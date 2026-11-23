@@ -24,8 +24,9 @@ path: the walk and its gather hook are the lane mint's, run with no sink.
 The loader rule of `tests/REVIEW.md` keeps a test whose subject is not the `.dlim` image rail off the rail. The cells below
 fire it and are ruled acceptable, each with its reason.
 
-- **The TTS facade smoke cells** - `facade_smoke` in `tests/_tts_parity.das`, called from `tests/test_tts_kitten.das`,
-  `tests/test_tts_kokoro.das` and `tests/test_tts_pocket.das`, `test_kokoro_ru_facade` in `tests/test_tts_kokoro.das`, and
+- **The TTS facade cells** - the `image` form of a voice file's block (`styletts2_form`, `pocket_form` in
+  `tests/_tts_parity.das`), loaded once for the cells of `tests/test_tts_kitten.das`, `tests/test_tts_kokoro.das`
+  and `tests/test_tts_pocket.das` that read the facade's own load, `test_kokoro_ru_facade` among them, and
   the two cells of `test_kitten_stored_file` that load a stored file through `load_styletts2` (its lane choice under a
   pin is their subject; they wipe the images they mint beside their temp files). They
   load through the facade's `load_tts_model`, which bakes the family's `.dlim` beside the model when `DASLLAMA_IMAGE` is unset, so each mints an

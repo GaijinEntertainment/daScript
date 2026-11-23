@@ -9,6 +9,7 @@ require daslib/strings_boost
 require strings
 require math
 require _model_tier   // models_dir, model_available: the smoke cells are stocked
+require _child_run   // with_child_log_info: the example's info lines
 
 // Shared by the browser examples' smoke tests (test_storyteller_restart.das, test_storywish.das, test_parrot.das):
 // each spawns its example as a child of this binary, and the example opens a GLFW window.
@@ -49,18 +50,15 @@ def public example_ready(t : T?; models : array<string>) : bool {
 //! `out` whatever level the test runs under
 def public run_example(main : string; args : array<string>; var out : string&) : int {
     let prev_image = env_value_of("DASLLAMA_IMAGE")
-    let prev_level = env_value_of("DAS_LOG_LEVEL")
-    let prev_logger_level = env_value_of("DAS_LOGGER_LEVEL")
     set_env_variable("DASLLAMA_IMAGE", "0")
-    set_env_variable("DAS_LOG_LEVEL", "info")
-    set_env_variable("DAS_LOGGER_LEVEL", "info")
     let root = get_das_root()
     var argv <- [example_daslang(), "-jit", "-dasroot", root, "{root}/examples/dasLLAMA/{main}", "--", "--models", models_dir(), "--smoke"]
     argv |> push_from(args)
-    let rc = run_and_capture(argv, out, 300.0)
+    var rc = 0
+    with_child_log_info() {
+        rc = run_and_capture(argv, out, 300.0)
+    }
     set_env_variable("DASLLAMA_IMAGE", prev_image)
-    set_env_variable("DAS_LOG_LEVEL", prev_level)
-    set_env_variable("DAS_LOGGER_LEVEL", prev_logger_level)
     return rc
 }
 

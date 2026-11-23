@@ -106,26 +106,30 @@ def private check_test_categories() {
 //! the section every load-once finding names
 let private LOAD_ONCE_AT = "ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once"
 
-let private MODEL_ONCE = ("a model file loads once a form in an area's run: `with_cpu_and_gpu_model` is called once an area and model "
-    + "file across this folder, its forms the call's list - fold the cells of this call, and the forms they need, into the first "
-    + "call (ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once)")
+let private MODEL_ONCE = ("a model file loads once a form in an area's run: its block (`with_cpu_and_gpu_model`, `with_model_once`) "
+    + "is called once an area and model file across this folder, its forms the call's list - fold the cells of this call, and the "
+    + "forms they need, into the first call (ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once)")
 
-let private MODEL_LITERAL = ("`with_cpu_and_gpu_model` takes its run area and its model file as string literals - `t, \"llm\", "
-    + "\"<file>.gguf\", ...`: this gate reads them to hold one call an area and model across the folder "
-    + "(ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once)")
+let private MODEL_LITERAL = ("a block (`with_cpu_and_gpu_model`, `with_model_once`) takes its run area and its model file as string "
+    + "literals on the call's first line - `t, \"llm\", \"<file>.gguf\", ...`: this gate reads them to hold one call an area and model "
+    + "across the folder (ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once)")
 
-let private LOAD_ONCE = ("a model file loads once in an area's run, through the area's one `with_cpu_and_gpu_model` call for it: move "
-    + "this cell onto a form of that call, or - where the cell must own its load - declare why in the function holding the load, "
-    + "`own_load(\"<why>\")` (ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once)")
+let private LOAD_ONCE = ("a model file loads once in an area's run, through the area's one block for it (`with_cpu_and_gpu_model`, "
+    + "`with_model_once`): move this cell onto a form of that call, or - where the cell must own its load - declare why in the "
+    + "function holding the load, `own_load(\"<why>\")` (ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once)")
 
 let private OWN_LOAD_WHY = ("`own_load` names, as a non-empty string literal, why the function's load cannot be a form of its model's "
-    + "`with_cpu_and_gpu_model` call (ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once)")
+    + "block (ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once)")
 
 let private UNLISTED_LOADER = ("a function that passes its parameter to a loader is a loader: `LOADERS` (tests/REVIEW.das) lists it, "
     + "so the load-once check reads the model file at its callers (ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once)")
 
 //! the run areas whose test files the load-once check holds
-let private LOAD_ONCE_AREAS = fixed_array("llm")
+let private LOAD_ONCE_AREAS = fixed_array("llm", "tts")
+
+//! the areas whose model files are `.gguf` alone: a `.bin` their files name is a llama2.c checkpoint, a second read of
+//! a 60 MB file
+let private GGUF_ONLY_AREAS = fixed_array("llm")
 
 //! the test files whose cells still load their own models: their load-once findings print as held lines, one count a run - the
 //! fold empties the list, and a listed file the check finds clean is a finding of its own
@@ -133,23 +137,36 @@ let private UNFOLDED = fixed_array("test_dflash_drafter.das", "test_embeddings.d
     "test_metal_format_census.das", "test_mlx_snapshot.das", "test_mtp_gemma_drafter.das")
 
 //! the calls that load the model file their arguments name: the engine's loaders, then the folder's helpers that pass a file
-//! to one (a listed helper the scanned files do not define is a finding); a call of `with_cpu_and_gpu_model` is the area's
-//! block, read apart
+//! to one (a listed helper the scanned files do not define is a finding); a call of a `BLOCKS` name is the area's block,
+//! read apart
 let private ENGINE_LOADERS = fixed_array("load_model_", "load_model", "load_gguf", "load_model_uncached", "load_model_cached",
-    "load_cached_q8", "load_resident", "load_resident_host", "load_resident_as", "load_resident_at", "load_resident_by")
+    "load_cached_q8", "load_resident", "load_resident_host", "load_resident_as", "load_resident_at", "load_resident_by",
+    "load_asr_model", "load_whisper_model", "load_parakeet_model", "load_gigaam_model", "load_canary_encoder", "load_vad_model",
+    "load_audio_tower", "load_audio_tower_encoder", "load_audio_embedder", "load_gemma4a_encoder", "load_qwen3a_tower",
+    "load_gemma3v_tower", "load_gemma4v_tower", "load_gemma4uv_embedder", "load_qwen3v_tower", "load_qwen25v_tower",
+    "load_vision_embedder", "load_tts_model", "load_styletts2", "load_pocket", "load_g2p", "load_pos_tagger", "load_ru_stress",
+    "load_ru_stress_pack", "load_nmt_model", "load_translator", "load_checkpoint",
+    "stage_whisper_model", "stage_parakeet_model", "stage_parakeet_kq_model", "stage_gigaam_model", "stage_canary_encoder",
+    "stage_audio_tower", "stage_gemma4a_encoder", "stage_qwen3a_tower", "stage_gemma3v_tower", "stage_gemma4v_tower",
+    "stage_gemma4uv_embedder", "stage_qwen3v_tower", "stage_qwen25v_tower", "stage_styletts2", "stage_pocket", "stage_nmt_model")
 let private LOADERS = fixed_array("blob_twin", "cuda_feed_rig", "cuda_forced_feed", "dense_feeds_block", "family_lane_cell",
-    "gdraft_target", "gemma_format_cell", "gemma_model", "greedy_turn", "kq_native_load", "kquant_cell", "kv_codecs_cell", "lanes_cell",
-    "live_cell", "load_capped", "load_kq_native", "load_outcome", "load_perop", "load_refusal", "load_resident_lane",
-    "load_trunk", "metal_arms_cell", "metal_lossless_cell", "metal_prefill_cell", "metal_routed_cell",
-    "metal_served_cell", "moe_forced_feed", "moe_forced_feed_pinned", "parity_row_load", "parity_spec_arms",
-    "ppl_compare", "ring_draft_run", "sampled_metal_cell", "slot_swap_cycle", "staged_tokens_at", "stream_twin_within",
-    "tail_after_load", "with_cold_lane", "with_gemma_rig", "with_metal_trunk", "with_served_drafter")
+    "g2p_pack_form", "gdraft_target", "gemma_format_cell", "gemma_model", "greedy_turn", "kq_clone_over_roster",
+    "kq_native_load", "kquant_cell", "kv_codecs_cell", "lanes_cell", "live_cell", "load_and_drop", "load_capped",
+    "load_kq_native", "load_model_and_drop", "load_outcome", "load_perop", "load_refusal", "load_resident_lane",
+    "load_trunk", "metal_arms_cell", "metal_lossless_cell", "metal_prefill_cell", "metal_routed_cell", "metal_served_cell",
+    "moe_forced_feed", "moe_forced_feed_pinned", "parity_row_load", "parity_spec_arms", "pocket_form", "pocket_minted",
+    "pocket_tts_minted", "ppl_compare", "ring_draft_run", "ru_pack_form", "ru_stress_form", "sampled_metal_cell",
+    "slot_swap_cycle", "speak_line_of", "staged_tokens_at", "stored_file_pins", "stream_twin_within", "styletts2_form",
+    "tagger_pack_form", "tail_after_load", "with_cold_lane", "with_gemma_rig", "with_metal_trunk", "with_served_drafter")
 
 //! the file whose loads are the block's own body: no helper of it is listed
 let private LOADER_HOMES = fixed_array("_cpu_gpu_model.das")
 
 let private MODELS_LEAD = "\{models_dir()\}/"
-let private BLOCK = "with_cpu_and_gpu_model"
+
+//! the calls that are an area's one load of a model file: the chat models' block, and the block of every other model - under
+//! the models directory, or under a root the call names
+let private BLOCKS = fixed_array("with_cpu_and_gpu_model", "with_model_once", "with_model_once_at")
 
 //! one load of a model file: the file and line, the call, whether the function holding it declares its own load
 struct private LoadSite {
@@ -188,7 +205,7 @@ def private gguf_names(args : string) : array<string> {
     var out : array<string>
     for (seg in quoted_segments(args)) {
         let name = seg |> starts_with(MODELS_LEAD) ? slice(seg, length(MODELS_LEAD)) : seg
-        if (name |> ends_with(".gguf") && find(name, "\{") < 0) {
+        if ((name |> ends_with(".gguf") || name |> ends_with(".bin")) && find(name, "\{") < 0) {
             out |> push(name)
         }
     }
@@ -363,9 +380,7 @@ def private load_sites(file : string; loaders : array<string>; globals : table<s
     for (f in fns) {
         g_defined |> insert(f.name)
     }
-    var inscope calls <- [for (l in loaders); l]
-    calls |> push(BLOCK)
-    for (call in calls) {
+    for (call in loaders) {
         var from = 0
         while (true) {
             let at = find(text, "{call}(", from)
@@ -376,11 +391,10 @@ def private load_sites(file : string; loaders : array<string>; globals : table<s
             let fi = fn_at(fns, at)
             let args = call_args(text, at + length(call))
             var inscope names <- site_names(args, lines, line, fi >= 0 ? fns[fi].start : 0, text, globals)
-            if (empty(names) && !(fi >= 0 && passed_param(file, line, fns[fi], call, args, loaders)) && call != BLOCK) {
+            if (empty(names) && !(fi >= 0 && passed_param(file, line, fns[fi], call, args, loaders))) {
                 g_unread++
                 to_log(LOG_INFO, "UNREAD {file}:{line}: `{call}` names its model file through a value the load-once check cannot read\n")
             }
-            continue if (call == BLOCK)   //! a block is read apart (`block_calls`)
             sites |> reserve(length(sites) + length(names))
             for (n in names) {
                 sites |> push(LoadSite(model = n, file = file, line = line, call = call, own = fi >= 0 && fns[fi].own))
@@ -496,23 +510,25 @@ def private area_files(run_path, area : string) : array<string> {
 
 let private TESTS = "modules/dasLLAMA/tests"
 
-//! the first line of each `with_cpu_and_gpu_model` call in `f`, its area and file where both are literals; a call that names
-//! them otherwise is a finding, held where `held`
-def private block_calls(f : string; held : bool; var hold : int&) : array<tuple<key : string; line : int>> {
-    var out : array<tuple<key : string; line : int>>
+//! the first line of each block call (`BLOCKS`) in `f`, its area and file where both are literals; a call that names them
+//! otherwise is a finding, held where `held`
+def private block_calls(f : string; held : bool; var hold : int&) : array<tuple<key : string; line : int; call : string>> {
+    var out : array<tuple<key : string; line : int; call : string>>
     let text = fread(f)
-    var inscope calls <- split(text, "with_cpu_and_gpu_model(t, ")
-    calls |> erase(0)
-    for (tail in calls) {
-        let eol = find(tail, "\n")
-        let head = eol >= 0 ? slice(tail, 0, eol) : tail
-        let at = find_line(text, "with_cpu_and_gpu_model(t, {head}")
-        var inscope lits <- split(head, "\"")   //! `"area", "file", rest`: empty, the area, the comma, the file, the rest
-        if (!(head |> starts_with("\"")) || length(lits) < 5 || strip(lits[2]) != ",") {
-            load_once_finding(f, at, MODEL_LITERAL, held, hold)
-            continue
+    for (call in BLOCKS) {
+        var inscope calls <- split(text, "{call}(t, ")
+        calls |> erase(0)
+        for (tail in calls) {
+            let eol = find(tail, "\n")
+            let head = eol >= 0 ? slice(tail, 0, eol) : tail
+            let at = find_line(text, "{call}(t, {head}")
+            var inscope lits <- split(head, "\"")   //! `"area", "file", rest`: empty, the area, the comma, the file, the rest
+            if (!(head |> starts_with("\"")) || length(lits) < 5 || strip(lits[2]) != ",") {
+                load_once_finding(f, at, MODEL_LITERAL, held, hold)
+                continue
+            }
+            out |> push((key = "{lits[1]}, {lits[3]}", line = at, call = call))
         }
-        out |> push((key = "{lits[1]}, {lits[3]}", line = at))
     }
     return <- out
 }
@@ -530,9 +546,9 @@ def private load_once_finding(f : string; line : int; msg : string; held : bool;
 //! the load-once check over `files` for `area`: the area's blocks (`blocks`, keyed `area, file`) each the one load of its model
 //! file; every other load site of a model a block loads, and every load site of a model loaded at two sites and by no block,
 //! is a finding unless its function declares its own load, a load a call of `loaders` names. A file of `unfolded` has its
-//! findings held; a listed file with none is a finding
+//! findings held, and is counted into `dirty`
 def private load_once_area(area : string; files : array<string>; blocks : table<string; string>; globals : table<string; array<string>>;
-                           held_blocks : array<LoadSite>; unfolded, loaders : array<string>; var hold : int&) {
+                           held_blocks : array<LoadSite>; unfolded, loaders : array<string>; var hold : int&; var dirty : table<string>) {
     var inscope sites : array<LoadSite>
     for (b in held_blocks) {
         if (has_value(files, b.file)) {
@@ -542,13 +558,15 @@ def private load_once_area(area : string; files : array<string>; blocks : table<
     for (f in files) {
         load_sites(f, loaders, globals, sites)
     }
+    if (has_value(GGUF_ONLY_AREAS, area)) {
+        sites |> erase_if() $(s) => s.model |> ends_with(".bin")
+    }
     var unowned : table<string; array<string>>
     for (s in sites) {
         if (!s.own && !key_exists(blocks, "{area}, {s.model}")) {
             unowned[s.model] |> push("{base_name(s.file)}:{s.line}")
         }
     }
-    var dirty : table<string>
     for (s in sites) {
         continue if (s.own)
         let owner = blocks?["{area}, {s.model}"] ?? ""
@@ -559,17 +577,21 @@ def private load_once_area(area : string; files : array<string>; blocks : table<
         load_once_finding(s.file, s.line, "`{s.call}` loads {s.model}, {where_} - {LOAD_ONCE}", held, hold)
         dirty |> insert(base_name(s.file))
     }
+    delete unowned
+}
+
+//! a finding for each file of `unfolded` no area's check counted into `dirty`: a listed file the check finds clean
+def private stale_unfolded(unfolded : array<string>; dirty : table<string>) {
     for (u in unfolded) {
         if (!key_exists(dirty, u)) {
             gate_finding("{TESTS}/REVIEW.das", "UNFOLDED lists {u}, whose loads the check finds folded: drop it from the list ({LOAD_ONCE_AT})")
         }
     }
-    delete unowned
 }
 
-//! one call of `with_cpu_and_gpu_model` an area and model file across the folder's test files (a second call naming the same
-//! area and file is a second full load of a form; every call names its area and file by literals on the call's first line),
-//! and in each area of LOAD_ONCE_AREAS no other load of a model file a call loads, nor two loads of one no call loads
+//! one block call (`BLOCKS`) an area and model file across the folder's test files (a second call naming the same area and
+//! file is a second full load of a form; every call names its area and file by literals on the call's first line), and in
+//! each area of LOAD_ONCE_AREAS no other load of a model file a call loads, nor two loads of one no call loads
 [arch(at = "../ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once")]
 def private check_models_load_once() {
     var inscope files <- tracked_files(["modules/dasLLAMA/tests/test_*.das"], "the model blocks")
@@ -585,10 +607,12 @@ def private check_models_load_once() {
     for (f in fixtures) {
         load_sites(f, loaders, globals, none)
     }
+    var dirty : table<string>
     for (area in LOAD_ONCE_AREAS) {
         var inscope area_set <- area_files("{TESTS}/run.das", area)
-        load_once_area(area, area_set, blocks, globals, held_blocks, [for (u in UNFOLDED); u], loaders, hold)
+        load_once_area(area, area_set, blocks, globals, held_blocks, [for (u in UNFOLDED); u], loaders, hold, dirty)
     }
+    stale_unfolded([for (u in UNFOLDED); u], dirty)
     if (hold > 0) {
         to_log(LOG_WARNING, "REVIEW.das load-once: {hold} finding(s) held in the {length(UNFOLDED)} file(s) UNFOLDED lists - DAS_LOG_LEVEL=info prints them\n")
     }
@@ -612,7 +636,7 @@ def private load_once_blocks(files : array<string>; unfolded : array<string>; va
                     blocks |> insert(b.key, "{base_name(f)}:{b.line}")
                 } elif (held) {
                     let comma = find(b.key, ", ")
-                    sites |> push(LoadSite(model = slice(b.key, comma + 2), file = f, line = b.line, call = "with_cpu_and_gpu_model"))
+                    sites |> push(LoadSite(model = slice(b.key, comma + 2), file = f, line = b.line, call = b.call))
                 } else {
                     load_once_finding(f, b.line, "{MODEL_ONCE} - the first call is {blocks?[b.key] ?? ""}", held, hold)
                 }
@@ -638,17 +662,21 @@ def private stale_loaders(listed : array<string>) {
     }
 }
 
-//! the load-once check over the named files alone, as one llm area - its files the ones the runner `area_run` lists where
-//! named, else the named files - the findings of the files `unfolded` names held: its fixture rail. Its helper loaders are
-//! `listed` where it names some, each one a named file must define, else LOADERS
-def private check_load_once_files(files, unfolded, listed : array<string>; area_run : string) {
+//! the load-once check over the named files alone, as the areas `areas` - an area's files the ones the runner `area_run`
+//! lists for it where named, else the named files - the findings of the files `unfolded` names held: its fixture rail. Its
+//! helper loaders are `listed` where it names some, each one a named file must define, else LOADERS
+def private check_load_once_files(files, unfolded, listed, areas : array<string>; area_run : string) {
     var hold = 0
     var inscope held_blocks : array<LoadSite>
     var inscope blocks <- load_once_blocks(files, unfolded, held_blocks, hold)
     var inscope globals <- global_names(files)
     var inscope loaders <- all_loaders(empty(listed) ? [for (l in LOADERS); l] : listed)
-    var inscope area_set <- empty(area_run) ? [for (f in files); f] : area_files(area_run, "llm")
-    load_once_area("llm", area_set, blocks, globals, held_blocks, unfolded, loaders, hold)
+    var dirty : table<string>
+    for (area in areas) {
+        var inscope area_set <- empty(area_run) ? [for (f in files); f] : area_files(area_run, area)
+        load_once_area(area, area_set, blocks, globals, held_blocks, unfolded, loaders, hold, dirty)
+    }
+    stale_unfolded(unfolded, dirty)
     if (!empty(listed)) {
         stale_loaders(listed)
     }
@@ -687,15 +715,19 @@ def private check_cell_pins() {
     check_cell_pins_in(files)
 }
 
-//! the gate; `-- --load-once <file>... --unfolded <name>... --loaders <name>... --area-run <run.das>` runs the load-once
-//! check over the named files alone (`check_load_once_files`), and `-- --cell-pins <file>...` the cell-pin check - its
-//! fixture rails
+//! the gate; `-- --load-once <file>... --unfolded <name>... --loaders <name>... --area-run <run.das> --area <name>...` runs
+//! the load-once check over the named files alone as the named areas, `llm` where none is named (`check_load_once_files`),
+//! and `-- --cell-pins <file>...` the cell-pin check - its fixture rails
 [export]
 def main() : int {
     let fixtures <- gate_flag_args("--load-once")
     if (!empty(fixtures)) {
         let area_run <- gate_flag_args("--area-run")
-        check_load_once_files(fixtures, gate_flag_args("--unfolded"), gate_flag_args("--loaders"), empty(area_run) ? "" : area_run[0])
+        var inscope areas <- gate_flag_args("--area")
+        if (empty(areas)) {
+            areas |> push("llm")
+        }
+        check_load_once_files(fixtures, gate_flag_args("--unfolded"), gate_flag_args("--loaders"), areas, empty(area_run) ? "" : area_run[0])
         return gate_verdict("modules/dasLLAMA/tests --load-once")
     }
     let pinned <- gate_flag_args("--cell-pins")

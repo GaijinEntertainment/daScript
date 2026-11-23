@@ -163,19 +163,41 @@ list holds three or more such forms each later one maps the file's device lane
 parity row's CPU form (`parity_spec_form`, `tests/_parity_cells.das`) and runs the row's cell on it. A
 call names its area and its file by string literals.
 
+`tests/_model_once.das` owns the load of a model file that is no chat model - a TTS voice, a front-end
+pack, a stress model. `with_model_once` takes the area, the file, a list of form names and the
+family's form loader, a function of the file's path and a form's name: it loads each form once, runs
+the caller's cells on it and drops it before the next form loads, so no two forms of a file stand
+in memory together; a file the box lacks is one loud skip and no cell. `with_model_once_at` reads
+the file under a root the call names; the loop is `tests/_model_form.das`'s `model_once_at`, which takes
+the file's gate as an argument, so a model-free test runs it on a fake model. The TTS voices' form loaders (`tests/_tts_parity.das`) answer
+the facade's `TtsModel`, which holds either family's model and the packs: `styletts2_form` loads a
+KittenTTS or Kokoro file through the image rail (`image`) or mints a lane in memory (`f32`, `q8`,
+`kq`); `pocket_form` loads a Pocket file through the image rail or mints it with no lane pinned
+(`native`), under the f32 pin or under the q8 pin, the lane unset after the mint, a panic included. The facade
+loads a voice's front-end packs beside the voice, so a voice form's load includes them and the
+check reads no site for them. A file's block
+is one call across the area's test files, so the cells that read a file live under that call - a
+cell another topic file held runs from a fixture cell module (`tests/_tts_facade_cells.das`,
+`tests/_tts_postag_cells.das`) - and a cell that reads two files runs in the inner of two nested
+calls, each file loaded once. The parity rail of a StyleTTS2 voice runs a form at a time: the f32
+form's cell keeps each bring-up case's decode inputs, and the q8 and recipe forms' cells feed them
+to the decode seat.
+
 `tests/REVIEW.das`'s `check_models_load_once` reads the folder's test files as text. It holds one
-call an area and file, and in each area `LOAD_ONCE_AREAS` names it reads every load site of the
+block call (`BLOCKS`: `with_cpu_and_gpu_model`, `with_model_once`, `with_model_once_at`) an area
+and file, and in each area `LOAD_ONCE_AREAS` names (`llm`, `tts`) it reads every load site of the
 area's test files (`run.das`'s `area_tests`): a call of an engine loader or of a helper `LOADERS`
-lists, its model file a `.gguf` literal in the call's arguments or one an identifier is bound to in
+lists, its model file a `.gguf` literal - or, outside the llm area, a `.bin` pack's - in the call's
+arguments or one an identifier is bound to in
 the holding function, at the file's top level or in a fixture module. A site of a file a call loads,
 or one of two sites of a file no call loads, is a finding unless the holding function calls
 `own_load("<why>")` with a non-empty literal reason. A function that passes its own parameter to a
 loader is itself a loader, and one `LOADERS` does not list is a finding; a site whose file is built at run time is
 counted, not read. The llama2.c `stories15M.bin` checkpoint loads once a cell through `load_checkpoint`
-(27 loads in 10 test files, under a second in all), outside the blocks: the check reads `.gguf`
-loads alone, and a checkpoint load is not a site. `UNFOLDED` names the test files whose cells load
-their own models; their findings print as held lines, and a listed file with no finding is a
-finding. Its `check_cell_pins` reads the fixture cell modules (`tests/_*_cells.das`): a call there that pins,
+(27 loads in 10 test files, under a second in all), outside the blocks: in an area `GGUF_ONLY_AREAS`
+lists - `llm`, whose `.bin` names are checkpoints - the check drops every `.bin` site, so a checkpoint load there is not a site. `UNFOLDED` names the test files whose cells load
+their own models; their findings print as held lines, and a listed file no area finds a finding
+in is a finding. Its `check_cell_pins` reads the fixture cell modules (`tests/_*_cells.das`): a call there that pins,
 clears or re-pins the kernel backend or the K-quant native knob is a finding, since both are a
 property of the form's load; the check licenses none.
 

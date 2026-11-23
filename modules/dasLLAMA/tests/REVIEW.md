@@ -38,7 +38,7 @@ changes such a condition, or changes the body of a function in this folder that 
 calls, applies `REVIEW_SKIPS.md` (beside this file) too.**
 
 **A diff that adds, moves or changes a cell that loads a model file, a `with_cpu_and_gpu_model`
-call or an `own_load` call, or changes `REVIEW.das`'s `check_models_load_once`, `LOAD_ONCE_AREAS`,
+or `with_model_once` call or an `own_load` call, or changes `REVIEW.das`'s `check_models_load_once`, `LOAD_ONCE_AREAS`,
 `LOADERS` or `UNFOLDED`, applies `REVIEW_LOAD_ONCE.md` (beside this file) too.**
 
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the asserts

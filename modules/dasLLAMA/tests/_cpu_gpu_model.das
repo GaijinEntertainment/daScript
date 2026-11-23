@@ -57,11 +57,6 @@ def private head_pinned(f : ModelForm; load : block<() : Model>) : Model {
     return <- m
 }
 
-//! where a block's seconds went, a line a form: under `DAS_LOG_LEVEL=info`
-def private log_form_seconds(f : ModelForm; load_usec, cells_usec : int; how : string = "") {
-    to_log(LOG_INFO, "FORM {form_name(f)}{how}: load {float(load_usec) * 1e-6f:.1f} s, cells {float(cells_usec) * 1e-6f:.1f} s\n")
-}
-
 //! every lane beside `path` that `before` does not name goes: the block leaves the folder as it found it. Where a name of
 //! `before` is gone, a load adopted an image that stood there under its lane's name (`image_path_for`), and nothing goes:
 //! false then, true where the folder is back to `before`
@@ -202,7 +197,7 @@ def private device_form_load(t : T?; path : string; call_ctx : int64; form : Mod
         invoke(body, dev, armed)
         t |> equal(resident_prefill_allowed(), prefill_pin, "the cells of {form_name(armed)} left the resident prefill pin as they found it")
         set_resident_prefill_allowed(prefill_pin)   //! a cell that panicked under its pin: the later forms run unpinned
-        log_form_seconds(armed, get_time_usec(t0) - get_time_usec(t1), get_time_usec(t1), lane ? ", off the lane" : "")
+        log_form_seconds("{form_name(armed)}{lane ? ", off the lane" : ""}", get_time_usec(t0) - get_time_usec(t1), get_time_usec(t1))
         if (form.drops_device) {
             t |> equal(g_drop_cells, 1, "{form_name(armed)} ran the one drop cell it is marked for (`device_drop_cell`)")
         } else {
@@ -261,7 +256,7 @@ def private perop_form_load(t : T?; path : string; ctx : int64; form : ModelForm
     t |> success(!moe_gpu_resident_active(), "the route lever kept the whole-model driver off the model through {form_name(form)}")
     let t1 = ref_time_ticks()
     invoke(body, m, form)
-    log_form_seconds(form, get_time_usec(t0) - get_time_usec(t1), get_time_usec(t1))
+    log_form_seconds(form_name(form), get_time_usec(t0) - get_time_usec(t1), get_time_usec(t1))
     t |> success(!moe_gpu_resident_active(), "the whole-model driver stayed off through {form_name(form)}")
     moe_gpu_drop_model()
     delete m
@@ -406,7 +401,7 @@ def private cpu_form_load(t : T?; path : string; ctx : int64; form : ModelForm; 
         f = codec_pass(form, kv, i == 0)
         invoke(body, cpu, f)
     }
-    log_form_seconds(f, get_time_usec(t0) - get_time_usec(t1), get_time_usec(t1))
+    log_form_seconds(form_name(f), get_time_usec(t0) - get_time_usec(t1), get_time_usec(t1))
     delete cpu
 }
 

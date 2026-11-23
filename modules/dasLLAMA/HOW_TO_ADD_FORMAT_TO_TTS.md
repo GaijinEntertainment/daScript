@@ -114,8 +114,9 @@ and its plane's address, format and layout in the part's slab key.
 
 - A form the check refuses sends the whole carrier to the CPU chain with no error, at several
   times the seat's real-time factor (`PERF_LEDGER.md`'s "TTS weight formats" entry): read the
-  factor after every change to a leaf, and give the lane a leg in `tests/_tts_parity.das`'s GPU
-  decode cell, the one gate that compares the seat's read of the form against the CPU chain.
+  factor after every change to a leaf, and give the lane a form in `tests/_tts_parity.das` - its name
+  in `styletts2_lane_forms`, its in-memory mint in `styletts2_form`, its bar in `tts_parity_decode`, the
+  GPU decode cell: the one gate that compares the seat's read of the form against the CPU chain.
 
 ## 5. Measure, then set the default
 

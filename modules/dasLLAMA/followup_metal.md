@@ -712,7 +712,7 @@ on kokoro across the four parts), which a model load could take off the first sy
 the kokoro decode seat's 111 ms, two thirds of its sentence - the generator's ten stages of
 Snake blocks at 512 channels, where a wider N tile or the AdaIN pass folded into the conv's X
 loader are the A/Bs. The served-lane synthesis cell (`tests/_tts_parity.das`,
-`tts_gpu_synthesis`) gates counters and sample counts and logs its sample-wise waveform figure
+`tts_gpu_synthesis_lane`) gates counters and sample counts and logs its sample-wise waveform figure
 without a bar; a phase-insensitive instrument - a per-window spectral compare tolerant of one
 frame of shift - would gate the served lane end to end. Pocket TTS rides the tower in three seats
 (`ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-codec` and `ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames`); what its frame loop still costs is the

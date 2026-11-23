@@ -16,6 +16,7 @@ require daslib/jobque_boost
 require daslib/fio
 require strings
 require _tts_parity
+require _model_once
 require _model_tier
 require _scratch_dir   // scratch_path, scratch_file: the stress-model probe's directory
 
@@ -32,9 +33,8 @@ require _scratch_dir   // scratch_path, scratch_file: the stress-model probe's d
 // through the front end's own inventory. The facade and GPU cells also need the front-end
 // packs (`tts_g2p.bin`, `tts_postag.bin`) beside the model; the GPU cells run on Metal or Vulkan,
 // skip where no device serves or the driver registers no seat for the stage, and red where a
-// present seat declines a stage.
-
-def private gguf_path() : string => path_join(models_dir(), "kokoro-82m.gguf")
+// present seat declines a stage. Each voice file loads once a form, through its one `with_model_once`
+// block; the directory front end's cell holds its own load.
 
 def private oracle_dir() : string => path_join(models_dir(), "tts_oracle/kokoro")
 
@@ -115,70 +115,53 @@ def test_kokoro_symbols(t : T?) {
     }
 }
 
-[test(description = "Kokoro-82M against the PyTorch reference with captured noise: every case's token ids and sample count match, and each traced stage holds 1e-4 of the oracle's peak, with poisoned controls")]
-def test_kokoro_oracle(t : T?) {
-    t |> run("against the PyTorch reference, captured noise") @(t : T?) {
-        if (!model_available(t, gguf_path())) {
-            return
-        }
-        delete g_family
-        {
-            var inscope staged <- load_styletts2(gguf_path())
-            g_family := staged.kokoro
-        }
-        t |> success(length(g_family.sym) > 100, "{length(g_family.sym)} symbols in the vocabulary")
-        var inscope ids <- kokoro_token_ids(g_family, "hˈɛlO wˈɜɹld")   // nolint:STYLE039
-        t |> equal(length(ids), 14, "two pads around twelve known symbols")
-        t |> equal(ids[0], 0)
-        t |> equal(ids[length(ids) - 1], 0)
-        tts_parity(t, TtsParityRig(family = "kokoro", gguf = gguf_path(), oracle_dir = oracle_dir(), ids = @@kokoro_ids_of))
-    }
+// the model's vocabulary, taken off the f32 form before the parity rail's cases
+def private kokoro_vocabulary(t : T?; m : StyleTts2Model) {
+    delete g_family
+    g_family := m.kokoro
+    t |> success(length(g_family.sym) > 100, "{length(g_family.sym)} symbols in the vocabulary")
+    var inscope ids <- kokoro_token_ids(g_family, "hˈɛlO wˈɜɹld")   // nolint:STYLE039
+    t |> equal(length(ids), 14, "two pads around twelve known symbols")
+    t |> equal(ids[0], 0)
+    t |> equal(ids[length(ids) - 1], 0)
 }
 
-[test(description = "Kokoro on the GPU tower serves every seat once a chunk on the served lane, speaks above the 0.05 peak floor with a sample count within a twentieth of the CPU chain, then holds the f32 reference lane against the CPU")]
-def test_kokoro_synthesis_metal(t : T?) {
-    t |> run("kokoro: the synthesis on the Metal tower vs the CPU chain, the served lane") @(t : T?) {
-        tts_gpu_synthesis(t, gguf_path(), "The tower serves the generator, and the words still land.", "af_heart")
-    }
-}
-
-[test(description = "Kokoro through the facade declares en-us and en-gb, lists 28 voices each in a declared language (8 British), adds no chunk mark, and speaks a sentence as 1 to 10 seconds of finite audio peaking above 0.05")]
-def test_kokoro_facade(t : T?) {
-    t |> run("text in, speech out") @(t : T?) {
-        // the American and British packs: the front end phonemizes no other language
-        facade_smoke(t, gguf_path(), true, 28) $(var m : TtsModel; c : TtsCaps) {
-            t |> success(length(c.langs) == 2 && c.langs[0] == "en-us" && c.langs[1] == "en-gb",
-                "{length(c.langs)} language(s), first '{c.langs[0]}'")
-            t |> equal(length(c.voice_langs), length(c.voices), "one language per listed voice")
-            var british = 0
-            for (lang in c.voice_langs) {
-                t |> success(find_index(c.langs, lang) >= 0, "a listed voice speaks a declared language ({lang})")
-                british += lang == "en-gb" ? 1 : 0
+[cold_path]
+def private test_kokoro_facade(t : T?; var m : TtsModel; path : string) {
+    unsafe {
+        t |> run("text in, speech out") @capture(& m)(t : T ?) {
+            // the American and British packs: the front end phonemizes no other language
+            facade_smoke_cell(t, m, path, true, 28) $(var fm : TtsModel; c : TtsCaps) {
+                t |> success(length(c.langs) == 2 && c.langs[0] == "en-us" && c.langs[1] == "en-gb",
+                    "{length(c.langs)} language(s), first '{c.langs[0]}'")
+                t |> equal(length(c.voice_langs), length(c.voices), "one language per listed voice")
+                var british = 0
+                for (lang in c.voice_langs) {
+                    t |> success(find_index(c.langs, lang) >= 0, "a listed voice speaks a declared language ({lang})")
+                    british += lang == "en-gb" ? 1 : 0
+                }
+                t |> equal(british, 8, "the British packs")
+                let emma = find_index(c.voices, "bf_emma")
+                t |> success(emma >= 0 && c.voice_langs[emma] == "en-gb", "bf_emma is listed as British")
+                var inscope plain <- tts_chunks(fm, "hello how are you")
+                t |> success(length(plain) == 1 && plain[0] == "hello how are you", "a Kokoro chunk carries no appended mark")
+                var inscope audio <- synthesize(fm, "The quick brown fox jumps over the lazy dog, twice.", "af_heart")
+                t |> equal(audio.sample_rate, 24000)
+                t |> success(length(audio.pcm) > 24000 && length(audio.pcm) < 240000, "{length(audio.pcm)} samples")
+                let lv = speech_level(audio.pcm)
+                t |> success(lv.finite, "every sample finite")
+                t |> success(lv.peak > 0.05, "peak {lv.peak}: the model spoke")
+                to_log(LOG_INFO, "kokoro facade: {length(audio.pcm)} samples, peak {lv.peak}; {timings_line(audio.timings, audio.sample_rate)}\n")
             }
-            t |> equal(british, 8, "the British packs")
-            let emma = find_index(c.voices, "bf_emma")
-            t |> success(emma >= 0 && c.voice_langs[emma] == "en-gb", "bf_emma is listed as British")
-            var inscope plain <- tts_chunks(m, "hello how are you")
-            t |> success(length(plain) == 1 && plain[0] == "hello how are you", "a Kokoro chunk carries no appended mark")
-            var inscope audio <- synthesize(m, "The quick brown fox jumps over the lazy dog, twice.", "af_heart")
-            t |> equal(audio.sample_rate, 24000)
-            t |> success(length(audio.pcm) > 24000 && length(audio.pcm) < 240000, "{length(audio.pcm)} samples")
-            let lv = speech_level(audio.pcm)
-            t |> success(lv.finite, "every sample finite")
-            t |> success(lv.peak > 0.05, "peak {lv.peak}: the model spoke")
-            to_log(LOG_INFO, "kokoro facade: {length(audio.pcm)} samples, peak {lv.peak}; {timings_line(audio.timings, audio.sample_rate)}\n")
         }
     }
 }
 
-[test(description = "Kokoro phonemizes a line to exact en-us and en-gb strings whose symbols all survive tokenization, and bf_emma's synthesis of three lines has exactly the British string's sample count each, which differs from the American one on at least one")]
-def test_kokoro_dialects(t : T?) {
-    t |> run("a British voice speaks the British inventory, and the vocabulary carries it") @(t : T?) {
-        if (tts_data_missing(t, gguf_path())) {
-            return
-        }
-        with_dasllama_jobque_() {
-            var inscope m <- load_tts_model(gguf_path())
+[cold_path]
+def private test_kokoro_dialects(t : T?; var m : TtsModel; path : string) {
+    unsafe {
+        t |> run("a British voice speaks the British inventory, and the vocabulary carries it") @capture(& m)(t : T ?) {
+            return if (tts_data_missing(t, path))
             let line = "The doctor barked orders at the water tower."
             let ps_us = strip(tts_phonemize(m, line, "en-us"))
             let ps_gb = strip(tts_phonemize(m, line, "en-gb"))
@@ -216,17 +199,141 @@ def test_kokoro_dialects(t : T?) {
     }
 }
 
-def private ru_gguf_path() : string => path_join(models_dir(), "kokoro-ru.gguf")
+def private test_kokoro_voice_refusals(t : T?; m : TtsModel; path : string) {
+    unsafe {
+        t |> run("a voice the front end cannot phonemize refuses, naming the language its pack speaks") @capture(& m)(t : T ?) {
+            return if (tts_data_missing(t, path))
+            var inscope c <- caps(m)
+            t |> success(find_index(m.model.voice_names, "jf_alpha") >= 0, "the model carries the Japanese pack")
+            t |> success(find_index(c.voices, "jf_alpha") < 0, "and caps does not offer it")
+            let ja = panic_text() {
+                feint("{tts_voice_lang(m, "jf_alpha")}")
+            }
+            t |> success(find(ja, "unknown voice 'jf_alpha'") >= 0, "the refusal names the voice: {ja}")
+            t |> success(find(ja, "speaks ja") >= 0, "and the language the pack speaks: {ja}")
+            let nobody = panic_text() {
+                feint("{tts_voice_lang(m, "no-such-voice")}")
+            }
+            t |> success(find(nobody, "unknown voice 'no-such-voice'") >= 0, "a voice the model lacks refuses first: {nobody}")
+            t |> success(find(nobody, "speaks") < 0, "with no language to name: {nobody}")
+        }
+    }
+}
 
-[test(description = "kokoro-ru asks only for the Russian stress pack, declares ru for both voices from the file, normalizes and phonemizes to exact strings with English words spliced, and sveta's synthesis has the pack-default string's exact sample count")]
-def test_kokoro_ru_facade(t : T?) {
-    t |> run("a Russian fine-tune: its packs speak the language the file declares, and the front end reads it") @(t : T?) {
-        return if (tts_data_missing(t, ru_gguf_path()) || ru_pack_missing(t))
-        var inscope packs <- tts_pack_names(ru_gguf_path())
-        t |> equal(length(packs), 1, "the file's voices ask for one pack, before any load: {packs}")
-        t |> equal(packs[0], "tts_g2p_ru.bin", "the Russian stress pack alone")
-        with_dasllama_jobque_() {
-            var inscope m <- load_tts_model(ru_gguf_path())
+// a lane form's cell of the parity rail
+[cold_path]
+def test_kokoro_oracle(t : T?; m : TtsModel; form : string; var rows : St2LaneRows) {
+    styletts2_parity_cell(t, m, form, TtsParityRig(family = "kokoro", oracle_dir = oracle_dir(), ids = @@kokoro_ids_of, prepare = @@kokoro_vocabulary),
+        "against the PyTorch reference, captured noise", rows)
+}
+
+// a lane form's cell of the served synthesis
+[cold_path]
+def test_kokoro_synthesis_metal(t : T?; var m : TtsModel; form, path : string) {
+    styletts2_synthesis_cell(t, m, form, path, "kokoro: the synthesis on the Metal tower vs the CPU chain",
+        "The tower serves the generator, and the words still land.", "af_heart")
+}
+
+// Kokoro-82M, one block: the image form carries the facade's cells, the lane forms the served synthesis across the tower
+// knob and the parity rail.
+[test(description = "kokoro-82m.gguf loads once a form. Its image form through the facade declares en-us and en-gb, lists 28 voices each in a declared language (8 British), adds no chunk mark, and speaks a sentence as 1 to 10 seconds of finite audio peaking above 0.05; it phonemizes a line to exact en-us and en-gb strings whose symbols all survive tokenization, and bf_emma's synthesis of three lines has exactly the British string's sample count each, which differs from the American one on at least one; it carries the Japanese pack but caps does not offer it, and `tts_voice_lang` refuses jf_alpha naming the voice and the ja it speaks, and refuses an absent voice with no language named. Its lane forms on the GPU tower hold the f32 reference lane against the CPU, then serve every seat once a chunk on the served and recipe lanes above the 0.05 peak floor within a twentieth of the CPU chain's sample count; against the PyTorch reference with captured noise every case's token ids and sample count match and each traced stage holds 1e-4 of the oracle's peak, with poisoned controls, the q8 and recipe lanes' decode on the tower within their bars")]
+def test_kokoro_82m(t : T?) {
+    let path = path_join(models_dir(), "kokoro-82m.gguf")
+    var inscope rows = St2LaneRows()
+    with_dasllama_jobque_() {
+        with_model_once(t, "tts", "kokoro-82m.gguf", styletts2_lane_forms(true), @@styletts2_form) $(var m; form) {
+            styletts2_form_is(t, m, path_join(models_dir(), "kokoro-82m.gguf"), form)
+            if (form == "image") {
+                test_kokoro_facade(t, m, path)
+                test_kokoro_dialects(t, m, path)
+                test_kokoro_voice_refusals(t, m, path)
+            } else {
+                test_kokoro_synthesis_metal(t, m, form, path)
+                test_kokoro_oracle(t, m, form, rows)
+            }
+        }
+    }
+}
+
+def private ctx_missing(t : T?) : bool => !model_available(t, path_join(models_dir(), "tts_ctx_ru.gguf"))
+
+[cold_path]
+def private kokoro_ru_context_cell(t : T?; m : TtsModel; path : string) {
+    unsafe {
+        t |> run("with tts_ctx_ru.gguf beside the voices, the context model picks a homograph's reading by its sentence") @capture(& m)(t : T ?) {
+            return if (tts_data_missing(t, path) || ru_pack_missing(t) || ctx_missing(t))
+            t |> success(ru_stress_loaded(m.ru_stress_model), "the loader read the context model beside the voices")
+            var inscope packs <- tts_pack_names(path)
+            t |> equal(length(packs), 1, "the context model is optional: the required packs stay {packs}")
+            let lock = strip(tts_phonemize(m, "он открыл замок ключом.", "ru"))   // nolint:STYLE039
+            let castle = strip(tts_phonemize(m, "старинный замок стоит на горе.", "ru"))   // nolint:STYLE039
+            t |> success(find(lock, "zɐmˈok") >= 0, "a key opens a lock, замо́к: {lock}")   // nolint:STYLE039
+            t |> success(find(castle, "zˈɑmək") >= 0, "a castle on a hill, за́мок: {castle}")   // nolint:STYLE039
+            let marked = strip(tts_phonemize(m, "он открыл з+амок ключом.", "ru"))   // nolint:STYLE039
+            t |> success(find(marked, "zˈɑmək") >= 0, "the control: a mark in the text outranks the model: {marked}")   // nolint:STYLE039
+        }
+    }
+}
+
+//! `text` with each of `latin` replaced by the English front end's phonemes for it
+def private replace_latin(m : TtsModel; text : string; latin : array<string>) : string {
+    var out = text
+    for (word in latin) {
+        out = replace(out, word, strip(tts_phonemize(m, word, "en-us")))
+    }
+    return out
+}
+
+//! the facade's Russian reading of a marked text: its Latin words spliced as phonemes, then letter-to-sound
+def private latin_spliced_phonemes(m : TtsModel; marked : string; latin : array<string>) : string =>
+    strip(ru_phonemize_marked(replace_latin(m, marked, latin)))
+
+// the cell's last steps read the facade with its context model dropped: it runs after every cell that reads by that model
+[cold_path]
+def test_kokoro_ru_mixed_script(t : T?; var m : TtsModel; path : string) {
+    unsafe {
+        t |> run("Latin runs around the homographs: each Russian word reads the context pass's pick over the text as written") @capture(& m)(t : T ?) {
+            return if (tts_data_missing(t, path) || ru_pack_missing(t) || ctx_missing(t) || !model_available(t, path_join(models_dir(), "tts_g2p.bin")) || !model_available(t, path_join(models_dir(), "tts_postag.bin")))
+            t |> success(ru_stress_loaded(m.ru_stress_model), "the context model is loaded")
+            t |> success(!empty(m.g2p.data), "the English packs are loaded: a Latin run is spliced as phonemes")
+            var inscope latin <- ["hello", "python", "world"]
+            let norm = tts_normalize("hello он открыл замок ключом. python старинный замок стоит на горе world.", "ru")   // nolint:STYLE039
+            for (word in latin) {
+                t |> success(find(norm, word) >= 0, "the normalizer keeps '{word}': {norm}")
+            }
+            var inscope sc = RuStressScratch()
+            var inscope picks <- ru_stress_context_picks(m.ru_stress_model, m.ru_stress, norm, sc)
+            t |> success(picks.asked >= 2, "both homographs are asked ({picks.asked})")
+            let in_context = ru_mark_stress(m.ru_stress, norm, picks.picked)
+            let by_pack = ru_mark_stress(m.ru_stress, norm)
+            let want = latin_spliced_phonemes(m, in_context, latin)
+            let pack_only = latin_spliced_phonemes(m, by_pack, latin)
+            let got = strip(tts_phonemize(m, norm, "ru"))
+            to_log(LOG_INFO, "mixed script: {in_context}\n  facade {got}\n  pack   {pack_only}\n")
+            t |> equal(got, want, "the facade's phonemes are the context pass's marking of the text as written, its Latin runs spliced after")
+            t |> success(find(in_context, "зам+ок") >= 0 && find(in_context, "з+амок") >= 0, "the two homographs take two readings: {in_context}")   // nolint:STYLE039
+            t |> success(got != pack_only, "the control: the pack alone reads another string")
+            for (word in latin) {
+                t |> success(find(got, strip(tts_phonemize(m, word, "en-us"))) >= 0, "'{word}' is read by the English front end")
+            }
+            delete m.ru_stress_model
+            let bare = strip(tts_phonemize(m, norm, "ru"))
+            t |> equal(bare, pack_only, "without the context model the facade reads the pack's marking")
+            let spliced_first = strip(ru_phonemize(m.ru_stress, replace_latin(m, norm, latin)))
+            t |> equal(bare, spliced_first, "and marking before the splice reads what marking the spliced text reads")
+        }
+    }
+}
+
+// the cell drops the facade's context model to read by the pack alone: it runs last on its form
+[cold_path]
+def private kokoro_ru_pack_cell(t : T?; var m : TtsModel; path : string) {
+    unsafe {
+        t |> run("a Russian fine-tune: its packs speak the language the file declares, and the front end reads it") @capture(& m)(t : T ?) {
+            return if (tts_data_missing(t, path) || ru_pack_missing(t))
+            var inscope packs <- tts_pack_names(path)
+            t |> equal(length(packs), 1, "the file's voices ask for one pack, before any load: {packs}")
+            t |> equal(packs[0], "tts_g2p_ru.bin", "the Russian stress pack alone")
             delete m.ru_stress_model
             var inscope c <- caps(m)
             t |> equal(length(c.voices), 2, "sveta and masha: {c.voices}")
@@ -264,21 +371,12 @@ def test_kokoro_ru_facade(t : T?) {
             to_log(LOG_INFO, "kokoro-ru facade: {length(audio.pcm)} samples, peak {lv.peak}; {timings_line(audio.timings, audio.sample_rate)}\n")
         }
     }
-    t |> run("with tts_ctx_ru.gguf beside the voices, the context model picks a homograph's reading by its sentence") @(t : T?) {
-        return if (tts_data_missing(t, ru_gguf_path()) || ru_pack_missing(t) || !model_available(t, path_join(models_dir(), "tts_ctx_ru.gguf")))
-        with_dasllama_jobque_() {
-            var inscope m <- load_tts_model(ru_gguf_path())
-            t |> success(ru_stress_loaded(m.ru_stress_model), "the loader read the context model beside the voices")
-            var inscope packs <- tts_pack_names(ru_gguf_path())
-            t |> equal(length(packs), 1, "the context model is optional: the required packs stay {packs}")
-            let lock = strip(tts_phonemize(m, "он открыл замок ключом.", "ru"))   // nolint:STYLE039
-            let castle = strip(tts_phonemize(m, "старинный замок стоит на горе.", "ru"))   // nolint:STYLE039
-            t |> success(find(lock, "zɐmˈok") >= 0, "a key opens a lock, замо́к: {lock}")   // nolint:STYLE039
-            t |> success(find(castle, "zˈɑmək") >= 0, "a castle on a hill, за́мок: {castle}")   // nolint:STYLE039
-            let marked = strip(tts_phonemize(m, "он открыл з+амок ключом.", "ru"))   // nolint:STYLE039
-            t |> success(find(marked, "zˈɑmək") >= 0, "the control: a mark in the text outranks the model: {marked}")   // nolint:STYLE039
-        }
-    }
+}
+
+// a directory loads as a front end: every pack it holds and the context model beside them
+[cold_path]
+def private test_directory_front_end(t : T?) {
+    own_load("the cell holds several models loaded at once: a directory's front end is every pack the directory holds and the context model beside them, read by one load outside any job queue")
     t |> run("a directory's front end, asked outside any job queue, still reads by the context model") @(t : T?) {
         return if (ru_pack_missing(t) || !model_available(t, path_join(models_dir(), "tts_ctx_ru.gguf")))
         var inscope m <- load_tts_model(models_dir())
@@ -293,54 +391,20 @@ def test_kokoro_ru_facade(t : T?) {
     }
 }
 
-//! `text` with each of `latin` replaced by the English front end's phonemes for it
-def private replace_latin(m : TtsModel; text : string; latin : array<string>) : string {
-    var out = text
-    for (word in latin) {
-        out = replace(out, word, strip(tts_phonemize(m, word, "en-us")))
-    }
-    return out
-}
-
-//! the facade's Russian reading of a marked text: its Latin words spliced as phonemes, then letter-to-sound
-def private latin_spliced_phonemes(m : TtsModel; marked : string; latin : array<string>) : string =>
-    strip(ru_phonemize_marked(replace_latin(m, marked, latin)))
-
-[test(description = "Russian text with Latin words before, between and after two homographs: the facade marks every Russian word with the context pass's pick over the normalized text, and without the context model reads the pack's marking of the spliced text")]
-def test_kokoro_ru_mixed_script(t : T?) {
-    t |> run("Latin runs around the homographs: each Russian word reads the context pass's pick over the text as written") @(t : T?) {
-        return if (tts_data_missing(t, ru_gguf_path()) || ru_pack_missing(t) || !model_available(t, path_join(models_dir(), "tts_ctx_ru.gguf")) || !model_available(t, path_join(models_dir(), "tts_g2p.bin")) || !model_available(t, path_join(models_dir(), "tts_postag.bin")))
-        with_dasllama_jobque_() {
-            var inscope m <- load_tts_model(ru_gguf_path())
-            t |> success(ru_stress_loaded(m.ru_stress_model), "the context model is loaded")
-            t |> success(!empty(m.g2p.data), "the English packs are loaded: a Latin run is spliced as phonemes")
-            var inscope latin <- ["hello", "python", "world"]
-            let norm = tts_normalize("hello он открыл замок ключом. python старинный замок стоит на горе world.", "ru")   // nolint:STYLE039
-            for (word in latin) {
-                t |> success(find(norm, word) >= 0, "the normalizer keeps '{word}': {norm}")
-            }
-            var inscope sc = RuStressScratch()
-            var inscope picks <- ru_stress_context_picks(m.ru_stress_model, m.ru_stress, norm, sc)
-            t |> success(picks.asked >= 2, "both homographs are asked ({picks.asked})")
-            let in_context = ru_mark_stress(m.ru_stress, norm, picks.picked)
-            let by_pack = ru_mark_stress(m.ru_stress, norm)
-            let want = latin_spliced_phonemes(m, in_context, latin)
-            let pack_only = latin_spliced_phonemes(m, by_pack, latin)
-            let got = strip(tts_phonemize(m, norm, "ru"))
-            to_log(LOG_INFO, "mixed script: {in_context}\n  facade {got}\n  pack   {pack_only}\n")
-            t |> equal(got, want, "the facade's phonemes are the context pass's marking of the text as written, its Latin runs spliced after")
-            t |> success(find(in_context, "зам+ок") >= 0 && find(in_context, "з+амок") >= 0, "the two homographs take two readings: {in_context}")   // nolint:STYLE039
-            t |> success(got != pack_only, "the control: the pack alone reads another string")
-            for (word in latin) {
-                t |> success(find(got, strip(tts_phonemize(m, word, "en-us"))) >= 0, "'{word}' is read by the English front end")
-            }
-            delete m.ru_stress_model
-            let bare = strip(tts_phonemize(m, norm, "ru"))
-            t |> equal(bare, pack_only, "without the context model the facade reads the pack's marking")
-            let spliced_first = strip(ru_phonemize(m.ru_stress, replace_latin(m, norm, latin)))
-            t |> equal(bare, spliced_first, "and marking before the splice reads what marking the spliced text reads")
+// The Russian fine-tune, one block. The cells that read by the context model the facade loaded beside the voices run first;
+// the mixed-script cell's last steps and the pack cell drop that model and read by the pack alone.
+[test(description = "kokoro-ru.gguf loads once: with tts_ctx_ru.gguf beside the voices the context model picks a homograph's reading by its sentence and a mark in the text outranks it; over Russian text with Latin words before, between and after two homographs the facade marks every Russian word with the context pass's pick over the normalized text, and without the context model reads the pack's marking of the spliced text; the file asks only for the Russian stress pack, declares ru for both voices from the file, normalizes and phonemizes to exact strings with English words spliced, and sveta's synthesis has the pack-default string's exact sample count; a directory's front end, asked outside any job queue, still reads by the context model")]
+def test_kokoro_ru_facade(t : T?) {
+    let path = path_join(models_dir(), "kokoro-ru.gguf")
+    with_dasllama_jobque_() {
+        with_model_once(t, "tts", "kokoro-ru.gguf", ["image"], @@styletts2_form) $(var m; form) {
+            styletts2_form_is(t, m, path_join(models_dir(), "kokoro-ru.gguf"), form)
+            kokoro_ru_context_cell(t, m, path)
+            test_kokoro_ru_mixed_script(t, m, path)
+            kokoro_ru_pack_cell(t, m, path)
         }
     }
+    test_directory_front_end(t)
 }
 
 [test(description = "`tts_ru_stress_model_path` answers the stress-context model's path where `tts_ctx_ru.gguf` sits in the directory and nothing where it does not")]
@@ -361,30 +425,5 @@ def test_seat_stats_refusal(t : T?) {
             styletts2_gpu_stats("generators")
         }
         t |> success(find(why, "no GPU seat named 'generators'") >= 0, "the refusal names the key: {why}")
-    }
-}
-
-[test(description = "Kokoro carries the Japanese pack but caps does not offer it, and `tts_voice_lang` refuses jf_alpha naming the voice and the ja it speaks, and refuses an absent voice with no language named")]
-def test_kokoro_voice_refusals(t : T?) {
-    t |> run("a voice the front end cannot phonemize refuses, naming the language its pack speaks") @(t : T?) {
-        if (tts_data_missing(t, gguf_path())) {
-            return
-        }
-        with_dasllama_jobque_() {
-            var inscope m <- load_tts_model(gguf_path())
-            var inscope c <- caps(m)
-            t |> success(find_index(m.model.voice_names, "jf_alpha") >= 0, "the model carries the Japanese pack")
-            t |> success(find_index(c.voices, "jf_alpha") < 0, "and caps does not offer it")
-            let ja = panic_text() {
-                feint("{tts_voice_lang(m, "jf_alpha")}")
-            }
-            t |> success(find(ja, "unknown voice 'jf_alpha'") >= 0, "the refusal names the voice: {ja}")
-            t |> success(find(ja, "speaks ja") >= 0, "and the language the pack speaks: {ja}")
-            let nobody = panic_text() {
-                feint("{tts_voice_lang(m, "no-such-voice")}")
-            }
-            t |> success(find(nobody, "unknown voice 'no-such-voice'") >= 0, "a voice the model lacks refuses first: {nobody}")
-            t |> success(find(nobody, "speaks") < 0, "with no language to name: {nobody}")
-        }
     }
 }

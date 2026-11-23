@@ -1,12 +1,14 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
+options _dasllama_internal = true   // the gate cells' child helper is a fixture of this folder (`_child_run.das`)
 
 require dastest/testing_boost public
 require daslib/fio
 require strings
 require daslib/strings_boost
 require daslib/rtti
+require _child_run   // with_child_log_info: a gate child's held lines
 require dasllama/dasllama   // nolint:STYLE030 - the dependency cell reads this module's graph by name
 require ../../../examples/dasLLAMA/library/dasllama_lib.das
 
@@ -402,6 +404,15 @@ def private run_tests_gate(tail : array<string>) : GateRun {
     return GateRun(rc = rc, output = output)
 }
 
+//! `run_tests_gate` with the gate's info lines printed (`with_child_log_info`): its held lines
+def private run_tests_gate_logged(tail : array<string>) : GateRun {
+    var run = GateRun()
+    with_child_log_info() {
+        run = run_tests_gate(tail)
+    }
+    return run
+}
+
 //! a load-once fixture's block of `file`: the area's one load of it, the call's paren spliced so the folder walk reads no call
 def private lo_block(file : string) : string => "def test_owner(t : T?) \{\n    with_cpu_and_gpu_model{OPEN}t, \"llm\", \"{file}\", 64l) $(m, form) \{\n    \}\n\}\n"
 
@@ -416,7 +427,7 @@ def private lo_red(t : T?; files : array<string>; at, want : string; count : int
 
 let private LO_LOAD = "def test_raw(t : T?) \{\n    var m <- load_model_{OPEN}path_join(dir, \"fx-a.gguf\"), QuantMode.q8)\n\}\n"
 
-[test(description = "The tests/ REVIEW.das load-once gate passes a block alone and a second load of its file whose function declares its own load with a reason, and fails, naming the site's file and line and the model file, a second loader of a blocked file, a load through a listed helper whose name a local or a top-level constant binds, two loads of a file no block loads, an own-load declaration with an empty reason, a function passing its parameter to a loader the list does not name, and a second block of one file; a block in a file whose findings are held owns its model file where no other block does, so a load in another file names it as its block, while a held file's second block of a file an unheld block owns is a held load site; it reads a name bound one local away or by a constant of another file, a load on a one-line function's def line, and no call whose name ends a longer name or follows a dot; a listed loader passing its parameter, or the block's home doing so, is no finding; and it fails a held file it finds clean, a block naming its area or file by a non-literal, an own-load reason that is not a literal, a listed loader no file defines, and an area whose runner lists no file - the area's files the runner's", timeout = 1200)]
+[test(description = "The tests/ REVIEW.das load-once gate passes a block alone and a second load of its file whose function declares its own load with a reason, and fails, naming the site's file and line and the model file, a second loader of a blocked file, a load through a listed helper whose name a local or a top-level constant binds, two loads of a file no block loads, an own-load declaration with an empty reason, a function passing its parameter to a loader the list does not name, and a second block of one file; a block in a file whose findings are held owns its model file where no other block does, so a load in another file names it as its block, while a held file's second block of a file an unheld block owns is a held load site; it reads a name bound one local away or by a constant of another file, a load on a one-line function's def line, and no call whose name ends a longer name or follows a dot; a listed loader passing its parameter, or the block's home doing so, is no finding; and it fails a held file it finds clean, a block naming its area or file by a non-literal, an own-load reason that is not a literal, a listed loader no file defines, and an area whose runner lists no file - the area's files the runner's; a `with_model_once` call, and a `with_model_once_at` one, is a block like the chat models' - a second load of its file a finding, a second block of one area and file a finding and a block an area none, a held file's second block a held site its held line names by its own call, a file its form loader loads beside its own a load site of that file; two loads of a `.bin` pack are findings in an area that reads packs and none in the llm area; and a held file one area finds dirty is not a clean file of another", timeout = 1200)]
 def test_load_once_gate(t : T?) {
     let owner = fixture("lo_owner.das", lo_block("fx-a.gguf"))
     t |> run("a block alone passes") @(t : T?) {
@@ -467,6 +478,78 @@ def test_load_once_gate(t : T?) {
     }
     lo_gate_reads(t, owner)
     lo_gate_lists(t, owner)
+    lo_gate_once_blocks(t, owner)
+}
+
+//! a load-once fixture's `with_model_once` block of `file` in `area`, its form loader `fx_form`
+def private lo_once_block(area, file : string) : string =>
+    "def test_once(t : T?) \{\n    with_model_once{OPEN}t, \"{area}\", \"{file}\", forms, @@fx_form) $(var m; form) \{\n    \}\n\}\n"
+
+//! a load-once fixture's two loads of the pack `file`, a function each
+def private lo_pack_twice(file : string) : string =>
+    "def test_one(t : T?) \{\n    var p <- load_g2p{OPEN}path_join(dir, \"{file}\"))\n\}\n\ndef test_two(t : T?) \{\n    var p <- load_g2p{OPEN}path_join(dir, \"{file}\"))\n\}\n"
+
+//! the load-once gate's second block, `with_model_once`: its file's other loads, a second block, a file its form loader loads
+//! beside its own, the packs an area reads, and the held list across areas
+def private lo_gate_once_blocks(t : T?; owner : string) {
+    let once = fixture("lo_once.das", lo_once_block("llm", "fx-m.gguf"))
+    t |> run("a `with_model_once` block alone passes") @(t : T?) {
+        let run = run_load_once_gate([once])
+        t |> equal(run.rc, 0, "the gate's exit code\n{run.output}")
+    }
+    t |> run("a second load of a file a `with_model_once` block loads is a finding naming the block") @(t : T?) {
+        let raw = fixture("lo_raw_m.das", "def test_raw(t : T?) \{\n    var m <- load_model_{OPEN}path_join(dir, \"fx-m.gguf\"), QuantMode.q8)\n\}\n")
+        lo_red(t, [once, raw], "lo_raw_m.das:2:", "`load_model_` loads fx-m.gguf, its block is lo_once.das:2")
+    }
+    t |> run("a `with_model_once` block of a file another block loads is a second block") @(t : T?) {
+        lo_red(t, [owner, fixture("lo_once_a.das", lo_once_block("llm", "fx-a.gguf"))], "lo_once_a.das:2:", "the first call is lo_owner.das:2")
+    }
+    t |> run("a `with_model_once_at` call, its file under a root it names, is a block of that file") @(t : T?) {
+        let at_root = fixture("lo_once_at.das", "def test_at(t : T?) \{\n    with_model_once_at{OPEN}t, \"llm\", \"fx-a.gguf\", forms, root, @@fx_form) $(var m; form) \{\n    \}\n\}\n")
+        lo_red(t, [owner, at_root], "lo_once_at.das:2:", "the first call is lo_owner.das:2")
+    }
+    t |> run("a held file's `with_model_once` block of a file another block loads is a held load site named by its call") @(t : T?) {
+        let held = fixture("lo_held_once.das", lo_once_block("llm", "fx-a.gguf"))
+        let run = run_tests_gate_logged(["--load-once", held, owner, "--unfolded", "lo_held_once.das"])
+        t |> equal(run.rc, 0, "the gate's exit code: the held block is held\n{run.output}")
+        t |> success(find(run.output, "1 finding(s) held") >= 0, "the held block is the one held finding\n{run.output}")
+        t |> success(find(run.output, "lo_held_once.das:2: `with_model_once` loads fx-a.gguf, its block is lo_owner.das:2") >= 0, "the held line names the block's own call\n{run.output}")
+    }
+    t |> run("one file's blocks in two areas are a block each") @(t : T?) {
+        let run = run_load_once_gate([owner, fixture("lo_once_tts.das", lo_once_block("tts", "fx-a.gguf"))])
+        t |> equal(run.rc, 0, "the gate's exit code\n{run.output}")
+    }
+    t |> run("a file a block's form loader loads beside the block's own is a load site of that file") @(t : T?) {
+        let loader = "def fx_form{OPEN}path, form : string) : FxPair \{\n    return <- FxPair{OPEN}pack <- load_g2p{OPEN}path), tagger <- load_pos_tagger{OPEN}path_join(dir, \"fx-tag.bin\")))\n\}\n\n"
+        let pair = fixture("lo_pair.das", "{loader}{lo_once_block("tts", "fx-pack.bin")}")
+        let alone = run_tests_gate(["--load-once", pair, "--loaders", "fx_form", "--area", "tts"])
+        t |> equal(alone.rc, 0, "the pair's one load of each file passes\n{alone.output}")
+        let tag = fixture("lo_tag.das", "def test_tag(t : T?) \{\n    var p <- load_pos_tagger{OPEN}path_join(dir, \"fx-tag.bin\"))\n\}\n")
+        let run = run_tests_gate(["--load-once", pair, tag, "--loaders", "fx_form", "--area", "tts"])
+        t |> equal(run.rc, 1, "the gate's exit code\n{run.output}")
+        t |> success(find(run.output, "loads fx-tag.bin, loaded at 2 sites of the tts area and by no block: lo_pair.das:2, lo_tag.das:2") >= 0, "the form loader's load and the second one are the two sites\n{run.output}")
+        t |> success(find(run.output, "2 finding(s)") >= 0, "a finding a site\n{run.output}")
+    }
+    t |> run("two loads of a `.bin` pack are findings in an area that reads packs, and none in the llm area") @(t : T?) {
+        let packs = fixture("lo_packs.das", lo_pack_twice("fx-pack.bin"))
+        let tts = run_tests_gate(["--load-once", packs, "--area", "tts"])
+        t |> equal(tts.rc, 1, "the gate's exit code in the tts area\n{tts.output}")
+        t |> success(find(tts.output, "loads fx-pack.bin, loaded at 2 sites of the tts area and by no block") >= 0, "the findings name the pack\n{tts.output}")
+        t |> success(find(tts.output, "2 finding(s)") >= 0, "a finding a site\n{tts.output}")
+        let llm = run_load_once_gate([packs])
+        t |> equal(llm.rc, 0, "the llm area reads a `.bin` as a checkpoint, not a model file\n{llm.output}")
+    }
+    t |> run("a held file one area finds dirty is not a clean file of the area that does not list it") @(t : T?) {
+        let runner = fixture("lo_run_two.das", "def area_tests(area : string) : array<string> \{\n    if (area == \"llm\") \{\n        return <- [ \"test_lo_llm.das\" ]\n    \} elif (area == \"tts\") \{\n        return <- [ \"test_lo_tts.das\" ]\n    \}\n    var none : array<string>\n    return <- none\n\}\n")
+        let dirty = fixture("test_lo_llm.das", "def test_one(t : T?) \{\n    var m <- load_gguf{OPEN}path_join(dir, \"fx-b.gguf\"), QuantMode.q8)\n\}\n\ndef test_two(t : T?) \{\n    var m <- load_gguf{OPEN}path_join(dir, \"fx-b.gguf\"), QuantMode.q8)\n\}\n")
+        let clean = fixture("test_lo_tts.das", lo_once_block("tts", "fx-v.gguf"))
+        let run = run_tests_gate(["--load-once", dirty, clean, "--unfolded", "test_lo_llm.das", "--area-run", runner, "--area", "llm", "tts"])
+        t |> equal(run.rc, 0, "the gate's exit code: the held file's findings are held, and the tts pass does not call it clean\n{run.output}")
+        t |> success(find(run.output, "2 finding(s) held") >= 0, "the llm area's two loads are the held findings\n{run.output}")
+        let stale = run_tests_gate(["--load-once", dirty, clean, "--unfolded", "test_lo_tts.das", "--area-run", runner, "--area", "llm", "tts"])
+        t |> equal(stale.rc, 1, "the control: a held file no area finds dirty is a finding\n{stale.output}")
+        t |> success(find(stale.output, "UNFOLDED lists test_lo_tts.das, whose loads the check finds folded") >= 0, "the finding names the clean file\n{stale.output}")
+    }
 }
 
 //! the load-once gate's lists on its rail: the loaders it reads (`--loaders`), the area's files off a runner
