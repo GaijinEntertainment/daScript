@@ -74,7 +74,7 @@ def private run_lint_roots(extra : array<string>; roots : array<string>;
                            var output : string&) : int {
     var after <- ["-q"]
     after |> push_from(extra, roots)
-    var argv <- lint_cli_argv([], after)
+    var argv <- lint_cli_argv(["-no-module-cache"], after)
     return unsafe(popen_argv(argv, 0.0, $(f) {
         if (f != null) {
             output = fread(f)
@@ -183,6 +183,17 @@ let private CHECKLIST = ("# Folder Code Review Checklist\n\n"
     + "**A diff that runs `test_thing_ghost` or names `far_tool.das` must foresee below-average load; the clause below binds `test_aot`.**\n\n"
     + "**A diff touching `sibling/sibling_tool.das`, `run.das --help`, `$LCPP/src/unicode-data.cpp`, `./run.das` or `hook.sh` is silent; `above.das`, `nowhere/sibling_tool.das` and `stale.das` are dead.**\n")
 
+let private VISIBILITY_RULE = ("\n**A diff that changes the load path runs "
+    + "`test_thing_private`, `test_thing_public`, `test_thing_tabbed` and "
+    + "`test_thing_last`.**\n")
+
+let private VISIBILITY_CELLS = ("options gen2\n\n"
+    + "require dastest/testing_boost public\n\n"
+    + "def private test_thing_private(t : T?) \{\n    t |> equal(1, 1)\n\}\n\n"
+    + "def public test_thing_public(t : T?) \{\n    test_thing_private(t)\n\}\n\n"
+    + "def\tpublic\ttest_thing_tabbed(t : T?) \{\n    test_thing_private(t)\n\}\n\n"
+    + "def test_thing_last : int => 1")   // no newline ends the file
+
 let private ARCH = ("# Folder Architecture\n\n"
     + "`gone.das` holds the walk; see the rule above; `test_thing_vanished` pins it.\n")
 
@@ -207,7 +218,8 @@ def private build_names_tree() : string {
     plant(folder, "run.das", "options gen2\n\n[export]\ndef main \{\n    print(\"run\\n\")\n\}\n")
     plant(tests, "test_thing_holds.das", "options gen2\n\nrequire dastest/testing_boost public\n\n// def test_thing_ghost - a retired cell, named only in this comment\n\n[test]\ndef test_thing_holds(t : T?) \{\n    t |> equal(1, 1)\n\}\n")
     plant(sibling, "sibling_tool.das", "options gen2\n\n[export]\ndef main \{\n    print(\"tool\\n\")\n\}\n")
-    plant(folder, "REVIEW.md", CHECKLIST)
+    plant(tests, "_thing_cells.das", VISIBILITY_CELLS)
+    plant(folder, "REVIEW.md", CHECKLIST + VISIBILITY_RULE)
     plant(folder, "ARCHITECTURE.md", ARCH)
     return root
 }
@@ -407,6 +419,14 @@ def test_rule_doc_names(t : T?) {
         t |> success(find(out, "REVIEW.md:15: LINT033: cited path `nowhere/sibling_tool.das`") >= 0, "a slashed path gets no bare-basename fallback\n{out}")
         t |> success(find(out, "REVIEW.md:15: LINT033: cited path `stale.das`") >= 0, "a build tree is pruned from the basename index\n{out}")
         t |> success(find(out, "test_thing_holds`") < 0, "a cell the folder's tests define is silent\n{out}")
+        t |> success(find(out, "test_thing_private`") < 0,
+                     "a cell declared `def private` is found\n{out}")
+        t |> success(find(out, "test_thing_public`") < 0,
+                     "a cell declared `def public` is found\n{out}")
+        t |> success(find(out, "test_thing_tabbed`") < 0,
+                     "tabs between `def`, the visibility and the name are fine\n{out}")
+        t |> success(find(out, "test_thing_last`") < 0,
+                     "a cell on a last line with no newline is found\n{out}")
         t |> success(find(out, "`test_aot`") < 0, "a one-underscore name is a binary, not a cell\n{out}")
         t |> success(find(out, "`sibling_tool.das`") < 0, "a bare basename that lives in another tree is silent\n{out}")
         t |> success(find(out, "`sibling/sibling_tool.das`") < 0, "a path that resolves from an ancestor under the root is silent\n{out}")
