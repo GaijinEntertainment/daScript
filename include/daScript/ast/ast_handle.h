@@ -216,6 +216,24 @@ namespace das
         };
     };
 
+    template <typename callT, typename FnT = decltype(&callT::static_call)> struct CallPropertyStubbed;
+
+    template <typename callT, typename RetT, typename ArgT>
+    struct CallPropertyStubbed<callT, RetT(*)(ArgT)> {
+        using RetType = RetT;
+        enum { ref = callT::ref, isConst = callT::isConst, };
+        static RetT static_call ( ArgT this_ ) {
+            if constexpr ( DAS_SHOULD_USE_STUBS ) {
+                return jit_stubbed_call<RetT>();
+            } else {
+                return callT::static_call(this_);
+            }
+        }
+    };
+
+    template <bool Stubbed, typename callT>
+    using CallPropertyStubbedIf = conditional_t<Stubbed, CallPropertyStubbed<callT>, callT>;
+
     template <int isRef, typename callT> struct RegisterProperty;
 
     template <typename callT> struct RegisterProperty <true,callT> {
@@ -287,11 +305,11 @@ namespace das
             using callT = CallProperty<FunT,PROP>;
             RegisterProperty<callT::ref,callT>::reg(mlib, dotName, cppPropName);
         }
-        template <typename FunT, FunT PROP>
+        template <typename FunT, FunT PROP, bool Stubbed = false>
         void addPropertyForManagedType ( const string & na, const string & cppNa="" ) {
             string dotName = ".`" + na;
             string cppPropName = (cppNa.empty() ? na : cppNa);
-            using callT = CallPropertyForType<ManagedType,FunT,PROP>;
+            using callT = CallPropertyStubbedIf<Stubbed, CallPropertyForType<ManagedType,FunT,PROP>>;
             RegisterPropertyForType<ManagedType,callT::isConst,typename callT::RetType,callT::ref,callT>::reg(mlib, dotName, cppPropName, false, SideEffects::none);
         }
         template <typename FunT, FunT PROP, typename FunTConst, FunTConst PROP_CONST>
@@ -303,13 +321,13 @@ namespace das
             using callTConst = CallProperty<FunTConst,PROP_CONST>;
             RegisterProperty<callTConst::ref,callTConst>::reg(mlib, dotName, cppPropName, true);
         }
-      template <typename FunT, FunT PROP, typename FunTConst, FunTConst PROP_CONST>
+      template <typename FunT, FunT PROP, typename FunTConst, FunTConst PROP_CONST, bool Stubbed = false>
         void addPropertyExtConstForManagedType ( const string & na, const string & cppNa="" ) {
             string dotName = ".`" + na;
             string cppPropName = (cppNa.empty() ? na : cppNa);
-            using callT = CallPropertyForType<ManagedType,FunT,PROP>;
+            using callT = CallPropertyStubbedIf<Stubbed, CallPropertyForType<ManagedType,FunT,PROP>>;
             RegisterPropertyForType<ManagedType,callT::isConst,typename callT::RetType,callT::ref,callT>::reg(mlib, dotName, cppPropName, true, SideEffects::modifyArgument);
-            using callTConst = CallPropertyForType<ManagedType,FunTConst,PROP_CONST>;
+            using callTConst = CallPropertyStubbedIf<Stubbed, CallPropertyForType<ManagedType,FunTConst,PROP_CONST>>;
             RegisterPropertyForType<ManagedType,callTConst::isConst,typename callTConst::RetType,callTConst::ref,callTConst>::reg(mlib, dotName, cppPropName, true);
         }
         template <typename TT, off_t off>

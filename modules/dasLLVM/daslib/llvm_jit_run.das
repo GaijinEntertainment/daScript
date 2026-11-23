@@ -860,7 +860,7 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
         jit_flags.emit_prologue = emit_prologue
         jit_flags.need_di = debug_info
         jit_flags.dll_cache = use_dll && !(gen_lib || gen_wasm)
-        jit_flags.direct_builtins = lib_static && !gen_lib
+        jit_flags.direct_builtins = (lib_static || emit_aot_object) && !gen_lib
         let jit_mode = emit_aot_object ? LlvmJitMode.LLVM_AOT : (gen_exe ? LlvmJitMode.EXE : LlvmJitMode.JIT)
 
         let attrs = new Attributes(g_ctx)
