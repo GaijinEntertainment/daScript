@@ -60,11 +60,6 @@ def aot_object_one(input : string, output : string, gen2 : bool, gen2_make : boo
             // the lint macros and style rules already ran upstream.
             cop.no_lint = true
             cop.tune_frozen = true            // AOT is a cross-box artifact (see utils/aot/main.das)
-            // Off so no wrapper is spliced that turns a runtime extern argument into a compile-time
-            // constant for the folder to execute -- fatal when the host stubs its C++ externs in the
-            // AOT tool. Must match the host runtime's policies so both make the same inline/fold
-            // decisions and the AOT hashes agree.
-            cop.auto_inline_functions = false
             cop.jit_output_path := output     // the macro appends the .o suffix
             compile_file(input, access, unsafe(addr(mg)), cop) $(ok; var program : smart_ptr<Program>; issues) {
                 if (!ok || program == null) {
