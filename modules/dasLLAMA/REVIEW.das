@@ -6,6 +6,7 @@ require daslib/strings_boost
 require daslib/strings_convert
 require daslib/fio
 require dastest/review_gate
+require dastest/file_census
 
 // The mechanical half of modules/dasLLAMA/REVIEW.md (contract: REVIEW_COMMON.md at the repo
 // root). Run from the repo root: bin/daslang modules/dasLLAMA/REVIEW.das — exit 0 clean,
@@ -1296,7 +1297,7 @@ def private gpu_tier_seat_setters(text : string) : table<string> {
     var fn = ""
     for (line in split(text, "\n")) {
         if (line |> starts_with("def ")) {
-            fn = def_name_of(line)
+            fn = def_decl_name(line)
             continue
         }
         continue if (empty(fn))
@@ -1342,7 +1343,7 @@ def private check_gpu_home_seat_registrants {
                 continue
             }
             if (line |> starts_with("def ")) {
-                fn = def_name_of(line)
+                fn = def_decl_name(line)
                 fn_init = annotation_has(ann, "init")
                 ann = ""
                 continue
@@ -1391,7 +1392,7 @@ def private check_image_backing_release {
             line_no++
             if (line |> starts_with("def ")) {
                 report_stray_closes(p, fn, opened, closes)
-                fn = def_name_of(line)
+                fn = def_decl_name(line)
                 opened = false
                 closes |> clear()
             }
@@ -1464,7 +1465,7 @@ def private is_meta_serializer(header : string) : bool =>
 //! the `*_prepare` mints that place image bytes are the TTS block file's (`conv1d_prepare`, `linear_prepare`); a driver's prepare (`vk_rdec_prepare`, `mirror_prepare`) places none
 def private is_layout_function(file : string; header : string) : bool {
     return true if (is_archive_serializer(header))
-    let name = def_name_of(header)
+    let name = def_decl_name(header)
     // a bake writes a GPU flavor's device block - bytes the kernels read by layout
     return true if (key_exists(LAYOUT_HELPERS, name) || name |> ends_with("_bake") || name |> ends_with("_bake_into"))
     return name == "build_image" || name == "parse_image" || (find(name, "_prepare") >= 0 && "{DASLLAMA_DIR}/{file}" == TTS_BLOCKS_FILE)
@@ -2577,18 +2578,6 @@ let private DEVICE_CREATION_FUNCTIONS <- {"metal_tensor_race", "metal_tensor_rac
 let private DEVICE_CREATION_CALLS <- ["metal_create_system_default_device(", "metal_new_command_queue(", "create_device_storage_8_16_int_dot",
     "cuda_create_context(", "cuda_stream_create("]
 
-def private def_name_of(body : string) : string {
-    let nl = find(body, "\n")
-    var header = nl < 0 ? body : slice(body, 0, nl)
-    header = slice(header, length("def "))
-    if (header |> starts_with("private ")) {
-        header = slice(header, length("private "))
-    } elif (header |> starts_with("public ")) {
-        header = slice(header, length("public "))
-    }
-    return ident_prefix(header)
-}
-
 def private check_device_creation_sites {
     dir(DASLLAMA_DIR) $(name) {
         return if (!ends_with(name, ".das") || DEVICE_CREATION_FILES |> key_exists(name))
@@ -2602,7 +2591,7 @@ def private check_device_creation_sites {
                 creates = creates || find(f.body, call) >= 0
             }
             continue if (!creates)
-            let fname = def_name_of(f.body)
+            let fname = def_decl_name(f.body)
             continue if (DEVICE_CREATION_FUNCTIONS |> key_exists(fname))
             gate_finding(path, f.line, "`{fname}` creates a GPU device or queue of its own - a GPU family shares the one device and queue its _common file's init made; a tuner race entry that must run before the driver inits is named in REVIEW.das's DEVICE_CREATION_FUNCTIONS with its reason (ARCHITECTURE_GPU.md#gpu-backends)")
         }
@@ -3259,7 +3248,7 @@ def private tests_homes : table<string; string> {
     for (p in files) {
         for (line in split(read_lf(p), "\n")) {
             if (line |> starts_with("def ")) {
-                let n = def_name_of(line)
+                let n = def_decl_name(line)
                 if (!key_exists(out, n)) {
                     out[n] = p
                 }
@@ -3272,7 +3261,7 @@ def private tests_homes : table<string; string> {
 //! true when a cell the pinned set names in `home` calls `name` - a gate helper a pinned cell runs
 def private called_by_pinned_cell(name, home : string; pinned : table<string>) : bool {
     var inscope fns <- function_bodies(home) $(header) {
-        return header |> starts_with("def test_") && key_exists(pinned, def_name_of(header))
+        return header |> starts_with("def test_") && key_exists(pinned, def_decl_name(header))
     }
     for (f in fns) {
         return true if (find(f.body, "{name}(") >= 0)
@@ -3440,7 +3429,7 @@ def private names_under(roots : array<string>; var files, defs : table<string>) 
             files |> insert(base_name(p))
             for (line in split(read_lf(p), "\n")) {
                 if (line |> starts_with("def ")) {
-                    defs |> insert(def_name_of(line))
+                    defs |> insert(def_decl_name(line))
                 }
             }
         }

@@ -28,6 +28,7 @@ require daslib/fio
 require daslib/strings_boost
 require daslib/rtti
 require daslib/ast
+require dastest/file_census
 require strings
 require math
 
@@ -346,23 +347,6 @@ def def_is_generic(line : string) : bool {
         return true if (find(seg, ':') < 0)
     }
     return false
-}
-
-// the def name for duplicate-header renaming; "" for operators and non-def lines
-def def_decl_name(line : string) : string {
-    return "" if (!(line |> starts_with("def ")))
-    var name = ""
-    peek_data(line) $(d) {
-        let stop = trimmed_end(d)
-        var pos = skip_white_space(d, length("def "))
-        for (m in ["private ", "public ", "static ", "abstract ", "const "]) {
-            if (pos + length(m) <= stop && starts_with(d, pos, m)) {
-                pos = skip_white_space(d, pos + length(m))
-            }
-        }
-        name = take_ident(d, pos)
-    }
-    return name == "operator" ? "" : name
 }
 
 def def_header_key(line : string) : string {
@@ -705,7 +689,7 @@ def register_def_header(var ren : Renamer; chunk : Chunk) {
             continue
         }
         let dname = def_decl_name(l)
-        continue if (empty(dname))
+        continue if (empty(dname) || dname == "operator")
         let hdr = (def_is_generic(l) ? join(ann_parts, "") : "") + def_header_key(l)
         if (key_exists(ren.def_headers, hdr)) {
             declare(ren, [dname])
