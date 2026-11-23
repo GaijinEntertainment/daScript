@@ -256,7 +256,9 @@ first when the pointers are non-owning.
   cast one side. Bare integer LITERALS are the one exception, adapting to a known numeric
   target - `f + 1`, `d > 1`, `var f : float = 1`, `return 200` into `uint8` - but NOT at
   call arguments (`take_f(1)` fails when `take_f` wants float) or parameter defaults, and
-  float literals never adapt to double. No `bool(int)` - write `x != 0`. No `string(bool)`
+  float literals never adapt to double. In an operator an int constant the compiler can
+  evaluate adapts too (`f *= int(2)`), a named constant does not. No `bool(int)` - write
+  `x != 0`. No `string(bool)`
   - interpolate `"{flag}"`.
 - **Hex literals are `uint`** - `int(0x3F)` when an int is needed.
 - **Reserved words that look like identifiers:** `where`, `shared`, `label`, `expect`,

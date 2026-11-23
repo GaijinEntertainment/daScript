@@ -101,6 +101,7 @@ namespace das {
         bool relaxedAssign = false;
         bool relaxedPointerConst = false;
         bool promoteFoldedIntConstants = false;
+        bool quietFolding = false;
         bool unsafeTableLookup = false;
         bool defaultInitContainers = true;
         bool withModuleIsUnsafe = false;
@@ -576,6 +577,8 @@ namespace das {
         // Sets rangeError=true and emits exceeds_constant_range when the literal exceeds the target range.
         // Returns nullptr+rangeError=false when promotion is not applicable.
         ExpressionPtr tryPromoteConstInt(const ExpressionPtr &expr, const TypeDeclPtr &targetType, bool &rangeError, bool requireConstLiteral = false);
+        ExpressionPtr promoteOp2Operand(const ExpressionPtr &operand, const TypeDeclPtr &targetType, bool &rangeError, bool foldedToo);
+        bool op2LookupMisses(ExprOp2 *expr) const;
         string moveErrorInfo(ExprMove *expr) const;
         virtual void preVisit(ExprMove *expr) override;
         virtual ExpressionPtr visit(ExprMove *expr) override;

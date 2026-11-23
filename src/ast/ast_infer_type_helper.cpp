@@ -65,6 +65,7 @@ namespace das {
             func->notInferred();
     }
     void InferTypes::reportFolding() {
+        if (quietFolding) return;
         FoldingVisitor::reportFolding();
         needRestart = true;
         if (func)

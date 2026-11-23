@@ -128,7 +128,7 @@ namespace das {
         alwaysExportInitializer = prog->options.getBoolOption("always_export_initializer", false);
         relaxedAssign = prog->options.getBoolOption("relaxed_assign", prog->policies.relaxed_assign);
         relaxedPointerConst = prog->options.getBoolOption("relaxed_pointer_const", prog->policies.relaxed_pointer_const);
-        promoteFoldedIntConstants = prog->policies.promote_folded_int_constants;
+        promoteFoldedIntConstants = prog->options.getBoolOption("promote_folded_int_constants", prog->policies.promote_folded_int_constants);
         unsafeTableLookup = prog->options.getBoolOption("unsafe_table_lookup", prog->policies.unsafe_table_lookup);
         defaultInitContainers = prog->options.getBoolOption("default_init_containers", prog->policies.default_init_containers);
         withModuleIsUnsafe = prog->options.getBoolOption("with_module_is_unsafe", prog->policies.with_module_is_unsafe);

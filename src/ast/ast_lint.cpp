@@ -1339,6 +1339,7 @@ namespace das {
     // language
         "always_export_initializer",    Type::tBool,
         "infer_time_folding",           Type::tBool,
+        "promote_folded_int_constants", Type::tBool,
         // disable_run registered via its CodeOfPolicies field
         "indenting",                    Type::tInt,
         "no_unsafe_uninitialized_structures", Type::tBool,

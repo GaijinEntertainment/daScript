@@ -674,6 +674,24 @@ namespace das {
                 }
             }
         }
+        if ( expr->rtti_isOp3() ) {
+            auto op3 = static_cast<ExprOp3 *>(expr);
+            if ( op3->subexpr->type && op3->left->type && op3->right->type ) {
+                auto ccc = foldConstInit(op3->subexpr);
+                auto lcc = ccc ? foldConstInit(op3->left) : nullptr;
+                auto rcc = lcc ? foldConstInit(op3->right) : nullptr;
+                if ( rcc ) {
+                    auto copy = static_cast<ExprOp3 *>(op3->clone());
+                    copy->subexpr = ccc;
+                    copy->left = lcc;
+                    copy->right = rcc;
+                    auto folded = evalAndFold(copy);
+                    if ( folded && folded->rtti_isConstant() ) {
+                        return folded;
+                    }
+                }
+            }
+        }
         if ( expr->rtti_isSwizzle() ) {
             auto swz = static_cast<ExprSwizzle *>(expr);
             if ( swz->value->type ) {

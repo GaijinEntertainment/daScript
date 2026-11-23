@@ -17,6 +17,10 @@ def typed_uint_on_left(bits : uint) : uint => clz(bits) - 31
 
 def minus_one(a : auto(T)) => a - 1
 
+def operator %(a : float; b : int) : float => a + float(b) + 100.0
+
+def mixed_remainder(a : float; b : int) : float => a % b
+
 [test(description = "a constant folded from a typed expression keeps its uint type under infer-time folding, so the literal on the other side adapts to it")]
 def test_folded_constant_keeps_its_type(t : T?) {
     t |> run("folded call result keeps uint, literal adapts") @(t : T?) {
@@ -65,4 +69,48 @@ def test_bare_literal_still_adapts(t : T?) {
         t |> equal(minus_one(5u), 4u)
         t |> equal(minus_one(5l), 4l)
     }
+}
+
+[test(description = "an int constant folded from a call or a typeinfo promotes toward the other operand where the operator would not compile without it, on either side and in a compound assignment")]
+def test_folded_int_constant_promotes(t : T?) {
+    t |> run("compound assignment takes a cast literal") @(t : T?) {
+        var f = 1.5
+        f *= 1
+        f *= int(2)
+        t |> equal(f, 3.0)
+        var d = 1.5lf
+        d += int(2)
+        t |> equal(d, 3.5lf)
+        var l = 5l
+        l -= int(2)
+        t |> equal(l, 3l)
+    }
+    t |> run("either side of a binary operator") @(t : T?) {
+        let f = 2.0
+        t |> equal(typeinfo typename(f + int(1)), "float const")
+        t |> equal(f + int(1), 3.0)
+        t |> equal(int(1) + f, 3.0)
+        t |> success(f > int(1))
+    }
+    t |> run("a folded call and a typeinfo") @(t : T?) {
+        let f = 2.0
+        t |> equal(f * clz(0xFF), 48.0)
+        t |> equal(f * typeinfo sizeof(type<int>), 8.0)
+        t |> equal(f * (typeinfo is_pod(type<int>) ? 2 : 3), 4.0)
+    }
+}
+
+[test(description = "an operator declared on the mixed pair is still the one called when the int side is a folded constant")]
+def test_user_operator_beats_folded_promotion(t : T?) {
+    let f = 2.0
+    t |> equal(mixed_remainder(f, 3), 105.0)
+    t |> equal(f % int(3), 105.0)
+    t |> equal(f % typeinfo sizeof(type<int>), 106.0)
+}
+
+[test(description = "a folded int constant beside a bitfield takes the bitfield type, on either side")]
+def test_folded_int_constant_beside_bitfield(t : T?) {
+    let x : bitfield = bitfield(1)
+    t |> equal(int(x | int(2)), 3)
+    t |> equal(int(int(2) | x), 3)
 }
