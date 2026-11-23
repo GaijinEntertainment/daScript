@@ -18,6 +18,7 @@ require daslib/strings_boost
 require daslib/rtti
 require daslib/module_group   // module_group_module_name: a require path's module
 require dastest/review_gate   // das_requires: a file's require paths
+require dastest/file_census   // def_decl_name: a `def` header's name
 require ../common/parallel_workers.das
 require ../common/arch_citations.das
 
@@ -450,36 +451,35 @@ def collect_basenames(path : string; var out : table<string; void?>) {
     }
 }
 
-// Every `def test_*` name under `folder`, `_`-prefixed fixture files included: a checklist may
-// name a cell its folder's shared fixture defines.
-def collect_test_cells(path : string; var out : table<string; void?>) {
+def collect_file_def_names(text : string; var out : table<string; void?>) {
+    peek_data(text) $(d) {
+        var from = 0
+        while (true) {
+            let at = find(d, "def", from)
+            break if (at < 0)
+            from = at + length("def")
+            var line_start = at   //! a `def` only counts at the head of its line - `// def test_gone` is a comment
+            while (line_start > 0 && (int(d[line_start - 1]) == ' ' || int(d[line_start - 1]) == '\t')) {
+                line_start --
+            }
+            continue if (line_start != 0 && int(d[line_start - 1]) != '\n')
+            let eol = find(d, "\n", at)
+            out |> insert(def_decl_name(slice(d, at, eol < 0 ? length(d) : eol)), null)
+        }
+    }
+}
+
+// Every function name under `path`, `_`-prefixed fixture files
+// included: a checklist may name a cell its folder's shared fixture
+// defines.
+def collect_def_names(path : string; var out : table<string; void?>) {
     let st = stat(path)
     return if (!st.is_valid)
     if (st.is_reg) {
         return if (!(path |> ends_with(".das")))
         let text = fread(path)
         return if (empty(text))
-        peek_data(text) $(d) {
-            var from = 0
-            while (true) {
-                let at = find(d, "def test_", from)
-                break if (at < 0)
-                var end = at + 4
-                while (end < length(d)) {
-                    let ch = int(d[end])
-                    break if (!is_word_byte(ch))
-                    end ++
-                }
-                var line_start = at   //! a `def` only counts at the head of its line - `// def test_gone` is a comment
-                while (line_start > 0 && (int(d[line_start - 1]) == ' ' || int(d[line_start - 1]) == '\t')) {
-                    line_start --
-                }
-                if (line_start == 0 || int(d[line_start - 1]) == '\n') {
-                    out |> insert(slice(d, at + 4, end), null)
-                }
-                from = end
-            }
-        }
+        collect_file_def_names(text, out)
         return
     }
     return if (!st.is_dir)
@@ -487,7 +487,7 @@ def collect_test_cells(path : string; var out : table<string; void?>) {
         return if (name == "." || name == ".." || is_skip_dir(name))
         let full = "{path}/{name}"
         return if (is_skip_tree(full))
-        collect_test_cells(full, out)
+        collect_def_names(full, out)
     }
 }
 
@@ -572,7 +572,7 @@ def run_rule_doc_text_pass(folders : array<string>; roots : array<string>;
                             "or was renamed; fix the cite or drop it"))
                     } elif (token_is_test_cell(tok)) {
                         if (!cells_indexed) {
-                            collect_test_cells(folder, cells)
+                            collect_def_names(folder, cells)
                             cells_indexed = true
                         }
                         if (!(cells |> key_exists(tok))) {

@@ -76,10 +76,11 @@ the checklists' text: **LINT032** reports a `REVIEW*.md` citing a rule by positi
 above", "see below"), and **LINT033** a `REVIEW*.md` naming a path (a backticked token with a
 source extension) or a test cell (a backticked `test_<subject>_<claim>`) the tree no longer has -
 a path resolves against the checklist's folder, its ancestors and the working directory, a bare
-basename anywhere in the repo, a cell as a `def test_*` under the checklist's folder. The
+basename anywhere in the repo, a cell as a `def test_*`, `def private test_*` or
+`def public test_*` at the head of a line under the checklist's folder. The
 `rule_docs_only` key is a folder property - it never cascades, unlike `[format]`. Fixtures:
-`tests/lint025_*`, `tests/lint026_*`, `tests/lint027_*` and `tests/lint033_*`, each driving the
-CLI over a planted tree.
+`tests/lint026_*` and `tests/lint_rule_docs.das` (LINT025, LINT027, LINT032 and LINT033), each
+driving the CLI over a planted tree.
 
 Design: the runner stays thin - rules live in the daslib modules (authoring rails:
 `skills/internal/perf_lint_authoring.md`, `skills/internal/style_lint_authoring.md`);
@@ -90,5 +91,5 @@ Every rule id has a fixture whose file name carries the id - `tests/<id>_*.das` 
 `tests/lint/` (repo root) file for the rules whose test needs the dastest harness - and a
 section in `doc/source/reference/language/lint.rst`; `REVIEW.das` beside this file checks the
 triple. Fixtures whose names do not carry the id: LINT019 -> `tests/lint/test_stale_nolint.das`, PERF033 ->
-`tests/lint/test_lint_fix.das` (its before/after fixture pair), LINT032 ->
-`utils/lint/tests/lint033_rule_doc_names.das` (the folder test both checklist rules share).
+`tests/lint/test_lint_fix.das` (its before/after fixture pair), LINT025, LINT027, LINT032 and
+LINT033 -> `utils/lint/tests/lint_rule_docs.das` (the folder test the document rules share).

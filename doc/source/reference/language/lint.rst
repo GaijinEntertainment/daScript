@@ -909,7 +909,8 @@ A backticked token in a ``REVIEW*.md`` that ends in a source extension
 (``.das``, ``.md``, ``.rst``, ``.py``, ``.sh``, ``.cpp``, ``.h``, ``.hpp``,
 ``.ypp``, ``.cmake``) must resolve: a path against the checklist's folder, its
 ancestors and the working directory; a bare basename anywhere in the repo.
-A backticked ``test_<subject>_<claim>`` must be a ``def test_*`` under the
+A backticked ``test_<subject>_<claim>`` must be a ``def test_*``,
+``def private test_*`` or ``def public test_*`` at the head of a line under the
 checklist's folder. A span carrying a wildcard or a placeholder is skipped, as
 is an absolute or ``$``-prefixed path. A renamed file or cell leaves the rule
 that cited it pointing at nothing, and a rule nobody can follow stops binding.
