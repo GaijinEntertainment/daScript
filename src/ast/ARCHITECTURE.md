@@ -6,7 +6,8 @@ host-built programs, `ARCHITECTURE_GC.md` gc roots, `ARCHITECTURE_SHARED.md` sha
 `ARCHITECTURE_MODULE_SCAN.md` the module scan and the descriptor manifest, `ARCHITECTURE_INLINE.md`
 the inliner's conditional call lowering, `ARCHITECTURE_LIBRARIES.md` which library a source links into,
 `ARCHITECTURE_LOOP_SOURCE.md` a value made in a loop header, `ARCHITECTURE_ALIASING.md` in-place
-builds and what the alias pass counts as a read of the target.
+builds and what the alias pass counts as a read of the target, `ARCHITECTURE_COMPILE_MODULES.md`
+compiling the required modules.
 The rest of inference, with parsing and simulation, is in `skills/internal/cpp_codebase_notes.md` (repo-only).
 
 ## Returned locals captured by blocks or heap literals {#return-local-storage}
