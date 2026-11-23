@@ -807,6 +807,16 @@ namespace das {
                 SideEffects::none, "das_get_jit_string_table_at_with_hash");
             addExternInline<DAS_BIND_FUN(das_get_jit_string_table_at_after_packed_miss)>(*this, lib, "get_jit_string_table_at_after_packed_miss",
                 SideEffects::none, "das_get_jit_string_table_at_after_packed_miss");
+            addExternInline<DAS_BIND_FUN(das_get_jit_table_at_link_name)>(*this, lib, "get_jit_table_at_link_name",
+                SideEffects::none, "das_get_jit_table_at_link_name");
+            addExternInline<DAS_BIND_FUN(das_get_jit_table_erase_link_name)>(*this, lib, "get_jit_table_erase_link_name",
+                SideEffects::none, "das_get_jit_table_erase_link_name");
+            addExternInline<DAS_BIND_FUN(das_get_jit_table_find_link_name)>(*this, lib, "get_jit_table_find_link_name",
+                SideEffects::none, "das_get_jit_table_find_link_name");
+            addExternInline<DAS_BIND_FUN(das_get_jit_string_table_at_with_hash_link_name)>(*this, lib, "get_jit_string_table_at_with_hash_link_name",
+                SideEffects::none, "das_get_jit_string_table_at_with_hash_link_name");
+            addExternInline<DAS_BIND_FUN(das_get_jit_string_table_at_after_packed_miss_link_name)>(*this, lib, "get_jit_string_table_at_after_packed_miss_link_name",
+                SideEffects::none, "das_get_jit_string_table_at_after_packed_miss_link_name");
             addExternInline<DAS_BIND_FUN(das_get_global_variable_offset)>(*this, lib, "get_global_variable_offset",
                 SideEffects::none, "das_get_global_variable_offset");
             addExternInline<DAS_BIND_FUN(das_get_global_variable_mnh)>(*this, lib, "get_global_variable_mnh",

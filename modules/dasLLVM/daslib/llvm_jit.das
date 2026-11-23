@@ -2120,7 +2120,9 @@ class public LlvmJitVisitor : AstVisitor {
             get_context_param(),
             get_line_info_ptr(at)
         )
-        var (tab_fun, typ) = get_table_at(g_builder, g_mod, ttype, types)
+        let type_id = unsafe(reinterpret<int>(ttype))
+        var (tab_fun, typ) = get_table_at(g_builder, g_mod, ttype, types,
+            flags.direct_builtins ? get_jit_table_at_link_name(type_id) : "")
         let ccall = LLVMBuildCall2(g_builder, typ, tab_fun, params, "")
         LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.nounwind)     // TODO: better no-unwind?
         LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.willreturn)
@@ -2136,7 +2138,9 @@ class public LlvmJitVisitor : AstVisitor {
             types.ConstI32(uint64(valueTypeSize)),    // valueTypeSize
             get_context_param()
         )
-        var (fun_ptr, typ) = get_table_find(g_builder, g_mod, ttype, types)
+        let type_id = unsafe(reinterpret<int>(ttype))
+        var (fun_ptr, typ) = get_table_find(g_builder, g_mod, ttype, types,
+            flags.direct_builtins ? get_jit_table_find_link_name(type_id) : "")
         let ccall = LLVMBuildCall2(g_builder, typ, fun_ptr, params, "")
         LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.nounwind)     // TODO: better no-unwind?
         LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.willreturn)
@@ -2289,7 +2293,8 @@ class public LlvmJitVisitor : AstVisitor {
             get_context_param(),
             get_line_info_ptr(at)
         )
-        var (tab_fun, typ) = get_string_table_at_with_hash(g_builder, g_mod, types)
+        var (tab_fun, typ) = get_string_table_at_with_hash(g_builder, g_mod, types,
+            flags.direct_builtins ? get_jit_string_table_at_with_hash_link_name() : "")
         let ccall = LLVMBuildCall2(g_builder, typ, tab_fun, params, "")
         LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.nounwind)
         LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.willreturn)
@@ -2314,7 +2319,8 @@ class public LlvmJitVisitor : AstVisitor {
             get_context_param(),
             get_line_info_ptr(at)
         )
-        var (tab_fun, typ) = get_string_table_at_after_packed_miss(g_builder, g_mod, types)
+        var (tab_fun, typ) = get_string_table_at_after_packed_miss(g_builder, g_mod, types,
+            flags.direct_builtins ? get_jit_string_table_at_after_packed_miss_link_name() : "")
         let ccall = LLVMBuildCall2(g_builder, typ, tab_fun, params, "")
         LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.nounwind)
         LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.willreturn)
@@ -5878,7 +5884,9 @@ class public LlvmJitVisitor : AstVisitor {
             get_context_param(),
             get_line_info_ptr(at)
         )
-        var (fun_ptr, typ) = get_table_erase(g_builder, g_mod, ttype, types)
+        let type_id = unsafe(reinterpret<int>(ttype))
+        var (fun_ptr, typ) = get_table_erase(g_builder, g_mod, ttype, types,
+            flags.direct_builtins ? get_jit_table_erase_link_name(type_id) : "")
         let ccall = LLVMBuildCall2(g_builder, typ, fun_ptr, params, "")
         LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.nounwind)     // TODO: better no-unwind?
         LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.willreturn)
