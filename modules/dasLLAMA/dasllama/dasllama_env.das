@@ -1056,6 +1056,10 @@ struct public TestEnv {
     @clarg_doc = "Directory of audio corpus files for the transcription tests."
     corpus_dir : string = ""
 
+    @clarg_path
+    @clarg_doc = "Directory the test runner's children make their scratch folders under (handed to each child as TMPDIR); unset, they make them under the runner's own. A box whose TMPDIR is a network folder points it at a local disk."
+    scratch_dir : string = ""
+
     @clarg_env = "TMPDIR"
     @clarg_path
     @clarg_default_doc = "/tmp"
@@ -1222,7 +1226,7 @@ def public models_dir_resolved() : string {
 }
 
 // Dynamic-name reads (`env_is_set` / `env_value_of` — the ONE sanctioned escape hatch: the
-// bench repro-line forwarder, lever env names from data, lab filter variables) and the doc
+// bench repro-line forwarder, lever env names from data, lab filter variables, `env_set_knobs`) and the doc
 // renderers both come from daslib/env_registry, re-exported public above.
 
 // Compile-time knobs are not runtime config — no struct field would tell the truth about them —
@@ -1284,8 +1288,8 @@ def public env_markdown() : string {
     }
 }
 
-//! Every declared knob name, in documentation order — the coverage test and the bench repro-line
-//! forwarder consume this.
+//! Every declared knob name, in documentation order — the coverage test, the bench repro-line
+//! forwarder and `env_set_knobs` consume this.
 def public registered_env_names() : array<string> {
     var out : array<string>
     out |> reserve(140)
@@ -1309,6 +1313,26 @@ def public registered_env_names() : array<string> {
     }
     delete extras
     return <- out
+}
+
+//! whether the knob `name` is part of a pass's key (`env_set_knobs`): every one but the four that say only where a run
+//! writes or how much it logs
+def public env_knob_keyed(name : string) : bool
+    => name != "TMPDIR" && name != "TEMP" && name != "DASLLAMA_SCRATCH_DIR" && name != "DAS_LOG_LEVEL"
+
+//! Every declared knob the environment sets, a `NAME=value` line each in declaration order, but the four that say only
+//! where a run writes or how much it logs (`TMPDIR`, `TEMP`, `DASLLAMA_SCRATCH_DIR`, `DAS_LOG_LEVEL`): what a test's
+//! verdict can rest on beside its sources, for the key of a pass on record
+def public env_set_knobs() : string {
+    var names <- registered_env_names()
+    let text = build_string() $(var w) {
+        for (n in names) {
+            continue if (!env_knob_keyed(n) || !env_is_set(n))
+            w |> write("{n}={env_value_of(n)}\n")
+        }
+    }
+    delete names
+    return text
 }
 
 //! a tri-state pin over an environment knob: -1 the environment's `env`, 0 off, any other value on

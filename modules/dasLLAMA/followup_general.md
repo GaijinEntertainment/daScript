@@ -1834,7 +1834,7 @@
    clip is replaced by a traceable one or built by the test. Done = both clips come from the rig
    or the repository and the cells' expectations are re-pinned on them.
 
-181. **`test_vision_chat.das`'s deepstack cell is SIGKILLed on the pod under its 62 GB cgroup cap.**
+181. **The Qwen3-VL 4B deepstack cell (`_vision_chat_cells.das`, run from `test_qwen3v.das`'s 4B block) is SIGKILLed on the pod under its 62 GB cgroup cap.**
    `test_vision_chat_deepstack` (Qwen3-VL 4B, the 300-row mrope image quantum declined to the CPU
    prefill loop - "the `vulkan` override does not rope from per-row tables") dies with "Killed"
    (exit 137) in every stocked run on the RTX PRO 4500 pod since 09-24, on master's code, while

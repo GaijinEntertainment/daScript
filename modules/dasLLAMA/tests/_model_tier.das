@@ -24,6 +24,7 @@ require dasllama/dasllama_common   // decode_ — the eyeball rail detokenizes t
 require dasllama/dasllama_tokenizer   // TokKind — a model loaded without its tokenizer logs ids
 require dasllama/dasllama_env
 require dasllama/dasllama_math
+require dasllama/dasllama_audio_io   // load_audio_16k_mono: a corpus clip's samples
 require dasllama/dasllama_load   // load_checkpoint, quantize_weights: the stories15M load-once blocks
 require dasllama/dasllama_gpu_resident   // resident_mirror_dtype — the mirror codec the box arms
 require ../performance/model_specs.das   // prefix_match_len / fixture_ok — the fixture compare the board gates read too
@@ -90,6 +91,25 @@ def corpus_dir() : string => root_or(g_env_test.corpus_dir, "{get_das_root()}/mo
 
 //! one corpus file by name (`jfk.wav`, `ru_fleurs.json`, `librispeech/<clip>.wav`)
 def asr_clip(name : string) : string => path_join(corpus_dir(), name)
+
+//! whether the corpus holds the clip `name`
+def asr_clip_present(name : string) : bool => fexist(asr_clip(name))
+
+//! true, with `t` skipped loudly, where the corpus does not hold the clip `name`
+def asr_clip_absent(t : T?; name : string) : bool {
+    return false if (asr_clip_present(name))
+    t |> skip("{name} not present")
+    return true
+}
+
+//! the corpus clip `name` at 16 kHz mono, empty after a loud skip of `t` where the corpus does not hold it
+def asr_samples(t : T?; name : string) : array<float> {
+    var samples <- load_audio_16k_mono(asr_clip(name))
+    if (empty(samples)) {
+        t |> skip("{name} not present")
+    }
+    return <- samples
+}
 
 //! an ASR family's oracle dumps under the model root, beside the TTS families' `tts_oracle/`
 def asr_oracle_dir(family : string) : string => path_join(models_dir(), "asr_oracle/{family}")
@@ -534,6 +554,14 @@ def snapshot_available(t : T?; snap : string) : bool {
 
 //! true under the JIT with the model at `path` stocked; else the cell has registered the loud skip and its caller returns
 def jit_model_available(t : T?; path : string) : bool => jit_only(t) && model_available(t, path)
+
+//! true where the image rail is on (`DASLLAMA_IMAGE` not 0); else the cell has registered the loud skip and its caller
+//! returns - a cell that asserts on a baked image has none to mint or map with the rail off
+def image_rail_on(t : T?) : bool {
+    return true if (g_env_engine.image)
+    t |> skip("the image rail is off (DASLLAMA_IMAGE=0) - a model arm has no image to mint or map")
+    return false
+}
 
 //! `blk` inside the engine's job queue with dispatch forced threaded (a chunk threshold of 1: every work count takes the
 //! lanes), the threshold put back after

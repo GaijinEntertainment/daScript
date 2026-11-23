@@ -69,7 +69,7 @@ def private cut_aud_release {
 [arch(at = "../ARCHITECTURE_GPU_TOWER_RAIL.md#whisper-chains")]
 def private cut_aud_attach(var r : CutResident; t : AudioTower) : bool {
     tower_aud_offs(t, g_cut_ln_offs)
-    let key = cut_key_dev(t.dev, t.devplan, t.fblob, t.n_layer)
+    let key = tower_fold_wblob(cut_key_dev(t.dev, t.devplan, t.fblob, t.n_layer), t.wblob)
     return true if (r.key == key)
     cut_aud_release()
     return cut_upload_planes(r, key, t.fblob, t.gemm_f16 ? t.wblob : PlaneU16(), 0l) && (!t.q8 || cut_upload_q8(r, t, CUT_AUD_PIECE))

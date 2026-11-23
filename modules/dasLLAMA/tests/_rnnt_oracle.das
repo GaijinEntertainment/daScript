@@ -154,46 +154,74 @@ def rnnt_tokens_match(t : T?; tag : string; got, want : array<RnntToken>; bar : 
 //! the plogs of `toks`: a decode's side of a plog compare
 def plogs_of(toks : array<RnntToken>) : array<float> => <- [for (x in toks); x.plog]
 
-//! A device twin's two decodes: the CPU loop's tokens and the device's.
-struct RnntTwin {
-    cpu : array<RnntToken>
+//! One clip's device-decode twin as two forms keep it: the device form's encoder rows `rows` over `tt` frames and its
+//! decode's tokens, then the CPU form's decode of `rows` and of `rows` at 1.05x (the control). `q8` is the lane, `cpu_q8`
+//! the lane of the CPU image whose decode the device's is held against. `legs` counts the forms kept.
+struct RnntDecodeTwin {
+    tag : string
+    q8 : bool
+    cpu_q8 : bool
+    tt : int64
+    rows : array<float>
     dev : array<RnntToken>
+    cpu : array<RnntToken>
+    moved : array<RnntToken>
+    dev_text : string
+    cpu_text : string
+    legs : int
 }
 
-//! A family's device-decode twin over one clip's encoder rows `x`: `cpu_decode` - the CPU-flavored model's decode of `x` - with
-//! the seat pinned off (the CPU loop - the decode counter must not move, so a knob that pins nothing reds), then `dev_decode` -
-//! the GPU-flavored model's (`#tower-dev-block`) - pinned on (counted on the device, `projects` / `handoffs` of them as the
-//! family's lane expects), the tokens alike within `bar`. The control decodes `x` scaled by 1.05 on the CPU loop and its plogs
-//! must land outside `bar` of the device's: a bar the encoder rows cannot move proves nothing. `x` is put back bit for bit.
-//! Answers both decodes for the caller's log. The caller skips through `rnnt_seat_skip` first.
-def rnnt_device_twin(t : T?; tag : string; bar : float; projects, handoffs : int64; var x : array<float>;
-                     cpu_decode : block<(var toks : array<RnntToken>) : void>; dev_decode : block<(var toks : array<RnntToken>) : void>) : RnntTwin {
-    var tw : RnntTwin
-    let was = rnnt_seat_pin(false)
-    let k0 = rnnt_seat_stats()
-    invoke(cpu_decode, tw.cpu)
+//! A device-decode twin's device leg: `decode` - the GPU-flavored model's decode (`#tower-dev-block`) of the encode the
+//! caller ran - with the seat pinned on, counted once on the device, `projects` / `handoffs` of it as the lane's home
+//! expects. `tag` names the twin in the asserts.
+def rnnt_decode_dev_leg(t : T?; tag : string; projects, handoffs : int64; decode : block<() : void>) {
+    let was = rnnt_seat_pin(true)
     let k1 = rnnt_seat_stats()
-    rnnt_seat_pin(true)
-    invoke(dev_decode, tw.dev)
+    invoke(decode)
     let s1 = rnnt_seat_stats()
-    rnnt_seat_pin(false)
-    var inscope keep := x
-    for (v in x) {
-        v *= 1.05
-    }
-    var inscope moved : array<RnntToken>
-    invoke(cpu_decode, moved)
-    x := keep
     rnnt_seat_pin(was)
-    t |> equal(k1.decodes - k0.decodes, 0l, "{tag}: pinned off, the decode stays on the CPU loop")
     t |> equal(s1.decodes - k1.decodes, 1l, "{tag}: the decode served on the device")
     t |> equal(s1.projects - k1.projects, projects, "{tag}: the encoder half projected on the device where the lane's home projects it")
     t |> equal(s1.handoffs - k1.handoffs, handoffs, "{tag}: the projection read the encode's device rows where the device encoded")
-    t |> success(!empty(tw.cpu), "{tag}: the clip decodes to tokens")
-    rnnt_tokens_match(t, tag, tw.dev, tw.cpu, bar)
-    check_exceeds(t, "{tag}: the control - the encoder rows scaled by 1.05 move the plogs past the bar", plogs_of(tw.dev), plogs_of(moved),
+}
+
+//! A device-decode twin's CPU legs: `decode` - the CPU form's decode of rows over `tt` frames - runs on the device form's
+//! kept rows with the seat pinned off (the decode counter must not move, so a knob that pins nothing reds), then on them
+//! scaled by 1.05 - the control. `tag` names the twin in the assert.
+def rnnt_decode_cpu_legs(t : T?; tag : string; var d : RnntDecodeTwin;
+                         decode : block<(rows : array<float>; tt : int64; var toks : array<RnntToken>) : void>) {
+    let was = rnnt_seat_pin(false)
+    let k0 = rnnt_seat_stats()
+    invoke(decode, d.rows, d.tt, d.cpu)
+    let k1 = rnnt_seat_stats()
+    var inscope scaled := d.rows
+    for (v in scaled) {
+        v *= 1.05
+    }
+    invoke(decode, scaled, d.tt, d.moved)
+    rnnt_seat_pin(was)
+    t |> equal(k1.decodes - k0.decodes, 0l, "{tag}: pinned off, the decode stays on the CPU loop")
+    d.legs = 2
+}
+
+//! A device-decode twin held, after its file's block, on what two forms kept: the device form's decode `dev` against the
+//! CPU form's decode `cpu` of the same encoder rows within `bar`, and the control - the CPU decode `moved` of the rows
+//! scaled by 1.05 - past it.
+def rnnt_twin_held(t : T?; tag : string; dev, cpu, moved : array<RnntToken>; bar : float) {
+    t |> success(!empty(cpu), "{tag}: the clip decodes to tokens")
+    rnnt_tokens_match(t, tag, dev, cpu, bar)
+    check_exceeds(t, "{tag}: the control - the encoder rows scaled by 1.05 move the plogs past the bar", plogs_of(dev), plogs_of(moved),
         Bar(abs_floor = bar))
-    return <- tw
+}
+
+//! A kept device-decode twin `d` held after its file's block: both forms' legs kept, then `rnnt_twin_held` within `bar`;
+//! both decodes' transcripts logged. `tag` names the twin.
+def rnnt_decode_twin_held(t : T?; tag : string; d : RnntDecodeTwin; bar : float) {
+    t |> equal(d.legs, 2, "{tag}: the device decode and the CPU decode were kept")
+    return if (d.legs != 2)
+    rnnt_twin_held(t, tag, d.dev, d.cpu, d.moved, bar)
+    to_log(LOG_INFO, "{tag} cpu   : {d.cpu_text}\n")
+    to_log(LOG_INFO, "{tag} device: {d.dev_text}\n")
 }
 
 let RC_NL = 2

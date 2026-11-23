@@ -357,6 +357,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `DISPLAY` | text | unset | Ambient platform variable; read only by the browser examples' smoke tests (storyteller, storywish, parrot) to tell whether a Linux box has a window server for the example's window. |
 | `WAYLAND_DISPLAY` | text | unset | Ambient platform variable (the Wayland twin of DISPLAY); read only by the browser examples' smoke tests. |
 | `DASLLAMA_CORPUS_DIR` | path | unset | Directory of audio corpus files for the transcription tests. |
+| `DASLLAMA_SCRATCH_DIR` | path | unset | Directory the test runner's children make their scratch folders under (handed to each child as TMPDIR); unset, they make them under the runner's own. A box whose TMPDIR is a network folder points it at a local disk. |
 | `TMPDIR` | path | /tmp | Scratch directory for test artifacts; set by the OS on macOS. |
 | `TEMP` | path | unset | Windows scratch-directory fallback when TMPDIR is unset (the test runner's log dir). |
 

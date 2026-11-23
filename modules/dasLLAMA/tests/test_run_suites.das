@@ -180,6 +180,7 @@ def test_areas_for_path(t : T?) {
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_tower_twin.das"), ","), "audio,vision", "the tower twin fixture reaches both towers")
     t |> equal(length(areas_for_path("modules/dasLLAMA/tests/test_metal_decode_parity.das")), 0, "a model-suite file reaches no area - it takes --arm")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_tts_oracle.das"), ","), "tts", "a TTS fixture reaches tts")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_audio_asr_cells.das"), ","), "audio", "an audio cell module reaches audio")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_model_tier.das"), ","), every, "the shared tier helper reaches every area")
     t |> equal(join(areas_for_path("modules/dasLLAMA/performance/model_specs.das"), ","), "infra", "the performance tree reaches infra")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/REVIEW.md"), ","), "infra", "a document under tests/ reaches infra, not a model suite")
@@ -634,7 +635,7 @@ def test_category_run(t : T?) {
         t |> success(check_category_args(clash) != 0, "refused beside --suite {clash.suite} --area '{clash.area}' --changed {clash.changed} --arm '{clash.arm}' --full {clash.full} --family '{clash.family}'")
     }
     let files <- category_files("gemma4-e4b")
-    t |> success(find_index(files, "{TESTS_DIR}/test_gemma4v.das") >= 0 && find_index(files, "{TESTS_DIR}/test_whisper.das") >= 0, "the files naming an E4B model: {join(files, " ")}")
+    t |> success(find_index(files, "{TESTS_DIR}/test_gemma4v.das") >= 0 && find_index(files, "{TESTS_DIR}/test_audio.das") >= 0, "the files naming an E4B model: {join(files, " ")}")
     t |> success(find_index(files, "{TESTS_DIR}/test_chat.das") < 0, "a file that names none stays out")
     t |> success(empty(category_files("nope")), "a name that is no category's plans nothing")
     t |> equal(length(category_files("gemma4-e4b,")), length(files), "an empty name plans no file of a model in no category")
@@ -846,7 +847,7 @@ def test_cuda_pass_keeps_every_cuda_file(t : T?) {
 //! the reach plan behind --changed: a test file itself, a fixture the tests requiring it through the fixtures between, an
 //! engine module its witness row or the core set beside its other areas whole, a benchmark the bench rows' files; every
 //! witness row and the core set name census files, and every row's module exists and reaches llm
-[test(description = "`reach_for_path` maps a test to itself - an on-demand one too -, a fixture to its requiring census tests and to no on-demand one, a leaf module to its witness row, a core module to the core plus every other area, and every witness names census files")]
+[test(description = "`reach_for_path` maps a test to itself - an on-demand one too -, a fixture to its requiring census tests and to no on-demand one, a leaf module to its witness row, a media decoder's arch module to that file's area, a core module to the core plus every other area, and every witness names census files")]
 def test_reach_for_path(t : T?) {
     let own <- reach_for_path("modules/dasLLAMA/tests/test_gemma3v.das")
     t |> equal(join(own.files, ","), "test_gemma3v.das", "a test file reaches itself")
@@ -870,6 +871,17 @@ def test_reach_for_path(t : T?) {
     }
     let qwen35 <- reach_for_path("modules/dasLLAMA/dasllama/dasllama_arch_qwen35.das")
     t |> success(!qwen35.core && empty(qwen35.areas) && find_index(qwen35.files, "test_gpu_resident_hybrid.das") >= 0, "a leaf module reaches its witness row, not the core")
+    for (arch, file in fixed_array("gemma3", "gemma3", "gemma4", "gemma4", "qwen2", "qwen3", "qwen3", "qwen3moe", "qwen3moe", "llama"),
+            fixed_array("test_gemma3v.das", "test_vision_chat.das", "test_gemma4v.das", "test_audio.das", "test_qwen25v.das", "test_qwen3v.das",
+                "test_audio.das", "test_qwen3v.das", "test_whisper.das", "test_audio_embedder.das")) {
+        let decoder <- reach_for_path("modules/dasLLAMA/dasllama/dasllama_arch_{arch}.das")
+        var inscope file_areas <- test_file_areas(file)
+        var reached = false
+        for (a in decoder.areas) {
+            reached ||= find_index(file_areas, a) >= 0
+        }
+        t |> success(reached, "an arch module reaches the area of a media file loading its decoder: {arch} -> {file} ({join(decoder.areas, ",")})")
+    }
     let load <- reach_for_path("modules/dasLLAMA/dasllama/dasllama_load.das")
     t |> success(load.core, "a core module reaches the core")
     t |> success(find_index(load.files, "test_vulkan_kernels.das") >= 0 && find_index(load.files, "test_gpu_resident_llama.das") >= 0, "every model-free llm file and the core witnesses")
@@ -930,33 +942,44 @@ def test_child_cache_dir(t : T?) {
     }
 }
 
-[test(description = "`pass_stamp` changes with the box's CPU and with the size, the time or the presence of a model file the child opens, holds while they hold, and a --skip-fully-cached run hands every child the flag with its stamp while a plain run hands none")]
+[test(description = "`pass_stamp` changes with the box's CPU, with the environment the child runs under and with the size, the time or the presence of a model file the child opens, and holds while they hold; a run hands every child the skip flag with its stamp, and a --rerun hands none")]
 def test_pass_stamp(t : T?) {
     let dir = path_join(test_temp_dir(), "pass_stamp_models")
     mkdir_rec(dir)
     let model = path_join(dir, "a.gguf")
     fwrite(model, "one")
     let names <- ["a.gguf", "absent.gguf"]
-    let base = pass_stamp(dir, names, "cpu one")
-    t |> equal(pass_stamp(dir, names, "cpu one"), base, "the same box and files give the same stamp")
-    t |> success(pass_stamp(dir, names, "cpu two") != base, "another CPU is another stamp")
+    let base = pass_stamp(dir, names, "cpu one", "DASLLAMA_GPU=1")
+    t |> equal(pass_stamp(dir, names, "cpu one", "DASLLAMA_GPU=1"), base, "the same box, environment and files give the same stamp")
+    t |> success(pass_stamp(dir, names, "cpu two", "DASLLAMA_GPU=1") != base, "another CPU is another stamp")
+    t |> success(pass_stamp(dir, names, "cpu one", "DASLLAMA_GPU=1\nDASLLAMA_CUDA=1") != base, "another GPU home is another stamp")
+    t |> success(pass_stamp(dir, names, "cpu one", "") != base, "and so is no GPU home")
     fwrite(path_join(dir, "absent.gguf"), "x")
-    let landed = pass_stamp(dir, names, "cpu one")
+    let landed = pass_stamp(dir, names, "cpu one", "DASLLAMA_GPU=1")
     t |> success(landed != base, "a model file that lands is another stamp")
     fwrite(model, "longer")
-    let resized = pass_stamp(dir, names, "cpu one")
+    let resized = pass_stamp(dir, names, "cpu one", "DASLLAMA_GPU=1")
     t |> success(resized != landed, "a model file of another size is another stamp")
     var built : FStat
     var why : string
     let retimed = stat(das_exe(), built) && set_mtime(model, built.mtime, why)
     t |> success(retimed, "the model file takes the binary's time: {why}")
-    t |> success(pass_stamp(dir, names, "cpu one") != resized, "a model file of another time is another stamp")
+    t |> success(pass_stamp(dir, names, "cpu one", "DASLLAMA_GPU=1") != resized, "a model file of another time is another stamp")
+    t |> equal(cached_files("CACHED a.das\n\x1b[32mCACHED b.das\x1b[0m\n[I] a line that says CACHED later\nPASS c.das\n"), 2, "a child's CACHED lines count, colored or not, and no other line does")
+    var cfg = RunArgs()
+    let full_suite = !skips_cached(cfg)   //! this very run under DASLLAMA_PARITY_FULL=1 skips nothing either
+    t |> success(skips_cached_in(cfg, false), "a run reports a file from its pass on record")
+    t |> success(!skips_cached_in(cfg, true), "the full suite runs every file")
+    cfg.rerun = true
+    t |> success(!skips_cached_in(cfg, false) && !skips_cached(cfg), "a --rerun runs every file")
+    t |> equal(cached_report(0), "", "a run that ran every file says nothing of files not run")
+    t |> success(find(cached_report(3), " 3 of them not run") == 0 && find(cached_report(3), "--rerun") > 0, "the REPORT's count of files not run names --rerun: {cached_report(3)}")
     return if (get_platform_name() == "windows")   //! the dry run's no-op child binary is a POSIX one, as test_runner_dry_run's
     var out : string
-    t |> equal(run_runner("--area infra --das /usr/bin/true --skip-fully-cached", out), 0, "a flagged infra dry run exits clean:\n{out}")
-    t |> success(find(out, " --skip-fully-cached --pass-stamp 0x") >= 0, "a child command carries the flag and its stamp:\n{out}")
-    t |> equal(run_runner("--area infra --das /usr/bin/true", out), 0, "a plain infra dry run exits clean:\n{out}")
-    t |> success(find(out, "--skip-fully-cached") < 0, "a plain run's children get no flag:\n{out}")
+    t |> equal(run_runner("--area infra --das /usr/bin/true", out), 0, "an infra dry run exits clean:\n{out}")
+    t |> equal(find(out, " --skip-fully-cached --pass-stamp 0x") >= 0, !full_suite, "a child command carries the flag and its stamp, and under the full suite (DASLLAMA_PARITY_FULL=1) none:\n{out}")
+    t |> equal(run_runner("--area infra --das /usr/bin/true --rerun", out), 0, "a --rerun infra dry run exits clean:\n{out}")
+    t |> success(find(out, "--skip-fully-cached") < 0, "a --rerun's children get no flag:\n{out}")
 }
 
 [test(description = "`child_chunks` batches files in order by the batch size, and gives the image file on area runs, an expected-failure compile test, and a tier contract file a child of its own that leaves the files around it in one batch")]
@@ -1061,6 +1084,64 @@ def test_poison_kv_envs(t : T?) {
     cfg.poison_kv = true
     t |> success(find(child_envs(cfg, false), "DASLLAMA_KV_INIT=poison ") >= 0, "the posix prefix: {child_envs(cfg, false)}")
     t |> success(find(child_envs(cfg, true), "set \"DASLLAMA_KV_INIT=poison\"&& ") >= 0, "the cmd.exe form: {child_envs(cfg, true)}")
+}
+
+[test(description = "A run of media-area files alone is a media run and only its Linux children's heap keeps a freed model's pages; a run holding one other file, or none, is no media run and names no heap setting")]
+def test_media_run_heap(t : T?) {
+    let cfg = RunArgs()
+    t |> success(media_run(["{TESTS_DIR}/test_whisper.das", "{TESTS_DIR}/test_nmt.das", "{TESTS_DIR}/test_model_image.das"]), "audio, translate and the image suite: a media run")
+    t |> success(!media_run(["{TESTS_DIR}/test_whisper.das", "{TESTS_DIR}/test_run_suites.das"]), "one file no media area lists: no media run")
+    var inscope none : array<string>
+    t |> success(!media_run(none), "no file: no media run")
+    let linux = get_platform_name() == "linux"
+    t |> equal(find(child_envs(cfg, false, true), "glibc.malloc.mmap_max=0:glibc.malloc.trim_threshold=") >= 0, linux, "a media run's children keep the heap on Linux alone: {child_envs(cfg, false, true)}")
+    t |> success(find(child_envs(cfg, false, false), "glibc.malloc") < 0, "any other run names no heap setting: {child_envs(cfg, false, false)}")
+    t |> success(find(child_envs(cfg, true, true), "glibc.malloc") < 0, "nor does cmd.exe's form")
+}
+
+//! the first `--pass-stamp` value a dry run's output carries, "" where none
+def private first_stamp(out : string) : string {
+    let key = " --pass-stamp "
+    let at = find(out, key)
+    return "" if (at < 0)
+    let from = at + length(key)
+    let stop = find(out, " ", from)
+    return slice(out, from, stop < 0 ? length(out) : stop)
+}
+
+[test(description = "A dry run's children carry a pass stamp that changes with the GPU home and holds across the scratch folder, a named scratch folder is the children's TMPDIR and is announced, the full suite's children carry no skip flag, only a media run's Linux children keep the heap, the whisper-class tower's image arm is audio's alone, and a media file's name outside the tests folder is no media file")]
+def test_run_wiring(t : T?) {
+    t |> success(find_index(split(area_image_arms("audio"), ","), "tower") >= 0, "the tower image arm is the audio area's")
+    t |> success(find_index(split(area_image_arms("vision"), ","), "tower") < 0, "and not the vision area's")
+    t |> success(!media_run(["elsewhere/test_whisper.das"]), "a media file's name outside the tests folder is no media file")
+    return if (get_platform_name() == "windows" || !skips_cached(RunArgs()))   //! a POSIX no-op child; the full suite stamps nothing
+    let dry = "--area infra --das /usr/bin/true"
+    var vulkan, cuda, moved, full, audio : string
+    t |> equal(run_runner(dry, vulkan, "DASLLAMA_GPU=1 "), 0, "a dry run on one GPU home exits clean:\n{vulkan}")
+    t |> equal(run_runner(dry, cuda, "DASLLAMA_GPU=1 DASLLAMA_CUDA=1 "), 0, "and on another:\n{cuda}")
+    let scratch = path_join(test_temp_dir(), "wiring_scratch")
+    t |> equal(run_runner(dry, moved, "DASLLAMA_GPU=1 DASLLAMA_SCRATCH_DIR='{scratch}' "), 0, "and with a scratch folder named:\n{moved}")
+    t |> success(!empty(first_stamp(vulkan)), "a child carries a pass stamp:\n{vulkan}")
+    t |> success(first_stamp(cuda) != first_stamp(vulkan), "another GPU home is another stamp ({first_stamp(vulkan)} / {first_stamp(cuda)})")
+    t |> equal(first_stamp(moved), first_stamp(vulkan), "the scratch folder is no part of the stamp")
+    t |> success(find(moved, "TMPDIR=\"{scratch}\" ") >= 0, "a child's command line carries the scratch folder as its TMPDIR:\n{moved}")
+    t |> success(find(moved, "SCRATCH {scratch}") >= 0 && stat(scratch).is_dir, "the run announces the folder and makes it:\n{moved}")
+    t |> success(find(vulkan, "TMPDIR=\"") < 0 && find(vulkan, "SCRATCH ") < 0, "a run that names none hands its children none:\n{vulkan}")
+    t |> equal(run_runner(dry, full, "DASLLAMA_PARITY_FULL=1 "), 0, "a dry run of the full suite exits clean:\n{full}")
+    t |> success(find(full, "--skip-fully-cached") < 0, "the full suite's children carry no skip flag:\n{full}")
+    t |> equal(run_runner("--area audio --das /usr/bin/true", audio), 0, "a dry audio run exits clean:\n{audio}")
+    let linux = get_platform_name() == "linux"
+    t |> equal(find(audio, "glibc.malloc.mmap_max=0") >= 0, linux, "a media run's children keep the heap on Linux alone:\n{audio}")
+    t |> success(find(vulkan, "glibc.malloc") < 0, "a run of another area's files names no heap setting:\n{vulkan}")
+}
+
+[test(description = "A scratch folder named for the run reaches every child as its TMPDIR on the posix form and as TEMP and TMP on cmd.exe's, and a run that names none hands its children no scratch folder")]
+def test_child_scratch_envs(t : T?) {
+    let cfg = RunArgs()
+    t |> success(find(child_envs(cfg, false, false, "/disk/scratch"), "TMPDIR=\"/disk/scratch\" ") >= 0, "the posix prefix: {child_envs(cfg, false, false, "/disk/scratch")}")
+    let cmd = child_envs(cfg, true, false, "D:\\scratch")
+    t |> success(find(cmd, "set \"TEMP=D:\\scratch\"&& ") >= 0 && find(cmd, "set \"TMP=D:\\scratch\"&& ") >= 0, "the cmd.exe form: {cmd}")
+    t |> success(find(child_envs(cfg, false), "TMPDIR") < 0 && find(child_envs(cfg, true), "TEMP") < 0, "no scratch folder named: the children make theirs under the runner's")
 }
 
 //! a models directory under the test's temp folder holding a one-byte file at every model path `files` and the fixtures

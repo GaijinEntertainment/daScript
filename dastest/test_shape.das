@@ -45,8 +45,19 @@ def continuation_index(stem : string; base : string) : int {
 //! the tool, not a test that forgot its annotation, and a
 //! compile-fail
 //! fixture is named by the tool's own convention (a lint rule's code)
-def check_test_shape(root : string; cap : int;  // nolint:STYLE037,STYLE038 - flat
-                     tests_only : bool = false) {
+def check_test_shape(root : string; cap : int; tests_only : bool = false) {
+    check_test_shape_floorless(root, cap, tests_only) $ [unused_argument(path)] (path : string) {
+        return false
+    }
+}
+
+//! `check_test_shape` with the three-tests floor lifted from each
+//! category file `floorless` answers true for (its path, `root`
+//! included): a folder whose one `[test]` runs many cells says which
+//! files those are
+def check_test_shape_floorless(root : string; cap : int;  // nolint:STYLE037,STYLE038 - flat
+                               tests_only : bool;
+                               floorless : block<(path : string) : bool>) {
     var files : array<TestFileCensus>
     census_tree(root, files)
     // for the continuation rule
@@ -93,9 +104,10 @@ def check_test_shape(root : string; cap : int;  // nolint:STYLE037,STYLE038 - fl
             for (e in c.tests) {
                 anyStandalone ||= !empty(e.standalone)
             }
-            if (length(c.tests) < 3 && !anyStandalone) {
+            if (length(c.tests) < 3 && !anyStandalone && !invoke(floorless, fullPath)) {
                 gate_finding(fullPath, "a category file holds three or more `[test]` " +
-                    "functions; this one holds {length(c.tests)} - move them into the " +
+                    "functions; this one holds {length(c.tests)}, and its folder's gate " +
+                        "lifts that floor only for the files it exempts - move them into the " +
                         "folder's `uncategorized.das`, or into the category file they " +
                             "belong to; a file that cannot share a program says why in " +
                             "`[test(standalone = \"...\")]`")

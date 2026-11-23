@@ -39,14 +39,16 @@ fire it and are ruled acceptable, each with its reason.
   metal-blob `.dlim`. The reason: the metal-blob flavor is what the Metal MTP rail and the drafter's attach serve. They pin
   no lane, and `--no-tune` runs them with `DASLLAMA_IMAGE=0`, so the image they mint is the box's own.
 - **The translation facade cells** - `test_nmt_llm_translator`, `test_nmt_chat_translator` and
-  `test_nmt_chat_thinking_off` in `tests/test_nmt.das` load through `load_translator`: a GGUF through `load_model_cached`, a
+  `test_nmt_chat_thinking_off` in `tests/test_nmt.das`, and the `image` and `image_f32` forms of the ru-en base-memory
+  student's block in `test_nmt_ru_en_pairs`, load through `load_translator`: a GGUF through `load_model_cached`, a
   Bergamot student through `load_nmt_model`, each baking its `.dlim` beside the model (`bergamot-q8`, and `bergamot-f32` for
   the `exact = true` load). `test_translate_facade_contracts` loads a synthetic student the same way, its image landing in
   the test's temp directory beside the student. The reason: the facade's load is the cells' subject - the kind it picks
   off the file and the lane `exact` asks - and it has no in-memory form; they pin no lane, and `--no-tune` runs them with
   `DASLLAMA_IMAGE=0`, so the image they mint is the box's own.
-- **The gemma4a facade cells** - `test_gemma4a_e4b_audio_facade` (the E4B pair) and `test_gemma4a_audio_oracle` (E2B) in
-  `tests/test_whisper.das` load through `load_asr_model(dec, mmproj)`, which bakes the decoder's `.dlim` (`load_model_cached`)
+- **The gemma4a facade cells** - `test_gemma4a_e4b_audio_facade` (the E4B pair) and `test_gemma4a_audio_oracle` (E2B),
+  cells of `tests/_audio_asr_cells.das` on the `image_asrdev` and `image_asr` forms of the mmprojs' blocks in
+  `tests/test_audio.das` - load through `load_asr_model(dec, mmproj)`, which bakes the decoder's `.dlim` (`load_model_cached`)
   and the encoder's lane image (`load_gemma4a_encoder`) beside the files. The reason: the facade's pairing is the cells'
   subject - the projector-type sniff routing the mmproj to gemma4a, the decoder width the embedder must project to, the lane
   the facade picks - and it has no in-memory form; they pin no lane, and `--no-tune` runs them with `DASLLAMA_IMAGE=0`, so

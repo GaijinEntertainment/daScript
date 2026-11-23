@@ -25,3 +25,21 @@ def with_model_once(t : T?; area, file : string; forms : array<string>;
                     load : function<(path : string; form : string) : auto(MODEL)>;
                     cells : block<(var m : MODEL; form : string) : void>) : bool =>
     with_model_once_at(t, area, file, forms, models_dir(), load, cells)
+
+//! `with_model_once_at` for a file several of whose forms are minted from one staged read (`staged_once_at`): `key` names
+//! the staged read a form is minted from, "" for a form that loads on its own; `stage` reads the file once a key; `load`
+//! builds a form's model from its own copy of that staging, which it may cut and poison
+def with_model_once_at(t : T?; area, file : string; forms : array<string>; root : string;
+                       key : function<(form : string) : string>;
+                       stage : function<(path : string; key : string) : auto(STG)>;
+                       load : function<(path : string; form : string; var stg : STG) : auto(MODEL)>;
+                       cells : block<(var m : MODEL; form : string) : void>) : bool =>
+    staged_once_at(t, area, file, path_join(root, file), forms, @@model_available, key, stage, load, cells)
+
+//! the staged `with_model_once_at` for a file under the models directory
+def with_model_once(t : T?; area, file : string; forms : array<string>;
+                    key : function<(form : string) : string>;
+                    stage : function<(path : string; key : string) : auto(STG)>;
+                    load : function<(path : string; form : string; var stg : STG) : auto(MODEL)>;
+                    cells : block<(var m : MODEL; form : string) : void>) : bool =>
+    with_model_once_at(t, area, file, forms, models_dir(), key, stage, load, cells)

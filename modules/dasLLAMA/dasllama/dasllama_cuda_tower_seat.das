@@ -363,19 +363,13 @@ def cuda_tower_shutdown {
     }
 }
 
-//! `k` folded with the halfword plane `wblob`: its address, size and sampled words
-def cut_key_wblob(k : uint64; wblob : PlaneU16) : uint64 {
-    let kw = hash_combine64(hash_combine64(k, intptr(unsafe(reinterpret<void?>(wblob.p)))), uint64(wblob.n))
-    return tower_fold_words(kw, unsafe(reinterpret<uint8 const?>(wblob.p)), wblob.n * 2l)
-}
-
 //! the resident key folds every model field the resident's extent follows: the planes' addresses, sizes and sampled words, the layer count
 def cut_key(m; n_layer : int64) : uint64 {
     var k = hash_combine64(0x6b0dul, uint64(n_layer))
     k = hash_combine64(k, intptr(unsafe(reinterpret<void?>(m.blob.p))))
     k = hash_combine64(k, uint64(m.blob.n))
     k = tower_fold_words(k, unsafe(reinterpret<uint8 const?>(m.blob.p)), m.blob.n * 4l)
-    k = cut_key_wblob(k, m.wblob)
+    k = tower_fold_wblob(k, m.wblob)
     static_if (typeinfo safe_has_field < dev > (m)) {
         k = hash_combine64(k, intptr(unsafe(reinterpret<void?>(m.dev.p))))
         k = hash_combine64(k, uint64(m.dev.n))

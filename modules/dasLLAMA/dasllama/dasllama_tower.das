@@ -981,6 +981,12 @@ def tower_fold_words(k : uint64; p : uint8 const?; bytes : int64) : uint64 {
     return h
 }
 
+//! `k` folded with the halfword plane `wblob`: its address, size and sampled words
+def tower_fold_wblob(k : uint64; wblob : PlaneU16) : uint64 {
+    let kw = hash_combine64(hash_combine64(k, intptr(unsafe(reinterpret<void?>(wblob.p)))), uint64(wblob.n))
+    return tower_fold_words(kw, unsafe(reinterpret<uint8 const?>(wblob.p)), wblob.n * 2l)
+}
+
 //! a GPU tower scratch's row capacity for `rows`
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def tower_cap_rows(rows : int64) : int64 => round_up(rows, 256l)

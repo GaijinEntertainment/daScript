@@ -5,16 +5,21 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_gemma4v
+require dasllama/dasllama_common   // QuantMode: the decoders' load mode
 require dasllama/dasllama_vision_embedder   // vision_exec_fmt through the carrier
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/fio
 require math
 require _model_tier   // models_dir() + model_available() gate
+require _model_once   // with_model_once: a tower file's one block in the area
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
 require ?das_metal dasllama/dasllama_metal_tower   // the GPU tier-1 attempt; the CPU gates pin the knob off
 require ?vulkan dasllama/dasllama_vulkan_tower
 require _tower_twin   // set_every_gpu_tower, the Vulkan twin's seat and instrument
+require _vision_forms   // the towers' forms, the twin's kept canvases, a block's cell
+require _cpu_gpu_model   // with_cpu_and_gpu_model: a chat decoder's one block in the area
+require _vision_chat_cells   // the image chat turn's cells, run under the tower's image form
 
 // Tier-1 gemma4v tower parity vs llama-mtmd-debug -p encode.
 // Reference arm: the f32-widened mmproj, CPU, --no-mmproj-offload, -fa off (the only true-f32 arm).
@@ -22,18 +27,85 @@ require _tower_twin   // set_every_gpu_tower, the Vulkan twin's seat and instrum
 // Dumps: beside the models in gemma4-vision-oracle/ (mint_e2b.sh / mint_e4b.sh regenerate).
 // Bar: scale-relative - 16 blocks of bf16-weight GEMMs under summation-order drift cannot promise
 // gemma4uv's 2e-4; the logged maxdiff is the number.
+// Each mmproj loads once a form, in its one `with_model_once` block (`gemma4v_form`): the image rail's forms carry the CPU
+// lanes' cells and the Metal tower's, the forms minted in memory the device lanes', the staged-plane knockouts and the
+// discrete twin's. A form's cells run on one home, so a compare of the CPU chain with a device chain is two forms, made
+// after the block on the rows they kept.
 // The discrete-home cells (the tier-1 rung on the serving discrete home, the twin, the E4B cell's device leg) run on the
 // serving discrete home: under the CUDA ask (DASLLAMA_CUDA=1 or set_gpu_home("cuda")) on the CUDA tower, else on the
-// Vulkan tower. The tier-1 rung and the twin skip under the ask without a CUDA device (`cuda_twin_seat`), else on a build
-// with das_metal - the Metal driver owns the tower hooks there -, without a Vulkan device under DASLLAMA_GPU=1 and without
-// the tower's tile family (`vulkan_twin_seat`); the E4B device leg has no seat on a das_metal build and skips where the
-// serving home's device does not stand up.
+// Vulkan tower. The tier-1 rung's and the twin's forms skip under the ask without a CUDA device (`cuda_twin_seat_why`), else
+// on a build with das_metal - the Metal driver owns the tower hooks there -, without a Vulkan device under DASLLAMA_GPU=1 and
+// without the tower's tile family (`vulkan_twin_seat_why`); the E4B device leg has no seat on a das_metal build and skips
+// where the serving home's device does not stand up.
+
+let private MM = "mmproj-gemma-4-E2B-it-bf16.gguf"
+let private MM_E4B = "mmproj-gemma-4-E4B-it-BF16.gguf"
 
 let private TIER1_ABS = 2e-4
 let private TIER1_REL = 4e-3   // × token rms (≈0.75 on E2B) - the rung gemma4uv's GPU leg holds
 let private TIER1_REL_GPU = 8e-3   // the Metal leg: 112 f16-staged GEMM tiles over 16 blocks - measured 8.9e-4..3.7e-3 on these dumps
 let private TIER1_REL_Q8 = 1.2e-1   // the q8 serving lane: measured 3.1e-2..6.8e-2 (≈9% of rms) on these dumps - 16 blocks of q8×q8 GEMMs; the caption floor is the product gate
 let private KNOCKOUT_FLOOR = 1e-3   // the clamp knockout must miss the oracle by at least this (the armed tower holds 1e-3)
+
+let private POISON_BLOCK = 8l   //! the whole-tower input poison's block: mid-stack, so the zero rides the residual through half the chain
+
+var private g_clamps_armed = 0   //! the block clamps the last `+clamps_off` form's staging carried armed before it disarmed them
+
+//! every block GEMM's clamp of the staging `stg` disarmed; how many were armed
+def private disarm_clamps(var stg : Gemma4vStaging) : int {
+    let d = stg.t.n_embd
+    let hd = d / stg.t.n_head
+    var armed = 0
+    for (l in range64(stg.t.n_layer)) {
+        let clamps = stg.t.layer_f + l * stg.t.layer_f_stride + 4l * d + 2l * hd
+        for (g in range64(GEMMA4V_GEMMS)) {
+            let flag = clamps + g * GEMMA4V_CLAMP_F + 4l
+            if (stg.blob[flag] != 0.0) {
+                armed++
+            }
+            stg.blob[flag] = 0.0
+        }
+    }
+    return armed
+}
+
+//! a std_bias / std_scale pair synthesized into the staging `stg`: bias 0 and scale 1 (neutral), or bias 0.25 and scale -1
+def private add_std_pair(var stg : Gemma4vStaging; biased : bool) {
+    let d = stg.t.n_embd
+    stg.t.has_std = true
+    stg.t.std_bias = long_length(stg.blob)
+    stg.t.std_scale = stg.t.std_bias + d
+    stg.blob |> reserve(stg.t.std_scale + d)
+    stg.blob |> resize(stg.t.std_scale + d)
+    for (i in range64(d)) {
+        stg.blob[stg.t.std_bias + i] = biased ? 0.25 : 0.0
+        stg.blob[stg.t.std_scale + i] = biased ? -1.0 : 1.0
+    }
+}
+
+//! a gemma4v tower file's staged read the key `key` names (`tower_stage_key`), under the key's lane pin and image flavor
+def private gemma4v_stage(path, key : string) : Gemma4vStaging =>
+    <- staged_tower_form(path, key, @@set_gemma4v_q8, @@reset_gemma4v_q8, @@stage_gemma4v_tower)
+
+//! One form of a gemma4v tower's file as the vision carrier holds it, its block's form loader (`tower_form`): the image
+//! rail's forms through `load_vision_embedder`, any other minted in memory from `stg`, its own copy of the file's staging
+//! under the form's lane pin, cut and poisoned - never `load_gemma4v_tower`, which bakes a `.dlim` under the pin. The
+//! edits: `+clamps_off` disarms every block clamp, `+std_neutral` and `+std_biased` synthesize a std pair.
+def private gemma4v_form(path, form : string; var stg : Gemma4vStaging) : VisionEmbedder {
+    let f = tower_form(form)
+    return <- image_tower_form(path, f, @@set_gemma4v_q8, @@reset_gemma4v_q8, @@gemma4v_serves_q8) if (f.image)
+    var inscope e = VisionEmbedder(kind = VisionKind.gemma4v)
+    truncate_and_poison(stg, f.nl, f.zero_block)
+    if (f.edit == "clamps_off") {
+        g_clamps_armed = disarm_clamps(stg)
+    } elif (f.edit == "std_neutral" || f.edit == "std_biased") {
+        add_std_pair(stg, f.edit == "std_biased")
+    } elif (!empty(f.edit)) {
+        panic("the gemma4v tests: '{form}' names no edit of the staged planes")
+    }
+    mint_gemma4v_tower(stg, e.gemma4v, tower_form_dev(f))
+    return <- e
+}
 
 [cold_path]
 def private gate_encode(t : T?; tw : Gemma4vTower; var st : Gemma4vState; kind : string; w, h : int; logname : string; rel : float = TIER1_REL) : bool {
@@ -43,16 +115,10 @@ def private gate_encode(t : T?; tw : Gemma4vTower; var st : Gemma4vState; kind :
     }
 }
 
-[test(description = "The gemma4v E2B tower on the exact lane reads its geometry and plane split off the mmproj and matches the mtmd encode dumps on eight canvases within 4e-3 of token rms, panicking on a grid past the position table or a ragged canvas")]
-def test_gemma4v_tier1(t : T?) {
-    t |> run("tier-1 tower parity vs the mtmd encode dumps (E2B)") @(tt : T?) {
-        let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
-        if (!model_available(tt, mm)) {
-            return
-        }
-        set_gemma4v_q8(false)   // the CPU gate owns the exact-plane lane; the q8 serving lane is the next test
-        var tw <- load_gemma4v_tower(mm)
-        reset_gemma4v_q8()
+// The exact lane on the CPU, on the E2B file's `image_f32` form.
+[cold_path]
+def private test_gemma4v_tier1(tt : T?; tw : Gemma4vTower) {
+    with_gpu_knobs() {
         set_every_gpu_tower(false)
         var st = Gemma4vState()
         tt |> success(!tw.q8, "exact-plane lane")
@@ -102,101 +168,91 @@ def test_gemma4v_tier1(t : T?) {
             ragged_tripped = true
         }
         tt |> success(ragged_tripped, "a canvas that is not a multiple of the pooled patch panics at the span check")
-        set_every_gpu_tower(true)
         delete st
-        delete tw
     }
 }
 
-// The GPU tier-1 gate: the same dumps through the Metal tower's block loop (bf16 mul_mm stages
-// f16 tiles, so the bar is scale-relative and wider than the CPU gate's).
-[test(description = "The gemma4v lane policy is q8 with the Metal tower off and exact with it armed, and the Metal tower matches the E2B mtmd dumps within 8e-3 of token rms on five canvases, with a knob-off decline leg and the q8 lane served with a red poison control")]
-def test_gemma4v_tier1_gpu(t : T?) {
-    t |> run("tier-1 GPU attempt vs the mtmd encode dumps (scale-relative rung)") @(tt : T?) {
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
-            if (!model_available(tt, mm)) {
-                return
+// The GPU tier-1 gate, on the E2B file's `image` form: the same dumps through the Metal tower's block loop (bf16 mul_mm
+// stages f16 tiles, so the bar is scale-relative and wider than the CPU gate's).
+[cold_path]
+def private test_gemma4v_tier1_gpu(tt : T?; tw : Gemma4vTower) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let knobs_found = gpu_knobs()
+        reset_gemma4v_q8()
+        set_metal_tower(false)
+        tt |> success(gemma4v_serves_q8(), "with the Metal tower off (and no accelerate tier) the default lane is q8")
+        set_metal_tower(true)
+        tt |> success(!gemma4v_serves_q8(), "with the Metal tower armed the default lane is the file's planes")
+        let policy_q8 = gemma4v_serves_q8()
+        var st = Gemma4vState()
+        tt |> equal(tw.q8, policy_q8, "the load took the policy's unpinned lane under the Metal tower (q8 = {policy_q8})")
+        let fixtures = [(kind = "cb", w = 96, h = 96, log = "e2b.encode.cb96.log"),
+                        (kind = "cb", w = 336, h = 336, log = "e2b.encode.cb336.log"),
+                        (kind = "green", w = 336, h = 336, log = "e2b.encode.green336.log"),
+                        (kind = "cb", w = 480, h = 480, log = "e2b.encode.cb480.log"),
+                        (kind = "cb", w = 672, h = 336, log = "e2b.encode.cb672x336.log")]
+        for (fx in fixtures) {
+            let s0 = metal_tower_stats()
+            if (gate_encode(tt, tw, st, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_GPU)) {
+                device_leg_served(tt, "{fx.kind} {fx.w}x{fx.h}", s0, metal_tower_stats(), tw.n_layer, -1l)
             }
-            set_metal_tower(false)
-            tt |> success(gemma4v_serves_q8(), "with the Metal tower off (and no accelerate tier) the default lane is q8")
+        }
+        // the knob-off leg: the same tower, the CPU chain, no dispatch
+        set_metal_tower(false)
+        let sc0 = metal_tower_stats()
+        tt |> gate_encode(tw, st, "cb", 336, 336, "e2b.encode.cb336.log")
+        let sc1 = metal_tower_stats()
+        tt |> equal(sc1.encodes, sc0.encodes, "knob-off leg never dispatched")
+        tt |> equal(sc1.declines - sc0.declines, 1l, "knob-off leg recorded the knob decline")
+        set_gpu_knobs(knobs_found)
+        delete st
+    } else {
+        feint("das_metal is not built on this platform - the GPU rung is Apple-only\n")
+    }
+}
+
+// The GPU rung's q8 lane, on the E2B file's `q8@dev` form of a das_metal build: the tower minted q8 in the Metal flavor
+// serves every block off its q8 planes.
+[cold_path]
+def private gpu_q8_lane(tt : T?; twq : Gemma4vTower) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_gpu_knobs() {
             set_metal_tower(true)
-            tt |> success(!gemma4v_serves_q8(), "with the Metal tower armed the default lane is the file's planes")
-            let policy_q8 = gemma4v_serves_q8()
-            var tw <- load_gemma4v_tower(mm)
-            var st = Gemma4vState()
-            tt |> equal(tw.q8, policy_q8, "the load took the policy's unpinned lane under the Metal tower (q8 = {policy_q8})")
-            let fixtures = [(kind = "cb", w = 96, h = 96, log = "e2b.encode.cb96.log"),
-                            (kind = "cb", w = 336, h = 336, log = "e2b.encode.cb336.log"),
-                            (kind = "green", w = 336, h = 336, log = "e2b.encode.green336.log"),
-                            (kind = "cb", w = 480, h = 480, log = "e2b.encode.cb480.log"),
-                            (kind = "cb", w = 672, h = 336, log = "e2b.encode.cb672x336.log")]
-            for (fx in fixtures) {
-                let s0 = metal_tower_stats()
-                if (gate_encode(tt, tw, st, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_GPU)) {
-                    device_leg_served(tt, "{fx.kind} {fx.w}x{fx.h}", s0, metal_tower_stats(), tw.n_layer, -1l)
-                }
-            }
-            // the knob-off leg: the same tower, the CPU chain, no dispatch
-            set_metal_tower(false)
-            let sc0 = metal_tower_stats()
-            tt |> gate_encode(tw, st, "cb", 336, 336, "e2b.encode.cb336.log")
-            let sc1 = metal_tower_stats()
-            tt |> equal(sc1.encodes, sc0.encodes, "knob-off leg never dispatched")
-            tt |> equal(sc1.declines - sc0.declines, 1l, "knob-off leg recorded the knob decline")
-            set_metal_tower(true)
-            delete st
-            delete tw
-            var twq <- mint_tower(mm, true, 0l, -1l, TowerDev.metal)   // in memory: a load under the pin would bake the q8 image beside the serving one
             var stq = Gemma4vState()
             tt |> success(twq.q8, "the q8 lane minted under the pin")
             q8_lane_served(tt, "q8 tower", TowerFamily.vision, twq.n_layer) $() : bool {
                 return gate_encode(tt, twq, stq, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
             }
             delete stq
-            delete twq
-            g4v_poison_leg(tt, mm, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
-        } else {
-            feint("das_metal is not built on this platform - the GPU rung is Apple-only\n")
         }
     }
 }
 
-// The clamp knockout: the same tower with every block clamp disarmed must MISS the oracle - the
-// sidecar scalars are load-bearing, not decoration (the E2B file's bounds sit where activations
-// live).
-[test(description = "A knockout: every E2B block GEMM carries an active clamp, and disarming them all moves the encode more than 1e-3 off the mtmd dump on both the exact and the q8 lane, so the clamp scalars are load-bearing")]
-def test_gemma4v_clamps_bind(t : T?) {
-    t |> run("disarming the block clamps moves tier-1 past the bar") @(tt : T?) {
-        let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
-        if (!model_available(tt, mm)) {
-            return
-        }
-        var o = OracleEncode()
-        let logpath = path_join(path_join(models_dir(), "gemma4-vision-oracle"), "e2b.encode.cb336.log")
-        if (!load_oracle_encode(logpath, o)) {
-            tt |> skip("oracle dump e2b.encode.cb336.log not present/parseable - mint via gemma4-vision-oracle/mint_e2b.sh")
-            return
-        }
-        set_gemma4v_q8(false)   // the exact-plane lane - the knockout reads against the strict bar's context
-        var inscope stg <- stage_gemma4v_tower(mm)
-        reset_gemma4v_q8()
-        let d = stg.t.n_embd
-        let hd = d / stg.t.n_head
-        var armed = 0
-        for (l in range64(stg.t.n_layer)) {
-            let clamps = stg.t.layer_f + l * stg.t.layer_f_stride + 4l * d + 2l * hd
-            for (g in range64(GEMMA4V_GEMMS)) {
-                let flag = clamps + g * GEMMA4V_CLAMP_F + 4l
-                if (stg.blob[flag] != 0.0) {
-                    armed++
-                }
-                stg.blob[flag] = 0.0
-            }
-        }
-        tt |> equal(armed, int(stg.t.n_layer * GEMMA4V_GEMMS), "every block GEMM carries an active clamp on E2B")
-        var tw = Gemma4vTower()
-        mint_gemma4v_tower(stg, tw)
+//! the dump whose bar the device poison of the tower file under the running block must exceed
+var private g_poison_log = "e2b.encode.cb336.log"
+
+// A canvas's device-side dump bar poisoned, on a `q8_z8@dev` form: the q8 tower with `POISON_BLOCK` zeroed must exceed the
+// bar the cb 336 dump holds.
+[cold_path]
+def private g4v_poison_leg(tt : T?; twp : Gemma4vTower) {
+    var o = OracleEncode()
+    return if (!oracle_dump(tt, "gemma4-vision-oracle", g_poison_log, "its gemma4-vision-oracle mint script", o))
+    var stp = Gemma4vState()
+    dump_poison_leg(tt, "gemma4v", "cb", 336, 336, o, TIER1_REL_Q8, POISON_BLOCK, int(twp.proj_dim), TIER1_ABS, twp, stp) $(t; var s; planes; var out) => gemma4v_encode(t, s, planes, 336l, 336l, out)
+    delete stp
+}
+
+//! the clamp knockout's miss on `tw`, a `+clamps_off` form: the largest v0 distance of its cb 336 encode from the mtmd dump
+//! on the CPU chain; negative where the dump is not stocked (a loud skip)
+def private knockout_miss(tt : T?; tw : Gemma4vTower) : float {
+    var o = OracleEncode()
+    let logpath = path_join(path_join(models_dir(), "gemma4-vision-oracle"), "e2b.encode.cb336.log")
+    if (!load_oracle_encode(logpath, o)) {
+        tt |> skip("oracle dump e2b.encode.cb336.log not present/parseable - mint via gemma4-vision-oracle/mint_e2b.sh")
+        return -1.0
+    }
+    var maxdiff = 0.0
+    with_gpu_knobs() {
         set_every_gpu_tower(false)
         var st = Gemma4vState()
         let planes <- make_planes("cb", 336, 336)
@@ -204,122 +260,92 @@ def test_gemma4v_clamps_bind(t : T?) {
         with_dasllama_jobque_() {
             gemma4v_encode(tw, st, planes, 336l, 336l, out)
         }
-        var maxdiff = 0.0
         for (p in range(o.npos)) {
             maxdiff = max(maxdiff, nan_wide_diff(out[p * int(tw.proj_dim)], o.v0[p]))
         }
-        to_log(LOG_INFO, "gemma4v clamp knockout cb 336x336: maxdiff {maxdiff} (floor {KNOCKOUT_FLOOR})\n")
-        tt |> success(maxdiff > KNOCKOUT_FLOOR, "disarmed clamps miss the oracle by {maxdiff}")
+        delete out
         delete st
-        delete tw
-        // the same knockout on the q8 lane: the q8 GEMM route's inactive-clamp arm runs and misses too
-        set_gemma4v_q8(true)
-        var inscope stgq <- stage_gemma4v_tower(mm)
-        reset_gemma4v_q8()
-        for (l in range64(stgq.t.n_layer)) {
-            let clamps = stgq.t.layer_f + l * stgq.t.layer_f_stride + 4l * d + 2l * hd
-            for (g in range64(GEMMA4V_GEMMS)) {
-                stgq.blob[clamps + g * GEMMA4V_CLAMP_F + 4l] = 0.0
-            }
-        }
-        var twq = Gemma4vTower()
-        mint_gemma4v_tower(stgq, twq)
-        var stq = Gemma4vState()
-        var outq : array<float>
-        with_dasllama_jobque_() {
-            gemma4v_encode(twq, stq, planes, 336l, 336l, outq)
-        }
-        var maxdiffq = 0.0
-        for (p in range(o.npos)) {
-            maxdiffq = max(maxdiffq, nan_wide_diff(outq[p * int(twq.proj_dim)], o.v0[p]))
-        }
-        tt |> success(twq.q8 && maxdiffq > KNOCKOUT_FLOOR, "q8 lane: disarmed clamps miss the oracle by {maxdiffq}")
-        set_every_gpu_tower(true)
-        delete stq
-        delete twq
     }
+    return maxdiff
 }
 
-// The standardize guard (std_bias / std_scale): absent on E2B, so the arm is reached through
-// staging - a neutral pair (bias 0, scale 1) must leave the encode bit-identical, a biased pair
-// must move it. The sign convention (x - bias) * scale is what the second half pins.
-[test(description = "A synthesized std_bias / std_scale pair on the E2B tower leaves the encode bit-identical at bias 0 and scale 1, and bias 0.25 with scale -1 moves the tokens by more than 1e-2")]
-def test_gemma4v_std_guard(t : T?) {
-    t |> run("synthesized std_bias/std_scale: neutral is identity, a bias moves the tokens") @(tt : T?) {
-        let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
-        if (!model_available(tt, mm)) {
-            return
-        }
+// The clamp knockout, on the `f32+clamps_off` form: the same tower with every block clamp disarmed must MISS the oracle -
+// the sidecar scalars are load-bearing, not decoration (the E2B file's bounds sit where activations live).
+[cold_path]
+def private test_gemma4v_clamps_bind(tt : T?; tw : Gemma4vTower) {
+    let maxdiff = knockout_miss(tt, tw)
+    return if (maxdiff < 0.0)
+    tt |> equal(g_clamps_armed, int(tw.n_layer * GEMMA4V_GEMMS), "every block GEMM carries an active clamp on E2B")
+    to_log(LOG_INFO, "gemma4v clamp knockout cb 336x336: maxdiff {maxdiff} (floor {KNOCKOUT_FLOOR})\n")
+    tt |> success(maxdiff > KNOCKOUT_FLOOR, "disarmed clamps miss the oracle by {maxdiff}")
+}
+
+// The same knockout on the q8 lane, on the `q8+clamps_off` form: the q8 GEMM route's inactive-clamp arm runs and misses too.
+[cold_path]
+def private clamps_bind_q8(tt : T?; twq : Gemma4vTower) {
+    let maxdiffq = knockout_miss(tt, twq)
+    return if (maxdiffq < 0.0)
+    tt |> success(twq.q8 && maxdiffq > KNOCKOUT_FLOOR, "q8 lane: disarmed clamps miss the oracle by {maxdiffq}")
+}
+
+//! the standardize guard's three encodes of the cb 96 canvas, a form each: the file's tower, the neutral pair's, the biased
+//! pair's
+struct private StdKept {
+    form : string
+    plain : array<float>
+    neutral : array<float>
+    biased : array<float>
+}
+
+// The standardize guard's encode on one of its forms (`f32`, `f32+std_neutral`, `f32+std_biased`), the rows kept.
+[cold_path]
+def private std_guard_encode(tt : T?; tw : Gemma4vTower; var k : StdKept) {
+    if (k.form == "f32") {
+        tt |> success(!tw.has_std, "E2B carries no std pair - the arm is synthesized below")
+    } else {
+        tt |> success(tw.has_std, "arm {k.form == "f32+std_neutral" ? 0 : 1}: the served tower carries the std pair")
+    }
+    with_gpu_knobs() {
         set_every_gpu_tower(false)
-        set_gemma4v_q8(false)
         let planes <- make_planes("cb", 96, 96)
-        var plain, neutral, biased : array<float>
+        var s = Gemma4vState()
         with_dasllama_jobque_() {
-            var inscope stg0 <- stage_gemma4v_tower(mm)
-            tt |> success(!stg0.t.has_std, "E2B carries no std pair - the arm is synthesized below")
-            var tw0 = Gemma4vTower()
-            mint_gemma4v_tower(stg0, tw0)
-            var s0 = Gemma4vState()
-            gemma4v_encode(tw0, s0, planes, 96l, 96l, plain)
-            delete s0
-            delete tw0
-            for (arm in range(2)) {
-                var inscope stg <- stage_gemma4v_tower(mm)
-                let d = stg.t.n_embd
-                stg.t.has_std = true
-                stg.t.std_bias = long_length(stg.blob)
-                stg.t.std_scale = stg.t.std_bias + d
-                stg.blob |> reserve(stg.t.std_scale + d)
-                stg.blob |> resize(stg.t.std_scale + d)
-                for (i in range64(d)) {
-                    stg.blob[stg.t.std_bias + i] = arm == 0 ? 0.0 : 0.25
-                    stg.blob[stg.t.std_scale + i] = arm == 0 ? 1.0 : -1.0
-                }
-                var tw = Gemma4vTower()
-                mint_gemma4v_tower(stg, tw)
-                tt |> success(tw.has_std, "arm {arm}: the served tower carries the std pair")
-                var s = Gemma4vState()
-                if (arm == 0) {
-                    gemma4v_encode(tw, s, planes, 96l, 96l, neutral)
-                } else {
-                    gemma4v_encode(tw, s, planes, 96l, 96l, biased)
-                }
-                delete s
-                delete tw
+            if (k.form == "f32") {
+                gemma4v_encode(tw, s, planes, 96l, 96l, k.plain)
+            } elif (k.form == "f32+std_neutral") {
+                gemma4v_encode(tw, s, planes, 96l, 96l, k.neutral)
+            } else {
+                gemma4v_encode(tw, s, planes, 96l, 96l, k.biased)
             }
         }
-        reset_gemma4v_q8()
-        var neutral_diff = 0.0
-        var biased_diff = 0.0
-        for (p0, pn, pb in plain, neutral, biased) {
-            neutral_diff = max(neutral_diff, nan_wide_diff(pn, p0))
-            biased_diff = max(biased_diff, nan_wide_diff(pb, p0))
-        }
-        tt |> success(neutral_diff == 0.0, "bias 0 / scale 1 leaves the encode bit-identical (diff {neutral_diff})")
-        tt |> success(biased_diff > 1e-2, "bias 0.25 / scale -1 moves the tokens (diff {biased_diff})")
-        set_every_gpu_tower(true)
+        delete s
     }
 }
 
-// The q8 serving lane (the CPU default): the same dumps on its own scale-relative bar. The
-// exact-plane gate above is the parity rail; this one says what serving costs in fidelity.
-[test(description = "The gemma4v q8 serving lane holds exactly the block GEMM set in its qblob and matches the E2B mtmd dumps within 0.12 of token rms on four canvases, and the vision carrier stamps q8 or f32 by lane")]
-def test_gemma4v_tier1_q8(t : T?) {
-    t |> run("tier-1 on the q8 block-GEMM lane (the serving default)") @(tt : T?) {
-        let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
-        if (!model_available(tt, mm)) {
-            return
-        }
-        set_gemma4v_q8(true)   // pinned: on Apple builds the Metal tower's presence flips the default to the exact lane
-        var inscope via_carrier <- load_vision_embedder(mm)
-        tt |> equal(vision_exec_fmt(via_carrier), "q8", "the carrier stamps the q8 lane")
-        let knobs = gpu_knobs()
-        set_every_gpu_tower(false)   // a CPU-chain claim: the knob-off load takes the lane's CPU image (`#tower-dev-block`)
-        var tw <- load_gemma4v_tower(mm)
-        set_gemma4v_q8(false)
-        var inscope via_carrier_exact <- load_vision_embedder(mm)
-        tt |> equal(vision_exec_fmt(via_carrier_exact), "f32", "the carrier stamps the exact lane")
-        reset_gemma4v_q8()
+// The standardize guard (std_bias / std_scale), after the block: absent on E2B, so the arm is reached through staging - a
+// neutral pair (bias 0, scale 1) must leave the encode bit-identical, a biased pair must move it. The sign convention
+// (x - bias) * scale is what the second half pins.
+[cold_path]
+def private test_gemma4v_std_guard(tt : T?; k : StdKept) {
+    tt |> success(!empty(k.plain) && length(k.neutral) == length(k.plain) && length(k.biased) == length(k.plain), "the three forms kept their encodes")
+    var neutral_diff = 0.0
+    var biased_diff = 0.0
+    for (p0, pn, pb in k.plain, k.neutral, k.biased) {
+        neutral_diff = max(neutral_diff, nan_wide_diff(pn, p0))
+        biased_diff = max(biased_diff, nan_wide_diff(pb, p0))
+    }
+    tt |> success(neutral_diff == 0.0, "bias 0 / scale 1 leaves the encode bit-identical (diff {neutral_diff})")
+    tt |> success(biased_diff > 1e-2, "bias 0.25 / scale -1 moves the tokens (diff {biased_diff})")
+}
+
+// The q8 serving lane (the CPU default), on the E2B file's `image_q8` form: the same dumps on its own scale-relative bar.
+// The exact-plane gate above is the parity rail; this one says what serving costs in fidelity.
+[cold_path]
+def private test_gemma4v_tier1_q8(tt : T?; via_carrier : VisionEmbedder) {
+    let tw & = unsafe(via_carrier.gemma4v)
+    tt |> equal(vision_exec_fmt(via_carrier), "q8", "the carrier stamps the q8 lane")
+    with_gpu_knobs() {
+        set_every_gpu_tower(false)   // a CPU-chain claim: the knob-off load took the lane's CPU image (`#tower-dev-block`)
         var st = Gemma4vState()
         tt |> success(tw.q8, "q8 lane loaded")
         tt |> success(length(tw.qblob) == tw.n_layer * tw.layer_w_stride, "qblob holds exactly the block GEMM set")
@@ -327,136 +353,155 @@ def test_gemma4v_tier1_q8(t : T?) {
         tt |> gate_encode(tw, st, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
         tt |> gate_encode(tw, st, "green", 336, 336, "e2b.encode.green336.log", TIER1_REL_Q8)
         tt |> gate_encode(tw, st, "cb", 672, 336, "e2b.encode.cb672x336.log", TIER1_REL_Q8)
-        set_gpu_knobs(knobs)
         delete st
-        delete tw
     }
 }
 
-let private POISON_BLOCK = 8l   //! the whole-tower input poison's block: mid-stack, so the zero rides the residual through half the chain
-
-//! a tower minted in memory from the staged planes under the lane pin (pinned, staged, the pin restored): `nl` blocks (0 = the
-//! file's count); `zero_block` >= 0 zeroes that block's q8 GEMM planes - the input poison of the device-side bars (q8 lane);
-//! `dev` the image flavor (`none` the CPU image). Never `load_gemma4v_tower`, which bakes a `.dlim` under the pin.
-def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int64 = -1l; dev : TowerDev = TowerDev.none) : Gemma4vTower
-    => mint_twin_tower(mm, q8, nl, zero_block, dev, @@set_gemma4v_q8, @@reset_gemma4v_q8, @@stage_gemma4v_tower, @@mint_gemma4v_tower)
-
-//! a canvas's device-side dump bar poisoned: the q8 tower with `POISON_BLOCK` zeroed must exceed the bar `logname` holds
-def private g4v_poison_leg(tt : T?; mm : string; kind : string; w, h : int; logname : string; bar_rms : float) {
-    var o = OracleEncode()
-    return if (!oracle_dump(tt, "gemma4-vision-oracle", logname, "its gemma4-vision-oracle mint script", o))
-    var twp <- mint_tower(mm, true, 0l, POISON_BLOCK, serving_tower_dev(TowerFamily.vision))
-    var stp = Gemma4vState()
-    dump_poison_leg(tt, "gemma4v", kind, w, h, o, bar_rms, POISON_BLOCK, int(twp.proj_dim), TIER1_ABS, twp, stp) $(t; var s; planes; var out) => gemma4v_encode(t, s, planes, int64(w), int64(h), out)
-    delete stp
-    delete twp
+// The q8 lane's bar on the serving discrete home, on the E2B file's `q8@dev` form: the device runs the q8 chain's
+// arithmetic with f16 weight scales and its own summation order.
+[cold_path]
+def private test_gemma4v_tier1_vulkan(tt : T?; tw : Gemma4vTower) {
+    with_gpu_knobs() {
+        set_every_gpu_tower(true)
+        var st = Gemma4vState()
+        let fixtures = [(kind = "cb", w = 96, h = 96, log = "e2b.encode.cb96.log"),
+                        (kind = "cb", w = 336, h = 336, log = "e2b.encode.cb336.log"),
+                        (kind = "green", w = 336, h = 336, log = "e2b.encode.green336.log"),
+                        (kind = "cb", w = 672, h = 336, log = "e2b.encode.cb672x336.log")]
+        for (fx in fixtures) {
+            let s0 = gpu_tower_counters(TowerFamily.vision)
+            let ran = gate_encode(tt, tw, st, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_Q8)
+            if (ran) {
+                device_leg_served(tt, "{fx.kind} {fx.w}x{fx.h}", s0, gpu_tower_counters(TowerFamily.vision), tw.n_layer, -1l)
+            }
+        }
+        delete st
+    }
 }
 
-//! the q8 lane's bar: the device runs the q8 chain's arithmetic with f16 weight scales and its own summation order
-[test(description = "The gemma4v q8 tower on the serving discrete home's device matches the E2B mtmd dumps within the q8 lane's 0.12 of token rms on four canvases, each device-served, while a mid-stack zeroed-block poison exceeds the bar")]
-def test_gemma4v_tier1_vulkan(t : T?) {
-    t |> run("tier-1 attempt on the serving discrete home's tower ({serving_tower_dev(TowerFamily.vision)}) vs the mtmd encode dumps (the q8 lane's bar)") @(tt : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
-            if (!model_available(tt, mm) || !discrete_twin_seat(tt)) {
-                return
+//! the discrete twin's canvases, depths and exact-lane leg: square canvases on one- and two-block towers - a drift names
+//! its block before the deep chain compounds it, the poison on the one-block tower, where the bar is tightest - then
+//! square, non-square and 128-aligned canvases on the whole tower
+def private gemma4v_twin() : VisionTwin {
+    var twin <- vision_twin("cb", 336, 336, "gemma4v cb 336x336", 441l)
+    twin.canvases <- [twin_canvas(1l, "cb", 96, 96, 0l), twin_canvas(1l, "cb", 336, 336),
+        twin_canvas(2l, "cb", 96, 96), twin_canvas(2l, "cb", 336, 336),
+        twin_canvas(0l, "cb", 96, 96), twin_canvas(0l, "cb", 336, 336), twin_canvas(0l, "green", 672, 336),
+        twin_canvas(0l, "cb", 768, 384)]   // 768 x 384: 1152 rows, a 128-multiple - the aligned tile variant's canvas
+    twin.depths <- [TwinDepth(nl = 1l), TwinDepth(nl = 2l)]
+    return <- twin
+}
+
+//! the forms only the discrete twin reads; with the whole exact form and the q8 one on the device (`f32`, `q8@dev`) they
+//! are its legs, the forms of one staged read (`tower_stage_key`) side by side
+let private TWIN_FORMS = fixed_array("f32_1L", "f32_2L", "f32@seat", "f32_z8@seat", "q8_1L", "q8_2L", "q8", "q8_1L@dev", "q8_1L_z0@dev", "q8_2L@dev")
+
+// A form's legs of the discrete twin: its canvases three ways, a form a chain, and the exact lane served on the device.
+[cold_path]
+def private twin_legs(tt : T?; tw : Gemma4vTower; var twin : VisionTwin) {
+    if (twin.form == "f32") {
+        tt |> success(!tw.q8, "exact-plane lane minted")
+    } elif (twin.form == "q8") {
+        tt |> success(tw.q8, "q8 lane minted")
+    }
+    var st = Gemma4vState()
+    twin_form_legs(tt, twin, tw, st) $(t; var s; planes; w; h; var out) => gemma4v_encode(t, s, planes, int64(w), int64(h), out)
+    delete st
+}
+
+// The twin's compares, after the block, on the rows its forms kept.
+[cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
+def private test_gemma4v_discrete_twin(tt : T?; twin : VisionTwin) {
+    twin_held(tt, "gemma4v", "", 16l, twin)
+}
+
+// The E2B Q8_0 decoder's block, nested in the tower's `image` form: an image chat turn reads both files.
+[cold_path]
+def private e2b_q8_decoder(t : T?; var emb : VisionEmbedder) {
+    unsafe {
+        t |> run("the gemma-4 E2B Q8_0 decoder under the gemma4v tower") @capture(& emb)(t : T ?) {
+            return if (!vision_chat_gate(t, "gemma4e", "gemma-4-E2B-it-Q8_0.gguf", 0))
+            with_cpu_and_gpu_model(t, "vision", "gemma-4-E2B-it-Q8_0.gguf", VISION_CHAT_CTX, [cpu_cells_form(QuantMode.q8)]) $(var m; form) {
+                vision_chat_cell(t, "the E2B image turn through the gemma4v tower: stream shape, then the caption", m, form, false, emb, @@test_vision_chat_e2b)
             }
-            let knobs = gpu_knobs()
-            set_every_gpu_tower(true)
-            var tw <- mint_tower(mm, true, 0l, -1l, serving_tower_dev(TowerFamily.vision))
-            var st = Gemma4vState()
-            let fixtures = [(kind = "cb", w = 96, h = 96, log = "e2b.encode.cb96.log"),
-                            (kind = "cb", w = 336, h = 336, log = "e2b.encode.cb336.log"),
-                            (kind = "green", w = 336, h = 336, log = "e2b.encode.green336.log"),
-                            (kind = "cb", w = 672, h = 336, log = "e2b.encode.cb672x336.log")]
-            for (fx in fixtures) {
-                let s0 = gpu_tower_counters(TowerFamily.vision)
-                let ran = gate_encode(tt, tw, st, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_Q8)
-                if (ran) {
-                    device_leg_served(tt, "{fx.kind} {fx.w}x{fx.h}", s0, gpu_tower_counters(TowerFamily.vision), tw.n_layer, -1l)
-                }
+        }
+    }
+}
+
+// The E2B Q4_K_M decoder's block, nested in the tower's `image` form: an image chat turn reads both files.
+[cold_path]
+def private e2b_q4_decoder(t : T?; var emb : VisionEmbedder) {
+    unsafe {
+        t |> run("the gemma-4 E2B Q4_K_M decoder under the gemma4v tower") @capture(& emb)(t : T ?) {
+            return if (!vision_chat_gate(t, "gemma4e", "gemma-4-E2B-it-Q4_K_M.gguf", 0))
+            with_cpu_and_gpu_model(t, "vision", "gemma-4-E2B-it-Q4_K_M.gguf", VISION_CHAT_CTX, [cpu_cells_form(QuantMode.q8)]) $(var m; form) {
+                vision_chat_cell(t, "the E2B image turn on the first turn under set_thinking(false) answers", m, form, false, emb, @@test_vision_chat_e2b_nothink)
             }
-            delete st
-            delete tw
-            g4v_poison_leg(tt, mm, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
-            set_gpu_knobs(knobs)
+        }
+    }
+}
+
+// The E2B mmproj, one block.
+[test(description = "The gemma4v E2B tower's mmproj loads once a form. On the exact lane it reads its geometry and plane split off the mmproj and matches the mtmd encode dumps on eight canvases within 4e-3 of token rms, panicking on a grid past the position table or a ragged canvas. The lane policy is q8 with the Metal tower off and exact with it armed, and the Metal tower matches the dumps within 8e-3 of token rms on five canvases, with a knob-off decline leg and the q8 lane served with a red poison control. A knockout: every block GEMM carries an active clamp, and disarming them all moves the encode more than 1e-3 off the mtmd dump on both the exact and the q8 lane, so the clamp scalars are load-bearing. A synthesized std_bias / std_scale pair leaves the encode bit-identical at bias 0 and scale 1, and bias 0.25 with scale -1 moves the tokens by more than 1e-2. The q8 serving lane holds exactly the block GEMM set in its qblob and matches the dumps within 0.12 of token rms on four canvases, the vision carrier stamps q8 or f32 by lane, and on the serving discrete home's device the q8 tower matches four dumps within that bar, each device-served, while a mid-stack zeroed-block poison exceeds it. The serving discrete home's chain matches the CPU q8 chain on one- and two-block towers and the full tower across square, non-square and 128-aligned canvases, a zeroed-block poison reds, and the exact lane is served on the device. Under the mmproj's image form each E2B decoder loads once: through the Q8_0 decoder the mmproj sniffs as gemma4v at 48 px, a carrier with no vision arm is refused at create, the cats turn splices 130 rows between the image markers, and the greedy caption names the cats; the Q4_K_M decoder's turn with thinking off under the sampled preset ends on a stop before the budget, files any leading thought block as reasoning, and leaves a cats answer with no channel marker in the content and the history")]
+def test_gemma4v_e2b(t : T?) {
+    return if (!family_on(t, "gemma4v"))
+    var inscope twin <- gemma4v_twin()
+    var inscope stdk = StdKept()
+    let twin_on = empty(twin_form_why(""))
+    g_poison_log = "e2b.encode.cb336.log"
+    var inscope forms <- ["image"]
+    add_served_forms(t, forms, MM, ["q8@dev", "q8_z8@dev"], @@metal_or_twin_form_why)
+    forms |> push_from(["image_f32", "image_q8", "q8+clamps_off", "f32+clamps_off", "f32", "f32+std_neutral", "f32+std_biased"])
+    add_served_forms(t, forms, MM, [for (f in TWIN_FORMS); f], @@twin_form_why)
+    let ran = with_model_once(t, "vision", "mmproj-gemma-4-E2B-it-bf16.gguf", forms, @@tower_stage_key, @@gemma4v_stage, @@gemma4v_form) $(var e; form) {
+        tower_form_is(t, MM, form, e.gemma4v)
+        twin.form = form
+        stdk.form = form
+        if (form == "image") {
+            tower_cell(t, "tier-1 GPU attempt vs the mtmd encode dumps (scale-relative rung)", e.gemma4v, @@test_gemma4v_tier1_gpu)
+            e2b_q8_decoder(t, e)
+            e2b_q4_decoder(t, e)
+        } elif (form == "image_f32") {
+            tower_cell(t, "tier-1 tower parity vs the mtmd encode dumps (E2B)", e.gemma4v, @@test_gemma4v_tier1)
+            tower_cell(t, "tier-1 on the q8 block-GEMM lane: the exact lane's carrier stamp", e, @@carrier_stamps_exact)
+        } elif (form == "image_q8") {
+            tower_cell(t, "tier-1 on the q8 block-GEMM lane (the serving default)", e, @@test_gemma4v_tier1_q8)
+        } elif (form == "f32+clamps_off") {
+            tower_cell(t, "disarming the block clamps moves tier-1 past the bar", e.gemma4v, @@test_gemma4v_clamps_bind)
+        } elif (form == "q8+clamps_off") {
+            tower_cell(t, "disarming the block clamps moves tier-1 past the bar, the q8 lane", e.gemma4v, @@clamps_bind_q8)
+        } elif (form == "f32+std_neutral" || form == "f32+std_biased") {
+            tower_cell(t, "synthesized std_bias/std_scale: the {form} form's encode", e.gemma4v, stdk, @@std_guard_encode)
+        } elif (form == "q8_z8@dev") {
+            tower_cell(t, "the q8 lane's dump bar: a zeroed block through the device chain reds it", e.gemma4v, @@g4v_poison_leg)
+        } elif (form == "q8@dev" && !twin_on) {
+            tower_cell(t, "tier-1 GPU attempt: the q8 lane on the Metal tower", e.gemma4v, @@gpu_q8_lane)
         } else {
-            tt |> skip("dasVulkan not present")
+            if (form == "f32") {
+                tower_cell(t, "synthesized std_bias/std_scale: the file's own encode", e.gemma4v, stdk, @@std_guard_encode)
+            } elif (form == "q8@dev") {
+                tower_cell(t, "tier-1 attempt on the serving discrete home's tower ({serving_tower_dev(TowerFamily.vision)}) vs the mtmd encode dumps (the q8 lane's bar)", e.gemma4v, @@test_gemma4v_tier1_vulkan)
+            }
+            if (twin_on) {
+                tower_cell(t, "the serving discrete home's chain, the {form} form's legs", e.gemma4v, twin, @@twin_legs)
+            }
         }
+    }
+    if (ran) {
+        kept_cell(t, "synthesized std_bias/std_scale: neutral is identity, a bias moves the tokens", stdk, @@test_gemma4v_std_guard)
+    }
+    if (ran && twin_on) {
+        kept_cell(t, "the serving discrete home's chain ({serving_tower_dev(TowerFamily.vision)}) vs the CPU q8 chain, and the exact lane served", twin, @@test_gemma4v_discrete_twin)
+        gpu_tower_shutdown(TowerFamily.vision)
     }
 }
 
-//! one canvas three ways on the shared instrument; `zero_block` >= 0 adds the input poison over a fresh q8 tower
-def private twin_encode(tt : T?; tw : Gemma4vTower; var st : Gemma4vState; tw_exact : Gemma4vTower; var st_exact : Gemma4vState;
-                        kind : string; w, h : int; mm : string; zero_block : int64 = -1l) {
-    let planes <- make_planes(kind, w, h)
-    twin_canvas(tt, "gemma4v", kind, w, h, 16l, "", tw, st, tw_exact, st_exact, zero_block,
-        $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb, serving_tower_dev(TowerFamily.vision)) }) $(t; var s; var out) => gemma4v_encode(t, s, planes, int64(w), int64(h), out)
-}
-
-[test(description = "The serving discrete home's gemma4v chain matches the CPU q8 chain on one- and two-block towers and the full tower across square, non-square and 128-aligned canvases, a zeroed-block poison reds, and the exact lane is served on the device"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
-def test_gemma4v_discrete_twin(t : T?) {
-    t |> run("the serving discrete home's chain ({serving_tower_dev(TowerFamily.vision)}) vs the CPU q8 chain, and the exact lane served") @(tt : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
-            if (!model_available(tt, mm) || !discrete_twin_seat(tt)) {
-                return
-            }
-            var tw_exact <- mint_tower(mm, false)
-            var st_exact = Gemma4vState()
-            tt |> success(!tw_exact.q8, "exact-plane lane minted")
-            // the one- and two-block towers first: a drift names its block before the deep chain compounds it
-            for (nl in [1l, 2l]) {
-                var twxs <- mint_tower(mm, false, nl)
-                var twq <- mint_tower(mm, true, nl)
-                var stq = Gemma4vState()
-                var stxs = Gemma4vState()
-                tt |> success(twq.q8 && !twxs.q8 && twq.n_layer == nl && twxs.n_layer == nl, "the {nl}-block towers, q8 and exact")
-                twin_encode(tt, twq, stq, twxs, stxs, "cb", 96, 96, mm, nl == 1l ? 0l : -1l)   // the poison on the one-block tower, where the bar is tightest
-                twin_encode(tt, twq, stq, twxs, stxs, "cb", 336, 336, mm)
-                delete stq
-                delete stxs
-                delete twq
-                delete twxs
-            }
-            var tw <- mint_tower(mm, true)
-            var st = Gemma4vState()
-            tt |> success(tw.q8, "q8 lane minted")
-            twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 96, 96, mm)
-            twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 336, 336, mm)
-            twin_encode(tt, tw, st, tw_exact, st_exact, "green", 672, 336, mm)
-            twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 768, 384, mm)   // 1152 rows, a 128-multiple: the aligned tile variant's canvas
-            delete st
-            delete tw
-            let planes <- make_planes("cb", 336, 336)
-            var twxp <- mint_tower(mm, false, 0l, POISON_BLOCK)
-            var stxp = Gemma4vState()
-            exact_lane_served(tt, "gemma4v cb 336x336", tw_exact, st_exact, 441l, twxp, stxp) $(t; var s; var out) => gemma4v_encode(t, s, planes, 336l, 336l, out)
-            delete stxp
-            delete twxp
-            delete st_exact
-            delete tw_exact
-            gpu_tower_shutdown(TowerFamily.vision)
-        } else {
-            tt |> skip("dasVulkan not present")
-        }
-    }
-}
-
-// The E4B rung: the larger E-series vehicle shares the tower geometry block for block - only the
-// soft-token width differs (2560 vs 1536) - so the dump set is the seam subset (smallest grid,
-// one product size, the orientation gate; mint_e4b.sh), with one GPU and one q8-lane fixture.
-[test(description = "The gemma4v E4B tower shares E2B's geometry but a 2560 soft-token width and matches its mtmd dumps on the exact lane within 4e-3 of token rms, on Metal within 8e-3, and on the q8 lane and its discrete device rung within 0.12")]
-def test_gemma4v_tier1_e4b(t : T?) {
-    t |> run("tier-1 tower parity vs the mtmd encode dumps (E4B)") @(tt : T?) {
-        let mm = path_join(models_dir(), "mmproj-gemma-4-E4B-it-BF16.gguf")
-        if (!model_available(tt, mm)) {
-            return
-        }
-        set_gemma4v_q8(false)
-        var tw <- load_gemma4v_tower(mm)
-        reset_gemma4v_q8()
-        let knobs = gpu_knobs()
+// The E4B rung, on the E4B file's `image_f32` form: the larger E-series vehicle shares the tower geometry block for block -
+// only the soft-token width differs (2560 vs 1536) - so the dump set is the seam subset (smallest grid, one product size,
+// the orientation gate; mint_e4b.sh), with one GPU and one q8-lane fixture on their own forms.
+[cold_path]
+def private test_gemma4v_tier1_e4b(tt : T?; tw : Gemma4vTower) {
+    with_gpu_knobs() {
         set_every_gpu_tower(false)
         var st = Gemma4vState()
         tt |> success(!tw.q8, "exact-plane lane")
@@ -469,44 +514,75 @@ def test_gemma4v_tier1_e4b(t : T?) {
         tt |> gate_encode(tw, st, "cb", 336, 336, "e4b.encode.cb336.log")
         tt |> gate_encode(tw, st, "green", 336, 336, "e4b.encode.green336.log")
         tt |> gate_encode(tw, st, "cb", 672, 336, "e4b.encode.cb672x336.log")
-        static_if (typeinfo builtin_module_exists(das_metal)) {
+        delete st
+    }
+}
+
+// The E4B rung on the Metal tower, on the E4B file's `image` form.
+[cold_path]
+def private e4b_gpu_leg(tt : T?; tw : Gemma4vTower) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_gpu_knobs() {
             set_metal_tower(true)
+            var st = Gemma4vState()
             let s0 = metal_tower_stats()
             let ran = gate_encode(tt, tw, st, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_GPU)
             if (ran) {
                 device_leg_served(tt, "GPU", s0, metal_tower_stats(), tw.n_layer, -1l)
             }
+            delete st
         }
-        delete st
-        delete tw
+    }
+}
+
+// The E4B serving lane on its own bar, on the E4B file's `q8` form - minted in memory (a load under the pin bakes a q8 image).
+[cold_path]
+def private e4b_q8_lane(tt : T?; twq : Gemma4vTower) {
+    with_gpu_knobs() {
         set_every_gpu_tower(false)
-        var twq <- mint_tower(mm, true)   //! the serving lane on its own bar, minted in memory (a load under the pin bakes a q8 image)
         var stq = Gemma4vState()
         tt |> success(twq.q8, "q8 lane loaded")
         tt |> gate_encode(twq, stq, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            static_if (typeinfo builtin_module_exists(das_metal)) {
-                to_log(LOG_INFO, "E4B q8: das_metal on this build owns the tower hooks - the Vulkan leg has no seat\n")
-            } else {
-                if (serving_tower_device_up(TowerFamily.vision)) {
-                    set_serving_gpu_tower(true, TowerFamily.vision)
-                    var twv <- mint_tower(mm, true, 0l, -1l, serving_tower_dev(TowerFamily.vision))
-                    var stv = Gemma4vState()
-                    let v0 = gpu_tower_counters(TowerFamily.vision)
-                    let ran = gate_encode(tt, twv, stv, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)
-                    if (ran) {
-                        device_leg_served(tt, "E4B q8", v0, gpu_tower_counters(TowerFamily.vision), twv.n_layer, -1l)
-                    }
-                    delete stv
-                    delete twv
-                    g4v_poison_leg(tt, mm, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)
-                } else {
-                    tt |> skip("no device stands up for the serving discrete home's tower ({serving_tower_dev(TowerFamily.vision)}) - the E4B q8 device leg")
-                }
-            }
-        }
-        set_gpu_knobs(knobs)
         delete stq
-        delete twq
+    }
+}
+
+// The E4B q8 lane's device leg on the serving discrete home, on the E4B file's `q8@dev` form.
+[cold_path]
+def private e4b_q8_device_leg(tt : T?; twv : Gemma4vTower) {
+    with_gpu_knobs() {
+        set_serving_gpu_tower(true, TowerFamily.vision)
+        var stv = Gemma4vState()
+        let v0 = gpu_tower_counters(TowerFamily.vision)
+        let ran = gate_encode(tt, twv, stv, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)
+        if (ran) {
+            device_leg_served(tt, "E4B q8", v0, gpu_tower_counters(TowerFamily.vision), twv.n_layer, -1l)
+        }
+        delete stv
+    }
+}
+
+// The E4B mmproj, one block.
+[test(description = "The gemma4v E4B tower's mmproj loads once a form: it shares E2B's geometry but a 2560 soft-token width and matches its mtmd dumps on the exact lane within 4e-3 of token rms, on Metal within 8e-3, and on the q8 lane and its discrete device rung within 0.12, a mid-stack zeroed-block poison exceeding that bar on the device")]
+def test_gemma4v_e4b(t : T?) {
+    return if (!family_on(t, "gemma4v"))
+    g_poison_log = "e4b.encode.cb336.log"
+    var inscope forms <- ["image_f32"]
+    add_served_forms(t, forms, MM_E4B, ["image"], @@metal_form_why)
+    forms |> push("q8")
+    add_served_forms(t, forms, MM_E4B, ["q8@dev", "q8_z8@dev"], @@discrete_rung_form_why)
+    with_model_once(t, "vision", "mmproj-gemma-4-E4B-it-BF16.gguf", forms, @@tower_stage_key, @@gemma4v_stage, @@gemma4v_form) $(var e; form) {
+        tower_form_is(t, MM_E4B, form, e.gemma4v)
+        if (form == "image_f32") {
+            tower_cell(t, "tier-1 tower parity vs the mtmd encode dumps (E4B)", e.gemma4v, @@test_gemma4v_tier1_e4b)
+        } elif (form == "image") {
+            tower_cell(t, "tier-1 on the Metal tower (E4B)", e.gemma4v, @@e4b_gpu_leg)
+        } elif (form == "q8") {
+            tower_cell(t, "tier-1 on the q8 lane (E4B)", e.gemma4v, @@e4b_q8_lane)
+        } elif (form == "q8@dev") {
+            tower_cell(t, "tier-1 on the q8 lane's device rung (E4B)", e.gemma4v, @@e4b_q8_device_leg)
+        } elif (form == "q8_z8@dev") {
+            tower_cell(t, "the q8 lane's dump bar: a zeroed block through the device chain reds it (E4B)", e.gemma4v, @@g4v_poison_leg)
+        }
     }
 }

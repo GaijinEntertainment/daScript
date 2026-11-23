@@ -43,6 +43,9 @@ def test_fleet_create_argv(t : T?) {
     t |> success(find(line, "--network-volume-id vol123") >= 0 && find(line, "--data-center-ids EU-RO-1") >= 0, "on the models volume in its data center")
     t |> success(find(line, "--gpu-id NVIDIA RTX PRO 4500 Blackwell") >= 0, "the GPU asked")
     t |> equal(FleetArgs().disk, 200, "the disk's default holds the tree and the copies of the models a run opens")
+    for (token in ["DASLLAMA_WHISPER_DIR=/root/models ", "DASLLAMA_CORPUS_DIR=/root/models/asr_corpus ", "DASLLAMA_SCRATCH_DIR=/root/scratch "]) {
+        t |> success(find(FleetArgs().env, token) >= 0, "the children's default environment names {token}: {FleetArgs().env}")
+    }
     t |> success(find(line, "--container-disk-in-gb 200") >= 0 && find(line, "--ports 22/tcp") >= 0, "its disk and the ssh port")
     t |> success(find(line, "\"PUBLIC_KEY\":\"ssh-ed25519 AAAA key\"") >= 0, "the key in the environment the boot reads")
     t |> success(find(line, "openssh-server rsync git curl ca-certificates libvulkan1 libgl1 libegl1") >= 0 && find(line, "exec /usr/sbin/sshd -D") >= 0, "the boot installs sshd, rsync, git, curl for the model fetch, the Vulkan loader and the GL and EGL loaders its NVIDIA ICD opens, then serves ssh")
@@ -331,10 +334,10 @@ def test_fleet_model_copy(t : T?) {
     let once = run_command(mf_cfg, "20261027-000000", "vulkan", true)
     t |> success(find(once, "--suite model-free --await-models") == rfind(once, "--suite model-free --await-models") && find(once, " mf=0;") >= 0, "an --args that is the model-free suite runs it once: {once}")
     var skip_cfg = FleetArgs()
-    skip_cfg.args = "--area llm --skip-fully-cached"
+    skip_cfg.args = "--area llm --rerun"
     let rerun = run_command(skip_cfg, "20261027-000000", "vulkan", true)
-    t |> success(find(rerun, "/run.das -- --suite model-free --skip-fully-cached --await-models") >= 0, "an --args with --skip-fully-cached hands it to the model-free suite too: {rerun}")
-    t |> success(find(vulkan, "--skip-fully-cached") < 0, "a run that names no such flag skips nothing: {vulkan}")
+    t |> success(find(rerun, "/run.das -- --suite model-free --rerun --await-models") >= 0, "an --args with --rerun hands it to the model-free suite too: {rerun}")
+    t |> success(find(vulkan, "--rerun") < 0, "a run that names no such flag forces none: {vulkan}")
     t |> success(runs_model_free("--suite model-free") && runs_model_free("-s model-free") && runs_model_free("--suite=model-free"), "the model-free suite's spellings")
     t |> success(!runs_model_free("--changed --base origin/master") && !runs_model_free("--suite stocked --exclude model-free"), "another run is not it")
 }

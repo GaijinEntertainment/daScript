@@ -186,6 +186,17 @@ def gpu_tower_shutdown(fam : TowerFamily) {
     }
 }
 
+//! the serving tower's residents released after a block's device forms: the Metal tower's on a das_metal build, else
+//! family `fam`'s discrete home's (`gpu_tower_shutdown`)
+[unused_argument(fam)]
+def serving_tower_shutdown(fam : TowerFamily) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        metal_tower_shutdown()
+    } else {
+        gpu_tower_shutdown(fam)
+    }
+}
+
 //! the image flavor family `fam`'s seats serve (`#tower-dev-block`): Metal's with das_metal, else CUDA's for a CUDA-home family, else Vulkan's, `none` with none
 [unused_argument(fam)]
 def serving_tower_dev(fam : TowerFamily) : TowerDev {
@@ -217,6 +228,10 @@ def serving_tower_device_up(fam : TowerFamily) : bool {
         }
     }
 }
+
+//! what the box lacks for a form a device leg of family `fam` reads, "" where a GPU device stands up for the serving tower
+def device_up_why(fam : TowerFamily) : string
+    => serving_tower_device_up(fam) ? "" : "no GPU device stands up for the serving tower on this build or box"
 
 //! family `fam`'s discrete device armed with a tile family its chains ride, the f16 feed aside: the CUDA tower armed, else Vulkan's tiles; false off the discrete homes
 [unused_argument(fam)]

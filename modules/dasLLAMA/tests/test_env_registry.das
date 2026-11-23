@@ -134,3 +134,15 @@ def test_registry_covers_every_documented_knob(t : T?) {
         delete names
     }
 }
+
+[test(description = "A pass's key reads every set knob but the four that say where a run writes or how much it logs, and `env_set_knobs` lists none of those four")]
+def test_env_knobs_in_a_pass_key(t : T?) {
+    for (name in ["DASLLAMA_GPU", "DASLLAMA_CUDA", "DASLLAMA_IMAGE", "DASLLAMA_PARITY_FULL", "DASLLAMA_MODELS_DIR"]) {
+        t |> success(env_knob_keyed(name), "{name} is part of a pass's key")
+    }
+    let text = "\n{env_set_knobs()}"
+    for (name in ["TMPDIR", "TEMP", "DASLLAMA_SCRATCH_DIR", "DAS_LOG_LEVEL"]) {
+        t |> success(!env_knob_keyed(name), "{name} is no part of a pass's key")
+        t |> success(find(text, "\n{name}=") < 0, "and `env_set_knobs` does not list it")
+    }
+}

@@ -879,7 +879,8 @@ Each pair below differs on the one axis named, and the fold is behavior-neutral 
 - **The inline media turn.** `render_prompt_media` (with `text_before`) and `render_user_spans` render the same
   turn as a head and tail pair and as one position stream (`dasllama/dasllama_chat.das`); the first becomes the
   second with one mark, split at the id run. The single-chat media turn then takes the text renderer's arms
-  (displaced tool results, the open-turn close): `test_vision_chat.das`'s render cells are the check.
+  (displaced tool results, the open-turn close): the render cells of `tests/_vision_chat_cells.das`, run from each
+  vision family's decoder block (`test_gemma3v.das`, `test_gemma4v.das`, `test_qwen25v.das`, ...), are the check.
 - **The per-layer input's gate.** `ple_pre_prefill_pad_gated` and `ple_pre_prefill_gated` differ on the id source
   (`dasllama/dasllama_common.das`); one gate reads an empty token range as the padding token and keeps the CPU's
   one-gather pad arm.

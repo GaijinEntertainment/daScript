@@ -6,13 +6,15 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_vision_embedder
 require daslib/fio
-require _model_tier   // models_dir() + model_available() gate
+require _model_tier   // models_dir(), model_available()
+require _model_form   // own_load: the refusal cell's loads
 
-// The vision carrier's own arms: the text-only (none) shape the seams test against, the sniff's
-// refusals by name, and (model-gated) the gemma4uv arms the 12B pair distinguishes. The gemma4v
-// arms are test_gemma4v.das / test_vision_chat.das's.
+// The vision carrier's own arms: the text-only (none) shape the seams test against and the sniff's
+// refusals by name. The gemma4uv arms the 12B pair distinguishes run on that mmproj's block in
+// test_gemma4uv.das (`test_vision_embedder_gemma4uv_arms`); the gemma4v arms are test_gemma4v.das's
+// and the image chat cells'.
 
-[test(description = "A default VisionEmbedder reports zero width, zero alignment, no family and the f32 stamp and panics on encode, and `load_vision_embedder` panics on a missing file and on an audio-only mmproj")]
+[test(description = "A default VisionEmbedder reports zero width, zero alignment, no family and the f32 stamp and panics on encode")]
 def test_vision_embedder_none(t : T?) {
     t |> run("a default carrier is the text-only arm") @(t : T?) {
         var e = VisionEmbedder()
@@ -33,7 +35,12 @@ def test_vision_embedder_none(t : T?) {
         delete st
         delete e
     }
-    t |> run("the loader refuses a missing file and a non-vision mmproj by name") @(t : T?) {
+}
+
+[test(description = "`load_vision_embedder` panics on a missing file and on an audio-only mmproj")]
+def test_vision_embedder_refusals(t : T?) {
+    own_load("asserts on the load itself - its refusal: a path that is no file, and an audio-only mmproj")
+    t |> run("the loader refuses a missing file by name") @(t : T?) {
         var missing = false
         try {
             var e <- load_vision_embedder(path_join(models_dir(), "no-such-mmproj.gguf"))
@@ -42,17 +49,18 @@ def test_vision_embedder_none(t : T?) {
             missing = true
         }
         t |> success(missing, "a missing path panics")
+    }
+    t |> run("the loader refuses a non-vision mmproj by name") @(t : T?) {
         let audio_only = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")   // an audio projector, no vision half
-        if (stat(audio_only).is_valid) {
-            var refused = false
-            try {
-                var e <- load_vision_embedder(audio_only)
-                delete e
-            } recover {
-                refused = true
-            }
-            t |> success(refused, "an audio-only mmproj is refused by name")
+        return if (!model_available(t, audio_only))
+        var refused = false
+        try {
+            var e <- load_vision_embedder(audio_only)
+            delete e
+        } recover {
+            refused = true
         }
+        t |> success(refused, "an audio-only mmproj is refused by name")
     }
 }
 
@@ -67,20 +75,5 @@ def test_vision_embedder_exec_fmt(t : T?) {
         t |> equal(vision_exec_fmt(e25), "f32", "qwen25v stamps f32 - the outlier ViT serves exact only")
         delete e3
         delete e25
-    }
-}
-
-[test(description = "The gemma-4 12B mmproj sniffs as gemma4uv with a 48 px superpatch alignment, a 3840-wide projection and the f32 exec stamp")]
-def test_vision_embedder_gemma4uv_arms(t : T?) {
-    t |> run("the 12B mmproj sniffs as gemma4uv and reports its geometry") @(t : T?) {
-        let mm = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
-        if (!model_available(t, mm)) {
-            return
-        }
-        var inscope e <- load_vision_embedder(mm)
-        t |> equal(vision_family(e), "gemma4uv")
-        t |> equal(vision_align(e), 48l, "48 px superpatch")
-        t |> equal(vision_proj_dim(e), 3840l, "the 12B width")
-        t |> equal(vision_exec_fmt(e), "f32", "the embedder serves the file's planes")
     }
 }

@@ -73,8 +73,8 @@ struct RunArgs {
     @clarg_short = "b"
     @clarg_doc = "Files per child (default the whole suite in one child on the model-free suite, 10 on any other run): past 1 the child compiles its files as ONE program (dastest --together), so the engine's parse and JIT are paid once a batch and each file still reports as its own; a batch that dies before every file's verdict reruns the files without one, one child each - under a test wall it stops the run instead. The image suite's child always runs alone; 1 = one child a file"
     batch : int = 0
-    @clarg_doc = "Skip a file whose program loaded whole from its compile record and whose last run on this box, over the same model files, passed (dastest --skip-fully-cached). A development loop's flag: the run that signs a change off never takes it"
-    skip_fully_cached : bool
+    @clarg_doc = "Run every file. Without it a file whose program loaded whole from its compile record and whose last run on this box - over the same model files and the same environment - passed is reported from that pass (dastest --skip-fully-cached). The run that signs an arc off takes it; the full suite (DASLLAMA_PARITY_FULL=1) runs every file whatever is given"
+    rerun : bool
     @clarg_name = "no-tune"
     @clarg_doc = "Short-circuit the [tune] framework in every child (DAS_TUNE_POLICY=reference): the reference bodies run — the portable tier's arm"
     no_tune : bool
@@ -392,12 +392,15 @@ def area_tests(area : string) : array<string> {
     return <- none
 }
 
+//! the areas whose file lists name the test file `name`, a base name
+def test_file_areas(name : string) : array<string> => [for (a in AREAS); a; where find_index(area_tests(a), name) >= 0]
+
 //! the image suite's arms an area owns (substring tokens, `arm_on` semantics); "" = the area has none
 def area_image_arms(area : string) : string {
     if (area == "audio") {
-        return "whisper,voxtral,parakeet,gigaam,qwen3a,canary,gemma4a,mtower"
+        return "whisper,voxtral,parakeet,gigaam,qwen3a,canary,gemma4a,tower"
     } elif (area == "vision") {
-        return "gemma4uv,gemma4v,gemma3v,gemma4e,tower"
+        return "gemma4uv,gemma4v,gemma3v,gemma4e"
     } elif (area == "llm") {
         return "mechanics,smol,untied,metal,mx4,b32,mlx"
     } elif (area == "tts") {
@@ -444,11 +447,13 @@ let MODULE_AREAS <- {
     "dasllama_exchange" => "infra", "dasllama_exchange_schema" => "infra", "dasllama_lint" => "infra",
     "dasllama_version" => "infra", "dasllama_fat_start" => "infra",
     "dasllama_chat" => "llm,vision,audio", "dasllama_tools" => "llm,vision,audio",
-    "dasllama_arch_gemma2" => "llm", "dasllama_arch_gemma3" => "llm", "dasllama_arch_gemma4" => "llm",
-    "dasllama_arch_glm4moe" => "llm", "dasllama_arch_gptoss" => "llm", "dasllama_arch_llama" => "llm",
-    "dasllama_arch_mistral3" => "llm", "dasllama_arch_phi3" => "llm", "dasllama_arch_qwen2" => "llm",
-    "dasllama_arch_qwen2moe" => "llm", "dasllama_arch_qwen3" => "llm", "dasllama_arch_qwen35" => "llm", "dasllama_arch_qwen4exp" => "llm",
-    "dasllama_arch_qwen3moe" => "llm", "dasllama_attn_prefill" => "llm", "dasllama_batch" => "llm",
+    // an arch a media file's chat decoder loads through reaches that file's area: the vision and audio blocks load
+    // gemma-3/4, Qwen2.5-Omni, Qwen3-VL, Qwen3-Omni, the canary (qwen3) and SmolLM2 (llama) decoders
+    "dasllama_arch_gemma2" => "llm", "dasllama_arch_gemma3" => "llm,vision", "dasllama_arch_gemma4" => "llm,vision,audio",
+    "dasllama_arch_glm4moe" => "llm", "dasllama_arch_gptoss" => "llm", "dasllama_arch_llama" => "llm,audio",
+    "dasllama_arch_mistral3" => "llm", "dasllama_arch_phi3" => "llm", "dasllama_arch_qwen2" => "llm,vision",
+    "dasllama_arch_qwen2moe" => "llm", "dasllama_arch_qwen3" => "llm,vision,audio", "dasllama_arch_qwen35" => "llm", "dasllama_arch_qwen4exp" => "llm",
+    "dasllama_arch_qwen3moe" => "llm,vision,audio", "dasllama_attn_prefill" => "llm", "dasllama_batch" => "llm",
     "dasllama_bpe" => "llm", "dasllama_safetensors" => "llm", "dasllama_gpu_resident" => "llm,audio,vision", "dasllama_gpu_tier" => "llm",
     "dasllama_kv_dtype" => "llm", "dasllama_metal_decode" => "llm", "dasllama_metal_mtp_gemma" => "llm",
     "dasllama_dflash" => "llm", "dasllama_metal_dflash" => "llm", "dasllama_vulkan_dflash" => "llm", "dasllama_cuda_dflash" => "llm",
@@ -545,6 +550,8 @@ def private csv_list(csv : string) : array<string> => <- split_trimmed(csv, ",")
 def private fixture_areas(name : string) : array<string> {
     if (name |> starts_with("_tts_")) {
         return <- ["tts"]
+    } elif (name |> starts_with("_audio_")) {
+        return <- ["audio"]   //! the audio area's cell modules and its twins' legs
     } elif (name == "_vision_oracle.das") {
         return <- ["vision"]
     } elif (name == "_nmt_oracle.das") {
@@ -584,7 +591,7 @@ def areas_for_path(path : string) : array<string> {
         if (name |> starts_with("_")) {
             return <- fixture_areas(name)
         }
-        return <- [for (a in AREAS); a; where find_index(area_tests(a), name) >= 0]
+        return <- test_file_areas(name)
     }
     if (rel |> starts_with("dasllama/")) {
         let stem = name |> ends_with(".das") ? slice(name, 0, length(name) - 4) : name
@@ -798,6 +805,12 @@ def private last_line_with(text, needle : string) : tuple<line : string; at : in
     return found
 }
 
+//! `word` opens `line`, or follows a tty color code within its first 8 bytes
+def private verdict_word_at(line, word : string) : bool {
+    let p = find(line, word)
+    return p == 0 || (p > 0 && p <= 8 && starts_with(line, "\x1b"))
+}
+
 //! the PASS and FAIL file sets of a dastest log, by base name - a tty color code may sit ahead of the word - and
 //! whether the together root itself failed (its compile, its simulate, its refusal): then every FAIL is the root's,
 //! not a file's
@@ -808,8 +821,7 @@ def log_verdicts(log_path : string) : tuple<passed : array<string>; failed : arr
         root_failed ||= find(line, "the together root") >= 0 || find(line, "] together: ") >= 0
         for (word in ["PASS ", "FAIL "]) {
             // a per-test line reads `--- PASS 'name'`: only a line start or a color code may sit ahead of a verdict
-            let p = find(line, word)
-            continue if (p < 0 || p > 8 || (p > 0 && !(line |> starts_with("\x1b"))))
+            continue if (!verdict_word_at(line, word))
             var inscope words <- split(line, " ")
             continue if (length(words) < 2)
             if (word == "PASS ") {
@@ -844,7 +856,7 @@ def child_run_env(cfg : RunArgs; arm : string) : string {
 // on an armed hazard oracle PANICS here, so declaration gaps can never ship quietly.
 // cmd.exe has no VAR=val prefix — `set "VAR=val"&&` is the safe form (llvm_tune's tuner_cmd)
 // Non-private: test_run_suites.das pins the K/V start a `--poison-kv` run hands its children
-def child_envs(cfg : RunArgs; win : bool) : string {
+def child_envs(cfg : RunArgs; win : bool; media : bool = false; scratch : string = "") : string {
     var envs = ""
     if (win) {
         envs = ((cfg.full ? "set \"DASLLAMA_PARITY_FULL=1\"&& " : "")
@@ -854,12 +866,21 @@ def child_envs(cfg : RunArgs; win : bool) : string {
         if (get_platform_name() == "linux") {
             // glibc parks each late-loaded module's thread-local block in a 512-byte
             // surplus; libLLVM, a shared module and the NVIDIA Vulkan driver's three
-            // libraries overrun it together, and vkCreateInstance then fails for good
-            envs = "GLIBC_TUNABLES=glibc.rtld.optional_static_tls=16384 {envs}"
+            // libraries overrun it together, and vkCreateInstance then fails for good.
+            // glibc hands a freed block of a model's size back to the kernel, so every load after a
+            // child's first pays the first touch of its pages again - about a second a gigabyte;
+            // with no mmap'd blocks and no trim the heap keeps the pages for the next load. A media
+            // run's alone: its models are a few GB, and a child that kept a chat model's pages
+            // could stand two of them against the box's memory
+            let heap = media ? ":glibc.malloc.mmap_max=0:glibc.malloc.trim_threshold=68719476736" : ""
+            envs = "GLIBC_TUNABLES=glibc.rtld.optional_static_tls=16384{heap} {envs}"
         }
     }
     if (cfg.poison_kv) {
         envs = win ? "{envs}set \"DASLLAMA_KV_INIT=poison\"&& " : "DASLLAMA_KV_INIT=poison {envs}"
+    }
+    if (!empty(scratch)) {
+        envs = win ? "{envs}set \"TEMP={scratch}\"&& set \"TMP={scratch}\"&& " : "TMPDIR=\"{scratch}\" {envs}"
     }
     if (cfg.no_tune) {
         envs = (win ? "{envs}set \"DAS_TUNE_POLICY=reference\"&& set \"DASLLAMA_IMAGE=0\"&& "
@@ -964,6 +985,19 @@ def skipped_cells(summary : string) : int {
     }
     return 0
 }
+
+//! the files a child reported from their passes on record and did not run: its log's `CACHED <file>` lines, a color
+//! code ahead of the word or none
+def cached_files(log_text : string) : int {
+    var n = 0
+    for (line in split(log_text, "\n")) {
+        n++ if (verdict_word_at(line, "CACHED "))
+    }
+    return n
+}
+
+//! the REPORT line's count of the `n` files a run reported from their passes on record: "" where every file ran
+def cached_report(n : int) : string => n == 0 ? "" : " {n} of them not run - passed before and unchanged (--rerun runs them),"
 
 //! the area set of an --area / --changed run, canonical order. `status` >= 0 is main's exit code
 //! (an argument error; a --changed run that reaches nothing); -1 means run `areas` (empty = a
@@ -1192,17 +1226,21 @@ def private temp_dir() : string {
 struct RunTally {
     failures : int
     skipped : int
+    cached : int   //! the files reported from their passes on record, not run (`skips_cached`)
     failed_tags : array<string>
     walled : string   //! why the run stopped short - a test past the wall, a batch without its verdicts ("" = it ran to its end)
     waited : double   //! the seconds the children waited on the model copy (`--await-models`)
 }
 
-//! what a child's pass on record rests on and its compile record does not see: the box's `cpu`, and the size and time of
-//! every model file under `dir` the child opens (`opened`, by path under `dir`; an absent one counts as such).
+//! what a child's pass on record rests on and its compile record does not see: the box's `cpu`, the environment the
+//! child runs under (`env`: a pass on one GPU home is none on another), and the size and time of every model file under
+//! `dir` the child opens (`opened`, by path under `dir`; an absent one counts as such).
 //! Non-private: test_run_suites.das pins it
-def pass_stamp(dir : string; opened : array<string>; cpu : string) : string {
+def pass_stamp(dir : string; opened : array<string>; cpu, env : string) : string {
     let text = build_string() $(var w) {
         w |> write(cpu)
+        w |> write("\n")
+        w |> write(env)
         for (model in opened) {
             w |> write("\n{model} {file_stamp(path_join(dir, model))}")
         }
@@ -1210,11 +1248,19 @@ def pass_stamp(dir : string; opened : array<string>; cpu : string) : string {
     return "{hash(text)}"
 }
 
-//! the dastest flags of `--skip-fully-cached` for the child over `chunk`: the flag and the child's `pass_stamp`
-def private skip_flags(cfg : RunArgs; models : string; chunk : array<string>) : string {
-    return "" if (!cfg.skip_fully_cached)
+//! whether a run reports a file from its pass on record: every run but a `--rerun` and the full suite's (`full_suite`)
+def skips_cached_in(cfg : RunArgs; full_suite : bool) : bool => !cfg.rerun && !full_suite
+
+//! `skips_cached_in` for this run, the full suite read off its environment
+def skips_cached(cfg : RunArgs) : bool => skips_cached_in(cfg, parity_full_mode())
+
+//! the dastest flags that report the child over `chunk` from its passes on record (`skips_cached`): the flag and the
+//! child's `pass_stamp`, over `envs` - the prefix its command line carries - and the knobs the environment sets
+def private skip_flags(cfg : RunArgs; models, envs : string; chunk : array<string>) : string {
+    return "" if (!skips_cached(cfg))
     var inscope opened <- opened_models(chunk, models, cfg.category, cfg.family, parity_full_mode())
-    return " --skip-fully-cached --pass-stamp {pass_stamp(models, opened, child_cpu())}"
+    let env = "{envs}\n{env_set_knobs()}"
+    return " --skip-fully-cached --pass-stamp {pass_stamp(models, opened, child_cpu(), env)}"
 }
 
 //! the per-test cache folder of the run's binary, and the folders of earlier binaries removed when the run is
@@ -1612,10 +1658,30 @@ def private await_child_models(cfg : RunArgs; models : string; chunk : array<str
     return false
 }
 
+//! a run of the media areas' files alone: each one a file audio, vision, tts or translate lists, or the image suite
+def media_run(files : array<string>) : bool {
+    for (f in files) {
+        let name = base_name(f)
+        return false if (f != "{TESTS_DIR}/{name}")
+        var media = name == "test_model_image.das"
+        for (a in test_file_areas(name)) {
+            media ||= a == "audio" || a == "vision" || a == "tts" || a == "translate"
+        }
+        return false if (!media)
+    }
+    return !empty(files)
+}
+
 def private run_files(cfg : RunArgs; files : array<string>; image_arms : string; area_run : bool) : RunTally {
     let tmp = temp_dir()
     let win = get_platform_name() == "windows"
-    let envs = child_envs(cfg, win)
+    let media = media_run(files)
+    let envs = child_envs(cfg, win, media, g_env_test.scratch_dir)
+    let stamp_envs = child_envs(cfg, win, media)   //! the scratch folder is where a child writes, no part of what it proves
+    if (!empty(g_env_test.scratch_dir)) {
+        mkdir_rec(g_env_test.scratch_dir)
+        to_log(LOG_WARNING, "SCRATCH {g_env_test.scratch_dir} (DASLLAMA_SCRATCH_DIR): the children write their temp files there\n")
+    }
     let tmo = child_timeout(cfg)
     let wall = wall_seconds(cfg)
     let wall_flag = wall > 0 ? " --test-wall {wall}" : ""
@@ -1644,7 +1710,7 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
             let file_args = n == 1 ? " --test \"{chunk[0]}\"" : join([for (f in chunk); " --together \"{f}\""], "")
             return <- tally if (stopped_by_marker(cfg, tag, tally) || await_child_models(cfg, models, chunk, seat, tag, at, tally))
             let run_env = child_run_env(cfg, (area_run && tag == "test_model_image.das") ? image_arms : cfg.arm)
-            let skip = skip_flags(cfg, models, chunk)
+            let skip = skip_flags(cfg, models, stamp_envs, chunk)
             let cmd = "{envs}\"{das_exe}\" -jit -module-cache {MODULE_CACHE} dastest/dastest.das --{file_args} --timeout {tmo * n}{wall_flag}{cache_flag}{skip}{run_env} > \"{log_path}\" 2>&1"
             to_log(LOG_INFO, "START {tag}{rep_tag}: {seat}: {cmd}\n")
             let t0 = ref_time_ticks()
@@ -1657,6 +1723,7 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
             let verdict = child_verdict(rc, summary, log_text)
             to_log(rc == 0 ? LOG_INFO : LOG_ERROR, "DONE {tag}: {seat} exit={rc} {verdict} elapsed={secs}s log={log_path}\n")
             tally.skipped += skipped_cells(summary)
+            tally.cached += cached_files(log_text)
             reap_after(cfg, models, kept_images, tag)
             continue if (rc == 0)
             return <- tally if (red_child(cfg, wall, tag, chunk, log_path, rc, at, tally, retry))
@@ -1799,6 +1866,7 @@ def private run_plan(cfg : RunArgs; files : array<string>; image_arms : string; 
 def operator +=(var a : RunTally; b : RunTally) {
     a.failures += b.failures
     a.skipped += b.skipped
+    a.cached += b.cached
     a.failed_tags |> push_from(b.failed_tags)
     a.waited += b.waited
     if (empty(a.walled)) {
@@ -1883,7 +1951,7 @@ def private print_report(cfg : RunArgs; areas : array<string>; n_files, n_exclud
     if (!empty(tally.walled)) {
         to_log(LOG_ERROR, "STOPPED, the files after it not run: {tally.walled}\n")
     }
-    to_log(tally.failures == 0 ? LOG_INFO : LOG_ERROR, "REPORT {scope}: {n_files} file(s), {tally.failures} failed{failed_list}, {tally.skipped} cell(s) skipped (a filtered arm, an absent device, or a missing model or fixture - each skips loudly){excluded}{waited}\n")
+    to_log(tally.failures == 0 ? LOG_INFO : LOG_ERROR, "REPORT {scope}: {n_files} file(s),{cached_report(tally.cached)} {tally.failures} failed{failed_list}, {tally.skipped} cell(s) skipped (a filtered arm, an absent device, or a missing model or fixture - each skips loudly){excluded}{waited}\n")
     if (cfg.changed) {
         if (core) {
             to_log(LOG_INFO, "NEXT the engine core changed: the whole stocked set before the PR - run.das -- --suite stocked over the fleet, a pod a GPU home (harness/pod_fleet.das)\n")

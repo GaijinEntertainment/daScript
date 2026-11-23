@@ -125,7 +125,7 @@ let private UNLISTED_LOADER = ("a function that passes its parameter to a loader
     + "so the load-once check reads the model file at its callers (ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once)")
 
 //! the run areas whose test files the load-once check holds
-let private LOAD_ONCE_AREAS = fixed_array("llm", "tts")
+let private LOAD_ONCE_AREAS = fixed_array("llm", "tts", "translate", "vision", "audio")
 
 //! the areas whose model files are `.gguf` alone: a `.bin` their files name is a llama2.c checkpoint, a second read of
 //! a 60 MB file
@@ -149,15 +149,19 @@ let private ENGINE_LOADERS = fixed_array("load_model_", "load_model", "load_gguf
     "stage_whisper_model", "stage_parakeet_model", "stage_parakeet_kq_model", "stage_gigaam_model", "stage_canary_encoder",
     "stage_audio_tower", "stage_gemma4a_encoder", "stage_qwen3a_tower", "stage_gemma3v_tower", "stage_gemma4v_tower",
     "stage_gemma4uv_embedder", "stage_qwen3v_tower", "stage_qwen25v_tower", "stage_styletts2", "stage_pocket", "stage_nmt_model")
-let private LOADERS = fixed_array("blob_twin", "cuda_feed_rig", "cuda_forced_feed", "dense_feeds_block", "family_lane_cell",
-    "g2p_pack_form", "gdraft_target", "gemma_format_cell", "gemma_model", "greedy_turn", "kq_clone_over_roster",
+let private LOADERS = fixed_array("aud_form", "aud_stage", "blob_twin", "canary_form", "canary_stage", "cuda_feed_rig", "cuda_forced_feed", "dense_feeds_block",
+    "family_lane_cell", "g2p_pack_form", "g4a_stage", "gdraft_target", "gemma3v_12b_form", "gemma3v_form", "gemma3v_stage", "gemma4a_e2b_form", "gemma4a_e4b_form", "gemma4a_form", "gemma4uv_form", "gemma4uv_stage",
+    "gemma4v_form", "gemma4v_stage", "gemma_format_cell", "gemma_model", "gigaam_form", "gigaam_minted", "greedy_turn", "image_file_transcript", "image_tower_form", "kq_clone_over_roster",
     "kq_native_load", "kquant_cell", "kv_codecs_cell", "lanes_cell", "live_cell", "load_and_drop", "load_capped",
     "load_kq_native", "load_model_and_drop", "load_outcome", "load_perop", "load_refusal", "load_resident_lane",
-    "load_trunk", "metal_arms_cell", "metal_lossless_cell", "metal_prefill_cell", "metal_routed_cell", "metal_served_cell",
-    "moe_forced_feed", "moe_forced_feed_pinned", "parity_row_load", "parity_spec_arms", "pocket_form", "pocket_minted",
-    "pocket_tts_minted", "ppl_compare", "ring_draft_run", "ru_pack_form", "ru_stress_form", "sampled_metal_cell",
-    "slot_swap_cycle", "speak_line_of", "staged_tokens_at", "stored_file_pins", "stream_twin_within", "styletts2_form",
-    "tagger_pack_form", "tail_after_load", "with_cold_lane", "with_gemma_rig", "with_metal_trunk", "with_served_drafter")
+    "load_trunk", "metal_arms_cell", "metal_lossless_cell", "metal_prefill_cell", "metal_routed_cell",
+    "metal_served_cell", "moe_forced_feed", "moe_forced_feed_pinned", "parakeet_form", "parakeet_stage", "parity_row_load", "parity_spec_arms",
+    "pk_image_file_rows", "pocket_form", "pocket_minted", "pocket_tts_minted", "ppl_compare", "q3omni_form", "qwen25v_form", "qwen25v_stage",
+    "qwen3a_form", "qwen3a_stage", "qwen3v_form", "qwen3v_stage",
+    "ring_draft_run", "ru_pack_form", "ru_stress_form", "sampled_metal_cell", "slot_swap_cycle", "speak_line_of",
+    "stage_panic", "staged_tokens_at", "staged_tower_form", "staged_twin_tower", "stored_file_pins",
+    "stories15m_form", "stream_twin_within", "styletts2_form", "tagger_pack_form", "tail_after_load",
+    "translator_form", "translator_stage", "vad_form", "whisper_form", "whisper_stage", "with_cold_lane", "with_gemma_rig", "with_metal_trunk", "with_served_drafter")
 
 //! the file whose loads are the block's own body: no helper of it is listed
 let private LOADER_HOMES = fixed_array("_cpu_gpu_model.das")
@@ -715,9 +719,25 @@ def private check_cell_pins() {
     check_cell_pins_in(files)
 }
 
+//! a test file that calls a block (`BLOCKS`): its one `[test]` runs the block's cells
+def private holds_block(path : string) : bool {
+    let text = fread(path)
+    for (call in BLOCKS) {
+        return true if (find(text, "{call}(t, ") >= 0)
+    }
+    return false
+}
+
+//! the folder's file shape, the three-tests floor lifted from a file that holds a block
+//! (ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once)
+def private check_folder_shape(root : string) {
+    check_test_shape_floorless(root, 100, true) $(path : string) => holds_block(path)
+}
+
 //! the gate; `-- --load-once <file>... --unfolded <name>... --loaders <name>... --area-run <run.das> --area <name>...` runs
 //! the load-once check over the named files alone as the named areas, `llm` where none is named (`check_load_once_files`),
-//! and `-- --cell-pins <file>...` the cell-pin check - its fixture rails
+//! `-- --floor <folder>` the file-shape check over that folder, and `-- --cell-pins <file>...` the cell-pin check - its
+//! fixture rails
 [export]
 def main() : int {
     let fixtures <- gate_flag_args("--load-once")
@@ -730,12 +750,17 @@ def main() : int {
         check_load_once_files(fixtures, gate_flag_args("--unfolded"), gate_flag_args("--loaders"), areas, empty(area_run) ? "" : area_run[0])
         return gate_verdict("modules/dasLLAMA/tests --load-once")
     }
+    let floors <- gate_flag_args("--floor")
+    if (!empty(floors)) {
+        check_folder_shape(floors[0])
+        return gate_verdict("modules/dasLLAMA/tests --floor")
+    }
     let pinned <- gate_flag_args("--cell-pins")
     if (!empty(pinned)) {
         check_cell_pins_in(pinned)
         return gate_verdict("modules/dasLLAMA/tests --cell-pins")
     }
-    check_test_shape("modules/dasLLAMA/tests", 100, true)
+    check_folder_shape(TESTS)
     check_one_test_child()
     check_test_categories()
     check_models_load_once()

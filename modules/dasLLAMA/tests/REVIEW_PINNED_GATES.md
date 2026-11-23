@@ -5,8 +5,8 @@ docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_CELL_BARS.md`. Planned work: `../fo
 
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the asserts
 of every helper it calls. A file entry opens on a file alone (`` `<file>` must hold ``) and pins
-every cell of that file. A named-cell entry opens on a `[test]` function (`` `<file>`'s `<function>`
-cell must hold ``) and pins every cell that function runs. A pinned test
+every cell of that file. A named-cell entry opens on a `[test]` function, or on a cell function a block's `[test]` runs (`` `<file>`'s `<function>`
+cell must hold ``), and pins every cell that function runs. A pinned test
 cell is a cell an entry pins, in the set before the diff or in the set after it; the pinned set
 alone decides whether a cell is one. A bar is the tolerance a compare accepts; a bar on a compare
 whose two sides the cell computes is never a value an outside source can change, whatever model file
@@ -23,7 +23,7 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   run names that its models directory lacks (the `MISSING` lines), the image reap behind
   `--reap-images` and its gate, the K/V start `--poison-kv` hands the children, the `options persistent_heap` line of the
   `stocked` files, the model categories and families, the `--category` run, a child's `--run-env` filters, the forced tune file,
-  the `--skip-fully-cached` hand-off (`pass_stamp`'s inputs, the flag and stamp a flagged run's children alone carry).
+  the skip of what passed (`pass_stamp`'s inputs, the environment among them; the flag and stamp every run's children carry but a `--rerun`'s and the full suite's; the `REPORT` count of files not run), a media run's heap setting, the children's scratch folder.
 - `test_facade_docs.das`'s `test_program_roots` cell must hold the `ROOT_DIRS` sweep, `options stack = 524288` and the prefill intent.
 - `test_env_registry.das` must hold the `../ENVIRONMENT.md` knob contract.
 - `test_model_specs.das` must hold `../performance/model_specs.das`'s model-set table, `spec_by_file` answering by the
@@ -226,21 +226,21 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   19-voice English roster and the four character replacements its config carries, as the reference build's config
   lists them, each seat serving, or declining with the `shape` reason, as that row's seat columns say, and a low-rank
   text table kept low-rank.
-- `test_whisper.das`'s `test_canary_qwen_oracle` cell, an external-reference compare, must hold
-  the forced walk over `../harness/canary_qwen_expected.tsv`'s ids within `CN_TIE_BAR` of our
-  argmax at every step of its three clips, on the CPU chain and on the GPU tower that serves canary's default lane (the
-  encoder minted on that lane in that tower's flavor, each walk counted as a device encode), its control the
-  same walk fed each id one step early with the oracle id outside the bar at every step that input
-  moved, and the greedy ids equal to the oracle's up to the first tie.
+- `_audio_asr_cells.das`'s `test_canary_qwen_oracle` and `canary_oracle_device_walk` cells (run under
+  `test_audio.das`'s Canary blocks), an external-reference compare, must hold the forced walk over
+  `../harness/canary_qwen_expected.tsv`'s ids within `CN_TIE_BAR` of our argmax at every step of its three clips, on the
+  CPU chain and on the GPU tower that serves canary's default lane (the encoder minted on that lane in that tower's
+  flavor, each walk counted as a device encode), its control the same walk fed each id one step early with the oracle
+  id outside the bar at every step that input moved, and the greedy ids equal to the oracle's up to the first tie.
 - `test_nmt.das`'s `test_nmt_spm` cell, an external-reference compare, must hold the model-file
   tokenizer id for id against `nmt_oracle/<dir>/`'s `tokens.json` source ids and `spm_edge.json` on
   every stocked student, its control the charsmap dropped spelling the normalizer fixture apart.
-- `test_nmt.das`'s `test_nmt_exact_lane` cell, an external-reference compare, must hold every tapped
+- `test_nmt.das`'s `test_nmt_exact_lane` cell (on each student's block, its f32 form), an external-reference compare, must hold every tapped
   stage of the exact lane under the oracle's own tokens within `STAGE_BAR` (1e-4 of the stage's
   largest magnitude) of the `.npy` dumps, the element counts equal, a displaced source token landing
   the last encoder layer outside the bar; and the free run at `EXACT_LINES_FLOOR` (28 of 30) lines
   of `tokens.json`'s ids, the lines fed the next line's source under it.
-- `test_nmt.das`'s `test_nmt_q8_lane` cell, an external-reference compare, must hold the q8 lane at
+- `test_nmt.das`'s `test_nmt_q8_lane` cell (on each ru/en base-memory student's block: its q8 form, the classifier-zeroed form's `q8_cls_zeroed_lane`, and their compare `q8_against_zeroed` after the block), an external-reference compare, must hold the q8 lane at
   `Q8_LINES_FLOOR` (25 of 30) lines of `tokens.json`'s ids on the ru/en base-memory pairs, the same
   file with its classifier's Q8_0 copy zeroed moving every line and falling under the floor.
 - `test_tts_g2p_ru.das`'s `test_ru_stress_encoder` cell (on the file's ru-stress-rubert-base block, a form each), an external-reference compare, must hold, on the 20 sentences of
@@ -280,7 +280,7 @@ replacement's output to the deleted assert's bound or tighter, with its control,
 testing the replacement, or names in the old cell's pinned-set entry the pinned cell that already
 asserts the replacement's output to that bound.**
 
-**A diff that adds a cell or an assert whose expected value the cell does not compute from its own
+**A diff that adds a cell or an assert - a cell moved whole, its asserts unchanged, is not added - whose expected value the cell does not compute from its own
 input, and that an outside source can change while no sha, row or tag in this repository changes,
 adds the cell to the pinned set in the same change.** Such a value is a literal or a copied
 condition restating that source, or a read of a file under `models_dir()` that the cell does not
