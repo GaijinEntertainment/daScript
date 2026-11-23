@@ -56,11 +56,23 @@
 #endif
 
 namespace das {
+    // L<length><enum name><value>E is a template argument literal, not an internal name
+    static bool isEnumLiteral ( const char * c ) {
+        char * nameAt = nullptr;
+        size_t len = strtoul(c, &nameAt, 10);
+        if ( strnlen(nameAt, len) < len ) return false;
+        const char * v = nameAt + len;
+        if ( *v=='n' ) ++v;
+        const char * digits = v;
+        while ( *v>='0' && *v<='9' ) ++v;
+        return v!=digits && *v=='E';
+    }
+
     // Itanium marks an internal-linkage name with L<length>, an anonymous namespace with _GLOBAL__N
     bool is_linkable_symbol ( const char * name ) {
         if ( strstr(name, "_GLOBAL__N") ) return false;
         for ( const char * c = name; c[0] && c[1]; ++c ) {
-            if ( c[0]=='L' && c[1]>='0' && c[1]<='9' ) return false;
+            if ( c[0]=='L' && c[1]>='0' && c[1]<='9' && !isEnumLiteral(c+1) ) return false;
         }
         return true;
     }
