@@ -991,19 +991,19 @@ extern "C" {
             return das_get_jit_string_table_at_after_packed_miss();
         }
         DAS_API void * das_get_jit_new ( TypeAnnotation *annotation ) {
-            return annotation->jitGetNew();
+            return annotation->jitGetNew().address;
         }
         DAS_API void * das_get_jit_delete ( TypeAnnotation *annotation ) {
-            return annotation->jitGetDelete();
+            return annotation->jitGetDelete().address;
         }
         DAS_API void * das_get_jit_clone ( TypeAnnotation *annotation ) {
-            return annotation->jitGetClone();
+            return annotation->jitGetClone().address;
         }
         DAS_API void * das_get_jit_each ( TypeAnnotation *annotation ) {
-            return annotation->jitGetEach();
+            return annotation->jitGetEach().address;
         }
         DAS_API void * das_get_jit_at ( TypeAnnotation *annotation, int32_t indexType ) {
-            return annotation->jitGetAt(Type(indexType));
+            return annotation->jitGetAt(Type(indexType)).address;
         }
     }
 }

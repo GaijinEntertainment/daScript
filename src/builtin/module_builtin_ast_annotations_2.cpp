@@ -53,8 +53,8 @@ namespace das {
         }
         static void jit_delete ( void * ptr, Context * ) {
         }
-        virtual void * jitGetNew() const override { return (void *) &jit_new; }
-        virtual void * jitGetDelete() const override { return (void *) &jit_delete; }
+        virtual JitTarget jitGetNew() const override { return jit_target<&jit_new>(); }
+        virtual JitTarget jitGetDelete() const override { return jit_target<&jit_delete>(); }
     };
 
     struct AstExprNamedCallAnnotation : AstExpressionAnnotation<ExprNamedCall> {

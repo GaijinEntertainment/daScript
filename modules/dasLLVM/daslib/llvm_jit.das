@@ -1408,6 +1408,13 @@ class public LlvmJitVisitor : AstVisitor {
         var new_handle = LLVMGetNamedGlobal(g_mod, obj_name.glob())
         let fn_type = LLVMFunctionType(types.LLVMVoidPtrType(),
                     fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType()))
+        if (new_handle == null && flags.direct_builtins) {
+            let direct = declare_linked_hook(get_jit_new_link_name(t.annotation), fn_type)
+            if (direct != null) {
+                g_fn_types[obj_name.publ()] = fn_type
+                return tuple(direct, fn_type)
+            }
+        }
         if (new_handle == null) {
             var new_handle_ptr = get_jit_new(t.annotation)
             if (new_handle_ptr == null) {
@@ -1657,6 +1664,10 @@ class public LlvmJitVisitor : AstVisitor {
         var ofunc = LLVMGetNamedGlobal(g_mod, mangled_name.glob())
         var fn_type = types.LLVMInteropFunctionType()
         let funcPtrType = LLVMPointerType(fn_type, 0u)
+        if (ofunc == null && flags.direct_builtins && !is_dasbind_late(expr.func)) {
+            let direct = declare_linked_hook(get_builtin_function_link_name(expr.func), fn_type)
+            if (direct != null) return direct
+        }
         if (ofunc == null) {
             let FUNC_PTR = get_builtin_function_address(expr.func)
             if (FUNC_PTR == null) {
@@ -6070,11 +6081,27 @@ class public LlvmJitVisitor : AstVisitor {
         LLVMPositionBuilderAtEnd(g_builder, end)
     }
 
+    def declare_linked_hook(link_name : string; fn_type : LLVMOpaqueType?) : LLVMOpaqueValue? {
+        if (empty(link_name)) return null
+        var direct = LLVMGetNamedFunction(g_mod, link_name)
+        if (direct == null) {
+            direct = LLVMAddFunctionWithType(g_mod, link_name, fn_type)
+        }
+        return direct
+    }
+
     def get_delete_handle_function(t : TypeDeclPtr) : LLVMOpaqueValue? {
         let func_name = uid.get_delete_type(t)
         var delete_handle = LLVMGetNamedGlobal(g_mod, func_name.glob())
         let fn_type = LLVMFunctionType(types.t_void,
                 fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(), types.LLVMVoidPtrType()))
+        if (delete_handle == null && flags.direct_builtins) {
+            let direct = declare_linked_hook(get_jit_delete_link_name(t.annotation), fn_type)
+            if (direct != null) {
+                g_fn_types[func_name.publ()] = fn_type
+                return direct
+            }
+        }
         if (delete_handle == null) {
             var delete_handle_ptr = get_jit_delete(t.annotation)
             if (delete_handle_ptr == null) {
@@ -6095,6 +6122,13 @@ class public LlvmJitVisitor : AstVisitor {
         var clone_handle = LLVMGetNamedGlobal(g_mod, func_name.glob())
         let fn_type = LLVMFunctionType(types.t_void,
                 fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(), types.LLVMVoidPtrType()))
+        if (clone_handle == null && flags.direct_builtins) {
+            let direct = declare_linked_hook(get_jit_clone_link_name(t.annotation), fn_type)
+            if (direct != null) {
+                g_fn_types[func_name.publ()] = fn_type
+                return direct
+            }
+        }
         if (clone_handle == null) {
             var clone_handle_ptr = get_jit_clone(t.annotation)
             if (clone_handle_ptr == null) {
@@ -6116,6 +6150,13 @@ class public LlvmJitVisitor : AstVisitor {
         let fn_type = LLVMFunctionType(types.t_void,
                 fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(), types.LLVMVoidPtrType(),
                     types.LLVMVoidPtrType(), types.LLVMVoidPtrType()))
+        if (each_handle == null && flags.direct_builtins) {
+            let direct = declare_linked_hook(get_jit_each_link_name(t.annotation), fn_type)
+            if (direct != null) {
+                g_fn_types[func_name.publ()] = fn_type
+                return direct
+            }
+        }
         if (each_handle == null) {
             var each_handle_ptr = get_jit_each(t.annotation)
             if (each_handle_ptr == null) {
@@ -6136,6 +6177,14 @@ class public LlvmJitVisitor : AstVisitor {
         let fn_type = LLVMFunctionType(types.LLVMVoidPtrType(),
                 fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(), type_to_llvm_abi_type(ixT),
                     types.LLVMVoidPtrType(), types.LLVMVoidPtrType()))
+        if (at_handle == null && flags.direct_builtins) {
+            let at_name = get_jit_at_link_name(t.annotation, jit_index_base_type(ixT))
+            let direct = declare_linked_hook(at_name, fn_type)
+            if (direct != null) {
+                g_fn_types[func_name.publ()] = fn_type
+                return direct
+            }
+        }
         if (at_handle == null) {
             var at_handle_ptr = get_jit_at(t.annotation, jit_index_base_type(ixT))
             if (at_handle_ptr == null) {

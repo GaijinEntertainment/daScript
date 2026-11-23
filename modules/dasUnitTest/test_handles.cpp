@@ -434,10 +434,10 @@ struct PtrSlotsAnnotation final : ManagedStructureAnnotation<PtrSlots,false> {
                                      SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
         return context.code->makeNode<SimNode_PtrSlotsAt>(at, rv, idx, ofs);
     }
-    virtual void * jitGetAt ( Type indexType ) const override {
+    virtual JitTarget jitGetAt ( Type indexType ) const override {
         // one index type only: the key. The jit passes it natively typed, same as the ref-yielding
         // annotations do for their int indices.
-        return indexType==Type::tString ? (void *) &ptr_slots_at : nullptr;
+        return indexType==Type::tString ? jit_target<&ptr_slots_at>() : JitTarget{};
     }
     virtual void gc_collect ( gc_root * target, gc_root * from ) override {
         ManagedStructureAnnotation<PtrSlots,false>::gc_collect(target, from);

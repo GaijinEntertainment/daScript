@@ -77,6 +77,15 @@ namespace das {
         return true;
     }
 
+    static const char * linkable_or_null ( const char * name ) {
+        return name && is_linkable_symbol(name) ? name : nullptr;
+    }
+    const char * das_get_jit_new_link_name ( TypeAnnotation * ann ) { return linkable_or_null(ann->jitGetNew().linkName); }
+    const char * das_get_jit_delete_link_name ( TypeAnnotation * ann ) { return linkable_or_null(ann->jitGetDelete().linkName); }
+    const char * das_get_jit_clone_link_name ( TypeAnnotation * ann ) { return linkable_or_null(ann->jitGetClone().linkName); }
+    const char * das_get_jit_each_link_name ( TypeAnnotation * ann ) { return linkable_or_null(ann->jitGetEach().linkName); }
+    const char * das_get_jit_at_link_name ( TypeAnnotation * ann, int32_t indexType ) { return linkable_or_null(ann->jitGetAt(Type(indexType)).linkName); }
+
     // forward declarations from module_builtin_fio.cpp
     void * register_dynamic_module(const char *, const char *, int, Context *, LineInfoArg *);
     void register_native_path(const char *, const char *, const char *, Context *, LineInfoArg *);
@@ -848,6 +857,16 @@ namespace das {
                 SideEffects::none, "das_get_jit_each")->args({"ann"});
             addExternInline<DAS_BIND_FUN(das_get_jit_at)>(*this, lib, "get_jit_at",
                 SideEffects::none, "das_get_jit_at")->args({"ann","indexType"});
+            addExternInline<DAS_BIND_FUN(das_get_jit_new_link_name)>(*this, lib, "get_jit_new_link_name",
+                SideEffects::none, "das_get_jit_new_link_name")->args({"ann"});
+            addExternInline<DAS_BIND_FUN(das_get_jit_delete_link_name)>(*this, lib, "get_jit_delete_link_name",
+                SideEffects::none, "das_get_jit_delete_link_name")->args({"ann"});
+            addExternInline<DAS_BIND_FUN(das_get_jit_clone_link_name)>(*this, lib, "get_jit_clone_link_name",
+                SideEffects::none, "das_get_jit_clone_link_name")->args({"ann"});
+            addExternInline<DAS_BIND_FUN(das_get_jit_each_link_name)>(*this, lib, "get_jit_each_link_name",
+                SideEffects::none, "das_get_jit_each_link_name")->args({"ann"});
+            addExternInline<DAS_BIND_FUN(das_get_jit_at_link_name)>(*this, lib, "get_jit_at_link_name",
+                SideEffects::none, "das_get_jit_at_link_name")->args({"ann","indexType"});
             addExternInline<DAS_BIND_FUN(das_get_jit_debug_enter)>(*this, lib,  "get_jit_debug_enter",
                 SideEffects::none, "das_get_jit_debug_enter");
             addExternInline<DAS_BIND_FUN(das_get_jit_debug_exit)>(*this, lib,  "get_jit_debug_exit",
