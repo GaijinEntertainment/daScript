@@ -28,6 +28,7 @@ require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — pf_window_rows / 
 require _compares   // argmax_of: the row's peak a red names; logits_of: the session's row copied
 require _model_tier   // logits_maxdiff, mirror_kv_dtype, live_maxabs, SUPPRESSED_LOGIT
 require _gpu_tier_armed   // gpu_tier_armed: resident_ready's armed-tier skip
+require _model_form   // skip_cell: a held skip as a skipped subtest of its own
 require _format_census   // census_plane, SiteCensus: a plane's tag against the file's tensor type
 require dasllama/dasllama_gguf   // parse_gguf_meta
 require daslib/fio   // fopen, fmap
@@ -1640,13 +1641,6 @@ def held_on(t : T?; body : block<(var h : Held) : void>) {
     var inscope h : Held
     invoke(body, h)
     held_within(t, h)
-}
-
-//! a skipped subtest of its own named `what`: the run's skipped cells count it, and the verdict of `t`'s other cells stands
-def skip_cell(t : T?; what : string) {
-    t |> run(what) @(t : T?) {
-        t |> skip(what)
-    }
 }
 
 //! every held check asserted on `t`, `tag` opening each message; a held skip skips `t` where `mark_skips`, else - and for a

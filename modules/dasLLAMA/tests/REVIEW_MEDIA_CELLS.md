@@ -16,11 +16,11 @@ doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`, `../followup_
 - A crowned kernel form is the one the tuner measured fastest and armed as the serving one; its
   tensor twin is the same kernel written on Metal's tensor primitives.
 - The twin bar holds the device chain's distance from the CPU exact chain within a stated multiple
-  of the CPU q8 chain's distance from it.
+  of the CPU quantized chain's - the q8 chain's, or the kq lane's - distance from it.
 - A rows-held transcript compare is equal transcript text or equal `transcript_words` lists beside
   the encoder output rows held within a tolerance of the other side's, or equal transcript text
-  beside the encoder output rows held by the twin bar; its words form also runs a device-route
-  control whose words must differ where the flipped token carries punctuation or casing alone.
+  beside the encoder output rows held by the twin bar; its words form forgives a flipped token that
+  carries punctuation or casing alone, so it also runs a device-route control whose words must differ.
 
 **A cell that runs with no model loaded and encodes, preprocesses, or asserts on media bytes
 an encoder consumes - pixels or audio samples, not a `.dlim` model image - builds its fixture

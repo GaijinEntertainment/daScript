@@ -234,6 +234,11 @@ The test folder's documents track its files (`ARCHITECTURE_ENGINE.md#test-folder
   `check_running_max_nan` fails. Every cell that reads the oracle's dumps joins the pinned set in
   `tests/REVIEW_PINNED_GATES.md` in the same change, as named cells or as one file entry naming
   what it pins.
+- **The family's block** (`ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once`): each model file loads
+  once in the area, through one `with_model_once` block whose call names `"audio"` and the file
+  as string literals on its first line. Write a `<family>_form` loader - each copy a cell needs
+  (exact, q8, a device lane, a poisoned copy) a form of it - and list it in `LOADERS`
+  (`tests/REVIEW.das`); a twin's compare runs after the block, on the values its forms kept.
 - **The runner** `tests/run.das`: the file in the stocked list and in `area_tests("audio")`, the
   family module's `MODULE_AREAS` row (`audio`), a `MODULE_AREAS` row (`audio`) for each new module of
   section 10 - the group's chain module and its CUDA seat - and the family's image arm in
@@ -348,7 +353,8 @@ On a build without das_metal the family's dispatch sequence is ONE body generic 
   matching `tests/test_cuda_tower_*.das`, each with its poisoned element; the
   family's three-way twin in `test_audio.das` through `discrete_audio_twin_seat` (the exact tower on the
   CPU, the q8 tower on the CPU and on the device, `tower_twin_bar`, the zeroed-blocks input poison that
-  must exceed the bar) and its exact leg on the f16 flavor (`exact_flavor_leg` over `exact_lane_served_on`), green
+  must exceed the bar) and its exact leg on the f16 flavor (`ExactFlavorKept`: the leg runs as a form of the file's block and `exact_flavor_held` compares after it,
+  `ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once`), green
   on both homes - the CUDA pass's `--only` list in `tests/CLAUDE.md` names its file; the f16 image's
   `gpu_lane_roundtrip` in `test_model_image.das`; the class in the census (`VK_CENSUS_NEVER_DISPATCHED` where no
   stocked carrier dispatches it).

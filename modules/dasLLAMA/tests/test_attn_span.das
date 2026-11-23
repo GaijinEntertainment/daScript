@@ -6,6 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require _model_tier
+require _model_once   // with_model_once_at: the checkpoint's one block in the area
 require _f32_tile_pin
 
 [init]
@@ -22,9 +23,22 @@ require dasllama/dasllama_load   // quantize_weights_q4: the q4_0 requant leg
 // the span attends [the sliding-window floor, span_end) — the non-causal decode semantics gemma
 // vision decodes under. The reference here is the MASK DIRECTION itself: under causal
 // attention position 0's residual cannot depend on later rows; under the span it must.
-// Needs llama2.c's stories15M.bin (test_prefill's fixture); skips cleanly when absent.
+// Needs llama2.c's stories15M.bin (test_prefill's fixture); skips cleanly when absent. The checkpoint loads once a form, in
+// its one `with_model_once_at` block (`stories15m_form`): the float weights, then the q4_0 requant; a cell that stamps the
+// toy's config puts it back.
 
-let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
+//! One form of llama2.c's stories15M checkpoint, its block's form loader: `f32` the float weights as `load_checkpoint`
+//! reads them, `q4` the same requantized to q4_0 (`quantize_weights_q4`).
+def private stories15m_form(path, form : string) : Model {
+    if (form != "f32" && form != "q4") {
+        panic("the span tests: '{form}' names no form of the checkpoint")
+    }
+    var inscope m <- load_checkpoint(path)
+    if (form == "q4") {
+        quantize_weights_q4(m)
+    }
+    return <- m
+}
 
 let NPOS = 48l
 
@@ -139,65 +153,69 @@ def private probe_override(t : Model; var s : Session; npos, start_pos : int64) 
     return false
 }
 
-[test(description = "On stories15M a causal prefill keeps row 0 bit-blind to a last-row perturbation while the non-causal span lets it see it on f32 and q4_0, flash agrees with classic within 1e-2, and a later causal prefill is bit-exact")]
-def test_attn_span(t : T?) {
-    t |> run("the non-causal span: direction, propagation, mode agreement, flag reset") @(tt : T?) {
-        if (!stat(MODEL_PATH).is_valid) {
-            tt |> skip("stories15M.bin not present at {MODEL_PATH} (set DASLLAMA_LLAMA2C_DIR)")
-            return
+// The non-causal span on the float weights, on the `f32` form: direction, propagation, mode agreement, flag reset.
+[cold_path]
+def private test_attn_span(tt : T?; var tr : Model) {
+    let dim = tr.config.dim
+    let embd_a <- make_embd(dim, 0)
+    let embd_b <- make_embd(dim, 1)   // differs ONLY in the last row
+    let attn_mode = get_prefill_attn_mode()
+    with_dasllama_jobque_() {
+        set_prefill_attn_mode(AttnPrefillMode.classic)
+        // the mask direction: causal position 0 is blind to the last row; the span sees it
+        let causal_a <- span_prefill(tr, embd_a, false)
+        let causal_b <- span_prefill(tr, embd_b, false)
+        let span_a <- span_prefill(tr, embd_a, true)
+        let span_b <- span_prefill(tr, embd_b, true)
+        tt |> equal(row_maxdiff(causal_a, causal_b, 0l, dim), 0.0, "causal: row 0 blind to a last-row perturbation")
+        let d0 = row_maxdiff(span_a, span_b, 0l, dim)
+        to_log(LOG_INFO, "attn_span: span row-0 sensitivity to last-row perturbation = {d0}\n")
+        tt |> success(d0 > 1e-4, "span: row 0 sees the last row (d0 = {d0})")
+        // the span rewrites the whole plane, not just row 0
+        let dlast = row_maxdiff(causal_a, span_a, NPOS - 1l, dim)
+        tt |> success(dlast > 1e-4, "span vs causal differ at the last row too ({dlast})")
+        // the two independent kernel implementations agree on the span semantics
+        set_prefill_attn_mode(AttnPrefillMode.flash)
+        let span_flash <- span_prefill(tr, embd_a, true)
+        set_prefill_attn_mode(AttnPrefillMode.classic)
+        var flash_diff = 0.0
+        for (r in range64(NPOS)) {
+            flash_diff = max(flash_diff, row_maxdiff(span_a, span_flash, r, dim))
         }
-        var tr <- load_checkpoint(MODEL_PATH)
-        let dim = tr.config.dim
-        let embd_a <- make_embd(dim, 0)
-        let embd_b <- make_embd(dim, 1)   // differs ONLY in the last row
-        with_dasllama_jobque_() {
-            set_prefill_attn_mode(AttnPrefillMode.classic)
-            // the mask direction: causal position 0 is blind to the last row; the span sees it
-            let causal_a <- span_prefill(tr, embd_a, false)
-            let causal_b <- span_prefill(tr, embd_b, false)
-            let span_a <- span_prefill(tr, embd_a, true)
-            let span_b <- span_prefill(tr, embd_b, true)
-            tt |> equal(row_maxdiff(causal_a, causal_b, 0l, dim), 0.0, "causal: row 0 blind to a last-row perturbation")
-            let d0 = row_maxdiff(span_a, span_b, 0l, dim)
-            to_log(LOG_INFO, "attn_span: span row-0 sensitivity to last-row perturbation = {d0}\n")
-            tt |> success(d0 > 1e-4, "span: row 0 sees the last row (d0 = {d0})")
-            // the span rewrites the whole plane, not just row 0
-            let dlast = row_maxdiff(causal_a, span_a, NPOS - 1l, dim)
-            tt |> success(dlast > 1e-4, "span vs causal differ at the last row too ({dlast})")
-            // the two independent kernel implementations agree on the span semantics
-            set_prefill_attn_mode(AttnPrefillMode.flash)
-            let span_flash <- span_prefill(tr, embd_a, true)
-            set_prefill_attn_mode(AttnPrefillMode.classic)
-            var flash_diff = 0.0
-            for (r in range64(NPOS)) {
-                flash_diff = max(flash_diff, row_maxdiff(span_a, span_flash, r, dim))
-            }
-            tt |> success(flash_diff < 1e-2, "flash agrees with classic on the span ({flash_diff})")
-            // the flag clears: a causal prefill AFTER a span prefill is bit-identical to fresh causal
-            var s2 <- make_run_state(tr.config)
-            forward_prefill_embd(tr, s2, embd_a, NPOS, 0l, true)
-            tt |> equal(s2.attn_uniform_end, 0l, "attn_uniform_end cleared after the span call")
-            delete s2
-            let causal_after <- span_prefill(tr, embd_a, false)
-            var reset_diff = 0.0
-            for (r in range64(NPOS)) {
-                reset_diff = max(reset_diff, row_maxdiff(causal_a, causal_after, r, dim))
-            }
-            tt |> equal(reset_diff, 0.0, "causal after span == fresh causal, bit-exact")
-            // the q4_0 requant tier takes the embedding prefill too: the same mask direction on q4_0 weights
-            var tq <- load_checkpoint(MODEL_PATH)
-            quantize_weights_q4(tq)
-            let q4_causal_a <- span_prefill(tq, embd_a, false)
-            let q4_causal_b <- span_prefill(tq, embd_b, false)
-            let q4_span_a <- span_prefill(tq, embd_a, true)
-            let q4_span_b <- span_prefill(tq, embd_b, true)
-            tt |> equal(row_maxdiff(q4_causal_a, q4_causal_b, 0l, dim), 0.0, "q4_0 causal: row 0 blind to a last-row perturbation")
-            let q4_d0 = row_maxdiff(q4_span_a, q4_span_b, 0l, dim)
-            tt |> success(q4_d0 > 1e-4, "q4_0 span: row 0 sees the last row (d0 = {q4_d0})")
-            delete tq
+        tt |> success(flash_diff < 1e-2, "flash agrees with classic on the span ({flash_diff})")
+        // the flag clears: a causal prefill AFTER a span prefill is bit-identical to fresh causal
+        var s2 <- make_run_state(tr.config)
+        forward_prefill_embd(tr, s2, embd_a, NPOS, 0l, true)
+        tt |> equal(s2.attn_uniform_end, 0l, "attn_uniform_end cleared after the span call")
+        delete s2
+        let causal_after <- span_prefill(tr, embd_a, false)
+        var reset_diff = 0.0
+        for (r in range64(NPOS)) {
+            reset_diff = max(reset_diff, row_maxdiff(causal_a, causal_after, r, dim))
         }
-        delete tr
+        tt |> equal(reset_diff, 0.0, "causal after span == fresh causal, bit-exact")
     }
+    set_prefill_attn_mode(attn_mode)
+}
+
+// The q4_0 requant tier takes the embedding prefill too, on the `q4` form: the same mask direction on q4_0 weights.
+[cold_path]
+def private attn_span_q4(tt : T?; var tq : Model) {
+    let dim = tq.config.dim
+    let embd_a <- make_embd(dim, 0)
+    let embd_b <- make_embd(dim, 1)   // differs ONLY in the last row
+    let attn_mode = get_prefill_attn_mode()
+    with_dasllama_jobque_() {
+        set_prefill_attn_mode(AttnPrefillMode.classic)
+        let q4_causal_a <- span_prefill(tq, embd_a, false)
+        let q4_causal_b <- span_prefill(tq, embd_b, false)
+        let q4_span_a <- span_prefill(tq, embd_a, true)
+        let q4_span_b <- span_prefill(tq, embd_b, true)
+        tt |> equal(row_maxdiff(q4_causal_a, q4_causal_b, 0l, dim), 0.0, "q4_0 causal: row 0 blind to a last-row perturbation")
+        let q4_d0 = row_maxdiff(q4_span_a, q4_span_b, 0l, dim)
+        tt |> success(q4_d0 > 1e-4, "q4_0 span: row 0 sees the last row (d0 = {q4_d0})")
+    }
+    set_prefill_attn_mode(attn_mode)
 }
 
 // the mrope turn (grid positions through the span): prefill + one decode step; the decode
@@ -217,223 +235,216 @@ def private mrope_turn_logits(t : Model; embd : array<float>; fuse : bool; nx, n
     return <- lg
 }
 
-[test(description = "The mrope span quantum gives bit-exact fused and spliced decode logits, sets rope_pos_delta to max grid minus span rows, and its grid positions and grid shape both change the logits")]
-def test_mrope_span(t : T?) {
-    t |> run("the mrope quantum: fused == splice, the delta advances, the map reaches the math") @(tt : T?) {
-        if (!stat(MODEL_PATH).is_valid) {
-            tt |> skip("stories15M.bin not present at {MODEL_PATH} (set DASLLAMA_LLAMA2C_DIR)")
-            return
-        }
-        var tr <- load_checkpoint(MODEL_PATH)
-        // the toy is not an mrope arch — stamp sections summing to head_size/2 (stories15M: 48/2)
-        tr.config.rope_sections = int4(8, 8, 8, 0)
-        tr.config.mrope_interleaved = true   // the qwen3vl proxy walk
-        let dim = tr.config.dim
-        let embd_a <- make_embd(dim, 0)
-        with_f32_row_nest() {
-            with_dasllama_jobque_() {
-                set_prefill_attn_mode(AttnPrefillMode.classic)
-                // span [7,29) = 22 rows = an 11x2 grid; position advance = max(11,2) = 11
-                let lg_fused <- mrope_turn_logits(tr, embd_a, true, 11l, 2l)
-                let lg_split <- mrope_turn_logits(tr, embd_a, false, 11l, 2l)
-                let fs = arr_maxdiff(lg_fused, lg_split)
-                log_argmax_sides("mrope_span fused-vs-splice", lg_fused, lg_split)
-                to_log(LOG_INFO, "mrope_span: fused-vs-splice decode-logits maxdiff = {fs}\n")
-                tt |> equal(fs, 0.0, "mrope fused == mrope splice, bit-exact (classic)")
-                // the delta: 22 rows advanced the position by 11
-                var s <- make_run_state(tr.config)
-                eval_embd_span_mrope_(tr, s, embd_a, NPOS, SPAN_LO, SPAN_HI, 11l, 2l)
-                tt |> equal(s.rope_pos_delta, 11l - 22l, "rope_pos_delta = max(grid) - span rows")
-                tt |> equal(int(long_length(s.mrope_pos)), 0, "the quantum map cleared after the call")
-                tt |> equal(s.n_past, NPOS, "KV rows advanced by the ROW count, not the position advance")
-                delete s
-                // the map must reach the rope math: grid positions differ from sequential ones
-                let lg_plain <- span_turn_logits(tr, embd_a, true)
-                let dm = arr_maxdiff(lg_fused, lg_plain)
-                log_argmax_sides("mrope_span mrope-vs-sequential", lg_fused, lg_plain)
-                to_log(LOG_INFO, "mrope_span: mrope-vs-sequential decode-logits maxdiff = {dm}\n")
-                tt |> success(dm > 1e-4, "grid rope positions change the outcome ({dm})")
-                // a different grid SHAPE of the same span changes the outcome too (h/w axes live)
-                let lg_tall <- mrope_turn_logits(tr, embd_a, true, 2l, 11l)
-                let dg = arr_maxdiff(lg_fused, lg_tall)
-                tt |> success(dg > 1e-4, "an 11x2 vs 2x11 grid differ ({dg})")
-            }
-        }
-        delete tr
-    }
-}
-
-[test(description = "The fused mid-turn span eval leaves the same cache as the three-eval splice (bit-exact decode logits on classic, within 1e-2 on flash) and in one eval keeps head rows causal while span rows see each other")]
-def test_attn_span_fused(t : T?) {
-    t |> run("the fused mid-turn span: splice equivalence + per-query mask direction") @(tt : T?) {
-        if (!stat(MODEL_PATH).is_valid) {
-            tt |> skip("stories15M.bin not present at {MODEL_PATH} (set DASLLAMA_LLAMA2C_DIR)")
-            return
-        }
-        var tr <- load_checkpoint(MODEL_PATH)
-        let dim = tr.config.dim
-        let embd_a <- make_embd(dim, 0)
-        with_f32_row_nest() {
-            with_dasllama_jobque_() {
-                // the fused single eval must leave the SAME cache as the three-eval splice: a decode
-                // step at NPOS attends every cached row, so its logits are the whole-cache witness
-                set_prefill_attn_mode(AttnPrefillMode.classic)
-                let lg_split <- span_turn_logits(tr, embd_a, false)
-                let lg_fused <- span_turn_logits(tr, embd_a, true)
-                tt |> equal(arr_maxdiff(lg_split, lg_fused), 0.0, "classic: fused == splice, bit-exact decode logits")
-                set_prefill_attn_mode(AttnPrefillMode.flash)
-                let lg_split_f <- span_turn_logits(tr, embd_a, false)
-                let lg_fused_f <- span_turn_logits(tr, embd_a, true)
-                let fdiff = arr_maxdiff(lg_split_f, lg_fused_f)
-                to_log(LOG_INFO, "attn_span fused: flash splice-vs-fused decode-logits maxdiff = {fdiff}\n")
-                tt |> success(fdiff < 1e-2, "flash: fused == splice within the online-softmax bar ({fdiff})")
-                set_prefill_attn_mode(AttnPrefillMode.classic)
-                // per-query mask direction inside ONE fused eval: a tail-row perturbation reaches no
-                // earlier row (span rows are bounded by uend, head/tail rows are causal)...
-                let base <- fused_plane(tr, embd_a)
-                let tail_p <- fused_plane(tr, make_embd(dim, 1))
-                var pre_tail = 0.0
-                for (r in range64(NPOS - 1l)) {
-                    pre_tail = max(pre_tail, row_maxdiff(base, tail_p, r, dim))
-                }
-                tt |> equal(pre_tail, 0.0, "fused: rows before a perturbed last row are blind to it")
-                tt |> success(row_maxdiff(base, tail_p, NPOS - 1l, dim) > 1e-4, "fused: the perturbed last row itself moved")
-                // ...while a perturbation on the LAST span row reaches the FIRST span row (non-causal
-                // within the span) and no head row (causal before the span)
-                let span_p <- fused_plane(tr, make_embd_at(dim, SPAN_HI - 1l))
-                var pre_span = 0.0
-                for (r in range64(SPAN_LO)) {
-                    pre_span = max(pre_span, row_maxdiff(base, span_p, r, dim))
-                }
-                tt |> equal(pre_span, 0.0, "fused: head rows are blind to a span perturbation")
-                let dspan = row_maxdiff(base, span_p, SPAN_LO, dim)
-                tt |> success(dspan > 1e-4, "fused: the first span row sees the last span row ({dspan})")
-            }
-        }
-        delete tr
-    }
-}
-
-[test(description = "Inverted or foreign span bounds and a recurrent graph panic the prefill, a split-span override sees three calls and a fused one one, and an override without the mrope or deepstack seat is never asked")]
-def test_attn_span_guards(t : T?) {   // nolint:STYLE038 — one sequential guard story over one loaded toy: panics → seats → declines → refusals
-    t |> run("the guards and the split-span capability seat") @(tt : T?) {
-        if (!stat(MODEL_PATH).is_valid) {
-            tt |> skip("stories15M.bin not present at {MODEL_PATH} (set DASLLAMA_LLAMA2C_DIR)")
-            return
-        }
-        var tr <- load_checkpoint(MODEL_PATH)
-        let dim = tr.config.dim
-        let embd_a <- make_embd(dim, 0)
+// The mrope quantum, on the `f32` form: fused == splice, the delta advances, the map reaches the math. The toy's config
+// is stamped as an mrope arch for the cell and put back after it.
+[cold_path]
+def private test_mrope_span(tt : T?; var tr : Model) {
+    let sections = tr.config.rope_sections
+    let interleaved = tr.config.mrope_interleaved
+    let attn_mode = get_prefill_attn_mode()
+    // the toy is not an mrope arch — stamp sections summing to head_size/2 (stories15M: 48/2)
+    tr.config.rope_sections = int4(8, 8, 8, 0)
+    tr.config.mrope_interleaved = true   // the qwen3vl proxy walk
+    let dim = tr.config.dim
+    let embd_a <- make_embd(dim, 0)
+    with_f32_row_nest() {
         with_dasllama_jobque_() {
-            // the span-bounds panic: a direct forward_prefill_embd caller with an inverted span
-            var tripped = false
-            var s1 <- make_run_state(tr.config)
-            try {
-                forward_prefill_embd(tr, s1, embd_a, NPOS, 0l, span_lo = 5l, span_hi = 3l)
-            } recover {
-                tripped = true
-            }
-            tt |> success(tripped, "an inverted span [5,3) panics forward_prefill_embd")
-            delete s1
-            // the hub guard: a foreign write to the session's span fields must panic the next
-            // prefill rather than drive a mask nobody set up
-            tripped = false
-            var s2 <- make_run_state(tr.config)
-            s2.attn_uniform_lo = 9l
-            s2.attn_uniform_end = 7l
-            var toks : array<int64>
-            toks |> resize(8l)
-            try {
-                forward_prefill(tr, s2, toks, 8l, 0l)
-            } recover {
-                tripped = true
-            }
-            tt |> success(tripped, "a foreign attn_uniform span [9,7) panics prefill_attention")
-            delete toks
-            delete s2
-            // the recurrent rejection: a fused span on a recurrent graph must refuse up front
-            tripped = false
-            var shell = Model()
-            shell.config.dim = 8l
-            shell.config.recr_mask = 1ul
-            var s3 = Session()
-            var e3 : array<float>
-            e3 |> resize(16l)
-            try {
-                forward_prefill_embd(shell, s3, e3, 2l, 0l, span_lo = 0l, span_hi = 1l)
-            } recover {
-                tripped = true
-            }
-            tt |> success(tripped, "a fused span on recr_mask != 0 panics forward_prefill_embd")
-            delete e3
-            delete s3
-            delete shell
-            // the split-span capability seat: an override that registers it forces the
-            // three-eval splice (3 override calls, each declining to the CPU arm); one that
-            // does not gets the fused single eval
-            register_prefill_override("test-split", @@probe_override)
-            register_prefill_override_split_span("test-split")
-            register_prefill_override("test-fused", @@probe_override)
-            select_prefill_override("test-split")
-            g_probe_calls = 0
-            var s4 <- make_run_state(tr.config)
-            eval_embd_span_(tr, s4, embd_a, NPOS, SPAN_LO, SPAN_HI)
-            delete s4
-            tt |> equal(g_probe_calls, 3, "a split-span override sees THREE prefill calls (the splice)")
-            select_prefill_override("test-fused")
-            g_probe_calls = 0
-            var s5 <- make_run_state(tr.config)
-            eval_embd_span_(tr, s5, embd_a, NPOS, SPAN_LO, SPAN_HI)
-            delete s5
-            tt |> equal(g_probe_calls, 1, "a fused-capable override sees ONE prefill call")
-            // the mrope seat: an override without it declines the WHOLE quantum by name -
-            // the CPU loop serves it, the override is never asked, and the logits match the
-            // no-override run bit-exact
-            tr.config.rope_sections = int4(8, 8, 8, 0)
-            select_prefill_override("")
-            var s6 <- make_run_state(tr.config)
-            eval_embd_span_mrope_(tr, s6, embd_a, NPOS, SPAN_LO, SPAN_HI, 11l, 2l)
-            select_prefill_override("test-fused")
-            g_probe_calls = 0
-            var s7 <- make_run_state(tr.config)
-            eval_embd_span_mrope_(tr, s7, embd_a, NPOS, SPAN_LO, SPAN_HI, 11l, 2l)
-            tt |> equal(g_probe_calls, 0, "a seat-less override never sees an mrope quantum (declined by name)")
-            tt |> equal(arr_maxdiff(s6.logits, s7.logits), 0.0, "the declined mrope quantum serves on the CPU loop, bit-exact")
-            // the deepstack seat: same decline shape for a wide-row quantum
-            tr.config.n_deepstack = 2l
-            var inscope wide6 <- make_wide_embd(tr.config.dim, 2l, 1)
-            g_probe_calls = 0
-            var s8 <- make_run_state(tr.config)
-            eval_embd_(tr, s8, wide6, NPOS)
-            tt |> equal(g_probe_calls, 0, "a seat-less override never sees a deepstack quantum (declined by name)")
-            tr.config.n_deepstack = 0l
-            delete s6
-            delete s7
-            delete s8
-            select_prefill_override("")
-            // the mrope refusals: inverted span bounds, and a config with no rope sections
-            var tripped6 = false
-            var s9 <- make_run_state(tr.config)
-            try {
-                eval_embd_span_mrope_(tr, s9, embd_a, NPOS, 9l, 5l, 2l, 2l)
-            } recover {
-                tripped6 = true
-            }
-            tt |> success(tripped6, "an inverted mrope span [9,5) panics")
-            delete s9
-            tr.config.rope_sections = int4(0, 0, 0, 0)
-            tripped6 = false
-            var s10 <- make_run_state(tr.config)
-            try {
-                eval_embd_span_mrope_(tr, s10, embd_a, NPOS, SPAN_LO, SPAN_HI, 11l, 2l)
-            } recover {
-                tripped6 = true
-            }
-            tt |> success(tripped6, "an mrope span without rope.dimension_sections panics")
-            delete s10
+            set_prefill_attn_mode(AttnPrefillMode.classic)
+            // span [7,29) = 22 rows = an 11x2 grid; position advance = max(11,2) = 11
+            let lg_fused <- mrope_turn_logits(tr, embd_a, true, 11l, 2l)
+            let lg_split <- mrope_turn_logits(tr, embd_a, false, 11l, 2l)
+            let fs = arr_maxdiff(lg_fused, lg_split)
+            log_argmax_sides("mrope_span fused-vs-splice", lg_fused, lg_split)
+            to_log(LOG_INFO, "mrope_span: fused-vs-splice decode-logits maxdiff = {fs}\n")
+            tt |> equal(fs, 0.0, "mrope fused == mrope splice, bit-exact (classic)")
+            // the delta: 22 rows advanced the position by 11
+            var s <- make_run_state(tr.config)
+            eval_embd_span_mrope_(tr, s, embd_a, NPOS, SPAN_LO, SPAN_HI, 11l, 2l)
+            tt |> equal(s.rope_pos_delta, 11l - 22l, "rope_pos_delta = max(grid) - span rows")
+            tt |> equal(int(long_length(s.mrope_pos)), 0, "the quantum map cleared after the call")
+            tt |> equal(s.n_past, NPOS, "KV rows advanced by the ROW count, not the position advance")
+            delete s
+            // the map must reach the rope math: grid positions differ from sequential ones
+            let lg_plain <- span_turn_logits(tr, embd_a, true)
+            let dm = arr_maxdiff(lg_fused, lg_plain)
+            log_argmax_sides("mrope_span mrope-vs-sequential", lg_fused, lg_plain)
+            to_log(LOG_INFO, "mrope_span: mrope-vs-sequential decode-logits maxdiff = {dm}\n")
+            tt |> success(dm > 1e-4, "grid rope positions change the outcome ({dm})")
+            // a different grid SHAPE of the same span changes the outcome too (h/w axes live)
+            let lg_tall <- mrope_turn_logits(tr, embd_a, true, 2l, 11l)
+            let dg = arr_maxdiff(lg_fused, lg_tall)
+            tt |> success(dg > 1e-4, "an 11x2 vs 2x11 grid differ ({dg})")
         }
-        delete tr
     }
+    set_prefill_attn_mode(attn_mode)
+    tr.config.rope_sections = sections
+    tr.config.mrope_interleaved = interleaved
+}
+
+// The fused mid-turn span, on the `f32` form: splice equivalence + per-query mask direction.
+[cold_path]
+def private test_attn_span_fused(tt : T?; var tr : Model) {
+    let dim = tr.config.dim
+    let embd_a <- make_embd(dim, 0)
+    let attn_mode = get_prefill_attn_mode()
+    with_f32_row_nest() {
+        with_dasllama_jobque_() {
+            // the fused single eval must leave the SAME cache as the three-eval splice: a decode
+            // step at NPOS attends every cached row, so its logits are the whole-cache witness
+            set_prefill_attn_mode(AttnPrefillMode.classic)
+            let lg_split <- span_turn_logits(tr, embd_a, false)
+            let lg_fused <- span_turn_logits(tr, embd_a, true)
+            tt |> equal(arr_maxdiff(lg_split, lg_fused), 0.0, "classic: fused == splice, bit-exact decode logits")
+            set_prefill_attn_mode(AttnPrefillMode.flash)
+            let lg_split_f <- span_turn_logits(tr, embd_a, false)
+            let lg_fused_f <- span_turn_logits(tr, embd_a, true)
+            let fdiff = arr_maxdiff(lg_split_f, lg_fused_f)
+            to_log(LOG_INFO, "attn_span fused: flash splice-vs-fused decode-logits maxdiff = {fdiff}\n")
+            tt |> success(fdiff < 1e-2, "flash: fused == splice within the online-softmax bar ({fdiff})")
+            set_prefill_attn_mode(AttnPrefillMode.classic)
+            // per-query mask direction inside ONE fused eval: a tail-row perturbation reaches no
+            // earlier row (span rows are bounded by uend, head/tail rows are causal)...
+            let base <- fused_plane(tr, embd_a)
+            let tail_p <- fused_plane(tr, make_embd(dim, 1))
+            var pre_tail = 0.0
+            for (r in range64(NPOS - 1l)) {
+                pre_tail = max(pre_tail, row_maxdiff(base, tail_p, r, dim))
+            }
+            tt |> equal(pre_tail, 0.0, "fused: rows before a perturbed last row are blind to it")
+            tt |> success(row_maxdiff(base, tail_p, NPOS - 1l, dim) > 1e-4, "fused: the perturbed last row itself moved")
+            // ...while a perturbation on the LAST span row reaches the FIRST span row (non-causal
+            // within the span) and no head row (causal before the span)
+            let span_p <- fused_plane(tr, make_embd_at(dim, SPAN_HI - 1l))
+            var pre_span = 0.0
+            for (r in range64(SPAN_LO)) {
+                pre_span = max(pre_span, row_maxdiff(base, span_p, r, dim))
+            }
+            tt |> equal(pre_span, 0.0, "fused: head rows are blind to a span perturbation")
+            let dspan = row_maxdiff(base, span_p, SPAN_LO, dim)
+            tt |> success(dspan > 1e-4, "fused: the first span row sees the last span row ({dspan})")
+        }
+    }
+    set_prefill_attn_mode(attn_mode)
+}
+
+// The guards and the split-span capability seat, on the `f32` form; the config stamps it makes are put back after it.
+[cold_path]
+def private test_attn_span_guards(tt : T?; var tr : Model) {   // nolint:STYLE038 — one sequential guard story over one loaded toy: panics → seats → declines → refusals
+    let dim = tr.config.dim
+    let embd_a <- make_embd(dim, 0)
+    let sections = tr.config.rope_sections
+    let n_deepstack = tr.config.n_deepstack
+    with_dasllama_jobque_() {
+        // the span-bounds panic: a direct forward_prefill_embd caller with an inverted span
+        var tripped = false
+        var s1 <- make_run_state(tr.config)
+        try {
+            forward_prefill_embd(tr, s1, embd_a, NPOS, 0l, span_lo = 5l, span_hi = 3l)
+        } recover {
+            tripped = true
+        }
+        tt |> success(tripped, "an inverted span [5,3) panics forward_prefill_embd")
+        delete s1
+        // the hub guard: a foreign write to the session's span fields must panic the next
+        // prefill rather than drive a mask nobody set up
+        tripped = false
+        var s2 <- make_run_state(tr.config)
+        s2.attn_uniform_lo = 9l
+        s2.attn_uniform_end = 7l
+        var toks : array<int64>
+        toks |> resize(8l)
+        try {
+            forward_prefill(tr, s2, toks, 8l, 0l)
+        } recover {
+            tripped = true
+        }
+        tt |> success(tripped, "a foreign attn_uniform span [9,7) panics prefill_attention")
+        delete toks
+        delete s2
+        // the recurrent rejection: a fused span on a recurrent graph must refuse up front
+        tripped = false
+        var shell = Model()
+        shell.config.dim = 8l
+        shell.config.recr_mask = 1ul
+        var s3 = Session()
+        var e3 : array<float>
+        e3 |> resize(16l)
+        try {
+            forward_prefill_embd(shell, s3, e3, 2l, 0l, span_lo = 0l, span_hi = 1l)
+        } recover {
+            tripped = true
+        }
+        tt |> success(tripped, "a fused span on recr_mask != 0 panics forward_prefill_embd")
+        delete e3
+        delete s3
+        delete shell
+        // the split-span capability seat: an override that registers it forces the
+        // three-eval splice (3 override calls, each declining to the CPU arm); one that
+        // does not gets the fused single eval
+        let prior_override = active_prefill_override()
+        register_prefill_override("test-split", @@probe_override)
+        register_prefill_override_split_span("test-split")
+        register_prefill_override("test-fused", @@probe_override)
+        select_prefill_override("test-split")
+        g_probe_calls = 0
+        var s4 <- make_run_state(tr.config)
+        eval_embd_span_(tr, s4, embd_a, NPOS, SPAN_LO, SPAN_HI)
+        delete s4
+        tt |> equal(g_probe_calls, 3, "a split-span override sees THREE prefill calls (the splice)")
+        select_prefill_override("test-fused")
+        g_probe_calls = 0
+        var s5 <- make_run_state(tr.config)
+        eval_embd_span_(tr, s5, embd_a, NPOS, SPAN_LO, SPAN_HI)
+        delete s5
+        tt |> equal(g_probe_calls, 1, "a fused-capable override sees ONE prefill call")
+        // the mrope seat: an override without it declines the WHOLE quantum by name -
+        // the CPU loop serves it, the override is never asked, and the logits match the
+        // no-override run bit-exact
+        tr.config.rope_sections = int4(8, 8, 8, 0)
+        select_prefill_override("")
+        var s6 <- make_run_state(tr.config)
+        eval_embd_span_mrope_(tr, s6, embd_a, NPOS, SPAN_LO, SPAN_HI, 11l, 2l)
+        select_prefill_override("test-fused")
+        g_probe_calls = 0
+        var s7 <- make_run_state(tr.config)
+        eval_embd_span_mrope_(tr, s7, embd_a, NPOS, SPAN_LO, SPAN_HI, 11l, 2l)
+        tt |> equal(g_probe_calls, 0, "a seat-less override never sees an mrope quantum (declined by name)")
+        tt |> equal(arr_maxdiff(s6.logits, s7.logits), 0.0, "the declined mrope quantum serves on the CPU loop, bit-exact")
+        // the deepstack seat: same decline shape for a wide-row quantum
+        tr.config.n_deepstack = 2l
+        var inscope wide6 <- make_wide_embd(tr.config.dim, 2l, 1)
+        g_probe_calls = 0
+        var s8 <- make_run_state(tr.config)
+        eval_embd_(tr, s8, wide6, NPOS)
+        tt |> equal(g_probe_calls, 0, "a seat-less override never sees a deepstack quantum (declined by name)")
+        tr.config.n_deepstack = 0l
+        delete s6
+        delete s7
+        delete s8
+        select_prefill_override(prior_override)
+        // the mrope refusals: inverted span bounds, and a config with no rope sections
+        var tripped6 = false
+        var s9 <- make_run_state(tr.config)
+        try {
+            eval_embd_span_mrope_(tr, s9, embd_a, NPOS, 9l, 5l, 2l, 2l)
+        } recover {
+            tripped6 = true
+        }
+        tt |> success(tripped6, "an inverted mrope span [9,5) panics")
+        delete s9
+        tr.config.rope_sections = int4(0, 0, 0, 0)
+        tripped6 = false
+        var s10 <- make_run_state(tr.config)
+        try {
+            eval_embd_span_mrope_(tr, s10, embd_a, NPOS, SPAN_LO, SPAN_HI, 11l, 2l)
+        } recover {
+            tripped6 = true
+        }
+        tt |> success(tripped6, "an mrope span without rope.dimension_sections panics")
+        delete s10
+    }
+    tr.config.rope_sections = sections
+    tr.config.n_deepstack = n_deepstack
 }
 
 // wide rows for the deepstack rail: slice 0 = make_embd's rows, tails filled by `mode` —
@@ -476,54 +487,67 @@ def private ds_eval_logits(t : Model; embd : array<float>) : array<float> {
     return <- lg
 }
 
-[test(description = "Deepstack wide rows with zero tails match the narrow eval bit-exact, nonzero tail slices move the logits at slice-dependent depths, and a following text eval sees no stale plane")]
-def test_deepstack_rail(t : T?) {
-    t |> run("the deepstack wide-row seam: split, per-layer adds, clean reset") @(tt : T?) {
-        if (!stat(MODEL_PATH).is_valid) {
-            tt |> skip("stories15M.bin not present at {MODEL_PATH} (set DASLLAMA_LLAMA2C_DIR)")
-            return
+// The deepstack wide-row seam, on the `f32` form: split, per-layer adds, clean reset. The toy's config is stamped as a
+// deepstack arch for the cell and put back after it.
+[cold_path]
+def private test_deepstack_rail(tt : T?; var tr : Model) {
+    let n_deepstack = tr.config.n_deepstack
+    tr.config.n_deepstack = 3l   // stamp: the toy is not a deepstack arch
+    let dim = tr.config.dim
+    with_dasllama_jobque_() {
+        let narrow <- make_embd(dim, 0)
+        let wide0 <- make_wide_embd(dim, 3l, 0)
+        let wide <- make_wide_embd(dim, 3l, 1)
+        let wide_s0 <- make_wide_embd(dim, 3l, 2, 0l)
+        let wide_s2 <- make_wide_embd(dim, 3l, 2, 2l)
+        let lg_n <- ds_eval_logits(tr, narrow)
+        let lg_w0 <- ds_eval_logits(tr, wide0)
+        tt |> equal(arr_maxdiff(lg_n, lg_w0), 0.0, "zero-tail wide rows == the narrow eval, bit-exact")
+        let lg_w <- ds_eval_logits(tr, wide)
+        let dm = arr_maxdiff(lg_n, lg_w)
+        log_argmax_sides("deepstack_rail tails-vs-narrow", lg_n, lg_w)
+        to_log(LOG_INFO, "deepstack_rail: tails-vs-narrow logits maxdiff = {dm}\n")
+        tt |> success(dm > 1e-4, "nonzero tail slices reach the hidden state ({dm})")
+        let lg_s0 <- ds_eval_logits(tr, wide_s0)
+        let lg_s2 <- ds_eval_logits(tr, wide_s2)
+        let ds02 = arr_maxdiff(lg_s0, lg_s2)
+        tt |> success(ds02 > 1e-4, "slice 0 and slice 2 add at different depths ({ds02})")
+        // the transient plane must not leak into a following plain eval
+        var s <- make_run_state(tr.config)
+        eval_embd_(tr, s, wide, NPOS)
+        tt |> success(!s.ds_active, "ds_active cleared after the wide quantum")
+        var one <- [42l]
+        eval_(tr, s, one)
+        delete one
+        var s2 <- make_run_state(tr.config)
+        eval_embd_(tr, s2, wide, NPOS)
+        var one2 <- [42l]
+        eval_(tr, s2, one2)
+        delete one2
+        var dd = 0.0
+        for (i in range64(long_length(s.logits))) {
+            dd = max(dd, nan_wide_diff(s.logits[i], s2.logits[i]))
         }
-        var tr <- load_checkpoint(MODEL_PATH)
-        tr.config.n_deepstack = 3l   // stamp: the toy is not a deepstack arch
-        let dim = tr.config.dim
-        with_dasllama_jobque_() {
-            let narrow <- make_embd(dim, 0)
-            let wide0 <- make_wide_embd(dim, 3l, 0)
-            let wide <- make_wide_embd(dim, 3l, 1)
-            let wide_s0 <- make_wide_embd(dim, 3l, 2, 0l)
-            let wide_s2 <- make_wide_embd(dim, 3l, 2, 2l)
-            let lg_n <- ds_eval_logits(tr, narrow)
-            let lg_w0 <- ds_eval_logits(tr, wide0)
-            tt |> equal(arr_maxdiff(lg_n, lg_w0), 0.0, "zero-tail wide rows == the narrow eval, bit-exact")
-            let lg_w <- ds_eval_logits(tr, wide)
-            let dm = arr_maxdiff(lg_n, lg_w)
-            log_argmax_sides("deepstack_rail tails-vs-narrow", lg_n, lg_w)
-            to_log(LOG_INFO, "deepstack_rail: tails-vs-narrow logits maxdiff = {dm}\n")
-            tt |> success(dm > 1e-4, "nonzero tail slices reach the hidden state ({dm})")
-            let lg_s0 <- ds_eval_logits(tr, wide_s0)
-            let lg_s2 <- ds_eval_logits(tr, wide_s2)
-            let ds02 = arr_maxdiff(lg_s0, lg_s2)
-            tt |> success(ds02 > 1e-4, "slice 0 and slice 2 add at different depths ({ds02})")
-            // the transient plane must not leak into a following plain eval
-            var s <- make_run_state(tr.config)
-            eval_embd_(tr, s, wide, NPOS)
-            tt |> success(!s.ds_active, "ds_active cleared after the wide quantum")
-            var one <- [42l]
-            eval_(tr, s, one)
-            delete one
-            var s2 <- make_run_state(tr.config)
-            eval_embd_(tr, s2, wide, NPOS)
-            var one2 <- [42l]
-            eval_(tr, s2, one2)
-            delete one2
-            var dd = 0.0
-            for (i in range64(long_length(s.logits))) {
-                dd = max(dd, nan_wide_diff(s.logits[i], s2.logits[i]))
-            }
-            tt |> equal(dd, 0.0, "a text eval after the wide quantum is deterministic (no stale plane)")
-            delete s
-            delete s2
+        tt |> equal(dd, 0.0, "a text eval after the wide quantum is deterministic (no stale plane)")
+        delete s
+        delete s2
+    }
+    tr.config.n_deepstack = n_deepstack
+}
+
+// llama2.c's stories15M checkpoint, one block.
+[test(description = "stories15M.bin loads once a form. A causal prefill keeps row 0 bit-blind to a last-row perturbation while the non-causal span lets it see it on f32 and q4_0, flash agrees with classic within 1e-2, and a later causal prefill is bit-exact. The mrope span quantum gives bit-exact fused and spliced decode logits, sets rope_pos_delta to max grid minus span rows, and its grid positions and grid shape both change the logits. The fused mid-turn span eval leaves the same cache as the three-eval splice (bit-exact decode logits on classic, within 1e-2 on flash) and in one eval keeps head rows causal while span rows see each other. Inverted or foreign span bounds and a recurrent graph panic the prefill, a split-span override sees three calls and a fused one one, and an override without the mrope or deepstack seat is never asked. Deepstack wide rows with zero tails match the narrow eval bit-exact, nonzero tail slices move the logits at slice-dependent depths, and a following text eval sees no stale plane")]
+def test_attn_span_stories15m(t : T?) {
+    with_model_once_at(t, "vision", "stories15M.bin", ["f32", "q4"], llama2c_dir(), @@stories15m_form) $(var tr; form) {
+        t |> equal(tr.quant, form == "q4" ? QuantMode.q4_0 : QuantMode.fp32, "stories15M.bin: the {form} form holds the weights it names")
+        if (form == "f32") {
+            tower_cell(t, "the non-causal span: direction, propagation, mode agreement, flag reset", tr, @@test_attn_span)
+            tower_cell(t, "the mrope quantum: fused == splice, the delta advances, the map reaches the math", tr, @@test_mrope_span)
+            tower_cell(t, "the fused mid-turn span: splice equivalence + per-query mask direction", tr, @@test_attn_span_fused)
+            tower_cell(t, "the guards and the split-span capability seat", tr, @@test_attn_span_guards)
+            tower_cell(t, "the deepstack wide-row seam: split, per-layer adds, clean reset", tr, @@test_deepstack_rail)
+        } else {
+            tower_cell(t, "the non-causal span on the q4_0 requant", tr, @@attn_span_q4)
         }
-        delete tr
     }
 }

@@ -957,8 +957,7 @@ def private vt_g4a_key(t : Gemma4aEncoder; lay : Q8RepackLayout) : uint64 {
     let src = vt_dev_src(t)
     var key = (src.on ? vt_key_dev(src, t.blob, 0l, t.blob.n, t.n_layer)
         : vt_key(t.qblob, t.qscales, t.blob, 0l, t.blob.n, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias))
-    key = vt_fold_int(vt_fold_addr(key, unsafe(reinterpret<void?>(t.wblob.p))), t.wblob.n)
-    key = tower_fold_words(key, unsafe(reinterpret<uint8 const?>(t.wblob.p)), t.wblob.n * 2l)
+    key = tower_fold_wblob(key, t.wblob)
     return tower_fold_words(key, unsafe(reinterpret<uint8 const?>(plane_at(t.pos_emb, 0l))), (gemma4a_attn_past() + 1l) * t.d_model * 4l)
 }
 
@@ -2039,8 +2038,8 @@ def private vt_aud_attach(var r : VtResident; t : AudioTower) : bool {
     let lay = active_q8_repack_layout(g_active_needs_repack)
     let norms_plane_n = t.fblob.n - t.layers_off   //! the blocks' rows, the post-norm and the projector tail's f32 rows behind them
     let src = vt_dev_src(t)
-    let key = (src.on ? vt_key_dev(src, t.fblob, t.layers_off, norms_plane_n, t.n_layer)
-        : vt_key(t.qblob, t.qscales, t.fblob, t.layers_off, norms_plane_n, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias))
+    let key = tower_fold_wblob(src.on ? vt_key_dev(src, t.fblob, t.layers_off, norms_plane_n, t.n_layer)
+        : vt_key(t.qblob, t.qscales, t.fblob, t.layers_off, norms_plane_n, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias), t.wblob)
     return r.key == key || vt_aud_upload(r, t, key, lay, src, norms_plane_n)
 }
 
@@ -2851,8 +2850,8 @@ def private vulkan_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; 
     let lay = active_q8_repack_layout(g_active_needs_repack)
     let src = vt_dev_src(t.core)
     let span = tower_q3a_norm_span(t)
-    let key = (src.on ? vt_key_dev(src, t.cblob, span.lo, span.hi - span.lo, 1l)
-        : vt_key(t.qcblob, t.qcscales, t.cblob, t.cout_w_off, featw, 0l, 1l, lay.mr, lay.kgroup, lay.wbias))
+    let key = tower_fold_wblob(src.on ? vt_key_dev(src, t.cblob, span.lo, span.hi - span.lo, 1l)
+        : vt_key(t.qcblob, t.qcscales, t.cblob, t.cout_w_off, featw, 0l, 1l, lay.mr, lay.kgroup, lay.wbias), t.wcblob)
     if (r.key != key && !vt_q3a_slab(r, t, key, lay)) {
         return vt_decline(r, TowerDecline.memory)
     }

@@ -128,10 +128,17 @@ def nmt_seat_shutdown {
     }
 }
 
+//! what the box lacks for the build's device translation seat - no seat on the build, or no device for it; "" where it serves
+def nmt_seat_why : string {
+    return "" if (nmt_seat_name() != "" && nmt_seat_ready())
+    return "no device translation seat on this build or box (Metal, or Vulkan under DASLLAMA_GPU=1 on a build without das_metal)"
+}
+
 //! true, with the cell skipped, where the build has no device translation seat or the box no device for it
 def nmt_seat_skip(t : T?; tag : string) : bool {
-    return false if (nmt_seat_name() != "" && nmt_seat_ready())
-    t |> skip("{tag}: no device translation seat on this build or box (Metal, or Vulkan under DASLLAMA_GPU=1 on a build without das_metal)")
+    let why = nmt_seat_why()
+    return false if (empty(why))
+    t |> skip("{tag}: {why}")
     return true
 }
 

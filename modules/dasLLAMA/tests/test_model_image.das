@@ -1118,14 +1118,6 @@ def private text_image_roundtrip(t : T?; path : string; n_gen : int) {
     delete prompt
 }
 
-//! a model arm's gate beside its presence check: the image rail on, else a loud skip - with it off a facade load reads and
-//! writes no image, so an arm has none to mint or map
-def private image_rail_on(t : T?) : bool {
-    return true if (g_env_engine.image)
-    t |> skip("the image rail is off (DASLLAMA_IMAGE=0) - a model arm has no image to mint or map")
-    return false
-}
-
 [test(description = "SmolLM2-135M and the untied stories15M emit the GGUF load's greedy tokens exactly from cold-built, warm and re-mapped images, with config and tokenizer round-tripping byte-exact and the untied image dropping the f32 table")]
 def test_model_image_roundtrip(t : T?) {
     t |> run("SmolLM2-135M q8: gguf load vs mapped image, token-for-token") @(t : T?) {

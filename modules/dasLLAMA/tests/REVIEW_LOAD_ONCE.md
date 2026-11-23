@@ -7,12 +7,13 @@ doc: `../ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once`. Planned work: `../follo
   asserts of every helper it calls.
 - An area is a name in `run.das`'s `AREAS` list, standing for the files `run.das`'s `area_tests`
   returns for it.
-- A form is one load of a model file under one set of load-time knobs and one load mode.
 - A home is a backend a model's weights are served from - the CPU, or a GPU backend
   (`DASLLAMA_GPU`, `DASLLAMA_CUDA`).
-- A block is the area's one call that loads a model file: a chat model's `with_cpu_and_gpu_model`
-  call (`_cpu_gpu_model.das`), any other model's `with_model_once` or `with_model_once_at` call
-  (`_model_once.das`).
+- A form is one model built from a model file - by its own load, or minted from its own copy of a
+  staged read the block keeps - under one set of load-time knobs, one load mode and one home.
+- A block is the area's one call that loads a model file: a `with_cpu_and_gpu_model` call
+  (`_cpu_gpu_model.das`) for a `.gguf` file loaded as a chat `Model`, a `with_model_once` or
+  `with_model_once_at` call (`_model_once.das`) for any other model file.
 - A model file is a `.gguf` file, or - outside the llm area - a `.bin` pack.
 
 **A diff that adds or moves a cell loading a model file loads it on a form of the area's one block
@@ -27,8 +28,10 @@ names - a voice's front-end packs.
 
 **A diff that adds a `with_model_once` or `with_model_once_at` call names the area and the file by
 string literals on the call's first line, a call a file - never one call in a loop over file names -
-and passes a form loader that `LOADERS` (`REVIEW.das`) lists.** A cell that reads two files runs in
-the inner of two nested blocks.
+and passes a form loader, and on the staged overload a stage function, that `LOADERS` (`REVIEW.das`)
+lists.** A cell that reads two files runs in
+the inner of two nested blocks, or - where the pairing of the two files is the cell's subject - on a
+form of one file's block that is a facade's own load of the pair.
 
 **A diff that removes an area from `LOAD_ONCE_AREAS` (`REVIEW.das`), removes or disarms
 `check_models_load_once`, adds a file to `UNFOLDED`, or adds or moves a model load into a file
@@ -41,8 +44,9 @@ shuts down the model; drops the model before its last step, or drops a CPU-loade
 cell that drops the device model as its last step runs as the `device_drop_cell` of a device form
 marked `drops_device`); writes a `.dlim` image beside the file; changes the loaded model's config in
 a way it cannot restore; loads it through a bench or tool; holds several models loaded at once;
-asserts on the load itself - its time, its allocation, or its refusal; or runs on a home the call
-does not load.**
+asserts on the load itself - its time, its allocation, its refusal, or the lane, the image flavor
+or the staged planes it lands on; loads a copy of the file that the cell itself writes; or runs on a
+home the call does not load.**
 
 **A diff that puts into a `with_cpu_and_gpu_model` call a cell whose asserts read the output of one
 CPU load and of no other form gives that load as `cpu_cells_form` and runs the cell only where

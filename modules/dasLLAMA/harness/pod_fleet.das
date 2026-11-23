@@ -68,8 +68,8 @@ struct FleetArgs {
     min_gbs : float = 1.0
     @clarg_doc = "the ssh private key the pods admit; its .pub is handed to every pod"
     key : string = "~/.ssh/runpod"
-    @clarg_doc = "run: the children's environment - KEY=VALUE tokens separated by spaces; the models directory is the pod's own folder of links to the volume's models, each model the run opens copied in place of its link, the image rail is off (DASLLAMA_IMAGE=0), allocations take no huge-page hint (DAS_NO_HUGEPAGE_HINT=1: a pod's host stalls on them) and so is the large tier off; an image suite's run passes its own --env with the rail on"
-    env : string = "DASLLAMA_MODELS_DIR=/root/models DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DAS_NO_HUGEPAGE_HINT=1 DASLLAMA_ALLOW_UNTUNED=1"
+    @clarg_doc = "run: the children's environment - KEY=VALUE tokens separated by spaces; the models directory is the pod's own folder of links to the volume's models, each model the run opens copied in place of its link, the whisper packs sit in that folder and the ASR clips in its asr_corpus subfolder, the children's scratch is on the pod's own disk (the run's TMPDIR is the volume's, which reads a fresh file back slower than the pod's own disk), the image rail is off (DASLLAMA_IMAGE=0), allocations take no huge-page hint (DAS_NO_HUGEPAGE_HINT=1: a pod's host stalls on them) and so is the large tier off; an image suite's run passes its own --env with the rail on"
+    env : string = "DASLLAMA_MODELS_DIR=/root/models DASLLAMA_WHISPER_DIR=/root/models DASLLAMA_CORPUS_DIR=/root/models/asr_corpus DASLLAMA_SCRATCH_DIR=/root/scratch DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DAS_NO_HUGEPAGE_HINT=1 DASLLAMA_ALLOW_UNTUNED=1"
     @clarg_doc = "run: the full suite - the children also take DASLLAMA_PARITY_FULL=1, so the models past the size tier run and no test wall stands; an arc's final run"
     full : bool
     @clarg_doc = "run: the run.das arguments, no --only; the CUDA pod adds the CUDA pass's, both pods `--batch 30` where they name no --batch"
@@ -464,7 +464,7 @@ def run_command(cfg : FleetArgs; run, home : string; model_free : bool) : string
     let runner = "./bin/daslang -jit -module-cache .cache/daslang/module_cache/dastest.dascache {RUNNER}"
     let given = batched_args("{cfg.args}{only}")
     let given_is_it = runs_model_free(cfg.args)
-    let skip = (split(cfg.args, " ") |> has_value("--skip-fully-cached")) ? " --skip-fully-cached" : ""   //! the caller's rerun flag is the fleet's model-free suite's too
+    let skip = (split(cfg.args, " ") |> has_value("--rerun")) ? " --rerun" : ""   //! the caller's `--rerun` is the fleet's model-free suite's too
     let mf_run = (given_is_it || !model_free ? " mf=0;"
         : " {runner} --suite model-free{skip} --await-models {state}; mf=$?;")
     let mf_exit = (given_is_it || model_free ? "echo MODEL-FREE-EXIT=$\{mf:-none\}"

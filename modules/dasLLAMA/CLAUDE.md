@@ -18,8 +18,9 @@ Outside the full suite (`DASLLAMA_PARITY_FULL=1`) a model-free test past 30 s en
 as a batch without its verdicts does (`LOST`); `--skip N` resumes at the child the `RESUME` line names, `--test-wall N`
 sets the wall for a run (0 = none) and `--stop-file <path>` shares the stop between a run's boxes. `--suite gpu-kernels`
 is the Vulkan and CUDA device kernel files - no model, no wall; the stocked suite runs them first.
-`--skip-fully-cached` is the development loop's rerun: a child whose program loaded whole from its compile record
-reports the files that passed last time and runs the rest (`tests/CLAUDE.md`).
+A run skips what is unchanged: a child whose program loaded whole from its compile record reports the files that
+passed last time, on this box and in this environment, and runs the rest (`tests/CLAUDE.md`). `--rerun` runs every
+file, and so does the full suite: an arc's final run takes one of them.
 After an edit: `./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed` runs the tests
 the changed files reach, by file: a test file itself, a fixture the tests requiring it, an engine
 module its `MODULE_WITNESSES` row or - a core module - every model-free `llm` file and one

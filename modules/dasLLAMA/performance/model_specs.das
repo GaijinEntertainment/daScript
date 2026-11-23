@@ -799,7 +799,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             sha256 = "700d2386a8ef18bdb1e5f65df612a3014d10723e6e50f74af19251b87e4b8224",
             recipe = "llama-quantize --allow-requantize --pure --token-embedding-type q5_0 --output-tensor-type q5_0 Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf Qwen1.5-MoE-A2.7B-Chat-Q5_0-pure-local.gguf Q5_0"),
         // the qwen vision pairs (the qwen3vl arc): parity-less provenance carriers —
-        // test_vision_chat's deepstack/qwen25o legs and the qwen tier-1 suites are their coverage
+        // the deepstack and qwen25o chat cells (test_qwen3v / test_qwen25v) and the qwen tier-1 suites are their coverage
         ModelSpec(file = "Qwen3VL-4B-Instruct-Q8_0.gguf", display = "Qwen3-VL-4B", official = true,
             url = "{HF}/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/1cd86afb9a95c410a6038ab3b40d8b578c892266/Qwen3VL-4B-Instruct-Q8_0.gguf",
             serve_name = "qwen3-vl-4b", serve_display = "Qwen3 VL 4B",

@@ -20,6 +20,7 @@ require dasllama/dasllama_math   // with_dasllama_jobque_: the forward runs on t
 require daslib/fio
 require daslib/math_bits   // float_bits_to_uint: the synthetic files' f32 words
 require _model_tier
+require _model_once   // with_model_once: a model file's one block in the area; served_forms, own_load
 require _json_file
 require _npy   // read_npy: the oracle's per-stage dumps
 require _compares   // check_rows / check_exact / check_exceeds / ids_equal
@@ -32,11 +33,13 @@ require _image_memory   // read_page_aligned: a host's own copy of an image
 // feed) and its free run by a line floor, the q8 lane by its lines' agreement with the f32 oracle, the device seat against the
 // CPU q8 chain; the loader's refusals over synthetic Marian and SentencePiece files written to the test's temp directory; the
 // facade's contracts on a shell and on a synthetic student, then on a translation LLM and two chat models.
+// A model file loads once a form, in its one `with_model_once` block (`translator_form`); the from-memory cell and the
+// MiLMMT cell hold their own loads.
 // Skips: a cell skips without its model (the five `bergamot/<dir>/` students, `milmmt/MiLMMT-46-1B-v0.1.Q4_K_M.gguf`,
 // `Qwen3-4B-Instruct-2507-Q4_K_M.gguf`, `Qwen3.5-0.8B-Q8_0.gguf`) or its dumps; the forward cells when interpreted
-// (`jit_model_available`); the device cell on a build with no device translation seat or a box with no device for it -
+// (`jit_only`); the MiLMMT `.dlim` load-back cell with the image rail off (DASLLAMA_IMAGE=0); a device form on a build with no device translation seat or a box with no device for it -
 // Metal on a das_metal build, Vulkan on a build without das_metal under DASLLAMA_GPU=1 with a device the tier serves.
-// The facade loads (`load_translator`) bake a `.dlim` beside the model - ledgered at
+// The facade loads (`load_translator`, the `image` forms) bake a `.dlim` beside the model - ledgered at
 // `../ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`; every other load mints in memory.
 
 //! The exact lane's stage bar: max |got - want| over the stage's largest magnitude, the decoder's stages under the oracle's
@@ -58,11 +61,13 @@ struct private NmtCase {
     src : string
 }
 
-let private CASES = [NmtCase(dir = "ru-en-base-memory", pair = "ruen", src = "ru"),
-                     NmtCase(dir = "en-ru-base-memory", pair = "enru", src = "en"),
-                     NmtCase(dir = "en-ru-base", pair = "enru", src = "en"),
-                     NmtCase(dir = "ru-en-tiny", pair = "ruen", src = "ru"),
-                     NmtCase(dir = "en-de-base-memory", pair = "ende", src = "en")]
+let private RU_EN_BASE_MEMORY = NmtCase(dir = "ru-en-base-memory", pair = "ruen", src = "ru")
+let private EN_RU_BASE_MEMORY = NmtCase(dir = "en-ru-base-memory", pair = "enru", src = "en")
+let private EN_RU_BASE = NmtCase(dir = "en-ru-base", pair = "enru", src = "en")
+let private RU_EN_TINY = NmtCase(dir = "ru-en-tiny", pair = "ruen", src = "ru")
+let private EN_DE_BASE_MEMORY = NmtCase(dir = "en-de-base-memory", pair = "ende", src = "en")
+
+let private CASES = [RU_EN_BASE_MEMORY, EN_RU_BASE_MEMORY, EN_RU_BASE, RU_EN_TINY, EN_DE_BASE_MEMORY]
 
 struct private OracleTokens {
     src : string
@@ -85,8 +90,6 @@ def private oracle_dir(c : NmtCase) : string => path_join(models_dir(), "nmt_ora
 
 def private line_dir(c : NmtCase; lane : string; li : int) : string => "{oracle_dir(c)}/{c.src}_{lane}/line_{li < 10 ? "0" : ""}{li}"
 
-def private ru_en_pair(c : NmtCase) : bool => c.dir == "ru-en-base-memory" || c.dir == "en-ru-base-memory"
-
 //! The oracle's lines of one variant, in order; empty when the dumps are absent.
 def private oracle_lines(c : NmtCase; lane : string) : array<OracleTokens> {
     var out : array<OracleTokens>
@@ -106,18 +109,90 @@ def private dumps_present(t : T?; c : NmtCase; lines : array<OracleTokens>) : bo
     return true
 }
 
-//! `lines` translated through the image file `dlim`, mapped for the call alone
-[cold_path]
-def private file_lines(dlim : string; q8 : bool; lines : array<string>) : array<string> {
-    var inscope m <- load_nmt_model(dlim, q8)
-    return <- nmt_lines(m, lines)
+//! the staged read a translation model's form is minted from: none on the facade's image forms, else the student's lane
+def private translator_stage_key(form : string) : string {
+    return "" if (form == "image" || form == "image_f32")
+    return form == "f32" ? "f32" : "q8"
 }
 
-def private mint(path : string; q8 : bool) : NmtModel {
-    var m = NmtModel()
-    var inscope st <- stage_nmt_model(path, q8)
-    mint_nmt_model(st, m)
-    return <- m
+//! a student's staged read on the lane the key `key` names
+def private translator_stage(path, key : string) : NmtStaging => <- stage_nmt_model(path, key == "q8")
+
+//! One form of a translation model's file as the facade holds it - the translate area's form loader. `image` is the
+//! facade's own load (`load_translator`): a GGUF through the cached loader, a Bergamot student through the image rail on
+//! the q8 lane, and `image_f32` the student on the exact lane. A student's other forms are minted in memory from `st`,
+//! its own copy of the file's staging, no `.dlim` baked and no direction taken: `f32` the exact lane; `q8` the q8 lane;
+//! `device` the q8 lane again, the copy the build's device seat serves; `q8_cls_zeroed` the q8 lane with its classifier's
+//! Q8_0 copy zeroed - quants and scales - so every step's logits are the output bias alone.
+def private translator_form(path, form : string; var st : NmtStaging) : Translator {
+    return <- load_translator(path, form == "image_f32") if (form == "image" || form == "image_f32")
+    var tr = Translator(kind = TranslatorKind.marian)
+    if (form == "q8_cls_zeroed") {
+        let n = st.e.n_vocab * st.e.d
+        for (i in range64(st.e.cls_off, st.e.cls_off + n)) {
+            st.qblob[i] = int8(0)
+        }
+        for (i in range64(st.e.cls_off / 32l, (st.e.cls_off + n) / 32l)) {
+            st.qscales[i] = 0.0
+        }
+    }
+    mint_nmt_model(st, tr.m)
+    return <- tr
+}
+
+//! what the box lacks for a form of `translator_form`, "" where it serves: the device form asks the build's seat
+def private translator_form_why(form : string) : string => form == "device" ? nmt_seat_why() : ""
+
+//! The form is the model and the lane it names: on `tr`, a form of the file `file` (`translator_form`), the kind the
+//! facade read off the file and its lane - an LLM's q8 load; a student's lane flag, its classifier's Q8_0 copy absent on
+//! an exact form and zeroed on `q8_cls_zeroed`, and on `device` a geometry the seat's shape gate takes.
+def private translator_form_is(t : T?; tr : Translator; file, form : string) {
+    if (file |> ends_with(".gguf")) {
+        t |> success(tr.kind == TranslatorKind.llm && tr.lm.quant == QuantMode.q8, "{file}: the {form} form is an LLM on the q8 load ({tr.kind}, {tr.lm.quant})")
+        return
+    }
+    let exact = form == "f32" || form == "image_f32"
+    t |> success(tr.kind == TranslatorKind.marian && tr.m.q8 == !exact && (tr.m.cls_off < 0l) == exact, "{file}: the {form} form is a student on the lane it names (q8 {tr.m.q8}, cls_off {tr.m.cls_off})")
+    if (form == "q8_cls_zeroed") {
+        t |> equal(tr.m.qscales[tr.m.cls_off / 32l], 0.0, "{file}: the {form} form's classifier scales are zeroed")
+    } elif (form == "device") {
+        t |> success(nmt_device_shape_ok(tr.m), "{file}: the {form} form's geometry is one the device seat serves")
+    }
+}
+
+//! One student's block: its case, the oracle's lines, and the ids its forms' cells keep for the compares after the block.
+struct private Student {
+    c : NmtCase
+    lines : array<OracleTokens>       //!< empty where the dumps are not stocked
+    srcs : array<array<int64>>        //!< each line's source ids
+    q8 : array<array<int64>>          //!< the q8 lane's lines
+    q8_zeroed : array<array<int64>>   //!< the q8 lane's, its classifier's Q8_0 copy zeroed
+    cpu : array<array<int64>>         //!< the CPU q8 chain's, the seat pinned off: the device form's reference
+    gpu : array<array<int64>>         //!< the device seat's
+    gpu_zeroed : array<array<int64>>  //!< the device seat's, its classifier zeroed
+    seat : bool                       //!< the block runs a device form
+    swapped : bool                    //!< the device form attaches over another student's, no shutdown between
+}
+
+//! `c`'s student with the oracle's lines read: a loud skip on `t`, and no line, where the dumps are not stocked
+def private student_of(t : T?; c : NmtCase) : Student {
+    var s = Student(c = c)
+    s.lines <- oracle_lines(c, "f32")
+    if (dumps_present(t, c, s.lines)) {
+        s.srcs <- [for (ln in s.lines); clone_to_move(ln.src_ids)]
+        s.seat = empty(nmt_seat_why())
+    }
+    return <- s
+}
+
+//! the forms of `lanes` a student's block loads: none where its dumps are not stocked, else each the box serves
+//! (`served_forms`: a device form with no seat is a skipped cell of its own)
+def private student_forms(t : T?; s : Student; lanes : array<string>) : array<string> {
+    var forms : array<string>
+    if (!empty(s.lines)) {
+        forms <- served_forms(t, s.c.dir, lanes, @@translator_form_why)
+    }
+    return <- forms
 }
 
 //! the oracle's target ids with the end token dropped: what a translation answers
@@ -216,66 +291,41 @@ def private last_encoder_rows(m : NmtModel; var st : NmtState; src : array<int64
     return <- clone_to_move(got?["enc_l{m.n_enc}"] ?? default<array<float>>)
 }
 
-[test(description = "Under marian's forced tokens the Bergamot exact lane matches the f32 oracle's dump at every stage within 1e-4 of the stage's max magnitude, and its free run agrees on at least 28 lines, with displaced-token and displaced-source controls outside")]
-def test_nmt_exact_lane(t : T?) {
-    t |> run("the exact lane holds marian's f32 graph stage by stage under its own tokens, and its free run by a line floor") @(t : T?) {
-        with_dasllama_jobque_() {
-            let bar = Bar(kind = BarKind.rel_of_max, rel = STAGE_BAR, poison = 1.0, poison_of_max = true)
-            for (c in CASES) {
-                let path = model_path(c)
-                continue if (!jit_model_available(t, path))
-                var inscope lines <- oracle_lines(c, "f32")
-                continue if (!dumps_present(t, c, lines))
-                var inscope m <- mint(path, false)
-                t |> equal(m.cls_off, -1l, "{c.dir}: the exact lane carries no Q8_0 classifier copy")
-                var inscope st = NmtState()
-                var forced_same = 0
-                for (li, ln in count(), lines) {
-                    var inscope got : table<string; array<float>>
-                    var inscope picks <- forced_rows(m, st, ln.src_ids, ln.ids, got)
-                    forced_same += ids_equal(picks, ln.ids) ? 1 : 0
-                    for (stage, rows in keys(got), values(got)) {
-                        let ref <- read_npy("{line_dir(c, "f32", li)}/{stage}.npy")
-                        t |> equal(long_length(rows), ref.rows * ref.cols, "{c.dir} line {li} {stage}: the element count")
-                        check_rows(t, "{c.dir} line {li} {stage}", rows, ref.data, bar, int(ref.cols))
-                    }
-                }
-                to_log(LOG_INFO, "{c.dir} exact forced feed: {forced_same}/{length(lines)} lines whose every step's argmax is the oracle's token\n")
-                var inscope moved := lines[0].src_ids
-                moved[0] = (moved[0] + 1l) % m.n_vocab
-                var inscope enc_moved <- last_encoder_rows(m, st, moved)
-                let ref <- read_npy("{line_dir(c, "f32", 0)}/enc_l{m.n_enc}.npy")
-                check_exceeds(t, "{c.dir} line 0 enc_l{m.n_enc}: the control - a displaced source token", enc_moved, ref.data, bar)
-                var inscope srcs <- [for (ln in lines); clone_to_move(ln.src_ids)]
-                var inscope free <- cpu_lines(m, st, srcs)
-                let same = lines_agreeing(m, "{c.dir} exact", free, lines)
-                t |> success(same >= EXACT_LINES_FLOOR, "{c.dir}: {same} of {length(lines)} lines the oracle's, floor {EXACT_LINES_FLOOR}")
-                var inscope off <- displaced_sources(lines)
-                var inscope off_lines <- cpu_lines(m, st, off)
-                let off_same = lines_agreeing(m, "{c.dir} exact displaced", off_lines, lines)
-                t |> success(off_same < EXACT_LINES_FLOOR, "{c.dir}: the control - each line fed the next line's source agrees on {off_same}, under the floor")
-            }
+//! the exact lane's cell, on a student's f32 form
+def test_nmt_exact_lane(t : T?; tr : Translator; s : Student) {
+    let bar = Bar(kind = BarKind.rel_of_max, rel = STAGE_BAR, poison = 1.0, poison_of_max = true)
+    let c = s.c
+    t |> equal(tr.m.cls_off, -1l, "{c.dir}: the exact lane carries no Q8_0 classifier copy")
+    var inscope st = NmtState()
+    var forced_same = 0
+    for (li, ln in count(), s.lines) {
+        var inscope got : table<string; array<float>>
+        var inscope picks <- forced_rows(tr.m, st, ln.src_ids, ln.ids, got)
+        forced_same += ids_equal(picks, ln.ids) ? 1 : 0
+        for (stage, rows in keys(got), values(got)) {
+            let ref <- read_npy("{line_dir(c, "f32", li)}/{stage}.npy")
+            t |> equal(long_length(rows), ref.rows * ref.cols, "{c.dir} line {li} {stage}: the element count")
+            check_rows(t, "{c.dir} line {li} {stage}", rows, ref.data, bar, int(ref.cols))
         }
     }
-}
-
-//! A q8 minted with its classifier's Q8_0 copy zeroed - quants and scales - so every step's logits are the output bias alone.
-def private mint_cls_zeroed(path : string) : NmtModel {
-    var m = NmtModel()
-    var inscope st <- stage_nmt_model(path, true)
-    let n = st.e.n_vocab * st.e.d
-    for (i in range64(st.e.cls_off, st.e.cls_off + n)) {
-        st.qblob[i] = int8(0)
-    }
-    for (i in range64(st.e.cls_off / 32l, (st.e.cls_off + n) / 32l)) {
-        st.qscales[i] = 0.0
-    }
-    mint_nmt_model(st, m)
-    return <- m
+    to_log(LOG_INFO, "{c.dir} exact forced feed: {forced_same}/{length(s.lines)} lines whose every step's argmax is the oracle's token\n")
+    var inscope moved := s.lines[0].src_ids
+    moved[0] = (moved[0] + 1l) % tr.m.n_vocab
+    var inscope enc_moved <- last_encoder_rows(tr.m, st, moved)
+    let ref <- read_npy("{line_dir(c, "f32", 0)}/enc_l{tr.m.n_enc}.npy")
+    check_exceeds(t, "{c.dir} line 0 enc_l{tr.m.n_enc}: the control - a displaced source token", enc_moved, ref.data, bar)
+    var inscope free <- cpu_lines(tr.m, st, s.srcs)
+    let same = lines_agreeing(tr.m, "{c.dir} exact", free, s.lines)
+    t |> success(same >= EXACT_LINES_FLOOR, "{c.dir}: {same} of {length(s.lines)} lines the oracle's, floor {EXACT_LINES_FLOOR}")
+    var inscope off <- displaced_sources(s.lines)
+    var inscope off_lines <- cpu_lines(tr.m, st, off)
+    let off_same = lines_agreeing(tr.m, "{c.dir} exact displaced", off_lines, s.lines)
+    t |> success(off_same < EXACT_LINES_FLOOR, "{c.dir}: the control - each line fed the next line's source agrees on {off_same}, under the floor")
 }
 
 [test(description = "A Bergamot image its host holds in memory loads from the bytes on each lane and translates three Russian lines as the image's file does, with the file gone; two carriers borrow the same bytes and each release drops one borrow; another family's lane read and the ASR loader refuse the image by name; with its planes zeroed the load translates otherwise")]
 def test_nmt_from_memory(t : T?) {
+    own_load("the cell reloads the model: it bakes each lane's image into scratch, holds the bytes in memory and loads from them, the image's file loaded as its control and the speech loader refused")
     t |> run("bergamot ru-en tiny: each lane's image bytes, borrowed in place") @(t : T?) {
         let path = path_join(models_dir(), "bergamot/ru-en-tiny/model.ruen.intgemm.alphas.bin")
         return if (!jit_model_available(t, path))
@@ -287,7 +337,9 @@ def test_nmt_from_memory(t : T?) {
                 with_image_destination(dlim) {   // the cold mint lands in scratch, not beside the carrier
                     var inscope cold <- load_nmt_model(path, q8)
                 }
-                var inscope want <- file_lines(dlim, q8, lines)
+                var filed <- load_nmt_model(dlim, q8)
+                var inscope want <- nmt_lines(filed, lines)
+                delete filed   // the image's file is mapped for these lines alone
                 var raw : array<uint8>
                 var size = 0ul
                 let base = read_page_aligned(dlim, raw, size)
@@ -344,167 +396,287 @@ def test_nmt_from_memory(t : T?) {
     }
 }
 
-[test(description = "The ru/en Bergamot q8 lane serves its GEMMs and classifier off the Q8_0 plane and translates at least 25 fixture lines as the f32 oracle does, while zeroing the Q8_0 classifier moves every line and falls under the floor")]
-def test_nmt_q8_lane(t : T?) {
-    t |> run("the q8 lane translates the ru/en fixtures close to marian's f32 graph, its classifier off the Q8_0 copy") @(t : T?) {
-        with_dasllama_jobque_() {
-            for (c in CASES) {
-                continue if (!ru_en_pair(c))
-                let path = model_path(c)
-                continue if (!jit_model_available(t, path))
-                var inscope lines <- oracle_lines(c, "f32")
-                continue if (!dumps_present(t, c, lines))
-                var inscope m <- mint(path, true)
-                t |> success(m.q8 && !empty(m.qblob) && m.cls_off >= 0l, "{c.dir}: the GEMMs and the classifier serve from the q8 plane")
-                var inscope st = NmtState()
-                var inscope srcs <- [for (ln in lines); clone_to_move(ln.src_ids)]
-                var inscope got <- cpu_lines(m, st, srcs)
-                let same = lines_agreeing(m, "{c.dir} q8", got, lines)
-                t |> success(same >= Q8_LINES_FLOOR, "{c.dir}: {same} of {length(lines)} lines the f32 oracle's, floor {Q8_LINES_FLOOR}")
-                var inscope mz <- mint_cls_zeroed(path)
-                var inscope zst = NmtState()
-                var inscope zgot <- cpu_lines(mz, zst, srcs)
-                var moved = 0
-                for (li, a, z in count(), got, zgot) {
-                    moved += ids_equal(a, z) ? 0 : 1
-                    if (li == 0) {
-                        nmt_log_side(m, "{c.dir} q8 line 0", "the q8 lane", a)
-                        nmt_log_side(m, "{c.dir} q8 line 0", "its Q8_0 classifier zeroed", z)
-                    }
-                }
-                t |> equal(moved, length(lines), "{c.dir}: the q8 lane's logits come off the Q8_0 copy - zeroed, every line moves")
-                let zsame = lines_agreeing(mz, "{c.dir} q8 cls zeroed", zgot, lines)
-                t |> success(zsame < Q8_LINES_FLOOR, "{c.dir}: the control - the classifier zeroed agrees on {zsame}, under the floor")
-            }
-        }
+//! the q8 lane's cell, on a student's q8 form: its lines kept for the compare with the classifier-zeroed twin
+def test_nmt_q8_lane(t : T?; tr : Translator; var s : Student) {
+    let c = s.c
+    t |> success(tr.m.q8 && !empty(tr.m.qblob) && tr.m.cls_off >= 0l, "{c.dir}: the GEMMs and the classifier serve from the q8 plane")
+    var inscope st = NmtState()
+    s.q8 <- cpu_lines(tr.m, st, s.srcs)
+    let same = lines_agreeing(tr.m, "{c.dir} q8", s.q8, s.lines)
+    t |> success(same >= Q8_LINES_FLOOR, "{c.dir}: {same} of {length(s.lines)} lines the f32 oracle's, floor {Q8_LINES_FLOOR}")
+    nmt_log_side(tr.m, "{c.dir} q8 line 0", "the q8 lane", s.q8[0])
+}
+
+//! the same lane's cell on the `q8_cls_zeroed` form: its lines kept, and held under the oracle's floor
+def private q8_cls_zeroed_lane(t : T?; mz : Translator; var s : Student) {
+    let c = s.c
+    var inscope zst = NmtState()
+    s.q8_zeroed <- cpu_lines(mz.m, zst, s.srcs)
+    nmt_log_side(mz.m, "{c.dir} q8 line 0", "its Q8_0 classifier zeroed", s.q8_zeroed[0])
+    let zsame = lines_agreeing(mz.m, "{c.dir} q8 cls zeroed", s.q8_zeroed, s.lines)
+    t |> success(zsame < Q8_LINES_FLOOR, "{c.dir}: the control - the classifier zeroed agrees on {zsame}, under the floor")
+}
+
+//! the q8 form's lines against its classifier-zeroed twin's, after their block
+def private q8_against_zeroed(t : T?; s : Student) {
+    let c = s.c
+    var moved = 0
+    for (a, z in s.q8, s.q8_zeroed) {
+        moved += ids_equal(a, z) ? 0 : 1
+    }
+    t |> equal(moved, length(s.lines), "{c.dir}: the q8 lane's logits come off the Q8_0 copy - zeroed, every line moves")
+}
+
+//! the tag a student's device lines log and assert under
+def private device_tag(s : Student) : string => "{s.c.dir} {nmt_seat_name()}"
+
+//! the device form's reference, on a student's q8 form: every source through `nmt_translate_ids` with the seat pinned off, kept
+def private device_cpu_reference(t : T?; var tr : Translator; var s : Student) {
+    let c = s.c
+    let was = nmt_seat_pin(false)
+    let off0 = nmt_seat_stats()
+    s.cpu <- [for (src in s.srcs); nmt_translate_ids(tr.m, tr.st, src)]
+    t |> equal(nmt_seat_stats().sentences, off0.sentences, "{c.dir}: the seat pinned off serves no sentence on the device")
+    nmt_seat_pin(was)
+}
+
+//! A device leg, on a student's device form: every source through the seat, the counters' rise asserted, the lines kept
+//! and logged beside the CPU q8 chain's.
+[cold_path]
+def private test_nmt_device(t : T?; var tr : Translator; var s : Student) {
+    let tag = s.swapped ? "{device_tag(s)} (swapped in, no shutdown)" : device_tag(s)
+    let was = nmt_seat_pin(true)
+    let on0 = nmt_seat_stats()
+    s.gpu <- [for (src in s.srcs); nmt_translate_ids(tr.m, tr.st, src)]
+    let on1 = nmt_seat_stats()
+    nmt_seat_pin(was)
+    t |> equal(on1.sentences - on0.sentences, long_length(s.srcs), "{tag}: every line served on the device")
+    t |> equal(on1.declines, on0.declines, "{tag}: no device decline")
+    for (li, a, g in count(), s.cpu, s.gpu) {
+        nmt_log_side(tr.m, "{tag} line {li}", "cpu q8", a)
+        nmt_log_side(tr.m, "{tag} line {li}", nmt_seat_name(), g)
     }
 }
 
-//! A device leg: every source through the seat, the counters' rise asserted and the lines held to the CPU q8 chain's.
-def private device_leg(t : T?; tag : string; m : NmtModel; var st : NmtState; srcs, cpu : array<array<int64>>) {
-    let on0 = nmt_seat_stats()
-    var inscope gpu <- [for (s in srcs); nmt_translate_ids(m, st, s)]
-    let on1 = nmt_seat_stats()
-    t |> equal(on1.sentences - on0.sentences, long_length(srcs), "{tag}: every line served on the device")
-    t |> equal(on1.declines, on0.declines, "{tag}: no device decline")
+//! a student's device form attached again - a swap back where the seat served another student's since - and its device
+//! classifier zeroed: every line through the poisoned seat, kept
+[cold_path]
+def private device_poisoned_lines(var tr : Translator; var s : Student) {
+    let tag = device_tag(s)
+    let was = nmt_seat_pin(true)
+    var inscope attach <- nmt_translate_ids(tr.m, tr.st, s.srcs[0])
+    nmt_seat_poison(tr.m)
+    s.gpu_zeroed <- [for (src in s.srcs); nmt_translate_ids(tr.m, tr.st, src)]
+    nmt_seat_pin(was)
+    nmt_log_side(tr.m, "{tag} line 0", "the device before the poison", attach)
+    nmt_log_side(tr.m, "{tag} line 0", "cpu q8", s.cpu[0])
+    nmt_log_side(tr.m, "{tag} line 0", "device classifier zeroed", s.gpu_zeroed[0])
+}
+
+//! a student's device lines held to the CPU q8 chain's, and its poisoned device lines apart from them, after their block
+def private device_against_cpu(t : T?; s : Student) {
+    let tag = s.swapped ? "{device_tag(s)} (swapped in, no shutdown)" : device_tag(s)
     var same = 0
-    for (li, a, g in count(), cpu, gpu) {
+    for (a, g in s.cpu, s.gpu) {
         same += ids_equal(a, g) ? 1 : 0
-        nmt_log_side(m, "{tag} line {li}", "cpu q8", a)
-        nmt_log_side(m, "{tag} line {li}", nmt_seat_name(), g)
     }
-    to_log(LOG_INFO, "{tag}: {same}/{length(srcs)} lines the CPU q8 chain's\n")
-    t |> success(same >= DEVICE_LINES_FLOOR, "{tag}: {same} of {length(srcs)} lines the CPU q8 chain's, floor {DEVICE_LINES_FLOOR}")
+    to_log(LOG_INFO, "{tag}: {same}/{length(s.srcs)} lines the CPU q8 chain's\n")
+    t |> success(same >= DEVICE_LINES_FLOOR, "{tag}: {same} of {length(s.srcs)} lines the CPU q8 chain's, floor {DEVICE_LINES_FLOOR}")
+    var poisoned = 0
+    for (a, g in s.cpu, s.gpu_zeroed) {
+        poisoned += ids_equal(a, g) ? 0 : 1
+    }
+    t |> equal(poisoned, length(s.srcs), "{device_tag(s)}: the control - with the device classifier zeroed every line differs")
 }
 
 //! a synthetic d 32 student through the seat: off the 64-wide GEMM tiles, so declined `shape` and translated on the CPU
+[cold_path]
 def private device_shape_decline(t : T?) {
     let pinned = nmt_seat_pin(true)
     var inscope v <- unigram_vocab()
-    var inscope off_lattice <- mint(syn_student("device_shape", "zz", SynSpec(), "vocab.zz.spm", v), true)
-    var inscope sst = NmtState()
+    let syn = syn_student("device_shape", "zz", SynSpec(), "vocab.zz.spm", v)
+    var inscope stg <- translator_stage(syn, translator_stage_key("q8"))
+    var inscope off_lattice <- translator_form(syn, "q8", stg)
     let sh0 = nmt_seat_stats()
     let shape0 = nmt_seat_declines("shape")
-    var inscope sids <- nmt_translate_ids(off_lattice, sst, [2l, 3l, 2l, 1l])
+    var inscope sids <- nmt_translate_ids(off_lattice.m, off_lattice.st, [2l, 3l, 2l, 1l])
     t |> equal(nmt_seat_stats().sentences, sh0.sentences, "a d {SYN_D} student is not served on the device")
     t |> success(nmt_seat_declines("shape") > shape0, "a width off the 64-wide GEMM tiles declines `shape`")
     t |> success(length(sids) <= 8, "and translates on the CPU within its length cap ({length(sids)} tokens)")
     nmt_seat_pin(pinned)
 }
 
-//! each model attached again (a swap back), its device classifier zeroed: every line then differs from the CPU q8 chain's
-def private device_poison_controls(t : T?; models : array<NmtModel>; srcs, cpu : array<array<array<int64>>>; tags : array<string>;
-                                   var st : NmtState) {
-    for (k, m in count(), models) {
-        var inscope attach <- nmt_translate_ids(m, st, srcs[k][0])
-        nmt_seat_poison(m)
-        var poisoned = 0
-        for (li, s, a in count(), srcs[k], cpu[k]) {
-            var inscope g <- nmt_translate_ids(m, st, s)
-            poisoned += ids_equal(a, g) ? 0 : 1
-            if (li == 0) {
-                nmt_log_side(m, "{tags[k]} line 0", "the device before the poison", attach)
-                nmt_log_side(m, "{tags[k]} line 0", "cpu q8", a)
-                nmt_log_side(m, "{tags[k]} line 0", "device classifier zeroed", g)
-            }
-        }
-        t |> equal(poisoned, length(srcs[k]), "{tags[k]}: the control - with the device classifier zeroed every line differs")
-    }
-}
-
-//! a scratch take past the device's largest buffer declining `device` (where the seat reads that limit), a source past
-//! `NMT_DEVICE_SRC_CAP` declining `length`, then the exact lane of `exact_path` declining `quant_mode`; all translate on the CPU
-def private device_declines(t : T?; tag : string; m : NmtModel; var st : NmtState; src : array<int64>; exact_path : string) {
+//! on a student's device form: a scratch take past the device's largest buffer declining `device` (where the seat reads
+//! that limit) and a source past `NMT_DEVICE_SRC_CAP` declining `length`, each translated on the CPU
+[cold_path]
+def private device_declines(t : T?; var tr : Translator; s : Student) {
+    let tag = device_tag(s)
+    let was = nmt_seat_pin(true)
     let probe = nmt_seat_take_max_probe(512ul)
     if (probe.seam) {
         let sh0 = nmt_seat_stats()
         let d0 = nmt_seat_declines("device")
-        var inscope short_ids <- nmt_translate_ids(m, st, src)
+        var inscope short_ids <- nmt_translate_ids(tr.m, tr.st, s.srcs[0])
         nmt_seat_take_max_probe(probe.was)
         t |> equal(nmt_seat_stats().sentences, sh0.sentences, "{tag}: a short scratch take is not served on the device")
         t |> success(nmt_seat_declines("device") > d0, "{tag}: a scratch take past the device's largest buffer declines `device`")
         t |> success(!empty(short_ids), "{tag}: and translates on the CPU")
     }
-    var long_src <- [for (i in range64(NMT_DEVICE_SRC_CAP + 1l)); src[i % (long_length(src) - 1l)]]
-    long_src |> push(m.eos_id)
+    var long_src <- [for (i in range64(NMT_DEVICE_SRC_CAP + 1l)); s.srcs[0][i % (long_length(s.srcs[0]) - 1l)]]
+    long_src |> push(tr.m.eos_id)
     let len0 = nmt_seat_stats()
     let l0 = nmt_seat_declines("length")
-    var inscope long_ids <- nmt_translate_ids(m, st, long_src)
+    var inscope long_ids <- nmt_translate_ids(tr.m, tr.st, long_src)
     t |> equal(nmt_seat_stats().sentences, len0.sentences, "{tag}: a {length(long_src)}-token source is not served on the device")
     t |> success(nmt_seat_declines("length") > l0, "{tag}: a source past {NMT_DEVICE_SRC_CAP} tokens declines `length`")
     t |> success(!empty(long_ids), "{tag}: and translates on the CPU")
-    nmt_seat_shutdown()
-    var inscope ex <- mint(exact_path, false)
+    nmt_seat_pin(was)
+}
+
+//! on a student's f32 form: the exact lane through the seat, declined `quant_mode` and translated on the CPU
+[cold_path]
+def private device_exact_decline(t : T?; var ex : Translator; s : Student) {
+    let tag = device_tag(s)
+    let was = nmt_seat_pin(true)
     let ex0 = nmt_seat_stats()
     let q0 = nmt_seat_declines("quant_mode")
-    var inscope ids <- nmt_translate_ids(ex, st, src)
+    var inscope ids <- nmt_translate_ids(ex.m, ex.st, s.srcs[0])
     t |> equal(nmt_seat_stats().sentences, ex0.sentences, "{tag}: the exact lane is not served on the device")
     t |> success(nmt_seat_declines("quant_mode") > q0, "{tag}: the exact lane declines by name")
     t |> success(!empty(ids), "{tag}: the exact lane translates on the CPU")
-    nmt_seat_shutdown()
+    nmt_seat_pin(was)
 }
 
-[test(description = "The device translation seat serves every ru/en fixture line, at least 26 matching the CPU q8 chain, across a model swap with no shutdown; a zeroed device classifier changes every line, and shape, length, buffer and quant_mode declines translate on the CPU")]
-def test_nmt_device(tst : T?) {
-    tst |> run("the build's device seat translates the ru/en fixtures as the CPU q8 chain does, across a model swap with no shutdown") @(t : T?) {
-        return if (nmt_seat_skip(t, "nmt device"))
-        with_dasllama_jobque_() {
+//! the cells of a student's minted lane `form` on `tr`: the exact lane's on `f32`; the q8 lane's on `q8`, and the device
+//! form's CPU reference where the block runs that form; the zeroed classifier's on `q8_cls_zeroed`
+[cold_path]
+def private student_lane_cells(t : T?; var tr : Translator; var s : Student; form : string) {
+    if (form == "f32") {
+        tower_cell(t, "test_nmt_exact_lane, {s.c.dir}", tr, s, @@test_nmt_exact_lane)
+    } elif (form == "q8") {
+        tower_cell(t, "test_nmt_q8_lane, {s.c.dir}: the q8 lane", tr, s, @@test_nmt_q8_lane)
+        if (s.seat) {
+            tower_cell(t, "test_nmt_device, {s.c.dir}: the CPU q8 chain, the seat pinned off", tr, s, @@device_cpu_reference)
+        }
+    } elif (form == "q8_cls_zeroed") {
+        tower_cell(t, "test_nmt_q8_lane, {s.c.dir}: its Q8_0 classifier zeroed", tr, s, @@q8_cls_zeroed_lane)
+    }
+}
+
+//! the compares between a student's forms, after its block: the q8 lane against its classifier-zeroed twin, and where
+//! the device form ran its lines and its poisoned lines against the CPU q8 chain's
+def private student_compares(t : T?; var s : Student) {
+    return if (empty(s.lines))
+    kept_cell(t, "test_nmt_q8_lane, {s.c.dir}", s, @@q8_against_zeroed)
+    if (s.seat) {
+        kept_cell(t, "test_nmt_device, {s.c.dir}", s, @@device_against_cpu)
+    }
+}
+
+//! the facade's q8 load of the ru-en student, on its `image` form: its direction read off the file, its one pair kept
+def private student_keeps_direction(t : T?; var mt : Translator) {
+    t |> equal(translator_langs(mt).src, "ru")
+    t |> success(set_translator_langs(mt, "ru", "en"), "its own pair")
+    t |> success(!set_translator_langs(mt, "en", "ru"), "a Bergamot student keeps its one direction")
+}
+
+//! the facade's exact load of the ru-en student, on its `image_f32` form: the f32 lane, translating
+[cold_path]
+def private student_exact_translates(t : T?; var ex : Translator) {
+    let text = "Где ближайшая аптека?"   // nolint:STYLE039 - the source language's own text
+    t |> success(!ex.m.q8, "exact = true loads the f32 lane")
+    let line = translate(ex, text)
+    to_log(LOG_INFO, "bergamot exact ru->en: {line}\n")
+    t |> success(find(to_lower(line), "pharmacy") >= 0, "the f32 lane translates: '{line}'")
+}
+
+//! en-ru base-memory's block: its lanes' cells and, on its device form, the leg and the poisoned lines. The call sits in
+//! ru-en's device form where that form runs - the seat then serves this student over ru-en's with no shutdown
+//! (`s.swapped`) - and after ru-en's block where it does not.
+[cold_path]
+def private en_ru_base_memory_block(t : T?; var s : Student) : bool {
+    var inscope forms <- student_forms(t, s, ["f32", "q8", "q8_cls_zeroed", "device"])
+    return with_model_once(t, "translate", "bergamot/en-ru-base-memory/model.enru.intgemm.alphas.bin", forms, @@translator_stage_key, @@translator_stage, @@translator_form) $(var tr; form) {
+        translator_form_is(t, tr, s.c.dir, form)
+        student_lane_cells(t, tr, s, form)
+        if (form == "device") {
+            tower_cell(t, "test_nmt_device, {s.c.dir}: the device leg", tr, s, @@test_nmt_device)
+            device_poisoned_lines(tr, s)
+        }
+    }
+}
+
+// The two ru/en base-memory students, a block each. The en-ru block sits inside ru-en's device form, so the seat swaps
+// from one live student to the other and back; every compare between two forms of a file follows the blocks.
+[test(description = "The ru-en and en-ru base-memory Bergamot students load once a form, the en-ru block inside the ru-en device form. On each f32 form, under marian's forced tokens the exact lane matches the f32 oracle's dump at every stage within 1e-4 of the stage's max magnitude, and its free run agrees on at least 28 lines, with displaced-token and displaced-source controls outside. On each q8 form the lane serves its GEMMs and classifier off the Q8_0 plane and translates at least 25 fixture lines as the f32 oracle does, while the form with the Q8_0 classifier zeroed falls under the floor and, against the q8 form, moves every line. On the device forms the translation seat serves every fixture line, at least 26 matching the CPU q8 chain, across a model swap with no shutdown and a swap back; a zeroed device classifier changes every line, and shape, length, buffer and quant_mode declines translate on the CPU. Through the facade the ru-en student keeps its one direction on its image form, and exact = true loads the f32 lane, which translates the pharmacy line")]
+def test_nmt_ru_en_pairs(t : T?) {
+    return if (!jit_only(t))
+    var inscope ru_en <- student_of(t, RU_EN_BASE_MEMORY)
+    var inscope en_ru <- student_of(t, EN_RU_BASE_MEMORY)
+    var ran = false
+    var en_ru_ran = false
+    var nested = false
+    with_dasllama_jobque_() {
+        t |> run("test_nmt_device: a synthetic student off the 64-wide tiles") @(t : T?) {
+            return if (nmt_seat_skip(t, "nmt device"))
             device_shape_decline(t)
-            var models : array<NmtModel>
-            var inscope srcs, cpu : array<array<array<int64>>>
-            var tags, paths : array<string>
-            let was = nmt_seat_pin(false)
-            for (c in CASES) {
-                continue if (!ru_en_pair(c))
-                let path = model_path(c)
-                continue if (!jit_model_available(t, path))
-                var inscope lines <- oracle_lines(c, "f32")
-                continue if (!dumps_present(t, c, lines))
-                var mm <- mint(path, true)
-                var inscope st = NmtState()
-                var cs <- [for (ln in lines); clone_to_move(ln.src_ids)]
-                let off0 = nmt_seat_stats()
-                var cl <- cpu_lines(mm, st, cs)
-                t |> equal(nmt_seat_stats().sentences, off0.sentences, "{c.dir}: the seat pinned off serves no sentence on the device")
-                models |> emplace(mm)
-                srcs |> emplace(cs)
-                cpu |> emplace(cl)
-                tags |> push("{c.dir} {nmt_seat_name()}")
-                paths |> push(path)
+        }
+        var inscope forms <- student_forms(t, ru_en, ["f32", "q8", "q8_cls_zeroed", "device"])
+        forms |> push("image")
+        forms |> push("image_f32")
+        ran = with_model_once(t, "translate", "bergamot/ru-en-base-memory/model.ruen.intgemm.alphas.bin", forms, @@translator_stage_key, @@translator_stage, @@translator_form) $(var tr; form) {
+            translator_form_is(t, tr, ru_en.c.dir, form)
+            student_lane_cells(t, tr, ru_en, form)
+            if (form == "f32" && ru_en.seat) {
+                tower_cell(t, "test_nmt_device, {ru_en.c.dir}: the exact lane declines", tr, ru_en, @@device_exact_decline)
+            } elif (form == "device") {
+                tower_cell(t, "test_nmt_device, {ru_en.c.dir}: the device leg", tr, ru_en, @@test_nmt_device)
+                nested = true
+                en_ru.swapped = true
+                en_ru_ran = en_ru_base_memory_block(t, en_ru)
+                device_poisoned_lines(tr, ru_en)
+                tower_cell(t, "test_nmt_device, {ru_en.c.dir}: the seat's declines", tr, ru_en, @@device_declines)
+            } elif (form == "image") {
+                tower_cell(t, "test_nmt_llm_translator: a Bergamot pair kept", tr, @@student_keeps_direction)
+            } elif (form == "image_f32") {
+                tower_cell(t, "test_nmt_llm_translator: a Bergamot student's exact load translates", tr, @@student_exact_translates)
             }
-            if (!empty(models)) {
-                nmt_seat_pin(true)
-                var inscope st = NmtState()
-                for (k, m in count(), models) {
-                    device_leg(t, k == 0 ? tags[k] : "{tags[k]} (swapped in, no shutdown)", m, st, srcs[k], cpu[k])
-                }
-                device_poison_controls(t, models, srcs, cpu, tags, st)
-                device_declines(t, tags[0], models[0], st, srcs[0][0], paths[0])
-            }
-            nmt_seat_pin(was)
-            unsafe {
-                delete models
-            }
+        }
+        if (!nested) {
+            en_ru_ran = en_ru_base_memory_block(t, en_ru)
+        }
+        nmt_seat_shutdown()
+    }
+    if (ran) {
+        student_compares(t, ru_en)
+    }
+    if (en_ru_ran) {
+        student_compares(t, en_ru)
+    }
+}
+
+// The students only the exact lane's cell reads, a block each.
+[test(description = "The en-ru base, ru-en tiny and en-de base-memory Bergamot students each load once, on the exact lane: under marian's forced tokens the lane matches the f32 oracle's dump at every stage within 1e-4 of the stage's max magnitude, and its free run agrees on at least 28 lines, with displaced-token and displaced-source controls outside")]
+def test_nmt_exact_students(t : T?) {
+    return if (!jit_only(t))
+    with_dasllama_jobque_() {
+        var inscope en_ru <- student_of(t, EN_RU_BASE)
+        var inscope en_ru_forms <- student_forms(t, en_ru, ["f32"])
+        with_model_once(t, "translate", "bergamot/en-ru-base/model.enru.intgemm.alphas.bin", en_ru_forms, @@translator_stage_key, @@translator_stage, @@translator_form) $(var tr; form) {
+            translator_form_is(t, tr, en_ru.c.dir, form)
+            student_lane_cells(t, tr, en_ru, form)
+        }
+        var inscope ru_en <- student_of(t, RU_EN_TINY)
+        var inscope ru_en_forms <- student_forms(t, ru_en, ["f32"])
+        with_model_once(t, "translate", "bergamot/ru-en-tiny/model.ruen.intgemm.alphas.bin", ru_en_forms, @@translator_stage_key, @@translator_stage, @@translator_form) $(var tr; form) {
+            translator_form_is(t, tr, ru_en.c.dir, form)
+            student_lane_cells(t, tr, ru_en, form)
+        }
+        var inscope en_de <- student_of(t, EN_DE_BASE_MEMORY)
+        var inscope en_de_forms <- student_forms(t, en_de, ["f32"])
+        with_model_once(t, "translate", "bergamot/en-de-base-memory/model.ende.intgemm.alphas.bin", en_de_forms, @@translator_stage_key, @@translator_stage, @@translator_form) $(var tr; form) {
+            translator_form_is(t, tr, en_de.c.dir, form)
+            student_lane_cells(t, tr, en_de, form)
         }
     }
 }
@@ -973,12 +1145,13 @@ def private raw_completion(var tr : Translator; prompt_text : string; cap : int6
     }
 }
 
-[test(description = "MiLMMT-46 through the facade translates ru to en (pharmacy) and back, stopping at the end of the first line where an unstopped completion runs on, its baked .dlim translates too, and a Bergamot student keeps its one direction")]
+[test(description = "MiLMMT-46 through the facade translates ru to en (pharmacy) and back, stopping at the end of the first line where an unstopped completion runs on, and its baked .dlim translates too")]
 def test_nmt_llm_translator(tst : T?) {
-    tst |> run("a translation LLM through the facade: the direction picked, one sentence translated to the end of its line, a Bergamot pair kept") @(t : T?) {
-        let path = path_join(models_dir(), "milmmt/MiLMMT-46-1B-v0.1.Q4_K_M.gguf")
+    own_load("writes a .dlim image beside the file: the facade's GGUF load bakes it, and the second cell asserts it current and loads it back as an LLM")
+    let path = path_join(models_dir(), "milmmt/MiLMMT-46-1B-v0.1.Q4_K_M.gguf")
+    let text = "Где ближайшая аптека?"   // nolint:STYLE039 - the source language's own text
+    tst |> run("a translation LLM through the facade: the direction picked, one sentence translated to the end of its line") @(t : T?) {
         return if (!jit_model_available(t, path))
-        let text = "Где ближайшая аптека?"   // nolint:STYLE039 - the source language's own text
         with_dasllama_jobque_() {
             var inscope tr <- load_translator(path)
             t |> equal(tr.kind, TranslatorKind.llm)
@@ -1001,6 +1174,9 @@ def test_nmt_llm_translator(tst : T?) {
             to_log(LOG_INFO, "milmmt en->ru: {replace(back, "\n", "\\n")}\n")
             t |> success(find(back, "аптек") >= 0, "the translation back: '{back}'")   // nolint:STYLE039 - the source language's own text
         }
+    }
+    tst |> run("the facade's GGUF load baked a current .dlim, which loads back as an LLM and translates") @(t : T?) {
+        return if (!jit_model_available(t, path) || !image_rail_on(t))
         var inscope imgs <- dlim_inventory_(path)
         let img = find_index_if(imgs) $(i : DlimImageInfo) => i.verdict == "CURRENT"
         t |> success(img >= 0, "the GGUF load baked a current .dlim beside it")
@@ -1013,36 +1189,24 @@ def test_nmt_llm_translator(tst : T?) {
                 t |> success(find(to_lower(out), "pharmacy") >= 0, "the image translates: '{out}'")
             }
         }
-        let mpath = path_join(models_dir(), "bergamot/ru-en-base-memory/model.ruen.intgemm.alphas.bin")
-        return if (!model_available(t, mpath))
-        with_dasllama_jobque_() {
-            var inscope mt <- load_translator(mpath)
-            t |> equal(translator_langs(mt).src, "ru")
-            t |> success(set_translator_langs(mt, "ru", "en"), "its own pair")
-            t |> success(!set_translator_langs(mt, "en", "ru"), "a Bergamot student keeps its one direction")
-            var inscope ex <- load_translator(mpath, true)
-            t |> success(!ex.m.q8, "exact = true loads the f32 lane")
-            let line = translate(ex, text)
-            to_log(LOG_INFO, "bergamot exact ru->en: {line}\n")
-            t |> success(find(to_lower(line), "pharmacy") >= 0, "the f32 lane translates: '{line}'")
-        }
     }
 }
 
 [test(description = "Qwen3-4B-Instruct through the translator facade's chat template translates a Russian sentence to one English line naming the pharmacy, with no reasoning block")]
 def test_nmt_chat_translator(tst : T?) {
     tst |> run("an instruct GGUF through the facade: its own chat template, the translation alone") @(t : T?) {
-        let path = path_join(models_dir(), "Qwen3-4B-Instruct-2507-Q4_K_M.gguf")
-        return if (!jit_model_available(t, path))
+        return if (!family_on(t, "qwen3") || !jit_only(t))
         with_dasllama_jobque_() {
-            var inscope tr <- load_translator(path)
-            t |> equal(tr.kind, TranslatorKind.llm)
-            t |> success(!empty(tr.lm.chat_template_str), "the file carries a chat template - the chat form serves it")
-            t |> success(set_translator_langs(tr, "ru", "en"), "ru -> en picked")
-            let out = translate(tr, "Где ближайшая аптека?")   // nolint:STYLE039 - the source language's own text
-            to_log(LOG_INFO, "qwen3-4b ru->en: {replace(out, "\n", "\\n")}\n")
-            t |> success(find(to_lower(out), "pharmacy") >= 0, "the translation: '{out}'")
-            t |> success(find(out, "\n") < 0 && find(out, "<think>") < 0, "one line, no reasoning: '{out}'")
+            with_model_once(t, "translate", "Qwen3-4B-Instruct-2507-Q4_K_M.gguf", ["image"], @@translator_stage_key, @@translator_stage, @@translator_form) $(var tr; form) {
+                translator_form_is(t, tr, "Qwen3-4B-Instruct-2507-Q4_K_M.gguf", form)
+                t |> equal(tr.kind, TranslatorKind.llm)
+                t |> success(!empty(tr.lm.chat_template_str), "the file carries a chat template - the chat form serves it")
+                t |> success(set_translator_langs(tr, "ru", "en"), "ru -> en picked")
+                let out = translate(tr, "Где ближайшая аптека?")   // nolint:STYLE039 - the source language's own text
+                to_log(LOG_INFO, "qwen3-4b ru->en: {replace(out, "\n", "\\n")}\n")
+                t |> success(find(to_lower(out), "pharmacy") >= 0, "the translation: '{out}'")
+                t |> success(find(out, "\n") < 0 && find(out, "<think>") < 0, "one line, no reasoning: '{out}'")
+            }
         }
     }
 }
@@ -1065,19 +1229,20 @@ let private CHAT_REPLY_TOKENS = 48l
 [test(description = "Hybrid-thinking Qwen3.5-0.8B through the translator facade answers with thinking off: a translation naming the pharmacy, no think block, within a 48-token reply")]
 def test_nmt_chat_thinking_off(tst : T?) {
     tst |> run("a hybrid-thinking chat model through the facade answers with thinking off: the translation alone, in a short reply") @(t : T?) {
-        let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
-        return if (!jit_model_available(t, path))
+        return if (!family_on(t, "qwen35") || !jit_only(t))
         let text = "Где ближайшая аптека?"   // nolint:STYLE039 - the source language's own text
         with_dasllama_jobque_() {
-            var inscope tr <- load_translator(path)
-            t |> success(find(tr.lm.chat_template_str, "enable_thinking") >= 0, "the carrier's template carries the thinking switch")
-            t |> success(set_translator_langs(tr, "ru", "en"), "ru -> en picked")
-            let out = translate(tr, text)
-            let reply = tr.ls.n_past - chat_prompt_len(tr, text)
-            to_log(LOG_INFO, "qwen3.5-0.8b ru->en: '{replace(out, "\n", "\\n")}', {reply} reply tokens\n")
-            t |> success(!empty(out) && find(out, "<think>") < 0, "the translation, no reasoning: '{out}'")
-            t |> success(find(to_lower(out), "pharmac") >= 0, "the translation: '{out}'")
-            t |> success(reply > 0l && reply <= CHAT_REPLY_TOKENS, "the reply took {reply} tokens, within {CHAT_REPLY_TOKENS}: no reasoning turn ran")
+            with_model_once(t, "translate", "Qwen3.5-0.8B-Q8_0.gguf", ["image"], @@translator_stage_key, @@translator_stage, @@translator_form) $(var tr; form) {
+                translator_form_is(t, tr, "Qwen3.5-0.8B-Q8_0.gguf", form)
+                t |> success(find(tr.lm.chat_template_str, "enable_thinking") >= 0, "the carrier's template carries the thinking switch")
+                t |> success(set_translator_langs(tr, "ru", "en"), "ru -> en picked")
+                let out = translate(tr, text)
+                let reply = tr.ls.n_past - chat_prompt_len(tr, text)
+                to_log(LOG_INFO, "qwen3.5-0.8b ru->en: '{replace(out, "\n", "\\n")}', {reply} reply tokens\n")
+                t |> success(!empty(out) && find(out, "<think>") < 0, "the translation, no reasoning: '{out}'")
+                t |> success(find(to_lower(out), "pharmac") >= 0, "the translation: '{out}'")
+                t |> success(reply > 0l && reply <= CHAT_REPLY_TOKENS, "the reply took {reply} tokens, within {CHAT_REPLY_TOKENS}: no reasoning turn ran")
+            }
         }
     }
 }

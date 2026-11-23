@@ -254,6 +254,14 @@ def log_form_seconds(name : string; load_usec, cells_usec : int) {
     to_log(LOG_INFO, "FORM {name}: load {float(load_usec) * 1e-6f:.3f} s, cells {float(cells_usec) * 1e-6f:.3f} s\n")
 }
 
+//! a form's `cells` on its model `m`, after a load that began at `t0`: one `FORM` line of both spans (`log_form_seconds`)
+def form_cells_timed(name : string; t0 : int64; var m : auto(MODEL); form : string; cells : block<(var m : MODEL; form : string) : void>) {
+    let loaded = get_time_usec(t0)
+    let t1 = ref_time_ticks()
+    invoke(cells, m, form)
+    log_form_seconds(name, loaded, get_time_usec(t1))
+}
+
 //! The forms of one model file at `path`, a form at a time, behind the file's gate: where `available` - the gate, which
 //! skips loudly on `t` - answers false nothing loads and the call answers false; else `load` builds the model of each
 //! form of `forms`, in the list's order, `cells` runs on it, and it drops before the next form loads.
@@ -264,12 +272,137 @@ def model_once_at(t : T?; area, file, path : string; forms : array<string>; avai
     for (form in forms) {
         let t0 = ref_time_ticks()
         var inscope m <- invoke(load, path, form)
-        let loaded = get_time_usec(t0)
-        let t1 = ref_time_ticks()
-        invoke(cells, m, form)
-        log_form_seconds("{area} {file} {form}", loaded, get_time_usec(t1))
+        form_cells_timed("{area} {file} {form}", t0, m, form, cells)
     }
     return true
+}
+
+//! the staging a form mints from (`staged_once_at`): none where the form has no staged read (`has` false), a copy of
+//! `kept` where a later form mints from it `again`, else `kept` itself, moved out
+def own_staging(var kept : auto(STG); has, again : bool) : STG -const {
+    return <- default<STG> if (!has)
+    return clone_to_move(kept) if (again)
+    return <- kept
+}
+
+//! `model_once_at` for a file several of whose forms are minted from one staged read. `key` names the staged read a form
+//! is minted from - "" for a form that loads on its own - `stage` reads the file once a key, and `load` builds a form's
+//! model from a staging of its own: a copy of the kept read, or the kept read itself on the last form of its key, so the
+//! cut or the poison one form writes into its staging reaches no other form's. The kept read drops where a form of
+//! another key asks for its own.
+def staged_once_at(t : T?; area, file, path : string; forms : array<string>; available : function<(t : T?; path : string) : bool>;
+                   key : function<(form : string) : string>;
+                   stage : function<(path : string; key : string) : auto(STG)>;
+                   load : function<(path : string; form : string; var stg : STG) : auto(MODEL)>;
+                   cells : block<(var m : MODEL; form : string) : void>) : bool {
+    return false if (!invoke(available, t, path))
+    var inscope kept = default<STG>
+    var kept_key = ""
+    for (i in range(length(forms))) {
+        let form = forms[i]
+        let t0 = ref_time_ticks()
+        let k = invoke(key, form)
+        if (!empty(k) && k != kept_key) {
+            delete kept
+            kept <- invoke(stage, path, k)
+            kept_key = k
+        }
+        var again = false
+        for (j in range(i + 1, length(forms))) {
+            again ||= !empty(k) && invoke(key, forms[j]) == k
+        }
+        var inscope own <- own_staging(kept, !empty(k), again)
+        if (!empty(k) && !again) {
+            kept_key = ""
+        }
+        var inscope m <- invoke(load, path, form, own)
+        form_cells_timed("{area} {file} {form}", t0, m, form, cells)
+    }
+    return true
+}
+
+//! a skipped subtest of its own named `what`: the run's skipped cells count it, and the verdict of `t`'s other cells stands
+def skip_cell(t : T?; what : string) {
+    t |> run(what) @(t : T?) {
+        t |> skip(what)
+    }
+}
+
+//! The forms of `forms` this box serves, in the list's order, for a block's form list: `why` is the family's account of
+//! what the box lacks for a form - a device, a build's module - and "" where it serves. A form with a reason is a skipped
+//! cell of its own on `t` (`skip_cell`), named `tag`, the form and the reason, and is left out, so its load never starts.
+def private served_forms_by(t : T?; tag : string; forms : array<string>; why : block<(form : string) : string>) : array<string> {
+    var served : array<string>
+    for (form in forms) {
+        let lacks = invoke(why, form)
+        if (empty(lacks)) {
+            served |> push(form)
+        } else {
+            skip_cell(t, "{tag}, the {form} form: {lacks}")
+        }
+    }
+    return <- served
+}
+
+//! the forms of `forms` this box serves, by the family's reason `why` for each form (`served_forms_by`)
+def served_forms(t : T?; tag : string; forms : array<string>; why : function<(form : string) : string>) : array<string> =>
+    <- served_forms_by(t, tag, forms) $(form) => invoke(why, form)
+
+//! the forms of `forms` this box serves, where one reason `lacks` - "" where the box serves them - stands for every form
+def served_forms(t : T?; tag : string; forms : array<string>; lacks : string) : array<string> =>
+    <- served_forms_by(t, tag, forms) $(_form) => lacks
+
+//! the forms of `asked` the box serves (`served_forms`: each of the others a skipped cell of its own), added to a block's
+//! form list `forms`
+def add_served_forms(t : T?; var forms : array<string>; tag : string; asked : array<string>; why : function<(form : string) : string>) {
+    var inscope served <- served_forms(t, tag, asked, why)
+    forms |> push_from(served)
+}
+
+//! the forms of `asked` the box serves where one reason `lacks` stands for every form, added to a block's form list `forms`
+def add_served_forms(t : T?; var forms : array<string>; tag : string; asked : array<string>; lacks : string) {
+    var inscope served <- served_forms(t, tag, asked, lacks)
+    forms |> push_from(served)
+}
+
+//! the reason a form either of two seats serves lacks: "" where the first seat stands (`first` empty), else the second's
+def either_why(first, second : string) : string => empty(first) ? "" : second
+
+//! what the box lacks for a form the Metal home's cells read, "" on a das_metal build
+def metal_build_why() : string {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return ""
+    } else {
+        return "das_metal not present"
+    }
+}
+
+//! a cell of a block: `cell` on the form's model `tw`, as the subtest `name`
+def tower_cell(t : T?; name : string; var tw : auto(TW); cell : auto(CELL)) {
+    unsafe {   // nolint:STYLE025 - the capture by reference needs it: the lint reads the generic before its types are known
+        t |> run(name) @capture(& tw)(t : T ?) {
+            invoke(cell, t, tw)
+        }
+    }
+}
+
+//! a cell of a block that keeps values for a compare after the block: `cell` on the form's model `tw` and the kept
+//! state `kept`, as the subtest `name`
+def tower_cell(t : T?; name : string; var tw : auto(TW); var kept : auto(KEPT); cell : auto(CELL)) {
+    unsafe {   // nolint:STYLE025 - the capture by reference needs it: the lint reads the generic before its types are known
+        t |> run(name) @capture(& tw, & kept)(t : T ?) {
+            invoke(cell, t, tw, kept)
+        }
+    }
+}
+
+//! a compare between a file's forms, after its block: `cell` on the kept state `kept`, as the subtest `name`
+def kept_cell(t : T?; name : string; var kept : auto(KEPT); cell : auto(CELL)) {
+    unsafe {   // nolint:STYLE025 - the capture by reference needs it: the lint reads the generic before its types are known
+        t |> run(name) @capture(& kept)(t : T ?) {
+            invoke(cell, t, kept)
+        }
+    }
 }
 
 //! the declaration a function makes that holds a load of a model file its block does not load: `why`, a string literal

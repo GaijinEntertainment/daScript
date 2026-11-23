@@ -34,17 +34,34 @@ require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower: the Metal
 require _ctc_oracle   // ctc_seat_heads: the build's device CTC seat's count
 require _example_rail   // example_daslang: the corpus harness's child runs on this binary
 require _image_memory   // read_page_aligned: a host's own copy of an image
+require _model_once   // with_model_once: a carrier's one block in the area; own_load
+require _audio_twin   // poison_fc_blocks / poison_kq_seats: a poisoned form's staging
+require _audio_gigaam_cells   // the device twins' legs and compares, run under this file's blocks
 
 // GigaAM v3 against the upstream package's per-stage dumps (benchmarks/asr/gigaam_oracle.py into the model root's
 // `asr_oracle/gigaam/<clip>_<variant>/`, minted by the `mint_gigaam.sh` stocked beside them over the corpus clips the
 // cells read through `asr_clip`; encoder weights
 // rounded through f16 - the carrier's precision) - the external-reference compare: the f16 lane stage by stage, the q8
 // lane by its transcript's words, and the long-form spans. Every cell skips without its carrier, its dumps or its clip;
-// the facade and `.dlim` cells also skip when interpreted (`jit_model_available`), the device decode twin where the build
+// the facade and `.dlim` cells also skip when interpreted (`jit_model_available`), the carrier's own `.dlim` cell with the
+// image rail off (DASLLAMA_IMAGE=0), the device decode twin where the build
 // or the box has no device transducer seat (`rnnt_seat_skip`), the kq lane's device leg where no GPU device stands up for
 // the serving tower (`serving_tower_device_up`), the CTC-head cell on a build without das_metal and when
 // interpreted, the decoder-needs-its-mmproj arm and the foreign-`.dlim`
 // refusal without SmolLM2-135M-Instruct-Q8_0.gguf, and the side-file arm without the Qwen3-ASR-0.6B mmproj and decoder.
+// A carrier loads once a form, in its one `with_model_once` block (`gigaam_form`, every form minted in memory): the CPU
+// forms carry the external-reference cells, the device forms the Metal and the discrete twins' legs and the device seats'
+// (`_audio_gigaam_cells`). A form's cells run on one home, so a compare of the CPU chain with a device chain is two forms,
+// made after the block on what they kept. The quantized e2e carriers' cells read the f16 carrier's exact lane as their
+// reference: their blocks follow its block in one `[test]`.
+
+let private E2E_RNNT = "gigaam-v3-e2e-rnnt-f16.gguf"
+let private KQ = "gigaam-v3-e2e-rnnt-q4_k.gguf"
+let private KQ_MIX = "gigaam-v3-e2e-rnnt-q4_k-mix-local.gguf"
+let private KQ_Q8_0 = "gigaam-v3-e2e-rnnt-q8_0.gguf"
+let private E2E_CTC = "gigaam-v3-e2e-ctc-f16.gguf"
+let private CTC = "gigaam-v3-ctc-f16.gguf"
+let private RNNT = "gigaam-v3-rnnt-f16.gguf"
 
 //! One stage's relative error bar: max |got - want| over max |want|.
 let private MEL_BAR = 1e-4
@@ -83,7 +100,6 @@ def private stage_ok(t : T?; tag : string; got : array<float>; want : Npy; rows,
     check_rows(t, "test_gigaam: {tag}", copy_span(got, 0l, rows * cols), want.data, stage_bar(bar), int(cols))
 }
 
-def private carrier(kind : string) : string => path_join(models_dir(), "gigaam-v3-{replace(kind, "_", "-")}-f16.gguf")
 
 //! the published Q4_K carrier of the e2e transducer: its attention and FF GEMMs Q4_K, its conv pointwise GEMMs Q8_0 - the kq lane's carrier
 def private kq_carrier() : string => path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
@@ -97,12 +113,86 @@ def private dumps_present(t : T?; clip, kind : string) : bool {
     return true
 }
 
-def private mint(path : string; q8 : bool; pinned : bool = false; dev : TowerDev = TowerDev.none) : GigaamModel {
-    var inscope st <- stage_gigaam_model(path, q8, false, pinned)
+//! a form of the carrier at `path` minted in memory (`gigaam_form`), under the knobs the caller set
+def private gigaam_minted(path : string; f : TowerForm) : GigaamModel {
+    let q8 = f.lane == "q8" || f.edit == "q8flag"
+    let nohead = f.edit == "nohead" || f.edit == "nohead_served"
+    let held = f.zero_block >= 0l || f.edit == "held" || nohead
+    var dev = tower_form_dev_of(f, TowerFamily.gigaam)
+    if (f.edit == "served" || f.edit == "nohead_served") {
+        var inscope probe <- stage_gigaam_model(path, q8, false)
+        dev = gigaam_dev_flavor(probe.e)
+    }
+    var inscope stg <- tower_dev_staged(dev) $ { return <- stage_gigaam_model(path, q8, held, f.edit == "pinned") }
+    if (f.zero_block >= 0l) {
+        if (stg.e.kq_lane) {
+            poison_kq_seats(stg.gemm_seats, f.zero_block * FC_BLOCK_GEMMS, long_length(stg.gemm_seats) / TOWER_SEAT_WORDS, stg.kq, stg.qblob)
+        } elif (q8) {
+            poison_fc_blocks(stg.qblob, stg.e.n_layer, f.zero_block, stg.e.d_model, stg.e.n_ff) $(b) => gigaam_layer_offsets(stg.e, b)
+        } else {
+            poison_fc_blocks(stg.wblob, stg.e.n_layer, f.zero_block, stg.e.d_model, stg.e.n_ff) $(b) => gigaam_layer_offsets(stg.e, b)
+        }
+    }
+    if (nohead) {
+        for (i in range64(stg.e.ctc_w, stg.e.ctc_w + stg.e.n_classes * stg.e.d_model)) {
+            stg.wblob[i] = uint16(0)
+        }
+    }
     var m = GigaamModel()
-    mint_gigaam_model(st, m, q8, dev)
+    mint_gigaam_model(stg, m, q8, dev)
     return <- m
 }
+
+//! One form of a GigaAM carrier as the ASR facade holds it, its block's form loader (`gigaam_form_of`), minted in memory from
+//! the file's staging - never the family's load, which bakes a `.dlim`. The lane names the staging's q8 flag (`q8`) or its
+//! absence (`f16`, a quantized carrier's `kq` and `f32`); `_z<block>` zeroes the GEMM planes of the poison's blocks from that
+//! block on (a kq lane's seats); `@dev` is the image flavor of the family's serving home. The edits: `served` the flavor the
+//! lane serves on this box (`gigaam_dev_flavor`), `pinned` the lane pinned on a quantized carrier, `q8flag` the q8 flag on a
+//! kq carrier (its planes decide), `held` the held staging, `nohead` the CTC head's halfwords zeroed (`nohead_served` in the
+//! served flavor), `portable` the mint under the portable kernel backend, put back after it.
+def private gigaam_form(path, form : string) : AsrModel {
+    let f = gigaam_form_of(form)
+    var inscope am = AsrModel(kind = AsrKind.gigaam)
+    if (f.edit == "portable") {
+        let pinned = with_kernel_backend("portable") {
+            am.ga <- gigaam_minted(path, f)
+        }
+        if (!pinned) {
+            panic("test_gigaam: the portable kernel backend did not pin for the {form} form")
+        }
+        return <- am
+    }
+    am.ga <- gigaam_minted(path, f)
+    return <- am
+}
+
+//! The form is the lane, poison and image flavor it names: on `m`, a carrier loaded as the form `form` of `file`, the lane
+//! flags, the poison's block the tower's middle one, and the image flavor - a `served` form's flavor is the box's pick and
+//! is not read.
+def private gigaam_form_is(t : T?; file, form : string; m : GigaamModel) {
+    let f = gigaam_form_of(form)
+    t |> success(m.kq_lane == (f.lane == "kq") && m.q8 == (f.lane == "q8"), "{file}: the {form} form serves the lane it names")
+    if (f.edit != "served" && f.edit != "nohead_served") {
+        form_zero_and_flavor_is(t, file, form, f, TowerFamily.gigaam, m.n_layer, m.dev_backend)
+    } elif (f.zero_block >= 0l) {
+        t |> equal(f.zero_block, m.n_layer / 2l, "{file}: the {form} form zeroes from the middle block on")
+    }
+}
+
+//! what the box lacks for the device transducer seat's cells, "" where the build has the seat and the box its device
+def private ga_seat_why() : string => rnnt_seat_name() != "" && rnnt_seat_ready() ? "" : "no device transducer seat on this build or box"
+
+//! what the box lacks for the CTC head's Metal seat, "" on a das_metal build under the JIT
+def private ga_ctc_metal_why() : string {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return jit_enabled() ? "" : "interpreted (dasLLAMA model tests are JIT-only)"
+    } else {
+        return "not a Metal build - the CTC head's device seat is Metal's"
+    }
+}
+
+//! what the box lacks for the CTC head oracle's device leg, "" where the build's device seat serves on the box
+def private ga_ctc_seat_why() : string => jit_enabled() && rnnt_seat_ready() ? "" : "no device seat serves the CTC head on this build or box, or interpreted"
 
 //! the kq lane's rows bar over the pinned q8 lane's distance from the same carrier widened to f32: both read the carrier's weights,
 //! and the kq lane's Q8_K activations carry one scale per 256 elements where the q8 lane's Q8_0 ones carry one per 32
@@ -115,15 +205,6 @@ def private encoder_rows(m : GigaamModel; samples : array<float>) : array<float>
     var r <- copy_span(st.x, 0l, n * m.d_model)
     delete st
     return <- r
-}
-
-//! `mint` in the flavor the lane serves on this build (`#tower-dev-block`): the GPU driver's where its chain serves the lane, else
-//! the CPU image
-def private mint_served(path : string; q8 : bool; pinned : bool = false) : GigaamModel {
-    var inscope st <- stage_gigaam_model(path, q8, false, pinned)
-    var m = GigaamModel()
-    mint_gigaam_model(st, m, q8, gigaam_dev_flavor(st.e))
-    return <- m
 }
 
 //! the whole clip's transcript through `m`, one span
@@ -285,41 +366,32 @@ def private q8_clip(t : T?; m : GigaamModel; clip, kind : string) {
     lane_clip(t, m, clip, kind, "q8", tk.text, "oracle")
 }
 
+// A carrier's lane against the external reference, on its `f16` form stage by stage and on its `q8` form by the
+// transcript's words; `clips` the comma list of its clips.
 [cold_path]
-def private variant_cells(tst : T?; kind, clips : string) {
-    let path = carrier(kind)
-    return if (!model_available(tst, path))
-    tst |> run("{kind}: the f16 lane matches the external reference stage by stage") @(t : T?) {
-        var inscope m <- mint(path, false)
-        t |> equal(gigaam_exec_fmt(m), "f16", "{kind}: the exact lane's name")
-        for (clip in split(clips, ",")) {
-            if (dumps_present(t, clip, kind)) {
-                reference_clip(t, m, clip, kind)
-            }
-        }
-    }
-    tst |> run("{kind}: the q8 lane's transcript agrees with the oracle's words") @(t : T?) {
-        var inscope m <- mint(path, true)
-        t |> equal(gigaam_exec_fmt(m), "q8", "{kind}: the q8 lane's name")
-        for (clip in split(clips, ",")) {
-            if (dumps_present(t, clip, kind)) {
-                q8_clip(t, m, clip, kind)
-            }
+def private variant_cell(t : T?; m : GigaamModel; form, kind, clips : string) {
+    t |> equal(gigaam_exec_fmt(m), form, "{kind}: the {form == "f16" ? "exact" : "q8"} lane's name")
+    for (clip in split(clips, ",")) {
+        continue if (!dumps_present(t, clip, kind))
+        if (form == "f16") {
+            reference_clip(t, m, clip, kind)
+        } else {
+            q8_clip(t, m, clip, kind)
         }
     }
 }
 
-[test(description = "GigaAM v3 CTC on its f16 carrier matches the upstream package's dumps stage by stage (mel, front, every layer, encoded within 1e-4, then the decode), and the q8 lane's transcript holds 90 percent of the oracle's words while a half-silenced clip does not")]
-def test_gigaam_ctc(tst : T?) {
-    with_dasllama_jobque_() {
-        variant_cells(tst, "ctc", "ru_short,ru_mid")
-    }
+[cold_path]
+def private test_gigaam_ctc(t : T?; m : GigaamModel; k : GaKept) {
+    variant_cell(t, m, k.form, "ctc", "ru_short,ru_mid")
 }
 
 //! the kq lane's Q8_0 seats of the carrier at `path` against the file's own blocks: staged held under a GPU flavor's staging (no
 //! CPU backend lays the planes), every Q8_0 GEMM's quants and scales the disk block's bit for bit
 [cold_path]
-def private q8_seats_exact(t : T?; path : string) {
+def private q8_seats_exact(t : T?; file : string) {
+    own_load("asserts on the load itself: the held staging's Q8_0 seats against the file's own blocks, a staging no minted form keeps")
+    let path = path_join(models_dir(), file)
     var inscope st <- tower_dev_staged(TowerDev.vulkan) $ { return <- stage_gigaam_model(path, false, true) }
     t |> success(st.e.kq_lane, "the carrier stages on the kq lane")
     let f = fopen(path, "rb")
@@ -346,93 +418,198 @@ def private q8_seats_exact(t : T?; path : string) {
     t |> equal(off_block, 0l, "every Q8_0 seat's quants and scales are the file's blocks")
 }
 
-//! the kq-lane cells' reference: the f16 carrier's exact-lane transcript of `clip` (the lane the oracle holds stage by stage), so they run with no oracle dumps
+//! the f16 e2e carrier's exact lane as the quantized carriers' cells read it: the clips' transcripts, and ru_short's
+//! encoder rows
+struct private ExactRefs {
+    texts : table<string; string>
+    rows : array<float>
+}
+
+//! What the forms of the e2e transducer's carriers keep for the cells and compares of the quantized ones: `form` the form
+//! whose cells run, the f16 carrier's references, the Q4_K carrier's lane name, transcript and rows under the q8 flag and
+//! the pins, and the mixed carrier's streamed and held mints' transcripts.
+struct private E2eKept {
+    form : string
+    refs : ExactRefs
+    fmt : string
+    text : string
+    fmt8 : string
+    text8 : string
+    xw : array<float>
+    xk : array<float>
+    xq : array<float>
+    mix_text : string
+    mix_held_text : string
+}
+
+// The quantized carriers' reference, on the f16 e2e carrier's `f16` form: the exact lane's transcript of each clip present
+// (the lane the oracle holds stage by stage, so their cells run with no oracle dumps) and ru_short's encoder rows.
 [cold_path]
-def private exact_reference(t : T?; clip : string; var want : string&) : bool {
-    let f16 = carrier("e2e_rnnt")
-    return false if (!model_available(t, f16))
-    if (!stat(asr_clip("{clip}.wav")).is_valid) {
-        t |> skip("{clip}.wav not present - the f16 lane's reference transcript")
+def private exact_reference_kept(t : T?; m : GigaamModel; var k : E2eKept) {
+    for (clip in ["ru_short", "ru_mid"]) {
+        let wav = asr_clip("{clip}.wav")
+        if (!stat(wav).is_valid) {
+            t |> skip("{clip}.wav not present - the f16 lane's reference transcript")
+            continue
+        }
+        var inscope samples <- load_audio_16k_mono(wav)
+        k.refs.texts[clip] = transcript_of(m, samples)
+        if (clip == "ru_short") {
+            delete k.refs.rows
+            k.refs.rows <- encoder_rows(m, samples)
+        }
+    }
+}
+
+//! the kq-lane cells' reference: the f16 carrier's exact-lane transcript of `clip`, as its block kept it
+def private exact_reference(t : T?; refs : ExactRefs; clip : string; var want : string&) : bool {
+    if (!key_exists(refs.texts, clip)) {
+        t |> skip("{clip}: no reference transcript - {E2E_RNNT} or {clip}.wav not present")
         return false
     }
-    var inscope m <- mint(f16, false)
-    want = transcript_of(m, load_audio_16k_mono(asr_clip("{clip}.wav")))
+    want = refs.texts?[clip] ?? ""
     return true
 }
 
-//! The kq lane over the published Q4_K carrier - the hosted file whose attention and FF GEMMs are Q4_K and conv pointwise GEMMs
-//! Q8_0: the carrier's own planes serve, named by their one K-quant member; the GPU block seats serve it (the parity cells
-//! `test_gigaam_discrete_twin` and `test_gigaam_metal_twin`); its Q8_0 seats are the carrier's blocks. Every lane's transcript
-//! holds the q8 bar against the f16 carrier's exact lane.
-[test(description = "The Q4_K GigaAM carrier loads on the kq lane named k4 with members k4+q8, its transcripts hold the q8 word bar against the f16 lane on the CPU and on the serving GPU tower with no decline, and its Q8_0 seats equal the file's blocks bit for bit")]
-def test_gigaam_kq_lane(tst : T?) {
-    with_dasllama_jobque_() {
-        let path = kq_carrier()
-        return if (!model_available(tst, path))
-        tst |> run("e2e_rnnt q4_k: the kq lane serves the carrier's own planes, on the GPU flavor too") @(t : T?) {
-            {
-                var inscope m <- mint(path, false)
-                t |> success(m.kq_lane, "the un-pinned load takes the kq lane")
-                t |> equal(gigaam_exec_fmt(m), "k4", "the lane's name: the one K-quant member")
-                t |> equal(gigaam_kq_members(m), "k4+q8", "the carrier's members: Q4_K attention and FF, Q8_0 conv pointwise")
-                t |> success(!gigaam_device_gpu(m), "the device-lane report: the CPU image's encode is the CPU's")
-                for (clip in split("ru_short,ru_mid", ",")) {
-                    var want = ""
-                    if (exact_reference(t, clip, want)) {
-                        lane_clip(t, m, clip, "e2e_rnnt", "kq", want, "f16 lane")
-                    }
-                }
-                if (!serving_tower_device_up(TowerFamily.gigaam)) {
-                    t |> skip("no GPU device stands up for the serving tower on this build or box - the device leg")
-                    return
-                }
-                with_gpu_knobs() {
-                    set_serving_gpu_tower(true, TowerFamily.gigaam)
-                    let dev = gigaam_dev_flavor(GigaamModel(kq_lane = true))
-                    t |> equal(dev, serving_tower_dev(TowerFamily.gigaam), "the serving tower's flavor serves the kq lane where its device stands up")
-                    return if (dev == TowerDev.none)
-                    var inscope md <- mint(path, false, false, dev)
-                    t |> success(md.kq_lane && md.dev_backend == dev && gigaam_device_gpu(md), "the {dev}-flavored image of the kq lane: the device-lane report names the device")
-                    let declines = gpu_tower_declines_of("kq_lane", TowerFamily.gigaam)
-                    var want = ""
-                    if (exact_reference(t, "ru_short", want)) {
-                        let e0 = gpu_tower_encodes(TowerFamily.gigaam)
-                        lane_clip(t, md, "ru_short", "e2e_rnnt", "kq {dev}", want, "f16 lane")
-                        t |> success(gpu_tower_encodes(TowerFamily.gigaam) > e0, "the device served the kq lane's encodes ({gpu_tower_encodes(TowerFamily.gigaam) - e0})")
-                        t |> equal(gpu_tower_declines_of("kq_lane", TowerFamily.gigaam), declines, "no kq_lane decline: every member of the carrier has a tile on the device")
-                    }
-                }
+// The kq lane over the published Q4_K carrier - the hosted file whose attention and FF GEMMs are Q4_K and conv pointwise
+// GEMMs Q8_0: on its `kq` form the carrier's own planes serve, named by their one K-quant member; on its `kq@dev` form the
+// serving tower's flavor serves it with no decline. Every lane's transcript holds the q8 bar against the f16 carrier's
+// exact lane.
+[cold_path]
+def private test_gigaam_kq_lane(t : T?; m : GigaamModel; k : E2eKept) {
+    if (k.form == "kq") {
+        t |> success(m.kq_lane, "the un-pinned load takes the kq lane")
+        t |> equal(gigaam_exec_fmt(m), "k4", "the lane's name: the one K-quant member")
+        t |> equal(gigaam_kq_members(m), "k4+q8", "the carrier's members: Q4_K attention and FF, Q8_0 conv pointwise")
+        t |> success(!gigaam_device_gpu(m), "the device-lane report: the CPU image's encode is the CPU's")
+        for (clip in split("ru_short,ru_mid", ",")) {
+            var want = ""
+            if (exact_reference(t, k.refs, clip, want)) {
+                lane_clip(t, m, clip, "e2e_rnnt", "kq", want, "f16 lane")
             }
         }
-        tst |> run("e2e_rnnt q4_k: the kq lane's Q8_0 seats are the carrier's blocks, moved exactly") @(t : T?) {
-            q8_seats_exact(t, path)
+        return
+    }
+    with_gpu_knobs() {
+        set_serving_gpu_tower(true, TowerFamily.gigaam)
+        let dev = gigaam_dev_flavor(GigaamModel(kq_lane = true))
+        t |> equal(dev, serving_tower_dev(TowerFamily.gigaam), "the serving tower's flavor serves the kq lane where its device stands up")
+        return if (dev == TowerDev.none)
+        t |> success(m.kq_lane && m.dev_backend == dev && gigaam_device_gpu(m), "the {dev}-flavored image of the kq lane: the device-lane report names the device")
+        let declines = gpu_tower_declines_of("kq_lane", TowerFamily.gigaam)
+        var want = ""
+        if (exact_reference(t, k.refs, "ru_short", want)) {
+            let e0 = gpu_tower_encodes(TowerFamily.gigaam)
+            lane_clip(t, m, "ru_short", "e2e_rnnt", "kq {dev}", want, "f16 lane")
+            t |> success(gpu_tower_encodes(TowerFamily.gigaam) > e0, "the device served the kq lane's encodes ({gpu_tower_encodes(TowerFamily.gigaam) - e0})")
+            t |> equal(gpu_tower_declines_of("kq_lane", TowerFamily.gigaam), declines, "no kq_lane decline: every member of the carrier has a tile on the device")
         }
     }
 }
 
-//! The Q4_K carrier under the lane flag and pins: the q8 flag a kq carrier's mint takes changes nothing, the family's pin reaches
-//! the facade load, and a pinned q8 or exact lane dequantizes the carrier into that lane's planes.
-[test(description = "On the Q4_K carrier the q8 flag leaves the kq lane and transcript unchanged, the facade honors the q8 pin, kq encoder rows sit within 1.5x the pinned q8 lane's distance from the widened carrier, and pinned q8 and f32 lanes transcribe")]
-def test_gigaam_kq_lane_pins(tst : T?) {   // nolint:STYLE038 - a flat list of cells over one carrier
-    with_dasllama_jobque_() {
-        let path = kq_carrier()
-        return if (!model_available(tst, path))
-        tst |> run("e2e_rnnt q4_k: the q8 flag a kq carrier's staging and mint take changes nothing - the carrier's planes decide") @(t : T?) {
-            var inscope m <- mint(path, false)
-            var inscope st8 <- stage_gigaam_model(path, true)
-            var inscope m8 = GigaamModel()
-            mint_gigaam_model(st8, m8, true)
-            t |> success(m8.kq_lane && !m8.q8, "asked for q8, the kq carrier still takes the kq lane")
-            t |> equal(gigaam_exec_fmt(m8), gigaam_exec_fmt(m), "the lane's name the q8=false mint's")
-            let clip = asr_clip("ru_short.wav")
-            if (!stat(clip).is_valid) {
-                t |> skip("ru_short.wav not present - the transcript compare")
-                return
-            }
-            let samples <- load_audio_16k_mono(clip)
-            t |> equal(transcript_of(m8, samples), transcript_of(m, samples), "the transcript the q8=false mint's")
+// The Q4_K carrier under the lane flag, a leg a form: on `kq` the un-pinned mint's lane name, transcript and encoder rows
+// of ru_short; on `kq+q8flag` the same off the mint that took the q8 flag.
+[cold_path]
+def private kq_flag_leg(t : T?; m : GigaamModel; var k : E2eKept) {
+    let clip = asr_clip("ru_short.wav")
+    var inscope samples <- load_audio_16k_mono(clip)
+    if (k.form == "kq") {
+        k.fmt = gigaam_exec_fmt(m)
+        if (!empty(samples)) {
+            k.text = transcript_of(m, samples)
+            delete k.xk
+            k.xk <- encoder_rows(m, samples)
         }
+    } else {
+        t |> success(m.kq_lane && !m.q8, "asked for q8, the kq carrier still takes the kq lane")
+        k.fmt8 = gigaam_exec_fmt(m)
+        if (!empty(samples)) {
+            k.text8 = transcript_of(m, samples)
+        }
+    }
+}
+
+// The q8 flag a kq carrier's staging and mint take changes nothing, after the block: the lane's name and the transcript
+// the q8=false mint's.
+[cold_path]
+def private kq_flag_held(t : T?; k : E2eKept) {
+    t |> success(!empty(k.fmt) && !empty(k.fmt8), "both mints of the Q4_K carrier kept their lane's name")
+    t |> equal(k.fmt8, k.fmt, "the lane's name the q8=false mint's")
+    if (!asr_clip_present("ru_short.wav")) {
+        t |> skip("ru_short.wav not present - the transcript compare")
+        return
+    }
+    t |> equal(k.text8, k.text, "the transcript the q8=false mint's")
+}
+
+//! a pinned lane's legs on the Q4_K carrier: off the kq lane, the lane named `lane` (`what` the assert's words), ru_short
+//! transcribed against the exact reference; its encoder rows of ru_short answered, empty where the corpus lacks the clip
+def private kq_pinned_rows(t : T?; m : GigaamModel; k : E2eKept; lane, what : string) : array<float> {
+    t |> success(!m.kq_lane, "the pin keeps the carrier off the kq lane")
+    t |> equal(gigaam_exec_fmt(m), lane, what)
+    var want = ""
+    if (exact_reference(t, k.refs, "ru_short", want)) {
+        lane_clip(t, m, "ru_short", "e2e_rnnt", lane, want, "f16 lane")
+    }
+    var inscope samples <- load_audio_16k_mono(asr_clip("ru_short.wav"))
+    return <- array<float>() if (empty(samples))
+    return <- encoder_rows(m, samples)
+}
+
+// A pinned q8 lane dequantizes the Q4_K carrier into Q8_0 planes, on the `q8+pinned` form; its encoder rows of ru_short
+// are kept for the rows compare.
+[cold_path]
+def private kq_pinned_q8_cell(t : T?; m : GigaamModel; var k : E2eKept) {
+    var inscope rows <- kq_pinned_rows(t, m, k, "q8", "the pinned lane's name")
+    if (!empty(rows)) {
+        delete k.xq
+        k.xq <- rows
+    }
+}
+
+// A pinned exact lane widens the Q4_K carrier to f32, on the `f32+pinned` form; its encoder rows of ru_short are kept for
+// the rows compare.
+[cold_path]
+def private kq_pinned_exact_cell(t : T?; m : GigaamModel; var k : E2eKept) {
+    var inscope rows <- kq_pinned_rows(t, m, k, "f32", "the pinned lane's name: no f16 block GEMMs to serve")
+    if (!empty(rows)) {
+        delete k.xw
+        k.xw <- rows
+    }
+}
+
+// The kq lane's encoder rows sit no further from the carrier widened to f32 than the pinned q8 lane's requant of it, after
+// the block, on the rows three forms kept; the control a chain on the f16 carrier's weights, outside the bar.
+[cold_path]
+def private kq_rows_held(t : T?; k : E2eKept) {
+    if (!asr_clip_present("ru_short.wav")) {
+        t |> skip("ru_short.wav not present - the rows compare")
+        return
+    }
+    var sk, sq = TowerParityStats()
+    return if (!tower_parity_stats(t, "kq lane vs widened", k.xw, k.xk, sk) || !tower_parity_stats(t, "q8 lane vs widened", k.xw, k.xq, sq))
+    to_log(LOG_INFO, "test_gigaam: q4_k rows rel_l2 from the widened carrier - kq lane {sk.rel_l2}, pinned q8 lane {sq.rel_l2}\n")
+    t |> success(is_finite(sk.rel_l2) && sk.rel_l2 > 0.0lf, "the kq lane's activation quants move its rows off the widened chain's - two chains compared ({sk.rel_l2})")
+    let bar = KQ_ROWS_SLACK * sq.rel_l2
+    t |> success(sk.rel_l2 <= bar, "the kq lane's rows within {KQ_ROWS_SLACK}x the q8 lane's distance from the widened carrier ({sk.rel_l2} vs {bar})")
+    if (empty(k.refs.rows)) {
+        t |> skip("{E2E_RNNT}'s block kept no rows - the control")
+        return
+    }
+    var sf = TowerParityStats()
+    return if (!tower_parity_stats(t, "f16 carrier vs widened q4_k", k.xw, k.refs.rows, sf))
+    to_log(LOG_INFO, "test_gigaam: the f16 carrier's exact rows rel_l2 from the widened q4_k carrier {sf.rel_l2}\n")
+    t |> success(is_finite(sf.rel_l2) && sf.rel_l2 > bar, "the control - a chain on the f16 carrier's weights lands outside the bar ({sf.rel_l2} vs {bar})")
+}
+
+//! The Q4_K carrier under the family's pin: the pin reaches the facade load, and un-pinned the facade load takes the kq lane.
+[test(description = "On the Q4_K GigaAM carrier the family's q8 pin reaches the facade load, which serves the q8 lane, and un-pinned the facade load takes the kq lane")]
+def test_gigaam_kq_lane_pins(tst : T?) {
+    with_dasllama_jobque_() {
+        let path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
+        return if (!model_available(tst, path))
         tst |> run("e2e_rnnt q4_k: the family's pin reaches the facade load - set_gigaam_q8 serves the q8 lane") @(t : T?) {
+            own_load("reloads the model: the facade's load under the family's pin and again un-pinned, each cold mint landing in scratch")
             set_asr_fp32(false)
             set_asr_tower_fp32(false)
             set_gigaam_q8(true)
@@ -448,52 +625,6 @@ def test_gigaam_kq_lane_pins(tst : T?) {   // nolint:STYLE038 - a flat list of c
             remove(path_join(test_temp_dir(), "ga_pin_q8.dlim"))
             remove(path_join(test_temp_dir(), "ga_pin_kq.dlim"))
         }
-        tst |> run("e2e_rnnt q4_k: the kq lane's encoder rows sit no further from the carrier widened to f32 than the pinned q8 lane's requant of it") @(t : T?) {
-            let clip = asr_clip("ru_short.wav")
-            if (!stat(clip).is_valid) {
-                t |> skip("ru_short.wav not present - the rows compare")
-                return
-            }
-            let samples <- load_audio_16k_mono(clip)
-            var inscope mw <- mint(path, false, true)
-            var inscope mk <- mint(path, false)
-            var inscope mq <- mint(path, true, true)
-            var inscope xw <- encoder_rows(mw, samples)
-            var inscope xk <- encoder_rows(mk, samples)
-            var inscope xq <- encoder_rows(mq, samples)
-            var sk, sq = TowerParityStats()
-            return if (!tower_parity_stats(t, "kq lane vs widened", xw, xk, sk) || !tower_parity_stats(t, "q8 lane vs widened", xw, xq, sq))
-            to_log(LOG_INFO, "test_gigaam: q4_k rows rel_l2 from the widened carrier - kq lane {sk.rel_l2}, pinned q8 lane {sq.rel_l2}\n")
-            t |> success(is_finite(sk.rel_l2) && sk.rel_l2 > 0.0lf, "the kq lane's activation quants move its rows off the widened chain's - two chains compared ({sk.rel_l2})")
-            let bar = KQ_ROWS_SLACK * sq.rel_l2
-            t |> success(sk.rel_l2 <= bar, "the kq lane's rows within {KQ_ROWS_SLACK}x the q8 lane's distance from the widened carrier ({sk.rel_l2} vs {bar})")
-            let f16 = carrier("e2e_rnnt")
-            return if (!model_available(t, f16))
-            var inscope mf <- mint(f16, false)
-            var inscope xf <- encoder_rows(mf, samples)
-            var sf = TowerParityStats()
-            return if (!tower_parity_stats(t, "f16 carrier vs widened q4_k", xw, xf, sf))
-            to_log(LOG_INFO, "test_gigaam: the f16 carrier's exact rows rel_l2 from the widened q4_k carrier {sf.rel_l2}\n")
-            t |> success(is_finite(sf.rel_l2) && sf.rel_l2 > bar, "the control - a chain on the f16 carrier's weights lands outside the bar ({sf.rel_l2} vs {bar})")
-        }
-        tst |> run("e2e_rnnt q4_k: a pinned q8 lane dequantizes the carrier into Q8_0 planes") @(t : T?) {
-            var inscope m <- mint(path, true, true)
-            t |> success(!m.kq_lane, "the pin keeps the carrier off the kq lane")
-            t |> equal(gigaam_exec_fmt(m), "q8", "the pinned lane's name")
-            var want = ""
-            if (exact_reference(t, "ru_short", want)) {
-                lane_clip(t, m, "ru_short", "e2e_rnnt", "q8", want, "f16 lane")
-            }
-        }
-        tst |> run("e2e_rnnt q4_k: a pinned exact lane widens the carrier to f32") @(t : T?) {
-            var inscope m <- mint(path, false, true)
-            t |> success(!m.kq_lane, "the pin keeps the carrier off the kq lane")
-            t |> equal(gigaam_exec_fmt(m), "f32", "the pinned lane's name: no f16 block GEMMs to serve")
-            var want = ""
-            if (exact_reference(t, "ru_short", want)) {
-                lane_clip(t, m, "ru_short", "e2e_rnnt", "f32", want, "f16 lane")
-            }
-        }
     }
 }
 
@@ -502,9 +633,10 @@ def test_gigaam_kq_lane_pins(tst : T?) {   // nolint:STYLE038 - a flat list of c
 [test(description = "The facade fp32 pin on the Q4_K GigaAM carrier loads the widened f32 lane on the CPU image, never a GPU flavor, and still transcribes the clip")]
 def test_gigaam_fp32_pin_load(tst : T?) {
     with_dasllama_jobque_() {
-        let path = kq_carrier()
+        let path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
         return if (!model_available(tst, path))
         tst |> run("e2e_rnnt q4_k: the facade's fp32 pin loads the widened carrier on the CPU image - no GPU chain reads f32 block GEMMs") @(t : T?) {
+            own_load("asserts on the load itself: the lane and the image flavor the facade's fp32 pin loads, minted into scratch")
             let clip = asr_clip("ru_short.wav")
             if (!stat(clip).is_valid) {
                 t |> skip("ru_short.wav not present - the transcript leg")
@@ -523,7 +655,9 @@ def test_gigaam_fp32_pin_load(tst : T?) {
 }
 
 //! the GPU flavor a load of `path` under the serving tower mints, read into memory: its bytes are refused by name
-def private gpu_flavor_refused(t : T?; path : string) {
+def private gpu_flavor_refused(t : T?) {
+    own_load("asserts on the load itself - its refusal: a GPU flavor's bytes in memory are refused by name")
+    let path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
     if (!serving_tower_device_up(TowerFamily.gigaam)) {
         t |> skip("no GPU device stands up for the serving tower - no GPU flavor to mint")
         return
@@ -555,9 +689,10 @@ def private gpu_flavor_refused(t : T?; path : string) {
 [test(description = "A GigaAM CPU image its host holds in memory loads from the bytes on the lane it was baked on and transcribes the clip as the image's file does, `load_asr_model` routes the bytes to gigaam, a base off the 16 KiB boundary is refused by name and so is a GPU flavor's bytes, and with its planes zeroed the load transcribes otherwise")]
 def test_gigaam_from_memory(tst : T?) {
     with_dasllama_jobque_() {
-        let path = kq_carrier()
+        let path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
         return if (!jit_model_available(tst, path))
         tst |> run("e2e_rnnt q4_k: the CPU image's bytes, borrowed in place, serve the transcript its file serves") @(t : T?) {
+            own_load("reloads the model: the cold mint lands in scratch, then loads from the bytes in memory, off the page, routed and poisoned")
             let clip = asr_clip("ru_short.wav")
             if (!stat(clip).is_valid) {
                 t |> skip("ru_short.wav not present - the transcript leg")
@@ -607,81 +742,85 @@ def test_gigaam_from_memory(tst : T?) {
             }
         }
         tst |> run("e2e_rnnt q4_k: a GPU flavor's bytes are refused by name") @(t : T?) {
-            gpu_flavor_refused(t, path)
+            gpu_flavor_refused(t)
         }
     }
 }
 
-//! The kq lane over the other carriers: a mint mixing two K-quant members (Q4_K attention, Q6_K FF), whose held staging mints the
-//! streamed mint's model, and the Q8_0 carrier, whose every seat is Q8_0.
-[test(description = "The kq lane serves a mixed Q4_K and Q6_K GigaAM carrier as kq with members k4+k6+q8, whose held staging mints the same transcript, and an all-Q8_0 carrier as q8 with seats equal to the file's blocks, both within the word bar")]
-def test_gigaam_kq_other_carriers(tst : T?) {
-    with_dasllama_jobque_() {
-        tst |> run("e2e_rnnt q4_k + q6_k: the kq lane serves a carrier mixing two K-quant members") @(t : T?) {
-            let mix_path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k-mix-local.gguf")
-            return if (!model_available(t, mix_path))
-            var inscope m <- mint(mix_path, false)
-            t |> success(m.kq_lane, "the un-pinned load takes the kq lane")
-            t |> equal(gigaam_exec_fmt(m), "kq", "the lane's name where the K-quant members mix")
-            t |> equal(gigaam_kq_members(m), "k4+k6+q8", "the members: Q4_K attention, Q6_K FF, Q8_0 conv pointwise")
+// The kq lane over the local mint mixing two K-quant members (Q4_K attention, Q6_K FF): on its `kq` form the carrier's
+// own planes serve named `kq`, the transcript within the word bar; on its `kq+held` form the held staging's mint
+// transcribes ru_short.
+[cold_path]
+def private test_gigaam_kq_other_carriers(t : T?; m : GigaamModel; var k : E2eKept) {
+    var inscope samples <- load_audio_16k_mono(asr_clip("ru_short.wav"))
+    if (k.form == "kq+held") {
+        // the held staging writes every member at the plan's own offsets, each on its format's strides
+        if (!empty(samples)) {
+            k.mix_held_text = transcript_of(m, samples)
+        }
+        return
+    }
+    t |> success(m.kq_lane, "the un-pinned load takes the kq lane")
+    t |> equal(gigaam_exec_fmt(m), "kq", "the lane's name where the K-quant members mix")
+    t |> equal(gigaam_kq_members(m), "k4+k6+q8", "the members: Q4_K attention, Q6_K FF, Q8_0 conv pointwise")
+    var want = ""
+    if (exact_reference(t, k.refs, "ru_short", want)) {
+        lane_clip(t, m, "ru_short", "e2e_rnnt", "kq mix", want, "f16 lane")
+    }
+    if (!empty(samples)) {
+        k.mix_text = transcript_of(m, samples)
+    }
+}
+
+// The mixed carrier's held staging mints the streamed mint's model, after the block: the same transcript.
+[cold_path]
+def private kq_mix_held(t : T?; k : E2eKept) {
+    if (!asr_clip_present("ru_short.wav")) {
+        t |> skip("ru_short.wav not present - the transcript compare")
+        return
+    }
+    t |> success(!empty(k.mix_text) && !empty(k.mix_held_text), "the streamed and the held mint kept their transcripts")
+    t |> equal(k.mix_held_text, k.mix_text, "the held staging mints the streamed mint's model: the same transcript")
+}
+
+// The Q8_0 carrier, whose every block GEMM is Q8_0, on its `kq` form: the kq lane serves them, named `q8`.
+[cold_path]
+def private kq_q8_0_cell(t : T?; m : GigaamModel; k : E2eKept) {
+    t |> success(m.kq_lane, "the un-pinned load takes the kq lane")
+    t |> equal(gigaam_exec_fmt(m), "q8", "the lane's name where every seat is Q8_0")
+    t |> equal(gigaam_kq_members(m), "q8", "the carrier's one member")
+    var want = ""
+    if (exact_reference(t, k.refs, "ru_short", want)) {
+        lane_clip(t, m, "ru_short", "e2e_rnnt", "kq q8", want, "f16 lane")
+    }
+}
+
+// The Q4_K carrier's load on the box's GPU flavor (`#gigaam-planes`): the kq lane on the device where its chain serves
+// that lane, else the kq lane on the CPU image - a Vulkan device off the f16 GEMM feed (`DASLLAMA_COOPMAT=sdot4`) among
+// them; the transcript holds the word bar against the f16 carrier's exact lane.
+[cold_path]
+def private test_gigaam_kq_load_flavor(t : T?; refs : ExactRefs) {
+    own_load("asserts on the load itself: the flavor the family's load lands on under the serving tower, minted into scratch")
+    let path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
+    reset_gigaam_q8()
+    with_gpu_knobs() {
+        set_serving_gpu_tower(true, TowerFamily.gigaam)
+        let kq_dev = serving_tower_device_up(TowerFamily.gigaam) ? serving_tower_dev(TowerFamily.gigaam) : TowerDev.none   // the box fact: the device the chain rides stands up
+        let dlim = path_join(test_temp_dir(), "ga_load_flavor.dlim")
+        with_image_destination(dlim) {   // the cold mint lands in scratch, not beside the carrier
+            var inscope m <- load_gigaam_model(path)
+            to_log(LOG_INFO, "test_gigaam: the box's device {kq_dev}: loaded {gigaam_exec_fmt(m)} on {m.dev_backend}\n")
+            if (kq_dev != TowerDev.none) {
+                t |> success(m.kq_lane && m.dev_backend == kq_dev, "the chain serves the kq lane: the carrier's own planes on the device")
+            } else {
+                t |> success(m.kq_lane && m.dev_backend == TowerDev.none, "no device the chain rides: the kq lane on the CPU image")
+            }
             var want = ""
-            if (exact_reference(t, "ru_short", want)) {
-                lane_clip(t, m, "ru_short", "e2e_rnnt", "kq mix", want, "f16 lane")
-                // the held staging writes every member at the plan's own offsets, each on its format's strides
-                var inscope sth <- stage_gigaam_model(mix_path, false, true)
-                var inscope mh = GigaamModel()
-                mint_gigaam_model(sth, mh, false)
-                let samples <- load_audio_16k_mono(asr_clip("ru_short.wav"))
-                t |> equal(transcript_of(mh, samples), transcript_of(m, samples), "the held staging mints the streamed mint's model: the same transcript")
+            if (exact_reference(t, refs, "ru_short", want)) {
+                lane_clip(t, m, "ru_short", "e2e_rnnt", gigaam_exec_fmt(m), want, "f16 lane")
             }
         }
-        tst |> run("e2e_rnnt q8_0: a carrier whose every block GEMM is Q8_0 serves them exactly on the kq lane") @(t : T?) {
-            let q8_path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q8_0.gguf")
-            return if (!model_available(t, q8_path))
-            {
-                var inscope m <- mint(q8_path, false)
-                t |> success(m.kq_lane, "the un-pinned load takes the kq lane")
-                t |> equal(gigaam_exec_fmt(m), "q8", "the lane's name where every seat is Q8_0")
-                t |> equal(gigaam_kq_members(m), "q8", "the carrier's one member")
-                var want = ""
-                if (exact_reference(t, "ru_short", want)) {
-                    lane_clip(t, m, "ru_short", "e2e_rnnt", "kq q8", want, "f16 lane")
-                }
-            }
-            q8_seats_exact(t, q8_path)
-        }
-    }
-}
-
-//! The Q4_K carrier's load on the box's GPU flavor (`#gigaam-planes`): the kq lane on the device where its chain serves that lane,
-//! else the kq lane on the CPU image - a Vulkan device off the f16 GEMM feed (`DASLLAMA_COOPMAT=sdot4`) among them.
-[test(description = "Loading the Q4_K GigaAM carrier with the serving tower on lands the kq lane on the GPU flavor where the box's device stands up, else on the CPU image, and the transcript holds the word bar against the f16 lane")]
-def test_gigaam_kq_load_flavor(tst : T?) {
-    with_dasllama_jobque_() {
-        let path = kq_carrier()
-        return if (!model_available(tst, path))
-        tst |> run("e2e_rnnt q4_k: the load serves the carrier's own planes - on the device where its chain serves the lane, else on the CPU image") @(t : T?) {
-            reset_gigaam_q8()
-            with_gpu_knobs() {
-                set_serving_gpu_tower(true, TowerFamily.gigaam)
-                let kq_dev = serving_tower_device_up(TowerFamily.gigaam) ? serving_tower_dev(TowerFamily.gigaam) : TowerDev.none   // the box fact: the device the chain rides stands up
-                let dlim = path_join(test_temp_dir(), "ga_load_flavor.dlim")
-                with_image_destination(dlim) {   // the cold mint lands in scratch, not beside the carrier
-                    var inscope m <- load_gigaam_model(path)
-                    to_log(LOG_INFO, "test_gigaam: the box's device {kq_dev}: loaded {gigaam_exec_fmt(m)} on {m.dev_backend}\n")
-                    if (kq_dev != TowerDev.none) {
-                        t |> success(m.kq_lane && m.dev_backend == kq_dev, "the chain serves the kq lane: the carrier's own planes on the device")
-                    } else {
-                        t |> success(m.kq_lane && m.dev_backend == TowerDev.none, "no device the chain rides: the kq lane on the CPU image")
-                    }
-                    var want = ""
-                    if (exact_reference(t, "ru_short", want)) {
-                        lane_clip(t, m, "ru_short", "e2e_rnnt", gigaam_exec_fmt(m), want, "f16 lane")
-                    }
-                }
-                remove(dlim)
-            }
-        }
+        remove(dlim)
     }
 }
 
@@ -690,7 +829,8 @@ def test_gigaam_kq_load_flavor(tst : T?) {
 //! file that does not read; the lane peek's float disjuncts - BF16 and F32 GEMMs are the exact lane's, not the kq lane's.
 [test(description = "Over retyped copies of the Q4_K carrier the kq planner refuses a float GEMM among quantized ones, a Q5_1 or NVFP4 seat, and q in Q8_0 beside K-quant k and v, each by name, stages an unchanged copy, and the lane peek tags BF16 and F32 GEMMs as the exact lane")]
 def test_gigaam_kq_refusals(tst : T?) {
-    let path = kq_carrier()
+    own_load("asserts on the load itself - its refusal: the kq planner over copies of the carrier with tensors retyped")
+    let path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
     return if (!model_available(tst, path))
     let l0 = "encoder.layers.0."
     tst |> run("the kq carrier's planner refuses what its lane cannot seat") @(t : T?) {
@@ -766,123 +906,110 @@ def test_gigaam_seat_index(t : T?) {
     }
 }
 
-[test(description = "GigaAM v3 e2e RNNT on its f16 carrier matches the upstream dumps stage by stage within 1e-4 through the decode on two clips, and its q8 lane's transcript holds 90 percent of the oracle's words with a half-silenced control under the bar")]
-def test_gigaam_e2e_rnnt(tst : T?) {
-    with_dasllama_jobque_() {
-        variant_cells(tst, "e2e_rnnt", "ru_short,ru_mid")
-    }
+[cold_path]
+def private test_gigaam_e2e_rnnt(t : T?; m : GigaamModel; k : GaKept) {
+    variant_cell(t, m, k.form, "e2e_rnnt", "ru_short,ru_mid")
 }
 
-[test(description = "GigaAM v3 e2e CTC on its f16 carrier matches the upstream dumps stage by stage within 1e-4 through the decode, and its q8 lane's transcript holds 90 percent of the oracle's words with a half-silenced control under the bar")]
-def test_gigaam_e2e_ctc(tst : T?) {
-    with_dasllama_jobque_() {
-        variant_cells(tst, "e2e_ctc", "ru_short")
-    }
+[cold_path]
+def private test_gigaam_e2e_ctc(t : T?; m : GigaamModel; k : GaKept) {
+    variant_cell(t, m, k.form, "e2e_ctc", "ru_short")
 }
 
-[test(description = "GigaAM v3 char-wise RNNT on its f16 carrier matches the upstream dumps stage by stage within 1e-4 through the decode, and its q8 lane's transcript holds 90 percent of the oracle's words with a half-silenced control under the bar")]
-def test_gigaam_charwise_rnnt(tst : T?) {
-    with_dasllama_jobque_() {
-        variant_cells(tst, "rnnt", "ru_short")
-    }
+[cold_path]
+def private test_gigaam_charwise_rnnt(t : T?; m : GigaamModel; k : GaKept) {
+    variant_cell(t, m, k.form, "rnnt", "ru_short")
 }
 
-[test(description = "A long Russian clip past the cap splits at silences into ascending non-overlapping spans of at most 25 s, one text segment each, whose joined transcript holds 95 percent of the FLEURS references' words in order while the reversed references miss")]
-def test_gigaam_long_form(tst : T?) {
-    tst |> run("ru_long: past the cap the clip splits at silences into spans of at most 25 s, the words the references'") @(t : T?) {
-        let path = carrier("e2e_rnnt")
-        let wav = asr_clip("ru_long.wav")
-        let refs_path = asr_clip("ru_fleurs.json")
-        return if (!model_available(t, path))
-        if (!stat(wav).is_valid || !stat(refs_path).is_valid) {
-            t |> skip("ru_long.wav or ru_fleurs.json not present")
-            return
-        }
-        var refs = FleursRefs()
-        t |> success(load_json_file(refs_path, refs), "ru_fleurs.json read")
-        let reference = join([for (c in refs.long_clips); c.text], " ")
-        with_dasllama_jobque_() {
-            var inscope m <- mint(path, false)
-            let samples <- load_audio_16k_mono(wav)
-            var st = GigaamState()
-            let spans <- gigaam_chunks(st, samples)
-            t |> success(length(spans) > 1, "ru_long: {length(spans)} spans")
-            var last_end = 0l
-            for (sp in spans) {
-                t |> success(sp.end - sp.start <= GIGAAM_MAX_CLIP_S * AUDIO_SAMPLE_RATE, "ru_long: span [{sp.start}, {sp.end}) within the cap")
-                t |> success(sp.start >= last_end, "ru_long: spans ascend without overlap")
-                last_end = sp.end
-            }
-            var segs : array<TranscribeSegment>
-            var lang = ""
-            let n = gigaam_transcribe(m, st, samples, $(seg) {
-                segs |> push_clone(seg)
-            }, lang)
-            t |> equal(n, length(spans), "ru_long: one segment a span")
-            for (s, sp in segs, spans) {
-                t |> equal(s.t0, sp.start * 100l / AUDIO_SAMPLE_RATE, "ru_long: a segment starts at its span")
-                to_log(LOG_INFO, "test_gigaam: ru_long [{s.t0}, {s.t1}] cs: {s.text}\n")
-                t |> success(!empty(s.text), "ru_long: segment [{s.t0}, {s.t1}] carries text")
-            }
-            let text = join([for (s in segs); s.text], " ")
-            let agree = word_agreement(text, reference)
-            to_log(LOG_INFO, "test_gigaam: ru_long words {agree} of {length(ru_words(reference))} reference words\n")
-            t |> success(agree >= LONG_WORD_AGREE, "ru_long: {agree} of the references' words, in order")
-            let shuffled = join([for (i in range(length(refs.long_clips))); refs.long_clips[length(refs.long_clips) - 1 - i].text], " ")
-            let control = word_agreement(text, shuffled)
-            to_log(LOG_INFO, "test_gigaam: ru_long control (references in reverse order) {control}\n")
-            t |> success(control < LONG_WORD_AGREE, "ru_long: the references in reverse order miss the bar ({control})")
-        }
+// A long clip past the cap splits at silences, on the f16 e2e carrier's `f16` form.
+[cold_path]
+def private test_gigaam_long_form(t : T?; m : GigaamModel) {
+    let wav = asr_clip("ru_long.wav")
+    let refs_path = asr_clip("ru_fleurs.json")
+    if (!stat(wav).is_valid || !stat(refs_path).is_valid) {
+        t |> skip("ru_long.wav or ru_fleurs.json not present")
+        return
     }
+    var refs = FleursRefs()
+    t |> success(load_json_file(refs_path, refs), "ru_fleurs.json read")
+    let reference = join([for (c in refs.long_clips); c.text], " ")
+    let samples <- load_audio_16k_mono(wav)
+    var st = GigaamState()
+    let spans <- gigaam_chunks(st, samples)
+    t |> success(length(spans) > 1, "ru_long: {length(spans)} spans")
+    var last_end = 0l
+    for (sp in spans) {
+        t |> success(sp.end - sp.start <= GIGAAM_MAX_CLIP_S * AUDIO_SAMPLE_RATE, "ru_long: span [{sp.start}, {sp.end}) within the cap")
+        t |> success(sp.start >= last_end, "ru_long: spans ascend without overlap")
+        last_end = sp.end
+    }
+    var segs : array<TranscribeSegment>
+    var lang = ""
+    let n = gigaam_transcribe(m, st, samples, $(seg) {
+        segs |> push_clone(seg)
+    }, lang)
+    t |> equal(n, length(spans), "ru_long: one segment a span")
+    for (s, sp in segs, spans) {
+        t |> equal(s.t0, sp.start * 100l / AUDIO_SAMPLE_RATE, "ru_long: a segment starts at its span")
+        to_log(LOG_INFO, "test_gigaam: ru_long [{s.t0}, {s.t1}] cs: {s.text}\n")
+        t |> success(!empty(s.text), "ru_long: segment [{s.t0}, {s.t1}] carries text")
+    }
+    let text = join([for (s in segs); s.text], " ")
+    let agree = word_agreement(text, reference)
+    to_log(LOG_INFO, "test_gigaam: ru_long words {agree} of {length(ru_words(reference))} reference words\n")
+    t |> success(agree >= LONG_WORD_AGREE, "ru_long: {agree} of the references' words, in order")
+    let shuffled = join([for (i in range(length(refs.long_clips))); refs.long_clips[length(refs.long_clips) - 1 - i].text], " ")
+    let control = word_agreement(text, shuffled)
+    to_log(LOG_INFO, "test_gigaam: ru_long control (references in reverse order) {control}\n")
+    t |> success(control < LONG_WORD_AGREE, "ru_long: the references in reverse order miss the bar ({control})")
 }
 
-[test(description = "Through the ASR facade a decoder GGUF needs its mmproj while the GigaAM carrier loads alone, its caps are Russian segment-timestamped whole-clip, an English session is refused, and transcribe yields the family's own one-segment transcript with a finite log-probability")]
+[test(description = "Through the ASR facade a decoder GGUF needs its mmproj")]
 def test_gigaam_facade(tst : T?) {
     tst |> run("a decoder GGUF needs its mmproj, where the gigaam GGUF loads alone") @(t : T?) {
         let decoder = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
         return if (!model_available(t, decoder))
         t |> success(asr_needs_mmproj(decoder), "a decoder GGUF needs its mmproj")
     }
-    tst |> run("the facade's gigaam arms: caps, exec format, the one-file carrier, session language, transcribe") @(t : T?) {
-        let path = carrier("e2e_rnnt")
-        let wav = asr_clip("ru_short.wav")
-        return if (!jit_model_available(t, path))
-        if (!stat(wav).is_valid) {
-            t |> skip("ru_short.wav not present")
-            return
-        }
-        t |> success(!asr_needs_mmproj(path), "the gigaam GGUF loads alone")
-        with_dasllama_jobque_() {
-            var inscope m = AsrModel(kind = AsrKind.gigaam)
-            m.ga <- mint(path, false)
-            var inscope c <- caps(m)
-            t |> equal(join(c.languages, ","), "ru", "the caps' languages")
-            t |> success(c.timestamps == AsrTimestamps.segment && !c.translate && !c.streaming, "segment timestamps, no translate, whole-clip")
-            t |> equal(asr_exec_fmt(m), "f16", "the facade's exec format is the family's")
-            let refused = panic_text() ${
-                var inscope en <- create_session(m, "en")
-            }
-            t |> success(find(refused, "transcribes Russian (ru)") >= 0, "an English session is refused: {refused}")
-            let samples <- load_audio_16k_mono(wav)
-            var inscope s <- create_session(m, "")
-            var segs : array<TranscribeSegment>
-            let n = transcribe(m, s, samples) $(seg) {
-                segs |> push_clone(seg)
-            }
-            var st = GigaamState()
-            var lang = ""
-            var direct = ""
-            gigaam_transcribe(m.ga, st, samples, $(seg) {
-                direct += seg.text
-            }, lang)
-            t |> equal(n, 1, "one segment under the clip cap")
-            t |> equal(s.detected_lang, "ru", "the detected language")
-            t |> success(n == 1 && segs[0].text == direct && !empty(direct), "the facade's transcript is the family's: '{direct}'")
-            for (seg in segs) {
-                t |> success(is_finite(seg.avg_logprob) && seg.avg_logprob <= 0.0,
-                    "a finite mean log-probability at or under 0 ({seg.avg_logprob})")
-            }
-        }
+}
+
+// The facade's gigaam arms, on the f16 e2e carrier's `f16` form: the one-file carrier, its caps, the session's language
+// and the family's own transcript.
+[cold_path]
+def private gigaam_facade_arms(t : T?; m : AsrModel) {
+    return if (!jit_only(t))
+    let wav = asr_clip("ru_short.wav")
+    if (!stat(wav).is_valid) {
+        t |> skip("ru_short.wav not present")
+        return
+    }
+    t |> success(!asr_needs_mmproj(path_join(models_dir(), E2E_RNNT)), "the gigaam GGUF loads alone")
+    var inscope c <- caps(m)
+    t |> equal(join(c.languages, ","), "ru", "the caps' languages")
+    t |> success(c.timestamps == AsrTimestamps.segment && !c.translate && !c.streaming, "segment timestamps, no translate, whole-clip")
+    t |> equal(asr_exec_fmt(m), "f16", "the facade's exec format is the family's")
+    let refused = panic_text() ${
+        var inscope en <- create_session(m, "en")
+    }
+    t |> success(find(refused, "transcribes Russian (ru)") >= 0, "an English session is refused: {refused}")
+    let samples <- load_audio_16k_mono(wav)
+    var inscope s <- create_session(m, "")
+    var segs : array<TranscribeSegment>
+    let n = transcribe(m, s, samples) $(seg) {
+        segs |> push_clone(seg)
+    }
+    var st = GigaamState()
+    var lang = ""
+    var direct = ""
+    gigaam_transcribe(m.ga, st, samples, $(seg) {
+        direct += seg.text
+    }, lang)
+    t |> equal(n, 1, "one segment under the clip cap")
+    t |> equal(s.detected_lang, "ru", "the detected language")
+    t |> success(n == 1 && segs[0].text == direct && !empty(direct), "the facade's transcript is the family's: '{direct}'")
+    for (seg in segs) {
+        t |> success(is_finite(seg.avg_logprob) && seg.avg_logprob <= 0.0,
+            "a finite mean log-probability at or under 0 ({seg.avg_logprob})")
     }
 }
 
@@ -1089,7 +1216,7 @@ def test_gigaam_facade_refusals(tst : T?) {
         }
     }
     tst |> run("the side files: a one-file ASR carrier and a projector (arch clip) serve no chat, a decoder does") @(t : T?) {
-        let ga = carrier("e2e_rnnt")
+        let ga = path_join(models_dir(), E2E_RNNT)
         let mmproj = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
         let decoder = path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf")
         return if (!model_available(t, ga) || !model_available(t, mmproj) || !model_available(t, decoder))
@@ -1098,7 +1225,8 @@ def test_gigaam_facade_refusals(tst : T?) {
         t |> success(!gguf_is_side_file(decoder), "the decoder is no side file")
     }
     tst |> run("a .dlim another family prepared is refused by the GigaAM loader") @(t : T?) {
-        let ga = carrier("e2e_rnnt")
+        own_load("asserts on the load itself - its refusal: another family's image, minted into scratch, is refused")
+        let ga = path_join(models_dir(), "gigaam-v3-e2e-rnnt-f16.gguf")
         let smol = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
         return if (!jit_model_available(t, ga) || !model_available(t, smol))
         with_dasllama_jobque_() {
@@ -1109,6 +1237,14 @@ def test_gigaam_facade_refusals(tst : T?) {
                 var inscope m <- load_gigaam_model(other)
             }
             t |> success(find(why, "is not a prepared gigaam image") >= 0, "refused: '{why}'")
+        }
+    }
+    tst |> run("the GigaAM carrier's own .dlim, baked by its cold load, maps through the loader") @(t : T?) {
+        own_load("reloads the model: the cold load bakes the carrier's image, which the cell loads back by path")
+        let ga = path_join(models_dir(), "gigaam-v3-e2e-rnnt-f16.gguf")
+        let smol = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
+        return if (!jit_model_available(t, ga) || !model_available(t, smol) || !image_rail_on(t))
+        with_dasllama_jobque_() {
             let taken = panic_text() ${
                 var inscope cold <- load_gigaam_model(ga)
                 //! the image the cold load prepared on this box: the exact lane on the device the tower serves, not the CPU lane's name
@@ -1140,129 +1276,111 @@ def test_gigaam_short_span(t : T?) {
 
 let private DEVICE_PLOG_BAR = 1e-5   //!< the device decode's plog off the CPU decoder's: float log-sums against double, ~1e-6 measured
 
-//! one clip's encoder rows decoded on the CPU loop and on the build's device seat, the serving tower pinned on: the same ids and
-//! frames, the plog within `DEVICE_PLOG_BAR`, the decode counted on the device - projected there, off the encode's own device rows
-//! where the tower encoded (the encode recorded a device generation), off uploaded rows where the CPU encoded; both decodes'
-//! transcripts logged
+//! a transducer carrier's device-decode twins: `form` the form whose legs run, `kind` the carrier's kind
+struct private DecodeKept {
+    form : string
+    kind : string
+    twins : array<RnntDecodeTwin>
+}
+
+// The device legs of the decode twin, on a lane's `+served` form - the flavor the lane serves on this box: each clip's
+// encode with the serving tower pinned on, then the transducer decode on the build's device seat, counted once there -
+// projected on the device, off the encode's own device rows where the tower encoded (the encode recorded a device
+// generation), off uploaded rows where the CPU encoded. The encode's rows are kept for the CPU form's legs.
 [cold_path]
-//! `m` the lane's GPU-flavored model, `mc` its CPU image: the device encode's rows decoded on both (`rnnt_device_twin`)
-def private device_decode_clip(t : T?; m, mc : GigaamModel; clip, tag : string) {
-    return if (rnnt_seat_skip(t, tag))
-    if (m.dev_backend == TowerDev.none) {
-        t |> skip("{tag}: the box serves the lane on its CPU image (a Vulkan device off the f16 GEMM feed) - the device seat decodes GPU images alone")
-        return
-    }
-    let path = asr_clip("{clip}.wav")
-    if (!stat(path).is_valid) {
-        t |> skip("{tag}: {clip}.wav not present")
-        return
-    }
-    with_gpu_knobs() {
-        set_serving_gpu_tower(true, TowerFamily.gigaam)
-        let samples <- load_audio_16k_mono(path)
-        var st = GigaamState()
-        var stc = GigaamState()
-        let tt = gigaam_encode_span(samples, 0l, min(long_length(samples), GIGAAM_MAX_CLIP_S * AUDIO_SAMPLE_RATE), m, st)
-        let device_encoded = st.enc_gen != 0ul
-        var inscope tw <- rnnt_device_twin(t, "test_gigaam: {tag}", DEVICE_PLOG_BAR, 1l, device_encoded ? 1l : 0l, st.x, $(var toks) {
-            stc.x := st.x
-            gigaam_decode(mc, stc, tt)
-            toks := stc.toks
-        }) $(var toks) {
-            gigaam_decode(m, st, tt)
-            toks := st.toks
+def private decode_dev_legs(t : T?; m : GigaamModel; var k : DecodeKept) {
+    for (clip in ["ru_short", "ru_mid"]) {
+        let tag = "{k.kind} {m.q8 ? "q8" : "f16"} {clip}"
+        continue if (rnnt_seat_skip(t, tag))
+        if (m.dev_backend == TowerDev.none) {
+            t |> skip("{tag}: the box serves the lane on its CPU image (a Vulkan device off the f16 GEMM feed) - the device seat decodes GPU images alone")
+            continue
         }
-        to_log(LOG_INFO, "test_gigaam: {tag} cpu   : {gigaam_detokenize(m, tw.cpu)}\n")
-        to_log(LOG_INFO, "test_gigaam: {tag} device: {gigaam_detokenize(m, tw.dev)}\n")
-        delete stc
-        delete st
-    }
-}
-
-[test(description = "For the e2e and char-wise RNNT carriers on f16 and q8 lanes, the transducer decode on the build's device seat emits the CPU decoder's ids and frames with plog within 1e-5, counted once on the device")]
-def test_gigaam_device_decode_twin(tst : T?) {
-    with_dasllama_jobque_() {
-        for (kind in ["e2e_rnnt", "rnnt"]) {
-            let path = carrier(kind)
-            continue if (!model_available(tst, path))
-            for (q8 in [false, true]) {
-                tst |> run("{kind} {q8 ? "q8" : "f16"}: the transducer decode on the device seat is the CPU decoder's") @(t : T?) {
-                    var inscope m <- mint_served(path, q8)
-                    var inscope mc <- mint(path, q8)
-                    for (clip in ["ru_short", "ru_mid"]) {
-                        device_decode_clip(t, m, mc, clip, "{kind} {q8 ? "q8" : "f16"} {clip}")
-                    }
-                }
-            }
+        let path = asr_clip("{clip}.wav")
+        if (!stat(path).is_valid) {
+            t |> skip("{tag}: {clip}.wav not present")
+            continue
         }
-    }
-}
-
-//! the CTC head on the Metal seat against the CPU head over one encode (an f16 head's CPU leg over half-rounded rows): each pick the CPU's but at a near-tie, -log sum exp within `CTC_PLOG_BAR`, the ids and transcript the CPU's, the device leg counted once and the CPU leg never, the 1.05x control outside the bar; then the head off the first clip's uploaded rows; `m` Metal-flavored, `mc` its CPU image
-[cold_path, unused_argument(t, m, mc, samples, tag)]
-def private ctc_head_metal_cell(t : T?; m, mc : GigaamModel; samples : array<float>; tag : string) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var d = RnntDecodeTwin(tag = tag, q8 = m.q8, cpu_q8 = m.q8)
         with_gpu_knobs() {
-            set_metal_tower(true)
-            let bar = Bar(rel = CTC_PLOG_BAR, abs_floor = CTC_PLOG_BAR, poison_scaled = true)
+            set_serving_gpu_tower(true, TowerFamily.gigaam)
+            var inscope samples <- load_audio_16k_mono(path)
             var st = GigaamState()
-            let n = gigaam_encode_span(samples, 0l, min(long_length(samples), GIGAAM_MAX_CLIP_S * AUDIO_SAMPLE_RATE), m, st)
-            t |> success(st.enc_gen != 0ul, "{tag}: the encode served on the device")
-            set_metal_tower(false)
-            var sc = GigaamState()
-            sc.x := st.x
-            var inscope cpu <- ctc_cpu_leg(mc, sc, n)
-            delete sc
-            set_metal_tower(true)
-            var inscope dev <- ctc_leg(m, st, n)
-            to_log(LOG_INFO, "test_gigaam: {tag} cpu   : {cpu.text}\n")
-            to_log(LOG_INFO, "test_gigaam: {tag} device: {dev.text}\n")
-            t |> equal(cpu.served, 0l, "{tag}: the tower knob off - the head stays on the CPU")
-            t |> equal(dev.served, 1l, "{tag}: the head served on the device")
-            t |> equal(ctc_hard_flips(cpu, dev, m.n_classes), 0, "{tag}: the picks are the CPU's but at a near-tie frame")
-            check(t, "test_gigaam: {tag} the device head's per-frame log-sums", dev.plogs, cpu.plogs, bar, FLAT_SHAPE)
-            t |> success(sequence_equal(dev.ids, cpu.ids), "{tag}: the token ids are the CPU head's")
-            t |> equal(dev.text, cpu.text, "{tag}: the transcript")
-            var inscope loud <- [for (v in samples); v * 1.05]
-            var sl = GigaamState()
-            let nl = gigaam_encode_span(loud, 0l, min(long_length(loud), GIGAAM_MAX_CLIP_S * AUDIO_SAMPLE_RATE), m, sl)
-            var inscope moved <- ctc_leg(m, sl, nl)
-            t |> equal(moved.served, 1l, "{tag}: the control's head served on the device")
-            check_exceeds(t, "test_gigaam: {tag} the control - the clip at 1.05x through the device chain", moved.plogs, cpu.plogs, bar)
-            t |> success(sl.enc_gen != st.enc_gen, "{tag}: the control's encode holds the device rows now")
-            delete sl
-            var inscope up <- ctc_leg(m, st, n)
-            t |> equal(up.served, 1l, "{tag}: off rows the device no longer holds the head serves off the uploaded rows")
-            t |> equal(ctc_hard_flips(cpu, up, m.n_classes), 0, "{tag}: the uploaded rows' picks are the CPU head's but at a near-tie frame")
-            check(t, "test_gigaam: {tag} the head off the uploaded rows' log-sums", up.plogs, cpu.plogs, bar, FLAT_SHAPE)
-            t |> equal(up.text, cpu.text, "{tag}: the uploaded rows' transcript")
+            d.tt = gigaam_encode_span(samples, 0l, min(long_length(samples), GIGAAM_MAX_CLIP_S * AUDIO_SAMPLE_RATE), m, st)
+            let device_encoded = st.enc_gen != 0ul
+            d.rows := st.x
+            rnnt_decode_dev_leg(t, "test_gigaam: {tag}", 1l, device_encoded ? 1l : 0l) {
+                gigaam_decode(m, st, d.tt)
+            }
+            d.dev := st.toks
+            d.dev_text = gigaam_detokenize(m, d.dev)
             delete st
         }
+        d.legs = 1
+        k.twins |> emplace(d)
     }
 }
-[test(description = "On the Metal seat the GigaAM CTC head, f16 and q8 on both CTC carriers, picks the CPU head's classes but at near-ties with log-sums within the bar and the same ids and transcript, from device and uploaded rows, while a 1.05x louder clip exceeds the bar")]
-def test_gigaam_ctc_head_metal(tst : T?) {
-    with_dasllama_jobque_() {
-        for (kind, q8 in ["e2e_ctc", "ctc", "e2e_ctc", "ctc"], [false, false, true, true]) {
-            tst |> run("{kind} {q8 ? "q8" : "f16"}: the CTC head on the Metal device seat is the CPU head's") @(t : T?) {
-                static_if (!typeinfo builtin_module_exists(das_metal)) {
-                    t |> skip("not a Metal build - the CTC head's device seat is Metal's")
-                } else {
-                    let path = carrier(kind)
-                    return if (!jit_model_available(t, path))
-                    let wav = asr_clip("ru_short.wav")
-                    if (!stat(wav).is_valid) {
-                        t |> skip("ru_short.wav not present")
-                        return
-                    }
-                    var inscope m <- mint(path, q8, false, TowerDev.metal)
-                    var inscope mc <- mint(path, q8)
-                    let samples <- load_audio_16k_mono(wav)
-                    ctc_head_metal_cell(t, m, mc, samples, "{kind} {q8 ? "q8" : "f16"} ru_short")
-                }
+
+// The CPU legs of the decode twin, on the lane's CPU form: the device form's kept rows decoded on the CPU loop with the seat
+// pinned off (the decode counter must not move, so a knob that pins nothing reds), then at 1.05x - the control.
+[cold_path]
+def private decode_cpu_legs(t : T?; mc : GigaamModel; var k : DecodeKept) {
+    for (d in k.twins) {
+        continue if (d.cpu_q8 != mc.q8 || d.legs != 1)
+        with_gpu_knobs() {
+            set_serving_gpu_tower(true, TowerFamily.gigaam)
+            var stc = GigaamState()
+            rnnt_decode_cpu_legs(t, "test_gigaam: {d.tag}", d) $(rows; tt; var toks) {
+                stc.x := rows
+                gigaam_decode(mc, stc, tt)
+                toks := stc.toks
             }
+            d.cpu_text = gigaam_detokenize(mc, d.cpu)
+            delete stc
         }
     }
+}
+
+// A form's legs of a transducer carrier's device-decode twin.
+[cold_path]
+def private decode_legs(t : T?; m : GigaamModel; var k : DecodeKept) {
+    with_dasllama_jobque_() {
+        if (gigaam_form_of(k.form).edit == "served") {
+            decode_dev_legs(t, m, k)
+        } else {
+            decode_cpu_legs(t, m, k)
+        }
+    }
+}
+
+// The transducer decode on the build's device seat against the CPU decoder's, after the carrier's block, the twins of the
+// lane `k.form` names (`f16`, `q8`): the same ids and frames, the plog within `DEVICE_PLOG_BAR`, the 1.05x control's plogs
+// outside it; both decodes' transcripts logged.
+[cold_path]
+def private test_gigaam_device_decode_twin(t : T?; k : DecodeKept) {
+    for (d in k.twins) {
+        continue if (d.q8 != (k.form == "q8"))
+        rnnt_decode_twin_held(t, "test_gigaam: {d.tag}", d, DEVICE_PLOG_BAR)
+    }
+}
+
+// The CTC head's device legs on the Metal seat, on a CTC carrier's `f16@dev` and `q8@dev` forms (`ga_ctc_dev_leg`).
+[cold_path]
+def private ctc_head_metal_dev(t : T?; m : GigaamModel; var k : GaKept) {
+    return if (!jit_only(t))
+    ga_ctc_dev_leg(t, m, k, "test_gigaam", "{k.strs?["kind"] ?? ""} {m.q8 ? "q8" : "f16"} ru_short", false)
+}
+
+// The CTC head's device legs on the family's discrete seat, on a CTC carrier's `+served` forms (`ga_ctc_dev_leg`).
+[cold_path]
+def private ctc_head_discrete_dev(t : T?; m : GigaamModel; var k : GaKept) {
+    ga_ctc_dev_leg(t, m, k, "test_audio", "gigaam {replace(k.strs?["kind"] ?? "", "_", "-")} {m.q8 ? "q8" : "f16"} ru_short", true)
+}
+
+// The CTC head on the Metal seat against the CPU head, after a CTC carrier's block, the lane `k.form` names (`ga_ctc_held`).
+[cold_path]
+def private test_gigaam_ctc_head_metal(t : T?; k : GaKept) {
+    ga_ctc_held(t, k, "test_gigaam")
 }
 
 //! the frames whose pick is not the oracle's argmax where the oracle's top two log-probabilities sit apart by `CTC_TIE_MARGIN` or
@@ -1320,64 +1438,43 @@ def private ctc_oracle_leg(m : GigaamModel; enc, lp : Npy; device : bool) : CtcO
     return <- r
 }
 
-//! The CTC head alone against the oracle on one lane: the oracle's encoder rows (`encoded.npy`) through the head on the CPU (the
-//! tower off) and, where the build's device seat serves on the box (Metal's, else Vulkan's), on that seat (counted once, off the
-//! uploaded rows) - each frame's pick the oracle's argmax but at a near-tie
-//! frame, the emitted tokens' probabilities within `PLOG_BAR` of the oracle's softmax, the ids the oracle's. The head reads the
-//! carrier's halfwords in ``wblob``, so the control is the same carrier staged with the head's halfwords zeroed there: its ids
-//! leave the oracle's on every leg.
+// The CTC head alone against the oracle, a leg a form: the oracle's encoder rows (`encoded.npy`) through the head on the
+// lane's CPU form (the tower off) and, where the build's device seat serves on the box (Metal's, else Vulkan's), on its
+// `+served` form (counted once, off the uploaded rows) - each frame's pick the oracle's argmax but at a near-tie frame,
+// the emitted tokens' probabilities within `PLOG_BAR` of the oracle's softmax, the ids the oracle's. The head reads the
+// carrier's halfwords in ``wblob``, so the control is the carrier staged with the head's halfwords zeroed there, the
+// `+nohead` forms: its ids leave the oracle's on every leg.
 [cold_path]
-def private ctc_head_oracle_cell(t : T?; path, kind : string; q8 : bool) {
+def private test_gigaam_ctc_head_oracle(t : T?; m : GigaamModel; k : GaKept) {
+    return if (!jit_only(t))
+    let kind = k.strs?["kind"] ?? ""
     let clip = "ru_short"
     return if (!dumps_present(t, clip, kind))
+    let f = gigaam_form_of(k.form)
+    let device = f.edit == "served" || f.edit == "nohead_served"
     let dir = dump_dir(clip, kind)
-    let tag = "{clip}_{kind} {q8 ? "q8" : "f16"} ctc head"
+    let tag = "{clip}_{kind} {f.lane == "q8" ? "q8" : "f16"} ctc head"
     let enc <- read_npy("{dir}/encoded.npy")
     let lp <- read_npy("{dir}/ctc_logprobs.npy")
     var tk = OracleTokens()
     t |> success(load_json_file("{dir}/tokens.json", tk), "{tag}: tokens.json read")
-    var inscope m <- mint(path, q8)
-    var inscope md <- mint_served(path, q8)
-    t |> success(m.ctc_f16, "{tag}: the head serves off the carrier's halfwords")
-    t |> equal(enc.cols, m.d_model, "{tag}: the oracle's encoder rows are d_model wide")
-    t |> equal(lp.cols, m.n_classes, "{tag}: the oracle's log-probabilities are n_classes wide")
-    var legs = [false]
-    if (rnnt_seat_ready()) {
-        legs |> push(true)
-    }
-    for (device in legs) {
-        let leg = device ? "{tag} {rnnt_seat_name()}" : "{tag} cpu"
-        var inscope r <- ctc_oracle_leg(device ? md : m, enc, lp, device)
-        to_log(LOG_INFO, "test_gigaam: {leg}: token probabilities off the oracle's softmax by {r.worst}: {r.text}\n")
-        t |> equal(r.served, device ? 1l : 0l, "{leg}: the head served {device ? "on the device seat" : "on the CPU"}")
-        t |> equal(oracle_hard_flips(r.picks, lp), 0, "{leg}: the picks are the oracle's argmax but at a near-tie frame")
-        t |> success(!empty(r.ids) && r.worst <= PLOG_BAR, "{leg}: token probabilities within {PLOG_BAR} of the oracle's softmax ({r.worst})")
-        t |> success(sequence_equal(r.ids, tk.ids), "{leg}: the token ids are the oracle's")
-    }
-    for (device in legs) {
-        let dev = device ? md.dev_backend : TowerDev.none
-        var inscope stg <- tower_dev_staged(dev) $ { return <- stage_gigaam_model(path, q8, true) }   // held planes staged in the form the flavor bakes
-        for (i in range64(stg.e.ctc_w, stg.e.ctc_w + stg.e.n_classes * stg.e.d_model)) {
-            stg.wblob[i] = uint16(0)
-        }
-        var inscope mz = GigaamModel()
-        mint_gigaam_model(stg, mz, q8, dev)
-        var inscope z <- ctc_oracle_leg(mz, enc, lp, device)
+    if (f.edit == "nohead" || f.edit == "nohead_served") {
+        var inscope z <- ctc_oracle_leg(m, enc, lp, device)
         t |> success(!sequence_equal(z.ids, tk.ids), "{tag} {device ? rnnt_seat_name() : "cpu"}: the control - the head's halfwords zeroed in wblob leave the oracle's ids ({length(z.ids)} tokens)")
+        return
     }
-}
-
-[test(description = "Over the oracle's encoder rows the GigaAM CTC head, on the CPU and the build's device seat, picks the oracle's argmax but at near-ties, emits tokens within 1e-4 of the oracle's softmax and its exact ids, while zeroing the head's halfwords leaves the oracle's ids")]
-def test_gigaam_ctc_head_oracle(tst : T?) {
-    with_dasllama_jobque_() {
-        for (kind, q8 in ["ctc", "e2e_ctc", "ctc", "e2e_ctc"], [false, false, true, true]) {
-            tst |> run("{kind} {q8 ? "q8" : "f16"}: the CTC head over the oracle's encoder rows reads its halfwords and lands the oracle's picks, on the CPU and the build's device seat") @(t : T?) {
-                let path = carrier(kind)
-                return if (!jit_model_available(t, path))
-                ctc_head_oracle_cell(t, path, kind, q8)
-            }
-        }
+    if (!device) {
+        t |> success(m.ctc_f16, "{tag}: the head serves off the carrier's halfwords")
+        t |> equal(enc.cols, m.d_model, "{tag}: the oracle's encoder rows are d_model wide")
+        t |> equal(lp.cols, m.n_classes, "{tag}: the oracle's log-probabilities are n_classes wide")
     }
+    let leg = device ? "{tag} {rnnt_seat_name()}" : "{tag} cpu"
+    var inscope r <- ctc_oracle_leg(m, enc, lp, device)
+    to_log(LOG_INFO, "test_gigaam: {leg}: token probabilities off the oracle's softmax by {r.worst}: {r.text}\n")
+    t |> equal(r.served, device ? 1l : 0l, "{leg}: the head served {device ? "on the device seat" : "on the CPU"}")
+    t |> equal(oracle_hard_flips(r.picks, lp), 0, "{leg}: the picks are the oracle's argmax but at a near-tie frame")
+    t |> success(!empty(r.ids) && r.worst <= PLOG_BAR, "{leg}: token probabilities within {PLOG_BAR} of the oracle's softmax ({r.worst})")
+    t |> success(sequence_equal(r.ids, tk.ids), "{leg}: the token ids are the oracle's")
 }
 
 //! the corpus harness spawned on this binary over `args` under DASLLAMA_IMAGE=0 (no sidecar beside the stocked carrier), its
@@ -1437,7 +1534,7 @@ def test_gigaam_corpus_eval(tst : T?) {
         t |> equal(has_nmt ? 7 : 5, length(cols), "id, wav, seconds, ms, hypothesis{has_nmt ? ", both translations" : ""}: {rows[0]}")
         return if (length(cols) < 5)
         t |> equal("1", cols[0], "the split's first id")
-        t |> success(find(cols[4], "сред") >= 0, "the hypothesis carries the clip's words ({cols[4]})")   // nolint:STYLE039 - the clip's Russian word
+        t |> success(find(cols[4], "телевизионные") >= 0, "the hypothesis carries the clip's words ({cols[4]})")   // nolint:STYLE039 - the clip's Russian word
         if (has_nmt && length(cols) == 7) {
             t |> success(find(cols[6], "Wednesday") >= 0, "the reference translated ({cols[6]})")
         }
@@ -1445,5 +1542,325 @@ def test_gigaam_corpus_eval(tst : T?) {
         let brc = run_corpus_eval(["--model", kq_carrier(), "--corpus", corpus, "--out", hyp, "--lane", "f16"], bad)
         t |> equal(1, brc, "a lane that is neither q8 nor exact is a refusal")
         t |> success(find(bad, "--lane is q8 or exact") >= 0, "and says so by name: {slice(bad, max(0, length(bad) - 600))}")
+    }
+}
+
+
+//! a kq carrier's forms: its own lane's CPU form, then the Metal twin's (minted and run under the portable backend) and
+//! the discrete twin's
+def private kq_twin_forms(t : T?; var forms : array<string>; file : string) {
+    add_served_forms(t, forms, file, ["kq+portable", "kq@dev+portable", "kq_z8@dev+portable"], metal_build_why())
+    add_served_forms(t, forms, file, ["kq+served", "kq_z8@dev"], audio_discrete_form_why(TowerFamily.gigaam))
+}
+
+//! a kq carrier's twin cells of the form `form`: the Metal twin's under the portable backend - the CPU kq leg in disk
+//! order on the portable batch GEMM, as the Metal image holds its planes - and the discrete twin's
+def private kq_twin_cells(t : T?; var m : GigaamModel; form : string; var kept : GaKept) {
+    let f = gigaam_form_of(form)
+    if (f.edit == "portable") {
+        let pinned = with_kernel_backend("portable") {
+            tower_cell(t, "{kept.carrier}: the kq lane's Metal twin, the {form} form's legs", m, kept, @@ga_metal_kq_legs)
+        }
+        t |> success(pinned, "{kept.carrier}: the portable backend pinned for the kq lane's {form} form")
+    } elif (empty(audio_discrete_form_why(TowerFamily.gigaam)) && (form == "kq" || form == "kq+served" || form == "kq_z8@dev")) {
+        tower_cell(t, "{kept.carrier}: the kq lane's discrete twin, the {form} form's legs", m, kept, @@ga_discrete_kq_legs)
+    }
+}
+
+//! a kq carrier's twin compares after its block
+def private kq_twin_held(t : T?; file : string; var kept : GaKept) {
+    if (empty(metal_build_why())) {
+        kept_cell(t, "{file}: the kq lane on the Metal chain vs the CPU kq chain", kept, @@ga_metal_kq_twin)
+    }
+    if (empty(audio_discrete_form_why(TowerFamily.gigaam))) {
+        kept_cell(t, "{file}: the kq lane on the discrete home's chain vs the CPU kq chain", kept, @@ga_discrete_kq_twin)
+    }
+}
+
+// The e2e transducer's f16 carrier's block: the external reference, the quantized carriers' reference, the long form, the
+// facade's arms, and the device twins' legs with their compares after it.
+[cold_path]
+def private e2e_rnnt_f16_block(t : T?; var kept : GaKept; var e2e : E2eKept) {
+    var inscope dec = DecodeKept(kind = "e2e_rnnt")
+    let metal_on = empty(metal_build_why())
+    let discrete_on = empty(audio_discrete_form_why(TowerFamily.gigaam))
+    let seat_on = empty(ga_seat_why())
+    var inscope forms : array<string>
+    add_served_forms(t, forms, E2E_RNNT, ["f16+served"], either_why(ga_seat_why(), audio_discrete_form_why(TowerFamily.gigaam)))
+    add_served_forms(t, forms, E2E_RNNT, ["q8+served"], ga_seat_why())
+    forms |> push("f16")
+    forms |> push("q8")
+    add_served_forms(t, forms, E2E_RNNT, ["q8@dev", "q8_z8@dev"], either_why(metal_build_why(), audio_discrete_form_why(TowerFamily.gigaam)))
+    add_served_forms(t, forms, E2E_RNNT, ["f16@dev"], metal_build_why())
+    add_served_forms(t, forms, E2E_RNNT, ["f16_z8@dev"], audio_discrete_form_why(TowerFamily.gigaam))
+    let ran = with_model_once(t, "audio", "gigaam-v3-e2e-rnnt-f16.gguf", forms, @@gigaam_form) $(var m; form) {
+        gigaam_form_is(t, E2E_RNNT, form, m.ga)
+        kept.form = form
+        e2e.form = form
+        dec.form = form
+        let served = form == "f16+served" || form == "q8+served"
+        if (form == "f16") {
+            tower_cell(t, "e2e_rnnt: the f16 lane matches the external reference stage by stage", m.ga, kept, @@test_gigaam_e2e_rnnt)
+            tower_cell(t, "e2e_rnnt: the exact lane's transcripts and rows, the quantized carriers' reference", m.ga, e2e, @@exact_reference_kept)
+            tower_cell(t, "ru_long: past the cap the clip splits at silences into spans of at most 25 s, the words the references'", m.ga, @@test_gigaam_long_form)
+            tower_cell(t, "the facade's gigaam arms: caps, exec format, the one-file carrier, session language, transcribe", m, @@gigaam_facade_arms)
+        } elif (form == "q8") {
+            tower_cell(t, "e2e_rnnt: the q8 lane's transcript agrees with the oracle's words", m.ga, kept, @@test_gigaam_e2e_rnnt)
+        }
+        if (seat_on && (served || form == "f16" || form == "q8")) {
+            tower_cell(t, "e2e_rnnt: the transducer decode twin, the {form} form's legs", m.ga, dec, @@decode_legs)
+        }
+        if (metal_on && !served) {
+            tower_cell(t, "GigaAM v3 e2e-rnnt: the Metal twin, the {form} form's legs", m.ga, kept, @@ga_metal_legs)
+        }
+        if (discrete_on && form != "q8+served") {
+            tower_cell(t, "GigaAM v3 e2e-rnnt: the discrete twin, the {form} form's legs", m.ga, kept, @@ga_discrete_legs)
+        }
+    }
+    if (ran && seat_on) {
+        dec.form = "f16"
+        kept_cell(t, "e2e_rnnt f16: the transducer decode on the device seat is the CPU decoder's", dec, @@test_gigaam_device_decode_twin)
+        dec.form = "q8"
+        kept_cell(t, "e2e_rnnt q8: the transducer decode on the device seat is the CPU decoder's", dec, @@test_gigaam_device_decode_twin)
+    }
+    if (ran && metal_on) {
+        kept_cell(t, "GigaAM v3 e2e-rnnt: the Metal rotary FastConformer chain vs the CPU exact chain on the FLEURS ru clips, the q8 lane and the Q4_K carrier's kq lane beside it", kept, @@test_gigaam_metal_twin)
+    }
+    if (ran && discrete_on) {
+        kept_cell(t, "GigaAM v3 e2e-rnnt: the discrete home's rotary FastConformer front and blocks on every lane - the q8 lane vs the CPU q8 chain, the exact lane off the halfwords vs the CPU exact chain, the Q4_K carrier's kq lane vs the CPU kq chain - on the FLEURS ru clips", kept, @@test_gigaam_discrete_twin)
+    }
+}
+
+// The published Q4_K carrier's block, after the f16 carrier's: the kq lane, the lane flag and the pins, the kq lane's
+// device twins, then the cells that own their load - the Q8_0 seats against the file and the family's load on the box's
+// flavor.
+[cold_path]
+def private e2e_rnnt_q4_k_block(t : T?; var kept : GaKept; var e2e : E2eKept) {
+    var inscope kq_forms <- ["kq"]
+    add_served_forms(t, kq_forms, KQ, ["kq@dev"], device_up_why(TowerFamily.gigaam))
+    kq_forms |> push_from(["kq+q8flag", "q8+pinned", "f32+pinned"])
+    kq_twin_forms(t, kq_forms, KQ)
+    kept.carrier = "k4"
+    kept.fmt = "k4"
+    let kq_ran = with_model_once(t, "audio", "gigaam-v3-e2e-rnnt-q4_k.gguf", kq_forms, @@gigaam_form) $(var m; form) {
+        gigaam_form_is(t, KQ, form, m.ga)
+        kept.form = form
+        e2e.form = form
+        if (form == "kq") {
+            tower_cell(t, "e2e_rnnt q4_k: the kq lane serves the carrier's own planes", m.ga, e2e, @@test_gigaam_kq_lane)
+            tower_cell(t, "e2e_rnnt q4_k: the un-pinned mint's lane name, transcript and rows", m.ga, e2e, @@kq_flag_leg)
+        } elif (form == "kq@dev") {
+            tower_cell(t, "e2e_rnnt q4_k: the kq lane serves the carrier's own planes, on the GPU flavor too", m.ga, e2e, @@test_gigaam_kq_lane)
+        } elif (form == "kq+q8flag") {
+            tower_cell(t, "e2e_rnnt q4_k: the mint that took the q8 flag, its lane name and transcript", m.ga, e2e, @@kq_flag_leg)
+        } elif (form == "q8+pinned") {
+            tower_cell(t, "e2e_rnnt q4_k: a pinned q8 lane dequantizes the carrier into Q8_0 planes", m.ga, e2e, @@kq_pinned_q8_cell)
+        } elif (form == "f32+pinned") {
+            tower_cell(t, "e2e_rnnt q4_k: a pinned exact lane widens the carrier to f32", m.ga, e2e, @@kq_pinned_exact_cell)
+        }
+        kq_twin_cells(t, m.ga, form, kept)
+    }
+    if (kq_ran) {
+        kept_cell(t, "e2e_rnnt q4_k: the q8 flag a kq carrier's staging and mint take changes nothing - the carrier's planes decide", e2e, @@kq_flag_held)
+        kept_cell(t, "e2e_rnnt q4_k: the kq lane's encoder rows sit no further from the carrier widened to f32 than the pinned q8 lane's requant of it", e2e, @@kq_rows_held)
+        kq_twin_held(t, KQ, kept)
+        t |> run("e2e_rnnt q4_k: the kq lane's Q8_0 seats are the carrier's blocks, moved exactly") @(t : T?) {
+            q8_seats_exact(t, "gigaam-v3-e2e-rnnt-q4_k.gguf")
+        }
+        unsafe {
+            t |> run("e2e_rnnt q4_k: the load serves the carrier's own planes - on the device where its chain serves the lane, else on the CPU image") @capture(& e2e)(t : T ?) {
+                test_gigaam_kq_load_flavor(t, e2e.refs)
+            }
+        }
+    }
+}
+
+// The other quantized carriers' blocks, after the f16 carrier's: the local mint mixing two K-quant members, and the
+// carrier whose every seat is Q8_0.
+[cold_path]
+def private e2e_rnnt_other_blocks(t : T?; var kept : GaKept; var e2e : E2eKept) {
+    var inscope mix_forms <- ["kq", "kq+held"]
+    kq_twin_forms(t, mix_forms, KQ_MIX)
+    kept.carrier = "mix"
+    kept.fmt = "kq"
+    let mix_ran = with_model_once(t, "audio", "gigaam-v3-e2e-rnnt-q4_k-mix-local.gguf", mix_forms, @@gigaam_form) $(var m; form) {
+        gigaam_form_is(t, KQ_MIX, form, m.ga)
+        kept.form = form
+        e2e.form = form
+        if (form == "kq" || form == "kq+held") {
+            tower_cell(t, "e2e_rnnt q4_k + q6_k: the kq lane serves a carrier mixing two K-quant members, the {form} form", m.ga, e2e, @@test_gigaam_kq_other_carriers)
+        }
+        kq_twin_cells(t, m.ga, form, kept)
+    }
+    if (mix_ran) {
+        kept_cell(t, "e2e_rnnt q4_k + q6_k: the held staging mints the streamed mint's model", e2e, @@kq_mix_held)
+        kq_twin_held(t, KQ_MIX, kept)
+    }
+    let q8_0_ran = with_model_once(t, "audio", "gigaam-v3-e2e-rnnt-q8_0.gguf", ["kq"], @@gigaam_form) $(var m; form) {
+        gigaam_form_is(t, KQ_Q8_0, form, m.ga)
+        tower_cell(t, "e2e_rnnt q8_0: a carrier whose every block GEMM is Q8_0 serves them on the kq lane", m.ga, e2e, @@kq_q8_0_cell)
+    }
+    if (q8_0_ran) {
+        t |> run("e2e_rnnt q8_0: a carrier whose every block GEMM is Q8_0 serves them exactly on the kq lane") @(t : T?) {
+            q8_seats_exact(t, "gigaam-v3-e2e-rnnt-q8_0.gguf")
+        }
+    }
+}
+
+// The e2e transducer's f16 carrier's block, then the quantized carriers' - each reads the f16 block's exact lane.
+[cold_path]
+def private e2e_rnnt_blocks(t : T?) {
+    var inscope kept <- ga_kept()
+    var inscope e2e = E2eKept()
+    e2e_rnnt_f16_block(t, kept, e2e)
+    e2e_rnnt_q4_k_block(t, kept, e2e)
+    e2e_rnnt_other_blocks(t, kept, e2e)
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        metal_tower_shutdown()
+    }
+    if (empty(audio_discrete_form_why(TowerFamily.gigaam))) {
+        gpu_tower_shutdown(TowerFamily.gigaam)
+    }
+}
+
+[test(description = "The GigaAM v3 e2e RNNT carriers load once a form. The f16 carrier matches the upstream dumps stage by stage within 1e-4 through the decode on two clips, its q8 lane's transcript holds 90 percent of the oracle's words with a half-silenced control under the bar; a long clip past the cap splits at silences into ascending non-overlapping spans of at most 25 s whose joined transcript holds 95 percent of the FLEURS references' words in order while the reversed references miss; through the ASR facade the carrier loads alone, its caps are Russian segment-timestamped whole-clip, an English session is refused, and transcribe yields the family's own one-segment transcript; the transducer decode on the build's device seat emits the CPU decoder's ids and frames with plog within 1e-5, counted once on the device; on Metal the conv front and every block run on the device within 1e-2 of the CPU exact rows with the CPU transcript, a scaled mel outside the bar, the q8 lane holding its three-way bar; on the discrete home the q8 lane and the exact f16 lane hold their bars with the CPU chain ids and poisons outside. The Q4_K carrier loads on the kq lane named k4 with members k4+q8, its transcripts hold the q8 word bar against the f16 lane on the CPU and on the serving GPU tower with no decline, the q8 flag leaves its lane and transcript unchanged, its rows sit within 1.5x the pinned q8 lane's distance from the widened carrier, pinned q8 and f32 lanes transcribe, its Q8_0 seats equal the file's blocks bit for bit, its load lands on the GPU flavor where the device stands up, and its kq lane holds the three-way bar on either GPU home with every member tile counted. The mixed Q4_K and Q6_K carrier serves as kq with members k4+k6+q8, its held staging minting the same transcript, and the all-Q8_0 carrier as q8 with seats equal to the file's blocks")]
+def test_gigaam_carriers_e2e_rnnt(t : T?) {
+    return if (!family_on(t, "gigaam"))
+    with_dasllama_jobque_() {
+        e2e_rnnt_blocks(t)
+    }
+}
+
+//! the forms of a CTC carrier: the head's device forms ahead of the CPU forms that read their rows
+def private ctc_carrier_forms(t : T?; file : string) : array<string> {
+    var forms : array<string>
+    add_served_forms(t, forms, file, ["f16@dev", "q8@dev"], ga_ctc_metal_why())
+    add_served_forms(t, forms, file, ["f16+served", "q8+served"], either_why(ga_ctc_seat_why(), audio_discrete_form_why(TowerFamily.gigaam)))
+    forms |> push_from(["f16", "q8", "f16+nohead", "q8+nohead"])
+    add_served_forms(t, forms, file, ["f16+nohead_served", "q8+nohead_served"], ga_ctc_seat_why())
+    return <- forms
+}
+
+//! a CTC carrier's cells of the form `form`: the external reference, the CTC head's oracle legs, and the head's device
+//! twin on the Metal seat or on the discrete seat
+def private ctc_carrier_cells(t : T?; var m : GigaamModel; form : string; var kept : GaKept; lane_cell : function<(t : T?; m : GigaamModel; k : GaKept) : void>) {
+    let kind = kept.strs?["kind"] ?? ""
+    let f = gigaam_form_of(form)
+    kept.form = form
+    if (form == "f16") {
+        tower_cell(t, "{kind}: the f16 lane matches the external reference stage by stage", m, kept, lane_cell)
+    } elif (form == "q8") {
+        tower_cell(t, "{kind}: the q8 lane's transcript agrees with the oracle's words", m, kept, lane_cell)
+    }
+    if (f.dev) {
+        tower_cell(t, "{kind}: the CTC head on the Metal device seat, the {form} form's legs", m, kept, @@ctc_head_metal_dev)
+        return
+    }
+    if (f.edit == "served" && empty(audio_discrete_form_why(TowerFamily.gigaam))) {
+        tower_cell(t, "GigaAM v3 {replace(kind, "_", "-")}: the CTC head on the discrete device seat, the {form} form's legs", m, kept, @@ctc_head_discrete_dev)
+    }
+    if (empty(f.edit)) {
+        tower_cell(t, "{kind}: the CTC head's CPU leg over the device form's rows, the {form} form", m, kept, @@ga_ctc_cpu_leg)
+    }
+    if (empty(f.edit) || empty(ga_ctc_seat_why())) {
+        tower_cell(t, "{kind} {f.lane}: the CTC head over the oracle's encoder rows reads its halfwords and lands the oracle's picks, the {form} form", m, kept, @@test_gigaam_ctc_head_oracle)
+    }
+}
+
+//! a CTC carrier's compares after its block: the head's device twin of each lane
+def private ctc_carrier_held(t : T?; var kept : GaKept) {
+    let kind = kept.strs?["kind"] ?? ""
+    for (lane in ["f16", "q8"]) {
+        kept.form = lane
+        if (empty(ga_ctc_metal_why())) {
+            kept_cell(t, "{kind} {lane}: the CTC head on the Metal device seat is the CPU head's", kept, @@test_gigaam_ctc_head_metal)
+        }
+        if (empty(audio_discrete_form_why(TowerFamily.gigaam))) {
+            kept_cell(t, "GigaAM v3 {replace(kind, "_", "-")} {lane}: the CTC head on the discrete device seat is the CPU head's, off the encode's held rows and off uploaded rows", kept, @@test_gigaam_ctc_discrete_twin)
+        }
+    }
+    if (empty(audio_discrete_form_why(TowerFamily.gigaam))) {
+        gpu_tower_shutdown(TowerFamily.gigaam)
+    }
+}
+
+[cold_path]
+def private e2e_ctc_block(t : T?) {
+    var inscope kept <- ga_kept()
+    kept.strs["kind"] = "e2e_ctc"
+    var inscope forms <- ctc_carrier_forms(t, E2E_CTC)
+    let ran = with_model_once(t, "audio", "gigaam-v3-e2e-ctc-f16.gguf", forms, @@gigaam_form) $(var m; form) {
+        gigaam_form_is(t, E2E_CTC, form, m.ga)
+        ctc_carrier_cells(t, m.ga, form, kept, @@test_gigaam_e2e_ctc)
+    }
+    if (ran) {
+        ctc_carrier_held(t, kept)
+    }
+}
+
+[test(description = "The GigaAM v3 e2e CTC carrier loads once a form: its f16 lane matches the upstream dumps stage by stage within 1e-4 through the decode, and its q8 lane's transcript holds 90 percent of the oracle's words with a half-silenced control under the bar; over the oracle's encoder rows its CTC head, on the CPU and the build's device seat, picks the oracle's argmax but at near-ties, emits tokens within 1e-4 of the oracle's softmax and its exact ids, while zeroing the head's halfwords leaves the oracle's ids; on the Metal seat and on the discrete seat the head, f16 and q8, picks the CPU head's classes but at near-ties with log-sums within the bar and the same ids and transcript, from device and uploaded rows, while a 1.05x louder clip exceeds the bar")]
+def test_gigaam_carrier_e2e_ctc(t : T?) {
+    return if (!family_on(t, "gigaam"))
+    with_dasllama_jobque_() {
+        e2e_ctc_block(t)
+    }
+}
+
+[cold_path]
+def private ctc_block(t : T?) {
+    var inscope kept <- ga_kept()
+    kept.strs["kind"] = "ctc"
+    var inscope forms <- ctc_carrier_forms(t, CTC)
+    let ran = with_model_once(t, "audio", "gigaam-v3-ctc-f16.gguf", forms, @@gigaam_form) $(var m; form) {
+        gigaam_form_is(t, CTC, form, m.ga)
+        ctc_carrier_cells(t, m.ga, form, kept, @@test_gigaam_ctc)
+    }
+    if (ran) {
+        ctc_carrier_held(t, kept)
+    }
+}
+
+[test(description = "The GigaAM v3 CTC carrier loads once a form: its f16 lane matches the upstream package's dumps stage by stage (mel, front, every layer, encoded within 1e-4, then the decode), and the q8 lane's transcript holds 90 percent of the oracle's words while a half-silenced clip does not; over the oracle's encoder rows its CTC head, on the CPU and the build's device seat, picks the oracle's argmax but at near-ties, emits tokens within 1e-4 of the oracle's softmax and its exact ids, while zeroing the head's halfwords leaves the oracle's ids; on the Metal seat and on the discrete seat the head, f16 and q8, picks the CPU head's classes but at near-ties with log-sums within the bar and the same ids and transcript, from device and uploaded rows, while a 1.05x louder clip exceeds the bar")]
+def test_gigaam_carrier_ctc(t : T?) {
+    return if (!family_on(t, "gigaam"))
+    with_dasllama_jobque_() {
+        ctc_block(t)
+    }
+}
+
+[cold_path]
+def private charwise_rnnt_block(t : T?) {
+    var inscope kept <- ga_kept()
+    var inscope dec = DecodeKept(kind = "rnnt")
+    let seat_on = empty(ga_seat_why())
+    var inscope forms : array<string>
+    add_served_forms(t, forms, RNNT, ["f16+served", "q8+served"], ga_seat_why())
+    forms |> push_from(["f16", "q8"])
+    let ran = with_model_once(t, "audio", "gigaam-v3-rnnt-f16.gguf", forms, @@gigaam_form) $(var m; form) {
+        gigaam_form_is(t, RNNT, form, m.ga)
+        kept.form = form
+        dec.form = form
+        if (form == "f16") {
+            tower_cell(t, "rnnt: the f16 lane matches the external reference stage by stage", m.ga, kept, @@test_gigaam_charwise_rnnt)
+        } elif (form == "q8") {
+            tower_cell(t, "rnnt: the q8 lane's transcript agrees with the oracle's words", m.ga, kept, @@test_gigaam_charwise_rnnt)
+        }
+        if (seat_on) {
+            tower_cell(t, "rnnt: the transducer decode twin, the {form} form's legs", m.ga, dec, @@decode_legs)
+        }
+    }
+    if (ran && seat_on) {
+        dec.form = "f16"
+        kept_cell(t, "rnnt f16: the transducer decode on the device seat is the CPU decoder's", dec, @@test_gigaam_device_decode_twin)
+        dec.form = "q8"
+        kept_cell(t, "rnnt q8: the transducer decode on the device seat is the CPU decoder's", dec, @@test_gigaam_device_decode_twin)
+    }
+}
+
+[test(description = "The GigaAM v3 char-wise RNNT carrier loads once a form: its f16 lane matches the upstream dumps stage by stage within 1e-4 through the decode, its q8 lane's transcript holds 90 percent of the oracle's words with a half-silenced control under the bar, and on f16 and q8 lanes the transducer decode on the build's device seat emits the CPU decoder's ids and frames with plog within 1e-5, counted once on the device")]
+def test_gigaam_carrier_rnnt(t : T?) {
+    return if (!family_on(t, "gigaam"))
+    with_dasllama_jobque_() {
+        charwise_rnnt_block(t)
     }
 }

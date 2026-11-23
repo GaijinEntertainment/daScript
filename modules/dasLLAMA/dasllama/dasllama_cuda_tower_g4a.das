@@ -149,7 +149,7 @@ def private cut_g4a_ensure(hs : int64) : bool
 
 //! the gemma4a resident's key: the device block's, the f16 lane's halfword plane - its address, size and sampled words - and the rel table
 def private cut_g4a_key(t : Gemma4aEncoder) : uint64 {
-    let k = cut_key_wblob(cut_key_dev(t.dev, t.devplan, t.blob, t.n_layer), t.wblob)
+    let k = tower_fold_wblob(cut_key_dev(t.dev, t.devplan, t.blob, t.n_layer), t.wblob)
     return tower_fold_words(k, unsafe(reinterpret<uint8 const?>(plane_at(t.pos_emb, 0l))), tower_g4a_rel_rows() * t.d_model * 4l)
 }
 
@@ -292,7 +292,7 @@ def private cuda_qwen3a_bake(t : Qwen3aTower; var b : TowerDevBuild) : bool {
 
 //! the qwen3a front resident's planes for the model the key names: as they are where it did not move, else uploaded (`cut_q3a_upload`)
 def private cut_q3a_planes(var r : CutResident; var p : CutRolePlanes; t : Qwen3aTower) : bool {
-    let key = cut_key_dev(t.core.dev, t.core.devplan, t.cblob, 1l)
+    let key = tower_fold_wblob(cut_key_dev(t.core.dev, t.core.devplan, t.cblob, 1l), t.wcblob)
     return r.key == key || cut_q3a_upload(r, p, t, key)
 }
 

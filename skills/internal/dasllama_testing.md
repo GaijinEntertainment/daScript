@@ -9,7 +9,8 @@ tests; `modules/dasLLAMA/tests/CLAUDE.md` says how the runner works, and
 - **Intermediate** - the default: a PR inside an arc, or one outside any arc. It tests
   what its change can realistically break, and nothing else.
 - **Final** - the PR that closes an arc. It runs everything, on the change of the arc's PRs
-  together.
+  together - every file, by `run.das --rerun` or the full suite: a plain run reports an
+  unchanged file from its last pass and does not run it.
 
 The PR body's Validation section opens with the kind: `Kind: intermediate PR of the <arc>
 arc.` (`Kind: intermediate PR, no arc.` outside one) or `Kind: final PR of the <arc> arc.`

@@ -15,6 +15,7 @@ require ?vulkan dasllama/dasllama_vulkan_common    // g_gpu: the Vulkan device a
 require ?cuda dasllama/dasllama_cuda_tower_g4a     // set_cuda_vad_faults_: the CUDA seat's device and memory decline legs
 require daslib/fio
 require _model_tier
+require _model_once   // with_model_once_at: the bin's one block in the area
 require _compares   // check / check_exceeds: the twin's bar and its control
 require _gpu_knobs   // with_gpu_knobs / set_serving_gpu_tower: the seat cells' tower pin
 require ?das_metal dasllama/dasllama_metal_common   // metal_common_init: whether the box has a Metal device
@@ -32,8 +33,17 @@ require ?das_metal dasllama/dasllama_metal_common   // metal_common_init: whethe
 // without the CUDA ask (DASLLAMA_CUDA=1, the VAD's CUDA_AUDIO_FAMILIES row on) and without a CUDA device.
 // The streaming leg skips without jfk.wav, and the batch segmenter runs a leg per clip present (jfk.wav,
 // benchmarks/asr/corpus/ru_long.wav), skipping with neither.
+// The bin loads once a form, in its one `with_model_once_at` block (`vad_form`): the `env` form carries the cells that run
+// on the route the run's knobs pick, the `device` form the cells that pin the VAD home's tower on - their CPU reference the
+// CPU chunk step (`vad_probs_cpu`) over the same load.
 
-def private vad_bin_path() : string => "{get_das_root()}/modules/dasLLAMA/models/silero_vad.bin"
+//! the tree's folder holding the checked-in bin
+def private vad_root() : string => "{get_das_root()}/modules/dasLLAMA/models"
+
+//! One form of the Silero-VAD bin, its block's form loader. The load reads no knob: `env` and `device` are the same model,
+//! apart by the home their cells run on.
+[unused_argument(form)]
+def private vad_form(path, form : string) : VadModel => <- load_vad_model(path)
 
 // deterministic integer LCG (Numerical Recipes), fp32-mapped to [-0.15, 0.15) — identical to
 // the python freeze in the oracle run, so the inputs are bit-for-bit equal on both sides.
@@ -48,76 +58,70 @@ def private lcg_signal(n : int) : array<float> {
     return <- out
 }
 
-[test(description = "Silero VAD on a deterministic LCG signal yields 10 per-frame probabilities each within 1e-3 of the values frozen from onnxruntime op15")]
-def test_vad_forward_lcg(t : T?) {
-    t |> run("per-frame prob matches onnxruntime op15 on a deterministic LCG signal") @(t : T?) {
-        // frozen from harness/silero_vad_oracle.py on the same LCG (10 chunks)
-        let expected = [0.01383990, 0.02051842, 0.01915139, 0.01694492, 0.01415426,
-                        0.01128137, 0.01160875, 0.01086920, 0.00850144, 0.02220330]
-        let sig <- lcg_signal(10 * 512)
-        with_dasllama_jobque_() {
-            var m <- load_vad_model(vad_bin_path())
-            let probs <- vad_probs(m, sig)
-            t |> success(length(probs) == 10, "10 chunks -> 10 probs")
-            for (i in range(min(length(probs), length(expected)))) {
-                t |> success(abs(probs[i] - expected[i]) < 1e-3, "frame {i} prob within 1e-3 of oracle")
-            }
+// The per-frame probabilities against onnxruntime op15, on the `env` form.
+[cold_path]
+def private test_vad_forward_lcg(t : T?; m : VadModel) {
+    // frozen from harness/silero_vad_oracle.py on the same LCG (10 chunks)
+    let expected = [0.01383990, 0.02051842, 0.01915139, 0.01694492, 0.01415426,
+                    0.01128137, 0.01160875, 0.01086920, 0.00850144, 0.02220330]
+    let sig <- lcg_signal(10 * 512)
+    with_dasllama_jobque_() {
+        let probs <- vad_probs(m, sig)
+        t |> success(length(probs) == 10, "10 chunks -> 10 probs")
+        for (i in range(min(length(probs), length(expected)))) {
+            t |> success(abs(probs[i] - expected[i]) < 1e-3, "frame {i} prob within 1e-3 of oracle")
         }
     }
 }
 
-[test(description = "An empty clip yields no probability from `vad_probs` or `vad_probs_cpu`, no speech region, and no streaming event, also with the stream GPU lever on")]
-def test_vad_empty_clip(t : T?) {
-    t |> run("an empty clip: no probability, no speech region, no streaming event, nothing asked of a seat") @(t : T?) {
-        with_dasllama_jobque_() {
-            var m <- load_vad_model(vad_bin_path())
-            let none : array<float>
-            let probs <- vad_probs(m, none)
-            t |> equal(length(probs), 0, "vad_probs answers no probability")
-            let cpu <- vad_probs_cpu(m, none)
-            t |> equal(length(cpu), 0, "vad_probs_cpu answers no probability")
-            let segs <- find_speech_timestamps(m, none, default_vad_opts())
-            t |> equal(length(segs), 0, "find_speech_timestamps answers no region")
-            let evs <- stream_events(m, none, 1300)
-            t |> equal(length(evs), 0, "the streaming iterator emits no event")
-            var it : VadIter
-            vad_iter_reset(it, default_vad_opts())
-            let was = set_vad_stream_gpu(true)
-            var fed = 0
-            vad_iter_feed(m, it, none) $(ev) {
-                fed++
-            }
-            set_vad_stream_gpu(was)
-            t |> equal(fed, 0, "an empty feed with the stream lever on emits no event")
+// An empty clip, on the `env` form.
+[cold_path]
+def private test_vad_empty_clip(t : T?; m : VadModel) {
+    with_dasllama_jobque_() {
+        let none : array<float>
+        let probs <- vad_probs(m, none)
+        t |> equal(length(probs), 0, "vad_probs answers no probability")
+        let cpu <- vad_probs_cpu(m, none)
+        t |> equal(length(cpu), 0, "vad_probs_cpu answers no probability")
+        let segs <- find_speech_timestamps(m, none, default_vad_opts())
+        t |> equal(length(segs), 0, "find_speech_timestamps answers no region")
+        let evs <- stream_events(m, none, 1300)
+        t |> equal(length(evs), 0, "the streaming iterator emits no event")
+        var it : VadIter
+        vad_iter_reset(it, default_vad_opts())
+        let was = set_vad_stream_gpu(true)
+        var fed = 0
+        vad_iter_feed(m, it, none) $(_ev) {
+            fed++
         }
+        set_vad_stream_gpu(was)
+        t |> equal(fed, 0, "an empty feed with the stream lever on emits no event")
     }
 }
 
-[test(description = "`find_speech_timestamps` on jfk.wav returns exactly the four segments silero get_speech_timestamps gives, start and end sample for sample")]
-def test_vad_segments_jfk(t : T?) {
-    t |> run("find_speech_timestamps matches silero get_speech_timestamps on jfk.wav") @(t : T?) {
-        let wav = asr_clip("jfk.wav")
-        let samples <- load_audio_16k_mono(wav)
-        if (empty(samples)) {
-            t |> skip("jfk.wav not present in the ASR corpus")
-            return
-        }
-        // silero get_speech_timestamps defaults, sample indices (harness/silero_segment_oracle.py)
-        let exp_start = [5152l, 52256l, 86048l, 130592l]
-        let exp_end   = [36320l, 71136l, 122848l, 169952l]
-        with_dasllama_jobque_() {
-            var m <- load_vad_model(vad_bin_path())
-            let probs <- vad_probs(m, samples)
-            // decoder-robust smoke checks (exact per-frame values are gated by the LCG test);
-            // the WAV reader here decodes marginally differently from the oracle's soundfile.
-            t |> success(probs[0] < 0.05, "jfk frame 0 (silence) low")
-            t |> success(probs[11] > 0.5, "jfk frame 11 (speech onset) high")
-            let segs <- find_speech_timestamps(m, samples, default_vad_opts())
-            t |> success(length(segs) == 4, "4 speech segments")
-            for (i in range(min(length(segs), 4))) {
-                t |> success(segs[i].start == exp_start[i], "segment {i} start")
-                t |> success(segs[i].end == exp_end[i], "segment {i} end")
-            }
+// jfk's speech regions against silero's, on the `env` form.
+[cold_path]
+def private test_vad_segments_jfk(t : T?; m : VadModel) {
+    let wav = asr_clip("jfk.wav")
+    let samples <- load_audio_16k_mono(wav)
+    if (empty(samples)) {
+        t |> skip("jfk.wav not present in the ASR corpus")
+        return
+    }
+    // silero get_speech_timestamps defaults, sample indices (harness/silero_segment_oracle.py)
+    let exp_start = [5152l, 52256l, 86048l, 130592l]
+    let exp_end   = [36320l, 71136l, 122848l, 169952l]
+    with_dasllama_jobque_() {
+        let probs <- vad_probs(m, samples)
+        // decoder-robust smoke checks (exact per-frame values are gated by the LCG test);
+        // the WAV reader here decodes marginally differently from the oracle's soundfile.
+        t |> success(probs[0] < 0.05, "jfk frame 0 (silence) low")
+        t |> success(probs[11] > 0.5, "jfk frame 11 (speech onset) high")
+        let segs <- find_speech_timestamps(m, samples, default_vad_opts())
+        t |> success(length(segs) == 4, "4 speech segments")
+        for (i in range(min(length(segs), 4))) {
+            t |> success(segs[i].start == exp_start[i], "segment {i} start")
+            t |> success(segs[i].end == exp_end[i], "segment {i} end")
         }
     }
 }
@@ -200,125 +204,125 @@ def private twin_probs(t : T?; m : VadModel; tag : string; sig : array<float>) :
     return true
 }
 
-[test(description = "The GPU VAD seat serves every chunk with probabilities within 1e-5 absolute of the CPU chunk step (a silenced-chunk control must exceed it), streams the CPU feed's exact events, and segments jfk and ru_long to the CPU's exact regions")]
-def test_vad_gpu_twin(t : T?) {
-    t |> run("the GPU seat's probabilities against the CPU chunk step on the LCG signal, whole and ragged") @(t : T?) {
-        with_dasllama_jobque_() {
-            with_gpu_knobs() {
-                set_serving_gpu_tower(true, TowerFamily.vad)
-                var m <- load_vad_model(vad_bin_path())
-                let sig <- lcg_signal(10 * 512)
-                return if (!twin_probs(t, m, "lcg-10", sig))
-                let ragged <- lcg_signal(37 * 512 + 100)
-                twin_probs(t, m, "lcg-ragged", ragged)
-            }
-        }
-    }
-    t |> run("the streaming seat: the device feed's events are the CPU feed's, every whole chunk served") @(t : T?) {
-        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
-        if (empty(samples)) {
-            t |> skip("jfk.wav not present in the ASR corpus")
-            return
-        }
-        with_dasllama_jobque_() {
-            let knobs = gpu_knobs()
+// The GPU seat's probabilities against the CPU chunk step on the LCG signal, on the `device` form.
+[cold_path]
+def private test_vad_gpu_twin(t : T?; m : VadModel) {
+    with_dasllama_jobque_() {
+        with_gpu_knobs() {
             set_serving_gpu_tower(true, TowerFamily.vad)
-            var m <- load_vad_model(vad_bin_path())
-            let was = set_vad_stream_gpu(false)
-            let off0 = gpu_vad_chunks()
-            let cpu <- stream_events(m, samples, 1300)
-            t |> equal(gpu_vad_chunks() - off0, 0l, "the lever off: the stream stepped no chunk on the device")
-            set_vad_stream_gpu(true)
-            let c0 = gpu_vad_chunks()
-            let dev <- stream_events(m, samples, 1300)
-            let served = gpu_vad_chunks() - c0
-            set_vad_stream_gpu(was)
-            set_gpu_knobs(knobs)
-            if (served == 0l && !vad_device_expected()) {
-                t |> skip("no GPU VAD seat served on this box")
-                return
-            }
-            t |> equal(served, long_length(samples) / 512l, "the device stepped every whole chunk of the stream")
-            t |> success(length(cpu) >= 4, "the CPU feed opens and closes speech ({length(cpu) / 2} events)")
-            t |> success(length(dev) == length(cpu), "as many device events as CPU events")
-            var first_off = -1
-            for (i in range(min(length(dev), length(cpu)))) {
-                if (dev[i] != cpu[i] && first_off < 0) {
-                    first_off = i
-                }
-            }
-            t |> success(first_off < 0, "every device event the CPU's (first mismatch at {first_off})")
-        }
-    }
-    t |> run("the batch segmenter on the device: jfk's and ru_long's speech regions are the CPU's, the probabilities within the bar") @(t : T?) {
-        with_dasllama_jobque_() {
-            let knobs = gpu_knobs()
-            set_serving_gpu_tower(true, TowerFamily.vad)
-            var m <- load_vad_model(vad_bin_path())
-            var ran = 0
-            for (wav in [asr_clip("jfk.wav"), asr_clip("ru_long.wav")]) {
-                var inscope samples <- load_audio_16k_mono(wav)
-                if (empty(samples)) {
-                    t->log("{wav} absent: no leg")
-                    continue
-                }
-                let tag = base_name(wav)
-                continue if (!twin_probs(t, m, tag, samples))
-                let c0 = gpu_vad_chunks()
-                var inscope dev <- find_speech_timestamps(m, samples, default_vad_opts())
-                t |> success(gpu_vad_chunks() > c0, "{tag}: the segmenter's probabilities came off the device")
-                var inscope cpu_probs <- vad_probs_cpu(m, samples)
-                t |> success(!empty(dev), "{tag}: {length(dev)} speech regions")
-                var inscope cpu <- speech_timestamps_of(cpu_probs, long_length(samples), default_vad_opts())
-                t |> success(same_segments(dev, cpu), "{tag}: every device speech region is the CPU's ({length(dev)} against {length(cpu)})")
-                ran++
-            }
-            set_gpu_knobs(knobs)
-            if (ran == 0) {
-                t |> skip("neither jfk.wav nor ru_long.wav is present")
-            }
+            let sig <- lcg_signal(10 * 512)
+            return if (!twin_probs(t, m, "lcg-10", sig))
+            let ragged <- lcg_signal(37 * 512 + 100)
+            twin_probs(t, m, "lcg-ragged", ragged)
         }
     }
 }
 
-[test(description = "The Metal VAD seat declines once per call on its knob, a slab-less model, a sub-1024-lane pipeline and an untakeable scratch, stepping no device chunk and answering the CPU probabilities bit for bit, then serves again")]
-def test_vad_metal_declines(t : T?) {
-    t |> run("the Metal VAD seat declines on its knob, a model with no slab, a recurrence pipeline under 1024 lanes and a scratch it cannot take") @(t : T?) {
-        static_if (!typeinfo builtin_module_exists(das_metal)) {
-            t |> skip("not a Metal build")
-        } else {
-            with_dasllama_jobque_() {
-                let knobs = gpu_knobs()
-                set_metal_tower(true)
-                var m <- load_vad_model(vad_bin_path())
-                let sig <- lcg_signal(10 * 512)
-                twin_probs(t, m, "the seat serves", sig)
-                let tower_was = metal_tower_knob()
-                vad_decline_leg(t, m, sig, "knob") $(on) {
-                    set_metal_tower(on ? false : tower_was)
-                }
-                var bare := m
-                bare.slab |> clear()
-                vad_decline_leg(t, bare, sig, "shape") $(on) {}
-                var lanes_was = 0u
-                vad_decline_leg(t, m, sig, "device") $(on) {
-                    if (on) {
-                        lanes_was = set_metal_vad_lanes_probe_(512u)
-                    } else {
-                        set_metal_vad_lanes_probe_(lanes_was)
-                    }
-                }
-                var take_was = 0ul
-                vad_decline_leg(t, m, sig, "memory") $(on) {
-                    if (on) {
-                        take_was = set_metal_take_max_probe_(512ul)
-                    } else {
-                        set_metal_take_max_probe_(take_was)
-                    }
-                }
-                twin_probs(t, m, "the seat serves again with every pin put back", sig)
-                set_gpu_knobs(knobs)
+// The streaming seat against the CPU feed over jfk, on the `device` form.
+[cold_path]
+def private vad_twin_stream(t : T?; m : VadModel) {
+    let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
+    if (empty(samples)) {
+        t |> skip("jfk.wav not present in the ASR corpus")
+        return
+    }
+    with_dasllama_jobque_() {
+        let knobs = gpu_knobs()
+        set_serving_gpu_tower(true, TowerFamily.vad)
+        let was = set_vad_stream_gpu(false)
+        let off0 = gpu_vad_chunks()
+        let cpu <- stream_events(m, samples, 1300)
+        t |> equal(gpu_vad_chunks() - off0, 0l, "the lever off: the stream stepped no chunk on the device")
+        set_vad_stream_gpu(true)
+        let c0 = gpu_vad_chunks()
+        let dev <- stream_events(m, samples, 1300)
+        let served = gpu_vad_chunks() - c0
+        set_vad_stream_gpu(was)
+        set_gpu_knobs(knobs)
+        if (served == 0l && !vad_device_expected()) {
+            t |> skip("no GPU VAD seat served on this box")
+            return
+        }
+        t |> equal(served, long_length(samples) / 512l, "the device stepped every whole chunk of the stream")
+        t |> success(length(cpu) >= 4, "the CPU feed opens and closes speech ({length(cpu) / 2} events)")
+        t |> success(length(dev) == length(cpu), "as many device events as CPU events")
+        var first_off = -1
+        for (i in range(min(length(dev), length(cpu)))) {
+            if (dev[i] != cpu[i] && first_off < 0) {
+                first_off = i
             }
+        }
+        t |> success(first_off < 0, "every device event the CPU's (first mismatch at {first_off})")
+    }
+}
+
+// The batch segmenter on the device over jfk and ru_long, on the `device` form.
+[cold_path]
+def private vad_twin_segmenter(t : T?; m : VadModel) {
+    with_dasllama_jobque_() {
+        let knobs = gpu_knobs()
+        set_serving_gpu_tower(true, TowerFamily.vad)
+        var ran = 0
+        for (wav in [asr_clip("jfk.wav"), asr_clip("ru_long.wav")]) {
+            var inscope samples <- load_audio_16k_mono(wav)
+            if (empty(samples)) {
+                t->log("{wav} absent: no leg")
+                continue
+            }
+            let tag = base_name(wav)
+            continue if (!twin_probs(t, m, tag, samples))
+            let c0 = gpu_vad_chunks()
+            var inscope dev <- find_speech_timestamps(m, samples, default_vad_opts())
+            t |> success(gpu_vad_chunks() > c0, "{tag}: the segmenter's probabilities came off the device")
+            var inscope cpu_probs <- vad_probs_cpu(m, samples)
+            t |> success(!empty(dev), "{tag}: {length(dev)} speech regions")
+            var inscope cpu <- speech_timestamps_of(cpu_probs, long_length(samples), default_vad_opts())
+            t |> success(same_segments(dev, cpu), "{tag}: every device speech region is the CPU's ({length(dev)} against {length(cpu)})")
+            ran++
+        }
+        set_gpu_knobs(knobs)
+        if (ran == 0) {
+            t |> skip("neither jfk.wav nor ru_long.wav is present")
+        }
+    }
+}
+
+// The Metal seat's declines, on the `device` form.
+[cold_path]
+def private test_vad_metal_declines(t : T?; m : VadModel) {
+    static_if (!typeinfo builtin_module_exists(das_metal)) {
+        t |> skip("not a Metal build")
+    } else {
+        with_dasllama_jobque_() {
+            let knobs = gpu_knobs()
+            set_metal_tower(true)
+            let sig <- lcg_signal(10 * 512)
+            twin_probs(t, m, "the seat serves", sig)
+            let tower_was = metal_tower_knob()
+            vad_decline_leg(t, m, sig, "knob") $(on) {
+                set_metal_tower(on ? false : tower_was)
+            }
+            var bare := m
+            bare.slab |> clear()
+            vad_decline_leg(t, bare, sig, "shape") $(_on) {}
+            var lanes_was = 0u
+            vad_decline_leg(t, m, sig, "device") $(on) {
+                if (on) {
+                    lanes_was = set_metal_vad_lanes_probe_(512u)
+                } else {
+                    set_metal_vad_lanes_probe_(lanes_was)
+                }
+            }
+            var take_was = 0ul
+            vad_decline_leg(t, m, sig, "memory") $(on) {
+                if (on) {
+                    take_was = set_metal_take_max_probe_(512ul)
+                } else {
+                    set_metal_take_max_probe_(take_was)
+                }
+            }
+            twin_probs(t, m, "the seat serves again with every pin put back", sig)
+            set_gpu_knobs(knobs)
         }
     }
 }
@@ -339,102 +343,117 @@ def private vad_decline_leg(t : T?; m : VadModel; sig : array<float>; reason : s
     check_exact(t, "{reason}: the CPU chunk step answered", probs, cpu)
 }
 
-[test(description = "The Vulkan VAD seat declines once per call on its knob, a slab-less model, no tile family, and a slab or scratch past the storage range, answering the CPU probabilities bit for bit, then serves on a rebuilt scratch")]
-def test_vad_vulkan_declines(t : T?) {
-    t |> run("the Vulkan VAD seat declines on its knob, a model with no slab, a device with neither tile family, a slab past the storage range on a released resident and a scratch past it, then serves on a rebuilt scratch") @(t : T?) {
-        static_if (!typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(das_metal)) {
-            t |> skip("not a Vulkan build")
-        } else {
-            if (tower_family_cuda(TowerFamily.vad)) {
-                t |> skip("the VAD's seats serve on the CUDA home under the ask (CUDA_AUDIO_FAMILIES) - the Vulkan seat's levers are not installed")
-                return
+// The Vulkan seat's declines, on the `device` form.
+[cold_path, unused_argument(m)]
+def private test_vad_vulkan_declines(t : T?; m : VadModel) {
+    static_if (!typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(das_metal)) {
+        t |> skip("not a Vulkan build")
+    } else {
+        if (tower_family_cuda(TowerFamily.vad)) {
+            t |> skip("the VAD's seats serve on the CUDA home under the ask (CUDA_AUDIO_FAMILIES) - the Vulkan seat's levers are not installed")
+            return
+        }
+        if (!vulkan_tower_arms()) {
+            t |> skip("no Vulkan device (DASLLAMA_GPU=1 and a device the tier serves)")
+            return
+        }
+        if (!vulkan_tower_tiles_on()) {
+            t |> skip("the seat's stamps need cm2 or the KHR tile at subgroup 32 (subgroup {g_gpu.subgroup_size} here) - every call declines device")
+            return
+        }
+        with_dasllama_jobque_() {
+            let knobs = gpu_knobs()
+            set_vulkan_tower(true)
+            let sig <- lcg_signal(10 * 512)
+            twin_probs(t, m, "the seat serves", sig)
+            let tower_was = vulkan_tower_on()
+            vad_decline_leg(t, m, sig, "knob") $(on) {
+                set_vulkan_tower(on ? false : tower_was)
             }
-            if (!vulkan_tower_arms()) {
-                t |> skip("no Vulkan device (DASLLAMA_GPU=1 and a device the tier serves)")
-                return
+            var bare := m
+            bare.slab |> clear()
+            vad_decline_leg(t, bare, sig, "shape") $(_on) {}
+            let km = g_gpu.has_coopmat
+            let mode = g_gpu.coopmat_mode
+            vad_decline_leg(t, m, sig, "device") $(on) {
+                g_gpu.has_coopmat = on ? false : km
+                g_gpu.coopmat_mode = on ? COOPMAT_MM : mode
             }
-            if (!vulkan_tower_tiles_on()) {
-                t |> skip("the seat's stamps need cm2 or the KHR tile at subgroup 32 (subgroup {g_gpu.subgroup_size} here) - every call declines device")
-                return
+            // a released resident: the upload's range decline releases it again, and must not destroy the slab the
+            // shutdown already destroyed
+            vulkan_tower_shutdown()
+            let msr = g_gpu.msr
+            vad_decline_leg(t, m, sig, "shape") $(on) {
+                g_gpu.msr = on ? 4096l : msr
             }
-            with_dasllama_jobque_() {
-                let knobs = gpu_knobs()
-                set_vulkan_tower(true)
-                var m <- load_vad_model(vad_bin_path())
+            // the slab fits the range and a call's scratch runs past it
+            let slab_bytes = long_length(m.slab) * 4l
+            let long_sig <- lcg_signal(int(slab_bytes / (512l * 4l) + 2l) * 512)
+            vad_decline_leg(t, m, long_sig, "shape") $(on) {
+                g_gpu.msr = on ? slab_bytes : msr
+            }
+            // the range decline must leave no capacity behind: the next call builds its scratch, never dispatching into
+            // the buffers the declined build released
+            twin_probs(t, m, "the seat serves on a scratch rebuilt after the range decline", sig)
+            set_gpu_knobs(knobs)
+        }
+    }
+}
+
+// The CUDA seat's declines, on the `device` form.
+[cold_path, unused_argument(m)]
+def private test_vad_cuda_declines(t : T?; m : VadModel) {
+    static_if (!typeinfo builtin_module_exists(cuda) || typeinfo builtin_module_exists(das_metal)) {
+        t |> skip("not a CUDA build")
+    } else {
+        if (!tower_family_cuda(TowerFamily.vad)) {
+            t |> skip("the VAD's seats serve on the Vulkan home: no CUDA ask (DASLLAMA_CUDA=1), or its CUDA_AUDIO_FAMILIES row off")
+            return
+        }
+        if (!gpu_tower_tiles_up(TowerFamily.vad)) {
+            t |> skip("no CUDA device (DASLLAMA_GPU=1 DASLLAMA_CUDA=1 and a device the home serves)")
+            return
+        }
+        with_dasllama_jobque_() {
+            with_gpu_knobs() {
+                set_serving_gpu_tower(true, TowerFamily.vad)
                 let sig <- lcg_signal(10 * 512)
                 twin_probs(t, m, "the seat serves", sig)
-                let tower_was = vulkan_tower_on()
                 vad_decline_leg(t, m, sig, "knob") $(on) {
-                    set_vulkan_tower(on ? false : tower_was)
+                    set_serving_gpu_tower(!on, TowerFamily.vad)
                 }
                 var bare := m
                 bare.slab |> clear()
-                vad_decline_leg(t, bare, sig, "shape") $(on) {}
-                let km = g_gpu.has_coopmat
-                let mode = g_gpu.coopmat_mode
+                vad_decline_leg(t, bare, sig, "shape") $(_on) {}
+                let faults_was = set_cuda_vad_faults_(false, false)   // the pins the cell found; each leg below starts clean
                 vad_decline_leg(t, m, sig, "device") $(on) {
-                    g_gpu.has_coopmat = on ? false : km
-                    g_gpu.coopmat_mode = on ? COOPMAT_MM : mode
+                    set_cuda_vad_faults_(on, false)
                 }
-                // a released resident: the upload's range decline releases it again, and must not destroy the slab the
-                // shutdown already destroyed
-                vulkan_tower_shutdown()
-                let msr = g_gpu.msr
-                vad_decline_leg(t, m, sig, "shape") $(on) {
-                    g_gpu.msr = on ? 4096l : msr
+                vad_decline_leg(t, m, sig, "memory") $(on) {
+                    set_cuda_vad_faults_(false, on)
                 }
-                // the slab fits the range and a call's scratch runs past it
-                let slab_bytes = long_length(m.slab) * 4l
-                let long_sig <- lcg_signal(int(slab_bytes / (512l * 4l) + 2l) * 512)
-                vad_decline_leg(t, m, long_sig, "shape") $(on) {
-                    g_gpu.msr = on ? slab_bytes : msr
-                }
-                // the range decline must leave no capacity behind: the next call builds its scratch, never dispatching into
-                // the buffers the declined build released
-                twin_probs(t, m, "the seat serves on a scratch rebuilt after the range decline", sig)
-                set_gpu_knobs(knobs)
+                twin_probs(t, m, "the seat serves on a resident rebuilt after the memory decline", sig)
+                set_cuda_vad_faults_(faults_was.device, faults_was.memory)
             }
         }
     }
 }
 
-[test(description = "The CUDA VAD seat declines once per call on its knob, a slab-less model, a failed class build and a failed allocation, answering the CPU probabilities bit for bit, then serves on a rebuilt resident")]
-def test_vad_cuda_declines(t : T?) {
-    t |> run("the CUDA VAD seat declines on its knob, a model with no slab, a class that failed to build and an allocation it cannot take, then serves on a rebuilt resident") @(t : T?) {
-        static_if (!typeinfo builtin_module_exists(cuda) || typeinfo builtin_module_exists(das_metal)) {
-            t |> skip("not a CUDA build")
+// The checked-in Silero-VAD bin, one block.
+[test(description = "The checked-in Silero-VAD bin loads once a form. On the run's own route a deterministic LCG signal yields 10 per-frame probabilities each within 1e-3 of the values frozen from onnxruntime op15; an empty clip yields no probability from `vad_probs` or `vad_probs_cpu`, no speech region, and no streaming event, also with the stream GPU lever on; and `find_speech_timestamps` on jfk.wav returns exactly the four segments silero get_speech_timestamps gives, start and end sample for sample. With the VAD home's tower pinned on, the GPU seat serves every chunk with probabilities within 1e-5 absolute of the CPU chunk step (a silenced-chunk control must exceed it), streams the CPU feed's exact events, and segments jfk and ru_long to the CPU's exact regions. The Metal seat declines once per call on its knob, a slab-less model, a sub-1024-lane pipeline and an untakeable scratch; the Vulkan seat on its knob, a slab-less model, no tile family, and a slab or scratch past the storage range, then serves on a rebuilt scratch; the CUDA seat on its knob, a slab-less model, a failed class build and a failed allocation, then serves on a rebuilt resident - each decline stepping no device chunk and answering the CPU probabilities bit for bit")]
+def test_vad_silero(t : T?) {
+    with_model_once_at(t, "audio", "silero_vad.bin", ["env", "device"], vad_root(), @@vad_form) $(var m; form) {
+        if (form == "env") {
+            tower_cell(t, "per-frame prob matches onnxruntime op15 on a deterministic LCG signal", m, @@test_vad_forward_lcg)
+            tower_cell(t, "an empty clip: no probability, no speech region, no streaming event, nothing asked of a seat", m, @@test_vad_empty_clip)
+            tower_cell(t, "find_speech_timestamps matches silero get_speech_timestamps on jfk.wav", m, @@test_vad_segments_jfk)
         } else {
-            if (!tower_family_cuda(TowerFamily.vad)) {
-                t |> skip("the VAD's seats serve on the Vulkan home: no CUDA ask (DASLLAMA_CUDA=1), or its CUDA_AUDIO_FAMILIES row off")
-                return
-            }
-            if (!gpu_tower_tiles_up(TowerFamily.vad)) {
-                t |> skip("no CUDA device (DASLLAMA_GPU=1 DASLLAMA_CUDA=1 and a device the home serves)")
-                return
-            }
-            with_dasllama_jobque_() {
-                with_gpu_knobs() {
-                    set_serving_gpu_tower(true, TowerFamily.vad)
-                    var m <- load_vad_model(vad_bin_path())
-                    let sig <- lcg_signal(10 * 512)
-                    twin_probs(t, m, "the seat serves", sig)
-                    vad_decline_leg(t, m, sig, "knob") $(on) {
-                        set_serving_gpu_tower(!on, TowerFamily.vad)
-                    }
-                    var bare := m
-                    bare.slab |> clear()
-                    vad_decline_leg(t, bare, sig, "shape") $(on) {}
-                    let faults_was = set_cuda_vad_faults_(false, false)   // the pins the cell found; each leg below starts clean
-                    vad_decline_leg(t, m, sig, "device") $(on) {
-                        set_cuda_vad_faults_(on, false)
-                    }
-                    vad_decline_leg(t, m, sig, "memory") $(on) {
-                        set_cuda_vad_faults_(false, on)
-                    }
-                    twin_probs(t, m, "the seat serves on a resident rebuilt after the memory decline", sig)
-                    set_cuda_vad_faults_(faults_was.device, faults_was.memory)
-                }
-            }
+            tower_cell(t, "the GPU seat's probabilities against the CPU chunk step on the LCG signal, whole and ragged", m, @@test_vad_gpu_twin)
+            tower_cell(t, "the streaming seat: the device feed's events are the CPU feed's, every whole chunk served", m, @@vad_twin_stream)
+            tower_cell(t, "the batch segmenter on the device: jfk's and ru_long's speech regions are the CPU's, the probabilities within the bar", m, @@vad_twin_segmenter)
+            tower_cell(t, "the Metal VAD seat declines on its knob, a model with no slab, a recurrence pipeline under 1024 lanes and a scratch it cannot take", m, @@test_vad_metal_declines)
+            tower_cell(t, "the Vulkan VAD seat declines on its knob, a model with no slab, a device with neither tile family, a slab past the storage range on a released resident and a scratch past it, then serves on a rebuilt scratch", m, @@test_vad_vulkan_declines)
+            tower_cell(t, "the CUDA VAD seat declines on its knob, a model with no slab, a class that failed to build and an allocation it cannot take, then serves on a rebuilt resident", m, @@test_vad_cuda_declines)
         }
     }
 }

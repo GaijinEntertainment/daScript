@@ -11,6 +11,7 @@ require dasllama/dasllama_math   // with_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/fio
 require _model_tier   // models_dir() + model_available() gate
+require _model_once   // with_model_once: a tower file's one block in the area; own_load
 require _gpu_knobs   // serving_tower_dev: the q8 lane's GPU image leg
 require dasllama/dasllama_tower   // tower_dev_tag: the GPU image's lane name
 require ?das_metal dasllama/dasllama_metal_tower   // the CPU gates pin the tower knob off
@@ -21,16 +22,26 @@ require _vision_oracle   // the mtmd dump parser, fixture generators, per-token 
 require math   // nolint:STYLE030,LINT019 — used only inside the GPU static_if arms; the no-GPU lane sees it unused
 require _f32_tile_pin   // with_reference_f32_tile - the q8 legs' bars are measured at the tile's reference order
 require _tower_twin   // set_every_gpu_tower, the Vulkan twin's seat and instrument
+require _vision_forms   // the towers' forms, the twin's kept canvases, a block's cell
+require _cpu_gpu_model   // with_cpu_and_gpu_model: a chat decoder's one block in the area
+require _vision_chat_cells   // the image chat turn's cells, run under the tower's image form
 
 // Tier-1 qwen3v tower parity vs llama-mtmd-debug -p encode (the Omni-30B SigLIP-geometry ViT).
 // Reference arm: the f32-widened mmprojs, CPU, -fa off (qwen3vl-vision-oracle/mint.sh mints the
 // Omni encode.* dumps, mint_4b.sh the 4B deepstack encode4b.* dumps).
 // Fixtures: pre-resized [0,1] float canvases - no preprocessing, so a diff isolates the tower math.
+// Each mmproj loads once a form, in its one `with_model_once` block (`qwen3v_form`): the image rail's forms carry the CPU
+// lanes' cells and the Metal tower's, the forms minted in memory the zeroed-layer controls, the device lanes and the
+// discrete twin's. A form's cells run on one home, so a compare of the CPU chain with a device chain is two forms, made
+// after the block on the rows they kept. The q8 cell's baked-tag and GPU-image legs hold their own loads.
 // The twin runs on the serving discrete home: under the CUDA ask (DASLLAMA_CUDA=1 or set_gpu_home("cuda")) on the CUDA
-// tower, skipping without a CUDA device there (`cuda_twin_seat`); else on the Vulkan tower, skipping on a build with
-// das_metal - the Metal driver owns the tower hooks there -, without a Vulkan device under DASLLAMA_GPU=1 and without the
-// tower's tile family (`vulkan_twin_seat`). The q8 cell's GPU image leg skips where the serving tower's device does not
-// stand up.
+// tower, its forms skipping without a CUDA device there (`cuda_twin_seat_why`); else on the Vulkan tower, skipping on a
+// build with das_metal - the Metal driver owns the tower hooks there -, without a Vulkan device under DASLLAMA_GPU=1 and
+// without the tower's tile family (`vulkan_twin_seat_why`). The q8 cell's GPU image leg skips where the serving tower's
+// device does not stand up.
+
+let private MM = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf"
+let private MM_4B = "mmproj-Qwen3VL-4B-Instruct-F16.gguf"
 
 let private TIER1_ABS = 2e-4
 // x token rms. Poison-calibrated: 27 blocks whose GELU rides the f16 LUT quantize the
@@ -74,6 +85,25 @@ let private TIER1_REL_Q8 = 1.0
 // proves the served slices still carry their signal
 let private TIER1_REL_Q8_DS = 8.2e-1
 
+let private POISON_BLOCK = 13l   //! the whole-tower input poison's block: a mid-stack block past the first deepstack tap
+let private TAP1_BLOCK = 11l   //! the 4B tower's tap-1 block (`ds_l1`), the deepstack q8 bar's poison: it hits the main path and a served slice
+
+//! a qwen3v tower file's staged read the key `key` names (`tower_stage_key`), under the key's lane pin and image flavor
+def private qwen3v_stage(path, key : string) : Qwen3vStaging =>
+    <- staged_tower_form(path, key, @@set_qwen3v_q8, @@reset_qwen3v_q8, @@stage_qwen3v_tower)
+
+//! One form of a qwen3v tower's file as the vision carrier holds it, its block's form loader (`tower_form`): the image
+//! rail's forms through `load_vision_embedder`, any other minted in memory from `stg`, its own copy of the file's staging
+//! under the form's lane pin, cut and poisoned - never `load_qwen3v_tower`, which bakes a `.dlim` under the pin.
+def private qwen3v_form(path, form : string; var stg : Qwen3vStaging) : VisionEmbedder {
+    let f = tower_form(form)
+    return <- image_tower_form(path, f, @@set_qwen3v_q8, @@reset_qwen3v_q8, @@qwen3v_serves_q8) if (f.image)
+    var inscope e = VisionEmbedder(kind = VisionKind.qwen3v)
+    truncate_and_poison(stg, f.nl, f.zero_block)
+    mint_qwen3v_tower(stg, e.qwen3v, tower_form_dev(f))
+    return <- e
+}
+
 def private gate_encode(t : T?; tw : Qwen3vTower; var st : Qwen3vState; kind : string; w, h : int; logname : string;
                         rel : float = TIER1_REL) : bool {
     return oracle_gate(t, path_join(models_dir(), "qwen3vl-vision-oracle"), logname, "qwen3vl-vision-oracle/mint.sh (encode.*) / mint_4b.sh (encode4b.*)", kind, w, h,
@@ -82,16 +112,27 @@ def private gate_encode(t : T?; tw : Qwen3vTower; var st : Qwen3vState; kind : s
     }
 }
 
-[test(description = "The Omni-30B qwen3v tower on the exact CPU lane loads its pinned shape and matches the mtmd dumps on seven canvases within 2e-4 abs plus 1.5e-2 of token rms; an off-grid canvas panics and a zeroed layer 13 reds the bar")]
-def test_qwen3v_tier1(t : T?) {
-    t |> run("tier-1 tower parity vs the mtmd encode dumps (Omni-30B)") @(tt : T?) {
-        let mm = path_join(models_dir(), "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")
-        if (!model_available(tt, mm)) {
-            return
-        }
-        set_qwen3v_q8(false)   // the exact-plane lane; the q8 serving lane is its own test
-        var tw <- load_qwen3v_tower(mm)
-        reset_qwen3v_q8()
+//! how far the `kind` canvas at w x h through `ptw` - a tower with a layer zeroed - lands past the bar `rel` the dump
+//! `logname` holds (`encode_excess`); `found` false where the dump is not stocked
+def private poison_excess(ptw : Qwen3vTower; kind : string; w, h : int; logname : string; rel : float) : tuple<found : bool; excess : float> {
+    var o = OracleEncode()
+    return (found = false, excess = 0.0) if (!load_oracle_encode(path_join(path_join(models_dir(), "qwen3vl-vision-oracle"), logname), o))
+    var st = Qwen3vState()
+    let planes <- make_planes(kind, w, h)
+    var pout : array<float>
+    with_dasllama_jobque_() {
+        qwen3v_encode(ptw, st, planes, int64(w), int64(h), pout)
+    }
+    let excess = encode_excess(pout, int(qwen3v_row_width(ptw)), o, TIER1_ABS, rel)
+    delete pout
+    delete st
+    return (found = true, excess = excess)
+}
+
+// The Omni-30B tower on the exact CPU lane, on the Omni file's `image_f32` form.
+[cold_path]
+def private test_qwen3v_tier1(tt : T?; tw : Qwen3vTower) {
+    with_gpu_knobs() {
         set_every_gpu_tower(false)
         var st = Qwen3vState()
         tt |> success(!tw.q8, "exact-plane lane")
@@ -124,165 +165,131 @@ def test_qwen3v_tier1(t : T?) {
             ragged_tripped = true
         }
         tt |> success(ragged_tripped, "a canvas off the 32 px merged-patch grid panics by name")
-        set_every_gpu_tower(true)
-        // negative control for the exact bar: layer 13's f32 layer_w region zeroed through the
-        // staging planes must red the same fixture on the same bar (the loosened-bar rule)
-        var o = OracleEncode()
-        if (load_oracle_encode(path_join(path_join(models_dir(), "qwen3vl-vision-oracle"), "encode.gray448.log"), o)) {
-            set_qwen3v_q8(false)
-            var inscope pst <- stage_qwen3v_tower(mm)
-            reset_qwen3v_q8()
-            let base = pst.t.layer_w + 13l * pst.t.layer_w_stride
-            for (i in range64(pst.t.layer_w_stride)) {
-                pst.blob[base + i] = 0.0
-            }
-            for (i in range64(long_length(pst.wblob) > 0l ? pst.t.layer_w_stride : 0l)) {
-                pst.wblob[base + i] = uint16(0)   // the baked twin serves the GPU route - a blob-only poison is laundered
-            }
-            var ptw = Qwen3vTower()
-            mint_qwen3v_tower(pst, ptw)
-            let planes <- make_planes("gray", 448, 448)
-            var pout : array<float>
-            with_dasllama_jobque_() {
-                qwen3v_encode(ptw, st, planes, 448l, 448l, pout)
-            }
-            let excess = encode_excess(pout, int(qwen3v_row_width(ptw)), o, TIER1_ABS, TIER1_REL)
-            to_log(LOG_INFO, "qwen3v exact poison leg: zero layer 13 -> excess {excess} over the bar\n")
-            tt |> success(excess > 0.0, "a zeroed mid-layer f32 region reds the exact bar (excess {excess})")
-            delete pout
-            delete ptw
-        }
         delete st
-        delete tw
     }
 }
 
-//! the q8 lane on the Metal device: the deepstack tower minted q8 under the pin serves every block off its q8 planes on the q8 bar, no quant_mode decline
+// The negative control for the exact bar, on the Omni file's `f32_z13@seat` form: layer 13's f32 layer_w region zeroed
+// through the staging planes (the baked twin serves the GPU route - a blob-only poison is laundered) must red the same
+// fixture on the same bar (the loosened-bar rule), on the tower the box serves.
 [cold_path]
-def private q3v_metal_q8_leg(tt : T?; mm4 : string) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        var twq <- mint_tower(mm4, true, 0l, -1l, TowerDev.metal)   // in memory: a load under the pin would bake the q8 image beside the serving one
-        tt |> success(twq.q8, "the q8 lane minted under the pin")
-        var stq = Qwen3vState()
-        q8_lane_served(tt, "q8 tower", TowerFamily.vision, twq.n_layer) $() : bool {
-            return tt |> gate_encode(twq, stq, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_Q8_DS)
+def private exact_poison_leg(tt : T?; ptw : Qwen3vTower) {
+    with_gpu_knobs() {
+        set_every_gpu_tower(true)
+        let p = poison_excess(ptw, "gray", 448, 448, "encode.gray448.log", TIER1_REL)
+        if (p.found) {
+            to_log(LOG_INFO, "qwen3v exact poison leg: zero layer 13 -> excess {p.excess} over the bar\n")
+            tt |> success(p.excess > 0.0, "a zeroed mid-layer f32 region reds the exact bar (excess {p.excess})")
         }
-        delete stq
-        delete twq
-        q3v_poison_leg(tt, mm4, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_Q8_DS)
     }
 }
 
-let private POISON_BLOCK = 13l   //! the whole-tower input poison's block: a mid-stack block past the first deepstack tap
-
-//! a canvas's device-side dump bar poisoned: the deepstack q8 tower with `POISON_BLOCK` zeroed must exceed the bar `logname` holds
-def private q3v_poison_leg(tt : T?; mm : string; kind : string; w, h : int; logname : string; bar_rms : float) {
-    var o = OracleEncode()
-    return if (!oracle_dump(tt, "qwen3vl-vision-oracle", logname, "qwen3vl-vision-oracle/mint_4b.sh", o))
-    var twp <- mint_tower(mm, true, 0l, POISON_BLOCK, serving_tower_dev(TowerFamily.vision))
-    var stp = Qwen3vState()
-    dump_poison_leg(tt, "qwen3v", kind, w, h, o, bar_rms, POISON_BLOCK, int(qwen3v_row_width(twp)), TIER1_ABS, twp, stp) $(t; var s; planes; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)
-    delete stp
-    delete twp
+// The negative control for the GPU bars, on the same form of a das_metal build: the same zero-layer-13 poison, GPU-served,
+// must red TIER1_REL_GPU (the loosened-bar rule wants the control ON THIS lane).
+[cold_path]
+def private gpu_poison_leg(tt : T?; ptw : Qwen3vTower) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_gpu_knobs() {
+            set_metal_tower(true)
+            let p = poison_excess(ptw, "gray", 448, 448, "encode.gray448.log", TIER1_REL_GPU)
+            if (p.found) {
+                to_log(LOG_INFO, "qwen3v GPU-lane poison leg: zero layer 13 -> excess {p.excess} over the GPU bar\n")
+                tt |> success(p.excess > 0.0, "a zeroed mid-layer reds the GPU bar on the GPU-served lane (excess {p.excess})")
+            }
+        }
+    }
 }
 
-// The Metal tower arm: the SAME fixtures and bars, tower pinned ON — the GPU chain's parity
-// gate, with engage evidence (encode/block counter deltas), never "the model ran".
-[test(description = "On the Metal tower, the Omni-30B and 4B deepstack towers match the mtmd dumps within 4e-2 and 8e-2 of token rms with every gated encode and block counted, the q8 lane serves on its bar, and zeroed-layer poisons red")]
-def test_qwen3v_tier1_metal(t : T?) {
-    t |> run("tier-1 on the Metal tower (Omni-30B narrow + 4B deepstack)") @(tt : T?) {
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            let mm = path_join(models_dir(), "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")
-            let mm4 = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
-            if (!model_available(tt, mm) || !model_available(tt, mm4)) {
-                return
-            }
-            set_qwen3v_q8(false)   // the Metal tower serves the f32 exact planes
-            var tw <- load_qwen3v_tower(mm)
-            var tw4 <- load_qwen3v_tower(mm4)
-            reset_qwen3v_q8()
+// The Metal tower arm, on a file's `image` form: the SAME fixtures and bars, tower pinned ON — the GPU chain's parity
+// gate, with engage evidence (encode/block counter deltas), never "the model ran". The Omni file runs the narrow fixtures,
+// the 4B file the deepstack ones.
+[cold_path]
+def private test_qwen3v_tier1_metal(tt : T?; tw : Qwen3vTower) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_gpu_knobs() {
             set_metal_tower(true)
             var st = Qwen3vState()
             let s0 = metal_tower_stats()
-            var omni_gated = 0l
-            var ds_gated = 0l
-            for (fx in [(kind = "gray", w = 448, h = 448, log = "encode.gray448.log"), (kind = "cb", w = 448, h = 448, log = "encode.cb448.log"),
-                        (kind = "cb", w = 640, h = 320, log = "encode.cb640x320.log")]) {
-                omni_gated += (tt |> gate_encode(tw, st, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_GPU)) ? 1l : 0l
-            }
-            var st4 = Qwen3vState()
-            for (fx in [(kind = "cb", w = 448, h = 448, log = "encode4b.cb448.log"), (kind = "cb", w = 640, h = 320, log = "encode4b.cb640x320.log"),
-                        (kind = "cb", w = 96, h = 96, log = "encode4b.cb96.log")]) {
-                ds_gated += (tt |> gate_encode(tw4, st4, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_GPU_DS)) ? 1l : 0l
+            var gated = 0l
+            if (tw.n_deepstack == 0l) {
+                for (fx in [(kind = "gray", w = 448, h = 448, log = "encode.gray448.log"), (kind = "cb", w = 448, h = 448, log = "encode.cb448.log"),
+                            (kind = "cb", w = 640, h = 320, log = "encode.cb640x320.log")]) {
+                    gated += (tt |> gate_encode(tw, st, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_GPU)) ? 1l : 0l
+                }
+            } else {
+                for (fx in [(kind = "cb", w = 448, h = 448, log = "encode4b.cb448.log"), (kind = "cb", w = 640, h = 320, log = "encode4b.cb640x320.log"),
+                            (kind = "cb", w = 96, h = 96, log = "encode4b.cb96.log")]) {
+                    gated += (tt |> gate_encode(tw, st, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_GPU_DS)) ? 1l : 0l
+                }
             }
             let s1 = metal_tower_stats()
-            to_log(LOG_INFO, "qwen3v metal tier-1: +{s1.encodes - s0.encodes} encodes, +{s1.blocks - s0.blocks} blocks, +{s1.declines - s0.declines} declines ({omni_gated}+{ds_gated} fixtures gated)\n")
-            if (omni_gated + ds_gated == 0l) {
+            to_log(LOG_INFO, "qwen3v metal tier-1 ({tw.n_layer} blocks): +{s1.encodes - s0.encodes} encodes, +{s1.blocks - s0.blocks} blocks, +{s1.declines - s0.declines} declines ({gated} fixtures gated)\n")
+            if (gated == 0l) {
                 tt |> skip("no oracle dumps present - the GPU parity fixtures all skipped")
             } else {
-                tt |> success(s1.encodes - s0.encodes >= omni_gated + ds_gated, "every gated encode served on the Metal tower")
-                tt |> equal(s1.blocks - s0.blocks, omni_gated * 27l + ds_gated * 24l, "the block counters advanced per gated fixture")
-            }
-            q3v_metal_q8_leg(tt, mm4)
-            // negative control for the GPU bars: the same zero-layer-13 poison, GPU-served,
-            // must red TIER1_REL_GPU (the loosened-bar rule wants the control ON THIS lane)
-            var po = OracleEncode()
-            if (load_oracle_encode(path_join(path_join(models_dir(), "qwen3vl-vision-oracle"), "encode.gray448.log"), po)) {
-                set_qwen3v_q8(false)
-                var inscope pst <- stage_qwen3v_tower(mm)
-                reset_qwen3v_q8()
-                let base = pst.t.layer_w + 13l * pst.t.layer_w_stride
-                for (i in range64(pst.t.layer_w_stride)) {
-                    pst.blob[base + i] = 0.0
-                }
-                for (i in range64(long_length(pst.wblob) > 0l ? pst.t.layer_w_stride : 0l)) {
-                    pst.wblob[base + i] = uint16(0)
-                }
-                var ptw = Qwen3vTower()
-                mint_qwen3v_tower(pst, ptw)
-                let planes <- make_planes("gray", 448, 448)
-                var pout : array<float>
-                with_dasllama_jobque_() {
-                    qwen3v_encode(ptw, st, planes, 448l, 448l, pout)
-                }
-                let excess = encode_excess(pout, int(qwen3v_row_width(ptw)), po, TIER1_ABS, TIER1_REL_GPU)
-                to_log(LOG_INFO, "qwen3v GPU-lane poison leg: zero layer 13 -> excess {excess} over the GPU bar\n")
-                tt |> success(excess > 0.0, "a zeroed mid-layer reds the GPU bar on the GPU-served lane (excess {excess})")
-                delete pout
-                delete ptw
+                tt |> success(s1.encodes - s0.encodes >= gated, "every gated encode served on the Metal tower")
+                tt |> equal(s1.blocks - s0.blocks, gated * tw.n_layer, "the block counters advanced per gated fixture")
             }
             delete st
-            delete st4
-            delete tw
-            delete tw4
-        } else {
-            tt |> skip("no das_metal on this build - the Metal tower arm has no device to serve")
+        }
+    } else {
+        tt |> skip("no das_metal on this build - the Metal tower arm has no device to serve")
+    }
+}
+
+// The q8 lane on the Metal device, on the 4B file's `q8@dev` form of a das_metal build: the deepstack tower minted q8 in
+// the Metal flavor serves every block off its q8 planes on the q8 bar, no quant_mode decline.
+[cold_path]
+def private q3v_metal_q8_leg(tt : T?; twq : Qwen3vTower) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_gpu_knobs() {
+            set_metal_tower(true)
+            tt |> success(twq.q8, "the q8 lane minted under the pin")
+            var stq = Qwen3vState()
+            q8_lane_served(tt, "q8 tower", TowerFamily.vision, twq.n_layer) $() : bool {
+                return tt |> gate_encode(twq, stq, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_Q8_DS)
+            }
+            delete stq
         }
     }
 }
 
-[test(description = "On Metal's twin-W route, the 4B f16 and Omni bf16 qwen3v towers match the mtmd dumps on the GPU bars with every gated encode on the f16-W route, and the knob-off leg stays on the f32 GEMM route"), arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
-def test_qwen3v_tier1_metal_f16(t : T?) {
-    t |> run("tier-1 on the Metal tower's twin-W route (crowned twins, 4B f16 + Omni bf16)") @(tt : T?) {
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            let mm4 = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
-            if (!model_available(tt, mm4)) {
-                return
+// A canvas's device-side dump bar poisoned, on the 4B file's `q8_z13@dev` form: the deepstack q8 tower with `POISON_BLOCK`
+// zeroed must exceed the bar the cb 448 dump holds.
+[cold_path]
+def private q3v_poison_leg(tt : T?; twp : Qwen3vTower) {
+    var o = OracleEncode()
+    return if (!oracle_dump(tt, "qwen3vl-vision-oracle", "encode4b.cb448.log", "qwen3vl-vision-oracle/mint_4b.sh", o))
+    var stp = Qwen3vState()
+    dump_poison_leg(tt, "qwen3v", "cb", 448, 448, o, TIER1_REL_Q8_DS, POISON_BLOCK, int(qwen3v_row_width(twp)), TIER1_ABS, twp, stp) $(t; var s; planes; var out) => qwen3v_encode(t, s, planes, 448l, 448l, out)
+    delete stp
+}
+
+// The Metal tower's twin-W route (crowned twins), on a file's `image` form: the 4B f16 tower's gated encodes ride the
+// f16-W route and its knob-off leg keeps the f32 GEMM route; the Omni bf16 tower rides the twin route.
+[cold_path, arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
+def private test_qwen3v_tier1_metal_f16(tt : T?; tw : Qwen3vTower) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let knobs_found = gpu_knobs()
+        let f16_found = get_metal_tower_f16()
+        let crowns_found = get_metal_tensor_crowns()
+        set_metal_tensor_crowns("mulmm_q8")
+        metal_prefill_shutdown()
+        set_metal_tower(true)
+        set_metal_tower_f16(true)
+        var st = Qwen3vState()
+        if (tw.n_deepstack == 0l) {
+            let b0 = metal_tower_f16_encodes()
+            if (tt |> gate_encode(tw, st, "cb", 448, 448, "encode.cb448.log", TIER1_REL_GPU)) {
+                tt |> success(metal_tower_f16_encodes() - b0 >= 1l, "the bf16-sourced tower rode the twin route")
             }
-            set_metal_tensor_crowns("mulmm_q8")
-            metal_prefill_shutdown()
-            set_qwen3v_q8(false)
-            var tw4 <- load_qwen3v_tower(mm4)
-            reset_qwen3v_q8()
-            set_metal_tower(true)
-            set_metal_tower_f16(true)
-            var st4 = Qwen3vState()
+        } else {
             let f0 = metal_tower_f16_encodes()
             var gated = 0l
-            if (tt |> gate_encode(tw4, st4, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_GPU_DS)) {
+            if (tt |> gate_encode(tw, st, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_GPU_DS)) {
                 gated++
             }
-            if (tt |> gate_encode(tw4, st4, "cb", 96, 96, "encode4b.cb96.log", TIER1_REL_GPU_DS)) {
+            if (tt |> gate_encode(tw, st, "cb", 96, 96, "encode4b.cb96.log", TIER1_REL_GPU_DS)) {
                 gated++
             }
             let f1 = metal_tower_f16_encodes()
@@ -291,44 +298,24 @@ def test_qwen3v_tier1_metal_f16(t : T?) {
             } else {
                 tt |> success(f1 - f0 >= gated, "every gated encode rode the f16-W route ({f1 - f0} of {gated})")
                 set_metal_tower_f16(false)
-                tt |> gate_encode(tw4, st4, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_GPU_DS)
+                tt |> gate_encode(tw, st, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_GPU_DS)
                 tt |> equal(metal_tower_f16_encodes() - f1, 0l, "the knob-off leg keeps the f32 GEMM route")
-                set_metal_tower_f16(true)
             }
-            let mm = path_join(models_dir(), "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")
-            if (model_available(tt, mm)) {
-                set_qwen3v_q8(false)
-                var tw <- load_qwen3v_tower(mm)
-                reset_qwen3v_q8()
-                var st = Qwen3vState()
-                let b0 = metal_tower_f16_encodes()
-                if (tt |> gate_encode(tw, st, "cb", 448, 448, "encode.cb448.log", TIER1_REL_GPU)) {
-                    tt |> success(metal_tower_f16_encodes() - b0 >= 1l, "the bf16-sourced tower rode the twin route")
-                }
-                delete st
-                delete tw
-            }
-            set_metal_tower_f16(true)
-            set_metal_tensor_crowns("")
-            metal_prefill_shutdown()
-            delete st4
-            delete tw4
-        } else {
-            tt |> skip("no das_metal on this build - the f16-W route has no device to serve")
         }
+        set_metal_tower_f16(f16_found)
+        set_metal_tensor_crowns(crowns_found)
+        set_gpu_knobs(knobs_found)
+        metal_prefill_shutdown()
+        delete st
+    } else {
+        tt |> skip("no das_metal on this build - the f16-W route has no device to serve")
     }
 }
 
-[test(description = "The Qwen3-VL 4B deepstack tower on the exact CPU lane loads three taps at blocks 5/11/17 with a 10240-wide row and matches the mtmd dumps on four canvases within 2e-4 abs plus 4e-2 of token rms")]
-def test_qwen3v_tier1_deepstack(t : T?) {
-    t |> run("tier-1 deepstack tower parity vs the mtmd encode dumps (Qwen3-VL 4B)") @(tt : T?) {
-        let mm = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
-        if (!model_available(tt, mm)) {
-            return
-        }
-        set_qwen3v_q8(false)   // the exact-plane lane; the q8 serving lane is its own test
-        var tw <- load_qwen3v_tower(mm)
-        reset_qwen3v_q8()
+// The Qwen3-VL 4B deepstack tower on the exact CPU lane, on the 4B file's `image_f32` form.
+[cold_path]
+def private test_qwen3v_tier1_deepstack(tt : T?; tw : Qwen3vTower) {
+    with_gpu_knobs() {
         set_every_gpu_tower(false)
         var st = Qwen3vState()
         tt |> success(!tw.q8, "exact-plane lane")
@@ -345,15 +332,15 @@ def test_qwen3v_tier1_deepstack(t : T?) {
         tt |> gate_encode(tw, st, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_DS)
         tt |> gate_encode(tw, st, "cb", 640, 320, "encode4b.cb640x320.log", TIER1_REL_DS)   // non-square: merge-reorder + transposed-grid
         tt |> gate_encode(tw, st, "cb", 96, 96, "encode4b.cb96.log", TIER1_REL_DS)   // 9 tokens: the pos-table DOWNSCALE arm
-        set_every_gpu_tower(true)
         delete st
-        delete tw
     }
 }
 
 //! the q8-lane image's baked tag routes through the carrier sniff (the qwen3v-q8 arm), with the GPU towers off as the caller
 //! left them; the image is this build's own mint, never a file an earlier build left beside the mmproj
-def private q8_baked_tag_leg(tt : T?; mm : string) {
+def private q8_baked_tag_leg(tt : T?) {
+    own_load("the cell reloads the model: it mints the q8 lane's CPU image into scratch through the cold load, then loads that image through the carrier")
+    let mm = path_join(models_dir(), "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")
     let img = path_join(test_temp_dir(), base_name(image_path_for(mm, "qwen3v-q8")))
     remove(img)
     set_qwen3v_q8(true)
@@ -371,19 +358,31 @@ def private q8_baked_tag_leg(tt : T?; mm : string) {
     remove(img)
 }
 
-// The q8 serving lane (the CPU default): the same dumps on their own scale-relative bars.
-[test(description = "The Omni-30B q8 serving lane matches the mtmd dumps within 1.0 of token rms at the reference f32 tile, a zeroed layer-13 qblob reds that bar, the baked q8 image sniffs to qwen3v, and the GPU q8 image mints and reloads")]
-def test_qwen3v_tier1_q8(t : T?) {
-    t |> run("tier-1 on the q8 block-GEMM lane (the serving default, Omni-30B)") @(tt : T?) {
-        let mm = path_join(models_dir(), "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")
-        if (!model_available(tt, mm)) {
-            return
-        }
-        set_qwen3v_q8(true)   // a CPU-lane claim pins the covering knob, never relies on the policy
-        let knobs = gpu_knobs()
-        set_every_gpu_tower(false)   // ... and the knob-off load takes the lane's CPU image (`#tower-dev-block`)
-        var tw <- load_qwen3v_tower(mm)
-        reset_qwen3v_q8()
+//! the q8 lane's GPU image, with the GPU towers on as the caller pinned them: the cold load mints it into scratch where the
+//! serving tower's device stands up, and the image loads by its path with its device block bound
+def private q8_gpu_image_leg(tt : T?) {
+    own_load("the cell reloads the model: it mints the q8 lane's GPU image into scratch through the cold load, then loads that image by its path")
+    let mm = path_join(models_dir(), "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")
+    let dev = serving_tower_dev(TowerFamily.vision)
+    set_qwen3v_q8(true)
+    let imgd = path_join(test_temp_dir(), base_name(image_path_for(mm, tower_dev_tag("qwen3v-q8", dev))))
+    remove(imgd)
+    with_image_destination(imgd) {
+        var inscope cold <- load_qwen3v_tower(mm)
+        tt |> equal(cold.dev_backend, dev, "the cold load of the q8 lane mints the {dev} image where its device stands up")
+    }
+    var inscope byp <- load_qwen3v_tower(imgd)
+    tt |> success(byp.dev_backend == dev && !empty(byp.dev), "the {dev} q8 image loads by its path, its device block bound")
+    reset_qwen3v_q8()
+    remove(imgd)
+}
+
+// The q8 serving lane (the CPU default), on the Omni file's `image_q8` form: the same dumps on their own scale-relative
+// bars; then the baked-tag and GPU-image legs, each its own load.
+[cold_path]
+def private test_qwen3v_tier1_q8(tt : T?; tw : Qwen3vTower) {
+    with_gpu_knobs() {
+        set_every_gpu_tower(false)   // a CPU-lane claim: the knob-off load took the lane's CPU image (`#tower-dev-block`)
         var st = Qwen3vState()
         tt |> success(tw.q8, "q8 lane loaded")
         tt |> equal(int(tw.ff_pad), 4352, "ffn served at the layout's padded width")
@@ -392,164 +391,188 @@ def test_qwen3v_tier1_q8(t : T?) {
             tt |> gate_encode(tw, st, "cb", 448, 448, "encode.cb448.log", TIER1_REL_Q8)
             tt |> gate_encode(tw, st, "cb", 96, 96, "encode.cb96.log", TIER1_REL_Q8)
         }
-        // negative control: layer 13's qblob region zeroed through the staging planes (the
-        // gemma4v knockout shape) must red the same fixture on the same bar
-        var o = OracleEncode()
-        if (load_oracle_encode(path_join(path_join(models_dir(), "qwen3vl-vision-oracle"), "encode.gray448.log"), o)) {
-            set_qwen3v_q8(true)
-            var inscope pst <- stage_qwen3v_tower(mm)
-            reset_qwen3v_q8()
-            let base = pst.t.layer_w + 13l * pst.t.layer_w_stride
-            for (i in range64(pst.t.layer_w_stride)) {
-                pst.qblob[base + i] = int8(0)
-            }
-            var ptw = Qwen3vTower()
-            mint_qwen3v_tower(pst, ptw)
-            let planes <- make_planes("gray", 448, 448)
-            var pout : array<float>
-            with_reference_f32_tile(tt) {
-                with_dasllama_jobque_() {
-                    qwen3v_encode(ptw, st, planes, 448l, 448l, pout)
-                }
-            }
-            let excess = encode_excess(pout, int(qwen3v_row_width(ptw)), o, TIER1_ABS, TIER1_REL_Q8)
-            to_log(LOG_INFO, "qwen3v q8 poison leg: zero layer 13 -> excess {excess} over the bar\n")
-            tt |> success(excess > 0.0, "a zeroed mid-layer qblob region reds the bar (excess {excess})")
-            delete pout
-            delete ptw
-        }
-        q8_baked_tag_leg(tt, mm)
+        delete st
+        q8_baked_tag_leg(tt)
         set_every_gpu_tower(true)   // the GPU leg's pin
-        let dev = serving_tower_dev(TowerFamily.vision)
         if (serving_tower_device_up(TowerFamily.vision)) {
-            set_qwen3v_q8(true)
-            let imgd = path_join(test_temp_dir(), base_name(image_path_for(mm, tower_dev_tag("qwen3v-q8", dev))))
-            remove(imgd)
-            with_image_destination(imgd) {
-                var inscope cold <- load_qwen3v_tower(mm)
-                tt |> equal(cold.dev_backend, dev, "the cold load of the q8 lane mints the {dev} image where its device stands up")
-            }
-            var inscope byp <- load_qwen3v_tower(imgd)
-            tt |> success(byp.dev_backend == dev && !empty(byp.dev), "the {dev} q8 image loads by its path, its device block bound")
-            reset_qwen3v_q8()
-            remove(imgd)
+            q8_gpu_image_leg(tt)
         } else {
             tt |> skip("no GPU device stands up for the serving tower - the GPU image leg")
         }
-        set_gpu_knobs(knobs)
-        delete st
-        delete tw
     }
 }
 
-//! a tower minted in memory from the staged planes under the lane pin (pinned, staged, the pin restored): `nl` blocks (0 = the
-//! file's count); `zero_block` >= 0 zeroes that block's q8 GEMM planes - the input poison of the device-side bar (q8 lane);
-//! `dev` the image flavor (`none` the CPU image). Never `load_qwen3v_tower`, which bakes a `.dlim` under the pin.
-def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int64 = -1l; dev : TowerDev = TowerDev.none) : Qwen3vTower
-    => mint_twin_tower(mm, q8, nl, zero_block, dev, @@set_qwen3v_q8, @@reset_qwen3v_q8, @@stage_qwen3v_tower, @@mint_qwen3v_tower)
-
-//! one canvas three ways on the shared instrument; `zero_block` >= 0 adds the input poison over a fresh q8 tower
-def private twin_encode(tt : T?; tw : Qwen3vTower; var st : Qwen3vState; tw_exact : Qwen3vTower; var st_exact : Qwen3vState;
-                        kind : string; w, h : int; mm : string; zero_block : int64 = -1l) {
-    let planes <- make_planes(kind, w, h)
-    twin_canvas(tt, "qwen3v", kind, w, h, 16l, ", {tw.n_deepstack} taps", tw, st, tw_exact, st_exact, zero_block,
-        $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb, serving_tower_dev(TowerFamily.vision)) }) $(t; var s; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)
+// The q8 bar's negative control, on the Omni file's `q8_z13` form: layer 13's qblob region zeroed through the staging
+// planes (the gemma4v knockout shape) must red the same fixture on the same bar.
+[cold_path]
+def private q8_poison_leg(tt : T?; ptw : Qwen3vTower) {
+    q8_poison_reds(tt, ptw, "gray", "encode.gray448.log", TIER1_REL_Q8, "q8 poison leg: zero layer 13",
+                   "a zeroed mid-layer qblob region reds the bar")
 }
 
-[test(description = "On the serving discrete home, the qwen3v 4B deepstack device chain holds to the CPU q8 and exact chains at 1, 2, 6 and 24 blocks on structured canvases, a one-block zeroed poison exceeds the bar, and the exact lane is device-served"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
-def test_qwen3v_discrete_twin(t : T?) {
-    t |> run("the serving discrete home's chain ({serving_tower_dev(TowerFamily.vision)}) vs the CPU q8 chain (Qwen3-VL 4B, deepstack), and the exact lane served") @(tt : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            let mm = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
-            if (!model_available(tt, mm) || !discrete_twin_seat(tt)) {
-                return
+//! a q8 poison form's control: the poisoned tower `ptw` on the `kind` 448 x 448 canvas against the dump `log` exceeds the
+//! bar `rel`, logged as `leg` and asserted as `what`, the CPU lane under the reference f32 tile
+def private q8_poison_reds(tt : T?; ptw : Qwen3vTower; kind, log : string; rel : float; leg, what : string) {
+    with_gpu_knobs() {
+        set_every_gpu_tower(false)
+        with_reference_f32_tile(tt) {
+            let p = poison_excess(ptw, kind, 448, 448, log, rel)
+            if (p.found) {
+                to_log(LOG_INFO, "qwen3v {leg} -> excess {p.excess} over the bar\n")
+                tt |> success(p.excess > 0.0, "{what} (excess {p.excess})")
             }
-            var tw_exact <- mint_tower(mm, false)
-            var st_exact = Qwen3vState()
-            tt |> success(!tw_exact.q8 && tw_exact.n_deepstack == 3l, "exact-plane lane minted, three deepstack taps")
-            for (nl in [1l, 2l, 6l]) {
-                var twxs <- mint_tower(mm, false, nl)
-                var twq <- mint_tower(mm, true, nl)
-                var stq = Qwen3vState()
-                var stxs = Qwen3vState()
-                tt |> success(twq.q8 && !twxs.q8 && twq.n_layer == nl && twxs.n_layer == nl, "the {nl}-block towers, q8 and exact")
-                twin_encode(tt, twq, stq, twxs, stxs, "cb", 96, 96, mm, nl == 1l ? 0l : -1l)   // the poison on the one-block tower, where the bar is tightest
-                twin_encode(tt, twq, stq, twxs, stxs, "cb", 448, 448, mm)
-                delete stq
-                delete stxs
-                delete twq
-                delete twxs
-            }
-            var tw <- mint_tower(mm, true)
-            var st = Qwen3vState()
-            tt |> success(tw.q8, "q8 lane minted")
-            twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 96, 96, mm)
-            twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 448, 448, mm)
-            twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 640, 320, mm)   // non-square: the merge-reorder and the transposed grid; no gray canvas - the q8 lane is no instrument there (its own cells keep gray on the exact set)
-            delete st
-            delete tw
-            let planes <- make_planes("cb", 448, 448)
-            var twxp <- mint_tower(mm, false, 0l, 13l)
-            var stxp = Qwen3vState()
-            exact_lane_served(tt, "qwen3v cb 448x448", tw_exact, st_exact, 784l, twxp, stxp) $(t; var s; var out) => qwen3v_encode(t, s, planes, 448l, 448l, out)
-            delete stxp
-            delete twxp
-            delete st_exact
-            delete tw_exact
-            gpu_tower_shutdown(TowerFamily.vision)
-        } else {
-            tt |> skip("dasVulkan not present")
         }
     }
 }
 
-[test(description = "The Qwen3-VL 4B deepstack q8 lane matches the mtmd dumps within 0.82 of token rms at the reference f32 tile, and zeroing the tap-1 block's qblob reds that bar")]
-def test_qwen3v_tier1_q8_deepstack(t : T?) {
-    t |> run("tier-1 deepstack on the q8 block-GEMM lane (Qwen3-VL 4B)") @(tt : T?) {
-        let mm = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
-        if (!model_available(tt, mm)) {
-            return
-        }
-        set_qwen3v_q8(true)   // a CPU-lane claim pins the covering knob, never relies on the policy
-        let knobs = gpu_knobs()
-        set_every_gpu_tower(false)   // ... and the knob-off load takes the lane's CPU image (`#tower-dev-block`)
-        var tw <- load_qwen3v_tower(mm)
-        reset_qwen3v_q8()
+// The deepstack q8 lane, on the 4B file's `image_q8` form.
+[cold_path]
+def private test_qwen3v_tier1_q8_deepstack(tt : T?; tw : Qwen3vTower) {
+    with_gpu_knobs() {
+        set_every_gpu_tower(false)   // a CPU-lane claim: the knob-off load took the lane's CPU image (`#tower-dev-block`)
         var st = Qwen3vState()
         tt |> success(tw.q8, "q8 lane loaded")
+        tt |> equal(tw.ds_l1, TAP1_BLOCK, "the tap-1 block is the one the bar's poison form zeroes")
         with_reference_f32_tile(tt) {
             tt |> gate_encode(tw, st, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_Q8_DS)
             tt |> gate_encode(tw, st, "cb", 96, 96, "encode4b.cb96.log", TIER1_REL_Q8_DS)
         }
-        // negative control for THIS bar: the same zero-layer knockout must red it (tap 1's
-        // block, so the poison hits both the main path and a served slice)
-        var o = OracleEncode()
-        if (load_oracle_encode(path_join(path_join(models_dir(), "qwen3vl-vision-oracle"), "encode4b.cb448.log"), o)) {
-            set_qwen3v_q8(true)
-            var inscope pst <- stage_qwen3v_tower(mm)
-            reset_qwen3v_q8()
-            let base = pst.t.layer_w + pst.t.ds_l1 * pst.t.layer_w_stride
-            for (i in range64(pst.t.layer_w_stride)) {
-                pst.qblob[base + i] = int8(0)
-            }
-            var ptw = Qwen3vTower()
-            mint_qwen3v_tower(pst, ptw)
-            let planes <- make_planes("cb", 448, 448)
-            var pout : array<float>
-            with_reference_f32_tile(tt) {
-                with_dasllama_jobque_() {
-                    qwen3v_encode(ptw, st, planes, 448l, 448l, pout)
-                }
-            }
-            let excess = encode_excess(pout, int(qwen3v_row_width(ptw)), o, TIER1_ABS, TIER1_REL_Q8_DS)
-            to_log(LOG_INFO, "qwen3v deepstack q8 poison leg: zero the tap-1 block -> excess {excess} over the bar\n")
-            tt |> success(excess > 0.0, "a zeroed tap block reds the deepstack bar (excess {excess})")
-            delete pout
-            delete ptw
-        }
-        set_gpu_knobs(knobs)
         delete st
-        delete tw
+    }
+}
+
+// The negative control for the deepstack q8 bar, on the 4B file's `q8_z11` form: the same zero-layer knockout must red it
+// (tap 1's block, so the poison hits both the main path and a served slice).
+[cold_path]
+def private q8_deepstack_poison_leg(tt : T?; ptw : Qwen3vTower) {
+    q8_poison_reds(tt, ptw, "cb", "encode4b.cb448.log", TIER1_REL_Q8_DS, "deepstack q8 poison leg: zero the tap-1 block",
+                   "a zeroed tap block reds the deepstack bar")
+}
+
+//! the discrete twin's canvases, depths and exact-lane leg: structured canvases on one-, two- and six-block towers, the
+//! poison on the one-block tower, where the bar is tightest, then on the whole tower with the non-square canvas (the
+//! merge-reorder and the transposed grid); no gray canvas - the q8 lane is no instrument there (its own cells keep gray on
+//! the exact set)
+def private qwen3v_twin() : VisionTwin {
+    var twin <- vision_twin("cb", 448, 448, "qwen3v cb 448x448", 784l)
+    twin.canvases <- [twin_canvas(1l, "cb", 96, 96, 0l), twin_canvas(1l, "cb", 448, 448),
+        twin_canvas(2l, "cb", 96, 96), twin_canvas(2l, "cb", 448, 448),
+        twin_canvas(6l, "cb", 96, 96), twin_canvas(6l, "cb", 448, 448),
+        twin_canvas(0l, "cb", 96, 96), twin_canvas(0l, "cb", 448, 448), twin_canvas(0l, "cb", 640, 320)]
+    twin.depths <- [TwinDepth(nl = 1l), TwinDepth(nl = 2l), TwinDepth(nl = 6l)]
+    return <- twin
+}
+
+//! the forms only the discrete twin reads; with the q8 form on the device (`q8@dev`) they are its legs, the forms of one
+//! staged read (`tower_stage_key`) side by side
+let private TWIN_FORMS = fixed_array("q8_1L", "q8_2L", "q8_6L", "q8", "q8_1L@dev", "q8_1L_z0@dev", "q8_2L@dev", "q8_6L@dev",
+    "f32_1L", "f32_2L", "f32_6L", "f32", "f32@seat", "f32_z13@seat")
+
+// A form's legs of the discrete twin: its canvases three ways, a form a chain, and the exact lane served on the device.
+[cold_path]
+def private twin_legs(tt : T?; tw : Qwen3vTower; var twin : VisionTwin) {
+    if (twin.form == "f32") {
+        tt |> success(!tw.q8 && tw.n_deepstack == 3l, "exact-plane lane minted, three deepstack taps")
+    } elif (twin.form == "q8") {
+        tt |> success(tw.q8, "q8 lane minted")
+    }
+    var st = Qwen3vState()
+    twin_form_legs(tt, twin, tw, st) $(t; var s; planes; w; h; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)
+    delete st
+}
+
+// The twin's compares, after the block, on the rows its forms kept.
+[cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
+def private test_qwen3v_discrete_twin(tt : T?; twin : VisionTwin) {
+    twin_held(tt, "qwen3v", ", 3 taps", 16l, twin)
+}
+
+// The Qwen3-Omni-30B decoder's block, nested in the tower's `image` form: an image chat turn reads both files.
+[cold_path]
+def private omni_decoder(t : T?; var emb : VisionEmbedder) {
+    unsafe {
+        t |> run("the Qwen3-Omni-30B decoder under the qwen3v tower") @capture(& emb)(t : T ?) {
+            return if (!vision_chat_gate(t, "qwen3", "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf", 56))
+            with_cpu_and_gpu_model(t, "vision", "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf", VISION_CHAT_CTX, [cpu_cells_form(QuantMode.q8)]) $(var m; form) {
+                vision_chat_cell(t, "the Omni image turn through the qwen3v tower: stream shape, the grid, the caption", m, form, false, emb, @@test_vision_chat_omni)
+                vision_chat_cell(t, "one Omni session: image turn, then a text turn recalling it", m, form, false, emb, @@test_omni_showcase)
+            }
+        }
+    }
+}
+
+// The Omni-30B mmproj, one block.
+[test(description = "The Omni-30B qwen3v tower's mmproj loads once a form. On the exact CPU lane it loads its pinned shape and matches the mtmd dumps on seven canvases within 2e-4 abs plus 1.5e-2 of token rms; an off-grid canvas panics and a zeroed layer 13 reds the bar. On the Metal tower it matches the dumps within 4e-2 of token rms with every gated encode and block counted, rides the twin-W route, and a zeroed layer reds the GPU bar. The q8 serving lane matches the dumps within 1.0 of token rms at the reference f32 tile, a zeroed layer-13 qblob reds that bar, the baked q8 image sniffs to qwen3v, and the GPU q8 image mints and reloads. Under the mmproj's image form the Qwen3-Omni-30B decoder loads once: the image turn splices 300 rows on a 20x15 grid between the vision markers with user text after, captions the cats greedily, and leaves the session's rope delta at 20 - 300; one session then describes the cats on an image turn and answers yes on a text follow-up that needs the image turn's history, the rope delta persisting across turns")]
+def test_qwen3v_omni(t : T?) {
+    return if (!family_on(t, "qwen3v"))
+    with_model_once(t, "vision", "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf", ["image", "image_f32", "f32_z13@seat", "image_q8", "q8_z13"], @@tower_stage_key, @@qwen3v_stage, @@qwen3v_form) $(var e; form) {
+        tower_form_is(t, MM, form, e.qwen3v)
+        if (form == "image") {
+            tower_cell(t, "tier-1 on the Metal tower (Omni-30B narrow)", e.qwen3v, @@test_qwen3v_tier1_metal)
+            tower_cell(t, "tier-1 on the Metal tower's twin-W route (crowned twins, Omni bf16)", e.qwen3v, @@test_qwen3v_tier1_metal_f16)
+            omni_decoder(t, e)
+        } elif (form == "image_f32") {
+            tower_cell(t, "tier-1 tower parity vs the mtmd encode dumps (Omni-30B)", e.qwen3v, @@test_qwen3v_tier1)
+        } elif (form == "f32_z13@seat") {
+            tower_cell(t, "tier-1 tower parity: a zeroed layer 13 reds the exact bar", e.qwen3v, @@exact_poison_leg)
+            tower_cell(t, "tier-1 on the Metal tower: a zeroed layer 13 reds the GPU bar", e.qwen3v, @@gpu_poison_leg)
+        } elif (form == "image_q8") {
+            tower_cell(t, "tier-1 on the q8 block-GEMM lane (the serving default, Omni-30B)", e.qwen3v, @@test_qwen3v_tier1_q8)
+        } elif (form == "q8_z13") {
+            tower_cell(t, "tier-1 on the q8 block-GEMM lane: a zeroed layer 13 reds the bar", e.qwen3v, @@q8_poison_leg)
+        }
+    }
+}
+
+// The Qwen3-VL 4B decoder's block, its host sessions' context cut to `HOST_CTX_4B`, nested in the tower's `image` form: an image chat turn reads both files.
+[cold_path]
+def private qwen3vl_4b_decoder(t : T?; var emb : VisionEmbedder) {
+    unsafe {
+        t |> run("the Qwen3-VL 4B decoder under the qwen3v deepstack tower") @capture(& emb)(t : T ?) {
+            return if (!vision_chat_gate(t, "", "Qwen3VL-4B-Instruct-Q8_0.gguf", 0))
+            with_cpu_and_gpu_model(t, "vision", "Qwen3VL-4B-Instruct-Q8_0.gguf", HOST_CTX_4B, [cpu_cells_form(QuantMode.q8)]) $(var m; form) {
+                vision_chat_cell(t, "the Qwen3-VL 4B image turn: deepstack wide rows through the chat, then the caption", m, form, false, emb, @@test_vision_chat_deepstack)
+                vision_chat_cell(t, "pre-encoded wide rows through add_user_image_rows_ reproduce the embedder walk", m, form, false, emb, @@test_vision_chat_rows_seam)
+            }
+        }
+    }
+}
+
+// The Qwen3-VL 4B mmproj, one block.
+[test(description = "The Qwen3-VL 4B deepstack tower's mmproj loads once a form. On the exact CPU lane it loads three taps at blocks 5/11/17 with a 10240-wide row and matches the mtmd dumps on four canvases within 2e-4 abs plus 4e-2 of token rms. On the Metal tower it matches the dumps within 8e-2 of token rms with every gated encode and block counted, the q8 lane serves on its bar with a red zeroed-layer poison, every gated encode rides the f16-W route and the knob-off leg stays on the f32 GEMM route. The q8 lane matches the dumps within 0.82 of token rms at the reference f32 tile, and zeroing the tap-1 block's qblob reds that bar. On the serving discrete home, the device chain holds to the CPU q8 and exact chains at 1, 2, 6 and 24 blocks on structured canvases, a one-block zeroed poison exceeds the bar, and the exact lane is device-served. Under the mmproj's image form the Qwen3-VL 4B decoder loads once: the deepstack turn carries 10240-wide rows (1+3 taps of 2560) into the chat and captions the cats, zeroing the deepstack slices moves the decoder's logits by over 1e-2, pre-encoded wide rows fed to a plain chat through `add_user_image_rows_` produce the embedder chat's greedy reply token for token, and narrow rows on a deepstack decoder or a second image before respond panic")]
+def test_qwen3v_4b(t : T?) {
+    return if (!family_on(t, "qwen3v"))
+    var inscope twin <- qwen3v_twin()
+    let twin_on = empty(twin_form_why(""))
+    var inscope forms <- ["image"]
+    add_served_forms(t, forms, MM_4B, ["q8@dev"], @@metal_or_twin_form_why)
+    add_served_forms(t, forms, MM_4B, ["q8_z13@dev"], @@metal_form_why)
+    forms |> push_from(["image_f32", "image_q8", "q8_z11"])
+    add_served_forms(t, forms, MM_4B, [for (f in TWIN_FORMS); f], @@twin_form_why)
+    let ran = with_model_once(t, "vision", "mmproj-Qwen3VL-4B-Instruct-F16.gguf", forms, @@tower_stage_key, @@qwen3v_stage, @@qwen3v_form) $(var e; form) {
+        tower_form_is(t, MM_4B, form, e.qwen3v)
+        twin.form = form
+        if (form == "image") {
+            tower_cell(t, "tier-1 on the Metal tower (4B deepstack)", e.qwen3v, @@test_qwen3v_tier1_metal)
+            tower_cell(t, "tier-1 on the Metal tower's twin-W route (crowned twins, 4B f16)", e.qwen3v, @@test_qwen3v_tier1_metal_f16)
+            qwen3vl_4b_decoder(t, e)
+        } elif (form == "image_f32") {
+            tower_cell(t, "tier-1 deepstack tower parity vs the mtmd encode dumps (Qwen3-VL 4B)", e.qwen3v, @@test_qwen3v_tier1_deepstack)
+        } elif (form == "image_q8") {
+            tower_cell(t, "tier-1 deepstack on the q8 block-GEMM lane (Qwen3-VL 4B)", e.qwen3v, @@test_qwen3v_tier1_q8_deepstack)
+        } elif (form == "q8_z11") {
+            tower_cell(t, "tier-1 deepstack on the q8 block-GEMM lane: a zeroed tap block reds the bar", e.qwen3v, @@q8_deepstack_poison_leg)
+        } elif (form == "q8_z13@dev") {
+            tower_cell(t, "tier-1 on the Metal tower: the q8 lane's dump bar, a zeroed block reds it", e.qwen3v, @@q3v_poison_leg)
+        } elif (twin_on) {
+            tower_cell(t, "the serving discrete home's chain, the {form} form's legs", e.qwen3v, twin, @@twin_legs)
+        } elif (form == "q8@dev") {
+            tower_cell(t, "tier-1 on the Metal tower: the q8 lane", e.qwen3v, @@q3v_metal_q8_leg)
+        }
+    }
+    if (ran && twin_on) {
+        kept_cell(t, "the serving discrete home's chain ({serving_tower_dev(TowerFamily.vision)}) vs the CPU q8 chain (Qwen3-VL 4B, deepstack), and the exact lane served", twin, @@test_qwen3v_discrete_twin)
+        gpu_tower_shutdown(TowerFamily.vision)
     }
 }
 

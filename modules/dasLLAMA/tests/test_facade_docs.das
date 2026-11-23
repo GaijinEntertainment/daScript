@@ -485,6 +485,29 @@ def test_load_once_gate(t : T?) {
 def private lo_once_block(area, file : string) : string =>
     "def test_once(t : T?) \{\n    with_model_once{OPEN}t, \"{area}\", \"{file}\", forms, @@fx_form) $(var m; form) \{\n    \}\n\}\n"
 
+//! a fixture folder `name` of one test file, `body` under one `[test]` annotation: what the gate's `--floor` rail walks
+def private floor_folder(name, body : string) : string {
+    let dir = path_join(test_temp_dir(), name)
+    mkdir(dir)
+    fwrite(path_join(dir, "test_fx.das"), "[test{OPEN}description = \"a fixture's one test\")]\n{body}")
+    return dir
+}
+
+[test(description = "The tests/ gate's file-shape rail lifts the three-tests floor from a file whose one test holds a load-once block and keeps it for a file that holds none")]
+def test_block_file_floor(t : T?) {
+    t |> run("a file whose one `[test]` holds a block passes the floor") @(t : T?) {
+        let run = run_tests_gate(["--floor", floor_folder("floor_block", lo_once_block("llm", "fx-m.gguf"))])
+        t |> equal(run.rc, 0, "the gate's exit code\n{run.output}")
+    }
+    t |> run("a file whose one `[test]` holds no block is under the floor") @(t : T?) {
+        let run = run_tests_gate(["--floor", floor_folder("floor_plain", "def test_once(t : T?) \{\n\}\n")])
+        t |> equal(run.rc, 1, "the gate's exit code\n{run.output}")
+        t |> success(find(run.output, "test_fx.das") >= 0, "the finding names the file\n{run.output}")
+        t |> success(find(run.output, "a category file holds three or more") >= 0, "the finding is the floor's\n{run.output}")
+        t |> success(find(run.output, "1 finding(s)") >= 0, "the one file is the one finding\n{run.output}")
+    }
+}
+
 //! a load-once fixture's two loads of the pack `file`, a function each
 def private lo_pack_twice(file : string) : string =>
     "def test_one(t : T?) \{\n    var p <- load_g2p{OPEN}path_join(dir, \"{file}\"))\n\}\n\ndef test_two(t : T?) \{\n    var p <- load_g2p{OPEN}path_join(dir, \"{file}\"))\n\}\n"

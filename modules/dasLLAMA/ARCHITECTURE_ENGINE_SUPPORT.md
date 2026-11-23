@@ -9,7 +9,8 @@ anchor.
   library-side because the caches outlive a single suite.
 - **`dasllama_prefix.das`** - the prefix/page cache for evaluated token history.
 - **`dasllama_env.das`** - the `[EnvConfig]` knob declarations, loaded once into the `g_env_*`
-  globals, and the paths derived from them: the per-user `~/.dasllama` directory and the config
+  globals, the walks over the declared knobs (`registered_env_names`, `env_set_knobs`), and the
+  paths derived from them: the per-user `~/.dasllama` directory and the config
   lookup the server, its CLI and the exchange share.
 - **`dasllama_fat_start.das`** - a fat exe's first start: the runtime-section snapshot the tuner's
   kernel half also writes, the Metal twin crown race and the three homes' short-window knee races
@@ -164,12 +165,19 @@ parity row's CPU form (`parity_spec_form`, `tests/_parity_cells.das`) and runs t
 call names its area and its file by string literals.
 
 `tests/_model_once.das` owns the load of a model file that is no chat model - a TTS voice, a front-end
-pack, a stress model. `with_model_once` takes the area, the file, a list of form names and the
+pack, a stress model, a translation student, a decoder a facade wraps, a vision tower. `with_model_once` takes the area, the file, a list of form names and the
 family's form loader, a function of the file's path and a form's name: it loads each form once, runs
 the caller's cells on it and drops it before the next form loads, so no two forms of a file stand
 in memory together; a file the box lacks is one loud skip and no cell. `with_model_once_at` reads
 the file under a root the call names; the loop is `tests/_model_form.das`'s `model_once_at`, which takes
-the file's gate as an argument, so a model-free test runs it on a fake model. The TTS voices' form loaders (`tests/_tts_parity.das`) answer
+the file's gate as an argument, so a model-free test runs it on a fake model. A file whose forms are
+minted from one staged read takes the staged overload (`staged_once_at`): a key names the read a form
+mints from - its lane and image flavor, "" for a form that loads on its own - the file is staged once a
+key, and each form builds its model from a staging of its own (`own_staging`: a copy, the kept read
+itself on the last form of its key), so the cut, the zeroed block or the edit one form writes reaches
+no other form. The kept read stands beside a form's model while its cells run and drops where a form
+of another key stages, so a list puts one key's forms side by side where no cell reads their order.
+The TTS voices' form loaders (`tests/_tts_parity.das`) answer
 the facade's `TtsModel`, which holds either family's model and the packs: `styletts2_form` loads a
 KittenTTS or Kokoro file through the image rail (`image`) or mints a lane in memory (`f32`, `q8`,
 `kq`); `pocket_form` loads a Pocket file through the image rail or mints it with no lane pinned
@@ -183,9 +191,65 @@ calls, each file loaded once. The parity rail of a StyleTTS2 voice runs a form a
 form's cell keeps each bring-up case's decode inputs, and the q8 and recipe forms' cells feed them
 to the decode seat.
 
+A form a device serves is a form of its own, listed beside the CPU lanes, and the list goes through
+`served_forms` (`tests/_model_form.das`, beside the loop and as free of the fixture root): the
+family's account of what the box lacks for a form - a function of the form's name, empty where the
+box serves it - makes a form with a reason a skipped cell of its own (`skip_cell`), named the file,
+the form and the reason, and leaves it out of the list, so its load never starts. The translate area's forms are `translator_form`'s (`tests/test_nmt.das`), each
+answering the facade's `Translator`: a Bergamot student minted in memory on the exact lane (`f32`),
+on the q8 lane (`q8`), on the q8 lane with its classifier zeroed (`q8_cls_zeroed`, the q8 cell's
+control) and on the q8 lane as the copy the build's translation seat serves (`device`), or loaded
+as the facade loads it (`image`, `image_f32`). The device form's cells pin the seat on; the q8
+form's cell that keeps the CPU chain's lines pins it off, and the compare of the two follows the
+block. The seat holds one student at a time, so the cell that swaps it between two files runs in
+nested blocks: en-ru's block is called from ru-en's device form, and after ru-en's block where
+that form did not run.
+
+The vision area's tower blocks answer the vision carrier, `VisionEmbedder`, each family's form loader beside its
+block (`gemma3v_form`, `gemma4v_form`, `gemma4uv_form`, `qwen3v_form`, `qwen25v_form`); the form names are
+`tower_form`'s (`tests/_vision_forms.das`). `image`, `image_f32` and `image_q8` are the carrier's own load through
+the image rail - no lane pinned, the exact lane, and the q8 lane with every GPU tower knob off for the load, which
+takes the lane's CPU image. Any other name is a tower minted in memory from the file's staging, no `.dlim` baked:
+`<f32|q8>[_<n>L][_z<block>][@dev|@seat][+<edit>]` - cut to `n` blocks, a block's GEMM planes zeroed (the input
+poison), `+<edit>` a family's own change to the staged planes (gemma4v's disarmed clamps and synthesized std pair,
+gemma4uv's zeroed patch weights, qwen25v's full-attention period). A form with no home is the CPU chain's copy;
+`@dev` is minted in the serving home's image flavor and `@seat` is the CPU image again, each the copy the serving
+home's device chain reads, so a compare of a CPU chain with a device chain is two forms. A twin's forms keep their
+rows and the driver's counters around each leg (`TwinKept` and `ExactLaneKept` in `tests/_tower_twin.das`,
+`VisionTwin` in `tests/_vision_forms.das`), and the bars follow the block (`twin_held`). The forms only a seat's
+cells read go through `served_forms` with the seat's reason (`twin_form_why`, `metal_form_why`,
+`metal_or_twin_form_why`, `device_rung_form_why`, `discrete_rung_form_why`, `either_home_twin_form_why`). An image
+chat turn reads a tower and a decoder: the decoder's `with_cpu_and_gpu_model` block, on a CPU form asked alone, is
+nested in the tower's `image` form in the family's test file, the cells themselves `tests/_vision_chat_cells.das`'s;
+a chat takes its tower, and the cell hands it back to the form. The gemma-3-12b pair nests the other way - the
+large-tier decoder's block first (`tests/test_vision_chat.das`) - so a default run loads neither file. llama2.c's
+`stories15M.bin` is `with_model_once_at`'s block under the llama2.c folder (`stories15m_form`,
+`tests/test_attn_span.das`): the float weights, then the q4_0 requant.
+
+The audio area's blocks answer each file's holder, the form names `tower_form_of`'s with the family's lanes: the
+facade's `AsrModel` for a whisper or Parakeet bin, a Parakeet GGUF and a GigaAM carrier (`whisper_form`,
+`parakeet_form`, `gigaam_form`), the `CanaryEncoder` (`canary_form`), a gemma4a mmproj's carrier or pair (`gemma4a_form`),
+the `Qwen3aTower` (`qwen3a_form`), a chat tower mmproj's tower or carrier (`aud_form`, `tests/test_audio.das`) and the
+silero VAD (`vad_form`, `tests/test_vad.das`: two forms through one loader, apart by the home each cell runs on). `image` is
+the facade's or the carrier's own load, `image_f32` the exact lane's CPU image with every GPU tower knob off for the load,
+`image_emb` the audio carrier's load, `image_asr` and `image_asrdev` the ASR facade's two-file load of an mmproj with its
+decoder - so a decoder the facade pairs (gemma-4 E2B and E4B Q8, the Qwen3-Omni-30B thinker) loads inside its mmproj's
+form and has no block of its own. Any other name is minted in memory. A file several test files read has one block, in
+the test file holding most of its cells; the others' cells are `tests/_audio_*_cells.das`'s. A twin's forms keep their
+rows and counters a leg a form (`TwinRows`, `LaneTwinKept`, `ExactFlavorKept`, `TwinRegrowKept`), the quantized
+carriers' cells read the exact carrier's kept lane, and the compares follow the block. A chat decoder the area loads as a
+`Model` - the Canary-Qwen and gemma-4 E2B Q4_K_M decoders, SmolLM2 - is the area's `with_cpu_and_gpu_model` block, nested
+with the tower block whose form its cell reads.
+
+A decoder a facade wraps in a holder of its own - `load_translator`'s `Translator` over a chat GGUF -
+is a block of `with_model_once` whose one form (`image`) is the facade's load: its cells assert on
+what that load builds - the kind read off the file, the session, the direction left unpicked - and
+the chat block's `Model` carries none of it. A file the llm area's chat block also loads has a block
+of its own in the translate area.
+
 `tests/REVIEW.das`'s `check_models_load_once` reads the folder's test files as text. It holds one
 block call (`BLOCKS`: `with_cpu_and_gpu_model`, `with_model_once`, `with_model_once_at`) an area
-and file, and in each area `LOAD_ONCE_AREAS` names (`llm`, `tts`) it reads every load site of the
+and file, and in each area `LOAD_ONCE_AREAS` names (`llm`, `tts`, `translate`, `vision`, `audio`) it reads every load site of the
 area's test files (`run.das`'s `area_tests`): a call of an engine loader or of a helper `LOADERS`
 lists, its model file a `.gguf` literal - or, outside the llm area, a `.bin` pack's - in the call's
 arguments or one an identifier is bound to in
@@ -200,6 +264,10 @@ their own models; their findings print as held lines, and a listed file no area 
 in is a finding. Its `check_cell_pins` reads the fixture cell modules (`tests/_*_cells.das`): a call there that pins,
 clears or re-pins the kernel backend or the K-quant native knob is a finding, since both are a
 property of the form's load; the check licenses none.
+
+A block folds a model file's tests into one `[test]` whose cells are the tests, so a test file that
+calls a block is outside the three-tests floor of `tests/ARCHITECTURE.md#file-shape`: the gate's
+file-shape check (`check_folder_shape`) lifts the floor from it and keeps it for every other file.
 
 ### The format repository's files {#format-matrix-files}
 

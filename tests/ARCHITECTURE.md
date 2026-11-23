@@ -51,6 +51,10 @@ file when one fits, and into the uncategorized file of its signature otherwise. 
 more tests in an uncategorized file, plain or fenced, belong together, they move into a category
 file, new or existing, so `uncategorized.das` shrinks as topics get files.
 
+A folder's gate lifts the three-tests floor from the files it names (`check_test_shape_floorless`,
+`dastest/test_shape.das`) where one `[test]` runs many cells: dasLLAMA's lifts it from a file whose `[test]`
+holds a model's load-once block.
+
 A file holds at most 100 `[test]` functions. An uncategorized file past the cap continues in
 `<base>_2.das`, then `_3`, with the same fence signature (`uncategorized_2.das`,
 `uncategorized_no_aot_2.das`), and `REVIEW.das` rejects a continuation whose base is missing or

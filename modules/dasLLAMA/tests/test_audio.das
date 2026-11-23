@@ -33,6 +33,13 @@ require dasllama/dasllama_asr   // load_asr_model, asr_needs_mmproj: the facade'
 require dasllama/dasllama_gigaam
 require dasllama/dasllama_audio_io
 require _tower_twin
+require _audio_twin   // the FastConformer twins' poison, rows and range-refusal legs
+require _model_once   // with_model_once: a Parakeet carrier's one block in the area; own_load
+require _audio_asr_cells   // the ASR families' oracle and facade cells, run under their files' blocks
+require _audio_embedder_cells   // the audio carrier's gemma4a cells, run under the E2B mmproj's block
+require _cpu_gpu_model   // with_cpu_and_gpu_model: a chat decoder's one block in the area
+require _f32_tile_pin   // with_put_back: a mint's lane pin put back however its staging leaves
+require dasllama/dasllama_env   // parity_full_mode: the full suite's flag
 require _image_memory   // read_page_aligned: a host's own copy of an image
 require dasllama/dasllama_image   // with_image_destination: the cold mint's scratch path
 require ?cuda dasllama/dasllama_cuda_tower_fc   // cuda_gigaam_mel: gigaam's standalone device mel on the CUDA home
@@ -40,26 +47,31 @@ require ?cuda dasllama/dasllama_cuda_common   // cud_kernel_census_of: the kq la
 
 // Audio tower tests. The mel/gelu/filterbank tests are self-contained; the encoder tests
 // need the locally-converted Qwen2-Audio mmproj (2.5 GB, gitignored) and skip without it.
-// The GigaAM cells skip without the gigaam-v3-e2e-rnnt-f16.gguf carrier (the CTC head's Vulkan twin without
-// gigaam-v3-ctc-f16.gguf / gigaam-v3-e2e-ctc-f16.gguf), under a family filter
-// that leaves out `gigaam`, and per clip without benchmarks/asr/corpus/ru_short.wav or ru_mid.wav; their kq lane legs
-// skip without gigaam-v3-e2e-rnnt-q4_k.gguf, the mixed-member leg without gigaam-v3-e2e-rnnt-q4_k-mix-local.gguf;
-// the Metal ones on a build without das_metal. The parakeet device-decode twin skips without its
-// f32 carrier, per clip without jfk.wav or gb1.wav in benchmarks/asr/corpus/, where no GPU device stands up for the
-// serving tower (`serving_tower_device_up`), on the lane the build's chain does not flavor (Metal's q8, a discrete home's
-// exact), and where the build or the box has no device transducer seat (`rnnt_seat_skip`).
+// The GigaAM device twins are cells of test_gigaam.das's blocks (`_audio_gigaam_cells`). A Parakeet carrier loads once a
+// form, in its one block here (`parakeet_form`: the facade's `image` form, the forms minted in memory): the v2 and v3 f32
+// bins' blocks carry the oracle cells (`_audio_asr_cells`), the device twins' and the device-decode twins' legs, the
+// GGUF carriers' blocks the carrier and kq-lane cells; a compare of two forms, or of two files, follows the block on what
+// the forms kept. The parakeet device-decode twin's forms skip where no GPU device stands up for the serving tower
+// (`serving_tower_device_up`), its clips without jfk.wav or gb1.wav in benchmarks/asr/corpus/, on the lane the build's
+// chain does not flavor (Metal's q8, a discrete home's exact), and where the build or the box has no device transducer
+// seat (`rnnt_seat_skip`).
 // The oracle constants come from llama-mtmd-debug (CPU backend). The discrete-home twins run on the home each family's
 // seats serve on (`_gpu_knobs`' `CUDA_AUDIO_FAMILIES`) and skip without their carriers (the qwen2audio / voxtral / omni-3b
 // f32 mmprojs, the E2B bf16 and E4B BF16 mmprojs, the canary f32 encoder, the parakeet f32 encoder, the ultravox f16
 // mmproj, the Qwen3-ASR bf16 mmproj), without jfk.wav, without that home's device under DASLLAMA_GPU=1, on the Vulkan
 // home under the CUDA ask (DASLLAMA_CUDA=1 or set_gpu_home("cuda"), where the Vulkan tower's seats stand down -
 // `vulkan_twin_seat`), and on a build with das_metal; the qwen3a front also skips when interpreted. The Metal twins
-// (`test_fc_metal_twin`: canary and parakeet v3; `test_gemma4a_metal_twin`: E2B and E4B) skip on a build without
+// (`test_fc_metal_twin`: canary; the v3 bin's block: parakeet v3; `test_gemma4a_metal_twin`: E2B and E4B) skip on a build without
 // das_metal, with no Metal device standing up for the tower, under a family filter leaving the family out, without
 // their carriers (the canary and parakeet v3 f32 encoders, the E2B / E4B mmprojs) and without jfk.wav; the gemma4a
 // one also when interpreted. The Parakeet GGUF cells skip without parakeet-tdt-0.6b-v3-Q4_K_M.gguf (the carrier cell's
 // first run and the lane-tag controls without parakeet-tdt-0.6b-v3-F32.gguf or the v3 f32 bin), the encode cells without
-// jfk.wav, `test_parakeet_kq_discrete_twin` as the discrete-home twins do, `test_parakeet_kq_metal_twin` as the Metal twins do.
+// jfk.wav, `test_parakeet_kq_discrete_twin`'s forms as the discrete-home twins do, `test_parakeet_kq_metal_twin`'s as the Metal twins do.
+// The ASR oracle cells (`_audio_asr_cells`) skip when interpreted. The canary oracle cell is large tier
+// (DASLLAMA_PARITY_FULL=1), and its device walk skips where no GPU tower serves canary's default lane. The gemma4a oracle
+// skips without gemma4a_test2.wav. The E4B facade cell skips when interpreted, without gemma-4-E4B-it-Q8_0.gguf (large
+// tier) and mmproj-gemma-4-E4B-it-BF16.gguf, and without jfk.wav; its device legs run only where the serving tower's device
+// stands up.
 
 [test(description = "gelu_erf reproduces the exact-erf form x times Phi(x) at 1, -1, 0, 3 and 0.5 to within 1e-6 (1e-5 at 3) of the closed-form values")]
 def test_gelu_erf(t : T?) {
@@ -173,121 +185,14 @@ def test_swiglu_swapped(t : T?) {
     }
 }
 
-// Tower-structure tests for the ultravox / voxtral / omni mmprojs (each skips without its
-// local model file). proj_dim comes from the mm tensors, NOT clip.audio.projection_dim —
-// the ultravox-1b GGUF metadata says 4096 while mm2 actually projects into the 2048-wide
-// decoder. Token counts follow the projector chain's floor math.
-//! the tower's CPU image, loaded with every GPU tower off (`#tower-dev-block`): a CPU-chain claim's carrier - the CPU never runs
-//! the GPU-flavored image the box's served lane would load
-def private load_cpu_audio_tower(path : string) : AudioTower {
-    var tw = AudioTower()
-    with_gpu_knobs() {
-        set_every_gpu_tower(false)
-        tw <- load_audio_tower(path, false)
-    }
-    return <- tw
-}
+// The chat towers' mmprojs - the whisper-class tower with its projector: qwen2audio, voxtral, omni, ultravox - load once a
+// form, each in its file's one block (`aud_form`). proj_dim comes from the mm tensors, NOT clip.audio.projection_dim -
+// the ultravox-1b GGUF metadata says 4096 while mm2 actually projects into the 2048-wide decoder. Token counts follow
+// the projector chain's floor math.
 
-[test(description = "The ultravox f32 mmproj loads as a stack-8 projector with proj_dim 2048 read from mm2 and 187 tokens a chunk, and its CPU encode of a constant mel matches llama-mtmd-debug token 0, mean and max")]
-def test_ultravox_tower(t : T?) {
-    t |> run("ultravox mmproj: stack-8 projector shapes + 187 tokens/chunk") @(t : T?) {
-        let path = path_join(models_dir(), "mmproj-ultravox-1b-f32.gguf")
-        if (!model_available(t, path)) return
-        var tw <- load_cpu_audio_tower(path)
-        t |> success(tw.proj_kind == AudioProjKind.ultravox, "kind")
-        t |> equal(tw.stack_factor, 8l, "stack factor")
-        t |> equal(tw.mm1_out, 4096l, "mm1 out (pre-swiglu)")
-        t |> equal(tw.proj_dim, 2048l, "proj_dim from mm2 (metadata lies: 4096)")
-        t |> success(!audio_has_avgpool(tw), "no avg-pool")
-        t |> equal(audio_tokens_per_chunk(tw), 187l, "tokens per 30 s chunk (floor 1500/8)")
-        if (jit_enabled()) {
-            var mel = MelChunk(n_mel = tw.n_mel, n_len = AUDIO_CHUNK_FRAMES)
-            mel.data |> resize(int(tw.n_mel * AUDIO_CHUNK_FRAMES))
-            for (i in range(length(mel.data))) {
-                mel.data[i] = 1.0
-            }
-            var enc <- make_encoder_state(tw)
-            with_gpu_knobs() {
-                set_every_gpu_tower(false)
-                with_dasllama_jobque_() {
-                    audio_encode(tw, enc, mel)
-                }
-            }
-            // llama-mtmd-debug -p encode --audio one -n 3000 (CPU, f32 mmproj): token 0 opens
-            // -0.831656 1.679679 0.112337 -0.558047; stats mean=0.002889 max=4.306354.
-            t |> success(abs(enc.out[0] + 0.831656) < 5e-3, "tok0[0]")
-            t |> success(abs(enc.out[1] - 1.679679) < 5e-3, "tok0[1]")
-            t |> success(abs(enc.out[2] - 0.112337) < 5e-3, "tok0[2]")
-            t |> success(abs(enc.out[3] + 0.558047) < 5e-3, "tok0[3]")
-            var sum = 0.0lf
-            var mx = enc.out[0]
-            for (v in enc.out) {
-                sum += double(v)
-                mx = max(mx, v)
-            }
-            t |> success(abs(float(sum / double(187l * tw.proj_dim)) - 0.002889) < 5e-4, "mean")
-            t |> success(abs(mx - 4.306354) < 5e-2, "max")
-        }
-        delete tw   // image-backed planes are locked views — only the finalizer may release them
-    }
-}
-
-[test(description = "The voxtral f32 mmproj loads as an avg-pooled stack-4 projector with proj_dim 3072 and 187 tokens a chunk, and its CPU encode of a constant mel matches llama-mtmd-debug token 0, mean and max")]
-def test_voxtral_tower(t : T?) {
-    t |> run("voxtral mmproj: avg-pool + stack-4 projector shapes + 187 tokens/chunk") @(t : T?) {
-        let path = path_join(models_dir(), "voxtral-mini-mmproj-f32.gguf")
-        if (!model_available(t, path)) return
-        var tw <- load_cpu_audio_tower(path)
-        t |> success(tw.proj_kind == AudioProjKind.voxtral, "kind")
-        t |> equal(tw.stack_factor, 4l, "stack factor")
-        t |> equal(tw.mm1_out, 3072l, "mm1 out")
-        t |> equal(tw.proj_dim, 3072l, "proj_dim")
-        t |> success(audio_has_avgpool(tw), "avg-pool")
-        t |> equal(audio_tokens_per_chunk(tw), 187l, "tokens per 30 s chunk (floor 750/4)")
-        if (jit_enabled()) {
-            var mel = MelChunk(n_mel = tw.n_mel, n_len = AUDIO_CHUNK_FRAMES)
-            mel.data |> resize(int(tw.n_mel * AUDIO_CHUNK_FRAMES))
-            for (i in range(length(mel.data))) {
-                mel.data[i] = 1.0
-            }
-            var enc <- make_encoder_state(tw)
-            with_gpu_knobs() {
-                set_every_gpu_tower(false)
-                with_dasllama_jobque_() {
-                    audio_encode(tw, enc, mel)
-                }
-            }
-            // llama-mtmd-debug -p encode --audio one -n 3000 (CPU, f32 mmproj): token 0 opens
-            // 0.967699 -0.765652 0.050477 -0.571310; stats mean=-0.001517 max=1.459851.
-            t |> success(abs(enc.out[0] - 0.967699) < 5e-3, "tok0[0]")
-            t |> success(abs(enc.out[1] + 0.765652) < 5e-3, "tok0[1]")
-            t |> success(abs(enc.out[2] - 0.050477) < 5e-3, "tok0[2]")
-            t |> success(abs(enc.out[3] + 0.571310) < 5e-3, "tok0[3]")
-            var sum = 0.0lf
-            var mx = enc.out[0]
-            for (v in enc.out) {
-                sum += double(v)
-                mx = max(mx, v)
-            }
-            t |> success(abs(float(sum / double(187l * tw.proj_dim)) + 0.001517) < 5e-4, "mean")
-            t |> success(abs(mx - 1.459851) < 5e-2, "max")
-        }
-        delete tw   // image-backed planes are locked views — only the finalizer may release them
-    }
-}
-
-def private zero_plane(var q : array<auto(PT)>; off, n : int64) {
-    for (i in range64(n)) {
-        q[off + i] = default<PT>
-    }
-}
-
-//! one zeroed block moves a 32-block tower less than its own q8 chain's noise, so the poison zeroes an eighth of the blocks
-def private poison_blocks(n_layer : int64) : int64 => max(1l, n_layer / 8l)
-
-//! `zero_block` >= 0 zeroes `poison_blocks` blocks from it on, on the lane's planes; `dev` the image flavor (`none` the CPU image, `#tower-dev-block`)
-def private mint_aud(path : string; q8 : bool; zero_block : int64; dev : TowerDev = TowerDev.none) : AudioTower {
-    var inscope stg <- tower_dev_staged(dev) $ { return <- stage_audio_tower(path, q8) }
+//! a chat tower minted from `stg`, a staged read on the lane `q8`: `zero_block` >= 0 zeroes `poison_blocks` blocks from it
+//! on, on the lane's planes; `dev` the image flavor (`none` the CPU image, `#tower-dev-block`)
+def private mint_aud(var stg : AudioTowerStaging; q8 : bool; zero_block : int64; dev : TowerDev) : AudioTower {
     if (zero_block >= 0l) {
         for (b in range64(zero_block, min(stg.e.n_layer, zero_block + poison_blocks(stg.e.n_layer)))) {
             if (q8) {
@@ -310,66 +215,331 @@ def private aud_twin_encode(tw : AudioTower; var enc : EncoderState; mel : MelCh
     return long_length(out)
 }
 
-//! the exact tower's lane on the serving home (`exact_flavor_leg`): `twx`, the CPU image, on the CPU chain against the home's f16 flavor
-[cold_path]
-def private blocks_exact_leg(t : T?; tag : string; path : string; twx : AudioTower; var encx : EncoderState; mel : MelChunk) {
-    let home = serving_tower_dev(TowerFamily.whisper)
-    let tail0 = gpu_tower_tail_encodes(TowerFamily.whisper)
-    let convs = exact_flavor_leg(t, tag, TowerFamily.whisper, TWIN_EXACT_REL_L2_VK, twx, encx, twx.n_ctx, $(zb) { return <- mint_aud(path, false, zb, home) },
-        $(tw) { return <- make_encoder_state(tw) }) $(e; var s; var out) => aud_twin_encode(e, s, mel, out)
-    t |> equal(convs, 2l, "{tag} exact lane: the conv stem served on the device, the clean encode and the poisoned one")
-    t |> equal(gpu_tower_tail_encodes(TowerFamily.whisper) - tail0, 2l, "{tag} exact lane: the projector tail rode the device behind both encodes' blocks")
+//! a chat tower mmproj's form read off its name (`tower_form_of`): the lanes `f32` (the exact lane) and `q8`; `emb` names
+//! no lane - `image_emb` is the audio carrier's load of the mmproj
+def private aud_form_of(form : string) : TowerForm => tower_form_of(form, ["f32", "q8", "emb"], "chat tower")
+
+//! the staged read a chat tower mmproj's form is minted from (`tower_stage_key_of`)
+def private aud_stage_key(form : string) : string => tower_stage_key_of(aud_form_of(form))
+
+//! a chat tower mmproj's staged read the key `key` names: its lane, in its image flavor
+def private aud_stage(path, key : string) : AudioTowerStaging {
+    let f = aud_form_of(key)
+    return <- tower_dev_staged(tower_form_dev_of(f, TowerFamily.whisper)) $ { return <- stage_audio_tower(path, f.lane == "q8") }
 }
 
+//! A chat tower mmproj's form as its block holds it: the tower `tw`, or - on the `image_emb` form - the audio carrier `e`.
+struct private AudForm {
+    tw : AudioTower = AudioTower()
+    e : AudioEmbedder = AudioEmbedder()
+}
+
+def private finalize(var h : AudForm) {
+    delete h.tw
+    delete h.e
+}
+
+//! One form of a chat tower mmproj, its block's form loader. `image_f32` is the tower's own load (`load_audio_tower`) on its
+//! exact lane's CPU image - every GPU tower knob off for the load, put back however it leaves - and `image_emb` the audio
+//! carrier's load (`load_audio_embedder`). Any other form is minted in memory (`mint_aud`) from `stg`, its own copy of the
+//! mmproj's staging on the lane it names: `_z<block>` zeroes the poison's blocks from that block on, `@dev` is the image
+//! flavor of the whisper-class tower's serving home.
+def private aud_form(path, form : string; var stg : AudioTowerStaging) : AudForm {
+    let f = aud_form_of(form)
+    var inscope h = AudForm()
+    if (!f.image) {
+        if (f.lane != "f32" && f.lane != "q8") {
+            panic("the chat tower tests: '{form}' names no lane to mint")
+        }
+        h.tw <- mint_aud(stg, f.lane == "q8", f.zero_block, tower_form_dev_of(f, TowerFamily.whisper))
+        return <- h
+    }
+    if (f.lane == "emb") {
+        h.e <- load_audio_embedder(path)
+    } elif (f.lane == "f32") {
+        let knobs = gpu_knobs()
+        set_every_gpu_tower(false)
+        with_put_back($ {
+            set_gpu_knobs(knobs)
+        }) {
+            h.tw <- load_audio_tower(path, false)
+        }
+    } else {
+        panic("the chat tower tests: '{form}' names no load of the image rail")
+    }
+    return <- h
+}
+
+//! The form is the load, lane, poison and image flavor it names: on `h`, a chat tower mmproj loaded as the form `form` of
+//! `file` - the carrier's whisper-class arm on `image_emb`, else the tower with its lane flag, and on a minted form the
+//! poison's block the tower's middle one, and the image flavor.
+def private aud_form_is(t : T?; file, form : string; h : AudForm) {
+    let f = aud_form_of(form)
+    if (f.lane == "emb") {
+        t |> success(h.e.kind == AudioKind.audio_tower, "{file}: the {form} form is the carrier's whisper-class arm")
+        return
+    }
+    t |> success(h.tw.n_layer > 0l, "{file}: the {form} form holds the tower")
+    minted_form_is(t, file, form, f, TowerFamily.whisper, h.tw.q8, h.tw.n_layer, h.tw.dev_backend)
+}
+
+//! the minted forms a chat tower's twin reads: the exact form and the q8 form, the q8 lane's image in the home's flavor and
+//! its poison, the exact lane's image in the home's flavor and its poison
+let private AUD_TWIN_FORMS = fixed_array("f32", "q8", "q8@dev", "q8_z16@dev", "f32@dev", "f32_z16@dev")
+
+//! What a chat tower mmproj's block keeps for the twin compare that follows it, on a synthetic mel. `family` and `tag` name
+//! the twin, `kind` and `layers` the projector and the depth its cells name (0: none named), `metal_cell` and
+//! `discrete_cell` the compare on each home, `form` the form whose cells run; the three clean forms' lane flags, the device
+//! image's flavor, the q8 form's projector, depth and positions; the q8 lane's rows three ways (`LaneTwinKept`) and the
+//! projector tails its legs served; the exact lane's rows (`ExactFlavorKept`) and the tails its device legs served.
+struct private AudTwinKept {
+    family : string
+    tag : string
+    kind : AudioProjKind
+    layers : int64
+    metal_cell : string
+    discrete_cell : string
+    form : string
+    flags : LaneFlags
+    c_kind : AudioProjKind
+    n_layer : int64
+    n_ctx : int64
+    tail : int64
+    x_tail : int64
+    twin : LaneTwinKept = LaneTwinKept()
+    exact : ExactFlavorKept
+}
+
+//! The homes a chat tower's twin runs on this box - `metal` and `discrete` the homes its cells name - with the twin's tag
+//! set by the home that runs it, its forms added to `forms` through the asked homes' reasons (`add_served_forms`), and
+//! each asked home the box lacks a skipped cell named for its compare.
 [cold_path]
-def private blocks_twin(t : T?; family, file : string; layers_claimed : int64) {
-    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-        let path = path_join(models_dir(), file)
-        if (!model_available(t, path) || !discrete_audio_twin_seat(t, TowerFamily.whisper)) {
+def private aud_twin_asked(t : T?; var forms : array<string>; var k : AudTwinKept; file : string; metal, discrete : bool) : tuple<metal_on : bool; discrete_on : bool> {
+    let metal_why = metal_twin_jit_why(TowerFamily.whisper)
+    let discrete_why = audio_discrete_form_why(TowerFamily.whisper)
+    let metal_on = metal && empty(metal_why)
+    let discrete_on = discrete && !metal_on && empty(discrete_why)
+    k.tag = metal_on ? "{file} metal synthetic mel" : "{k.family} synthetic mel"
+    if (metal && !metal_on) {
+        skip_cell(t, "{k.metal_cell} - {metal_why}")
+    }
+    if (discrete && !discrete_on) {
+        skip_cell(t, "{k.discrete_cell} - {metal_on ? "das_metal on this build owns the tower hooks" : discrete_why}")
+    }
+    var inscope asked <- [for (f in AUD_TWIN_FORMS); f]
+    add_served_forms(t, forms, file, asked, metal && discrete ? either_why(metal_why, discrete_why) : (metal ? metal_why : discrete_why))
+    return (metal_on = metal_on, discrete_on = discrete_on)
+}
+
+// A form's legs of a chat tower's twin on the synthetic mel, each on the form's one home: the exact form the reference
+// chain and the exact lane's CPU leg, the q8 form the CPU q8 chain, its `@dev` form the device chain, the zeroed `@dev`
+// forms the input poisons, the exact lane's `@dev` form its device leg; the projector tails each clean leg served.
+[cold_path]
+def private aud_twin_leg(t : T?; tw : AudioTower; var k : AudTwinKept) {
+    let f = aud_form_of(k.form)
+    let mel <- synth_mel(tw.n_mel)
+    var enc <- make_encoder_state(tw)
+    k.twin.rows.spec = TwinSpec(family = k.family, tag = k.tag, n_layer = tw.n_layer, metric = TwinMetric.rel_l2, seat_family = TowerFamily.whisper)
+    exact_flavor_named(k.exact, k.tag, TowerFamily.whisper, TWIN_EXACT_REL_L2_VK, tw.n_ctx)
+    let tail0 = gpu_tower_tail_encodes(TowerFamily.whisper)
+    let leg = lane_exact_leg(t, k.twin, k.exact, k.flags, f, true, tw, enc) $(e; var s; var out) => aud_twin_encode(e, s, mel, out)
+    if (leg == LaneFormLeg.cpu) {
+        k.c_kind = tw.proj_kind
+        k.n_layer = tw.n_layer
+        k.n_ctx = tw.n_ctx
+    }
+    let tails = gpu_tower_tail_encodes(TowerFamily.whisper) - tail0
+    if (f.lane == "f32" && (f.dev || f.zero_block >= 0l)) {
+        k.x_tail += tails
+    } elif (f.zero_block < 0l) {
+        k.tail += tails
+    }
+    delete enc
+}
+
+//! the exact lane held, after the block (`exact_flavor_held`): the conv stem and the projector tail served on both device encodes
+def private aud_exact_held(t : T?; k : AudTwinKept) {
+    let tag = k.tag
+    let convs = exact_flavor_held(t, k.exact)
+    t |> equal(convs, 2l, "{tag} exact lane: the conv stem served on the device, the clean encode and the poisoned one")
+    t |> equal(k.x_tail, 2l, "{tag} exact lane: the projector tail rode the device behind both encodes' blocks")
+}
+
+//! a chat tower's device leg held inside `twin_rows_held`: exactly the device leg dispatched, every block, every row
+def private aud_block_counters(t : T?; k : AudTwinKept; legs : TwinLegs) {
+    let tag = k.tag
+    t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "{tag}: exactly the device leg dispatched")
+    t |> equal(legs.dev.blocks - legs.pre.blocks, k.n_layer, "{tag}: blocks delta = n_layer")
+    t |> equal(legs.dev.rows - legs.pre.rows, k.n_ctx, "{tag}: rows delta = n_ctx")
+}
+
+// A chat tower on the discrete home, after its mmproj's block: every block and the projector tail on the device within the
+// three-way bar on the synthetic mel, a poison past it, and the exact lane within its bar.
+[cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+def private test_encoder_blocks_vulkan(t : T?; k : AudTwinKept) {
+    let tag = k.tag
+    let layers_claimed = k.layers
+    t |> success(!k.flags.x_q8 && k.flags.c_q8, "{tag}: the exact and the q8 towers minted")
+    if (layers_claimed > 0l) {
+        t |> equal(k.n_layer, layers_claimed, "{tag}: the tower's depth is the {layers_claimed} blocks the cell names")
+    }
+    twin_rows_held(t, k.twin.rows) $(legs) {
+        aud_block_counters(t, k, legs)
+    }
+    t |> equal(k.tail, 1l, "{tag}: the projector tail rode the device behind the device leg's blocks")
+    aud_exact_held(t, k)
+}
+
+// A chat tower on the Metal home, after its mmproj's block: the q8 lane three ways - the exact CPU image the reference, the
+// CPU q8 image, the q8 lane's Metal image with the projector tail behind its blocks - with its poison, then the exact lane
+// on its f16 Metal image.
+[cold_path]
+def private test_encoder_blocks_gpu(t : T?; k : AudTwinKept) {
+    let tag = k.tag
+    let layers = k.layers
+    t |> success(k.c_kind == k.kind, "{tag}: the projector kind the cell names")
+    if (layers > 0l) {
+        t |> equal(k.n_layer, layers, "{tag}: the tower's depth is the {layers} blocks the cell names")
+    }
+    t |> success(!k.flags.x_q8 && k.flags.c_q8 && k.flags.d_q8 && k.flags.d_backend == TowerDev.metal, "{tag}: the exact and the q8 towers minted, the q8 lane's Metal image beside")
+    twin_rows_held(t, k.twin.rows) $(legs) {
+        aud_block_counters(t, k, legs)
+    }
+    t |> equal(k.tail, 1l, "{tag}: the q8 projector tail rode the device behind the device leg's blocks")
+    t |> equal(k.twin.f16_encodes, 0l, "{tag}: the q8 lane read the q8 slab, not the halfword plane")
+    aud_exact_held(t, k)
+}
+
+//! the twin's cells of a chat tower mmproj's minted form `form`: its legs on the home the box serves
+[cold_path]
+def private aud_twin_cells(t : T?; file, form : string; var tw : AudioTower; var kept : AudTwinKept; homes : tuple<metal_on : bool; discrete_on : bool>) {
+    return if (!homes.metal_on && !homes.discrete_on)
+    tower_cell(t, "{file}: the {homes.metal_on ? "Metal" : "discrete"} twin, the {form} form's legs", tw, kept, @@aud_twin_leg)
+}
+
+//! the twin's compare of a chat tower after its mmproj's block, on the home that ran it, and the home's residents released
+[cold_path]
+def private aud_twin_held(t : T?; var kept : AudTwinKept; homes : tuple<metal_on : bool; discrete_on : bool>) {
+    if (homes.metal_on) {
+        kept_cell(t, kept.metal_cell, kept, @@test_encoder_blocks_gpu)
+    }
+    if (homes.discrete_on) {
+        kept_cell(t, kept.discrete_cell, kept, @@test_encoder_blocks_vulkan)
+    }
+    if (homes.metal_on || homes.discrete_on) {
+        serving_tower_shutdown(TowerFamily.whisper)
+    }
+}
+
+// The ultravox-1b f32 mmproj's tower on its exact lane's CPU image: the stack-8 projector's shapes, and the CPU encode of a
+// constant mel against llama-mtmd-debug.
+[cold_path]
+def private ultravox_1b_tower(t : T?; tw : AudioTower) {
+    t |> success(tw.proj_kind == AudioProjKind.ultravox, "kind")
+    t |> equal(tw.stack_factor, 8l, "stack factor")
+    t |> equal(tw.mm1_out, 4096l, "mm1 out (pre-swiglu)")
+    t |> equal(tw.proj_dim, 2048l, "proj_dim from mm2 (metadata lies: 4096)")
+    t |> success(!audio_has_avgpool(tw), "no avg-pool")
+    t |> equal(audio_tokens_per_chunk(tw), 187l, "tokens per 30 s chunk (floor 1500/8)")
+    if (jit_enabled()) {
+        var mel = MelChunk(n_mel = tw.n_mel, n_len = AUDIO_CHUNK_FRAMES)
+        mel.data |> resize(tw.n_mel * AUDIO_CHUNK_FRAMES)
+        for (i in range(length(mel.data))) {
+            mel.data[i] = 1.0
+        }
+        var enc <- make_encoder_state(tw)
+        with_gpu_knobs() {
+            set_every_gpu_tower(false)
+            with_dasllama_jobque_() {
+                audio_encode(tw, enc, mel)
+            }
+        }
+        // llama-mtmd-debug -p encode --audio one -n 3000 (CPU, f32 mmproj): token 0 opens
+        // -0.831656 1.679679 0.112337 -0.558047; stats mean=0.002889 max=4.306354.
+        t |> success(abs(enc.out[0] + 0.831656) < 5e-3, "tok0[0]")
+        t |> success(abs(enc.out[1] - 1.679679) < 5e-3, "tok0[1]")
+        t |> success(abs(enc.out[2] - 0.112337) < 5e-3, "tok0[2]")
+        t |> success(abs(enc.out[3] + 0.558047) < 5e-3, "tok0[3]")
+        var sum = 0.0lf
+        var mx = enc.out[0]
+        for (v in enc.out) {
+            sum += double(v)
+            mx = max(mx, v)
+        }
+        t |> success(abs(float(sum / double(187l * tw.proj_dim)) - 0.002889) < 5e-4, "mean")
+        t |> success(abs(mx - 4.306354) < 5e-2, "max")
+        delete enc
+    }
+}
+
+[test(description = "mmproj-ultravox-1b-f32.gguf loads once: its exact lane's CPU image is a stack-8 projector with proj_dim 2048 read from mm2 and 187 tokens a chunk, and its CPU encode of a constant mel matches llama-mtmd-debug token 0, mean and max")]
+def test_ultravox_tower(t : T?) {
+    with_model_once(t, "audio", "mmproj-ultravox-1b-f32.gguf", ["image_f32"], @@aud_stage_key, @@aud_stage, @@aud_form) $(var h; form) {
+        aud_form_is(t, "mmproj-ultravox-1b-f32.gguf", form, h)
+        tower_cell(t, "ultravox mmproj: stack-8 projector shapes + 187 tokens/chunk", h.tw, @@ultravox_1b_tower)
+    }
+}
+
+// The voxtral f32 mmproj's tower on its exact lane's CPU image: the avg-pooled stack-4 projector's shapes, and the CPU
+// encode of a constant mel against llama-mtmd-debug.
+[cold_path]
+def private test_voxtral_tower(t : T?; tw : AudioTower) {
+    t |> success(tw.proj_kind == AudioProjKind.voxtral, "kind")
+    t |> equal(tw.stack_factor, 4l, "stack factor")
+    t |> equal(tw.mm1_out, 3072l, "mm1 out")
+    t |> equal(tw.proj_dim, 3072l, "proj_dim")
+    t |> success(audio_has_avgpool(tw), "avg-pool")
+    t |> equal(audio_tokens_per_chunk(tw), 187l, "tokens per 30 s chunk (floor 750/4)")
+    if (jit_enabled()) {
+        var mel = MelChunk(n_mel = tw.n_mel, n_len = AUDIO_CHUNK_FRAMES)
+        mel.data |> resize(tw.n_mel * AUDIO_CHUNK_FRAMES)
+        for (i in range(length(mel.data))) {
+            mel.data[i] = 1.0
+        }
+        var enc <- make_encoder_state(tw)
+        with_gpu_knobs() {
+            set_every_gpu_tower(false)
+            with_dasllama_jobque_() {
+                audio_encode(tw, enc, mel)
+            }
+        }
+        // llama-mtmd-debug -p encode --audio one -n 3000 (CPU, f32 mmproj): token 0 opens
+        // 0.967699 -0.765652 0.050477 -0.571310; stats mean=-0.001517 max=1.459851.
+        t |> success(abs(enc.out[0] - 0.967699) < 5e-3, "tok0[0]")
+        t |> success(abs(enc.out[1] + 0.765652) < 5e-3, "tok0[1]")
+        t |> success(abs(enc.out[2] - 0.050477) < 5e-3, "tok0[2]")
+        t |> success(abs(enc.out[3] + 0.571310) < 5e-3, "tok0[3]")
+        var sum = 0.0lf
+        var mx = enc.out[0]
+        for (v in enc.out) {
+            sum += double(v)
+            mx = max(mx, v)
+        }
+        t |> success(abs(float(sum / double(187l * tw.proj_dim)) + 0.001517) < 5e-4, "mean")
+        t |> success(abs(mx - 1.459851) < 5e-2, "max")
+        delete enc
+    }
+}
+
+// The voxtral mini mmproj's tower, one block.
+[test(description = "voxtral-mini-mmproj-f32.gguf loads its tower once a form. Its exact lane's CPU image is an avg-pooled stack-4 projector with proj_dim 3072 and 187 tokens a chunk, and its CPU encode of a constant mel matches llama-mtmd-debug token 0, mean and max. On Metal the tower runs every block and the projector tail on the q8 slab within the three-way bar on a synthetic mel, a poison exceeds it, and the f16 exact lane holds; on the discrete home every block and the projector tail run on the device within the three-way bar, a poison exceeds it, and the exact lane holds")]
+def test_voxtral_carrier(t : T?) {
+    var inscope kept = AudTwinKept(family = "voxtral", kind = AudioProjKind.voxtral,
+        metal_cell = "voxtral tower: the Metal chain vs the CPU encoder - pair pool, post-norm, stacked GELU MLP",
+        discrete_cell = "voxtral tower: the discrete home's blocksvs the CPU q8 chain on the synthetic mel")
+    var inscope forms <- ["image_f32"]
+    let homes = aud_twin_asked(t, forms, kept, "voxtral-mini-mmproj-f32.gguf", true, true)
+    let ran = with_model_once(t, "audio", "voxtral-mini-mmproj-f32.gguf", forms, @@aud_stage_key, @@aud_stage, @@aud_form) $(var h; form) {
+        aud_form_is(t, "voxtral-mini-mmproj-f32.gguf", form, h)
+        kept.form = form
+        if (form == "image_f32") {
+            tower_cell(t, "voxtral mmproj: avg-pool + stack-4 projector shapes + 187 tokens/chunk", h.tw, @@test_voxtral_tower)
             return
         }
-        let home = serving_tower_dev(TowerFamily.whisper)
-        let tag = "{family} synthetic mel"
-        let knobs = gpu_knobs()
-        defer() {
-            set_gpu_knobs(knobs)
-        }
-        var twx <- mint_aud(path, false, -1l)
-        var tw <- mint_aud(path, true, -1l)
-        t |> success(!twx.q8 && tw.q8, "{tag}: the exact and the q8 towers minted")
-        if (layers_claimed > 0l) {
-            t |> equal(tw.n_layer, layers_claimed, "{tag}: the tower's depth is the {layers_claimed} blocks the cell names")
-        }
-        let mel <- synth_mel(tw.n_mel)
-        var encx <- make_encoder_state(twx)
-        var enc <- make_encoder_state(tw)
-        let spec = TwinSpec(family = family, tag = tag, n_layer = tw.n_layer, metric = TwinMetric.rel_l2, seat_family = TowerFamily.whisper)
-        let tail0 = gpu_tower_tail_encodes(TowerFamily.whisper)
-        var twd <- mint_aud(path, true, -1l, home)
-        var encd <- make_encoder_state(twd)
-        let r <- twin_three_way(t, spec, tw, enc, twd, encd, twx, encx, $(e; var s; var out) => aud_twin_encode(e, s, mel, out)) $(legs) {
-            t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "{tag}: exactly the device leg dispatched")
-            t |> equal(legs.dev.blocks - legs.pre.blocks, tw.n_layer, "{tag}: blocks delta = n_layer")
-            t |> equal(legs.dev.rows - legs.pre.rows, tw.n_ctx, "{tag}: rows delta = n_ctx")
-        }
-        delete encd
-        delete twd
-        t |> equal(gpu_tower_tail_encodes(TowerFamily.whisper) - tail0, 1l, "{tag}: the projector tail rode the device behind the device leg's blocks")
-        if (r.bar > 0.0lf) {
-            var twp <- mint_aud(path, true, tw.n_layer / 2l, home)
-            var encp <- make_encoder_state(twp)
-            twin_poison(t, r, tw.n_layer / 2l, twp, encp) $(e; var s; var out) => aud_twin_encode(e, s, mel, out)
-            delete encp
-            delete twp
-        }
-        delete enc
-        delete tw
-        blocks_exact_leg(t, tag, path, twx, encx, mel)
-        delete encx
-        delete twx
-        gpu_tower_shutdown(TowerFamily.whisper)
-    } else {
-        t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
+        aud_twin_cells(t, "voxtral-mini-mmproj-f32.gguf", form, h.tw, kept, homes)
+    }
+    if (ran) {
+        aud_twin_held(t, kept, homes)
     }
 }
 
@@ -384,13 +554,17 @@ def private zero_g4a_gemm(var stg : Gemma4aStaging; off, n : int64) {
     }
 }
 
-//! `zero_block` >= 0 zeroes the eleven GEMM planes of `poison_blocks` blocks from it on, on the lane's planes; `dev` the image flavor
-def private mint_g4a(mm : string; q8 : bool; zero_block : int64; dev : TowerDev = TowerDev.none) : Gemma4aEncoder {
-    set_gemma4a_q8(q8)
-    defer() {
-        reset_gemma4a_q8()
-    }
-    var inscope stg <- tower_dev_staged(dev) $ { return <- stage_gemma4a_encoder(mm) }
+//! a gemma4a mmproj's staged read the key `key` names (`tower_stage_key_of`): under its lane pin, put back however the
+//! staging leaves, in its image flavor
+def private g4a_stage(mm, key : string) : Gemma4aStaging {
+    let f = g4a_form_of(key)
+    return <- staged_twin_tower(mm, f.lane == "q8", tower_form_dev_of(f, TowerFamily.gemma4a), @@set_gemma4a_q8, @@reset_gemma4a_q8,
+        @@ < (path : string) : Gemma4aStaging > stage_gemma4a_encoder)
+}
+
+//! a gemma4a encoder minted from `stg`: `zero_block` >= 0 zeroes the eleven GEMM planes of `poison_blocks` blocks from it
+//! on, on the lane's planes; `dev` the image flavor
+def private mint_g4a(var stg : Gemma4aStaging; zero_block : int64; dev : TowerDev) : Gemma4aEncoder {
     if (zero_block >= 0l) {
         let d = stg.e.d_model
         let ff = stg.e.n_ff
@@ -410,168 +584,6 @@ def private mint_g4a(mm : string; q8 : bool; zero_block : int64; dev : TowerDev 
     return <- enc
 }
 
-//! the first 3 s of a clip: an encode short enough to size the residency's scratch under the full clip's
-def private clip_head(samples : array<float>) : array<float> {
-    let n = min(long_length(samples), 3l * AUDIO_SAMPLE_RATE)
-    return <- [for (i in range64(n)); samples[i]]
-}
-
-//! the regrow legs at `r`'s bar on the twin family's home (short encode, clip, clip after a shutdown, poison); `exactly_three`: one dispatch an encode
-[cold_path, unused_argument(t, tag, enc, st, samples, r, exactly_three, mint_poisoned, encode)]
-def private twin_regrow_legs(t : T?; tag : string; enc : auto(TW); var st : auto(ST); samples : array<float>; r : TwinResult;
-                             exactly_three : bool; mint_poisoned : block<() : TW>;
-                             encode : block<(e : TW; var s : ST; clip : array<float>; var out : array<float>) : int64>) {
-    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-        let fam = r.spec.seat_family
-        let head <- clip_head(samples)
-        var dev_head, dev_again, dev_fresh : array<float>
-        set_serving_gpu_tower(true, fam)
-        let e0 = gpu_tower_encodes(fam)
-        with_dasllama_jobque_() {
-            invoke(encode, enc, st, head, dev_head)
-            invoke(encode, enc, st, samples, dev_again)
-            gpu_tower_shutdown(fam)
-            invoke(encode, enc, st, samples, dev_fresh)
-        }
-        let n_enc = gpu_tower_encodes(fam) - e0
-        if (exactly_three) {
-            t |> equal(n_enc, 3l, "{tag}: the short, the regrown and the fresh encodes ran on the device")
-        } else {
-            t |> success(n_enc >= 3l, "{tag}: the short, the regrown and the fresh encodes ran on the device")
-        }
-        tower_twin_held(t, "{tag} regrown scratch", fam, r.reference, dev_again, r.bar)
-        tower_twin_held(t, "{tag} after shutdown", fam, r.reference, dev_fresh, r.bar)
-        var encp <- invoke(mint_poisoned)
-        var stp = ST()
-        var poisoned : array<float>
-        let p0 = gpu_tower_encodes(fam)
-        with_dasllama_jobque_() {
-            invoke(encode, encp, stp, samples, poisoned)
-        }
-        t |> success(gpu_tower_encodes(fam) > p0, "{tag} poison: device-served (encodes delta)")
-        tower_twin_poisoned(t, tag, fam, r.reference, poisoned, r.bar)
-        delete poisoned
-        delete stp
-        delete encp
-        delete dev_head
-        delete dev_again
-        delete dev_fresh
-    }
-}
-
-//! one gemma4a encoder `tag` on jfk three ways on the q8 lane with its regrow and poison legs, then its exact lane on the home's exact image
-[cold_path, unused_argument(tst, tag, mm_file)]
-def private g4a_discrete_twin(tst : T?; tag, mm_file : string; want_proj : int64) {
-    tst |> run("gemma4a {tag}: the discrete home's Conformer chain vs the CPU q8 chain on jfk, then its exact lane, the exact chain the reference") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-            let mm = path_join(models_dir(), mm_file)
-            let jt = "gemma4a {tag} jfk"
-            jfk_twin_cell(t, mm, false, TowerFamily.gemma4a) $(samples) {
-                let home = serving_tower_dev(TowerFamily.gemma4a)
-                var encx <- mint_g4a(mm, false, -1l)
-                var enc <- mint_g4a(mm, true, -1l)
-                t |> success(!encx.q8 && enc.q8, "the exact and the q8 encoders minted")
-                t |> equal(gemma4a_mid_dim(enc), 1536l, "{jt}: the encoder's own width")
-                t |> equal(enc.proj_dim, want_proj, "{jt}: the embedder projects to the decoder's width")
-                var encd <- mint_g4a(mm, true, -1l, home)
-                var stx = Gemma4aState()
-                var st = Gemma4aState()
-                var std = Gemma4aState()
-                var n_exact = 0l
-                let spec = TwinSpec(family = "gemma4a", tag = jt, n_layer = enc.n_layer, metric = TwinMetric.rel_l2, seat_family = TowerFamily.gemma4a)
-                let r <- twin_three_way(t, spec, enc, st, encd, std, encx, stx, $(e; var s; var out) => gemma4a_encode_all(e, s, samples, out)) $(legs) {
-                    n_exact = legs.n_exact
-                    let n_chunks = legs.dev.encodes - legs.pre.encodes
-                    t |> equal(legs.n_cpu, legs.n_exact, "{jt}: the q8 chain's token count")
-                    t |> equal(legs.n_dev, legs.n_exact, "{jt}: the device chain's token count")
-                    t |> success(n_chunks >= 1l, "{jt}: the device served the chunk encodes ({n_chunks})")
-                    t |> equal(legs.dev.blocks - legs.pre.blocks, n_chunks * enc.n_layer, "{jt}: every block of every served encode ran on the driver")
-                    front_served(t, jt, legs.dev.convs - legs.pre.convs, n_chunks, legs.dev.declines - legs.cpu.declines)
-                }
-                if (r.bar > 0.0lf) {
-                    var st2 = Gemma4aState()
-                    twin_regrow_legs(t, jt, encd, st2, samples, r, false, $ { return <- mint_g4a(mm, true, enc.n_layer / 2l, home) }) $(e; var s; clip; var out) => gemma4a_encode_all(e, s, clip, out)
-                    delete st2
-                }
-                delete std
-                delete encd
-                let xconvs = exact_flavor_leg(t, jt, TowerFamily.gemma4a, encx, stx, n_exact, $(zb) { return <- mint_g4a(mm, false, zb, home) }) $(e; var s; var out) => gemma4a_encode_all(e, s, samples, out)
-                t |> success(xconvs >= 2l, "{jt} exact lane: the chunk front served on both device encodes ({xconvs} dispatches)")
-                delete stx
-                delete st
-                delete enc
-                delete encx
-                gpu_tower_shutdown(TowerFamily.gemma4a)
-            }
-        } else {
-            t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
-        }
-    }
-}
-
-//! E2B's audio embedder is square on the encoder's 1536; E4B's widens it to the decoder's 2560 - the projector tail at two widths
-[test(description = "The gemma4a E2B and E4B encoders on the discrete home stay within the three-way bar the CPU q8 chain sets against the exact chain on jfk, across regrown and fresh residencies, and a zeroed-blocks poison exceeds it"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def test_gemma4a_discrete_twin(tst : T?) {
-    g4a_discrete_twin(tst, "E2B", "mmproj-gemma-4-E2B-it-bf16.gguf", 1536l)
-    g4a_discrete_twin(tst, "E4B", "mmproj-gemma-4-E4B-it-BF16.gguf", 2560l)
-}
-
-//! the GEMM planes of one FastConformer block zeroed in its GEMM plane (the q8 quants, or the halfwords) - eleven, or ten where
-//! the family has no pos projection (`pos_w` -1): the poison of the device twins' control
-def private poison_fc_block(var plane : array<auto(PT)>; lo : CanaryLayerOffs; d, ff : int64) {
-    for (w in fixed_array(lo.q_w, lo.k_w, lo.v_w, lo.pos_w, lo.o_w, lo.pw2_w)) {
-        if (w >= 0l) {
-            zero_plane(plane, w, d * d)
-        }
-    }
-    for (w in fixed_array(lo.ff1a_w, lo.ff1b_w, lo.ff2a_w, lo.ff2b_w)) {
-        zero_plane(plane, w, d * ff)
-    }
-    zero_plane(plane, lo.pw1_w, d * 2l * d)
-}
-
-//! `zero_block` >= 0: the GEMM planes of `poison_blocks` blocks from that block on zeroed in `plane`, each block's offsets
-//! `layer` maps onto canary's record
-def private poison_fc_blocks(var plane : array<auto(PT)>; n_layer, zero_block, d, ff : int64; layer : block<(b : int64) : CanaryLayerOffs>) {
-    return if (zero_block < 0l)
-    for (b in range64(zero_block, min(n_layer, zero_block + poison_blocks(n_layer)))) {
-        poison_fc_block(plane, invoke(layer, b), d, ff)
-    }
-}
-
-//! one encode of `run` over `st`, the encoder's `width`-wide rows of `st.x` it answered for into `out`; its frame count
-def private x_rows_encode(var st : auto(ST); width : int64; var out : array<float>; run : block<(var s : ST) : int64>) : int64 {
-    let n = invoke(run, st)
-    delete out
-    out <- copy_span(st.x, 0l, n * width)
-    return n
-}
-
-//! a Vulkan-flavored model's encode under a storage range stood in at `msr_at`: the front stands down and the CPU chain refuses (`#tower-dev-block`)
-[unused_argument(t, tag, fam, msr_at, run)]   // without dasVulkan the gated body is empty
-def private blocks_refused_leg(t : T?; tag : string; fam : TowerFamily; msr_at : int64; run : block<() : void>) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        return if (tower_family_cuda(fam))
-        let msr = g_gpu.msr
-        let s0 = vulkan_tower_stats()
-        let k0 <- vulkan_tower_declines()
-        g_gpu.msr = msr_at
-        var refused = ""
-        try {
-            invoke(run)
-        } recover {
-            refused = "refused"
-        }
-        g_gpu.msr = msr
-        let s1 = vulkan_tower_stats()
-        let k1 <- vulkan_tower_declines()
-        t |> equal(s1.convs - s0.convs, 0l, "{tag}, blocks past the range: no front dispatch counted")
-        t |> equal(s1.mels - s0.mels, 0l, "{tag}, blocks past the range: no device mel counted")
-        t |> equal(s1.encodes - s0.encodes, 0l, "{tag}, blocks past the range: no encode served")
-        t |> equal((k1?["memory"] ?? 0l) - (k0?["memory"] ?? 0l), 0l, "{tag}, blocks past the range: the front's buffers fit (no memory decline)")
-        t |> equal(refused, "refused", "{tag}, blocks past the range: the Vulkan-flavored model refuses the CPU chain")
-    }
-}
 
 //! the synthetic speech-scale mel every twin reads: the all-ones fixture is degenerate (identical rows make every attention weight
 //! a near-tie, so single elements flip O(1)); `other` is the second clip, the control's rows outside the bar
@@ -588,9 +600,9 @@ def private synth_mel(n_mel : int64) : MelChunk {
     return <- mel
 }
 
-//! `zero_block` >= 0 zeroes the eleven GEMM planes of `poison_blocks` blocks from it on, in the lane's GEMM plane; `dev` the image flavor
-def private mint_cn(path : string; q8 : bool; zero_block : int64; dev : TowerDev = TowerDev.none) : CanaryEncoder {
-    var inscope stg <- tower_dev_staged(dev) $ { return <- stage_canary_encoder(path, q8) }
+//! a Canary encoder minted from `stg`, a staged read on the lane `q8`: `zero_block` >= 0 zeroes the eleven GEMM planes of
+//! `poison_blocks` blocks from it on, in the lane's GEMM plane; `dev` the image flavor
+def private mint_cn(var stg : CanaryStaging; q8 : bool; zero_block : int64; dev : TowerDev) : CanaryEncoder {
     if (q8) {
         poison_fc_blocks(stg.qblob, stg.e.n_layer, zero_block, stg.e.d_model, stg.e.n_ff) $(b) => stg.layers[b]
     } elif (stg.e.gemm_f16) {
@@ -612,62 +624,10 @@ def private cn_twin_encode(enc : CanaryEncoder; var st : CanaryState; clip : arr
     return n
 }
 
-//! a FastConformer's exact lane on family `fam`'s home (`exact_flavor_leg` over `mint`'s halfword flavor), the front on both device legs
-[cold_path]
-def private fc_exact_lane_leg(t : T?; tag : string; fam : TowerFamily; tw_exact : auto(TW); var st_exact : auto(ST); mint : block<(zb : int64) : TW>;
-                              encode : block<(e : TW; var s : ST; var out : array<float>) : int64>) {
-    let convs = exact_flavor_leg(t, tag, fam, tw_exact, st_exact, -1l, mint, encode)
-    front_served(t, "{tag} exact lane", convs, 2l, 0l)
-}
 
-[test(description = "The canary encoder on the discrete home serves its front and every block on the device within the three-way bar on jfk, holds it across regrown and fresh residencies and on the exact f16 lane, and a poison exceeds it"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def test_canary_discrete_twin(tst : T?) {
-    tst |> run("canary-qwen 2.5B: the discrete home's FastConformerblocks vs the CPU q8 chain on jfk, the exact chain the reference") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-            let path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
-            jfk_twin_cell(t, path, false, TowerFamily.canary) $(samples) {
-                let home = serving_tower_dev(TowerFamily.canary)
-                var encx <- mint_cn(path, false, -1l)
-                var enc <- mint_cn(path, true, -1l)
-                t |> success(!encx.q8 && enc.q8, "the exact and the q8 encoders minted")
-                var encd <- mint_cn(path, true, -1l, home)
-                var stx = CanaryState()
-                var st = CanaryState()
-                var std = CanaryState()
-                let spec = TwinSpec(family = "canary", tag = "canary jfk", n_layer = enc.n_layer, metric = TwinMetric.rel_l2, seat_family = TowerFamily.canary)
-                let r <- twin_three_way(t, spec, enc, st, encd, std, encx, stx, $(e; var s; var out) => cn_twin_encode(e, s, samples, out)) $(legs) {
-                    t |> equal(legs.n_cpu, legs.n_exact, "canary jfk: the q8 chain's frame count")
-                    t |> equal(legs.n_dev, legs.n_exact, "canary jfk: the device chain's frame count")
-                    t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "canary jfk: the device served the encode")
-                    t |> equal(legs.dev.blocks - legs.pre.blocks, enc.n_layer, "canary jfk: every block ran on the driver")
-                    front_served(t, "canary jfk", legs.dev.convs - legs.pre.convs, 1l, legs.dev.declines - legs.cpu.declines)
-                }
-                if (r.bar > 0.0lf) {
-                    var st2 = CanaryState()
-                    twin_regrow_legs(t, "canary jfk", encd, st2, samples, r, true, $ { return <- mint_cn(path, true, enc.n_layer / 2l, home) }) $(e; var s; clip; var out) => cn_twin_encode(e, s, clip, out)
-                    delete st2
-                }
-                delete std
-                delete encd
-                delete enc
-                fc_exact_lane_leg(t, "canary jfk", TowerFamily.canary, encx, stx, $(zb) { return <- mint_cn(path, false, zb, home) }) $(e; var s; var out) => cn_twin_encode(e, s, samples, out)
-                delete stx
-                delete st
-                delete encx
-                gpu_tower_shutdown(TowerFamily.canary)
-            }
-        } else {
-            t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
-        }
-    }
-}
-
-//! parakeet staged and minted in memory on the lane asked - `kq` a quantized GGUF's own planes, else `q8` or the exact lane; `zero_block` >= 0 zeroes the GEMM planes of the blocks from it on
-def private mint_pk(path : string; q8 : bool; zero_block : int64; dev : TowerDev = TowerDev.none; kq : bool = false) : ParakeetModel {
-    var inscope stg <- tower_dev_staged(dev) $ {
-        return <- stage_parakeet_kq_model(path) if (kq)
-        return <- stage_parakeet_model(path, q8)
-    }
+//! parakeet minted in memory from `stg`, a staged read on the lane asked - `kq` a quantized GGUF's own planes, else `q8`
+//! or the exact lane; `zero_block` >= 0 zeroes the GEMM planes of the blocks from it on
+def private mint_pk(var stg : ParakeetStaging; q8 : bool; zero_block : int64; dev : TowerDev; kq : bool) : ParakeetModel {
     if (kq) {
         if (zero_block >= 0l) {
             poison_kq_seats(stg.gemm_seats, zero_block * PK_LAYER_SEATS, stg.e.n_layer * PK_LAYER_SEATS, stg.kq, stg.qblob)
@@ -692,6 +652,57 @@ def private pk_twin_encode(m : ParakeetModel; var st : ParakeetState; clip : arr
     }
 }
 
+let private PK_V2 = "ggml-parakeet-tdt-0.6b-v2-f32.bin"
+let private PK_V3 = "ggml-parakeet-tdt-0.6b-v3-f32.bin"
+let private PK_V3_Q8_0 = "ggml-parakeet-tdt-0.6b-v3-q8_0.bin"
+let private PK_Q4 = "parakeet-tdt-0.6b-v3-Q4_K_M.gguf"
+let private PK_F32 = "parakeet-tdt-0.6b-v3-F32.gguf"
+let private PK_Q8_0 = "parakeet-tdt-0.6b-v3-Q8_0.gguf"
+
+//! a Parakeet carrier's form read off its name (`tower_form_of`): the lanes `f32` (the exact lane), `q8`, and `kq` (a
+//! quantized GGUF's own planes)
+def private parakeet_form_of(form : string) : TowerForm => tower_form_of(form, ["f32", "q8", "kq"], "parakeet")
+
+//! the staged read a Parakeet carrier's form is minted from (`tower_stage_key_of`)
+def private parakeet_stage_key(form : string) : string => tower_stage_key_of(parakeet_form_of(form))
+
+//! a Parakeet carrier's staged read the key `key` names: its lane - a kq lane the GGUF's own planes - in its image flavor
+def private parakeet_stage(path, key : string) : ParakeetStaging {
+    let f = parakeet_form_of(key)
+    return <- tower_dev_staged(tower_form_dev_of(f, TowerFamily.parakeet)) $ {
+        return <- stage_parakeet_kq_model(path) if (f.lane == "kq")
+        return <- stage_parakeet_model(path, f.lane == "q8")
+    }
+}
+
+//! One form of a Parakeet carrier as the ASR facade holds it, its block's form loader (`parakeet_form_of`): `image` the
+//! facade's own load with the family's lane pin unset; any other minted in memory (`mint_pk`) from `stg`, its own copy of
+//! the carrier's staging on the lane it names - `_z<block>` zeroes the GEMM planes of the poison's blocks from that block
+//! on (a kq lane's seats), `@dev` is the image flavor of the family's serving home.
+def private parakeet_form(path, form : string; var stg : ParakeetStaging) : AsrModel {
+    let f = parakeet_form_of(form)
+    if (f.image) {
+        reset_parakeet_q8()
+        set_asr_fp32(false)
+        set_asr_tower_fp32(false)
+        return <- load_asr_model(path)
+    }
+    var inscope m = AsrModel(kind = AsrKind.parakeet)
+    m.pk <- mint_pk(stg, f.lane == "q8", f.zero_block, tower_form_dev_of(f, TowerFamily.parakeet), f.lane == "kq")
+    return <- m
+}
+
+//! The form is the lane, poison and image flavor it names: on `m`, a carrier loaded as the form `form` of `file`, the lane
+//! flags, the poison's block the tower's middle one, and the image flavor. The `image` form's lane and flavor are the
+//! run's policy: not read.
+def private parakeet_form_is(t : T?; file, form : string; m : AsrModel) {
+    let f = parakeet_form_of(form)
+    t |> success(m.kind == AsrKind.parakeet, "{file}: the {form} form is a parakeet model")
+    return if (f.image)
+    t |> success(m.pk.kq_lane == (f.lane == "kq") && m.pk.q8 == (f.lane == "q8"), "{file}: the {form} form serves the lane it names")
+    form_zero_and_flavor_is(t, file, form, f, TowerFamily.parakeet, m.pk.n_layer, m.pk.dev_backend)
+}
+
 let private SHORT_CLIP_SAMPLES = fixed_array(320l, 480l, 640l, 800l, 1600l)   //! 20 to 100 ms: a few mel frames each, from under four frames to past it
 let private SHORT_CLIP_BAR = 5e-2lf   //! the device rows' rel_l2 from the CPU q8 chain's over a clip of a few frames - two q8 chains, the device's GEMMs on the f16 feed
 
@@ -701,202 +712,247 @@ def private short_clip_noise(var seed : uint&) : float {
     return (float(seed >> 8u) / 16777216.0 - 0.5) * 0.6
 }
 
-//! clips a few mel frames long through `twd` (the GPU-flavored tower) on family `fam`'s home against `tw` (its CPU image) at `SHORT_CLIP_BAR`, `encode` the family's encode of a clip
-[cold_path, unused_argument(t, tag, fam, tw, st, twd, std)]   // without a discrete home the gated body is empty
-def private short_clip_cell(t : T?; tag : string; fam : TowerFamily; tw : auto(TW); var st : auto(ST); twd : TW; var std : ST;
-                            encode : block<(e : TW; var s : ST; clip : array<float>; var out : array<float>) : int64>) {
-    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-        var last_cpu : array<float>
-        for (n in SHORT_CLIP_SAMPLES) {
-            var inscope clip <- [for (i in range64(n)); 0.3 * sin(float(i) * 0.05) + 0.1 * sin(float(i) * 0.31)]
-            var cpu, dev : array<float>
-            var n_cpu = 0l
-            var n_dev = 0l
-            var s0 = GpuTowerCounters()
-            var s1 = GpuTowerCounters()
-            var s2 = GpuTowerCounters()
-            with_gpu_knobs() {
-                with_dasllama_jobque_() {
-                    set_serving_gpu_tower(true, fam)
-                    s0 = gpu_tower_counters(fam)
-                    n_cpu = invoke(encode, tw, st, clip, cpu)
-                    s1 = gpu_tower_counters(fam)
-                    n_dev = invoke(encode, twd, std, clip, dev)
-                    s2 = gpu_tower_counters(fam)
-                }
-            }
-            let ctag = "{tag} {n}-sample clip"
-            t |> equal(s1.encodes - s0.encodes, 0l, "{ctag}: the CPU image's leg never dispatched")
-            t |> equal(s2.encodes - s1.encodes, 1l, "{ctag}: the device served the encode")
-            t |> equal(s2.declines - s1.declines, 0l, "{ctag}: the device leg declined nothing")
-            t |> equal(n_dev, n_cpu, "{ctag}: the device's row count is the CPU's")
-            var got = TowerParityStats()
-            if (n_cpu > 0l && tower_parity_stats(t, ctag, cpu, dev, got)) {
-                to_log(LOG_INFO, "test_audio: {ctag}: device vs CPU q8 rel_l2 {got.rel_l2} over {n_cpu} rows\n")
-                t |> success(got.rel_l2 <= SHORT_CLIP_BAR, "{ctag}: the device rows within {SHORT_CLIP_BAR} of the CPU's ({got.rel_l2})")
-            }
-            last_cpu := cpu
-            delete cpu
-            delete dev
-        }
-        var seed = 12345u
-        var inscope noise <- [for (_i in range64(SHORT_CLIP_SAMPLES[length(SHORT_CLIP_SAMPLES) - 1])); short_clip_noise(seed)]
-        var other : array<float>
+
+//! The short clips of one family as two forms keep them, for the compare after the block (`test_vulkan_short_clips`): each
+//! clip's rows, row count and the driver's counters across its encode on the CPU image and on the device image, and the
+//! device image's rows of a noise clip (the control).
+struct private ShortClipsKept {
+    tag : string
+    cpu : array<array<float>>
+    dev : array<array<float>>
+    n_cpu : array<int64>
+    n_dev : array<int64>
+    cpu_encodes : array<int64>
+    dev_encodes : array<int64>
+    dev_declines : array<int64>
+    other : array<float>
+    legs : int
+}
+
+//! A form's leg of the short clips `k` on family `fam`'s home: every clip through the form's tower `tw` with the tower
+//! knob on - the CPU image (`dev` false), which never dispatches, or the GPU-flavored image, which then encodes the noise
+//! clip too; `encode` the family's encode of a clip.
+[cold_path]
+def private short_clip_leg(var k : ShortClipsKept; fam : TowerFamily; dev : bool; tw : auto(TW); var st : auto(ST);
+                           encode : block<(e : TW; var s : ST; clip : array<float>; var out : array<float>) : int64>) {
+    for (n in SHORT_CLIP_SAMPLES) {
+        var inscope clip <- [for (i in range64(n)); 0.3 * sin(float(i) * 0.05) + 0.1 * sin(float(i) * 0.31)]
+        var rows : array<float>
+        var n_rows = 0l
+        var s0 = GpuTowerCounters()
+        var s1 = GpuTowerCounters()
         with_gpu_knobs() {
             with_dasllama_jobque_() {
                 set_serving_gpu_tower(true, fam)
-                invoke(encode, twd, std, noise, other)
+                s0 = gpu_tower_counters(fam)
+                n_rows = invoke(encode, tw, st, clip, rows)
+                s1 = gpu_tower_counters(fam)
             }
         }
-        var ctl = TowerParityStats()
-        if (tower_parity_stats(t, "{tag} control", last_cpu, other, ctl)) {
-            t |> success(is_finite(ctl.rel_l2) && ctl.rel_l2 > SHORT_CLIP_BAR, "{tag}: the device's rows of a noise clip land outside the bar of the longest clip's CPU rows ({ctl.rel_l2}) - the control")
-        }
-        delete other
-        delete last_cpu
-    }
-}
-
-[test(description = "Clips of 320 to 1600 samples through the gemma4a, canary and parakeet GPU-flavored images serve as one device encode with no decline, the CPU image row count and rows within SHORT_CLIP_BAR, a noise clip outside it"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def test_vulkan_short_clips(tst : T?) {
-    tst |> run("gemma4a E2B: clips of 320 to 1600 samples serve on the discrete home's image as the CPU image reads them") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-            let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
-            return if (!model_available(t, mm) || !discrete_audio_twin_seat(t, TowerFamily.gemma4a))
-            var enc <- mint_g4a(mm, true, -1l)
-            var encd <- mint_g4a(mm, true, -1l, serving_tower_dev(TowerFamily.gemma4a))
-            var st = Gemma4aState()
-            var std = Gemma4aState()
-            short_clip_cell(t, "gemma4a", TowerFamily.gemma4a, enc, st, encd, std) $(e; var s; clip; var out) => gemma4a_encode_all(e, s, clip, out)
-            delete std
-            delete st
-            delete encd
-            delete enc
-            gpu_tower_shutdown(TowerFamily.gemma4a)
+        if (dev) {
+            k.dev |> emplace(rows)
+            k.n_dev |> push(n_rows)
+            k.dev_encodes |> push(s1.encodes - s0.encodes)
+            k.dev_declines |> push(s1.declines - s0.declines)
         } else {
-            t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
+            k.cpu |> emplace(rows)
+            k.n_cpu |> push(n_rows)
+            k.cpu_encodes |> push(s1.encodes - s0.encodes)
         }
     }
-    tst |> run("canary: clips of 320 to 1600 samples serve on the discrete home's image as the CPU image reads them") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-            let path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
-            return if (!model_available(t, path) || !discrete_audio_twin_seat(t, TowerFamily.canary))
-            var enc <- mint_cn(path, true, -1l)
-            var encd <- mint_cn(path, true, -1l, serving_tower_dev(TowerFamily.canary))
-            var st = CanaryState()
-            var std = CanaryState()
-            short_clip_cell(t, "canary", TowerFamily.canary, enc, st, encd, std) $(e; var s; clip; var out) => cn_twin_encode(e, s, clip, out)
-            delete std
-            delete st
-            delete encd
-            delete enc
-            gpu_tower_shutdown(TowerFamily.canary)
-        } else {
-            t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
-        }
-    }
-    tst |> run("parakeet-TDT 0.6B v2: clips of 320 to 1600 samples serve on the discrete home's image as the CPU image reads them") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-            let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v2-f32.bin")
-            return if (!model_available(t, path) || !discrete_audio_twin_seat(t, TowerFamily.parakeet))
-            var m <- mint_pk(path, true, -1l)
-            var md <- mint_pk(path, true, -1l, serving_tower_dev(TowerFamily.parakeet))
-            var st = ParakeetState()
-            var std = ParakeetState()
-            short_clip_cell(t, "parakeet", TowerFamily.parakeet, m, st, md, std) $(e; var s; clip; var out) => pk_twin_encode(e, s, clip, out)
-            delete std
-            delete st
-            delete md
-            delete m
-            gpu_tower_shutdown(TowerFamily.parakeet)
-        } else {
-            t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
-        }
-    }
-}
-
-[test(description = "Parakeet-TDT v2 on the discrete home serves its front and every block on the device within the three-way bar on jfk, refuses the CPU chain past the storage range, and a poison and the exact lane hold their bars"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def test_parakeet_discrete_twin(tst : T?) {
-    tst |> run("parakeet-TDT 0.6B v2: the discrete home's FastConformerfront and blocks vs the CPU q8 chain on jfk, the exact chain the reference") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-            let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v2-f32.bin")
-            jfk_twin_cell(t, path, false, TowerFamily.parakeet) $(samples) {
-                let home = serving_tower_dev(TowerFamily.parakeet)
-                var mx <- mint_pk(path, false, -1l)
-                var m <- mint_pk(path, true, -1l)
-                var md <- mint_pk(path, true, -1l, home)
-                t |> success(!mx.q8 && m.q8 && md.dev_backend == home, "the exact and the q8 models minted, the q8 lane's {home} image beside")
-                var stx = ParakeetState()
-                var st = ParakeetState()
-                var std = ParakeetState()
-                let spec = TwinSpec(family = "parakeet", tag = "parakeet jfk", n_layer = m.n_layer, metric = TwinMetric.rel_l2, seat_family = TowerFamily.parakeet)
-                let r <- twin_three_way(t, spec, m, st, md, std, mx, stx, $(e; var s; var out) => pk_twin_encode(e, s, samples, out)) $(legs) {
-                    t |> equal(legs.n_cpu, legs.n_exact, "parakeet jfk: the q8 chain's frame count")
-                    t |> equal(legs.n_dev, legs.n_exact, "parakeet jfk: the device chain's frame count")
-                    t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "parakeet jfk: the device served the encode")
-                    t |> equal(legs.dev.blocks - legs.pre.blocks, m.n_layer, "parakeet jfk: every block ran on the driver")
-                    front_served(t, "parakeet jfk", legs.dev.convs - legs.pre.convs, 1l, legs.dev.declines - legs.cpu.declines)
-                }
-                if (r.bar > 0.0lf) {
-                    var st_rf = ParakeetState()
-                    var out_rf : array<float>
-                    blocks_refused_leg(t, "parakeet jfk", TowerFamily.parakeet, 256l << 20l) $ {
-                        pk_twin_encode(md, st_rf, samples, out_rf)
-                    }
-                    delete st_rf
-                    var mp <- mint_pk(path, true, m.n_layer / 2l, home)
-                    var stp = ParakeetState()
-                    twin_poison(t, r, m.n_layer / 2l, mp, stp) $(e; var s; var out) => pk_twin_encode(e, s, samples, out)
-                    delete stp
-                    delete mp
-                }
-                delete std
-                delete md
-                fc_exact_lane_leg(t, "parakeet jfk", TowerFamily.parakeet, mx, stx, $(zb) { return <- mint_pk(path, false, zb, home) }) $(e; var s; var out) => pk_twin_encode(e, s, samples, out)
-                delete stx
-                delete st
-                delete m
-                delete mx
-                gpu_tower_shutdown(TowerFamily.parakeet)
+    if (dev) {
+        var seed = 12345u
+        var inscope noise <- [for (_i in range64(SHORT_CLIP_SAMPLES[length(SHORT_CLIP_SAMPLES) - 1])); short_clip_noise(seed)]
+        with_gpu_knobs() {
+            with_dasllama_jobque_() {
+                set_serving_gpu_tower(true, fam)
+                invoke(encode, tw, st, noise, k.other)
             }
-        } else {
-            t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
         }
+    }
+    k.legs++
+}
+
+// Clips a few mel frames long through a family's GPU-flavored tower against its CPU image at `SHORT_CLIP_BAR`, after the
+// file's block, on what the two forms kept; the device's rows of a noise clip the control.
+[cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+def private test_vulkan_short_clips(t : T?; k : ShortClipsKept) {
+    let tag = k.tag
+    t |> equal(k.legs, 2, "{tag}: the short clips kept their CPU image's leg and their device image's")
+    return if (k.legs != 2)
+    for (n, i in SHORT_CLIP_SAMPLES, count()) {
+        let ctag = "{tag} {n}-sample clip"
+        t |> equal(k.cpu_encodes[i], 0l, "{ctag}: the CPU image's leg never dispatched")
+        t |> equal(k.dev_encodes[i], 1l, "{ctag}: the device served the encode")
+        t |> equal(k.dev_declines[i], 0l, "{ctag}: the device leg declined nothing")
+        t |> equal(k.n_dev[i], k.n_cpu[i], "{ctag}: the device's row count is the CPU's")
+        var got = TowerParityStats()
+        if (k.n_cpu[i] > 0l && tower_parity_stats(t, ctag, k.cpu[i], k.dev[i], got)) {
+            to_log(LOG_INFO, "test_audio: {ctag}: device vs CPU q8 rel_l2 {got.rel_l2} over {k.n_cpu[i]} rows\n")
+            t |> success(got.rel_l2 <= SHORT_CLIP_BAR, "{ctag}: the device rows within {SHORT_CLIP_BAR} of the CPU's ({got.rel_l2})")
+        }
+    }
+    var ctl = TowerParityStats()
+    if (tower_parity_stats(t, "{tag} control", k.cpu[length(k.cpu) - 1], k.other, ctl)) {
+        t |> success(is_finite(ctl.rel_l2) && ctl.rel_l2 > SHORT_CLIP_BAR, "{tag}: the device's rows of a noise clip land outside the bar of the longest clip's CPU rows ({ctl.rel_l2}) - the control")
     }
 }
 
-//! a Parakeet-TDT v3 carrier of the GGUF set by its quant name (`F32`, `Q4_K_M`)
-def private pk_gguf(quant : string) : string => path_join(models_dir(), "parakeet-tdt-0.6b-v3-{quant}.gguf")
 
-//! a held kq-lane staging's seats zeroed from seat `first` up to seat `past` (the seats behind it kept): the quant bytes of every
-//! K-quant and Q8_0 seat between them, the planes' ends where `past` is the seat count
-def private poison_kq_seats(seats : array<int64>; first, past : int64; var kq : array<uint8>; var qblob : array<int8>) {
-    let q8 = int64(int(KqFmt.q8))
-    var kq_lo = long_length(kq)
-    var kq_hi = long_length(kq)
-    var q8_lo = long_length(qblob)
-    var q8_hi = long_length(qblob)
-    for (i in range64(first, long_length(seats) / TOWER_SEAT_WORDS)) {
-        let at = seats[i * TOWER_SEAT_WORDS + 1l]
-        if (seats[i * TOWER_SEAT_WORDS] == q8) {
-            q8_lo = min(q8_lo, at)
-            q8_hi = i >= past ? min(q8_hi, at) : q8_hi
-        } else {
-            kq_lo = min(kq_lo, at)
-            kq_hi = i >= past ? min(kq_hi, at) : kq_hi
-        }
-    }
-    for (i in range64(kq_lo, kq_hi)) {
-        kq[i] = 0u8
-    }
-    for (i in range64(q8_lo, q8_hi)) {
-        qblob[i] = int8(0)
-    }
+//! the f32 ggml bin's side of the F32 GGUF's compares: its shape, its encoder rows of jfk and of jfk at half volume, and
+//! its transcript
+struct private PkCarrierKept {
+    n_layer : int64
+    n_vocab : int64
+    blob_n : int64
+    rows : array<float>
+    loud : array<float>
+    text : string
+    kept : bool
 }
 
-//! a quantized Parakeet GGUF staged on the kq lane and minted in memory; `zero_block` >= 0 poisons the blocks from it on
-def private mint_pk_kq(path : string; zero_block : int64; dev : TowerDev = TowerDev.none) : ParakeetModel
-    => <- mint_pk(path, false, zero_block, dev, true)
+//! the Q4_K_M carrier's CPU lanes as its forms keep them: the lane flags and jfk's encoder rows on the dequantized exact
+//! lane, the q8 lane, the kq lane, and the kq lane with its seats zeroed from the middle block on
+struct private PkKqLanes {
+    x_kq : bool
+    q_q8 : bool
+    k_kq : bool
+    k_q8 : bool
+    n_layer : int64
+    ex : array<float>
+    q8 : array<float>
+    kq : array<float>
+    bad : array<float>
+    legs : int
+}
+
+//! What a Parakeet `[test]`'s blocks keep for the compares that follow them. `tag` names the carrier in the cells' tags
+//! and `form` the form whose cells run. The device twin: `twin_tag` its asserts' tag, `exact_lane` whether the carrier
+//! takes the exact lane on the device, `range_refusal` whether the device leg runs the storage-range refusal, the three
+//! forms' lane flags, the device image's flavor, lane name and host planes, the kq tiles and mul_mm stamps its leg moved,
+//! and the rows (`LaneTwinKept`, `ExactFlavorKept`).
+struct private PkKept {
+    tag : string
+    form : string
+    twin_tag : string
+    exact_lane : bool
+    range_refusal : bool
+    flags : LaneFlags
+    c_kq : bool
+    d_kq : bool
+    d_fmt : string
+    d_host_planes : int64
+    kq_tiles : int64
+    kq_mm : int64
+    twin : LaneTwinKept = LaneTwinKept()
+    exact : ExactFlavorKept
+    clips : ShortClipsKept
+    decode : array<RnntDecodeTwin>
+    carrier : PkCarrierKept
+    lanes : PkKqLanes
+    oracle : PkOracleKept
+    text : PkBinText
+}
+
+// A form's legs of a Parakeet carrier's device twin on jfk, each on the form's one home: the lane's rows three ways with
+// the input poison (`LaneTwinKept`) - the exact form the reference, the q8 or kq form the CPU chain, its `@dev` form the
+// device chain - and, on an f32 bin, the exact lane on the device (`ExactFlavorKept`).
+[cold_path]
+def private pk_twin_leg(t : T?; m : ParakeetModel; var k : PkKept) {
+    let samples <- asr_samples(t, "jfk.wav")
+    return if (empty(samples))
+    let f = parakeet_form_of(k.form)
+    let fam = TowerFamily.parakeet
+    lane_twin_named(k.twin, k.twin_tag, fam, m.n_layer)
+    exact_flavor_named(k.exact, k.twin_tag, fam, TWIN_EXACT_REL_L2_VK, -1l)
+    var st = ParakeetState()
+    let fmt = parakeet_exec_fmt(m)
+    let host_planes = m.kq.n + m.ks.n + m.qblob.n
+    let k4_0 = kq_tile_count("k4", fam)
+    let mm0 = kq_mm_count()
+    let leg = lane_exact_leg(t, k.twin, k.exact, k.flags, f, k.exact_lane, m, st) $(e; var s; var out) => pk_twin_encode(e, s, samples, out)
+    if (leg == LaneFormLeg.dev) {
+        k.d_kq = m.kq_lane
+        k.d_fmt = fmt
+        k.d_host_planes = host_planes
+        k.kq_tiles = kq_tile_count("k4", fam) - k4_0
+        k.kq_mm = kq_mm_count() - mm0
+        if (k.range_refusal) {
+            var st_rf = ParakeetState()
+            var out_rf : array<float>
+            blocks_refused_leg(t, k.twin_tag, fam, 256l << 20l) $ {
+                pk_twin_encode(m, st_rf, samples, out_rf)
+            }
+            delete out_rf
+            delete st_rf
+        }
+    } elif (leg == LaneFormLeg.cpu) {
+        k.c_kq = m.kq_lane
+    }
+    delete st
+}
+
+// A form's leg of the v2 bin's short clips: its q8 lane's CPU image, or that lane's image in the discrete home's flavor.
+[cold_path]
+def private pk_short_clip_leg(t : T?; m : ParakeetModel; var k : PkKept) {
+    t |> success(m.q8, "{k.clips.tag}: the short clips ride the q8 lane")
+    var st = ParakeetState()
+    short_clip_leg(k.clips, TowerFamily.parakeet, m.dev_backend != TowerDev.none, m, st) $(e; var s; clip; var out) => pk_twin_encode(e, s, clip, out)
+    delete st
+}
+
+// Parakeet-TDT v2 on the discrete home, after the bin's block: the front and every block on the device within the three-way
+// bar on jfk, a poison past it, and the exact lane within its bar.
+[cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+def private test_parakeet_discrete_twin(t : T?; k : PkKept) {
+    return if (asr_clip_absent(t, "jfk.wav"))
+    let home = serving_tower_dev(TowerFamily.parakeet)
+    t |> success(!k.flags.x_q8 && k.flags.c_q8 && k.flags.d_backend == home, "the exact and the q8 models minted, the q8 lane's {home} image beside")
+    let n_layer = k.twin.rows.spec.n_layer
+    twin_rows_held(t, k.twin.rows) $(legs) {
+        fc_discrete_counters(t, "parakeet jfk", n_layer, legs)
+    }
+    fc_exact_lane_held(t, k.exact)
+}
+
+// Parakeet-TDT v3 on the Metal FastConformer chain, after the bin's block: the q8 lane three ways with its poison, then
+// the exact lane.
+[cold_path]
+def private pk_fc_metal_twin(t : T?; k : PkKept) {
+    return if (asr_clip_absent(t, "jfk.wav"))
+    fc_metal_twin_held(t, "models", k.flags, k.twin, k.exact)
+}
+
+// The Q4_K_M carrier's kq lane on the discrete home, after its block: the front and every block from the kq lane's device
+// planes within the three-way bar on jfk, a k4 tile counted, zeroed seats past the bar.
+[cold_path, arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
+def private test_parakeet_kq_discrete_twin(t : T?; k : PkKept) {
+    return if (asr_clip_absent(t, "jfk.wav"))
+    let home = serving_tower_dev(TowerFamily.parakeet)
+    t |> success(k.c_kq && k.d_kq && k.flags.d_backend == home, "the kq lane's CPU image, its {home} image beside")
+    t |> equal(k.d_fmt, "k4", "the {home} image's lane is named by its one K-quant member's disk type")
+    t |> equal(k.d_host_planes, 0l, "the {home} image carries the device planes alone")
+    let n_layer = k.twin.rows.spec.n_layer
+    twin_rows_held(t, k.twin.rows) $(legs) {
+        t |> equal(legs.n_dev, legs.n_exact, "parakeet kq jfk: the device chain's frame count")
+        t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "parakeet kq jfk: the device served the encode")
+        t |> equal(legs.dev.blocks - legs.pre.blocks, n_layer, "parakeet kq jfk: every block ran on the driver")
+        front_served(t, "parakeet kq jfk", legs.dev.convs - legs.pre.convs, 1l, legs.dev.declines - legs.cpu.declines)
+    }
+    t |> success(k.kq_tiles > 0l, "parakeet kq jfk: a k4 tile served the K-quant seats (the census counter rose)")
+}
+
+// The Q4_K_M carrier's kq lane on the Metal FastConformer chain, after its block: the front and every block from the kq
+// lane's slabs within the three-way bar on jfk with no `quant_mode` decline, a K-quant mul_mm stamp counted, zeroed seats
+// past the bar.
+[cold_path, arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
+def private test_parakeet_kq_metal_twin(t : T?; k : PkKept) {
+    return if (asr_clip_absent(t, "jfk.wav"))
+    t |> success(k.c_kq && k.d_kq && k.flags.d_backend == TowerDev.metal, "the kq lane's CPU image, its Metal image beside")
+    t |> equal(k.d_fmt, "k4", "the Metal image's lane is named by its one K-quant member's disk type")
+    metal_q8_twin_held(t, k.twin)
+    t |> success(k.kq_mm > 0l, "parakeet kq metal jfk: a K-quant mul_mm stamp served the K-quant seats (the census counter rose)")
+}
 
 //! the encoder rows of `samples` through `m` on the CPU chain
 def private pk_cpu_rows(m : ParakeetModel; samples : array<float>) : array<float> {
@@ -922,13 +978,11 @@ def private pk_image_file_rows(dlim : string; samples : array<float>) : array<fl
 [test(description = "A Parakeet image its host holds in memory loads from the bytes on the lane it was baked on and encodes jfk to the rows the image's file gives, with the file gone, and `load_asr_model` routes the bytes to parakeet; with its planes zeroed the load encodes other rows")]
 def test_parakeet_from_memory(tst : T?) {
     tst |> run("parakeet-TDT 0.6B v3 Q4_K_M: the CPU image's bytes, borrowed in place") @(t : T?) {
-        let gguf = pk_gguf("Q4_K_M")
+        own_load("reloads the model: the cold mint lands in scratch, loads back as a file, then three times from the bytes in memory")
+        let gguf = path_join(models_dir(), "parakeet-tdt-0.6b-v3-Q4_K_M.gguf")
         return if (!model_available(t, gguf))
-        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
-        if (empty(samples)) {
-            t |> skip("jfk.wav not present")
-            return
-        }
+        let samples <- asr_samples(t, "jfk.wav")
+        return if (empty(samples))
         with_dasllama_jobque_() {
             with_gpu_knobs() {
                 set_serving_gpu_tower(false, TowerFamily.parakeet)   // the CPU image: the one an image in memory serves
@@ -969,73 +1023,124 @@ def test_parakeet_from_memory(tst : T?) {
     }
 }
 
-[test(description = "The F32 Parakeet GGUF stages the f32 ggml bin's planes and encodes jfk to the same rows, and the Q4_K_M file's kq lane, named k4, holds its CPU rows within 2.5x the q8 lane's distance from the dequantized chain with a zeroed half outside it"), arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-gguf")]
-def test_parakeet_gguf_carrier(tst : T?) {
-    tst |> run("parakeet-TDT 0.6B v3: the F32 GGUF against the f32 ggml bin") @(t : T?) {
-        let bin = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
-        let gguf = pk_gguf("F32")
-        return if (!model_available(t, bin) || !model_available(t, gguf))
-        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
-        if (empty(samples)) {
-            t |> skip("jfk.wav not present")
-            return
-        }
-        var mb <- mint_pk(bin, false, -1l)
-        var mg <- mint_pk(gguf, false, -1l)
-        t |> equal(mg.n_layer, mb.n_layer, "the block count")
-        t |> equal(mg.n_vocab, mb.n_vocab, "the vocabulary without the blank")
-        t |> equal(mg.blob.n, mb.blob.n, "the f32 blob's length")
-        var inscope rb <- pk_cpu_rows(mb, samples)
-        var inscope rg <- pk_cpu_rows(mg, samples)
-        var got = TowerParityStats()
-        if (tower_parity_stats(t, "parakeet gguf vs bin", rb, rg, got)) {
-            to_log(LOG_INFO, "test_audio: parakeet F32 gguf vs f32 bin on jfk: rel_l2 {got.rel_l2}\n")
-            t |> success(got.rel_l2 <= PK_GGUF_BIN_BAR, "the GGUF's encoder rows are the bin's ({got.rel_l2})")
-        }
-        var inscope loud <- [for (v in samples); v * 0.5]
-        var inscope rl <- pk_cpu_rows(mb, loud)
-        var ctl = TowerParityStats()
-        if (long_length(rl) == long_length(rb) && tower_parity_stats(t, "parakeet gguf vs bin control", rl, rg, ctl)) {
-            t |> success(is_finite(ctl.rel_l2) && ctl.rel_l2 > PK_GGUF_BIN_BAR, "the bin's rows of the clip at half volume land outside the bar ({ctl.rel_l2}) - the control")
-        }
-        delete mg
-        delete mb
+// The f32 ggml bin's side of the F32 GGUF's compares, on the v3 bin's `f32` form: its shape, jfk's encoder rows whole and
+// at half volume, and its transcript at jfk's word floor.
+[cold_path]
+def private pk_bin_carrier_leg(t : T?; mb : ParakeetModel; var k : PkKept) {
+    let samples <- asr_samples(t, "jfk.wav")
+    return if (empty(samples))
+    k.carrier.n_layer = mb.n_layer
+    k.carrier.n_vocab = mb.n_vocab
+    k.carrier.blob_n = mb.blob.n
+    k.carrier.rows <- pk_cpu_rows(mb, samples)
+    var inscope loud <- [for (v in samples); v * 0.5]
+    k.carrier.loud <- pk_cpu_rows(mb, loud)
+    let bin_text = pk_cpu_text(mb, samples)
+    jfk_words_floor(t, "parakeet f32 bin", bin_text)
+    k.carrier.text = bin_text
+    k.carrier.kept = true
+}
+
+//! true, with the cell skipped, where jfk.wav is absent or the v3 f32 bin's block kept nothing for the GGUF's compares
+def private pk_no_bin_reference(t : T?; k : PkKept) : bool {
+    return true if (asr_clip_absent(t, "jfk.wav"))
+    return false if (k.carrier.kept)
+    t |> skip("{PK_V3}'s f32 form kept no rows - its block did not run")
+    return true
+}
+
+// The F32 GGUF against the f32 ggml bin, on the GGUF's `f32` form: the bin's planes staged, jfk encoded to the same rows.
+[cold_path, arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-gguf")]
+def private test_parakeet_gguf_carrier(t : T?; mg : ParakeetModel; k : PkKept) {
+    return if (pk_no_bin_reference(t, k))
+    let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
+    t |> equal(mg.n_layer, k.carrier.n_layer, "the block count")
+    t |> equal(mg.n_vocab, k.carrier.n_vocab, "the vocabulary without the blank")
+    t |> equal(mg.blob.n, k.carrier.blob_n, "the f32 blob's length")
+    var inscope rg <- pk_cpu_rows(mg, samples)
+    var got = TowerParityStats()
+    if (tower_parity_stats(t, "parakeet gguf vs bin", k.carrier.rows, rg, got)) {
+        to_log(LOG_INFO, "test_audio: parakeet F32 gguf vs f32 bin on jfk: rel_l2 {got.rel_l2}\n")
+        t |> success(got.rel_l2 <= PK_GGUF_BIN_BAR, "the GGUF's encoder rows are the bin's ({got.rel_l2})")
     }
-    tst |> run("parakeet-TDT 0.6B v3 Q4_K_M: the kq lane on the CPU against the q8 lane, the dequantized f32 chain the reference") @(t : T?) {
-        let path = pk_gguf("Q4_K_M")
-        return if (!model_available(t, path))
-        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
-        if (empty(samples)) {
-            t |> skip("jfk.wav not present")
-            return
-        }
-        var mx <- mint_pk(path, false, -1l)
-        var mq <- mint_pk(path, true, -1l)
-        var mk <- mint_pk_kq(path, -1l)
-        t |> success(mk.kq_lane && !mk.q8 && !mx.kq_lane && mq.q8, "the kq lane's model beside the exact and the q8 lanes'")
-        t |> equal(parakeet_exec_fmt(mk), "k4", "the lane's name: its one K-quant member's disk type")
-        t |> success(mk.kq.n > 0l && mk.qblob.n > 0l, "K-quant seats beside Q8_0 ones: the attention outputs and the pointwise convs")
-        var inscope ex <- pk_cpu_rows(mx, samples)
-        var inscope q8 <- pk_cpu_rows(mq, samples)
-        var inscope kq <- pk_cpu_rows(mk, samples)
-        var q8_ex = TowerParityStats()
-        var kq_ex = TowerParityStats()
-        if (tower_parity_stats(t, "parakeet q8 vs exact", ex, q8, q8_ex) && tower_parity_stats(t, "parakeet kq vs exact", ex, kq, kq_ex)) {
-            let bar = PK_KQ_CPU_SLACK * q8_ex.rel_l2 + TWIN_REL_L2_FLOOR
-            to_log(LOG_INFO, "test_audio: parakeet Q4_K_M on jfk: rel_l2 from the dequantized chain - kq {kq_ex.rel_l2}, q8 {q8_ex.rel_l2}, the bar {bar}\n")
-            t |> success(kq_ex.rel_l2 <= bar, "the kq lane's rows within {PK_KQ_CPU_SLACK}x the q8 lane's rel_l2 from the dequantized chain ({kq_ex.rel_l2} vs {q8_ex.rel_l2})")
-            var mz <- mint_pk_kq(path, mk.n_layer / 2l)
-            var inscope bad <- pk_cpu_rows(mz, samples)
-            var bad_ex = TowerParityStats()
-            if (tower_parity_stats(t, "parakeet poisoned kq vs exact", ex, bad, bad_ex)) {
-                t |> success(is_finite(bad_ex.rel_l2) && bad_ex.rel_l2 > bar, "zeroed seats from the middle block on EXCEED the bar ({bad_ex.rel_l2} vs {bar})")
-            }
-            delete mz
-        }
-        delete mk
-        delete mq
-        delete mx
+    var ctl = TowerParityStats()
+    if (long_length(k.carrier.loud) == long_length(k.carrier.rows) && tower_parity_stats(t, "parakeet gguf vs bin control", k.carrier.loud, rg, ctl)) {
+        t |> success(is_finite(ctl.rel_l2) && ctl.rel_l2 > PK_GGUF_BIN_BAR, "the bin's rows of the clip at half volume land outside the bar ({ctl.rel_l2}) - the control")
     }
+}
+
+// The decoder half of the F32 GGUF, on its `f32` form: jfk's transcript is the f32 bin's.
+[cold_path]
+def private pk_gguf_bin_text(t : T?; mg : ParakeetModel; k : PkKept) {
+    return if (pk_no_bin_reference(t, k))
+    let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
+    let bin_text = k.carrier.text
+    t |> equal(pk_cpu_text(mg, samples), bin_text, "the F32 GGUF's transcript is the f32 bin's: the predictor, the joint and the durations read alike")
+}
+
+// A form's rows of the Q4_K_M carrier's CPU lanes on jfk: the dequantized exact lane (`f32`), the q8 lane, the kq lane -
+// named k4, K-quant seats beside Q8_0 ones - and the kq lane with its seats zeroed from the middle block on (`kq_z12`).
+[cold_path]
+def private pk_kq_lane_leg(t : T?; m : ParakeetModel; var k : PkKept) {
+    let samples <- asr_samples(t, "jfk.wav")
+    return if (empty(samples))
+    let f = parakeet_form_of(k.form)
+    if (f.lane == "f32") {
+        k.lanes.x_kq = m.kq_lane
+        k.lanes.ex <- pk_cpu_rows(m, samples)
+    } elif (f.lane == "q8") {
+        k.lanes.q_q8 = m.q8
+        k.lanes.q8 <- pk_cpu_rows(m, samples)
+    } elif (f.zero_block >= 0l) {
+        k.lanes.bad <- pk_cpu_rows(m, samples)
+    } else {
+        k.lanes.k_kq = m.kq_lane
+        k.lanes.k_q8 = m.q8
+        k.lanes.n_layer = m.n_layer
+        t |> equal(parakeet_exec_fmt(m), "k4", "the lane's name: its one K-quant member's disk type")
+        t |> success(m.kq.n > 0l && m.qblob.n > 0l, "K-quant seats beside Q8_0 ones: the attention outputs and the pointwise convs")
+        k.lanes.kq <- pk_cpu_rows(m, samples)
+    }
+    k.lanes.legs++
+}
+
+// The Q4_K_M carrier's kq lane on the CPU against its q8 lane, after the block: the kq lane's rows within
+// `PK_KQ_CPU_SLACK` x the q8 lane's distance from the dequantized chain, the zeroed seats past that bar.
+[cold_path]
+def private pk_kq_lanes_held(t : T?; k : PkKept) {
+    return if (asr_clip_absent(t, "jfk.wav"))
+    t |> equal(k.lanes.legs, 4, "the Q4_K_M carrier kept its exact, q8, kq and poisoned kq rows")
+    return if (k.lanes.legs != 4)
+    t |> success(k.lanes.k_kq && !k.lanes.k_q8 && !k.lanes.x_kq && k.lanes.q_q8, "the kq lane's model beside the exact and the q8 lanes'")
+    var q8_ex = TowerParityStats()
+    var kq_ex = TowerParityStats()
+    if (tower_parity_stats(t, "parakeet q8 vs exact", k.lanes.ex, k.lanes.q8, q8_ex) && tower_parity_stats(t, "parakeet kq vs exact", k.lanes.ex, k.lanes.kq, kq_ex)) {
+        let bar = PK_KQ_CPU_SLACK * q8_ex.rel_l2 + TWIN_REL_L2_FLOOR
+        to_log(LOG_INFO, "test_audio: parakeet Q4_K_M on jfk: rel_l2 from the dequantized chain - kq {kq_ex.rel_l2}, q8 {q8_ex.rel_l2}, the bar {bar}\n")
+        t |> success(kq_ex.rel_l2 <= bar, "the kq lane's rows within {PK_KQ_CPU_SLACK}x the q8 lane's rel_l2 from the dequantized chain ({kq_ex.rel_l2} vs {q8_ex.rel_l2})")
+        var bad_ex = TowerParityStats()
+        if (tower_parity_stats(t, "parakeet poisoned kq vs exact", k.lanes.ex, k.lanes.bad, bad_ex)) {
+            t |> success(is_finite(bad_ex.rel_l2) && bad_ex.rel_l2 > bar, "zeroed seats from the middle block on EXCEED the bar ({bad_ex.rel_l2} vs {bar})")
+        }
+    }
+}
+
+// The decoder half of the Q4_K_M carrier, on its `kq` form: jfk's transcript at the word floor.
+[cold_path]
+def private pk_kq_text_cell(t : T?; mk : ParakeetModel) {
+    let samples <- asr_samples(t, "jfk.wav")
+    return if (empty(samples))
+    let kq_text = pk_cpu_text(mk, samples)
+    to_log(LOG_INFO, "test_audio: parakeet Q4_K_M kq jfk: {kq_text}\n")
+    jfk_words_floor(t, "parakeet Q4_K_M kq lane", kq_text)
+}
+
+// The Q8_0 GGUF on the kq lane, on its `kq` form: every seat Q8_0, so the lane is named q8; an F16 GGUF is no kq carrier.
+[cold_path]
+def private pk_q8_0_gguf_lane(t : T?; m : ParakeetModel) {
+    t |> equal(parakeet_exec_fmt(m), "q8", "the Q8_0 file: every seat Q8_0")
+    let f16 = path_join(models_dir(), "parakeet-tdt-0.6b-v3-F16.gguf")
+    t |> equal(parakeet_load_tag(f16, true) == PARAKEET_KQ_TAG, false, "an F16 GGUF is no kq carrier") if (model_available(t, f16))
 }
 
 let private PK_GGUF_BIN_BAR = 1e-4lf   //! the two carriers' rows apart: one model's f32 tensors, the GGUF's filterbank and window rebuilt from its header
@@ -1044,14 +1149,15 @@ let private PK_KQ_CPU_SLACK = 2.5lf    //! the CPU kq lane's rel_l2 over the q8 
 //! the kq planner's refusal of the Q4_K_M carrier with `retype` applied, staged on the kq lane - "" where it staged
 [cold_path]
 def private pk_retyped_refusal(name : string; retype : table<string; int>) : string {
-    return gguf_retyped_refusal(pk_gguf("Q4_K_M"), name, retype) $(p) {
+    own_load("asserts on the load itself - its refusal: the kq planner over a retyped copy of the carrier written to scratch")
+    return gguf_retyped_refusal(path_join(models_dir(), "parakeet-tdt-0.6b-v3-Q4_K_M.gguf"), name, retype) $(p) {
         var inscope st <- stage_parakeet_kq_model(p)
     }
 }
 
 [test(description = "Over retyped copies of the Q4_K_M Parakeet carrier the kq planner refuses a Q5_1 seat, q in Q8_0 beside K-quant k and v, and one block's position linear in Q8_0, each by name, stages an unchanged copy, refuses a ggml bin, and the load tag is the kq lane's for a quantized GGUF asked for q8 un-pinned alone"), arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
 def test_parakeet_kq_refusals(tst : T?) {
-    let path = pk_gguf("Q4_K_M")
+    let path = path_join(models_dir(), "parakeet-tdt-0.6b-v3-Q4_K_M.gguf")
     return if (!model_available(tst, path))
     tst |> run("the kq planner refuses what its lane cannot seat") @(t : T?) {
         let b0 = "enc.blocks.0."
@@ -1065,13 +1171,14 @@ def test_parakeet_kq_refusals(tst : T?) {
         t |> equal(pk_retyped_refusal("pk_clean", nothing), "", "the copy with nothing retyped stages (the control)")
     }
     tst |> run("the kq lane is a quantized GGUF's alone") @(t : T?) {
+        own_load("asserts on the load itself - its refusal: the kq lane refuses a ggml bin")
         reset_parakeet_q8()
         t |> equal(parakeet_load_tag(path, true), PARAKEET_KQ_TAG, "the Q4_K_M GGUF asked for q8, un-pinned: the kq lane")
         t |> equal(parakeet_load_tag(path, false), "parakeet-f32", "asked for the exact lane: the f32 lane")
         set_parakeet_q8(true)
         t |> equal(parakeet_load_tag(path, true), "parakeet-q8", "pinned q8: the q8 lane, the carrier dequantized")
         reset_parakeet_q8()
-        let f32 = pk_gguf("F32")
+        let f32 = path_join(models_dir(), "parakeet-tdt-0.6b-v3-F32.gguf")
         if (model_available(t, f32)) {
             t |> equal(parakeet_load_tag(f32, true), "parakeet-q8", "the F32 GGUF asked for q8: the q8 lane (the control)")
         }
@@ -1105,9 +1212,10 @@ def private pk_cpu_text(m : ParakeetModel; samples : array<float>) : string {
 //! the loader's refusal of the Q4_K_M carrier with byte `v` written at offset `at` of header key `key`'s value - "" where it staged
 [cold_path]
 def private pk_header_refusal(name, key : string; at, v : int) : string {
+    own_load("asserts on the load itself - its refusal: the loader over a copy of the carrier with one header byte rewritten, written to scratch")
     let dst = path_join(test_temp_dir(), "{name}.gguf")
     let nothing : table<string; int>
-    gguf_retyped_copy(pk_gguf("Q4_K_M"), dst, nothing, [(key = key, at = at, v = v)])
+    gguf_retyped_copy(path_join(models_dir(), "parakeet-tdt-0.6b-v3-Q4_K_M.gguf"), dst, nothing, [(key = key, at = at, v = v)])
     let why = panic_text() $ {
         var inscope st <- stage_parakeet_kq_model(dst)
     }
@@ -1118,16 +1226,29 @@ def private pk_header_refusal(name, key : string; at, v : int) : string {
 //! the kq lane's name over the Q4_K_M carrier with `retype` applied, staged
 [cold_path]
 def private pk_retyped_lane_name(name : string; retype : table<string; int>) : string {
+    own_load("asserts on the load itself - the lane a retyped copy of the carrier, written to scratch, stages on")
     let dst = path_join(test_temp_dir(), "{name}.gguf")
-    gguf_retyped_copy(pk_gguf("Q4_K_M"), dst, retype)
+    gguf_retyped_copy(path_join(models_dir(), "parakeet-tdt-0.6b-v3-Q4_K_M.gguf"), dst, retype)
     var inscope st <- stage_parakeet_kq_model(dst)
     remove(dst)
     return parakeet_exec_fmt(st.e)
 }
 
-[test(description = "The Parakeet GGUF loader refuses a foreign architecture, linear biases, input scaling, an FF off four times the width, a token count off the predictor's and a front end off 16 kHz by name; the F32 GGUF transcribes jfk as the f32 bin does and the Q4_K_M kq lane holds jfk's word floor; a Q6_K seat names the lane kq, a BF16 GEMM stages, the Q8_0 file names it q8"), arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-gguf")]
+//! the Parakeet reader's refusal of a GigaAM carrier, by name
+def private pk_gigaam_refusal(t : T?) {
+    own_load("asserts on the load itself - its refusal: the Parakeet reader refuses a GigaAM carrier by name")
+    let ga = path_join(models_dir(), "gigaam-v3-e2e-rnnt-f16.gguf")
+    if (model_available(t, ga)) {
+        let why = panic_text() $ {
+            var inscope st <- stage_parakeet_model(ga, false)
+        }
+        t |> success(find(why, "parakeet") >= 0 && !empty(why), "a GigaAM GGUF refused by the Parakeet reader: '{why}'")
+    }
+}
+
+[test(description = "The Parakeet GGUF loader refuses a foreign architecture, linear biases, input scaling, an FF off four times the width, a token count off the predictor's and a front end off 16 kHz by name; over retyped copies a Q6_K seat names the lane kq and a BF16 GEMM stages on the k4 lane"), arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-gguf")]
 def test_parakeet_gguf_loads(tst : T?) {
-    let path = pk_gguf("Q4_K_M")
+    let path = path_join(models_dir(), "parakeet-tdt-0.6b-v3-Q4_K_M.gguf")
     return if (!model_available(tst, path))
     tst |> run("the header's refusals") @(t : T?) {
         let enc = "stt.parakeet.encoder"
@@ -1138,13 +1259,7 @@ def test_parakeet_gguf_loads(tst : T?) {
         t |> success(find(pk_header_refusal("pk_rate", "stt.frontend.sample_rate", 0, 129), "Hz front end") >= 0, "a front end off 16 kHz refused")
         t |> success(find(pk_header_refusal("pk_hop", "stt.frontend.hop_length", 0, 161), "Hz front end") >= 0, "a hop off 160 refused")
         t |> equal(pk_header_refusal("pk_same", "stt.frontend.hop_length", 0, 160), "", "the header rewritten with its own byte stages (the control)")
-        let ga = path_join(models_dir(), "gigaam-v3-e2e-rnnt-f16.gguf")
-        if (model_available(t, ga)) {
-            let why = panic_text() $ {
-                var inscope st <- stage_parakeet_model(ga, false)
-            }
-            t |> success(find(why, "parakeet") >= 0 && !empty(why), "a GigaAM GGUF refused by the Parakeet reader: '{why}'")
-        }
+        pk_gigaam_refusal(t)
     }
     tst |> run("the lane's name follows its seats") @(t : T?) {
         let b0 = "enc.blocks.0."
@@ -1152,48 +1267,17 @@ def test_parakeet_gguf_loads(tst : T?) {
         t |> equal(pk_retyped_lane_name("pk_bf16", { "{b0}ff1.linear1.weight" => GGML_TYPE_BF16 }), "k4", "a BF16 GEMM takes a Q8_0 seat: the lane keeps its one member's name")
         let nothing : table<string; int>
         t |> equal(pk_retyped_lane_name("pk_plain", nothing), "k4", "the copy with nothing retyped (the control)")
-        let q8 = pk_gguf("Q8_0")
-        if (model_available(t, q8)) {
-            var inscope st <- stage_parakeet_kq_model(q8)
-            t |> equal(parakeet_exec_fmt(st.e), "q8", "the Q8_0 file: every seat Q8_0")
-            t |> equal(parakeet_load_tag(pk_gguf("F16"), true) == PARAKEET_KQ_TAG, false, "an F16 GGUF is no kq carrier") if (model_available(t, pk_gguf("F16")))
-        }
-    }
-    tst |> run("the decoder half: transcripts on jfk") @(t : T?) {
-        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
-        if (empty(samples)) {
-            t |> skip("jfk.wav not present")
-            return
-        }
-        var mk <- mint_pk_kq(path, -1l)
-        let kq_text = pk_cpu_text(mk, samples)
-        to_log(LOG_INFO, "test_audio: parakeet Q4_K_M kq jfk: {kq_text}\n")
-        jfk_words_floor(t, "parakeet Q4_K_M kq lane", kq_text)
-        delete mk
-        let bin = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
-        let f32 = pk_gguf("F32")
-        if (model_available(t, bin) && model_available(t, f32)) {
-            var mb <- mint_pk(bin, false, -1l)
-            var mg <- mint_pk(f32, false, -1l)
-            let bin_text = pk_cpu_text(mb, samples)
-            t |> equal(pk_cpu_text(mg, samples), bin_text, "the F32 GGUF's transcript is the f32 bin's: the predictor, the joint and the durations read alike")
-            jfk_words_floor(t, "parakeet f32 bin", bin_text)
-            delete mg
-            delete mb
-        }
     }
 }
 
 [test(description = "The ASR facade loads the Q4_K_M Parakeet GGUF alone on the kq lane's CPU image, names the lane k4, holds jfk's word floor, and loads the lane's image back by path to the same transcript"), arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
 def test_parakeet_gguf_facade(tst : T?) {
-    let path = pk_gguf("Q4_K_M")
+    let path = path_join(models_dir(), "parakeet-tdt-0.6b-v3-Q4_K_M.gguf")
     return if (!model_available(tst, path))
     tst |> run("the facade loads the GGUF alone, and its kq image back by path") @(t : T?) {
-        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
-        if (empty(samples)) {
-            t |> skip("jfk.wav not present")
-            return
-        }
+        own_load("writes a `.dlim` image beside the file: the facade's load of the carrier bakes the kq lane's image, which the cell loads back by path")
+        let samples <- asr_samples(t, "jfk.wav")
+        return if (empty(samples))
         t |> success(!asr_needs_mmproj(path), "a Parakeet GGUF is a one-file carrier")
         with_gpu_knobs() {
             set_serving_gpu_tower(false, TowerFamily.parakeet)
@@ -1212,84 +1296,6 @@ def test_parakeet_gguf_facade(tst : T?) {
             } else {
                 t |> skip("no prepared image beside the carrier (the image rail is off)")
             }
-        }
-    }
-}
-
-[test(description = "The Q4_K_M Parakeet GGUF on the discrete home serves its front and every block from the kq lane's device planes within the three-way bar on jfk, a k4 tile counted, and zeroed seats exceed the bar"), arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
-def test_parakeet_kq_discrete_twin(tst : T?) {
-    tst |> run("parakeet-TDT 0.6B v3 Q4_K_M: the discrete home's chain on the kq lane vs the CPU kq chain on jfk, the dequantized chain the reference") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-            let path = pk_gguf("Q4_K_M")
-            jfk_twin_cell(t, path, false, TowerFamily.parakeet) $(samples) {
-                let home = serving_tower_dev(TowerFamily.parakeet)
-                var mx <- mint_pk(path, false, -1l)
-                var m <- mint_pk_kq(path, -1l)
-                var md <- mint_pk_kq(path, -1l, home)
-                t |> success(m.kq_lane && md.kq_lane && md.dev_backend == home, "the kq lane's CPU image, its {home} image beside")
-                t |> equal(parakeet_exec_fmt(md), "k4", "the {home} image's lane is named by its one K-quant member's disk type")
-                t |> equal(md.kq.n + md.ks.n + md.qblob.n, 0l, "the {home} image carries the device planes alone")
-                var stx = ParakeetState()
-                var st = ParakeetState()
-                var std = ParakeetState()
-                let k4_0 = kq_tile_count("k4", TowerFamily.parakeet)
-                let spec = TwinSpec(family = "parakeet", tag = "parakeet kq jfk", n_layer = m.n_layer, metric = TwinMetric.rel_l2, seat_family = TowerFamily.parakeet)
-                let r <- twin_three_way(t, spec, m, st, md, std, mx, stx, $(e; var s; var out) => pk_twin_encode(e, s, samples, out)) $(legs) {
-                    t |> equal(legs.n_dev, legs.n_exact, "parakeet kq jfk: the device chain's frame count")
-                    t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "parakeet kq jfk: the device served the encode")
-                    t |> equal(legs.dev.blocks - legs.pre.blocks, m.n_layer, "parakeet kq jfk: every block ran on the driver")
-                    front_served(t, "parakeet kq jfk", legs.dev.convs - legs.pre.convs, 1l, legs.dev.declines - legs.cpu.declines)
-                }
-                t |> success(kq_tile_count("k4", TowerFamily.parakeet) > k4_0, "parakeet kq jfk: a k4 tile served the K-quant seats (the census counter rose)")
-                if (r.bar > 0.0lf) {
-                    var mp <- mint_pk_kq(path, m.n_layer / 2l, home)
-                    var stp = ParakeetState()
-                    twin_poison(t, r, m.n_layer / 2l, mp, stp) $(e; var s; var out) => pk_twin_encode(e, s, samples, out)
-                    delete stp
-                    delete mp
-                }
-                delete std
-                delete st
-                delete stx
-                delete md
-                delete m
-                delete mx
-                gpu_tower_shutdown(TowerFamily.parakeet)
-            }
-        } else {
-            t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
-        }
-    }
-}
-
-[test(description = "The Q4_K_M Parakeet GGUF on the Metal FastConformer chain serves its front and every block from the kq lane's slabs within the three-way bar on jfk with no quant_mode decline, a K-quant mul_mm stamp counted, and zeroed seats exceed the bar"), arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
-def test_parakeet_kq_metal_twin(tst : T?) {
-    tst |> run("parakeet-TDT 0.6B v3 Q4_K_M: the Metal chain on the kq lane vs the CPU kq chain on jfk, the dequantized chain the reference") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            let path = pk_gguf("Q4_K_M")
-            return if (!family_on(t, "parakeet"))
-            metal_jfk_twin_cell(t, path, false, TowerFamily.parakeet) $(samples) {
-                var mx <- mint_pk(path, false, -1l)
-                var m <- mint_pk_kq(path, -1l)
-                var md <- mint_pk_kq(path, -1l, TowerDev.metal)
-                t |> success(m.kq_lane && md.kq_lane && md.dev_backend == TowerDev.metal, "the kq lane's CPU image, its Metal image beside")
-                t |> equal(parakeet_exec_fmt(md), "k4", "the Metal image's lane is named by its one K-quant member's disk type")
-                var stx = ParakeetState()
-                var st = ParakeetState()
-                var std = ParakeetState()
-                let mm0 = kq_mm_count()
-                metal_q8_twin(t, "parakeet kq metal jfk", TowerFamily.parakeet, m, st, md, std, mx, stx, $ { return <- mint_pk_kq(path, m.n_layer / 2l, TowerDev.metal) }) $(e; var s; var out) => pk_twin_encode(e, s, samples, out)
-                t |> success(kq_mm_count() > mm0, "parakeet kq metal jfk: a K-quant mul_mm stamp served the K-quant seats (the census counter rose)")
-                delete std
-                delete st
-                delete stx
-                delete md
-                delete m
-                delete mx
-                metal_tower_shutdown()
-            }
-        } else {
-            t |> skip("no Metal build")
         }
     }
 }
@@ -1341,461 +1347,276 @@ def test_mel_spectrum_magnitude(t : T?) {
     }
 }
 
-//! max |device - CPU| over the CPU rows' largest magnitude: the device GEMMs stage W and X through halves, about 1e-3 of the rows' scale over sixteen blocks, so 1e-2 is that floor with headroom and a poisoned clip (x3, the log-mel moved by ln 9) reads at the rows' own scale.
-let private GA_TWIN_BAR = 1e-2
+let private CN_ENC = "canary-qwen-2.5b-encoder-f32.bin"
+let private G4A_E2B = "mmproj-gemma-4-E2B-it-bf16.gguf"
+let private G4A_E4B = "mmproj-gemma-4-E4B-it-BF16.gguf"
 
-//! the device log-mel against the CPU's, each element within 1e-5 of its magnitude floored at 1: the device frames are the
-//! CPU's bit for bit and both sides sum in float, so the log reads within an ulp of the clip's loudest value
-let private GA_MEL_BAR = 1e-5
+//! the Canary encoder bin's form read off its name (`tower_form_of`): the lanes `f32` (the exact lane) and `q8`
+def private canary_form_of(form : string) : TowerForm => tower_form_of(form, ["f32", "q8"], "canary")
 
-struct private GaLeg {
-    n : int64
-    x : array<float>
-    ids : array<int>
-    text : string
+//! the staged read a Canary encoder bin's form is minted from (`tower_stage_key_of`)
+def private canary_stage_key(form : string) : string => tower_stage_key_of(canary_form_of(form))
+
+//! the Canary encoder bin's staged read the key `key` names: its lane, in its image flavor
+def private canary_stage(path, key : string) : CanaryStaging {
+    let f = canary_form_of(key)
+    return <- tower_dev_staged(tower_form_dev_of(f, TowerFamily.canary)) $ { return <- stage_canary_encoder(path, f.lane == "q8") }
 }
 
-//! one GigaAM log-mel, encode and greedy decode of `samples` through the span encode on the current tower knobs (the device mel
-//! where the hook serves); `scale` scales the samples ahead of it
-def private ga_leg(m : GigaamModel; samples : array<float>; scale : float = 1.0) : GaLeg {
-    var st = GigaamState()
-    var r = GaLeg()
-    var inscope clip := samples
-    for (v in clip) {
-        v *= scale
+//! One form of the Canary encoder bin, its block's form loader (`canary_form_of`): minted in memory (`mint_cn`) from `stg`,
+//! its own copy of the bin's staging on the lane it names - never `load_canary_encoder`, which bakes a `.dlim` -
+//! `_z<block>` zeroing the GEMM planes of the poison's blocks from that block on, `@dev` the image flavor of canary's
+//! serving home.
+[unused_argument(path)]
+def private canary_form(path, form : string; var stg : CanaryStaging) : CanaryEncoder {
+    let f = canary_form_of(form)
+    if (f.image) {
+        panic("the canary tests: '{form}' names the image rail - the encoder's forms are minted in memory")
     }
-    r.n = gigaam_encode_span(clip, 0l, long_length(clip), m, st)
-    r.x <- copy_span(st.x, 0l, r.n * m.d_model)
-    gigaam_decode(m, st, r.n)
-    r.ids <- [for (k in st.toks); k.id]
-    r.text = gigaam_detokenize(m, st.toks)
-    delete st
-    return <- r
+    return <- mint_cn(stg, f.lane == "q8", f.zero_block, tower_form_dev_of(f, TowerFamily.canary))
 }
 
-//! the device rows' bar: within ``GA_TWIN_BAR`` of the CPU rows' largest magnitude, the poisoned expected element that
-//! magnitude off
-def private ga_bar() : Bar => Bar(kind = BarKind.rel_of_max, rel = GA_TWIN_BAR, poison = 1.0, poison_of_max = true)
+//! The form is the lane, poison and image flavor it names: on `enc`, the encoder minted as the form `form` of `file`, the
+//! lane flag, the poison's block the tower's middle one, and the image flavor.
+def private canary_form_is(t : T?; file, form : string; enc : CanaryEncoder) {
+    let f = canary_form_of(form)
+    minted_form_is(t, file, form, f, TowerFamily.canary, enc.q8, enc.n_layer, enc.dev_backend)
+}
 
-//! each element's bar: ``GA_TWIN_BAR`` of its own frame's largest magnitude in `want`, frames `d` wide
-def private ga_frame_bars(want : array<float>; d : int64) : array<float> {
-    var bars : array<float>
-    bars |> reserve(length(want))
-    for (f in range64(long_length(want) / d)) {
-        var peak = 0.0
-        for (i in range64(f * d, (f + 1l) * d)) {
-            peak = max(peak, abs(want[i]))
+//! a gemma4a mmproj's form read off its name (`tower_form_of`): the lanes `f32` (the exact lane) and `q8`; `asr` and
+//! `asrdev` name no lane - `image_asr` and `image_asrdev` are the ASR facade's two-file load of the mmproj
+def private g4a_form_of(form : string) : TowerForm => tower_form_of(form, ["f32", "q8", "asr", "asrdev"], "gemma4a")
+
+//! the staged read a gemma4a mmproj's form is minted from (`tower_stage_key_of`)
+def private g4a_stage_key(form : string) : string => tower_stage_key_of(g4a_form_of(form))
+
+//! A gemma4a mmproj's form as its block holds it: the audio carrier `e` - its own load, or an encoder minted in memory -
+//! or, on the `image_asr` and `image_asrdev` forms, the ASR facade's pair `asr` of the mmproj and its decoder.
+struct private G4aForm {
+    e : AudioEmbedder = AudioEmbedder()
+    asr : AsrModel = AsrModel()
+}
+
+def private finalize(var h : G4aForm) {
+    delete h.e
+    delete h.asr
+}
+
+//! whether the form `f` is the ASR facade's two-file load
+def private g4a_form_asr(f : TowerForm) : bool => f.image && (f.lane == "asr" || f.lane == "asrdev")
+
+//! One form of a gemma4a mmproj, its block's form loader behind the file's own (`gemma4a_e2b_form`,
+//! `gemma4a_e4b_form`, which name `decoder`, the mmproj's Q8 decoder under the models directory). `image` is the audio
+//! carrier's own load (`load_audio_embedder`) and `image_asr` the ASR facade's two-file load with `decoder`
+//! (`load_asr_model`, which sniffs the pair's route and bakes each file's image), each with the family's lane pin unset,
+//! as the run's knobs route it, the facade's load keeping the host planes its f32 K/V cells read; `image_asrdev` is the facade's load with gemma4a's serving tower knob on for the load,
+//! which the load's flavor pick reads - the knobs put back however a load leaves. Any other form is minted in memory
+//! (`mint_g4a`) from `stg`, its own copy of the mmproj's staging on the lane it names: `_z<block>` zeroes the GEMM planes
+//! of the poison's blocks from that block on, `@dev` is the image flavor of gemma4a's serving home.
+def private gemma4a_form(path, form, decoder : string; var stg : Gemma4aStaging) : G4aForm {
+    let f = g4a_form_of(form)
+    var inscope h = G4aForm()
+    if (!f.image) {
+        if (f.lane != "f32" && f.lane != "q8") {
+            panic("the gemma4a tests: '{form}' names no lane to mint")
         }
-        for (_ in range64(d)) {
-            bars |> push(GA_TWIN_BAR * peak)
-        }
+        h.e.kind = AudioKind.gemma4a
+        h.e.gemma4a <- mint_g4a(stg, f.zero_block, tower_form_dev_of(f, TowerFamily.gemma4a))
+        return <- h
     }
-    return <- bars
-}
-
-//! the device rows against the CPU's at the twin bar twice: over the rows' largest magnitude, and frame by frame over each frame's
-//! own, so a quiet frame's error cannot hide under a loud frame's scale
-def private ga_check_rows(t : T?; tag : string; got, want : array<float>; d : int64) {
-    check_rows(t, tag, got, want, ga_bar(), int(d))
-    var inscope bars <- ga_frame_bars(want, d)
-    check(t, "{tag}, per frame", got, want, Bar(kind = BarKind.per_element, poison = 1.0, poison_of_max = true), Shape(row_width = int(d)), bars)
-}
-
-//! the device log-mel alone (`metal_gigaam_mel`, the encode chain's mel dispatches) against `gigaam_log_mel` at ``GA_MEL_BAR``,
-//! the frame count and the counter beside it, the bar's poisoned element the control
-[unused_argument(t, m, samples, clip)]   // off-Apple the gated body is empty
-def private ga_mel_twin_cell(t : T?; m : GigaamModel; samples : array<float>; clip : string) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        var st = GigaamState()
-        gigaam_log_mel(samples, m, st)
-        var inscope dev : array<float>
-        let mel0 = metal_tower_ga_mels()
-        let n = metal_gigaam_mel(m, samples, dev)
-        t |> equal(n, st.n_len, "{clip}: the device mel's frame count")
-        t |> equal(metal_tower_ga_mels() - mel0, 1l, "{clip}: the mel seat ran on the device")
-        check_rows(t, "gigaam {clip} metal: the device log-mel tracks the CPU's", dev, st.mel, Bar(rel = GA_MEL_BAR, poison_scaled = true), int(m.n_mel))
-        var inscope loud <- [for (v in samples); v * 1.1]
-        var inscope dev_loud : array<float>
-        metal_gigaam_mel(m, loud, dev_loud)
-        check_exceeds(t, "gigaam {clip} metal: the control - the clip at 1.1x on the device side off the CPU's log-mel", dev_loud, st.mel,
-            Bar(rel = GA_MEL_BAR))
-        delete st
+    let knobs = gpu_knobs()
+    let planes = host_planes_pin()
+    reset_gemma4a_q8()
+    if (f.lane == "asrdev") {
+        set_serving_gpu_tower(true, TowerFamily.gemma4a)
     }
-}
-
-//! one clip's legs: the CPU chain over the CPU image `mc`, the device chain over the Metal-flavored `m` (its halfword planes on
-//! the half tensor GEMM, the one route the flavor pick takes them on), a poisoned clip; the encoder's frame count. The cell pins the tower and its f16 twin route at its head and puts every knob back as
-//! it found them.
-[cold_path, unused_argument(t, m, mc, samples, clip)]   // off-Apple the gated body is empty
-def private ga_clip_cell(t : T?; m, mc : GigaamModel; samples : array<float>; clip : string) : int64 {
-    var frames = 0l
-    with_gpu_knobs() {
-        frames = ga_clip_legs(t, m, mc, samples, clip)
+    if (f.lane == "asr") {
+        set_host_planes(true)   //! its cells ride the f32 K/V CPU rail: a load onto a discrete home keeps no plane on the host
     }
-    return frames
-}
-
-[unused_argument(t, m, mc, samples, clip)]   // off-Apple the gated body is empty
-def private ga_clip_legs(t : T?; m, mc : GigaamModel; samples : array<float>; clip : string) : int64 {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let f16_found = get_metal_tower_f16()
-        set_metal_tower_f16(true)
-        set_metal_tower(false)
-        let c0 = metal_tower_stats()
-        var inscope cpu <- ga_leg(mc, samples)
-        let c1 = metal_tower_stats()
-        t |> equal(c1.encodes - c0.encodes, 0l, "{clip}: the tower-off leg never dispatched")
-        t |> success(c1.declines - c0.declines >= 1l, "{clip}: the tower-off leg counted the knob decline")
-        set_metal_tower(true)
-        ga_mel_twin_cell(t, m, samples, clip)
-        let g0 = metal_tower_stats()
-        let f0 = metal_tower_f16_encodes()
-        let mel0 = metal_tower_ga_mels()
-        let kq0 = kq_mm_count()
-        var inscope dev <- ga_leg(m, samples)
-        let g1 = metal_tower_stats()
-        let twin = metal_tower_f16_encodes() - f0
-        t |> equal(kq_mm_count() - kq0, 0l, "{clip}: the exact lane dispatches no K-quant mul_mm stamp (the kq lane counter's control)")
-        t |> equal(g1.encodes - g0.encodes, 1l, "{clip}: the device served the encode")
-        t |> equal(metal_tower_ga_mels() - mel0, 1l, "{clip}: the log-mel ran on the device, inside the encode's command buffer")
-        t |> equal(g1.convs - g0.convs, 1l, "{clip}: the conv front ran on the device")
-        t |> equal(g1.blocks - g0.blocks, m.n_layer, "{clip}: every block ran on the driver")
-        t |> equal(dev.n, cpu.n, "{clip}: the frame count")
-        ga_check_rows(t, "gigaam {clip} metal ({twin > 0l ? "twin" : "f32 tiles"}): the device rows track the CPU's", dev.x, cpu.x, m.d_model)
-        t |> equal(dev.text, cpu.text, "{clip}: the transcript")
-        to_log(LOG_INFO, "test_audio: gigaam {clip} cpu: {cpu.text}\n")
-        to_log(LOG_INFO, "test_audio: gigaam {clip} gpu: {dev.text}\n")
-        var inscope bad <- ga_leg(m, samples, 3.0)
-        check_exceeds(t, "gigaam {clip} metal: a poisoned clip reds the bar", bad.x, cpu.x, ga_bar())
-        set_metal_tower_f16(f16_found)
-        return cpu.n
-    } else {
-        return 0l
-    }
-}
-
-//! the head of `samples` whose encoder frame count is the largest multiple of 64 the clip holds - the rotary chain's attention
-//! with no pad rows; empty where the clip holds under 64 frames
-def private ga_lattice_clip(m : GigaamModel; samples : array<float>) : array<float> {
-    let frames = $(n : int64) => gigaam_conv_out(gigaam_conv_out(n >= m.n_fft ? (n - m.n_fft) / m.hop + 1l : 0l, m.subs_kernel), m.subs_kernel)
-    var n = long_length(samples)
-    let target = invoke(frames, n) / 64l * 64l
-    while (target > 0l && invoke(frames, n) > target) {
-        n -= m.hop
-    }
-    return <- copy_span(samples, 0l, target > 0l ? n : 0l)
-}
-
-//! the q8 lane on the Metal chain, off the q8 slab, against the CPU q8 chain with the exact chain `mx` the reference: the device
-//! rows' rel_l2 from the exact chain within ``TWIN_SLACK_VK`` x the CPU q8 chain's own plus ``TWIN_REL_L2_FLOOR``, the token ids
-//! the CPU q8 chain's, the encode, its log-mel and every block on the device with no ``quant_mode`` decline; the control a q8
-//! model with blocks from the middle on zeroed, through the device chain, past the bar
-[cold_path, unused_argument(t, path, mx, samples, clip)]   // off-Apple the gated body is empty
-def private ga_q8_cell(t : T?; path : string; mx : GigaamModel; samples : array<float>; clip : string) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        var mq <- mint_ga(path, true, -1l)
-        var mqd <- mint_ga(path, true, -1l, TowerDev.metal)
-        var mp <- mint_ga(path, true, mq.n_layer / 2l, TowerDev.metal)
-        let tag = "gigaam {clip} q8 lane"
-        with_gpu_knobs() {
-            set_metal_tower(false)
-            var inscope ex <- ga_leg(mx, samples)
-            var inscope cpu <- ga_leg(mq, samples)
-            set_metal_tower(true)
-            let q0 = metal_tower_stats()
-            let mel0 = metal_tower_ga_mels()
-            let qd0 = metal_tower_declines()?["quant_mode"] ?? 0l
-            var inscope dev <- ga_leg(mqd, samples)
-            let q1 = metal_tower_stats()
-            t |> equal(q1.encodes - q0.encodes, 1l, "{tag}: the device served the encode")
-            t |> equal(q1.blocks - q0.blocks, mq.n_layer, "{tag}: every block ran on the driver")
-            t |> equal(metal_tower_ga_mels() - mel0, 1l, "{tag}: the log-mel ran on the device")
-            t |> equal((metal_tower_declines()?["quant_mode"] ?? 0l) - qd0, 0l, "{tag}: no quant_mode decline")
-            t |> equal(dev.n, cpu.n, "{tag}: the frame count")
-            t |> equal(dev.ids, cpu.ids, "{tag}: the token ids are the CPU q8 chain's")
-            to_log(LOG_INFO, "test_audio: {tag} cpu: {cpu.text}\n")
-            to_log(LOG_INFO, "test_audio: {tag} gpu: {dev.text}\n")
-            var q8_ex = TowerParityStats()
-            var dev_ex = TowerParityStats()
-            if (tower_parity_stats(t, "{tag} cpu q8 vs exact", ex.x, cpu.x, q8_ex) && tower_parity_stats(t, "{tag} metal vs exact", ex.x, dev.x, dev_ex)) {
-                let bar = double(TWIN_SLACK_VK) * q8_ex.rel_l2 + TWIN_REL_L2_FLOOR
-                to_log(LOG_INFO, "test_audio: {tag}: rel_l2 from the exact chain - cpu q8 {q8_ex.rel_l2}, metal {dev_ex.rel_l2}, the bar {bar}\n")
-                t |> success(dev_ex.rel_l2 <= bar, "{tag}: the device rows within {TWIN_SLACK_VK}x the CPU q8 chain's rel_l2 from the exact chain ({dev_ex.rel_l2} vs {q8_ex.rel_l2})")
-                var inscope bad <- ga_leg(mp, samples)
-                var bad_ex = TowerParityStats()
-                if (tower_parity_stats(t, "{tag} poisoned metal vs exact", ex.x, bad.x, bad_ex)) {
-                    t |> success(is_finite(bad_ex.rel_l2) && bad_ex.rel_l2 > bar, "{tag}: zeroed blocks through the device chain EXCEED the bar ({bad_ex.rel_l2} vs {bar})")
-                }
-            }
-        }
-        delete mp
-        delete mqd
-        delete mq
-    }
-}
-
-//! the device's dense K-quant mul_mm dispatches, every stamp and form: on the Q4_K carrier the kq lane's K-quant seats alone move them
-def private kq_mm_count() : int64 {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        var n = 0l
-        var inscope cov <- metal_kernel_coverage()
-        for (k, v in keys(cov), values(cov)) {
-            if (k |> ends_with("_metal_kq_mulmm_t") || k |> ends_with("_metal_kq_mulmm_db") || k |> ends_with("_metal_kq_mulmm_k6_t") || k |> ends_with("_metal_kq_mulmm_iq4xs_t")
-                    || k |> ends_with("_metal_kq_mulmm") || k |> ends_with("_metal_kq_mulmm_sk")) {
-                n += v
-            }
-        }
-        return n
-    } else {
-        return 0l
-    }
-}
-
-//! the kq lane on the Metal chain against the CPU kq chain, the exact chain `mx` the reference: no `kq_lane` or `quant_mode` decline, and a K-quant mul_mm stamp counted - "a kernel counter ... that no other plane of that file moves" (REVIEW_KQ_FORMATS.md)
-[cold_path, unused_argument(t, kq_path, mx, samples, clip, fmt), arch(at = "../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-kq")]   // off-Apple the gated body is empty
-def private ga_kq_cell(t : T?; kq_path : string; mx : GigaamModel; samples : array<float>; clip, fmt : string) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        var mk <- mint_ga(kq_path, false, -1l)
-        var mkd <- mint_ga(kq_path, false, -1l, TowerDev.metal)
-        let tag = "gigaam {clip} kq lane {gigaam_kq_members(mk)}"
-        t |> success(mk.kq_lane, "{tag}: the carrier serves as its own planes")
-        t |> equal(gigaam_exec_fmt(mk), fmt, "{tag}: the lane's name - its one K-quant member's disk type, or `kq` where the members mix")
-        with_gpu_knobs() {
-            set_metal_tower(false)
-            var inscope ex <- ga_leg(mx, samples)
-            var inscope cpu <- ga_leg(mk, samples)
-            set_metal_tower(true)
-            let q0 = metal_tower_stats()
-            let mel0 = metal_tower_ga_mels()
-            let qd0 = metal_tower_declines()?["quant_mode"] ?? 0l
-            let mm0 = kq_mm_count()
-            var inscope dev <- ga_leg(mkd, samples)
-            let q1 = metal_tower_stats()
-            t |> equal(q1.encodes - q0.encodes, 1l, "{tag}: the device served the encode")
-            t |> equal(q1.blocks - q0.blocks, mk.n_layer, "{tag}: every block ran on the driver")
-            t |> equal(metal_tower_ga_mels() - mel0, 1l, "{tag}: the log-mel ran on the device")
-            t |> equal((metal_tower_declines()?["quant_mode"] ?? 0l) - qd0, 0l, "{tag}: no quant_mode decline")
-            t |> success(kq_mm_count() > mm0, "{tag}: a K-quant mul_mm stamp served the K-quant seats (the census counter rose)")
-            t |> equal(dev.n, cpu.n, "{tag}: the frame count")
-            t |> equal(dev.ids, cpu.ids, "{tag}: the token ids are the CPU kq chain's")
-            to_log(LOG_INFO, "test_audio: {tag} cpu: {cpu.text}\n")
-            to_log(LOG_INFO, "test_audio: {tag} gpu: {dev.text}\n")
-            var kq_ex = TowerParityStats()
-            var dev_ex = TowerParityStats()
-            if (tower_parity_stats(t, "{tag} cpu kq vs exact", ex.x, cpu.x, kq_ex) && tower_parity_stats(t, "{tag} metal vs exact", ex.x, dev.x, dev_ex)) {
-                let bar = double(TWIN_SLACK_VK) * kq_ex.rel_l2 + TWIN_REL_L2_FLOOR
-                to_log(LOG_INFO, "test_audio: {tag}: rel_l2 from the exact chain - cpu kq {kq_ex.rel_l2}, metal {dev_ex.rel_l2}, the bar {bar}\n")
-                t |> success(dev_ex.rel_l2 <= bar, "{tag}: the device rows within {TWIN_SLACK_VK}x the CPU kq chain's rel_l2 from the exact chain ({dev_ex.rel_l2} vs {kq_ex.rel_l2})")
-                ga_kq_poison_leg(t, tag, kq_path, mk.n_layer, TowerDev.metal, ex.x, samples, bar)
-            }
-        }
-        delete mkd
-        delete mk
-    }
-}
-
-//! the kq lane's poisoned control: the carrier at `kq_path` minted `dev`-flavored with its block GEMMs zeroed from the middle
-//! block on, through the device chain, lands outside `bar` of the exact chain's rows `exact`
-[cold_path]
-def private ga_kq_poison_leg(t : T?; tag, kq_path : string; n_layer : int64; dev : TowerDev; exact : array<float>; samples : array<float>; bar : double) {
-    var inscope mz <- mint_ga(kq_path, false, n_layer / 2l, dev)
-    t |> success(mz.kq_lane && mz.dev_backend == dev, "{tag}: the poisoned carrier is a {dev}-flavored kq lane image")
-    var inscope bad <- ga_leg(mz, samples)
-    var bad_ex = TowerParityStats()
-    if (tower_parity_stats(t, "{tag} poisoned {dev} vs exact", exact, bad.x, bad_ex)) {
-        t |> success(is_finite(bad_ex.rel_l2) && bad_ex.rel_l2 > bar, "{tag}: the control - its GEMMs zeroed from block {n_layer / 2l} on, the device rows land outside the bar ({bad_ex.rel_l2} vs {bar})")
-    }
-}
-
-//! the GigaAM device seats' side arms on one clip: the mel seat's declines (the knob, a clip under one window, a scratch past the largest buffer), the encode off an uploaded mel, the held rows' key, and a scratch the tower cannot take refusing the CPU chain; `m` Metal-flavored, `mc` its CPU image, the knobs put back
-[cold_path, unused_argument(t, m, mc, samples)]   // off-Apple the gated body is empty
-def private ga_seat_arms_cell(t : T?; m, mc : GigaamModel; samples : array<float>) {
-    with_gpu_knobs() {
-        ga_seat_arms_legs(t, m, mc, samples)
-    }
-}
-
-[unused_argument(t, m, mc, samples)]   // off-Apple the gated body is empty
-def private ga_seat_arms_legs(t : T?; m, mc : GigaamModel; samples : array<float>) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        set_metal_tower(false)
-        var inscope cpu <- ga_leg(mc, samples)
-        set_metal_tower(true)
-        var inscope dev : array<float>
-        let mel0 = metal_tower_ga_mels()
-        set_metal_tower(false)
-        t |> equal(metal_gigaam_mel(m, samples, dev), -1l, "mel seat: the knob off declines")
-        set_metal_tower(true)
-        var inscope tiny : array<float>
-        tiny |> resize(int(m.n_fft) - 1)
-        t |> equal(metal_gigaam_mel(m, tiny, dev), -1l, "mel seat: a clip under one window declines")
-        let take_was = set_metal_take_max_probe_(512ul)
-        t |> equal(metal_gigaam_mel(m, samples, dev), -1l, "mel seat: a scratch past the device's largest buffer declines")
-        set_metal_take_max_probe_(take_was)
-        t |> equal(metal_tower_ga_mels() - mel0, 0l, "mel seat: no declined call ran a mel")
-        var st = GigaamState()
-        gigaam_log_mel(samples, m, st)
-        let e0 = metal_tower_stats()
-        let n = gigaam_encode(m, st)
-        let e1 = metal_tower_stats()
-        t |> equal(e1.encodes - e0.encodes, 1l, "uploaded mel: the encode served on the device")
-        t |> equal(e1.convs - e0.convs, 1l, "uploaded mel: the conv front ran on the device")
-        t |> equal(metal_tower_ga_mels() - mel0, 0l, "uploaded mel: no mel ran on the device")
-        t |> equal(n, cpu.n, "uploaded mel: the frame count")
-        var inscope rows <- copy_span(st.x, 0l, n * m.d_model)
-        ga_check_rows(t, "gigaam metal, uploaded mel: the device rows track the CPU's", rows, cpu.x, m.d_model)
-        let elems = n * m.d_model
-        t |> success(st.enc_gen != 0ul, "the served encode recorded its generation ({st.enc_gen})")
-        t |> success(metal_tower_enc_rows(st.enc_gen, elems) != null, "the served encode's rows are held under the generation it recorded")
-        t |> equal(metal_tower_held_rows_elems(), elems, "the hold's element count")
-        t |> success(metal_tower_enc_rows(0ul, elems) == null, "generation 0 - no device encode - hands off nothing")
-        t |> success(metal_tower_enc_rows(st.enc_gen, elems + 1l) == null, "another element count hands off nothing")
-        var st2 = GigaamState()
-        gigaam_log_mel(samples, m, st2)
-        gigaam_encode(m, st2)
-        t |> success(st2.enc_gen != st.enc_gen, "a second session's encode records its own generation")
-        t |> success(metal_tower_enc_rows(st.enc_gen, elems) == null, "after a second session's encode the first session's generation hands off nothing")
-        t |> success(metal_tower_enc_rows(st2.enc_gen, elems) != null, "the second session's generation hands its rows off")
-        delete st2
-        delete st
-        let s0 = metal_tower_stats()
-        set_metal_take_max_probe_(512ul)
-        var refused = false
-        try {
-            var inscope mem <- ga_leg(m, samples)
-        } recover {
-            refused = true
-        }
-        set_metal_take_max_probe_(take_was)
-        t |> equal(metal_tower_stats().encodes - s0.encodes, 0l, "a scratch the tower cannot take: no encode on the device")
-        t |> success(refused, "... the Metal-flavored model refuses the CPU chain")
-    }
-}
-
-//! the asr_prof buckets a GigaAM transcribe fills: the CPU chain's stage and block buckets with the tower off, the device
-//! chain's command-buffer time with it on, and the rotary chain's replayed restrides and slab trio under the replay alone; the
-//! replay pinned off at the head, every knob and the profiler put back as found
-[cold_path, unused_argument(t, m, mc, samples)]   // off-Apple the gated body is empty
-def private ga_prof_cell(t : T?; m, mc : GigaamModel; samples : array<float>) {
-    with_gpu_knobs() {
-        ga_prof_legs(t, m, mc, samples)
-    }
-}
-
-[unused_argument(t, m, mc, samples)]   // off-Apple the gated body is empty
-def private ga_prof_legs(t : T?; m, mc : GigaamModel; samples : array<float>) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let replay_found = set_metal_fc_prof_replay(false)
-        let prof_found = asr_prof_on()
-        set_asr_prof(true)
-        asr_prof_reset()
-        set_metal_tower(false)
-        var inscope cpu <- ga_leg(mc, samples)
-        set_metal_tower(true)
-        for (b in ["ga.mel", "ga.front", "ga.blocks", GIGAAM_ENCODE_BUCKET, "ga.ffn", "ga.attn_heads", "ga.conv_module"]) {
-            t |> success(asr_prof_ms(b) > 0.0lf, "tower off: the CPU chain fills {b} ({asr_prof_ms(b)} ms)")
-        }
-        t |> equal(asr_prof_ms("ga.encode.gpu"), 0.0lf, "tower off: no device time")
-        asr_prof_reset()
-        var inscope dev <- ga_leg(m, samples)
-        for (b in ["ga.encode.gpu", "ga.encode.record", GIGAAM_ENCODE_BUCKET]) {
-            t |> success(asr_prof_ms(b) > 0.0lf, "tower on: the device chain fills {b} ({asr_prof_ms(b)} ms)")
-        }
-        t |> equal(asr_prof_ms("ga.encode.gpu.attn"), 0.0lf, "replay off: no replayed slab trio")
-        set_metal_fc_prof_replay(true)
-        asr_prof_reset()
-        var inscope rep <- ga_leg(m, samples)
-        set_metal_fc_prof_replay(replay_found)
-        for (b in ["ga.encode.gpu.restride", "ga.encode.gpu.attn"]) {
-            t |> success(asr_prof_ms(b) > 0.0lf, "replay on: the replay fills {b} ({asr_prof_ms(b)} ms)")
-        }
-        asr_prof_reset()
-        var inscope mel : array<float>
-        metal_gigaam_mel(m, samples, mel)
-        t |> success(asr_prof_ms("ga.mel.gpu") > 0.0lf, "the mel seat fills ga.mel.gpu")
-        set_asr_prof(prof_found)
-        t |> equal(dev.text, cpu.text, "the profiled device pass's transcript")
-        t |> equal(rep.text, cpu.text, "the replayed pass's transcript")
-    }
-}
-
-[test(description = "GigaAM v3 e2e-rnnt on Metal runs its conv front and every block on the device within 1e-2 of the CPU exact rows with the CPU transcript on the ru clips, a scaled mel outside the bar, and its q8 and kq lanes hold"), arch(at = "../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
-def test_gigaam_metal_twin(tst : T?) {
-    tst |> run("GigaAM v3 e2e-rnnt: the Metal rotary FastConformer chain vs the CPU exact chain on the FLEURS ru clips, the q8 lane and the Q4_K carrier's kq lane beside it") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            let path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-f16.gguf")
-            return if (!family_on(t, "gigaam") || !model_available(t, path))
-            let kq_path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
-            with_dasllama_jobque_() {
-                var inscope m <- mint_ga(path, false, -1l, TowerDev.metal)
-                var inscope mc <- mint_ga(path, false, -1l)
-                for (clip in ["ru_short", "ru_mid"]) {
-                    let wav = asr_clip("{clip}.wav")
-                    if (!stat(wav).is_valid) {
-                        t |> skip("{clip}.wav not present")
-                        continue
-                    }
-                    var inscope samples <- load_audio_16k_mono(wav)
-                    ga_clip_cell(t, m, mc, samples, clip)
-                    ga_q8_cell(t, path, mc, samples, clip)
-                    if (model_available(t, kq_path)) {
-                        // the CPU kq leg in disk order on the portable batch GEMM, as the Metal image holds its planes: the ids compare
-                        let pinned = with_kernel_backend("portable") {
-                            ga_kq_cell(t, kq_path, mc, samples, clip, "k4")
-                        }
-                        t |> success(pinned, "{clip}: the portable backend pinned for the kq lane cell")
-                    }
-                    let mix_path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k-mix-local.gguf")
-                    if (clip == "ru_short" && model_available(t, mix_path)) {
-                        // the mixed-member carrier: Q4_K attention, Q6_K FF, Q8_0 conv pointwise - two K-quant members on one lane
-                        let pinned = with_kernel_backend("portable") {
-                            ga_kq_cell(t, mix_path, mc, samples, clip, "kq")
-                        }
-                        t |> success(pinned, "{clip}: the portable backend pinned for the mixed kq lane cell")
-                    }
-                    if (clip == "ru_short") {
-                        ga_seat_arms_cell(t, m, mc, samples)
-                        ga_prof_cell(t, m, mc, samples)
-                    }
-                    if (clip == "ru_mid") {
-                        var inscope head <- ga_lattice_clip(m, samples)
-                        if (empty(head)) {
-                            t |> skip("ru_mid holds under 64 encoder frames - no pad-free clip")
-                            continue
-                        }
-                        let frames = ga_clip_cell(t, m, mc, head, "ru_mid lattice")
-                        t |> success(frames >= 64l && frames % 64l == 0l, "ru_mid lattice: the encoder frames are a whole multiple of 64 ({frames})")
-                    }
-                }
-                with_gpu_knobs() {
-                    set_metal_tower(true)
-                    let ga_q8 = gigaam_serves_q8()
-                    t |> equal(ga_q8, !gigaam_gpu_exact_serves(), "the tower on: the un-pinned lane follows the driver's faster lane")
-                    t |> equal(!ga_q8, get_metal_tower_f16() && pf_hmm_ready(), "the tower on: the un-pinned lane is the f16 planes where the toolchain compiled the half tensor GEMM, the q8 slab on a box without it")
-                    set_metal_tower(false)
-                    t |> success(gigaam_serves_q8(), "the tower off: the un-pinned lane is the q8 planes (the control)")
-                }
-                metal_tower_shutdown()
-            }
+    with_put_back($ {
+        set_gpu_knobs(knobs)
+        restore_host_planes(planes)
+    }) {
+        if (g4a_form_asr(f)) {
+            h.asr <- load_asr_model(path_join(models_dir(), decoder), path)
         } else {
-            t |> skip("no Metal build - the GigaAM rotary FastConformer driver has no device to serve")
+            h.e <- load_audio_embedder(path)
         }
+    }
+    return <- h
+}
+
+//! the E2B mmproj's form loader: `gemma4a_form` with the E2B Q8 decoder
+def private gemma4a_e2b_form(path, form : string; var stg : Gemma4aStaging) : G4aForm => <- gemma4a_form(path, form, "gemma-4-E2B-it-Q8_0.gguf", stg)
+
+//! the E4B mmproj's form loader: `gemma4a_form` with the E4B Q8 decoder
+def private gemma4a_e4b_form(path, form : string; var stg : Gemma4aStaging) : G4aForm => <- gemma4a_form(path, form, "gemma-4-E4B-it-Q8_0.gguf", stg)
+
+//! The form is the family, lane, poison and image flavor it names: on `h`, a mmproj loaded as the form `form` of `file`,
+//! the facade's gemma4a route on an ASR form, else the carrier's gemma4a arm and, on a minted form, the lane flag, the
+//! poison's block the tower's middle one, and the image flavor. An image form's lane and flavor are the run's policy:
+//! not read.
+def private gemma4a_form_is(t : T?; file, form : string; h : G4aForm) {
+    let f = g4a_form_of(form)
+    if (g4a_form_asr(f)) {
+        t |> success(h.asr.kind == AsrKind.gemma4a, "{file}: the {form} form is the facade's gemma4a pair")
+        return
+    }
+    t |> success(h.e.kind == AudioKind.gemma4a, "{file}: the {form} form is the carrier's gemma4a arm")
+    return if (f.image)
+    minted_form_is(t, file, form, f, TowerFamily.gemma4a, h.e.gemma4a.q8, h.e.gemma4a.n_layer, h.e.gemma4a.dev_backend)
+}
+
+//! What a Canary or gemma4a tower file's block keeps for the compares that follow it. `tag` names the twin in its asserts
+//! and `form` the form whose cells run; the three clean forms' lane flags and the device image's flavor; a gemma4a
+//! encoder's own width and its projection, `want_proj` the decoder's width; the q8 lane's rows three ways
+//! (`LaneTwinKept`), the regrown residencies' (`TwinRegrowKept`), the exact lane's (`ExactFlavorKept`) and the short
+//! clips' (`ShortClipsKept`).
+struct private EncTwinKept {
+    tag : string
+    form : string
+    flags : LaneFlags
+    mid_dim : int64
+    proj_dim : int64
+    want_proj : int64
+    twin : LaneTwinKept = LaneTwinKept()
+    regrow : TwinRegrowKept
+    exact : ExactFlavorKept
+    clips : ShortClipsKept
+}
+
+// The legs the form `f` of a tower `tw` adds to its file's twin on jfk, each on the form's one home: the exact form the
+// reference chain and the exact lane's CPU leg, the q8 form the CPU q8 chain, its `@dev` form the device chain - and, on
+// a discrete home, the regrown residencies - the zeroed `@dev` forms the input poisons, the exact lane's `@dev` form its
+// device leg. `encode` is the family's encode of a clip.
+[cold_path]
+def private enc_twin_leg(t : T?; var k : EncTwinKept; f : TowerForm; fam : TowerFamily; tw : auto(TW); var st : auto(ST); samples : array<float>;
+                         encode : block<(e : TW; var s : ST; clip : array<float>; var out : array<float>) : int64>) {
+    let discrete = serving_tower_dev(fam) != TowerDev.metal
+    lane_twin_named(k.twin, k.tag, fam, twin_facts(tw).n_layer)
+    exact_flavor_named(k.exact, k.tag, fam, TWIN_EXACT_REL_L2_VK, -1l)
+    if (f.lane != "f32" && f.zero_block >= 0l && discrete) {
+        twin_regrow_poison_leg(k.regrow, fam, tw, st, samples, encode)
+        return
+    }
+    let leg = lane_exact_leg(t, k.twin, k.exact, k.flags, f, true, tw, st) $(e; var s; var out) => invoke(encode, e, s, samples, out)
+    if (leg == LaneFormLeg.dev && discrete) {
+        var regrown = ST()
+        twin_regrow_dev_leg(k.regrow, fam, tw, regrown, samples, encode)
+        delete regrown
     }
 }
 
-[test(description = "A canary encode served on the Metal tower counts one device encode and leaves zero encoder rows held on the device, since no transducer decodes them")]
-def test_canary_metal_holds_no_rows(tst : T?) {
-    tst |> run("canary's served Metal encode leaves no encoder rows on the device: no transducer decodes them") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            let path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
-            return if (!family_on(t, "canary") || !model_available(t, path))
-            var inscope samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
-            if (empty(samples)) {
-                t |> skip("jfk.wav not present")
-                return
-            }
-            with_dasllama_jobque_() {
-                var inscope enc <- mint_cn(path, false, -1l, TowerDev.metal)
+// A form's legs of the Canary encoder's twin on jfk.
+[cold_path]
+def private cn_twin_leg(t : T?; enc : CanaryEncoder; var k : EncTwinKept) {
+    let samples <- asr_samples(t, "jfk.wav")
+    return if (empty(samples))
+    var st = CanaryState()
+    enc_twin_leg(t, k, canary_form_of(k.form), TowerFamily.canary, enc, st, samples) $(e; var s; clip; var out) => cn_twin_encode(e, s, clip, out)
+    delete st
+}
+
+// A form's leg of the Canary encoder's short clips: its q8 lane's CPU image, or that lane's image in the discrete home's flavor.
+[cold_path]
+def private cn_short_clip_leg(t : T?; enc : CanaryEncoder; var k : EncTwinKept) {
+    t |> success(enc.q8, "{k.clips.tag}: the short clips ride the q8 lane")
+    var st = CanaryState()
+    short_clip_leg(k.clips, TowerFamily.canary, enc.dev_backend != TowerDev.none, enc, st) $(e; var s; clip; var out) => cn_twin_encode(e, s, clip, out)
+    delete st
+}
+
+// A form's legs of a gemma4a encoder's twin on jfk; the q8 form's own width and projection kept.
+[cold_path]
+def private g4a_twin_leg(t : T?; enc : Gemma4aEncoder; var k : EncTwinKept) {
+    let samples <- asr_samples(t, "jfk.wav")
+    return if (empty(samples))
+    let f = g4a_form_of(k.form)
+    if (f.lane == "q8" && f.zero_block < 0l && !f.dev) {
+        k.mid_dim = gemma4a_mid_dim(enc)
+        k.proj_dim = enc.proj_dim
+    }
+    var st = Gemma4aState()
+    enc_twin_leg(t, k, f, TowerFamily.gemma4a, enc, st, samples) $(e; var s; clip; var out) => gemma4a_encode_all(e, s, clip, out)
+    delete st
+}
+
+// A form's leg of the E2B encoder's short clips: its q8 lane's CPU image, or that lane's image in the discrete home's flavor.
+[cold_path]
+def private g4a_short_clip_leg(t : T?; enc : Gemma4aEncoder; var k : EncTwinKept) {
+    t |> success(enc.q8, "{k.clips.tag}: the short clips ride the q8 lane")
+    var st = Gemma4aState()
+    short_clip_leg(k.clips, TowerFamily.gemma4a, enc.dev_backend != TowerDev.none, enc, st) $(e; var s; clip; var out) => gemma4a_encode_all(e, s, clip, out)
+    delete st
+}
+
+// One gemma4a encoder on the discrete home, after its mmproj's block: jfk three ways on the q8 lane with its regrown
+// residencies and their poison, then its exact lane on the home's exact image.
+[cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+def private test_gemma4a_discrete_twin(t : T?; var k : EncTwinKept) {
+    return if (asr_clip_absent(t, "jfk.wav"))
+    let jt = k.tag
+    t |> success(!k.flags.x_q8 && k.flags.c_q8, "the exact and the q8 encoders minted")
+    t |> equal(k.mid_dim, 1536l, "{jt}: the encoder's own width")
+    t |> equal(k.proj_dim, k.want_proj, "{jt}: the embedder projects to the decoder's width")
+    let n_layer = k.twin.rows.spec.n_layer
+    let held = twin_rows_held(t, k.twin.rows) $(legs) {
+        let n_chunks = legs.dev.encodes - legs.pre.encodes
+        t |> equal(legs.n_cpu, legs.n_exact, "{jt}: the q8 chain's token count")
+        t |> equal(legs.n_dev, legs.n_exact, "{jt}: the device chain's token count")
+        t |> success(n_chunks >= 1l, "{jt}: the device served the chunk encodes ({n_chunks})")
+        t |> equal(legs.dev.blocks - legs.pre.blocks, n_chunks * n_layer, "{jt}: every block of every served encode ran on the driver")
+        front_served(t, jt, legs.dev.convs - legs.pre.convs, n_chunks, legs.dev.declines - legs.cpu.declines)
+    }
+    twin_regrow_held(t, jt, TowerFamily.gemma4a, false, k.regrow, k.twin.rows.exact, held.bar)
+    k.exact.lane.npos = k.twin.rows.n_exact
+    let xconvs = exact_flavor_held(t, k.exact)
+    t |> success(xconvs >= 2l, "{jt} exact lane: the chunk front served on both device encodes ({xconvs} dispatches)")
+}
+
+// One gemma4a encoder on the Metal Conformer chain, after its mmproj's block: the q8 lane three ways with its poison,
+// then the exact lane.
+[cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+def private test_gemma4a_metal_twin(t : T?; k : EncTwinKept) {
+    return if (asr_clip_absent(t, "jfk.wav"))
+    let jt = k.tag
+    t |> success(!k.flags.x_q8 && k.flags.c_q8 && k.flags.d_q8 && k.flags.d_backend == TowerDev.metal, "{jt}: the exact and the q8 encoders minted, the q8 lane's Metal image beside")
+    metal_q8_twin_held(t, k.twin)
+    exact_flavor_held(t, k.exact)
+}
+
+// The Canary encoder on the discrete home, after its bin's block: the front and every block on the device within the
+// three-way bar on jfk, held across the regrown residencies, a poison past it, and the exact lane within its bar.
+[cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+def private test_canary_discrete_twin(t : T?; k : EncTwinKept) {
+    return if (asr_clip_absent(t, "jfk.wav"))
+    t |> success(!k.flags.x_q8 && k.flags.c_q8, "the exact and the q8 encoders minted")
+    let n_layer = k.twin.rows.spec.n_layer
+    let held = twin_rows_held(t, k.twin.rows) $(legs) {
+        fc_discrete_counters(t, "canary jfk", n_layer, legs)
+    }
+    twin_regrow_held(t, "canary jfk", TowerFamily.canary, true, k.regrow, k.twin.rows.exact, held.bar)
+    fc_exact_lane_held(t, k.exact)
+}
+
+// The Metal home's FastConformer rel-form twin of the Canary encoder on jfk, after its bin's block: the q8 lane three ways
+// with its poison, then the exact lane.
+[cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+def private test_fc_metal_twin(t : T?; k : EncTwinKept) {
+    return if (asr_clip_absent(t, "jfk.wav"))
+    fc_metal_twin_held(t, "encoders", k.flags, k.twin, k.exact)
+}
+
+// A canary encode served on the Metal tower leaves no encoder rows held on the device - no transducer decodes them - on
+// the exact lane's `f32@dev` form of a das_metal build.
+[cold_path, unused_argument(t, enc)]
+def private test_canary_metal_holds_no_rows(t : T?; enc : CanaryEncoder) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var inscope samples <- asr_samples(t, "jfk.wav")
+        return if (empty(samples))
+        with_dasllama_jobque_() {
+            with_gpu_knobs() {
+                set_metal_tower(true)
                 var st = CanaryState()
                 let e0 = metal_tower_stats()
                 canary_log_mel(enc, samples, st)
@@ -1805,561 +1626,23 @@ def test_canary_metal_holds_no_rows(tst : T?) {
                 delete st
                 metal_tower_shutdown()
             }
-        } else {
-            t |> skip("no Metal build")
         }
     }
 }
 
-//! family `fam`'s q8 lane three ways on the Metal home (`twin_three_way`), every stage on the device, then the poisoned image `mint_poisoned` mints
-[cold_path, unused_argument(t, tag, fam, tw, st, twd, std, twx, stx, mint_poisoned, encode)]
-def private metal_q8_twin(t : T?; tag : string; fam : TowerFamily; tw : auto(TW); var st : auto(ST); twd : TW; var std : ST; twx : TW; var stx : ST;
-                          mint_poisoned : block<() : TW>; encode : block<(e : TW; var s : ST; var out : array<float>) : int64>) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let n_layer = twin_facts(tw).n_layer
-        let dq0 = gpu_tower_quant_declines(fam)
-        let f0 = metal_tower_f16_encodes()
-        let spec = TwinSpec(family = "{fam}", tag = tag, n_layer = n_layer, metric = TwinMetric.rel_l2, seat_family = fam)
-        let r <- twin_three_way(t, spec, tw, st, twd, std, twx, stx, encode) $(legs) {
-            t |> equal(legs.n_cpu, legs.n_exact, "{tag}: the q8 chain's frame count")
-            t |> equal(legs.n_dev, legs.n_exact, "{tag}: the device chain's frame count")
-            let n_enc = legs.dev.encodes - legs.pre.encodes
-            t |> success(n_enc >= 1l, "{tag}: the device served the encodes ({n_enc})")
-            t |> equal(legs.dev.blocks - legs.pre.blocks, n_enc * n_layer, "{tag}: every block of every encode ran on the driver")
-            front_served(t, tag, legs.dev.convs - legs.pre.convs, n_enc, legs.dev.declines - legs.cpu.declines)
-        }
-        t |> equal(gpu_tower_quant_declines(fam) - dq0, 0l, "{tag}: the q8 lane declined nothing (`quant_mode`)")
-        t |> equal(metal_tower_f16_encodes() - f0, 0l, "{tag}: the q8 lane read the q8 slab, not the halfword plane")
-        if (r.bar > 0.0lf) {
-            var twp <- invoke(mint_poisoned)
-            var stp = ST()
-            twin_poison(t, r, n_layer / 2l, twp, stp, encode)
-            delete stp
-            delete twp
-        }
-    }
+let private Q3A = "mmproj-Qwen3-ASR-0.6B-bf16.gguf"
+
+//! the Qwen3-ASR mmproj's staged read the key `key` names (`tower_stage_key_of`): under its lane pin, put back however the
+//! staging leaves, in its image flavor
+def private qwen3a_stage(path, key : string) : Qwen3aStaging {
+    let f = qwen3a_form_of(key)
+    return <- staged_twin_tower(path, f.lane == "q8", tower_form_dev_of(f, TowerFamily.qwen3a), @@set_qwen3a_q8, @@reset_qwen3a_q8,
+        @@ < (path : string) : Qwen3aStaging > stage_qwen3a_tower)
 }
 
-//! the Metal home's FastConformer rel-form twins on jfk: the q8 lane three ways with its poison, then the exact lane (`fc_exact_lane_leg`)
-[test(description = "Canary and parakeet v3 on the Metal FastConformer chain serve every block on the q8 slab within the three-way bar on jfk with no quant_mode decline, a poison exceeds it, and the exact f16 lane holds its bar"), arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
-def test_fc_metal_twin(tst : T?) {
-    tst |> run("canary-qwen 2.5B: the Metal FastConformer chain's q8 and f16 lanes vs the CPU chains on jfk, the exact chain the reference") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            let path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
-            return if (!family_on(t, "canary"))
-            metal_jfk_twin_cell(t, path, false, TowerFamily.canary) $(samples) {
-                var encx <- mint_cn(path, false, -1l)
-                var enc <- mint_cn(path, true, -1l)
-                var encd <- mint_cn(path, true, -1l, TowerDev.metal)
-                t |> success(!encx.q8 && enc.q8 && encd.q8 && encd.dev_backend == TowerDev.metal, "the exact and the q8 encoders minted, the q8 lane's Metal image beside")
-                var stx = CanaryState()
-                var st = CanaryState()
-                var std = CanaryState()
-                metal_q8_twin(t, "canary metal jfk", TowerFamily.canary, enc, st, encd, std, encx, stx, $ { return <- mint_cn(path, true, enc.n_layer / 2l, TowerDev.metal) }) $(e; var s; var out) => cn_twin_encode(e, s, samples, out)
-                delete std
-                delete encd
-                delete enc
-                fc_exact_lane_leg(t, "canary metal jfk", TowerFamily.canary, encx, stx, $(zb) { return <- mint_cn(path, false, zb, TowerDev.metal) }) $(e; var s; var out) => cn_twin_encode(e, s, samples, out)
-                delete st
-                delete stx
-                delete encx
-                metal_tower_shutdown()
-            }
-        } else {
-            t |> skip("no Metal build")
-        }
-    }
-    tst |> run("parakeet-TDT 0.6B v3: the Metal FastConformer chain's q8 and f16 lanes vs the CPU chains on jfk, the exact chain the reference") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
-            return if (!family_on(t, "parakeet"))
-            metal_jfk_twin_cell(t, path, false, TowerFamily.parakeet) $(samples) {
-                var mx <- mint_pk(path, false, -1l)
-                var m <- mint_pk(path, true, -1l)
-                var md <- mint_pk(path, true, -1l, TowerDev.metal)
-                t |> success(!mx.q8 && m.q8 && md.q8 && md.dev_backend == TowerDev.metal, "the exact and the q8 models minted, the q8 lane's Metal image beside")
-                var stx = ParakeetState()
-                var st = ParakeetState()
-                var std = ParakeetState()
-                metal_q8_twin(t, "parakeet metal jfk", TowerFamily.parakeet, m, st, md, std, mx, stx, $ { return <- mint_pk(path, true, m.n_layer / 2l, TowerDev.metal) }) $(e; var s; var out) => pk_twin_encode(e, s, samples, out)
-                delete std
-                delete md
-                delete m
-                fc_exact_lane_leg(t, "parakeet metal jfk", TowerFamily.parakeet, mx, stx, $(zb) { return <- mint_pk(path, false, zb, TowerDev.metal) }) $(e; var s; var out) => pk_twin_encode(e, s, samples, out)
-                delete st
-                delete stx
-                delete mx
-                metal_tower_shutdown()
-            }
-        } else {
-            t |> skip("no Metal build")
-        }
-    }
-}
-
-//! the Metal home's gemma4a twins on jfk, E2B and E4B: the q8 lane three ways with its poison, then the exact lane (`exact_flavor_leg`)
-[test(description = "The gemma4a E2B and E4B encoders on the Metal Conformer chain serve every block on the q8 slab within the three-way bar on jfk, a poison exceeds it, and the exact f16 lane holds its bar"), arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
-def test_gemma4a_metal_twin(tst : T?) {
-    for (tag, mm_file in fixed_array("E2B", "E4B"), fixed_array("mmproj-gemma-4-E2B-it-bf16.gguf", "mmproj-gemma-4-E4B-it-BF16.gguf")) {
-        let mm = path_join(models_dir(), mm_file)
-        tst |> run("gemma4a {tag}: the Metal Conformer chain's q8 and f16 lanes vs the CPU chains on jfk ({base_name(mm)}), the exact chain the reference") @(t : T?) {
-            static_if (typeinfo builtin_module_exists(das_metal)) {
-                return if (!family_on(t, "gemma4a"))
-                let jt = "gemma4a {tag} metal jfk"
-                metal_jfk_twin_cell(t, mm, true, TowerFamily.gemma4a) $(samples) {
-                    var encx <- mint_g4a(mm, false, -1l)
-                    var enc <- mint_g4a(mm, true, -1l)
-                    var encd <- mint_g4a(mm, true, -1l, TowerDev.metal)
-                    t |> success(!encx.q8 && enc.q8 && encd.q8 && encd.dev_backend == TowerDev.metal, "{jt}: the exact and the q8 encoders minted, the q8 lane's Metal image beside")
-                    var stx = Gemma4aState()
-                    var st = Gemma4aState()
-                    var std = Gemma4aState()
-                    metal_q8_twin(t, jt, TowerFamily.gemma4a, enc, st, encd, std, encx, stx, $ { return <- mint_g4a(mm, true, enc.n_layer / 2l, TowerDev.metal) }) $(e; var s; var out) => gemma4a_encode_all(e, s, samples, out)
-                    delete std
-                    delete encd
-                    delete enc
-                    exact_flavor_leg(t, jt, TowerFamily.gemma4a, encx, stx, -1l, $(zb) { return <- mint_g4a(mm, false, zb, TowerDev.metal) }) $(e; var s; var out) => gemma4a_encode_all(e, s, samples, out)
-                    delete st
-                    delete stx
-                    delete encx
-                    metal_tower_shutdown()
-                }
-            } else {
-                t |> skip("no Metal build")
-            }
-        }
-    }
-}
-
-//! the GigaAM model staged and minted in memory on the lane asked; `zero_block` >= 0 zeroes the ten GEMM planes of
-//! `poison_blocks` blocks from that block on - the q8 quants, or on the exact lane the halfwords
-def private mint_ga(path : string; q8 : bool; zero_block : int64; dev : TowerDev = TowerDev.none) : GigaamModel {
-    var inscope stg <- tower_dev_staged(dev) $ { return <- stage_gigaam_model(path, q8, zero_block >= 0l) }
-    if (stg.e.kq_lane) {
-        if (zero_block >= 0l) {
-            poison_kq_seats(stg.gemm_seats, zero_block * FC_BLOCK_GEMMS, long_length(stg.gemm_seats) / TOWER_SEAT_WORDS, stg.kq, stg.qblob)
-        }
-    } elif (q8) {
-        poison_fc_blocks(stg.qblob, stg.e.n_layer, zero_block, stg.e.d_model, stg.e.n_ff) $(b) => gigaam_layer_offsets(stg.e, b)
-    } else {
-        poison_fc_blocks(stg.wblob, stg.e.n_layer, zero_block, stg.e.d_model, stg.e.n_ff) $(b) => gigaam_layer_offsets(stg.e, b)
-    }
-    var m = GigaamModel()
-    mint_gigaam_model(stg, m, q8, dev)
-    return <- m
-}
-
-//! `mint_ga` in the flavor the lane serves on this build (`#tower-dev-block`): the GPU driver's where its chain serves the lane,
-//! else the CPU image
-def private mint_ga_served(path : string; q8 : bool; zero_block : int64) : GigaamModel {
-    var inscope probe <- stage_gigaam_model(path, q8, false)
-    let dev = gigaam_dev_flavor(probe.e)
-    return <- mint_ga(path, q8, zero_block, dev)
-}
-
-//! the device's declines that keep a lane off it on this box: `device` (no form for the lane's GEMMs), or `flavor` (the lane
-//! loaded its CPU image)
-def private off_device_declines() : int64
-    => gpu_tower_declines_of("device", TowerFamily.gigaam) + gpu_tower_declines_of("flavor", TowerFamily.gigaam)
-
-//! gigaam's device log-mel alone on its home (the encode chain's mel record) into `mel`: its frame count
-[unused_argument(m, samples, mel)]
-def private gpu_gigaam_mel(m : GigaamModel; samples : array<float>; @exact_size var mel : array<float>) : int64 {
-    static_if (typeinfo builtin_module_exists(cuda)) {
-        return cuda_gigaam_mel(m, samples, mel) if (tower_family_cuda(TowerFamily.gigaam))
-    }
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        return vulkan_gigaam_mel(m, samples, mel)
-    } else {
-        return 0l
-    }
-}
-
-def private ga_twin_encode(m : GigaamModel; var st : GigaamState; clip : array<float>; var out : array<float>) : int64 {
-    return x_rows_encode(st, m.d_model, out) $(var s) {
-        return gigaam_encode_span(clip, 0l, long_length(clip), m, s)
-    }
-}
-
-//! gigaam's device log-mel alone on its home against `gigaam_log_mel` at `GA_MEL_BAR`, frame count and counter; a poisoned element the control
-[unused_argument(t, m, samples, clip)]   // without a discrete home the gated body is empty
-def private ga_discrete_mel_twin_cell(t : T?; m : GigaamModel; samples : array<float>; clip : string) {
-    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-        var st = GigaamState()
-        with_dasllama_jobque_() {
-            gigaam_log_mel(samples, m, st)
-        }
-        var inscope dev : array<float>
-        let s0 = gpu_tower_counters(TowerFamily.gigaam)
-        let n = gpu_gigaam_mel(m, samples, dev)
-        t |> equal(n, st.n_len, "{clip}: the device mel's frame count")
-        t |> equal(gpu_tower_counters(TowerFamily.gigaam).mels - s0.mels, 1l, "{clip}: the mel seat ran on the device")
-        check_rows(t, "gigaam {clip} {serving_tower_dev(TowerFamily.gigaam)}: the device log-mel tracks the CPU's", dev, st.mel, Bar(rel = GA_MEL_BAR, poison_scaled = true), int(m.n_mel))
-        var inscope loud <- [for (v in samples); v * 1.1]
-        var inscope dev_loud : array<float>
-        gpu_gigaam_mel(m, loud, dev_loud)
-        check_exceeds(t, "gigaam {clip} {serving_tower_dev(TowerFamily.gigaam)}: the control - the clip at 1.1x on the device side off the CPU's log-mel", dev_loud, st.mel,
-            Bar(rel = GA_MEL_BAR))
-        delete st
-    }
-}
-
-//! one clip's device legs on gigaam's home: the three-way twin over the q8 GPU image `md`, both transcripts, the range refusal, the poison
-[cold_path, unused_argument(t, path, mx, m, md, samples, clip)]   // without a discrete home the gated body is empty
-def private ga_discrete_clip_cell(t : T?; path : string; mx, m, md : GigaamModel; samples : array<float>; clip : string) {
-    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-        var stx = GigaamState()
-        var st = GigaamState()
-        var std = GigaamState()
-        let tag = "gigaam {clip}"
-        let spec = TwinSpec(family = "gigaam", tag = tag, n_layer = m.n_layer, metric = TwinMetric.rel_l2, seat_family = TowerFamily.gigaam)
-        let r <- twin_three_way(t, spec, m, st, md, std, mx, stx, $(e; var s; var out) => ga_twin_encode(e, s, samples, out)) $(legs) {
-            t |> equal(legs.n_cpu, legs.n_exact, "{tag}: the q8 chain's frame count")
-            t |> equal(legs.n_dev, legs.n_exact, "{tag}: the device chain's frame count")
-            t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "{tag}: the device served the encode")
-            t |> equal(legs.dev.blocks - legs.pre.blocks, m.n_layer, "{tag}: every block ran on the driver")
-            front_served(t, tag, legs.dev.convs - legs.pre.convs, 1l, legs.dev.declines - legs.cpu.declines)
-            t |> equal(legs.dev.mels - legs.pre.mels, legs.dev.convs - legs.pre.convs, "{tag}: the log-mel ran on the device wherever the front did")
-        }
-        ga_discrete_mel_twin_cell(t, md, samples, clip)
-        delete stx
-        delete st
-        delete std
-        with_gpu_knobs() {
-            with_dasllama_jobque_() {
-                set_serving_gpu_tower(false, TowerFamily.gigaam)
-                var inscope cpu <- ga_leg(m, samples)
-                set_serving_gpu_tower(true, TowerFamily.gigaam)
-                let k4_0 = kq_tile_count("k4")
-                var inscope dev <- ga_leg(md, samples)
-                t |> equal(kq_tile_count("k4") - k4_0, 0l, "{tag}: the q8 lane dispatches no k4 tile (the kq lane counter's control)")
-                to_log(LOG_INFO, "test_audio: gigaam {clip} {md.dev_backend} vs cpu q8: rel_l2 {rel_l2(dev.x, cpu.x)}\n")
-                to_log(LOG_INFO, "test_audio: gigaam {clip} cpu q8: {cpu.text}\n")
-                to_log(LOG_INFO, "test_audio: gigaam {clip} {md.dev_backend}: {dev.text}\n")
-                t |> equal(dev.text, cpu.text, "{tag}: the device chain's transcript is the CPU q8 chain's")
-                blocks_refused_leg(t, tag, TowerFamily.gigaam, 64l << 20l) $ {
-                    var inscope refused <- ga_leg(md, samples)
-                }
-            }
-        }
-        if (r.bar > 0.0lf) {
-            var mp <- mint_ga(path, true, m.n_layer / 2l, md.dev_backend)
-            var stp = GigaamState()
-            twin_poison(t, r, m.n_layer / 2l, mp, stp) $(e2; var s; var out) => ga_twin_encode(e2, s, samples, out)
-            delete stp
-            delete mp
-        }
-    }
-}
-
-//! GigaAM's exact lane on its discrete home's chain (the f16 GEMM over the halfwords) against the CPU exact chain: every stage on the device with no `quant_mode` decline, the CPU's frames and ids, the rows nearer the exact chain than the CPU q8 chain's, the zeroed-blocks control past that bar; off the f16 feed the lane loads its CPU image (`mxd` the exact lane's flavor on this box)
-[cold_path, unused_argument(t, path, mx, mxd, mq, samples, clip)]   // without a discrete home the gated body is empty
-def private ga_discrete_exact_cell(t : T?; path : string; mx, mxd, mq : GigaamModel; samples : array<float>; clip : string) {
-    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-        let tag = "gigaam {clip} exact lane"
-        t |> success(!mx.q8 && mx.gemm_f16, "{tag}: the block GEMMs serve off the halfword plane")
-        with_gpu_knobs() {
-            with_dasllama_jobque_() {
-                set_serving_gpu_tower(false, TowerFamily.gigaam)
-                var inscope ex <- ga_leg(mx, samples)
-                var inscope q8 <- ga_leg(mq, samples)
-                set_serving_gpu_tower(true, TowerFamily.gigaam)
-                let s0 = gpu_tower_counters(TowerFamily.gigaam)
-                let dq0 = gpu_tower_quant_declines(TowerFamily.gigaam)
-                let dd0 = off_device_declines()
-                var inscope dev <- ga_leg(mxd, samples)
-                let s1 = gpu_tower_counters(TowerFamily.gigaam)
-                t |> equal(gpu_tower_quant_declines(TowerFamily.gigaam) - dq0, 0l, "{tag}: no quant_mode decline")
-                t |> equal(dev.n, ex.n, "{tag}: the frame count")
-                if (!gpu_tower_front_route(TowerFamily.gigaam)) {
-                    t |> equal(s1.encodes - s0.encodes, 0l, "{tag}: off the f16 GEMM feed no encode on the device")
-                    t |> success(off_device_declines() > dd0, "{tag}: off the f16 GEMM feed the chain declined the lane")
-                    return
-                }
-                device_leg_served(t, tag, s0, s1, mx.n_layer, -1l)
-                t |> equal(s1.convs - s0.convs, 1l, "{tag}: the conv front ran on the device")
-                t |> equal(dev.ids, ex.ids, "{tag}: the token ids are the CPU exact chain's")
-                to_log(LOG_INFO, "test_audio: {tag} cpu exact: {ex.text}\n")
-                to_log(LOG_INFO, "test_audio: {tag} {mxd.dev_backend}   : {dev.text}\n")
-                var q8_ex = TowerParityStats()
-                var dev_ex = TowerParityStats()
-                if (tower_parity_stats(t, "{tag} cpu q8 vs exact", ex.x, q8.x, q8_ex) && tower_parity_stats(t, "{tag} device vs exact", ex.x, dev.x, dev_ex)) {
-                    let bar = q8_ex.rel_l2
-                    to_log(LOG_INFO, "test_audio: {tag}: rel_l2 from the exact chain - {mxd.dev_backend} exact lane {dev_ex.rel_l2}, the bar (cpu q8) {bar}\n")
-                    t |> success(dev_ex.rel_l2 <= bar, "{tag}: the device rows sit nearer the exact chain than the CPU q8 chain's ({dev_ex.rel_l2} vs {bar})")
-                    var mp <- mint_ga(path, false, mx.n_layer / 2l, serving_tower_dev(TowerFamily.gigaam))
-                    let p0 = gpu_tower_encodes(TowerFamily.gigaam)
-                    var inscope bad <- ga_leg(mp, samples)
-                    t |> equal(gpu_tower_encodes(TowerFamily.gigaam) - p0, 1l, "{tag} poison: device-served (encodes delta)")
-                    var bad_ex = TowerParityStats()
-                    if (tower_parity_stats(t, "{tag} poisoned device vs exact", ex.x, bad.x, bad_ex)) {
-                        t |> success(is_finite(bad_ex.rel_l2) && bad_ex.rel_l2 > bar, "{tag}: zeroed halfword blocks through the device chain EXCEED the bar ({bad_ex.rel_l2} vs {bar})")
-                    }
-                    delete mp
-                }
-            }
-        }
-    }
-}
-
-//! GigaAM's lane policy on its discrete home: tower on, the lane knob picks q8 or exact; tower off, q8 whatever the knob; the knob restored
-[unused_argument(t)]   // without a discrete home the gated body is empty
-def private ga_discrete_lane_policy_cell(t : T?) {
-    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-        with_gpu_knobs() {
-            reset_gigaam_q8()   // the cell reads the un-pinned policy's lane
-            set_serving_gpu_tower(true, TowerFamily.gigaam)
-            let was = set_gpu_gigaam_exact_lane(false)
-            t |> success(gigaam_gpu_serves() && gigaam_serves_q8(), "the lane knob off: the un-pinned lane is the q8 image")
-            set_gpu_gigaam_exact_lane(true)
-            t |> success(!gigaam_serves_q8(), "the lane knob on: the un-pinned lane is the exact planes")
-            set_serving_gpu_tower(false, TowerFamily.gigaam)
-            t |> success(gigaam_serves_q8(), "the tower off: the un-pinned lane is the q8 image whatever the knob (the control)")
-            set_gpu_gigaam_exact_lane(was)
-        }
-    }
-}
-
-//! the device's k4 cm2 and KHR tile dispatches: the kq lane's K-quant seats run on one of them, by the device's mode and the column pick
-//! the dispatches of the K-quant member `fmt`'s batch tiles (`kq_batch_<fmt>_*`) the census counted
-[unused_argument(fmt, fam)]
-def private kq_tile_count(fmt : string; fam : TowerFamily = TowerFamily.gigaam) : int64 {
-    static_if (typeinfo builtin_module_exists(cuda)) {
-        if (tower_family_cuda(fam)) {
-            return (max(cud_kernel_census_of("kq_batch_{fmt}_cm2l_cls_cuda"), 0l) + max(cud_kernel_census_of("kq_batch_{fmt}_cm2m_cls_cuda"), 0l)
-                + max(cud_kernel_census_of("kq_batch_{fmt}_cm2s_cls_cuda"), 0l))
-        }
-    }
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        return (vk_kernel_coverage_of("kq_batch_{fmt}_cm2l_cls_spv") + vk_kernel_coverage_of("kq_batch_{fmt}_cm2m_cls_spv")
-            + vk_kernel_coverage_of("kq_batch_{fmt}_cm2s_cls_spv") + vk_kernel_coverage_of("kq_batch_{fmt}_khr_cls_spv"))
-    } else {
-        return 0l
-    }
-}
-
-//! the carrier's K-quant members, Q8_0 aside, by the names their tiles take
-def private kq_members_of(m : GigaamModel) : array<string> {
-    let names <- split(gigaam_kq_members(m), "+")
-    return <- [for (name in names); name; where name != "q8"]
-}
-
-//! GigaAM's kq lane on its discrete home's chain against the CPU kq chain: the lane named `fmt`, no `kq_lane` or `quant_mode`
-//! decline, every K-quant member's tiles counted - "a kernel counter ... that no other plane of that file moves"
-//! (REVIEW_KQ_FORMATS.md); off the f16 GEMM feed the chain declines `device`
-[cold_path, unused_argument(t, kq_path, mx, mk, mkd, samples, clip, fmt), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq")]   // without a discrete home the gated body is empty
-def private ga_discrete_kq_cell(t : T?; kq_path : string; mx, mk, mkd : GigaamModel; samples : array<float>; clip, fmt : string) {
-    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-        let tag = "gigaam {clip} kq lane {gigaam_kq_members(mk)}"
-        t |> success(mk.kq_lane, "{tag}: the carrier serves as its own planes")
-        t |> equal(gigaam_exec_fmt(mk), fmt, "{tag}: the lane's name - its one K-quant member's disk type, or `kq` where the members mix")
-        with_gpu_knobs() {
-            with_dasllama_jobque_() {
-                let members <- kq_members_of(mk)
-                set_serving_gpu_tower(false, TowerFamily.gigaam)
-                var inscope ex <- ga_leg(mx, samples)
-                var inscope cpu <- ga_leg(mk, samples)
-                set_serving_gpu_tower(true, TowerFamily.gigaam)
-                let s0 = gpu_tower_counters(TowerFamily.gigaam)
-                let dk0 = gpu_tower_declines_of("kq_lane", TowerFamily.gigaam)
-                let dq0 = gpu_tower_quant_declines(TowerFamily.gigaam)
-                let dd0 = off_device_declines()
-                let tiles0 <- [for (n in members); kq_tile_count(n)]
-                var inscope dev <- ga_leg(mkd, samples)
-                let s1 = gpu_tower_counters(TowerFamily.gigaam)
-                t |> equal(gpu_tower_declines_of("kq_lane", TowerFamily.gigaam) - dk0, 0l, "{tag}: no kq_lane decline")
-                t |> equal(gpu_tower_quant_declines(TowerFamily.gigaam) - dq0, 0l, "{tag}: no quant_mode decline")
-                t |> equal(dev.n, cpu.n, "{tag}: the frame count")
-                if (!gpu_tower_front_route(TowerFamily.gigaam)) {
-                    t |> equal(s1.encodes - s0.encodes, 0l, "{tag}: off the f16 GEMM feed no encode on the device")
-                    t |> success(off_device_declines() > dd0, "{tag}: off the f16 GEMM feed the chain declined the lane")
-                    return
-                }
-                device_leg_served(t, tag, s0, s1, mk.n_layer, -1l)
-                t |> equal(s1.convs - s0.convs, 1l, "{tag}: the conv front ran on the device")
-                for (n, c0 in members, tiles0) {
-                    t |> success(kq_tile_count(n) > c0, "{tag}: the {n} tiles served the {n} seats (the census counter rose)")
-                }
-                t |> equal(dev.ids, cpu.ids, "{tag}: the token ids are the CPU kq chain's")
-                to_log(LOG_INFO, "test_audio: {tag} cpu kq : {cpu.text}\n")
-                to_log(LOG_INFO, "test_audio: {tag} {mkd.dev_backend} : {dev.text}\n")
-                let bar = tower_twin_bar(t, tag, TowerFamily.gigaam, ex.x, cpu.x, dev.x, mk.n_layer, double(TWIN_SLACK_VK), TWIN_REL_L2_FLOOR)
-                if (bar > 0.0lf) {
-                    ga_kq_poison_leg(t, tag, kq_path, mk.n_layer, serving_tower_dev(TowerFamily.gigaam), ex.x, samples, bar)
-                }
-            }
-        }
-    }
-}
-
-//! the kq lane over the mixed-member carrier (Q4_K attention, Q6_K FF, Q8_0 conv pointwise), its home's image beside its CPU one
-[cold_path, unused_argument(t, mx, samples, clip)]   // without a discrete home the gated body is empty
-def private ga_discrete_kq_mix_cell(t : T?; mx : GigaamModel; samples : array<float>; clip : string) {
-    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-        let mix_path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k-mix-local.gguf")
-        return if (!model_available(t, mix_path))
-        var inscope mm <- mint_ga(mix_path, false, -1l)
-        var inscope mmd <- mint_ga_served(mix_path, false, -1l)
-        t |> equal(gigaam_kq_members(mm), "k4+k6+q8", "the mixed carrier's members: Q4_K attention, Q6_K FF, Q8_0 conv pointwise")
-        ga_discrete_kq_cell(t, mix_path, mx, mm, mmd, samples, clip, "kq")
-    }
-}
-
-[test(description = "GigaAM v3 e2e-rnnt on the discrete home holds the three-way bar on its q8 lane, its exact f16 lane and its Q4_K and mixed kq lanes over the ru clips, with the CPU chain ids, every member tile counted and poisons outside"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-rotary")]
-def test_gigaam_discrete_twin(tst : T?) {
-    tst |> run("GigaAM v3 e2e-rnnt: the discrete home's rotary FastConformer front and blocks on every lane - the q8 lane vs the CPU q8 chain, the exact lane off the halfwords vs the CPU exact chain, the Q4_K carrier's kq lane vs the CPU kq chain - on the FLEURS ru clips") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-            let path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-f16.gguf")
-            return if (!family_on(t, "gigaam") || !model_available(t, path) || !discrete_audio_twin_seat(t, TowerFamily.gigaam))
-            let home = serving_tower_dev(TowerFamily.gigaam)
-            var mx <- mint_ga(path, false, -1l)
-            var m <- mint_ga(path, true, -1l)
-            var md <- mint_ga(path, true, -1l, home)
-            var mxd <- mint_ga_served(path, false, -1l)
-            t |> success(!mx.q8 && m.q8 && md.dev_backend == home, "the exact and the q8 models minted, the q8 lane's {home} image beside")
-            let kq_path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
-            var mk = GigaamModel()
-            var mkd = GigaamModel()
-            let has_kq = model_available(t, kq_path)
-            if (has_kq) {
-                delete mk
-                delete mkd
-                mk <- mint_ga(kq_path, false, -1l)
-                mkd <- mint_ga_served(kq_path, false, -1l)
-                t |> success(mk.kq_lane, "the Q4_K carrier takes the kq lane")
-            }
-            for (clip in ["ru_short", "ru_mid"]) {
-                let wav = asr_clip("{clip}.wav")
-                if (!stat(wav).is_valid) {
-                    t |> skip("{clip}.wav not present")
-                    continue
-                }
-                var inscope samples <- load_audio_16k_mono(wav)
-                ga_discrete_clip_cell(t, path, mx, m, md, samples, clip)
-                ga_discrete_exact_cell(t, path, mx, mxd, m, samples, clip)
-                if (has_kq) {
-                    ga_discrete_kq_cell(t, kq_path, mx, mk, mkd, samples, clip, "k4")
-                }
-                if (clip == "ru_short") {
-                    ga_discrete_kq_mix_cell(t, mx, samples, clip)
-                }
-            }
-            ga_discrete_lane_policy_cell(t)
-            delete mkd
-            delete mk
-            delete mxd
-            delete md
-            delete m
-            delete mx
-            gpu_tower_shutdown(TowerFamily.gigaam)
-        } else {
-            t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
-        }
-    }
-}
-
-//! GigaAM's CTC head on the family's discrete seat (`vulkan_gigaam_ctc`, `cuda_gigaam_ctc`) against the CPU head over one encode: each pick the CPU's but at a near-tie, -log sum exp within `CTC_PLOG_BAR`, the ids and transcript the CPU's, the device leg counted once and the CPU leg (`mc`) never, the 1.05x control outside the bar; then the head off the first clip's uploaded rows
-[cold_path, unused_argument(t, m, mc, samples, tag)]   // without a discrete home the gated body is empty
-def private ga_discrete_ctc_cell(t : T?; m, mc : GigaamModel; samples : array<float>; tag : string) {
-    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-        with_gpu_knobs() {
-            with_dasllama_jobque_() {
-                set_serving_gpu_tower(true, TowerFamily.gigaam)
-                let bar = Bar(rel = CTC_PLOG_BAR, abs_floor = CTC_PLOG_BAR, poison_scaled = true)
-                let n_in = min(long_length(samples), GIGAAM_MAX_CLIP_S * AUDIO_SAMPLE_RATE)
-                var st = GigaamState()
-                let n = gigaam_encode_span(samples, 0l, n_in, m, st)
-                let held = st.enc_gen != 0ul
-                to_log(LOG_INFO, "test_audio: {tag}: the encode {held ? "served on the device, its rows held" : "ran on the CPU"}\n")
-                set_serving_gpu_tower(false, TowerFamily.gigaam)
-                var sc = GigaamState()
-                sc.x := st.x
-                var inscope cpu <- ctc_cpu_leg(mc, sc, n)
-                delete sc
-                set_serving_gpu_tower(true, TowerFamily.gigaam)
-                let s0 = gpu_ctc_stats()
-                var inscope dev <- ctc_leg(m, st, n)
-                let s1 = gpu_ctc_stats()
-                to_log(LOG_INFO, "test_audio: {tag} cpu   : {cpu.text}\n")
-                to_log(LOG_INFO, "test_audio: {tag} {m.dev_backend}: {dev.text}\n")
-                t |> equal(cpu.served, 0l, "{tag}: the tower knob off - the head stays on the CPU")
-                t |> equal(dev.served, 1l, "{tag}: the head served on the device")
-                t |> equal(s1.handoffs - s0.handoffs, held ? 1l : 0l, "{tag}: the head read the encode's own device rows where the chain held them")
-                t |> equal(ctc_hard_flips(cpu, dev, m.n_classes), 0, "{tag}: the picks are the CPU's but at a near-tie frame")
-                check(t, "test_audio: {tag} the device head's per-frame log-sums", dev.plogs, cpu.plogs, bar, FLAT_SHAPE)
-                t |> success(sequence_equal(dev.ids, cpu.ids), "{tag}: the token ids are the CPU head's")
-                t |> equal(dev.text, cpu.text, "{tag}: the transcript")
-                var inscope loud <- [for (v in samples); v * 1.05]
-                var sl = GigaamState()
-                let nl = gigaam_encode_span(loud, 0l, min(long_length(loud), GIGAAM_MAX_CLIP_S * AUDIO_SAMPLE_RATE), m, sl)
-                var inscope moved <- ctc_leg(m, sl, nl)
-                t |> equal(moved.served, 1l, "{tag}: the control's head served on the device")
-                check_exceeds(t, "test_audio: {tag} the control - the clip at 1.05x through the device chain", moved.plogs, cpu.plogs, bar)
-                t |> success(sl.enc_gen != st.enc_gen, "{tag}: the control's encode holds the device rows now")
-                delete sl
-                let u0 = gpu_ctc_stats()
-                var inscope up <- ctc_leg(m, st, n)
-                t |> equal(up.served, 1l, "{tag}: off rows the device no longer holds the head serves off the uploaded rows")
-                t |> equal(gpu_ctc_stats().handoffs - u0.handoffs, 0l, "{tag}: no held rows to read")
-                t |> equal(ctc_hard_flips(cpu, up, m.n_classes), 0, "{tag}: the uploaded rows' picks are the CPU head's but at a near-tie frame")
-                check(t, "test_audio: {tag} the head off the uploaded rows' log-sums", up.plogs, cpu.plogs, bar, FLAT_SHAPE)
-                t |> equal(up.text, cpu.text, "{tag}: the uploaded rows' transcript")
-                delete st
-            }
-        }
-    }
-}
-
-[test(description = "The GigaAM CTC head on the discrete seat, off held device rows and off uploaded rows, gives the CPU head picks, ids and transcript with log-sums within CTC_PLOG_BAR, and a 1.05x clip lands outside the bar"), arch(at = "../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
-def test_gigaam_ctc_discrete_twin(tst : T?) {
-    for (kind, q8 in ["e2e-ctc", "ctc", "e2e-ctc", "ctc"], [false, false, true, true]) {
-        tst |> run("GigaAM v3 {kind} {q8 ? "q8" : "f16"}: the CTC head on the discrete device seat is the CPU head's, off the encode's held rows and off uploaded rows") @(t : T?) {
-            static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-                let path = path_join(models_dir(), "gigaam-v3-{kind}-f16.gguf")
-                return if (!family_on(t, "gigaam") || !model_available(t, path) || !discrete_audio_twin_seat(t, TowerFamily.gigaam))
-                let wav = asr_clip("ru_short.wav")
-                if (!stat(wav).is_valid) {
-                    t |> skip("ru_short.wav not present")
-                    return
-                }
-                var m <- mint_ga_served(path, q8, -1l)
-                var mc <- mint_ga(path, q8, -1l)
-                t |> success(m.ctc_f16 && m.dw_f16, "the head and the depthwise taps serve off the carrier's halfwords")
-                var inscope samples <- load_audio_16k_mono(wav)
-                ga_discrete_ctc_cell(t, m, mc, samples, "gigaam {kind} {q8 ? "q8" : "f16"} ru_short")
-                delete mc
-                delete m
-                gpu_tower_shutdown(TowerFamily.gigaam)
-            } else {
-                t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
-            }
-        }
-    }
-}
-
-[test(description = "The qwen2audio, voxtral, omni-3b and ultravox towers on the discrete home run every block and the projector tail on the device within the three-way bar on a synthetic mel, a poison exceeds it, and the exact lane holds"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def test_encoder_blocks_vulkan(tst : T?) {
-    tst |> run("qwen2audio tower: the discrete home's blocksvs the CPU q8 chain on the synthetic mel, 32 layers") @(t : T?) {
-        blocks_twin(t, "qwen2audio", "qwen2audio-mmproj-f32.gguf", 32l)
-    }
-    tst |> run("voxtral tower: the discrete home's blocksvs the CPU q8 chain on the synthetic mel") @(t : T?) {
-        blocks_twin(t, "voxtral", "voxtral-mini-mmproj-f32.gguf", 0l)
-    }
-    tst |> run("omni-3b audio tower: the discrete home's blocksvs the CPU q8 chain on the synthetic mel") @(t : T?) {
-        blocks_twin(t, "omni-3b", "mmproj-omni-3b-f32.gguf", 0l)
-    }
-    tst |> run("ultravox audio tower: the discrete home's blocksand the gated-MLP tail vs the CPU q8 chain on the synthetic mel") @(t : T?) {
-        blocks_twin(t, "ultravox", "mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf", 0l)
-    }
-}
-
-//! qwen3a staged and minted in memory under the lane pin, reset after; `zero_block` >= 0 zeroes `poison_blocks` blocks from it on; `dev` the flavor
-def private mint_q3a(path : string; q8 : bool; zero_block : int64; dev : TowerDev = TowerDev.none) : Qwen3aTower {
-    set_qwen3a_q8(q8)
-    defer() {
-        reset_qwen3a_q8()
-    }
-    var inscope stg <- tower_dev_staged(dev) $ { return <- stage_qwen3a_tower(path) }
+//! qwen3a minted in memory from `stg`, a staged read on the lane `q8`; `zero_block` >= 0 zeroes `poison_blocks` blocks
+//! from it on; `dev` the flavor
+def private mint_q3a(var stg : Qwen3aStaging; q8 : bool; zero_block : int64; dev : TowerDev) : Qwen3aTower {
     if (zero_block >= 0l) {
         let nl = stg.e.core.n_layer
         for (b in range64(zero_block, min(nl, zero_block + poison_blocks(nl)))) {
@@ -2375,6 +1658,44 @@ def private mint_q3a(path : string; q8 : bool; zero_block : int64; dev : TowerDe
     var tw = Qwen3aTower()
     mint_qwen3a_tower(stg, tw, dev)
     return <- tw
+}
+
+//! the Qwen3-ASR mmproj's form read off its name (`tower_form_of`): the lanes `f32` (the exact lane) and `q8`
+def private qwen3a_form_of(form : string) : TowerForm => tower_form_of(form, ["f32", "q8"], "qwen3a")
+
+//! the staged read a Qwen3-ASR mmproj's form is minted from (`tower_stage_key_of`)
+def private qwen3a_stage_key(form : string) : string => tower_stage_key_of(qwen3a_form_of(form))
+
+//! One form of the Qwen3-ASR mmproj, its block's form loader. `image_f32` is the tower's own load (`load_qwen3a_tower`) on
+//! the exact lane's CPU image: the lane pinned and every GPU tower knob off for the load, put back however it leaves. Any
+//! other form is minted in memory (`mint_q3a`) from `stg`, its own copy of the mmproj's staging on the lane it names:
+//! `_z<block>` zeroes the poison's blocks from that block on, `@dev` is the image flavor of qwen3a's serving home.
+def private qwen3a_form(path, form : string; var stg : Qwen3aStaging) : Qwen3aTower {
+    let f = qwen3a_form_of(form)
+    if (!f.image) {
+        return <- mint_q3a(stg, f.lane == "q8", f.zero_block, tower_form_dev_of(f, TowerFamily.qwen3a))
+    }
+    if (f.lane != "f32") {
+        panic("the qwen3a tests: '{form}' names no load of the image rail")
+    }
+    let knobs = gpu_knobs()
+    set_every_gpu_tower(false)
+    set_qwen3a_q8(false)
+    var tw = Qwen3aTower()
+    with_put_back($ {
+        reset_qwen3a_q8()
+        set_gpu_knobs(knobs)
+    }) {
+        tw <- load_qwen3a_tower(path)
+    }
+    return <- tw
+}
+
+//! The form is the lane, poison and image flavor it names: on `tw`, the Qwen3-ASR mmproj loaded as the form `form` of
+//! `file`, the core's lane flag, the poison's block the tower's middle one, and the image flavor.
+def private qwen3a_form_is(t : T?; file, form : string; tw : Qwen3aTower) {
+    let f = qwen3a_form_of(form)
+    minted_form_is(t, file, form, f, TowerFamily.qwen3a, tw.core.q8, tw.core.n_layer, twin_facts(tw).dev)
 }
 
 //! a qwen3a twin leg's two states over one tower
@@ -2401,19 +1722,6 @@ def private q3a_twin_encode(tw : Qwen3aTower; var s : Q3aLegState; win, dev_win 
     return long_length(out)
 }
 
-//! qwen3a's exact lane on the serving home over window 0 (`exact_flavor_leg`): the CPU image's chain against the home's f16 flavor on the device
-[cold_path]
-def private q3a_exact_leg(t : T?; path : string; twx : Qwen3aTower; var sx : Q3aLegState; mel, dev_mel : WhisperMel) {
-    let home = serving_tower_dev(TowerFamily.qwen3a)
-    let tag = "qwen3a jfk mel+front+blocks at 0"
-    let win <- qwen3a_mel_window(mel, 0l)
-    let dev_win <- qwen3a_mel_window(dev_mel, 0l)
-    let n_chunks = dev_win.n_len / QWEN3A_CHUNK
-    let convs = exact_flavor_leg(t, tag, TowerFamily.qwen3a, TWIN_EXACT_REL_L2_VK, twx, sx, n_chunks * QWEN3A_TOK_PER_CHUNK,
-        $(zb) { return <- mint_q3a(path, false, zb, home) }, $(tw) { return <- q3a_leg_state(tw) }) $(e; var s; var out) => q3a_twin_encode(e, s, win, dev_win, out)
-    t |> equal(convs, 2l * n_chunks, "{tag} exact lane: the front served every chunk of both device encodes")
-}
-
 //! the Vulkan storage-range seam over the qwen3a mel: a range its scratch runs past declines `memory` and keeps no capacity, so the next mel rebuilds
 [unused_argument(t, samples, n_mel, mel, dev_mel)]   // without dasVulkan the gated body is empty
 def private q3a_mel_range_legs(t : T?; samples : array<float>; n_mel : int64; mel, dev_mel : WhisperMel) {
@@ -2434,140 +1742,167 @@ def private q3a_mel_range_legs(t : T?; samples : array<float>; n_mel : int64; me
     }
 }
 
-[test(description = "Qwen3-ASR on the discrete home computes the jfk log-mel within 1e-3 of the CPU mel, then serves front, blocks and projector on windows 0 and the tail within the three-way bar, a poison and the exact lane holding theirs")]
-def test_qwen3a_vulkan_front(tst : T?) {
-    tst |> run("qwen3a: the discrete home's mel + conv front + blocks vs the CPU q8 chain on jfk windows 0 and the tail") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-            let path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
-            jfk_twin_cell(t, path, true, TowerFamily.qwen3a) $(samples) {
-                let home = serving_tower_dev(TowerFamily.qwen3a)
-                var twx <- mint_q3a(path, false, -1l)
-                var tw <- mint_q3a(path, true, -1l)
-                t |> success(!twx.core.q8 && tw.core.q8 && tw.cq8, "qwen3a jfk: the exact and the q8 towers minted, the cblob trio on the q8 lane")
-                set_serving_gpu_tower(false, TowerFamily.qwen3a)
-                let m0 = gpu_tower_counters(TowerFamily.qwen3a)
-                let mel <- log_mel_qwen3a(samples, tw.core.n_mel)
-                let m1 = gpu_tower_counters(TowerFamily.qwen3a)
-                t |> equal(m1.mels - m0.mels, 0l, "qwen3a jfk mel: the knob-off mel ran on the CPU (mels delta)")
-                set_serving_gpu_tower(true, TowerFamily.qwen3a)
-                let dev_mel <- log_mel_qwen3a(samples, tw.core.n_mel)
-                let m2 = gpu_tower_counters(TowerFamily.qwen3a)
-                t |> equal(m2.mels - m1.mels, 1l, "qwen3a jfk mel: the device mel served (mels delta)")
-                t |> equal(m2.declines, m1.declines, "qwen3a jfk mel: the device mel served with no decline")
-                t |> equal(dev_mel.n_len, mel.n_len, "qwen3a jfk mel: the device mel has the CPU mel's frames")
-                let mel_maxd = logits_maxdiff(dev_mel.data, mel.data)
-                t |> success(mel_maxd < 1e-3, "qwen3a jfk mel: the device log-mel matches the CPU's within 1e-3 (max |diff| {mel_maxd})")
-                q3a_mel_range_legs(t, samples, tw.core.n_mel, mel, dev_mel)
-                var twd <- mint_q3a(path, true, -1l, home)
-                var sx <- q3a_leg_state(twx)
-                var sq <- q3a_leg_state(tw)
-                var sd <- q3a_leg_state(twd)
-                for (off in [0l, QWEN3A_WINDOW]) {
-                    let tag = "qwen3a jfk mel+front+blocks at {off}"
-                    let win <- qwen3a_mel_window(mel, off)
-                    let dev_win <- qwen3a_mel_window(dev_mel, off)
-                    let n_chunks = dev_win.n_len / QWEN3A_CHUNK
-                    let spec = TwinSpec(family = "qwen3a", tag = tag, n_layer = tw.core.n_layer, metric = TwinMetric.rel_l2, seat_family = TowerFamily.qwen3a)
-                    let tail0 = gpu_tower_tail_encodes(TowerFamily.qwen3a)
-                    let r <- twin_three_way(t, spec, tw, sq, twd, sd, twx, sx, $(e; var s; var out) => q3a_twin_encode(e, s, win, dev_win, out)) $(legs) {
-                        if (legs.dev.convs == legs.pre.convs) {
-                            to_log(LOG_INFO, "{tag}: the driver declined - {gpu_tower_declines(TowerFamily.qwen3a)}\n")
-                        }
-                        front_served(t, tag, legs.dev.convs - legs.pre.convs, n_chunks, legs.dev.declines - legs.cpu.declines)
-                        t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "{tag}: the block loop served the window")
-                    }
-                    t |> equal(gpu_tower_tail_encodes(TowerFamily.qwen3a) - tail0, 1l,
-                        "{tag}: the projector ran on the device behind the device leg's blocks and on neither knob-off leg (tail encodes delta)")
-                    if (off == 0l && r.bar > 0.0lf) {
-                        var twp <- mint_q3a(path, true, tw.core.n_layer / 2l, home)
-                        var sp <- q3a_leg_state(twp)
-                        twin_poison(t, r, tw.core.n_layer / 2l, twp, sp) $(e; var s; var out) => q3a_twin_encode(e, s, win, dev_win, out)
-                        delete sp
-                        delete twp
-                    }
-                }
-                delete sd
-                delete sq
-                delete twd
-                delete tw
-                q3a_exact_leg(t, path, twx, sx, mel, dev_mel)
-                delete sx
-                delete twx
-                gpu_tower_shutdown(TowerFamily.qwen3a)
-            }
-        } else {
-            t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
-        }
-    }
+//! One jfk window of the qwen3a twin as its forms keep it: the window's offset, its rows three ways (`TwinRows`), its conv
+//! chunks on the device mel and the projector tails its clean legs served.
+struct private Q3aWindowKept {
+    off : int64
+    rows : TwinRows = TwinRows()
+    n_chunks : int64
+    tail : int64
 }
 
-//! the Metal home's chat tower on one synthetic mel, one cell a projector kind: the q8 lane three ways (`twin_three_way`: the
-//! exact CPU image the reference, the CPU q8 image, the q8 lane's Metal image with the projector tail behind its blocks) with
-//! its poison, then the exact lane on its f16 Metal image (`blocks_exact_leg`); `layers` > 0 pins the depth
-[cold_path, unused_argument(file, kind, layers)]   // off-Apple the cell skips
-def private metal_tower_chain_cell(t : T?; file : string; kind : AudioProjKind; layers : int64) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let path = path_join(models_dir(), file)
-        return if (!jit_model_available(t, path) || !metal_twin_seat(t, TowerFamily.whisper))
-        let tag = "{file} metal synthetic mel"
-        with_gpu_knobs() {
-            set_metal_tower(true)
-            var twx <- mint_aud(path, false, -1l)
-            var tw <- mint_aud(path, true, -1l)
-            var twd <- mint_aud(path, true, -1l, TowerDev.metal)
-            t |> success(tw.proj_kind == kind, "{tag}: the projector kind the cell names")
-            if (layers > 0l) {
-                t |> equal(tw.n_layer, layers, "{tag}: the tower's depth is the {layers} blocks the cell names")
-            }
-            t |> success(!twx.q8 && tw.q8 && twd.q8 && twd.dev_backend == TowerDev.metal, "{tag}: the exact and the q8 towers minted, the q8 lane's Metal image beside")
-            let mel <- synth_mel(tw.n_mel)
-            var encx <- make_encoder_state(twx)
-            var enc <- make_encoder_state(tw)
-            var encd <- make_encoder_state(twd)
-            let spec = TwinSpec(family = file, tag = tag, n_layer = tw.n_layer, metric = TwinMetric.rel_l2, seat_family = TowerFamily.whisper)
-            let tail0 = metal_tower_tail_encodes()
-            let f0 = metal_tower_f16_encodes()
-            let r <- twin_three_way(t, spec, tw, enc, twd, encd, twx, encx, $(e; var s; var out) => aud_twin_encode(e, s, mel, out)) $(legs) {
-                t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "{tag}: exactly the device leg dispatched")
-                t |> equal(legs.dev.blocks - legs.pre.blocks, tw.n_layer, "{tag}: blocks delta = n_layer")
-                t |> equal(legs.dev.rows - legs.pre.rows, tw.n_ctx, "{tag}: rows delta = n_ctx")
-            }
-            t |> equal(metal_tower_tail_encodes() - tail0, 1l, "{tag}: the q8 projector tail rode the device behind the device leg's blocks")
-            t |> equal(metal_tower_f16_encodes() - f0, 0l, "{tag}: the q8 lane read the q8 slab, not the halfword plane")
-            delete encd
-            delete twd
-            if (r.bar > 0.0lf) {
-                var twp <- mint_aud(path, true, tw.n_layer / 2l, TowerDev.metal)
-                var encp <- make_encoder_state(twp)
-                twin_poison(t, r, tw.n_layer / 2l, twp, encp) $(e; var s; var out) => aud_twin_encode(e, s, mel, out)
-                delete encp
-                delete twp
-            }
-            delete enc
-            delete tw
-            blocks_exact_leg(t, tag, path, twx, encx, mel)
-            delete encx
-            delete twx
-            metal_tower_shutdown()
-        }
+//! What the Qwen3-ASR mmproj's block keeps for the discrete twin compare that follows it: `form` the form whose cells run;
+//! jfk's CPU and device log-mels, which the device form's mel cell keeps and every leg reads; the exact and the q8 forms'
+//! lane flags; the twins of window 0 and of the tail window (`Q3aWindowKept`) and window 0's exact lane (`ExactFlavorKept`).
+struct private Q3aKept {
+    form : string
+    mels : bool
+    mel : WhisperMel
+    dev_mel : WhisperMel
+    x_q8 : bool
+    c_q8 : bool
+    c_cq8 : bool
+    win0 : Q3aWindowKept = Q3aWindowKept()
+    win1 : Q3aWindowKept = Q3aWindowKept(off = QWEN3A_WINDOW)
+    exact : ExactFlavorKept
+}
+
+// jfk's log-mel on qwen3a's discrete home against the CPU's, both kept for every leg of the twin: the knob-off mel ran on
+// the CPU, the device mel served with no decline within 1e-3 of it, and the storage-range seam (`q3a_mel_range_legs`).
+[cold_path]
+def private q3a_mel_leg(t : T?; tw : Qwen3aTower; var k : Q3aKept) {
+    let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
+    with_gpu_knobs() {
+        set_serving_gpu_tower(false, TowerFamily.qwen3a)
+        let m0 = gpu_tower_counters(TowerFamily.qwen3a)
+        var mel <- log_mel_qwen3a(samples, tw.core.n_mel)
+        let m1 = gpu_tower_counters(TowerFamily.qwen3a)
+        t |> equal(m1.mels - m0.mels, 0l, "qwen3a jfk mel: the knob-off mel ran on the CPU (mels delta)")
+        set_serving_gpu_tower(true, TowerFamily.qwen3a)
+        var dev_mel <- log_mel_qwen3a(samples, tw.core.n_mel)
+        let m2 = gpu_tower_counters(TowerFamily.qwen3a)
+        t |> equal(m2.mels - m1.mels, 1l, "qwen3a jfk mel: the device mel served (mels delta)")
+        t |> equal(m2.declines, m1.declines, "qwen3a jfk mel: the device mel served with no decline")
+        t |> equal(dev_mel.n_len, mel.n_len, "qwen3a jfk mel: the device mel has the CPU mel's frames")
+        let mel_maxd = logits_maxdiff(dev_mel.data, mel.data)
+        t |> success(mel_maxd < 1e-3, "qwen3a jfk mel: the device log-mel matches the CPU's within 1e-3 (max |diff| {mel_maxd})")
+        q3a_mel_range_legs(t, samples, tw.core.n_mel, mel, dev_mel)
+        k.mel <- mel
+        k.dev_mel <- dev_mel
+    }
+    k.mels = true
+}
+
+//! the window `w`'s twin named on a tower of `n_layer` blocks
+def private q3a_window_named(var w : Q3aWindowKept; n_layer : int64) {
+    w.rows.spec = TwinSpec(family = "qwen3a", tag = "qwen3a jfk mel+front+blocks at {w.off}", n_layer = n_layer, metric = TwinMetric.rel_l2,
+        seat_family = TowerFamily.qwen3a)
+}
+
+//! the leg `leg` of the window `w` over the form's tower `tw` and its state `s`: the window cut from jfk's kept mels, the rows
+//! and counters kept (`twin_rows_leg`), the projector tails the leg served
+def private q3a_window_leg(var w : Q3aWindowKept; leg : TwinLeg; tw : Qwen3aTower; var s : Q3aLegState; mel, dev_mel : WhisperMel) {
+    let win <- qwen3a_mel_window(mel, w.off)
+    let dev_win <- qwen3a_mel_window(dev_mel, w.off)
+    w.n_chunks = dev_win.n_len / QWEN3A_CHUNK
+    q3a_window_named(w, tw.core.n_layer)
+    let tail0 = gpu_tower_tail_encodes(TowerFamily.qwen3a)
+    twin_rows_leg(w.rows, leg, tw, s) $(e; var st; var out) => q3a_twin_encode(e, st, win, dev_win, out)
+    w.tail += gpu_tower_tail_encodes(TowerFamily.qwen3a) - tail0
+}
+
+// A form's legs of the qwen3a twin on jfk, each on the form's one home: the exact form the reference chain on both windows
+// and window 0's exact lane CPU leg, the q8 form the CPU q8 chain, its `@dev` form the device chain, the zeroed q8 `@dev`
+// form window 0's input poison, the exact lane's `@dev` form and its poison window 0's exact lane device legs.
+[cold_path]
+def private q3a_twin_leg(t : T?; tw : Qwen3aTower; var k : Q3aKept) {
+    if (!k.mels) {
+        t |> skip("the device form's mel cell kept no jfk mel")
+        return
+    }
+    let f = qwen3a_form_of(k.form)
+    exact_flavor_named(k.exact, "qwen3a jfk mel+front+blocks at 0", TowerFamily.qwen3a, TWIN_EXACT_REL_L2_VK, -1l)
+    var s <- q3a_leg_state(tw)
+    let win <- qwen3a_mel_window(k.mel, 0l)
+    let dev_win <- qwen3a_mel_window(k.dev_mel, 0l)
+    if (f.lane == "f32" && f.zero_block >= 0l) {
+        exact_flavor_poison_leg(t, k.exact, tw, s) $(e; var st; var out) => q3a_twin_encode(e, st, win, dev_win, out)
+    } elif (f.lane == "f32" && f.dev) {
+        exact_flavor_dev_leg(k.exact, tw, s) $(e; var st; var out) => q3a_twin_encode(e, st, win, dev_win, out)
+    } elif (f.zero_block >= 0l) {
+        q3a_window_named(k.win0, tw.core.n_layer)
+        twin_rows_poison_leg(t, k.win0.rows, f.zero_block, tw, s) $(e; var st; var out) => q3a_twin_encode(e, st, win, dev_win, out)
     } else {
-        t |> skip("das_metal not present")
+        let leg = f.lane == "f32" ? TwinLeg.exact : (f.dev ? TwinLeg.dev : TwinLeg.cpu)
+        q3a_window_leg(k.win0, leg, tw, s, k.mel, k.dev_mel)
+        q3a_window_leg(k.win1, leg, tw, s, k.mel, k.dev_mel)
+        if (leg == TwinLeg.exact) {
+            k.x_q8 = tw.core.q8
+            exact_flavor_cpu_leg(k.exact, tw, s) $(e; var st; var out) => q3a_twin_encode(e, st, win, dev_win, out)
+        } elif (leg == TwinLeg.cpu) {
+            k.c_q8 = tw.core.q8
+            k.c_cq8 = tw.cq8
+        }
     }
+    delete s
 }
 
-[test(description = "The qwen2audio, voxtral, omni-3b and ultravox towers on Metal run every block and the projector tail on the q8 slab within the three-way bar on a synthetic mel, a poison exceeds it, and the f16 exact lane holds")]
-def test_encoder_blocks_gpu(tst : T?) {
-    tst |> run("qwen2audio tower: the Metal chain vs the CPU encoder, 32 layers") @(t : T?) {
-        metal_tower_chain_cell(t, "qwen2audio-mmproj-f32.gguf", AudioProjKind.qwen2a, 32l)
+//! one window's twin held, after the block: the front and the block loop served the window, the device chain within the
+//! three-way bar (`twin_rows_held`, its poison where the window took one), the projector behind the device leg alone
+def private q3a_window_held(t : T?; w : Q3aWindowKept) {
+    let tag = w.rows.spec.tag
+    let n_chunks = w.n_chunks
+    twin_rows_held(t, w.rows) $(legs) {
+        if (legs.dev.convs == legs.pre.convs) {
+            to_log(LOG_INFO, "{tag}: the driver declined - {gpu_tower_declines(TowerFamily.qwen3a)}\n")
+        }
+        front_served(t, tag, legs.dev.convs - legs.pre.convs, n_chunks, legs.dev.declines - legs.cpu.declines)
+        t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "{tag}: the block loop served the window")
     }
-    tst |> run("voxtral tower: the Metal chain vs the CPU encoder - pair pool, post-norm, stacked GELU MLP") @(t : T?) {
-        metal_tower_chain_cell(t, "voxtral-mini-mmproj-f32.gguf", AudioProjKind.voxtral, 0l)
+    t |> equal(w.tail, 1l, "{tag}: the projector ran on the device behind the device leg's blocks and on neither knob-off leg (tail encodes delta)")
+}
+
+// Qwen3-ASR on the discrete home, after its mmproj's block: front, blocks and projector on windows 0 and the tail within
+// the three-way bar on jfk, window 0's poison past it, and window 0's exact lane within its bar.
+[cold_path]
+def private test_qwen3a_vulkan_front(t : T?; var k : Q3aKept) {
+    t |> success(!k.x_q8 && k.c_q8 && k.c_cq8, "qwen3a jfk: the exact and the q8 towers minted, the cblob trio on the q8 lane")
+    q3a_window_held(t, k.win0)
+    q3a_window_held(t, k.win1)
+    let tag = "qwen3a jfk mel+front+blocks at 0"
+    let n_chunks = k.win0.n_chunks
+    k.exact.lane.npos = n_chunks * QWEN3A_TOK_PER_CHUNK
+    let convs = exact_flavor_held(t, k.exact)
+    t |> equal(convs, 2l * n_chunks, "{tag} exact lane: the front served every chunk of both device encodes")
+}
+
+// The Qwen3-ASR mmproj's tower, one block: the CPU oracle on its exact lane's image, the discrete twin's forms minted - the
+// device forms first, the first of them keeping jfk's two mels.
+[test(description = "mmproj-Qwen3-ASR-0.6B-bf16.gguf loads its qwen3a tower once a form. On the CPU f32 rail it loads its shape and encodes jfk window 0 to a first token within 5e-3 of llama-mtmd's embeddings on its first four values. On the discrete home it computes the jfk log-mel within 1e-3 of the CPU mel, then serves front, blocks and projector on windows 0 and the tail within the three-way bar, a poison and the exact lane holding theirs")]
+def test_qwen3a_carrier(t : T?) {
+    var inscope kept = Q3aKept()
+    let twin_why = jfk_twin_why(TowerFamily.qwen3a)
+    let discrete_on = empty(twin_why)
+    if (!discrete_on) {
+        skip_cell(t, "qwen3a: the discrete home's mel + conv front + blocks vs the CPU q8 chain on jfk windows 0 and the tail - {twin_why}")
     }
-    tst |> run("omni-3b tower: the Metal chain vs the CPU encoder - pair pool, post-norm, one biased linear") @(t : T?) {
-        metal_tower_chain_cell(t, "mmproj-Qwen2.5-Omni-3B-f16.gguf", AudioProjKind.qwen2a, 0l)
+    var inscope forms <- ["image_f32"]
+    add_served_forms(t, forms, Q3A, ["q8@dev", "q8_z9@dev", "f32@dev", "f32_z9@dev", "f32", "q8"], twin_why)
+    let ran = with_model_once(t, "audio", "mmproj-Qwen3-ASR-0.6B-bf16.gguf", forms, @@qwen3a_stage_key, @@qwen3a_stage, @@qwen3a_form) $(var tw; form) {
+        qwen3a_form_is(t, Q3A, form, tw)
+        kept.form = form
+        if (form == "image_f32") {
+            tower_cell(t, "qwen3a tower: conv2d frontend + windowed encode matches mtmd on jfk", tw, @@test_qwen3a_tower)
+            return
+        }
+        if (form == "q8@dev") {
+            tower_cell(t, "{Q3A}: jfk's log-mel on the discrete home's mel seat against the CPU's, the {form} form's", tw, kept, @@q3a_mel_leg)
+        }
+        tower_cell(t, "{Q3A}: the discrete twin, the {form} form's legs", tw, kept, @@q3a_twin_leg)
     }
-    tst |> run("ultravox tower: the Metal chain vs the CPU encoder - post-norm, stacked rms, gated MLP") @(t : T?) {
-        metal_tower_chain_cell(t, "mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf", AudioProjKind.ultravox, 0l)
+    if (ran && discrete_on) {
+        kept_cell(t, "qwen3a: the discrete home's mel + conv front + blocks vs the CPU q8 chain on jfk windows 0 and the tail", kept, @@test_qwen3a_vulkan_front)
+        gpu_tower_shutdown(TowerFamily.qwen3a)
     }
 }
 
@@ -2606,62 +1941,142 @@ def test_log_mel_chunks_gpu(t : T?) {
     }
 }
 
-[test(description = "The Qwen2.5-Omni 3B mmproj loads its audio side as a qwen2a tower (proj_dim 2048, 32 layers, 750 tokens a chunk) with the vision tensors skipped")]
-def test_omni_tower(t : T?) {
-    t |> run("qwen2.5o mmproj: audio side is qwen2a verbatim, vision tensors skipped") @(t : T?) {
-        let path = path_join(models_dir(), "mmproj-omni-3b-f32.gguf")
-        if (!model_available(t, path)) return
-        var tw <- load_audio_tower(path)   // loading at all proves the v.* tensors are skipped
-        t |> success(tw.proj_kind == AudioProjKind.qwen2a, "kind aliases qwen2a")
-        t |> equal(tw.proj_dim, 2048l, "proj_dim (3B decoder)")
-        t |> equal(tw.n_layer, 32l, "layers")
-        t |> equal(audio_tokens_per_chunk(tw), 750l, "tokens per 30 s chunk")
-        delete tw   // image-backed planes are locked views — only the finalizer may release them
+// The Qwen2.5-Omni 3B f32 mmproj's audio side on its exact lane's CPU image: a qwen2a tower, the vision tensors skipped.
+[cold_path]
+def private test_omni_tower(t : T?; tw : AudioTower) {
+    // loading at all proves the v.* tensors are skipped
+    t |> success(tw.proj_kind == AudioProjKind.qwen2a, "kind aliases qwen2a")
+    t |> equal(tw.proj_dim, 2048l, "proj_dim (3B decoder)")
+    t |> equal(tw.n_layer, 32l, "layers")
+    t |> equal(audio_tokens_per_chunk(tw), 750l, "tokens per 30 s chunk")
+}
+
+// The qwen2audio f32 tower on its exact lane's CPU image: the pinned shape, and the CPU encode of an all-ones mel against
+// llama-mtmd-debug.
+[cold_path]
+def private test_encoder_oracle(t : T?; tw : AudioTower) {
+    return if (!jit_only(t))
+    t |> equal(tw.n_mel, 128l, "n_mel")
+    t |> equal(tw.d_model, 1280l, "d_model")
+    t |> equal(tw.n_head, 20l, "heads")
+    t |> equal(tw.n_layer, 32l, "layers")
+    t |> equal(tw.n_ff, 5120l, "ffn")
+    t |> equal(tw.n_ctx, 1500l, "positions")
+    t |> equal(tw.proj_dim, 4096l, "projection")
+    var mel = MelChunk(n_mel = tw.n_mel, n_len = AUDIO_CHUNK_FRAMES)
+    mel.data |> resize(tw.n_mel * AUDIO_CHUNK_FRAMES)
+    for (i in range(length(mel.data))) {
+        mel.data[i] = 1.0
+    }
+    var enc <- make_encoder_state(tw)
+    with_gpu_knobs() {
+        set_every_gpu_tower(false)
+        with_dasllama_jobque_() {
+            audio_encode(tw, enc, mel)
+        }
+    }
+    // llama-mtmd-debug -p encode --audio one -n 3000 (CPU): token 0 opens
+    // 0.251974 0.311756 0.556828 0.005232 -0.838854; stats mean=0.009261 max=7.527778.
+    // fp32 CPU re-orders put us ~1e-3 off their flash-attn encoder; gate at 5e-3.
+    t |> success(abs(enc.out[0] - 0.251974) < 5e-3, "tok0[0]")
+    t |> success(abs(enc.out[1] - 0.311756) < 5e-3, "tok0[1]")
+    t |> success(abs(enc.out[2] - 0.556828) < 5e-3, "tok0[2]")
+    t |> success(abs(enc.out[4] + 0.838854) < 5e-3, "tok0[4]")
+    var sum = 0.0lf
+    var mx = enc.out[0]
+    for (v in enc.out) {
+        sum += double(v)
+        mx = max(mx, v)
+    }
+    let mean = sum / double(750l * tw.proj_dim)
+    t |> success(abs(float(mean) - 0.009261) < 5e-4, "mean")
+    t |> success(abs(mx - 7.527778) < 5e-2, "max")
+    delete enc
+}
+
+// The Qwen2-Audio mmproj's tower, one block.
+[test(description = "qwen2audio-mmproj-f32.gguf loads its tower once a form. Its exact lane's CPU image has the pinned shape, and its CPU encode of an all-ones mel matches the llama-mtmd-debug token 0 values within 5e-3 and the mean and max of the output. On Metal the tower runs all 32 blocks and the projector tail on the q8 slab within the three-way bar on a synthetic mel, a poison exceeds it, and the f16 exact lane holds; on the discrete home all 32 blocks and the projector tail run on the device within the three-way bar, a poison exceeds it, and the exact lane holds")]
+def test_qwen2audio_carrier(t : T?) {
+    var inscope kept = AudTwinKept(family = "qwen2audio", kind = AudioProjKind.qwen2a, layers = 32l,
+        metal_cell = "qwen2audio tower: the Metal chain vs the CPU encoder, 32 layers",
+        discrete_cell = "qwen2audio tower: the discrete home's blocksvs the CPU q8 chain on the synthetic mel, 32 layers")
+    var inscope forms <- ["image_f32"]
+    let homes = aud_twin_asked(t, forms, kept, "qwen2audio-mmproj-f32.gguf", true, true)
+    let ran = with_model_once(t, "audio", "qwen2audio-mmproj-f32.gguf", forms, @@aud_stage_key, @@aud_stage, @@aud_form) $(var h; form) {
+        aud_form_is(t, "qwen2audio-mmproj-f32.gguf", form, h)
+        kept.form = form
+        if (form == "image_f32") {
+            tower_cell(t, "all-ones mel through the tower matches mtmd (needs qwen2audio mmproj)", h.tw, @@test_encoder_oracle)
+            return
+        }
+        aud_twin_cells(t, "qwen2audio-mmproj-f32.gguf", form, h.tw, kept, homes)
+    }
+    if (ran) {
+        aud_twin_held(t, kept, homes)
     }
 }
 
-[test(description = "The qwen2audio f32 tower has the pinned shape, and its CPU encode of an all-ones mel matches the llama-mtmd-debug token 0 values within 5e-3 and the mean and max of the output")]
-def test_encoder_oracle(t : T?) {
-    t |> run("all-ones mel through the tower matches mtmd (needs qwen2audio mmproj)") @(t : T?) {
-        let path = path_join(models_dir(), "qwen2audio-mmproj-f32.gguf")
-        return if (!jit_model_available(t, path))
-        var tw <- load_cpu_audio_tower(path)
-        t |> equal(tw.n_mel, 128l, "n_mel")
-        t |> equal(tw.d_model, 1280l, "d_model")
-        t |> equal(tw.n_head, 20l, "heads")
-        t |> equal(tw.n_layer, 32l, "layers")
-        t |> equal(tw.n_ff, 5120l, "ffn")
-        t |> equal(tw.n_ctx, 1500l, "positions")
-        t |> equal(tw.proj_dim, 4096l, "projection")
-        var mel = MelChunk(n_mel = tw.n_mel, n_len = AUDIO_CHUNK_FRAMES)
-        mel.data |> resize(int(tw.n_mel * AUDIO_CHUNK_FRAMES))
-        for (i in range(length(mel.data))) {
-            mel.data[i] = 1.0
+// The omni-3b f32 mmproj's audio tower, one block; its Metal twin reads the Qwen2.5-Omni 3B f16 mmproj's.
+[test(description = "mmproj-omni-3b-f32.gguf loads its audio tower once a form. Its exact lane's CPU image is a qwen2a tower (proj_dim 2048, 32 layers, 750 tokens a chunk) with the vision tensors skipped. On the discrete home every block and the projector tail run on the device within the three-way bar on a synthetic mel, a poison exceeds it, and the exact lane holds")]
+def test_omni3b_carrier(t : T?) {
+    var inscope kept = AudTwinKept(family = "omni-3b", kind = AudioProjKind.qwen2a,
+        discrete_cell = "omni-3b audio tower: the discrete home's blocksvs the CPU q8 chain on the synthetic mel")
+    var inscope forms <- ["image_f32"]
+    let homes = aud_twin_asked(t, forms, kept, "mmproj-omni-3b-f32.gguf", false, true)
+    let ran = with_model_once(t, "audio", "mmproj-omni-3b-f32.gguf", forms, @@aud_stage_key, @@aud_stage, @@aud_form) $(var h; form) {
+        aud_form_is(t, "mmproj-omni-3b-f32.gguf", form, h)
+        kept.form = form
+        if (form == "image_f32") {
+            tower_cell(t, "qwen2.5o mmproj: audio side is qwen2a verbatim, vision tensors skipped", h.tw, @@test_omni_tower)
+            return
         }
-        var enc <- make_encoder_state(tw)
-        with_gpu_knobs() {
-            set_every_gpu_tower(false)
-            with_dasllama_jobque_() {
-                audio_encode(tw, enc, mel)
-            }
+        aud_twin_cells(t, "mmproj-omni-3b-f32.gguf", form, h.tw, kept, homes)
+    }
+    if (ran) {
+        aud_twin_held(t, kept, homes)
+    }
+}
+
+// The Qwen2.5-Omni 3B f16 mmproj's audio tower, one block; its discrete twin reads the omni-3b f32 mmproj's.
+[test(description = "mmproj-Qwen2.5-Omni-3B-f16.gguf loads its audio tower once a form. The audio carrier's load takes its audio side as the whisper-class tower beside its vision tensors at the probed width 2048, encodes finite rows a chunk (750) deterministically on a reused state without heap growth, another clip's rows apart. On Metal the tower runs every block and the projector tail on the q8 slab within the three-way bar on a synthetic mel, a poison exceeds it, and the f16 exact lane holds")]
+def test_qwen25_omni_carrier(t : T?) {
+    var inscope kept = AudTwinKept(family = "mmproj-Qwen2.5-Omni-3B-f16.gguf", kind = AudioProjKind.qwen2a,
+        metal_cell = "omni-3b tower: the Metal chain vs the CPU encoder - pair pool, post-norm, one biased linear")
+    var inscope forms <- ["image_emb"]
+    let homes = aud_twin_asked(t, forms, kept, "mmproj-Qwen2.5-Omni-3B-f16.gguf", true, false)
+    let ran = with_model_once(t, "audio", "mmproj-Qwen2.5-Omni-3B-f16.gguf", forms, @@aud_stage_key, @@aud_stage, @@aud_form) $(var h; form) {
+        aud_form_is(t, "mmproj-Qwen2.5-Omni-3B-f16.gguf", form, h)
+        kept.form = form
+        if (form == "image_emb") {
+            tower_cell(t, "the Qwen2.5-Omni mmproj's audio side loads as the whisper-class tower beside its vision tensors", h.e, @@embedder_omni_arm)
+            return
         }
-        // llama-mtmd-debug -p encode --audio one -n 3000 (CPU): token 0 opens
-        // 0.251974 0.311756 0.556828 0.005232 -0.838854; stats mean=0.009261 max=7.527778.
-        // fp32 CPU re-orders put us ~1e-3 off their flash-attn encoder; gate at 5e-3.
-        t |> success(abs(enc.out[0] - 0.251974) < 5e-3, "tok0[0]")
-        t |> success(abs(enc.out[1] - 0.311756) < 5e-3, "tok0[1]")
-        t |> success(abs(enc.out[2] - 0.556828) < 5e-3, "tok0[2]")
-        t |> success(abs(enc.out[4] + 0.838854) < 5e-3, "tok0[4]")
-        var sum = 0.0lf
-        var mx = enc.out[0]
-        for (v in enc.out) {
-            sum += double(v)
-            mx = max(mx, v)
+        aud_twin_cells(t, "mmproj-Qwen2.5-Omni-3B-f16.gguf", form, h.tw, kept, homes)
+    }
+    if (ran) {
+        aud_twin_held(t, kept, homes)
+    }
+}
+
+// The ultravox v0_5 f16 mmproj's audio tower, one block.
+[test(description = "mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf loads its audio tower once a form. The audio carrier's load holds the whisper-class tower at the probed width 2048, encodes finite rows a chunk (187) deterministically on a reused state without heap growth, another clip's rows apart. On Metal the tower runs every block - post-norm, stacked rms - and the gated-MLP tail on the q8 slab within the three-way bar on a synthetic mel, a poison exceeds it, and the f16 exact lane holds; on the discrete home every block and the gated-MLP tail run on the device within the three-way bar, a poison exceeds it, and the exact lane holds")]
+def test_ultravox_v0_5_carrier(t : T?) {
+    var inscope kept = AudTwinKept(family = "ultravox", kind = AudioProjKind.ultravox,
+        metal_cell = "ultravox tower: the Metal chain vs the CPU encoder - post-norm, stacked rms, gated MLP",
+        discrete_cell = "ultravox audio tower: the discrete home's blocksand the gated-MLP tail vs the CPU q8 chain on the synthetic mel")
+    var inscope forms <- ["image_emb"]
+    let homes = aud_twin_asked(t, forms, kept, "mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf", true, true)
+    let ran = with_model_once(t, "audio", "mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf", forms, @@aud_stage_key, @@aud_stage, @@aud_form) $(var h; form) {
+        aud_form_is(t, "mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf", form, h)
+        kept.form = form
+        if (form == "image_emb") {
+            tower_cell(t, "an ultravox mmproj loads as the whisper-class tower", h.e, @@embedder_ultravox_arm)
+            return
         }
-        let mean = sum / double(750l * tw.proj_dim)
-        t |> success(abs(float(mean) - 0.009261) < 5e-4, "mean")
-        t |> success(abs(mx - 7.527778) < 5e-2, "max")
-        delete tw   // image-backed planes are locked views — only the finalizer may release them
+        aud_twin_cells(t, "mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf", form, h.tw, kept, homes)
+    }
+    if (ran) {
+        aud_twin_held(t, kept, homes)
     }
 }
 
@@ -2687,68 +2102,486 @@ def test_encoder_state_sizing(t : T?) {
 
 let private PK_DEVICE_PLOG_BAR = 1e-4   //!< the device decode's plog off the CPU's: float log-sums over a recurrence of several hundred tokens, 2.3e-5 measured on gb1
 
-//! one parakeet clip decoded on the CPU loop and on the device seat (`rnnt_device_twin`) at `PK_DEVICE_PLOG_BAR`: `m` the lane's
-//! GPU-flavored model, `mc` the CPU image whose projection the device runs (the exact image where `m` keeps the joint's half f32)
+// The device legs of a Parakeet bin's device-decode twin, on a lane's `@dev` form - `m`, the lane's GPU-flavored model
+// (`#tower-dev-block`): each clip's encode with the serving tower pinned on, then the TDT decode on the build's device
+// seat, counted once there, projected on the device off the encode's device rows where the lane's home projects it. The
+// encode's rows are kept for the CPU form's legs.
 [cold_path]
-def private pk_device_decode_clip(t : T?; m, mc : ParakeetModel; samples : array<float>; tag : string) {
-    return if (rnnt_seat_skip(t, tag))
+def private pk_decode_dev_legs(t : T?; m : ParakeetModel; var k : PkKept) {
+    let q8 = m.q8
+    let home = serving_tower_dev(TowerFamily.parakeet)
+    var dev = TowerDev.none
     with_gpu_knobs() {
         set_serving_gpu_tower(true, TowerFamily.parakeet)
-        var st = ParakeetState()
-        var stc = ParakeetState()
-        parakeet_log_mel(samples, m, st)
-        let tt = parakeet_encode(m, st)
-        let projected = m.q8 && !m.jenc_exact ? 0l : 1l
-        var inscope tw <- rnnt_device_twin(t, "test_audio: {tag}", PK_DEVICE_PLOG_BAR, projected, projected,
-                st.x, $(var toks) {
-            stc.x := st.x
-            parakeet_tdt_decode(mc, stc, tt)
-            toks := stc.toks
-        }) $(var toks) {
-            parakeet_tdt_decode(m, st, tt)
-            toks := st.toks
+        dev = parakeet_dev_flavor(q8)
+    }
+    t |> equal(dev, home, "parakeet {k.tag}: the serving tower flavors the lane its chain serves")
+    return if (dev == TowerDev.none)
+    let projected = m.q8 && !m.jenc_exact ? 0l : 1l
+    for (clip in ["jfk", "gb1"]) {
+        let wav = asr_clip("{clip}.wav")
+        if (!stat(wav).is_valid) {
+            t |> skip("{clip}.wav not present")
+            continue
         }
-        to_log(LOG_INFO, "test_audio: {tag} cpu   : {parakeet_detokenize(m, tw.cpu)}\n")
-        to_log(LOG_INFO, "test_audio: {tag} device: {parakeet_detokenize(m, tw.dev)}\n")
-        delete stc
-        delete st
+        let tag = "parakeet {k.tag} {q8 ? "q8" : "exact"} {clip}"
+        continue if (rnnt_seat_skip(t, tag))
+        var inscope samples <- load_audio_16k_mono(wav)
+        var d = RnntDecodeTwin(tag = tag, q8 = q8, cpu_q8 = q8 && !m.jenc_exact)
+        with_gpu_knobs() {
+            set_serving_gpu_tower(true, TowerFamily.parakeet)
+            var st = ParakeetState()
+            parakeet_log_mel(samples, m, st)
+            d.tt = parakeet_encode(m, st)
+            d.rows := st.x
+            rnnt_decode_dev_leg(t, "test_audio: {tag}", projected, projected) {
+                parakeet_tdt_decode(m, st, d.tt)
+            }
+            d.dev := st.toks
+            d.dev_text = parakeet_detokenize(m, d.dev)
+            delete st
+        }
+        d.legs = 1
+        k.decode |> emplace(d)
     }
 }
 
-[test(description = "The parakeet v2 and v3 TDT decode on the device seat, both lanes, matches the CPU decoder tokens with log-probs within PK_DEVICE_PLOG_BAR on jfk and gb1, and encoder rows scaled 1.05x move them past it")]
-def test_parakeet_device_decode_twin(tst : T?) {
+// The CPU legs of the device-decode twin, on a bin's CPU form `mc` - the image whose projection the device runs: the
+// device form's kept rows decoded on the CPU loop with the seat pinned off (the decode counter must not move, so a knob
+// that pins nothing reds), then at 1.05x - the control.
+[cold_path]
+def private pk_decode_cpu_legs(t : T?; mc : ParakeetModel; var k : PkKept) {
+    for (d in k.decode) {
+        continue if (d.cpu_q8 != mc.q8 || d.legs != 1)
+        with_gpu_knobs() {
+            set_serving_gpu_tower(true, TowerFamily.parakeet)
+            var stc = ParakeetState()
+            rnnt_decode_cpu_legs(t, "test_audio: {d.tag}", d) $(rows; tt; var toks) {
+                stc.x := rows
+                parakeet_tdt_decode(mc, stc, tt)
+                toks := stc.toks
+            }
+            d.cpu_text = parakeet_detokenize(mc, d.cpu)
+            delete stc
+        }
+    }
+}
+
+// A form's legs of a Parakeet bin's device-decode twin: the device legs on a `@dev` form, the CPU legs on a CPU form.
+[cold_path]
+def private pk_decode_legs(t : T?; m : ParakeetModel; var k : PkKept) {
     with_dasllama_jobque_() {
-        for (v in ["v2", "v3"]) {
-            let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-{v}-f32.bin")
-            continue if (!model_available(tst, path))
-            for (q8 in [false, true]) {
-                tst |> run("parakeet {v} {q8 ? "q8" : "exact"}: the TDT decode on the device seat is the CPU decoder's") @(t : T?) {
-                    if (!serving_tower_device_up(TowerFamily.parakeet)) {
-                        t |> skip("parakeet {v}: no GPU device stands up for the serving tower on this build or box")
-                        return
-                    }
-                    let home = serving_tower_dev(TowerFamily.parakeet)
-                    var dev = TowerDev.none
-                    with_gpu_knobs() {
-                        set_serving_gpu_tower(true, TowerFamily.parakeet)
-                        dev = parakeet_dev_flavor(q8)
-                    }
-                    t |> equal(dev, home, "parakeet {v}: the serving tower flavors the lane its chain serves")
-                    return if (dev == TowerDev.none)
-                    var inscope m <- mint_pk(path, q8, -1l, dev)
-                    var inscope mc <- mint_pk(path, q8 && !m.jenc_exact, -1l)
-                    for (clip in ["jfk", "gb1"]) {
-                        let wav = asr_clip("{clip}.wav")
-                        if (!stat(wav).is_valid) {
-                            t |> skip("{clip}.wav not present")
-                            continue
-                        }
-                        var inscope samples <- load_audio_16k_mono(wav)
-                        pk_device_decode_clip(t, m, mc, samples, "parakeet {v} {q8 ? "q8" : "exact"} {clip}")
-                    }
-                    gpu_tower_shutdown(TowerFamily.parakeet)
-                }
+        if (parakeet_form_of(k.form).dev) {
+            pk_decode_dev_legs(t, m, k)
+        } else {
+            pk_decode_cpu_legs(t, m, k)
+        }
+    }
+}
+
+// The TDT decode on the build's device seat against the CPU decoder's, after the bin's block, the twins of the lane
+// `k.form` names (`exact`, `q8`): the same tokens, the plog within `PK_DEVICE_PLOG_BAR`, the 1.05x control's plogs
+// outside it (`rnnt_twin_held`); both decodes' transcripts logged.
+[cold_path]
+def private test_parakeet_device_decode_twin(t : T?; k : PkKept) {
+    for (d in k.decode) {
+        continue if (d.q8 != (k.form == "q8"))
+        rnnt_decode_twin_held(t, "test_audio: {d.tag}", d, PK_DEVICE_PLOG_BAR)
+    }
+}
+
+//! the device-decode twin's compares of a bin, a cell a lane, after its block
+def private pk_decode_held(t : T?; var kept : PkKept) {
+    for (lane in ["exact", "q8"]) {
+        kept.form = lane
+        kept_cell(t, "parakeet {kept.tag} {lane}: the TDT decode on the device seat is the CPU decoder's", kept, @@test_parakeet_device_decode_twin)
+    }
+}
+
+// The Parakeet-TDT v2 f32 bin, one block.
+[test(description = "ggml-parakeet-tdt-0.6b-v2-f32.bin loads once a form. Greedy on jfk.wav through the facade emits parakeet-cli's 33 tokens and text, a reused session and a flat heap hold, the other weight lane and the one-lane decode step give the same token ids. The TDT decode on the device seat, both lanes, matches the CPU decoder's tokens with log-probs within PK_DEVICE_PLOG_BAR on jfk and gb1, and encoder rows scaled 1.05x move them past it. On the discrete home clips of 320 to 1600 samples serve as one device encode with no decline within SHORT_CLIP_BAR of the CPU image's rows, a noise clip outside it; the front and every block serve on the device within the three-way bar on jfk, the CPU chain is refused past the storage range, and a poison and the exact lane hold their bars")]
+def test_parakeet_carrier_v2(t : T?) {
+    return if (!family_on(t, "parakeet"))
+    var inscope kept = PkKept(tag = "v2", twin_tag = "parakeet jfk", exact_lane = true, range_refusal = true)
+    kept.clips.tag = "parakeet"
+    let discrete_why = audio_discrete_form_why(TowerFamily.parakeet)
+    let decode_why = device_up_why(TowerFamily.parakeet)
+    let discrete_on = empty(discrete_why)
+    let decode_on = empty(decode_why)
+    let either = either_why(decode_why, discrete_why)
+    var inscope forms <- ["image"]
+    add_served_forms(t, forms, PK_V2, ["q8@dev"], either)
+    add_served_forms(t, forms, PK_V2, ["q8_z12@dev"], discrete_why)
+    add_served_forms(t, forms, PK_V2, ["f32@dev"], either)
+    add_served_forms(t, forms, PK_V2, ["f32_z12@dev"], discrete_why)
+    add_served_forms(t, forms, PK_V2, ["q8"], either)
+    forms |> push("f32")
+    let ran = with_model_once_at(t, "audio", "ggml-parakeet-tdt-0.6b-v2-f32.bin", forms, whisper_dir(), @@parakeet_stage_key, @@parakeet_stage, @@parakeet_form) $(var m; form) {
+        parakeet_form_is(t, PK_V2, form, m)
+        kept.form = form
+        let f = parakeet_form_of(form)
+        if (form == "image") {
+            tower_cell(t, "parakeet-TDT greedy on jfk.wav is token-for-token with parakeet-cli", m, kept.oracle, @@test_parakeet_oracle)
+            return
+        }
+        if (form == "f32") {
+            tower_cell(t, "parakeet-TDT v2: jfk's tokens on the other weight lane", m, kept.oracle, @@parakeet_other_lane_leg)
+        }
+        if (discrete_on) {
+            tower_cell(t, "{PK_V2}: the discrete twin, the {form} form's legs", m.pk, kept, @@pk_twin_leg)
+            if (f.lane == "q8" && f.zero_block < 0l) {
+                tower_cell(t, "{PK_V2}: the short clips, the {form} form's leg", m.pk, kept, @@pk_short_clip_leg)
             }
         }
+        if (decode_on && f.zero_block < 0l) {
+            tower_cell(t, "parakeet v2: the TDT decode twin, the {form} form's legs", m.pk, kept, @@pk_decode_legs)
+        }
+    }
+    return if (!ran)
+    kept_cell(t, "parakeet-TDT v2: the other weight lane reads jfk to the facade load's token ids", kept.oracle, @@parakeet_lanes_held)
+    if (decode_on) {
+        pk_decode_held(t, kept)
+    }
+    if (discrete_on) {
+        kept_cell(t, "parakeet-TDT 0.6B v2: clips of 320 to 1600 samples serve on the discrete home's image as the CPU image reads them", kept.clips, @@test_vulkan_short_clips)
+        kept_cell(t, "parakeet-TDT 0.6B v2: the discrete home's FastConformerfront and blocks vs the CPU q8 chain on jfk, the exact chain the reference", kept, @@test_parakeet_discrete_twin)
+    }
+    gpu_tower_shutdown(TowerFamily.parakeet)
+}
+
+// The Parakeet-TDT v3 f32 bin, one block, then the q8_0 bin and the F32 GGUF of the same model, which read what it kept.
+[test(description = "ggml-parakeet-tdt-0.6b-v3-f32.bin loads once a form. Through the facade it loads as a 25-language 8192-vocab model on the q8 lane and greedy on jfk.wav emits parakeet-cli's 38 tokens and exact text, reporting no detected language. The TDT decode on the device seat, both lanes, matches the CPU decoder's tokens with log-probs within PK_DEVICE_PLOG_BAR on jfk and gb1, and encoder rows scaled 1.05x move them past it. On the Metal FastConformer chain every block serves on the q8 slab within the three-way bar on jfk with no quant_mode decline, a poison exceeds it, and the exact f16 lane holds its bar. The v3 q8_0 bin loads through the reader the whisper bins share and transcribes jfk to exactly the text the f32 bin produces. The F32 GGUF stages the f32 bin's planes, encodes jfk to the same rows with the bin's rows at half volume outside the bar, and transcribes jfk as the f32 bin does, at jfk's word floor")]
+def test_parakeet_carrier_v3(t : T?) {
+    return if (!family_on(t, "parakeet"))
+    var inscope kept = PkKept(tag = "v3", twin_tag = "parakeet metal jfk", exact_lane = true)
+    let metal_why = metal_twin_seat_why(TowerFamily.parakeet)
+    let decode_why = device_up_why(TowerFamily.parakeet)
+    let metal_on = empty(metal_why)
+    let decode_on = empty(decode_why)
+    var inscope forms <- ["image"]
+    add_served_forms(t, forms, PK_V3, ["q8@dev"], decode_why)
+    add_served_forms(t, forms, PK_V3, ["q8_z12@dev"], metal_why)
+    add_served_forms(t, forms, PK_V3, ["f32@dev"], decode_why)
+    add_served_forms(t, forms, PK_V3, ["f32_z12@dev"], metal_why)
+    add_served_forms(t, forms, PK_V3, ["q8"], decode_why)
+    forms |> push("f32")
+    let ran = with_model_once_at(t, "audio", "ggml-parakeet-tdt-0.6b-v3-f32.bin", forms, whisper_dir(), @@parakeet_stage_key, @@parakeet_stage, @@parakeet_form) $(var m; form) {
+        parakeet_form_is(t, PK_V3, form, m)
+        kept.form = form
+        let f = parakeet_form_of(form)
+        if (form == "image") {
+            tower_cell(t, "parakeet-TDT v3 (25-lang) greedy on jfk.wav is token-for-token with parakeet-cli", m, @@test_parakeet_v3_oracle)
+            return
+        }
+        if (form == "f32") {
+            tower_cell(t, "parakeet-TDT 0.6B v3: the f32 ggml bin's rows and transcript on jfk, the F32 GGUF's reference", m.pk, kept, @@pk_bin_carrier_leg)
+            tower_cell(t, "{PK_V3}: jfk on the exact lane, the q8_0 bin's reference text", m, kept.text, @@parakeet_f32_text_leg)
+        }
+        if (metal_on) {
+            tower_cell(t, "{PK_V3}: the Metal twin, the {form} form's legs", m.pk, kept, @@pk_twin_leg)
+        }
+        if (decode_on && f.zero_block < 0l) {
+            tower_cell(t, "parakeet v3: the TDT decode twin, the {form} form's legs", m.pk, kept, @@pk_decode_legs)
+        }
+    }
+    if (ran && decode_on) {
+        pk_decode_held(t, kept)
+    }
+    if (ran && metal_on) {
+        kept_cell(t, "parakeet-TDT 0.6B v3: the Metal FastConformer chain's q8 and f16 lanes vs the CPU chains on jfk, the exact chain the reference", kept, @@pk_fc_metal_twin)
+    }
+    if (ran) {
+        serving_tower_shutdown(TowerFamily.parakeet)
+    }
+    with_model_once_at(t, "audio", "ggml-parakeet-tdt-0.6b-v3-q8_0.bin", ["f32"], whisper_dir(), @@parakeet_stage_key, @@parakeet_stage, @@parakeet_form) $(var m8; form8) {
+        parakeet_form_is(t, PK_V3_Q8_0, form8, m8)
+        tower_cell(t, "ggml-parakeet-tdt-0.6b-v3-q8_0.bin: a q8_0 bin loads and reads jfk as the f32 bin does", m8, kept.text, @@test_parakeet_q8_0_file)
+    }
+    with_model_once(t, "audio", "parakeet-tdt-0.6b-v3-F32.gguf", ["f32"], @@parakeet_stage_key, @@parakeet_stage, @@parakeet_form) $(var mg; formg) {
+        parakeet_form_is(t, PK_F32, formg, mg)
+        tower_cell(t, "parakeet-TDT 0.6B v3: the F32 GGUF against the f32 ggml bin", mg.pk, kept, @@test_parakeet_gguf_carrier)
+        tower_cell(t, "the decoder half: transcripts on jfk", mg.pk, kept, @@pk_gguf_bin_text)
+    }
+}
+
+// The Parakeet-TDT v3 Q4_K_M GGUF, one block, then the Q8_0 GGUF.
+[test(description = "parakeet-tdt-0.6b-v3-Q4_K_M.gguf loads once a form. Its kq lane, named k4, holds its CPU rows on jfk within 2.5x the q8 lane's distance from the dequantized chain with a zeroed half outside it, and transcribes jfk at the word floor. On the discrete home it serves its front and every block from the kq lane's device planes within the three-way bar on jfk, a k4 tile counted, and zeroed seats exceed the bar; on the Metal FastConformer chain from the kq lane's slabs with no quant_mode decline, a K-quant mul_mm stamp counted, and zeroed seats exceed the bar. The Q8_0 GGUF on the kq lane names it q8")]
+def test_parakeet_carrier_q4_k_m(t : T?) {
+    return if (!family_on(t, "parakeet"))
+    var inscope kept = PkKept(tag = "v3 Q4_K_M")
+    let metal_why = metal_twin_seat_why(TowerFamily.parakeet)
+    let twin_why = either_why(metal_why, audio_discrete_form_why(TowerFamily.parakeet))
+    let metal_on = empty(metal_why)
+    let twin_on = empty(twin_why)
+    kept.twin_tag = metal_on ? "parakeet kq metal jfk" : "parakeet kq jfk"
+    var inscope forms <- ["f32", "q8", "kq", "kq_z12"]
+    add_served_forms(t, forms, PK_Q4, ["kq@dev", "kq_z12@dev"], twin_why)
+    let ran = with_model_once(t, "audio", "parakeet-tdt-0.6b-v3-Q4_K_M.gguf", forms, @@parakeet_stage_key, @@parakeet_stage, @@parakeet_form) $(var m; form) {
+        parakeet_form_is(t, PK_Q4, form, m)
+        kept.form = form
+        if (!parakeet_form_of(form).dev) {
+            tower_cell(t, "{PK_Q4}: the CPU lanes on jfk, the {form} form's rows", m.pk, kept, @@pk_kq_lane_leg)
+        }
+        if (form == "kq") {
+            tower_cell(t, "the decoder half: the Q4_K_M kq lane's transcript on jfk", m.pk, @@pk_kq_text_cell)
+        }
+        if (twin_on && form != "q8" && form != "kq_z12") {
+            tower_cell(t, "{PK_Q4}: the kq lane's device twin, the {form} form's legs", m.pk, kept, @@pk_twin_leg)
+        }
+    }
+    if (ran) {
+        kept_cell(t, "parakeet-TDT 0.6B v3 Q4_K_M: the kq lane on the CPU against the q8 lane, the dequantized f32 chain the reference", kept, @@pk_kq_lanes_held)
+    }
+    if (ran && metal_on) {
+        kept_cell(t, "parakeet-TDT 0.6B v3 Q4_K_M: the Metal chain on the kq lane vs the CPU kq chain on jfk, the dequantized chain the reference", kept, @@test_parakeet_kq_metal_twin)
+    } elif (ran && twin_on) {
+        kept_cell(t, "parakeet-TDT 0.6B v3 Q4_K_M: the discrete home's chain on the kq lane vs the CPU kq chain on jfk, the dequantized chain the reference", kept, @@test_parakeet_kq_discrete_twin)
+    }
+    if (ran && twin_on) {
+        serving_tower_shutdown(TowerFamily.parakeet)
+    }
+    with_model_once(t, "audio", "parakeet-tdt-0.6b-v3-Q8_0.gguf", ["kq"], @@parakeet_stage_key, @@parakeet_stage, @@parakeet_form) $(var m8; form8) {
+        parakeet_form_is(t, PK_Q8_0, form8, m8)
+        tower_cell(t, "the lane's name follows its seats: the Q8_0 file", m8.pk, @@pk_q8_0_gguf_lane)
+    }
+}
+
+//! The Canary encoder bin's block, with the compares that follow it. `dec` is the Canary-Qwen decoder its own block holds
+//! loaded around this call, null where that block did not run: the oracle's cells pair it with the `f32` form and with the
+//! form minted on the lane the home's tower serves canary by default.
+[cold_path]
+def private canary_encoder_block(t : T?; var dec : Model?) {
+    var inscope kept = EncTwinKept()
+    let metal_why = metal_twin_seat_why(TowerFamily.canary)
+    let discrete_why = audio_discrete_form_why(TowerFamily.canary)
+    let twin_why = either_why(metal_why, discrete_why)
+    let metal_on = empty(metal_why)
+    let discrete_on = !metal_on && empty(discrete_why)
+    kept.tag = metal_on ? "canary metal jfk" : "canary jfk"
+    kept.clips.tag = "canary"
+    var walk_form = ""
+    if (dec != null) {
+        with_gpu_knobs() {
+            set_serving_gpu_tower(true, TowerFamily.canary)
+            reset_canary_enc_q8()
+            let q8 = canary_enc_serves_q8()
+            if (canary_dev_flavor(q8) == TowerDev.none) {
+                skip_cell(t, "no GPU tower on this box serves canary's default {q8 ? "q8" : "exact"} lane - the device walk needs one")
+            } else {
+                walk_form = q8 ? "q8@dev" : "f32@dev"
+            }
+        }
+    }
+    if (!metal_on) {
+        skip_cell(t, "canary-qwen 2.5B: the Metal FastConformer chain's twin - {metal_why}")
+    }
+    if (!discrete_on) {
+        skip_cell(t, "canary-qwen 2.5B: the discrete home's twin and short clips - {metal_on ? "das_metal on this build owns the tower hooks" : discrete_why}")
+    }
+    var inscope forms <- ["f32"]
+    add_served_forms(t, forms, CN_ENC, ["q8", "q8@dev", "q8_z16@dev"], twin_why)
+    add_served_forms(t, forms, CN_ENC, ["f32@dev"], either_why(metal_build_why(), twin_why))
+    add_served_forms(t, forms, CN_ENC, ["f32_z16@dev"], twin_why)
+    if (!empty(walk_form) && !has_value(forms, walk_form)) {
+        forms |> push(walk_form)
+    }
+    let ran = with_model_once(t, "audio", "canary-qwen-2.5b-encoder-f32.bin", forms, @@canary_stage_key, @@canary_stage, @@canary_form) $(var enc; form) {
+        canary_form_is(t, CN_ENC, form, enc)
+        kept.form = form
+        let f = canary_form_of(form)
+        if (form == "f32") {
+            tower_cell(t, "canary log-mel is bit-identical across calls on one reused state", enc, @@canary_mel_state_reuse)
+            if (dec != null) {
+                canary_pair_cell(t, "Canary-Qwen 2.5B greedy is token-for-token with the NeMo SALM oracle", *dec, enc, @@test_canary_qwen_oracle)
+            }
+        }
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (form == "f32@dev") {
+                tower_cell(t, "canary's served Metal encode leaves no encoder rows on the device: no transducer decodes them", enc, @@test_canary_metal_holds_no_rows)
+            }
+        }
+        if (dec != null && form == walk_form) {
+            canary_pair_cell(t, "Canary-Qwen 2.5B on the GPU tower's default lane, the {form} form: the oracle's device walk", *dec, enc, @@canary_oracle_device_walk)
+        }
+        if (metal_on || discrete_on) {
+            tower_cell(t, "{CN_ENC}: the {metal_on ? "Metal" : "discrete"} twin, the {form} form's legs", enc, kept, @@cn_twin_leg)
+        }
+        if (discrete_on && f.lane == "q8" && f.zero_block < 0l) {
+            tower_cell(t, "{CN_ENC}: the short clips, the {form} form's leg", enc, kept, @@cn_short_clip_leg)
+        }
+    }
+    static_if (!typeinfo builtin_module_exists(das_metal)) {
+        skip_cell(t, "canary's served Metal encode leaves no encoder rows on the device - no Metal build")
+    }
+    return if (!ran)
+    if (metal_on) {
+        kept_cell(t, "canary-qwen 2.5B: the Metal FastConformer chain's q8 and f16 lanes vs the CPU chains on jfk, the exact chain the reference", kept, @@test_fc_metal_twin)
+    }
+    if (discrete_on) {
+        kept_cell(t, "canary: clips of 320 to 1600 samples serve on the discrete home's image as the CPU image reads them", kept.clips, @@test_vulkan_short_clips)
+        kept_cell(t, "canary-qwen 2.5B: the discrete home's FastConformerblocks vs the CPU q8 chain on jfk, the exact chain the reference", kept, @@test_canary_discrete_twin)
+    }
+    serving_tower_shutdown(TowerFamily.canary)
+}
+
+// The Canary-Qwen 2.5B pair: the encoder bin's block, under the decoder's block where the full suite loads it.
+[test(description = "canary-qwen-2.5b-encoder-f32.bin loads once a form. Its log-mel of jfk computed twice on one reused state is bit-identical, a NaN counting as a difference. On the Metal FastConformer chain it serves every block on the q8 slab within the three-way bar on jfk with no quant_mode decline, a poison exceeds it, the exact f16 lane holds its bar, and a served encode leaves zero encoder rows held on the device, since no transducer decodes them. On the discrete home it serves its front and every block on the device within the three-way bar on jfk, holds it across regrown and fresh residencies and on the exact f16 lane, a poison exceeds it, and clips of 320 to 1600 samples serve as one device encode with no decline within SHORT_CLIP_BAR of the CPU image's rows, a noise clip outside it. Under the full suite canary-qwen-2.5b-decoder-f16.gguf loads once around it: on three clips, on the CPU chain and the GPU tower's default lane, every NeMo SALM oracle token stays within 0.25 logit of the argmax (one-step-early feed misses) and greedy ids match the oracle through the forced walk's agreement")]
+def test_canary_carrier(t : T?) {
+    return if (!family_on(t, "canary"))
+    if (!parity_full_mode()) {   // ~6.7 GB two-file (decoder GGUF + f32 encoder bin) - large-tier
+        skip_cell(t, "Canary-Qwen 2.5B greedy is token-for-token with the NeMo SALM oracle - canary-qwen is large-tier, set DASLLAMA_PARITY_FULL=1 to run")
+        canary_encoder_block(t, null)
+        return
+    }
+    var under_decoder = false
+    unsafe {
+        t |> run("the Canary-Qwen decoder, the encoder's block under it") @capture(& under_decoder)(t : T ?) {
+            with_cpu_and_gpu_model(t, "audio", "canary-qwen-2.5b-decoder-f16.gguf", ASR_DEC_CTX, [cpu_cells_form(QuantMode.q8)]) $(var dec; form) {
+                return if (!form.alone)
+                under_decoder = true
+                canary_encoder_block(t, unsafe(addr(dec)))
+            }
+        }
+    }
+    if (!under_decoder) {
+        canary_encoder_block(t, null)
+    }
+}
+
+//! the minted forms a gemma4a mmproj's twins read: the exact form and the q8 form, the q8 lane's image in the home's
+//! flavor and its poison, the exact lane's image in the home's flavor and its poison
+let private G4A_TWIN_FORMS = fixed_array("f32", "q8", "q8@dev", "q8_z6@dev", "f32@dev", "f32_z6@dev")
+
+//! the twins' cells of a gemma4a mmproj's minted form `form`: its legs on the home the box serves, and - `short_clips` -
+//! the short clips' leg on the discrete home's q8 forms
+[cold_path]
+def private g4a_twin_cells(t : T?; file, form : string; var enc : Gemma4aEncoder; var kept : EncTwinKept; metal_on, discrete_on, short_clips : bool) {
+    let f = g4a_form_of(form)
+    if (metal_on || discrete_on) {
+        tower_cell(t, "{file}: the {metal_on ? "Metal" : "discrete"} twin, the {form} form's legs", enc, kept, @@g4a_twin_leg)
+    }
+    if (short_clips && discrete_on && f.lane == "q8" && f.zero_block < 0l) {
+        tower_cell(t, "{file}: the short clips, the {form} form's leg", enc, kept, @@g4a_short_clip_leg)
+    }
+}
+
+//! the twins' named skips of the gemma4a encoder `tag` on a box that lacks a home
+[cold_path]
+def private g4a_twin_skips(t : T?; tag : string; metal_why, discrete_why : string) {
+    let metal_on = empty(metal_why)
+    if (!metal_on) {
+        skip_cell(t, "gemma4a {tag}: the Metal Conformer chain's twin - {metal_why}")
+    }
+    if (metal_on || !empty(discrete_why)) {
+        skip_cell(t, "gemma4a {tag}: the discrete home's twin - {metal_on ? "das_metal on this build owns the tower hooks" : discrete_why}")
+    }
+}
+
+//! the twins' compares of the gemma4a encoder `tag` (`mm_file` its mmproj), after its block
+[cold_path]
+def private g4a_twin_held(t : T?; tag, mm_file : string; var kept : EncTwinKept; metal_on, discrete_on, short_clips : bool) {
+    if (metal_on) {
+        kept_cell(t, "gemma4a {tag}: the Metal Conformer chain's q8 and f16 lanes vs the CPU chains on jfk ({mm_file}), the exact chain the reference", kept, @@test_gemma4a_metal_twin)
+    }
+    if (discrete_on && short_clips) {
+        kept_cell(t, "gemma4a {tag}: clips of 320 to 1600 samples serve on the discrete home's image as the CPU image reads them", kept.clips, @@test_vulkan_short_clips)
+    }
+    if (discrete_on) {
+        kept_cell(t, "gemma4a {tag}: the discrete home's Conformer chain vs the CPU q8 chain on jfk, then its exact lane, the exact chain the reference", kept, @@test_gemma4a_discrete_twin)
+    }
+    if (metal_on || discrete_on) {
+        serving_tower_shutdown(TowerFamily.gemma4a)
+    }
+}
+
+// The E2B Q4_K_M decoder's block, nested in the mmproj's form minted on the lane the policy names: the rows seam on a
+// plain chat reads both files.
+[cold_path]
+def private g4a_e2b_q4_decoder(t : T?; var e : AudioEmbedder) {
+    unsafe {
+        t |> run("the gemma-4 E2B Q4_K_M decoder under the gemma4a encoder") @capture(& e)(t : T ?) {
+            with_cpu_and_gpu_model(t, "audio", "gemma-4-E2B-it-Q4_K_M.gguf", 2048l, [cpu_cells_form(QuantMode.q8)]) $(var m; form) {
+                audio_chat_cell(t, "rows land, the turn answers, a second clip appends, and the refusals panic", m, form, e, @@test_audio_rows_on_a_plain_chat)
+            }
+        }
+    }
+}
+
+// The gemma-4 E2B mmproj's audio tower, one block; E2B's audio embedder is square on the encoder's 1536.
+[test(description = "mmproj-gemma-4-E2B-it-bf16.gguf loads its audio tower once a form. The carrier's load probes and loads as gemma4a at width 1536 and pads a sub-frame clip to one soft token, and a CURRENT gemma4a .dlim routes on its baked tag - the one the load baked beside the mmproj, and one minted into the scratch directory. The ASR facade's two-file load pairs it with gemma-4-E2B-it-Q8_0.gguf: on the f32 KV rail the pair transcribes gemma4a_test2.wav with the first 40 token ids of llama-mtmd-cli's greedy output, the confident prefix before its own near-tie, with a flat heap across reuse. On a form minted in memory the log-mel of jfk computed twice on one reused state is bit-identical, and under it gemma-4-E2B-it-Q4_K_M.gguf loads once: gemma4a rows on a plain chat append across clips, prefill as head plus rows plus tail and are consumed by the turn, while rows of the wrong length or beside a queued image panic. On the Metal Conformer chain the encoder serves every block on the q8 slab within the three-way bar on jfk, a poison exceeds it, and the exact f16 lane holds its bar. On the discrete home it stays within the three-way bar the CPU q8 chain sets against the exact chain on jfk, across regrown and fresh residencies, a zeroed-blocks poison exceeds it, the exact lane holds its bar, and clips of 320 to 1600 samples serve as one device encode with no decline within SHORT_CLIP_BAR of the CPU image's rows, a noise clip outside it")]
+def test_gemma4a_carrier_e2b(t : T?) {
+    return if (!family_on(t, "gemma4a"))
+    var inscope kept = EncTwinKept(want_proj = 1536l)
+    let metal_why = metal_twin_jit_why(TowerFamily.gemma4a)
+    let discrete_why = audio_discrete_form_why(TowerFamily.gemma4a)
+    let metal_on = empty(metal_why)
+    let discrete_on = !metal_on && empty(discrete_why)
+    kept.tag = metal_on ? "gemma4a E2B metal jfk" : "gemma4a E2B jfk"
+    kept.clips.tag = "gemma4a"
+    g4a_twin_skips(t, "E2B", metal_why, discrete_why)
+    reset_gemma4a_q8()
+    let policy = gemma4a_serves_q8() ? "q8" : "f32"   //! the lane a mint with no pin takes: the mel cell's and the rows seam's
+    var inscope forms <- ["image"]
+    if (asr_decoder_available(t, "gemma-4-E2B-it-Q8_0.gguf")) {
+        forms |> push("image_asr")
+    }
+    forms |> push(policy)
+    add_served_forms(t, forms, G4A_E2B, [for (f in G4A_TWIN_FORMS); f; where f != policy], either_why(metal_why, discrete_why))
+    let ran = with_model_once(t, "audio", "mmproj-gemma-4-E2B-it-bf16.gguf", forms, @@g4a_stage_key, @@g4a_stage, @@gemma4a_e2b_form) $(var h; form) {
+        gemma4a_form_is(t, G4A_E2B, form, h)
+        kept.form = form
+        if (form == "image") {
+            tower_cell(t, "the E2B mmproj probes and loads as gemma4a with its width", h.e, @@test_audio_embedder_gemma4a_arm)
+            return
+        }
+        if (form == "image_asr") {
+            tower_cell(t, "Gemma-4 E2B audio greedy is token-for-token with llama-mtmd-cli (confident prefix)", h.asr, @@test_gemma4a_audio_oracle)
+            return
+        }
+        if (form == policy) {
+            tower_cell(t, "gemma4a log-mel is bit-identical across calls on one reused state", h.e.gemma4a, @@test_mel_state_reuse_deterministic)
+            g4a_e2b_q4_decoder(t, h.e)
+        }
+        g4a_twin_cells(t, G4A_E2B, form, h.e.gemma4a, kept, metal_on, discrete_on, true)
+    }
+    t |> run("an E2B gemma4a image minted for this box into the scratch directory reads CURRENT and maps by the direct route") @(t : T?) {
+        embedder_scratch_image(t)
+    }
+    if (ran) {
+        g4a_twin_held(t, "E2B", G4A_E2B, kept, metal_on, discrete_on, true)
+    }
+}
+
+// The gemma-4 E4B mmproj's audio tower, one block; E4B's audio embedder widens the encoder's 1536 to the decoder's 2560 -
+// the projector tail at the other width.
+[test(description = "mmproj-gemma-4-E4B-it-BF16.gguf loads its audio tower once a form, and probes its decoder's width 2560. The ASR facade's two-file load, the serving tower on, pairs it with gemma-4-E4B-it-Q8_0.gguf: the pair widens the encoder's 1536 to the decoder's 2560 and transcribes jfk past the words floor, with soft tokens off the serving GPU tower where its device stands up. On the Metal Conformer chain the encoder serves every block on the q8 slab within the three-way bar on jfk, a poison exceeds it, and the exact f16 lane holds its bar. On the discrete home it stays within the three-way bar the CPU q8 chain sets against the exact chain on jfk, across regrown and fresh residencies, a zeroed-blocks poison exceeds it, and the exact lane holds its bar")]
+def test_gemma4a_carrier_e4b(t : T?) {
+    return if (!family_on(t, "gemma4a"))
+    var inscope kept = EncTwinKept(want_proj = 2560l)
+    let metal_why = metal_twin_jit_why(TowerFamily.gemma4a)
+    let discrete_why = audio_discrete_form_why(TowerFamily.gemma4a)
+    let metal_on = empty(metal_why)
+    let discrete_on = !metal_on && empty(discrete_why)
+    kept.tag = metal_on ? "gemma4a E4B metal jfk" : "gemma4a E4B jfk"
+    g4a_twin_skips(t, "E4B", metal_why, discrete_why)
+    var inscope forms : array<string>
+    if (stat(path_join(models_dir(), G4A_E4B)).is_valid && asr_decoder_available(t, "gemma-4-E4B-it-Q8_0.gguf")) {
+        forms |> push("image_asrdev")
+    }
+    add_served_forms(t, forms, G4A_E4B, [for (f in G4A_TWIN_FORMS); f], either_why(metal_why, discrete_why))
+    let ran = with_model_once(t, "audio", "mmproj-gemma-4-E4B-it-BF16.gguf", forms, @@g4a_stage_key, @@g4a_stage, @@gemma4a_e4b_form) $(var h; form) {
+        gemma4a_form_is(t, G4A_E4B, form, h)
+        kept.form = form
+        if (form == "image_asrdev") {
+            tower_cell(t, "Gemma-4 E4B audio through the facade: the widening embedder's soft tokens transcribe jfk", h.asr, @@test_gemma4a_e4b_audio_facade)
+            return
+        }
+        g4a_twin_cells(t, G4A_E4B, form, h.e.gemma4a, kept, metal_on, discrete_on, false)
+    }
+    t |> run("the E4B mmproj probes its own decoder's width, read off the embedder's rows") @(t : T?) {
+        embedder_e4b_probe(t)
+    }
+    if (ran) {
+        g4a_twin_held(t, "E4B", G4A_E4B, kept, metal_on, discrete_on, false)
     }
 }

@@ -13,7 +13,7 @@ require dasllama/dasllama_core   // kernel_report, prepared_image_alignment: a h
 require dasllama/dasllama_vad   // load_vad_model, vad_probs_cpu: the load from bytes
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require _image_memory   // read_page_aligned, zero_bytes: a host's own copy of the bin
-require _model_form   // ModelForm and its pure parts: the load-once forms' knobs, names and pairing
+require _model_form   // ModelForm and its pure parts: the load-once forms' knobs, names and pairing; served_forms
 require strings   // find: a refusal's words
 require daslib/strings_boost   // join: a block's loads and forms as one line
 require math
@@ -356,6 +356,32 @@ def private once_form(path, form : string) : OnceModel {
     return OnceModel(form = form, live = true)
 }
 
+var private g_once_stages : array<string>   //! each staged read's `<path>|<key>`, in order
+
+//! a fake staged read: the marks the forms minted from it wrote into it
+struct private OnceStaging {
+    marks : array<string>
+}
+
+//! the staged read a form of the fake file mints from: none for `img`, `k2` for `c`, `k1` for the rest
+def private once_stage_key(form : string) : string => form == "img" ? "" : (form == "c" ? "k2" : "k1")
+
+def private once_stage(path, key : string) : OnceStaging {
+    g_once_stages |> push("{path}|{key}")
+    return OnceStaging(marks <- ["read"])
+}
+
+//! a fake model minted from its own staging, which it marks: `form` carries every mark the staging held
+def private once_staged_form(path, form : string; var stg : OnceStaging) : OnceModel {
+    g_once_live++
+    stg.marks |> push(form)
+    g_once_loads |> push("{path}|{join(stg.marks, "+")}")
+    return OnceModel(form = form, live = true)
+}
+
+//! a family's account of its forms: `gone` is one this box cannot serve
+def private once_form_why(form : string) : string => form == "gone" ? "no device for it" : ""
+
 //! a block's gate over a file of the test's own: a loud skip on the handle where the file is absent
 def private once_gate(t : T?; path : string) : bool {
     return true if (stat(path).is_valid)
@@ -363,7 +389,34 @@ def private once_gate(t : T?; path : string) : bool {
     return false
 }
 
-[test(description = "A load-once block's loop (`model_once_at`, which `with_model_once_at` wires to the models' gate): behind a gate that finds no file it skips on the handle, loads nothing, runs no cell and answers false; over a present file and three forms it loads once a form, in the list's order, from the file's path, hands the cells each form's own model, holds exactly one model alive inside every cells call and none after the call, and answers true")]
+[test(description = "A staged block's loop (`staged_once_at`) reads a file once a key - again where another key's form came between - hands each form its own copy of that read, so one form's edit reaches no other's, and hands a form with no key no staging; `either_why` and `metal_build_why` answer a seat's reason")]
+def test_staged_once_block(t : T?) {
+    let root = test_temp_dir()
+    g_once_live = 0
+    g_once_loads |> clear()
+    g_once_stages |> clear()
+    let path = path_join(root, "once_stub.model")
+    t |> success(fwrite(path, "a stub, never read"), "the stub file is written")
+    var alive : array<int>
+    let ran = staged_once_at(t, "infra", "once_stub.model", path, ["a", "b", "img", "c", "d"], @@once_gate, @@once_stage_key, @@once_stage, @@once_staged_form) $(var m; form) {
+        alive |> push(g_once_live + (m.form == form ? 0 : 100))
+    }
+    t |> success(ran, "the call answers true")
+    t |> equal(join(g_once_stages, " "), "{path}|k1 {path}|k2 {path}|k1", "one staged read a key, again where another key's form came between")
+    t |> equal(join(g_once_loads, " "), "{path}|read+a {path}|read+b {path}|img {path}|read+c {path}|read+d", "each form's staging is the read plus its own mark: no form's edit reaches another's, and a form with no key gets none")
+    t |> equal(join(alive, " "), "1 1 1 1 1", "each cell sees its form's model, one alive at a time")
+    t |> equal(g_once_live, 0, "no model is alive after the call")
+    t |> equal(either_why("", "the second seat's reason"), "", "a form the first seat serves lacks nothing")
+    t |> equal(either_why("no first seat", "the second seat's reason"), "the second seat's reason", "else it lacks what the second seat does")
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        t |> equal(metal_build_why(), "", "a das_metal build lacks nothing for the Metal home's cells")
+    } else {
+        t |> equal(metal_build_why(), "das_metal not present", "a build without das_metal says so")
+    }
+    delete alive
+}
+
+[test(description = "A load-once block's loop (`model_once_at`, which `with_model_once_at` wires to the models' gate): behind a gate that finds no file it skips on the handle, loads nothing, runs no cell and answers false; over a present file and three forms it loads once a form, in the list's order, from the file's path, hands the cells each form's own model, holds exactly one model alive inside every cells call and none after the call, and answers true. A block's form list through `served_forms`: a form the family's account gives a reason for is one skipped cell of its own, named the tag, the form and the reason, and is left out of the list, the others kept in order; a list the box serves whole comes back whole with no cell")]
 def test_model_once_block(t : T?) {
     let root = test_temp_dir()
     t |> run("an absent file: the gate's skip, no load, no cell, false") @(t : T?) {
@@ -406,5 +459,33 @@ def test_model_once_block(t : T?) {
         t |> equal(g_once_live, 0, "no model is alive after the call")
         delete seen
         delete alive
+    }
+    t |> run("a form the box cannot serve: a skipped cell of its own, left out of the list") @(t : T?) {
+        var cells : array<string>
+        var skips = 0
+        var p = new T("probe", ref_time_ticks(), false)
+        unsafe {
+            p.onRun <- @capture(& cells, & skips)(name : string; cell : RunT) {
+                cells |> push(name)
+                var sub = new T(name, ref_time_ticks(), false)
+                sub.onSkipNow <- @capture(& skips)() {
+                    skips++
+                }
+                invoke(cell as lmd1, sub)
+                delete sub
+            }
+        }
+        var inscope served <- served_forms(p, "once.model", ["a", "gone", "b"], @@once_form_why)
+        t |> equal(join(served, " "), "a b", "the forms the box serves, in the list's order")
+        t |> equal(join(cells, " | "), "once.model, the gone form: no device for it", "the form it cannot serve is one cell, named the tag, the form and the reason")
+        t |> equal(skips, 1, "and that cell skipped")
+        cells |> clear()
+        var inscope whole <- served_forms(p, "once.model", ["a", "b"], @@once_form_why)
+        t |> equal(join(whole, " "), "a b", "the control: a list the box serves whole comes back whole")
+        t |> equal(length(cells) + skips, 1, "with no cell and no further skip")
+        unsafe {
+            delete p
+        }
+        delete cells
     }
 }
