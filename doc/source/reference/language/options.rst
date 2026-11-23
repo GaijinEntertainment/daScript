@@ -529,7 +529,7 @@ default ``false``.
    * - ``log_require``
      - Logs module resolution.
    * - ``log_compile_dag``
-     - Logs the module dependency DAG: per-module compile times, the critical path, and the simulated parallel compile time for 2 to 32 workers.
+     - Logs the module dependency DAG: per-module compile times, the critical path, the simulated parallel compile time for 2 to 32 workers, and the graph's width (the most modules that can compile at once).
    * - ``log_generics``
      - Logs generic function instantiation.
    * - ``log_mn_hash``

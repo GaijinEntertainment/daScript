@@ -1439,6 +1439,22 @@ namespace das
         int64_t cacheMacroSim = 0;
         int64_t cacheFinalize = 0;
         int64_t macroTicks = 0;
+        CompileTimeTotals & operator += ( const CompileTimeTotals & part ) {
+            parse += part.parse;
+            infer += part.infer;
+            opt += part.opt;
+            macroModules += part.macroModules;
+            cacheRead += part.cacheRead;
+            cacheReadCount += part.cacheReadCount;
+            cacheMacroSim += part.cacheMacroSim;
+            cacheFinalize += part.cacheFinalize;
+            macroTicks += part.macroTicks;
+            return *this;
+        }
+        CompileTimeTotals operator + ( const CompileTimeTotals & part ) const {
+            CompileTimeTotals sum = *this;
+            return sum += part;
+        }
     };
 
     class DAS_API ModuleGroup : public ModuleLibrary {

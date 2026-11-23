@@ -969,6 +969,7 @@ namespace das
         if ( it != files.end() ) {
             return it->second.get();
         }
+        if ( locked ) return nullptr;
         auto ni = getNewFileInfo(fileName);
         if ( ni ) {
             ni->reserveProfileData();

@@ -1,9 +1,14 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/ast/ast.h"
+#include "daScript/ast/ast_serializer.h"
 #include "ast_compile_modules.h"
 #include "ast_parse.h"
+#include "daScript/misc/job_que.h"
 #include "daScript/misc/performance_time.h"
+
+#include <atomic>
+#include <thread>
 
 // src/ast/ARCHITECTURE_COMPILE_MODULES.md#compile-dag
 namespace das {
@@ -163,6 +168,41 @@ namespace das {
                 return now;
             }
 
+            // Dilworth: the most modules no two of which require each other, directly or not,
+            // is the module count less a maximum matching of the reachability relation
+            int32_t width () const {
+                auto count = int32_t(deps.size());
+                vector<vector<bool>> reaches(count, vector<bool>(count, false));
+                for ( int32_t node = 0; node != count; ++node ) {
+                    for ( auto dep : deps[node] ) {
+                        reaches[node][dep] = true;
+                        for ( int32_t i = 0; i != count; ++i ) if ( reaches[dep][i] ) reaches[node][i] = true;
+                    }
+                }
+                struct Matching {
+                    const vector<vector<bool>> &    reaches;
+                    vector<int32_t>                 matchOf;
+                    vector<bool>                    seen;
+                    bool augment ( int32_t node ) {
+                        for ( int32_t dep = 0; dep != int32_t(matchOf.size()); ++dep ) {
+                            if ( !reaches[node][dep] || seen[dep] ) continue;
+                            seen[dep] = true;
+                            if ( matchOf[dep] < 0 || augment(matchOf[dep]) ) {
+                                matchOf[dep] = node;
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+                } matching { reaches, vector<int32_t>(count, -1), {} };
+                int32_t matched = 0;
+                for ( int32_t node = 0; node != count; ++node ) {
+                    matching.seen.assign(count, false);
+                    if ( matching.augment(node) ) matched ++;
+                }
+                return count - matched;
+            }
+
             void log ( const vector<ModuleInfo> & modules, const vector<uint64_t> & usec,
                     ModuleGroup & libGroup, TextWriter & logs ) const {
                 auto count = deps.size();
@@ -212,6 +252,13 @@ namespace das {
                          << ", by module count " << (simulatedMakespan(ones, usec, exclusive, workers) / 1000000.)
                          << ", lower bound " << (bound / 1000000.) << "\n";
                 }
+                if ( count ) {
+                    auto unlimited = simulatedMakespan(usec, usec, exclusive, int32_t(count));
+                    int32_t enough = 1;
+                    while ( simulatedMakespan(usec, usec, exclusive, enough) > unlimited ) enough ++;
+                    logs << "\twidth: " << width() << " modules can compile at once (by the graph), "
+                         << enough << " workers reach the time unlimited workers do (by measured time)\n";
+                }
                 logs << "critical path:\n";
                 for ( auto n : path ) {
                     logs << "\t" << (usec[n] / 1000000.) << " " << modules[n].moduleName << "\n";
@@ -251,32 +298,238 @@ namespace das {
             return true;
         }
 
-        ProgramPtr compileModulesInOrder ( const vector<ModuleInfo> & modules, const FileAccessPtr & access, TextWriter & logs,
-                ModuleGroup & libGroup, CodeOfPolicies & policies, bool promoteShared, const ModuleCacheStream & stream,
-                vector<uint64_t> & usec ) {
-            for ( auto & mod : modules ) {
-                auto maybeMod = libGroup.findModule(mod.moduleName);
-                if ( maybeMod ) {
+        struct InOrderResult {
+            ProgramPtr  failed;
+            size_t      next = 0;
+        };
+
+        // src/ast/ARCHITECTURE_COMPILE_MODULES.md#cache-prefix
+        InOrderResult compileModulesInOrder ( const vector<ModuleInfo> & modules, size_t from, const FileAccessPtr & access,
+                TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies & policies, bool promoteShared,
+                const ModuleCacheStream & stream, bool untilCutoff, vector<uint64_t> & usec ) {
+            InOrderResult result;
+            for ( result.next = from; result.next != modules.size(); ++result.next ) {
+                if ( untilCutoff && (!stream.read || stream.read->seenNewModule) ) break;
+                auto & mod = modules[result.next];
+                if ( auto maybeMod = libGroup.findModule(mod.moduleName) ) {
                     maybeMod->fromExtraDependency &= mod.extraDepModule;
-                    usec.push_back(0);
                     continue;
                 }
                 auto moduleT0 = ref_time_ticks();
-                auto program = parseDaScriptEx(mod.fileName, mod.moduleName, access, logs, libGroup, true, true, policies, true, stream);
-                usec.push_back(get_time_usec(moduleT0));
-                if ( !registerCompiledModule(program, mod, access, libGroup, policies, promoteShared) ) return program;
+                auto program = parseDaScriptEx(mod.fileName, mod.moduleName, access, logs, libGroup, true, true, policies, true, stream, nullptr);
+                usec[result.next] += get_time_usec(moduleT0);
+                if ( !registerCompiledModule(program, mod, access, libGroup, policies, promoteShared) ) {
+                    result.failed = program;
+                    break;
+                }
             }
-            return nullptr;
+            return result;
+        }
+
+        struct CompiledModule {
+            ProgramPtr          program;
+            string              logs;
+            unique_ptr<gc_root> root;
+            vector<Module *>    added;
+            CompileTimeTotals   times;
+            uint64_t            usec = 0;
+            bool                skipped = false;
+            bool                deferred = false;
+        };
+
+        // src/ast/ARCHITECTURE_COMPILE_MODULES.md#compile-workers
+        CompiledModule compileModuleJob ( const ModuleInfo & mod, const ProgramPtr & prepared, const FileAccessPtr & access,
+                const CodeOfPolicies & policies, const vector<Module *> & initialModules, const vector<const CompiledModule *> & deps ) {
+            CompiledModule result;
+            ModuleGroup group;
+            for ( auto m : initialModules ) group.addModule(m);
+            for ( auto dep : deps ) {
+                if ( dep->skipped || dep->deferred || (dep->program && dep->program->failed()) ) {
+                    result.skipped = true;
+                    group.getModules().clear();
+                    return result;
+                }
+                for ( auto m : dep->added ) group.addModule(m);
+            }
+            auto t0 = ref_time_ticks();
+            result.root = make_unique<gc_root>();
+            {
+                TextWriter moduleLogs;
+                gc_active_scope gcScope(result.root.get());
+                result.program = parseDaScriptEx(mod.fileName, mod.moduleName, access, moduleLogs, group, true, true, policies, true,
+                    ModuleCacheStream(), prepared, true);
+                result.logs = moduleLogs.str();
+            }
+            auto & program = result.program;
+            result.deferred = !program->failed() && program->needMacroModule && !program->thisModule->macroContext;
+            if ( !program->failed() && !result.deferred ) {
+                nameCompiledModule(program, mod);
+                program->thisModule->freeze();
+                result.added.push_back(program->thisModule.get());
+                program->library.foreach([&](Module * pm) -> bool {
+                    if ( !pm->name.empty() && pm->name != "$" && pm != program->thisModule.get() && !group.findModule(pm->name) ) {
+                        result.added.push_back(pm);
+                    }
+                    return true;
+                }, "*");
+            }
+            result.times = group.compileTimes;
+            group.getModules().clear();
+            result.usec = get_time_usec(t0);
+            return result;
+        }
+
+        // src/ast/ARCHITECTURE_COMPILE_MODULES.md#compile-workers
+        struct FileAccessLockScope {
+            FileAccess *    access;
+            bool            wasLocked;
+            FileAccessLockScope ( FileAccess * acc ) : access(acc), wasLocked(acc->isLocked()) { access->lock(); }
+            ~FileAccessLockScope () { if ( !wasLocked ) access->unlock(); }
+        };
+
+        // src/ast/ARCHITECTURE_COMPILE_MODULES.md#compile-workers
+        struct ModuleJobs {
+            const vector<ModuleInfo> &      modules;
+            const ModuleDag &               dag;
+            const FileAccessPtr &           access;
+            CodeOfPolicies                  policies;
+            vector<Module *>                initialModules;
+            vector<ProgramPtr>              prepared;
+            vector<uint64_t>                levels;
+            vector<daScriptEnvironment>     envs;
+            vector<CompiledModule>          results;
+            vector<std::atomic<int32_t>>    remaining;
+            std::atomic<int32_t>            finished{0};
+
+            ModuleJobs ( const vector<ModuleInfo> & mods, const ModuleDag & d, const FileAccessPtr & acc, const CodeOfPolicies & pol,
+                    ModuleGroup & libGroup )
+                : modules(mods), dag(d), access(acc), policies(pol), initialModules(libGroup.getModules()),
+                  prepared(mods.size()),
+                  envs(mods.size(), *daScriptEnvironment::getBound()), results(mods.size()), remaining(mods.size()) {
+                policies.macro_context_collect = false;
+                auto count = int32_t(modules.size());
+                for ( int32_t node = 0; node != count; ++node ) {
+                    envs[node].g_Program = nullptr;
+                    if ( libGroup.findModule(modules[node].moduleName) ) continue;
+                    prepared[node] = make_smart<Program>();
+                    prepared[node]->access = access;
+                    int32_t waits = 0;
+                    for ( auto dep : dag.deps[node] ) waits += prepared[dep] ? 1 : 0;
+                    remaining[node] = waits;
+                }
+                levels = dag.bottomLevels(dag.sourceBytes);
+            }
+
+            void push ( JobQue & que, vector<int32_t> & ready ) {
+                stable_sort(ready.begin(), ready.end(), [&]( int32_t a, int32_t b ) { return levels[a] > levels[b]; });
+                for ( auto node : ready ) que.push([this, &que, node]() { compileNode(que, node); }, 0, JobPriority::Default);
+            }
+
+            void compileNode ( JobQue & que, int32_t node ) {
+                auto bound = daScriptEnvironment::getBound();
+                daScriptEnvironment::setBound(&envs[node]);
+                vector<const CompiledModule *> deps;
+                vector<bool> reach(node, false);
+                for ( auto dep : dag.deps[node] ) reach[dep] = true;
+                for ( int32_t i = node - 1; i >= 0; --i ) {
+                    if ( !reach[i] ) continue;
+                    deps.push_back(&results[i]);
+                    for ( auto dep : dag.deps[i] ) reach[dep] = true;
+                }
+                results[node] = compileModuleJob(modules[node], prepared[node], access, policies, initialModules, deps);
+                daScriptEnvironment::setBound(bound);
+                vector<int32_t> ready;
+                for ( auto dependent : dag.dependents[node] ) {
+                    if ( prepared[dependent] && --remaining[dependent] == 0 ) ready.push_back(dependent);
+                }
+                push(que, ready);
+                finished ++;
+            }
+
+            void run ( int32_t threads ) {
+                FileAccessLockScope accessLock(access.get());
+                JobQue jobs;
+                jobs.setWorkerLimit(threads - 1);
+                int32_t total = 0;
+                vector<int32_t> ready;
+                for ( int32_t node = 0; node != int32_t(modules.size()); ++node ) {
+                    if ( !prepared[node] ) continue;
+                    total ++;
+                    if ( remaining[node] == 0 ) ready.push_back(node);
+                }
+                push(jobs, ready);
+                while ( finished < total ) {
+                    if ( !jobs.tryRunOneJob() ) std::this_thread::yield();
+                }
+            }
+        };
+
+        ProgramPtr compileModulesOnDag ( const vector<ModuleInfo> & modules, const ModuleDag & dag, const FileAccessPtr & access,
+                TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies & policies, bool promoteShared, int32_t threads,
+                vector<uint64_t> & usec, vector<ProgramPtr> & compiled ) {
+            ModuleJobs jobs(modules, dag, access, policies, libGroup);
+            jobs.run(threads);
+            auto & target = *gc_root::gc_get_active_root();
+            ProgramPtr failed;
+            for ( int32_t node = 0; node != int32_t(modules.size()); ++node ) {
+                auto & result = jobs.results[node];
+                auto & mod = modules[node];
+                usec[node] += result.usec;
+                libGroup.compileTimes += result.times;
+                if ( !jobs.prepared[node] ) {
+                    libGroup.findModule(mod.moduleName)->fromExtraDependency &= mod.extraDepModule;
+                    continue;
+                }
+                if ( failed || result.skipped ) continue;
+                logs << result.logs;
+                if ( result.root ) {
+                    while ( auto gcNode = result.root->gc_first ) gcNode->gc_assign(&target);
+                }
+                if ( result.deferred ) buildDeferredMacroModule(result.program, libGroup, logs);
+                if ( !compiled.empty() ) compiled[node] = result.program;
+                if ( !registerCompiledModule(result.program, mod, access, libGroup, policies, promoteShared) ) failed = result.program;
+            }
+            if ( failed ) return failed;
+            return compileModulesInOrder(modules, 0, access, logs, libGroup, policies, promoteShared, ModuleCacheStream(), false,
+                usec).failed;
+        }
+
+        bool loadedModuleNests ( ModuleGroup & libGroup ) {
+            bool nests = false;
+            Module::foreach([&]( Module * mod ) { nests |= mod->macroNestsCompile; return !nests; });
+            libGroup.foreach([&]( Module * mod ) { nests |= mod->macroNestsCompile; return !nests; }, "*");
+            return nests;
         }
 
     }
 
     vector<Error> compileModules ( const vector<ModuleInfo> & modules, const FileAccessPtr & access, TextWriter & logs,
             ModuleGroup & libGroup, CodeOfPolicies & policies, bool promoteShared, bool logDag, const ModuleCacheStream & stream ) {
-        vector<uint64_t> usec;
-        auto failed = compileModulesInOrder(modules, access, logs, libGroup, policies, promoteShared, stream, usec);
+        vector<uint64_t> usec(modules.size(), 0);
+        // src/ast/ARCHITECTURE_COMPILE_MODULES.md#cache-prefix
+        auto prefix = compileModulesInOrder(modules, 0, access, logs, libGroup, policies, promoteShared, stream, true, usec);
+        if ( prefix.failed ) return prefix.failed->errors;
+        auto threads = policies.compile_threads == 0 ? JobQue::get_num_threads() : policies.compile_threads;
+        bool parallel = threads > 1 && modules.size() - prefix.next > 1 && !loadedModuleNests(libGroup);
+        ModuleDag dag;
+        if ( parallel || logDag ) dag = ModuleDag(modules, access);
+        ProgramPtr failed;
+        if ( parallel ) {
+            vector<ProgramPtr> compiled(stream.write ? modules.size() : 0);
+            failed = compileModulesOnDag(modules, dag, access, logs, libGroup, policies, promoteShared, threads, usec, compiled);
+            if ( !failed && stream.write ) {
+                for ( auto node = prefix.next; node != modules.size(); ++node ) {
+                    if ( !compiled[node] ) continue;
+                    recordCompiledModule(stream.write, access, modules[node].fileName, compiled[node],
+                        libGroup.findModule(modules[node].moduleName));
+                }
+            }
+        } else {
+            failed = compileModulesInOrder(modules, prefix.next, access, logs, libGroup, policies, promoteShared, stream, false,
+                usec).failed;
+        }
         if ( failed ) return failed->errors;
-        if ( logDag ) ModuleDag(modules, access).log(modules, usec, libGroup, logs);
+        if ( logDag ) dag.log(modules, usec, libGroup, logs);
         return {};
     }
 }
