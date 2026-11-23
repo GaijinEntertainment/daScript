@@ -4457,6 +4457,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `get_aot_hash_comment` - Returns a diagnostic string containing the function's own semantic hash and all non-builtin dependency hashes with their mangled names.
 - `get_aot_name` - Returns the AOT-generated name for the specified function.
 - `get_builtin_function_address` - Takes as argument a BuiltInFunction, and returns its address.
+- `get_builtin_function_link_name` - Takes as argument a BuiltInFunction, and returns the symbol name the linker sees for its C++ function, or null when it is not known.
 - `get_const_expr` - Returns what the compiler makes of `expression` as a constant -- folding arithmetic and constant constructor calls even where the compilation policy leaves folding off -- or null when it is not a constant.
 - `get_current_search_module` - Returns the module currently being searched for a function by name, correctly resolving special names like `""`, `"_"`, `"*"`, and `"__"`.
 - `get_distinct_underlying_type` - Returns the workhorse type a distinct type annotation wraps (`float` for `typedef distinct Meters = float`).
