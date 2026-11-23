@@ -882,9 +882,17 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
     // The library handle dasbind's own extern machinery resolves (already-loaded check +
     // dll_search_paths + dasroot/lib fallbacks) — so das code needing raw entry points from a
     // bound library (the --jit-split-modules parallel emit) shares ONE resolution truth.
+    // A bare alias (lib=llvm) names the library its [extern] bindings already loaded.
     void * dasbind_get_library ( const char * library ) {
 #if DAS_BIND_EXTERNAL
         if ( !library || !*library ) return nullptr;
+        if ( !strchr(library, '=') ) {
+            const string prefix = string(library) + "=";
+            lock_guard<mutex> guard(g_dasBindLibMutex);
+            for ( auto & kv : g_dasBindLib ) {
+                if ( kv.second && kv.first.compare(0, prefix.size(), prefix)==0 ) return kv.second;
+            }
+        }
         return bindDynamicLibrary(library);
 #else
         (void)library;

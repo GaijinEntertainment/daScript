@@ -632,7 +632,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
     phase_tm = ref_time_ticks()
     // phase B - per-job walls logged by the pool under log_compile_time; all partitions cached -> zero jobs, skip the pool (and the LLVM symbol resolution) outright
     if (main_ok && !empty(g_split_parts)) {
-        let llvm_lib = __dasbind_get_library("LLVM.dll")
+        let llvm_lib = __dasbind_get_library("llvm")
         if (llvm_lib == null) {
             reset_jit_globals_after_failure()
             panic("LLVM JIT: split emit - can't resolve the LLVM library handle")
