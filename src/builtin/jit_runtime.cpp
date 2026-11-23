@@ -3,9 +3,7 @@
 
 #include "daScript/misc/sysos.h"
 
-#ifdef DAS_ENABLE_DYN_INCLUDES
 #include "daScript/ast/dyn_modules.h"
-#endif
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_handle.h"
