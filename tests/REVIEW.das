@@ -5,6 +5,7 @@ require math
 require daslib/strings_boost
 require daslib/fio
 require dastest/review_gate
+require dastest/file_census
 require dastest/test_shape
 
 // The mechanical half of tests/REVIEW.md (contract: REVIEW_COMMON.md
@@ -142,20 +143,6 @@ def private top_level_chunks(text : string) : array<string> {
     return <- chunks
 }
 
-def private def_name(chunk : string) : string {
-    return "" if (!starts_with(chunk, "def "))
-    let skip = starts_with(chunk, "def private ") ? 12 : 4
-    var name = ""
-    peek_data(chunk) $(d) {
-        var i = skip
-        while (i < length(d) && is_ident_byte(int(d[i]))) {
-            i++
-        }
-        name = slice(d, skip, i)
-    }
-    return name
-}
-
 //! helpers whose `return` hands back a path built from the repo root,
 //! closed over each other
 def private root_helpers(chunks : array<string>) : table<string> {
@@ -164,7 +151,7 @@ def private root_helpers(chunks : array<string>) : table<string> {
     while (changed) {
         changed = false
         for (chunk in chunks) {
-            let name = def_name(chunk)
+            let name = def_decl_name(chunk)
             continue if (empty(name) || key_exists(helpers, name))
             let header_end = find(chunk, "\{")
             continue if (header_end < 0 || find(slice(chunk, 0, header_end), ": string") < 0)

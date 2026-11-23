@@ -161,6 +161,28 @@ def test_file_census(tt : T?) {  // nolint:STYLE038 - one arm per census fact
     }
 }
 
+[test(description = "def_decl_name reads the function name of a def header past its visibility and other modifiers, answers nothing for a line that is no def header, and the census names a private test by its function")]
+def test_def_decl_name(t : T?) {
+    t |> equal(def_decl_name("def test_x(t : T?) \{"), "test_x")
+    t |> equal(def_decl_name("def private test_x(t : T?) \{"), "test_x")
+    t |> equal(def_decl_name("def public test_x(t : T?) \{"), "test_x")
+    t |> equal(def_decl_name("def public static make : Foo \{"), "make")
+    t |> equal(def_decl_name("def abstract const size : int"), "size")
+    t |> equal(def_decl_name("def override sealed tick \{"), "tick")
+    t |> equal(def_decl_name("def   private   spaced \{"), "spaced")
+    t |> equal(def_decl_name("def\tprivate\ttabbed \{"), "tabbed")
+    t |> equal(def_decl_name("def private_thing \{"), "private_thing")
+    t |> equal(def_decl_name("def operator +(a, b : Foo)"), "operator")
+    t |> equal(def_decl_name("def private "), "", "modifiers with no name after them")
+    t |> equal(def_decl_name("// def test_x \{"), "", "a comment is no def header")
+    t |> equal(def_decl_name("    def test_x \{"), "", "the header starts the line")
+    t |> equal(def_decl_name("define test_x"), "")
+    t |> equal(def_decl_name("def"), "")
+    let c <- census_text("x.das", "options gen2\n[test]\ndef private test_hidden(t : T?) \{\n\}\n")
+    t |> equal(length(c.tests), 1)
+    t |> equal(c.tests[0].funcName, "test_hidden")
+}
+
 [test(description = "with_folder_filter answers the root's .das_test per folder name, admits every folder where there is none, and refuses a .das_test that does not compile")]
 def test_with_folder_filter(t : T?) {
     let tmp = create_temp_directory_result("folder_filter")

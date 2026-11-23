@@ -4,6 +4,7 @@ require strings
 require daslib/strings_boost
 require daslib/fio
 require dastest/review_gate
+require dastest/file_census
 
 // The mechanical half of modules/dasLLVM/REVIEW.md (contract: REVIEW_COMMON.md at the repo
 // root). Run from the repo root: bin/daslang modules/dasLLVM/REVIEW.das — exit 0 clean,
@@ -77,14 +78,6 @@ def private opens_for_write(text : string) : bool {
 def private writes(text : string; sinks : table<string>) : bool =>
     calls_any(text, sinks) || opens_for_write(text)
 
-def private def_name(line : string) : string {
-    var rest = slice(line, length("def "))
-    if (rest |> starts_with("private ")) {
-        rest = slice(rest, length("private "))
-    }
-    return ident_prefix(rest)
-}
-
 // A helper in the same file that writes counts as a write at its call sites: the path is
 // spelled at the call and the write happens one frame down.
 def private local_sink_defs(lines : array<string>; var out : table<string>) {
@@ -92,7 +85,7 @@ def private local_sink_defs(lines : array<string>; var out : table<string>) {
     for (raw in lines) {
         let line = strip(raw)
         if (line |> starts_with("def ")) {
-            fn = def_name(line)
+            fn = def_decl_name(line)
         } elif (!empty(fn) && writes(line, SINK_CALLS)) {
             out |> insert(fn)
         }

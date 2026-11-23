@@ -170,19 +170,33 @@ def private record_options(var c : TestFileCensus; body : string) {
     }
 }
 
-//! the function name on a `def` line: `def test_x(t : T?) {` ->
-//! `test_x`
-def private def_name(line : string) : string {
+let private DEF_MODIFIERS <- {"private", "public", "static", "abstract", "override", "sealed",
+    "const"}
+
+//! the function name a `def` header declares, past its visibility
+//! and other modifiers: `def private test_x(t : T?) {` -> `test_x`;
+//! "" when `line` does not start with `def` and a space or a tab
+def def_decl_name(line : string) : string {
     var result = ""
     peek_data(line) $(d) {
-        let at = skip_white_space(d, length("def "))
-        var end = at
-        while (end < length(d)) {
-            let ch = int(d[end])
-            break if (!(is_alnum(ch) || ch == '_'))
-            end++
+        let is_def = (length(d) > 3 && starts_with(d, 0, "def")
+            && is_white_space(int(d[3])))
+        var at = 3
+        while (is_def) {
+            at = skip_white_space(d, at)
+            var end = at
+            while (end < length(d)) {
+                let ch = int(d[end])
+                break if (!(is_alnum(ch) || ch == '_'))
+                end++
+            }
+            let word = slice(d, at, end)
+            if (!key_exists(DEF_MODIFIERS, word)) {
+                result = word
+                break
+            }
+            at = end
         }
-        result = slice(d, at, end)
     }
     return result
 }
@@ -223,7 +237,7 @@ def census_text(path : string; text : string) : TestFileCensus {
             inHeader = false
         }
         if (havePending && line |> starts_with("def ")) {
-            pending.funcName = def_name(line)
+            pending.funcName = def_decl_name(line)
             c.tests |> push(pending)
             havePending = false
         }
