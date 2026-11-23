@@ -2248,12 +2248,14 @@ class LintVisitor : AstVisitor {
         }
         let text = lint_expr_text(expr)
         let twin = expr is ExprCall ? lint017_twin_call(expr as ExprCall) : ""
+        let int_text = expr is ExprConstInt && text == "{(expr as ExprConstInt).value}"
+        let int_value = int_text ? int64((expr as ExprConstInt).value) : 0l
+        let literal = int_text ? lint_int_literal_as(wide, int_value, text) : ""
         var leaf = "{wide}({text})"
         if (empty(text)) {
             leaf = ""
-        } elif (expr is ExprConstInt && text == "{(expr as ExprConstInt).value}"
-                && (wide == "int64" || (expr as ExprConstInt).value >= 0)) {
-            leaf = wide == "int64" ? "{text}l" : "{text}ul"
+        } elif (!empty(literal)) {
+            leaf = literal
         } elif (expr is ExprConstUInt && wide == "uint64"
                 && text == "{(expr as ExprConstUInt).value}u") {
             leaf = "{text}l"

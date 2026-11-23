@@ -236,6 +236,22 @@ def public lint_module_visible(fn : Function?; name : string) : bool {
     return m != null && is_visible_directly(fn._module, m)
 }
 
+//! The literal that spells the int ``value``, written ``digits`` in
+//! the source, in the type the cast ``cast_name`` names; empty when
+//! that type has no literal suffix or cannot hold the value exactly.
+def public lint_int_literal_as(cast_name : string; value : int64; digits : string) : string {
+    let FLOAT_EXACT = 16777216l
+    let float_exact = value >= -FLOAT_EXACT && value <= FLOAT_EXACT
+    if (cast_name == "float") return float_exact ? "{digits}.0" : ""
+    if (cast_name == "double") return "{digits}.0lf"
+    if (cast_name == "int64") return "{digits}l"
+    if (value < 0l) return ""
+    if (cast_name == "uint") return "{digits}u"
+    if (cast_name == "uint64") return "{digits}ul"
+    if (cast_name == "uint8") return value <= 255l ? "{digits}u8" : ""
+    return ""
+}
+
 def public lint_has_annotation(annotations; name : string) : bool {
     //! true when the annotation list of a variable, a field or an
     //! argument carries `name`

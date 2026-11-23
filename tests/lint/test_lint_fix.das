@@ -287,6 +287,12 @@ def test_lint_fix_perf_expressions(t : T?) {
     }
 }
 
+[test(description = "an int cast a float operand promotes stays in the tree, so PERF020 still rewrites it")]
+def test_lint_fix_promoted_cast_operand(t : T?) {
+    check_perf_pair(t, "_fixture_lint_fix_promoted_cast_before.das",
+                    "_fixture_lint_fix_promoted_cast_after.das", { "PERF020" }, 2)
+}
+
 [test(description = "statement-level PERF fixes rewrite the before fixture into the after fixture")]
 def test_lint_fix_perf_statements(t : T?) {
     t |> run("statement-level PERF fixes rewrite the before fixture into the after " +
@@ -406,7 +412,7 @@ def check_style_b_pair(t : T?; name : string; enabled : table<string>; applied :
     t |> equal(length(again), 0)
 }
 
-[test(description = "the STYLE unsafe, container and misc fixes rewrite their before fixtures into the after fixtures")]
+[test(description = "the STYLE unsafe, container, misc and literal-cast fixes rewrite their before fixtures into the after fixtures")]
 def test_lint_fix_style_b(t : T?) {
     t |> run("STYLE024 / 025 / 026 / 034 / 036 drop or narrow unsafe wraps and cast " +
         "spellings") @@(t : T?) {
@@ -418,6 +424,16 @@ def test_lint_fix_style_b(t : T?) {
     }
     t |> run("STYLE028 / 029 / 030 / 039 rewrite receivers, requires and string bytes") @@(t : T?) {
         check_style_b_pair(t, "misc", { "STYLE028", "STYLE029", "STYLE030", "STYLE039" }, 7)
+    }
+    t |> run("STYLE050 / 051 write the literal a cast of an integer literal spells") @@(t : T?) {
+        check_style_b_pair(t, "literal_cast", { "STYLE050", "STYLE051" }, 8)
+    }
+    t |> run("STYLE051 reports the uint8 casts and STYLE050 the rest") @@(t : T?) {
+        let before = fixture("_fixture_lint_fix_literal_cast_before.das")
+        let wide <- collect_style_b_fixes(t, before, { "STYLE050" })
+        let bytes <- collect_style_b_fixes(t, before, { "STYLE051" })
+        t |> equal(length(wide), 6)
+        t |> equal(length(bytes), 2)
     }
 }
 
