@@ -18,9 +18,15 @@ its `cap` argument, or passing `tests_only = true` - is a defect.**
 **A test never creates, overwrites, or deletes a git-tracked path - it works on a temp copy it
 makes itself.**
 
-**A test that writes - through its own filesystem calls, not a child process's - writes only to
-paths it created uniquely for this process (a temp file or a temp directory), and removes them** -
+**A test that writes - through its own filesystem calls, not a child process's and not the JIT
+cache an in-process JIT run writes - writes only to paths it created uniquely for this process (a
+temp file or a temp directory), and removes them** -
 two runs at once collide on a shared path under `build/` (repo root).
+
+**A test that deletes a directory recursively deletes only a directory it created itself, or the
+folder `round_cache_folder` (`_llvm_cache_common.das`) returns for a script it copied into such a
+directory.** A failed in-process JIT run returns an empty `output_path`, and `dir_name` of an
+empty path can be the working directory.
 
 **A test that spawns a daslang child keeps every path the child writes inside a directory `<dir>`
 the test created uniquely for this process.** A child writes its two caches - the front-end

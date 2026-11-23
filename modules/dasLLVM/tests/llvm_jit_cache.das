@@ -60,9 +60,9 @@ def test_jit_obj_cache(t : T?) {
     t |> success(copy_fixture(get_this_module_dir(), dir_name(client), "_llvm_obj_cache_client.das", "var a = 0", "var a = 1000"),
         "round 2 edit client")
     let r2 = check_round(t, "round 2 tail edit", client, 2, 1340)
+    remove_round_cache(t, "round 1 cold", r1)
+    remove_round_cache(t, "round 2 tail edit", r2)
     var err : string
-    rmdir_rec(dir_name(r1.output_path), err)
-    rmdir_rec(dir_name(r2.output_path), err)
     rmdir_rec(dir_name(client), err)
 }
 
@@ -91,9 +91,22 @@ def test_jit_split_modules(t : T?) {
     check_answer(t, "round 2 dll cache hit", r2)
     t |> equal(r2.partitions, 0, "round 2 dll cache hit: no partition re-emitted")
     t |> strictEqual(r2.output_path, r1.output_path, "round 2 dll cache hit: the same content-addressed DLL")
+    remove_round_cache(t, "round 1 split", r1)
     var err : string
-    rmdir_rec(dir_name(r1.output_path), err)
     rmdir_rec(dir_name(client), err)
+}
+
+[test(description = "the cache folder a JIT round's cleanup deletes is the script's own folder under .cache/daslang; a round that wrote no DLL, a path with no content hash, a path outside the cache and a module's folder give no cache folder")]
+def test_round_cache_folder(t : T?) {
+    t |> equal(round_cache_folder(".cache/daslang/_anon_1/0xa"), ".cache/daslang/_anon_1")
+    t |> equal(round_cache_folder("/tmp/w/.cache/daslang/_anon_1/0xa"),
+               "/tmp/w/.cache/daslang/_anon_1")
+    t |> equal(round_cache_folder(""), "", "a round that wrote no DLL")
+    t |> equal(round_cache_folder(".cache/daslang/_anon_1"), "", "no content hash yet")
+    t |> equal(round_cache_folder("0xa"), "", "a bare file name")
+    t |> equal(round_cache_folder("daslang/_anon_1/0xa"), "", "no .cache above daslang")
+    t |> equal(round_cache_folder(".cache/other/_anon_1/0xa"), "", "not the daslang cache")
+    t |> equal(round_cache_folder(".cache/daslang/some_module/0xa"), "", "a module's folder")
 }
 
 def private parse_round(client, blob : string; var res : SplitRound) : bool {
@@ -169,8 +182,8 @@ def test_jit_ast_roundtrip(t : T?) {
     t |> strictEqual(deser.output_path, parsed.output_path,
         "round 2 deserialized: every function hash survived the round trip")
     t |> equal(deser.acc, 340, "round 2 deserialized: the cross-partition answer")
+    remove_round_cache(t, "round 1 parsed", parsed)
     var err : string
-    rmdir_rec(dir_name(parsed.output_path), err)
     rmdir_rec(dir_name(client), err)
 }
 

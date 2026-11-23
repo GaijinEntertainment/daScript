@@ -15,7 +15,8 @@ require daslib/fio
 require daslib/strings_boost
 require llvm/daslib/llvm_env
 
-let private CACHE_FOLDER_PREFIX = "_anon_"
+//! true for the name of a script's folder in the JIT cache
+def public is_jit_cache_folder_name(name : string) : bool => name |> starts_with("_anon_")
 
 def public jit_key_prefix(key : string) : string => "{key}."
 
@@ -125,7 +126,7 @@ def public jit_sweep(cache_dir, manifest_dir : string; dry_run : bool) : JitSwee
     }
     var folders : array<string>
     dir(cache_dir) $(name) {
-        if (name |> starts_with(CACHE_FOLDER_PREFIX) && stat(path_join(cache_dir, name)).is_dir) {
+        if (is_jit_cache_folder_name(name) && stat(path_join(cache_dir, name)).is_dir) {
             folders |> push(name)
         }
     }

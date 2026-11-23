@@ -16,6 +16,7 @@ require daslib/option public
 require daslib/rtti public
 require llvm/daslib/llvm_jit_cli public
 require llvm/daslib/llvm_jit_run public
+require llvm/daslib/llvm_jit_sweep
 require strings
 
 // re-derive a fixture from its pristine source, optionally with one edit applied
@@ -113,6 +114,29 @@ struct public SplitRound {
     hi : int
     hit : int
     miss : int
+}
+
+//! the script's own folder under `.cache/daslang` that holds
+//! `output_path`, "" with no cache folder
+def public round_cache_folder(output_path : string) : string {
+    let folder = dir_name(output_path)
+    let cache = dir_name(folder)
+    let in_cache = base_name(cache) == "daslang" && base_name(dir_name(cache)) == ".cache"
+    return in_cache && is_jit_cache_folder_name(base_name(folder)) ? folder : ""
+}
+
+//! deletes the cache folder `r` wrote; with no cache folder it fails
+//! the test and deletes nothing
+def public remove_round_cache(t : T?; round : string; r : SplitRound) {
+    let folder = round_cache_folder(r.output_path)
+    if (empty(folder)) {
+        t |> failure("{round}: no cache folder to remove, the round wrote '{r.output_path}'")
+        return
+    }
+    return if (!stat(folder).is_dir)
+    var err : string
+    let removed = rmdir_rec(folder, err)
+    t |> success(removed, "{round}: remove {folder}: {err}")
 }
 
 def public compile_for_jit(script : string; exe_mode : bool; blk : block<(var program : smart_ptr<Program>) : void>) {
