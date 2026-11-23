@@ -7472,7 +7472,7 @@ class public LlvmJitVisitor : AstVisitor {
 
 // ExprFakeContext
     def override visitExprFakeContext(expr : ExprFakeContext?) : ExpressionPtr {
-        setE(expr, LLVMGetParam(ffunc, 0u))
+        setE(expr, get_context_param())
         return expr
     }
 
