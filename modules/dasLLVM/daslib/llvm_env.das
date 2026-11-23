@@ -25,6 +25,9 @@ struct public JitEnv {
     @clarg_doc = "Split-JIT LTO probe: partitions emit bitcode and the link runs lld LTO (pass /opt:lldlto=2 plus the CRT /LIBPATHs via --jit-linker-string). Dev instrument for measuring cross-module-inlining recovery; needs --jit-split-modules + --jit-obj-cache=0, announces itself, and folds into the cache keys so a probe artifact never serves a normal run."
     jit_probe_lto : bool = false
 
+    @clarg_doc = "AOT objects (jit_emit_object) hold LLVM IR instead of machine code, for a host whose link runs LTO; the host linker must read the IR of this LLVM version."
+    jit_aot_lto : bool = false
+
     @clarg_doc = "Split-JIT key forensics: log every (partition, mangled name, aot hash) the obj-cache chain folds. Diff two runs to locate WHERE a key diverged - distinguishes a changed hash from a changed fold order."
     jit_dump_hashes : bool = false
 

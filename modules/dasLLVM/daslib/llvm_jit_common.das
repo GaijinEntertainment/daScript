@@ -1071,6 +1071,41 @@ def public emit_object_only(target : JitTarget; mod : LLVMOpaqueModule?; out_pat
     return ok
 }
 
+//! emit_object_only for a host whose link runs LTO: the .o holds the
+//! module's IR, with the triple, layout and cpu attributes the target
+//! machine would have used
+def public emit_object_bitcode(target : JitTarget; mod : LLVMOpaqueModule?; out_path : string;
+                               use_host_cpu : bool = false) : bool {
+    with_default_target_machine(target, 3u, use_host_cpu) $(targetMachine : LLVMTargetMachineRef) {
+        let dl = LLVMCreateTargetDataLayout(targetMachine)
+        LLVMSetModuleDataLayout(mod, dl)
+        LLVMDisposeTargetData(dl)
+    }
+    let mod_triple = LLVMGetDefaultTargetTriple()
+    var file = artifact_path(out_path, JitArtifact.object)
+    if (get_platform_name() == "windows") {
+        file = "{out_path}.obj"
+    }
+    let machine = default_target_cpu_features(target, use_host_cpu)
+    let ok = write_lto_bitcode(mod, mod_triple, machine, file)
+    LLVMDisposeMessage(mod_triple)
+    if (!ok) {
+        to_log(LOG_ERROR, "emit_object_bitcode: LLVMWriteBitcodeToFile failed for {file}\n")
+    }
+    return ok
+}
+
+//! writes `mod` as bitcode for an LTO link: lld's LTO backend reads
+//! the module's triple and the functions' target attributes, which
+//! normal emission takes from the target machine
+def public write_lto_bitcode(mod : LLVMOpaqueModule?; triple : string;
+                             machine : tuple<cpu : string; features : string>;
+                             file : string) : bool {
+    LLVMSetTarget(mod, triple)
+    stamp_target_attrs(mod, machine.cpu, machine.features)
+    return LLVMWriteBitcodeToFile(mod, file) == 0
+}
+
 [arch(at="../ARCHITECTURE_EXE.md#split-exe-lto")]
 //! the LTO link's flags at the run's opt level: regular LTO (one merged module, its optimization serial - the bitcode carries no summary, so a ThinLTO job count would be inert)
 def public lto_linker_args(opt_level : uint) : string {
