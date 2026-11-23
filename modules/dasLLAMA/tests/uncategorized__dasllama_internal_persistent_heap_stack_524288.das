@@ -15,6 +15,7 @@ require dasllama/dasllama_math   // with_dasllama_jobque_
 require _image_memory   // read_page_aligned, zero_bytes: a host's own copy of the bin
 require _model_form   // ModelForm and its pure parts: the load-once forms' knobs, names and pairing
 require strings   // find: a refusal's words
+require daslib/strings_boost   // join: a block's loads and forms as one line
 require math
 
 // The SPIR-V dump differ (harness/vk_spv_diff.das) - the identity gate every kernel fold's
@@ -331,4 +332,79 @@ def test_model_form_account(t : T?) {
     var dev_alone = device_form()
     dev_alone.alone = true
     t |> success(!alone_pass_of(dev_alone, plain), "the control: a device pass is no CPU load's")
+}
+
+var private g_once_live = 0   //! the fake models a load made that no drop has taken back
+var private g_once_loads : array<string>   //! each load's `<path>|<form>`, in order
+
+//! a fake model: the form it was loaded as, alive until its finalizer runs
+struct private OnceModel {
+    form : string
+    live : bool
+}
+
+def private finalize(var m : OnceModel) {
+    if (m.live) {
+        g_once_live--
+        m.live = false
+    }
+}
+
+def private once_form(path, form : string) : OnceModel {
+    g_once_live++
+    g_once_loads |> push("{path}|{form}")
+    return OnceModel(form = form, live = true)
+}
+
+//! a block's gate over a file of the test's own: a loud skip on the handle where the file is absent
+def private once_gate(t : T?; path : string) : bool {
+    return true if (stat(path).is_valid)
+    t |> skip("{path} not present")
+    return false
+}
+
+[test(description = "A load-once block's loop (`model_once_at`, which `with_model_once_at` wires to the models' gate): behind a gate that finds no file it skips on the handle, loads nothing, runs no cell and answers false; over a present file and three forms it loads once a form, in the list's order, from the file's path, hands the cells each form's own model, holds exactly one model alive inside every cells call and none after the call, and answers true")]
+def test_model_once_block(t : T?) {
+    let root = test_temp_dir()
+    t |> run("an absent file: the gate's skip, no load, no cell, false") @(t : T?) {
+        g_once_live = 0
+        g_once_loads |> clear()
+        var skips = 0
+        var cells = 0
+        var p = new T("probe", ref_time_ticks(), false)
+        unsafe {
+            p.onSkipNow <- @capture(& skips)() {
+                skips++
+            }
+        }
+        let ran = model_once_at(p, "infra", "once_absent.model", path_join(root, "once_absent.model"), ["a", "b"], @@once_gate, @@once_form) $(var m; form) {
+            cells += m.form == form ? 1 : 2
+        }
+        unsafe {
+            delete p
+        }
+        t |> success(!ran, "the call answers false")
+        t |> equal(skips, 1, "the gate skipped on the handle, once")
+        t |> equal(length(g_once_loads), 0, "the loader is never invoked")
+        t |> equal(cells, 0, "no cell runs")
+    }
+    t |> run("a present file, three forms: a load a form in order, each form's own model, one alive at a time, none after") @(t : T?) {
+        g_once_live = 0
+        g_once_loads |> clear()
+        let path = path_join(root, "once_stub.model")
+        t |> success(fwrite(path, "a stub, never read"), "the stub file is written")
+        var seen : array<string>
+        var alive : array<int>
+        let ran = model_once_at(t, "infra", "once_stub.model", path, ["a", "b", "c"], @@once_gate, @@once_form) $(var m; form) {
+            seen |> push("{form}={m.form}")
+            alive |> push(g_once_live)
+        }
+        t |> success(ran, "the call answers true")
+        t |> equal(join(g_once_loads, " "), "{path}|a {path}|b {path}|c", "one load a form, in the list's order, from the file's path")
+        t |> equal(join(seen, " "), "a=a b=b c=c", "the cells see each form's own model")
+        t |> equal(join(alive, " "), "1 1 1", "exactly one model is alive inside every cells call")
+        t |> equal(g_once_live, 0, "no model is alive after the call")
+        delete seen
+        delete alive
+    }
 }

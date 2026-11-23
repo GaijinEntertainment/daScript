@@ -69,6 +69,23 @@ def private pinned_f32_batch(var yp : float?; wp : float const?; xp : float cons
     return true
 }
 
+//! `blk`, then `restore`, however `blk` leaves: a panic is re-raised once `restore` has run (a `defer` does not run when
+//! its scope panics)
+def with_put_back(restore : block<() : void>; blk : block<() : void>) {
+    var raised = false
+    var why = ""
+    try {
+        invoke(blk)
+    } recover {
+        raised = true
+        why = this_context().last_exception
+    }
+    invoke(restore)
+    if (raised) {
+        panic(why)
+    }
+}
+
 //! `blk` with every fp32 batch GEMM (`matmul_batch`, every form) served through the tile's reference
 //! permutation at every dot length and token count, through the engine's f32 tile pin - its own seat, ahead
 //! of the float-batch override an accelerate lane arms - the pin found put back however `blk` leaves, a panic
@@ -84,18 +101,11 @@ def with_reference_f32_tile(t : T?; blk : block<() : void>) {
     let tile_was = g_pinned_tile
     g_pinned_tile = tile
     let pin_was = set_f32_tile_pin(@@pinned_f32_batch)
-    var raised = false
-    var why = ""
-    try {
+    with_put_back($ {
+        set_f32_tile_pin(pin_was)
+        g_pinned_tile = tile_was
+    }) {
         invoke(blk)
-    } recover {
-        raised = true
-        why = this_context().last_exception
-    }
-    set_f32_tile_pin(pin_was)
-    g_pinned_tile = tile_was
-    if (raised) {
-        panic(why)
     }
 }
 
@@ -105,16 +115,9 @@ def with_reference_f32_tile(t : T?; blk : block<() : void>) {
 def with_f32_row_nest(blk : block<() : void>) {
     let min_n_was = get_f32_batch_tile_min_n()
     set_f32_batch_tile_min_n(1l << 40l)
-    var raised = false
-    var why = ""
-    try {
+    with_put_back($ {
+        set_f32_batch_tile_min_n(min_n_was)
+    }) {
         invoke(blk)
-    } recover {
-        raised = true
-        why = this_context().last_exception
-    }
-    set_f32_batch_tile_min_n(min_n_was)
-    if (raised) {
-        panic(why)
     }
 }

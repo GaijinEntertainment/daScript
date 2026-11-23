@@ -3040,6 +3040,21 @@ literal `REVIEW.das` reads, saying why the load cannot be a form of its model's 
 constructors, its pure parts (`form_name`, `device_default`, `main_side`, `same_cpu_load`, `codec_pass`, the account's
 `form_owed` and `alone_pass_of`), `with_ctx_cut` and `own_load` are `_model_form.das`'s, which `_cpu_gpu_model.das`
 requires publicly; `test_model_form_knobs` and `test_model_form_account` hold them model-free.
+`with_model_once` (`_model_once.das`) is the one loader of a model file that is no chat model - a TTS voice, a front-end
+pack, a stress model - for a run area's cells: `with_model_once(t, "<area>", "<file>", forms, @@<form loader>) $(var m;
+form) { ... }` builds each form of `forms` through the family's form loader (a function of the file's path and the form's
+name that `REVIEW.das`'s `LOADERS` lists), runs the cells on it and drops it before the next form loads; the area and the
+file are string literals on the call's first line, and `with_model_once_at` names a root other than the models directory.
+The loop is `_model_form.das`'s `model_once_at`, the file's gate its argument - `with_model_once_at` hands it
+`model_available` - and `test_model_once_block` holds it model-free on a fake model.
+A file the box lacks skips loudly once, at the call's `t`, and none of its cells runs. The TTS form loaders are
+`_tts_parity.das`'s, each answering the facade's `TtsModel`: `styletts2_form` (`image`: the facade's load through the image
+rail; `f32`, `q8`, `kq`: the lane minted in memory, no `.dlim` baked; the packs read where they sit beside the file) and
+`pocket_form` (`image`; `native`, `f32`, `q8`: minted with no lane pinned, the f32 pin, the q8 pin, the lane unset after
+the mint, a panic included - `with_put_back`, `_f32_tile_pin.das`). Each block's first step holds the form to the lane its name says (`styletts2_form_is`,
+`pocket_form_is`, `ru_stress_form_is`). A cell
+that reads two files runs in the inner of two nested calls; a cell that is its file's only cell holds the call inside its
+subtest, so an absent file skips that cell; a compare of two forms follows the call, on what the cells kept.
 `_cpu_gpu_model.das`'s feed helpers: `feeds_within` (each device feed against its CPU twin), `dense_feeds_block` (a
 block of the default form and the CPU form answering it), `MmqOffFeed` (the MMQ-off form's control feed).
 `test_batch_decode.das` - stocked suite, `-jit` only: the CPU batched stack against the
@@ -3899,7 +3914,11 @@ local (one hop or two), a top-level constant or another file's constant binds, t
 parameter to an unlisted loader (the block's home among them), a second block of one file, a one-line function's load on
 its def line, a listed loader no file defines, an area whose runner lists no file and a held file found clean each red,
 the finding naming its site's file and line and the model file; a held file's block owns its file where no unheld block
-does, and its second block of a file an unheld file blocks is a held site, the unheld block its owner.
+does, and its second block of a file an unheld file blocks is a held site, the unheld block its owner. A
+`with_model_once` call and a `with_model_once_at` call are blocks too: a second load of the file red, a second block of
+one area and file red, a block an area green, a file the block's form loader loads beside its own a load site of that
+file, a held file's `with_model_once` block named by its call; `--area <name>...` names the areas the rail reads the files as - two loads of a `.bin` pack red in the tts area and
+green in the llm area, and a held file one area finds dirty no clean file of another.
 `test_cell_pins_gate`: the cell-pin check of this folder's `REVIEW.das` over its `--cell-pins <file>...` rail - a fixture
 cell module that reads the backend pin and its form's K-quant knob, a commented pin beside them, and a call whose name
 ends a longer name or follows a `.`, green; a cell calling
@@ -5025,14 +5044,17 @@ unit and after a currency sign, a unit's dot that ends the sentence kept, abbrev
 punctuation - a normalized sentence a fixed point.
 `test_tts_postag.das` - stocked suite; model-free cells: the tagger's word class and shape
 features (the trainer's own hyphen rule, the d/h/q suffixes), the tokenizer's comma and colon
-infix rules, and the missing-pack panic; model-gated (`tts_postag.bin` in the models dir): the TTS
+infix rules, and the missing-pack panic; model-gated (`tts_postag.bin` in the models dir): the load
+budget (`test_tagger_load_budget`, `own_load`: the load's own time is the claim). The cells on a loaded
+tagger are `_tts_postag_cells.das`'s (`tts_postag_cells`), run on the pack's block in `test_tts_g2p.das`: the TTS
 tokenizer token-for-token against the reference tokenizer on the corpus, the tagger's agreement
-with the reference tagger (overall and on the heteronym words), the packed file's header floors,
-and the load budget.
+with the reference tagger (overall and on the heteronym words) and the packed file's header floors.
 `test_tts_g2p.das` - stocked suite; model-free cells: the missing-pack panic, the pack-version
 refusal (a synthetic version 1 header in a per-process temp dir; the stocked pack is its positive
-control) and the American-to-British rewrite table over pinned strings, idempotence included;
-model-gated (`tts_g2p.bin` + `tts_postag.bin`): the grapheme-to-phoneme rail phoneme-identical
+control, `own_load`: a load through the same call) and the American-to-British rewrite table over pinned strings,
+idempotence included; the pack's load budget (`own_load`: the load's time is the claim);
+model-gated (`test_english_packs`: `tts_postag.bin`'s block, inside it `tts_g2p.bin`'s, each pack loaded once and the
+cells their subtests, the American-only pack's block inside the cell that reads it): the grapheme-to-phoneme rail phoneme-identical
 with the reference front end on the corpus (fed the same normalized text) except the sentences its
 heteronym rules and the lexicon additions of `../harness/g2p_local_additions.json` read past it
 (named in the cell), both rails' remaining mismatch counts pinned exactly at 2, the heteronym gate
@@ -5207,7 +5229,12 @@ picks leave the f32 pick at a margin past `NEAR_TIE`). The ELECTRA lane (`test_r
 `ru-stress-ruelectra-small-q4.gguf`): the embeddings through the 128-to-256 projection, two words of
 one sentence from one pass bit for bit their single picks with finite logits, and замок read both
 ways by its two sentences. The K-quant and per-32 word-table forms have no cell: no stocked file
-stores its table in one.
+stores its table in one. Each model file is a block loaded once: `test_ru_stress_packs` holds
+`tts_g2p_ru.bin`'s and, inside it, `tts_ctx_ru.gguf`'s (the pack's cells on the pack, the context pass's on both);
+`test_ru_stress_rubert_base` the f32 checkpoint's (forms `f32`, `q8`: the encoder's cells a form each, the API's on `f32`);
+`test_ru_stress_quantized_lane` the shipped lane's and, inside it, its f32 reference's; the ELECTRA file's sits inside its
+one cell. `test_stress_pick_order` keeps the model-free head of its class-pick cell, and that cell's two asserts on the
+pack are the block's cell beside it.
 `test_tts_kitten.das` - stocked suite; the symbol-map and token-rule cells run everywhere
 (the front end's inventory into espeak-style IPA against the reference rewrite over the corpus,
 the reference driver's re-spacing and wrapping), as does `test_spectrum_diff_reds_a_nan` (the
@@ -5216,7 +5243,13 @@ a NaN in our magnitude, our phase or the reference magnitude reds it,
 the clean rows the control), the model-gated cells (`kitten-<size>.gguf` +
 `tts_oracle/kitten_<size>/` under the models dir, both from `performance/build_tts_data.das`)
 run the parity rail of `_tts_parity.das` per size and a facade smoke cell that speaks one
-sentence and checks the PCM is finite, non-silent, of speech length, and carries its timings;
+sentence and checks the PCM is finite, non-silent, of speech length, and carries its timings.
+Each voice file is one block (`with_model_once`, `styletts2_form`): `test_kitten_nano` holds `kitten-nano.gguf`'s -
+its image form the facade cell, the generator-hook cell (`test_kitten_generator_hook`), the over-long chunk
+(`test_kitten_over_long_chunk`, on the facade's own StyleTTS2 model) and the facade's cells of
+`_tts_facade_cells.das`, its `f32`, `q8` and `kq` forms the synthesis and the parity rail a lane each -
+`test_kitten_facade` the two published files' and `test_kitten_mini` `kitten-mini.gguf`'s (`f32`, `q8`, `kq`: the rail);
+`test_kitten_stored_file` owns its loads (`own_load`: it holds a stored file's staging beside two lanes of its source);
 `test_kitten_stored_file` (nano) writes the file that stores the Q8_0 lane's weights and the one that stores
 the recipe lane's (`write_styletts2_gguf`): each under half its source, naming its lane, its staged
 quant and K-quant bytes the in-memory lane's byte for byte and every float the lane's or the lane's
@@ -5229,10 +5262,12 @@ store, a quantized tensor in a file that declares no layout, a conv whose channe
 not name, a K-quant dense layer, a K-quant voice pack, an LSTM with one matrix of floats, a format no
 site takes and the writer over a stored file are each refused by name, a tensor of halves in a file of
 floats stages (the control), and a destination that cannot be written answers false with no temp file;
-the facade cell (`test_kitten_facade`) speaks the f32 file and the two published stored files
-(`kitten-nano-q8.gguf`, `kitten-nano-kq.gguf`, each skipping where absent);
+the facade cell (`kitten_facade_cell`) speaks the f32 file on `test_kitten_nano`'s image form and, under
+`test_kitten_facade`, the two published stored files (`kitten-nano-q8.gguf`, `kitten-nano-kq.gguf`, each skipping where absent);
 `test_kitten_synthesis_metal` (nano) is the synthesis across the tower knob through
-`tts_gpu_synthesis` (`_tts_parity.das`; kokoro's twin is `test_kokoro_synthesis_metal`): on the
+`tts_gpu_synthesis_lane` (`_tts_parity.das`; kokoro's twin is `test_kokoro_synthesis_metal`), a cell a lane form -
+the f32 reference lane first, the served lane on `q8`, the recipe lane on `kq`, each lane on its own tower
+verdict: on the
 served lane every chunk served at every seat but the generator's, one tower encode per seat per
 chunk, the knob-off chunks reaching every seat (the generator seat's included), serving nothing and
 declining by name at each, the generator seat never reached while the decode seat serves, the
@@ -5253,8 +5288,11 @@ tower reads the weights dequantized at f32 through their f16 block scales) - the
 on the q8 slab writes. Each cell carries a scaled or
 reversed input as the compare's control. The seam check carries the generator seat alone on the
 oracle's own inputs within `GPU_SEAM_BAR` (5e-3; 1.2e-3 at most), the knob-off leg bit-equal to
-the CPU chain with its decline recorded. The models for these cells mint in memory from the GGUF's
-staging on the lane each cell names, no `.dlim` baked. The GPU cells read the serving driver
+the CPU chain with its decline recorded. The rail runs a form at a time: the f32 form's cell holds every stage but
+the q8 and recipe decodes and keeps each bring-up case's decode inputs (`ParityDecode`), which the `q8` and `kq` forms'
+cells feed their decode seat (`tts_parity_decode`: a skip where the oracle is not stocked, a red where a stocked oracle
+left it no case; the inputs are the f32 form's CPU chain's, `cpu_decode_inputs`). The lane forms mint in memory
+from the GGUF's staging, no `.dlim` baked, and load only where the build carries a GPU home (`styletts2_lane_forms`). The GPU cells read the serving driver
 through the rail's helpers (the `_gpu_knobs.das` record - `gpu_knobs`, `set_gpu_knobs`,
 `with_gpu_knobs`, shared with the tower twins - and `set_serving_gpu_tower`, `gpu_encodes`, `gpu_declines`): the Metal
 tower on an Apple build, the Vulkan TTS driver elsewhere. Where no GPU device serves, every cell
@@ -5265,7 +5303,9 @@ The kitten image rail is the `image` suite's `kitten` arm (the TTS area's), not 
 string, the out-of-vocabulary drop, the style-row clamps, and the pack-name language rule
 (`<language><f|m>_` for all nine codes, and every other shape reading "" whatever letter it opens
 with - the letter alone would make "emma" Spanish); model-gated on the Russian fine-tune
-(`kokoro-ru.gguf` + `tts_g2p_ru.bin` under models_dir(), `test_kokoro_ru_facade`):
+(`kokoro-ru.gguf` + `tts_g2p_ru.bin` under models_dir(), `test_kokoro_ru_facade`, the file's one block: the cells
+that read by the context model first, the pack cell - which drops that model - last; the directory front end's cell
+follows the block and owns its load, `own_load`: one load of every pack the directory holds and the context model):
 `tts_pack_names` naming the Russian pack alone before any load, both voice packs listed as `ru`
 from the file's own declaration (the family record carries it; the name alone carries none), the
 front end listing Russian, the Russian normalizer and phonemizer through the facade's language
@@ -5284,7 +5324,8 @@ with the context model deleted the pack's marking, the same whether the splice r
 the marking; model-free, `tts_ru_stress_model_path` on a scratch directory without and with
 `tts_ctx_ru.gguf` (`test_ru_stress_model_probe`);
 model-gated (`kokoro-82m.gguf` +
-`tts_oracle/kokoro/`): the vocabulary and style-row rule, the parity rail of `_tts_parity.das`
+`tts_oracle/kokoro/`, `test_kokoro_82m`, the file's one block: the facade's cells on the image form, the synthesis and
+the rail a lane form each as the kitten entry describes): the vocabulary and style-row rule, the parity rail of `_tts_parity.das`
 against the PyTorch reference, a facade smoke cell through the front end's own inventory (the 28
 English packs, two declared languages, 8 of them British), the British voice cell - one line
 phonemized in both dialects, every British symbol proven to be in the model's own vocabulary by
@@ -5415,9 +5456,21 @@ for them and false off the page, too short or absent, the same samples as the im
 borrow while the model lives and none after, the ASR loader, a whisper lane read and a base off
 the page each refusing by name, a native stage without q8 refused by name, and zeroed planes
 speaking otherwise as the control. Every cell that loads a Pocket GGUF mints it in memory
-(`pocket_minted`, `pocket_tts_minted` in `_tts_parity.das`), so the file writes no image beside a
-stocked model; `test_pocket_facade` loads through the facade and is the one that bakes.
-`test_tts_facade.das` - stocked suite; model-free cells: the sentence chunker (the reference
+(`pocket_form`'s lane forms and `pocket_minted`, `pocket_tts_minted` in `_tts_parity.das`), so the file writes no image
+beside a stocked model; `test_pocket_facade` and `test_pocket_reports_generation_complete` run on an image form, the
+facade's own load, which bakes. Each file is a block loaded once a form (`with_model_once`, `pocket_form`):
+`test_pocket_en` holds `pocket-tts-en.gguf`'s - `image`, `native`, `f32`, `q8` - each former test a subtest under its own
+name, `test_pocket_f16_table`'s halfwords kept on the `native` and `f32` forms and compared after the block;
+`test_pocket_en_q8` and `test_pocket_en_kq` the published files' (the K-quant file's also under the `q8` and `f32` pins,
+`test_pocket_quiet_floor`'s two lanes, compared after the block), the served seats' cells a file each
+(`test_pocket_codec_metal_served`, `test_pocket_frames_metal_served`, the prompt seat's served leg) and, on the q8 file,
+`test_pocket_frames_after_model_drop`; `test_pocket_languages`, `test_pocket_small_models` (the voice-state cap its
+subtest on the 18M file), `test_pocket_small_refl` and `test_pocket_no_encoder` (the completion cell its subtest on the
+one-voice file's image form, the two 18M files' speech compared after their blocks) a literal block a file. The cells
+that hold several lanes or files at once own their loads (`own_load`: `test_pocket_q8_file`, `test_pocket_kq_file`,
+`test_pocket_prepared_prompt_transfer`), as does
+`test_pocket_from_memory` (a reload from bytes it bakes).
+`test_tts_facade.das` - stocked suite, every cell model-free: the sentence chunker (the reference
 driver's boundary rule, the cap counted in codepoints, the hard split of a whitespace-free run,
 the appended comma as Kitten's driver rule and the bare text Kokoro's sends), the normalizer the
 facade exposes (`tts_normalize`: abbreviation, decimal, money, clock, date, ordinal, percentage,
@@ -5431,9 +5484,10 @@ one, and the harmonic source's noise stream on a hand-built decoder (a captured 
 the reference's order - phases, then normals row by row - against the phases from
 `styletts2_draw_noise` plus the source's own per-window draw, sample-identical; another seed
 moving most samples; the window knob read back from the carry's stride at the default, the whole
-run and five frames, each speaking the same samples; a negative window refused by name); model-gated
-(`kitten-nano.gguf` through `model_available` + the front-end
-packs): the streaming form's chunks concatenate to the buffered synthesis sample for sample, one
+run and five frames, each speaking the same samples; a negative window refused by name).
+`_tts_facade_cells.das` - the facade's cells on a loaded kitten-nano (`tts_facade_kitten_cells`, run on the image form
+of `test_tts_kitten.das`'s `test_kitten_nano` block; each skips without the phoneme pack beside the file, and the release
+cell, last, puts the chunk cap back): the streaming form's chunks concatenate to the buffered synthesis sample for sample, one
 synthesis at one lane and the other at the box's lanes, the phonemizer on the corpus rail, the
 model-keyed chunker's Kitten arm (the driver's comma - the arm no model-free cell reaches), the
 language form of `tts_phonemize` - the declared language reads as the bare form does, an
@@ -5499,7 +5553,10 @@ explains). The whole rail runs under `with_reference_f32_tile` (`_f32_tile_pin.d
 GEMM on `f32_batch_tile`'s declared fallback through the engine's f32 tile pin (`set_f32_tile_pin`), a
 seat of its own ahead of the float-batch override, so a sidecar crowning another permutation moves no bar
 and the rail holds under `DASLLAMA_ACCEL=1` - only the f32 tile is pinned, every other kernel keeps its
-stamp, and the pin is put back however the block leaves, a panic included. The quant matrices:
+stamp, and the pin is put back however the block leaves, a panic included. The rail's cells run on one form of
+the model at a time (`styletts2_parity_cell`, `styletts2_synthesis_cell`), the forms a voice's block loads through
+`styletts2_form` and a Pocket file's through `pocket_form`; `facade_smoke_cell` is the facade smoke on a loaded image
+form. The quant matrices:
 `test_quant_mints` runs a conv minted in the K-quant form (Q4_K, Q5_K, Q6_K; forward, transposed and
 channel-major; stride 1 to 10; a stacked row padded to 256 and one on it; disk-order and repacked
 planes) against the f32 conv over the weights its own planes dequantize to at the q8 dot-envelope

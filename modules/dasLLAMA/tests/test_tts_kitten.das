@@ -14,6 +14,8 @@ require daslib/defer
 require daslib/fio
 require _tts_corpus
 require _tts_parity
+require _tts_facade_cells   // the facade's cells on kitten nano's image form
+require _model_once
 require _model_tier
 require _gguf_writer   // gguf_retyped_copy / gguf_retyped_refusal: the stored file's refusal carriers
 require dasllama/dasllama_gguf    // the GGML types a carrier is retyped to; f16_to_f32: a stored scale is a half
@@ -31,7 +33,8 @@ require dasllama/dasllama_env     // g_env_engine.image: the image rail's switch
 // seat declines a stage. The facade cell also speaks the published files that store a lane
 // (`kitten-nano-q8.gguf`, `kitten-nano-kq.gguf`), each leg skipping without its file; the stored-file
 // cell writes its own files from kitten-nano.gguf, its later legs skip where the first wrote none, and
-// its image-rail leg skips with the rail off (DASLLAMA_IMAGE=0).
+// its image-rail leg skips with the rail off (DASLLAMA_IMAGE=0). Each voice file loads once a form, through
+// its one `with_model_once` block; the stored-file cell holds its own loads.
 
 [test(description = "`kitten_phonemes_from_misaki` rewrites all 200 corpus sentences to the fixture's espeak IPA exactly plus the calibrated rules, and `kitten_token_ids` emits pad-wrapped ids with punctuation as its own token and a closing ellipsis")]
 def test_symbol_map(t : T?) {
@@ -95,19 +98,32 @@ def test_spectrum_diff_reds_a_nan(t : T?) {
 def private oracle_dir(size : string) : string =>
     path_join(models_dir(), "tts_oracle/kitten_{size}")
 
-def private gguf_path(size : string) : string => path_join(models_dir(), "kitten-{size}.gguf")
-
 // the front end's espeak-inventory phonemes, as the fixture carries them, into the driver's ids
 def private kitten_ids_of(ps : string) : array<int> => <- kitten_token_ids(ps)
 
-// text in, speech out through the facade: the front end's packs sit beside the GGUF in the store
-[test(description = "Kitten nano - its file of floats, and the published files that store its Q8_0 lane and its recipe lane - through the facade lists 8 voices at 24 kHz and speaks a 51-character sentence as 1 to 10 seconds of finite audio peaking above 0.05, with every stage clock running and the total covering its parts")]
-def test_kitten_facade(t : T?) {
-    for (stem in fixed_array("nano", "nano-q8", "nano-kq")) {   // the file of floats, then the two published files that store a lane
-        t |> run("{stem}: text in, speech out") @(t : T?) {
-            facade_smoke(t, gguf_path(stem), true, 8) $(var m : TtsModel; c : TtsCaps) {
+// a lane form's cell of the parity rail on kitten-`size`.gguf
+[cold_path]
+def test_kitten_oracle(t : T?; m : TtsModel; form, size : string; var rows : St2LaneRows) {
+    styletts2_parity_cell(t, m, form, TtsParityRig(family = "kitten-tts", oracle_dir = oracle_dir(size), ids = @@kitten_ids_of),
+        "{size} against onnxruntime, captured noise", rows)
+}
+
+// a lane form's cell of the served synthesis on kitten nano
+[cold_path]
+def test_kitten_synthesis_metal(t : T?; var m : TtsModel; form, path : string) {
+    styletts2_synthesis_cell(t, m, form, path, "nano: the synthesis on the Metal tower vs the CPU chain",
+        "The tower serves the generator, and the words still land.", "Bella")
+}
+
+// text in, speech out through the facade, on the image form `m` of kitten-`stem`.gguf: the front end's packs sit beside
+// the GGUF in the store
+[cold_path]
+def private kitten_facade_cell(t : T?; var m : TtsModel; stem : string) {
+    unsafe {
+        t |> run("{stem}: text in, speech out") @capture(& m)(t : T ?) {
+            facade_smoke_cell(t, m, path_join(models_dir(), "kitten-{stem}.gguf"), true, 8) $(var fm : TtsModel; c : TtsCaps) {
                 let served0 = styletts2_gpu_stats("decode").served
-                var inscope audio <- synthesize(m, "The quick brown fox jumps over the lazy dog, twice.", "Bella")
+                var inscope audio <- synthesize(fm, "The quick brown fox jumps over the lazy dog, twice.", "Bella")
                 t |> equal(audio.sample_rate, 24000)
                 // 51 characters of text: well over a second of speech, under ten
                 t |> success(length(audio.pcm) > 24000 && length(audio.pcm) < 240000, "{length(audio.pcm)} samples")
@@ -148,9 +164,8 @@ struct HookProbe {
     silent_after_serve : bool
 }
 
-def private hook_probe(path : string) : HookProbe {
+def private hook_probe(var m : TtsModel) : HookProbe {
     var r = HookProbe()
-    var inscope m <- load_tts_model(path)
     register_styletts2_gpu(St2GpuDriver(gen = @@generator_stub))   // the generator seat alone: the decode seat empty, so the CPU chain reaches it
     defer() {
         unregister_styletts2_gpu()
@@ -171,14 +186,12 @@ def private hook_probe(path : string) : HookProbe {
     return r
 }
 
-[test(description = "A registered StyleTTS2 generator hook is called once per chunk: when it declines nothing is counted served and the CPU chain still speaks, and when it serves its silent waveform reaches the facade and is counted")]
-def test_kitten_generator_hook(t : T?) {
-    t |> run("nano: the generator hook declines into the CPU chain and serves when it answers") @(t : T?) {
-        if (tts_data_missing(t, gguf_path("nano"), false)) {
-            return
-        }
-        with_dasllama_jobque_() {
-            let r = hook_probe(gguf_path("nano"))
+[cold_path]
+def private test_kitten_generator_hook(t : T?; var m : TtsModel; path : string) {
+    unsafe {
+        t |> run("nano: the generator hook declines into the CPU chain and serves when it answers") @capture(& m)(t : T ?) {
+            return if (tts_data_missing(t, path, false))
+            let r = hook_probe(m)
             t |> equal(r.calls_after_decline, 1, "one chunk, one hook call")
             t |> equal(r.served_after_decline, 0, "a decline serves nothing")
             t |> success(r.spoke_after_decline, "the CPU chain spoke after the decline")
@@ -188,10 +201,65 @@ def test_kitten_generator_hook(t : T?) {
     }
 }
 
-[test(description = "Kitten nano on the GPU tower serves every seat once a chunk on the served lane, speaks above the 0.05 peak floor with a sample count within a twentieth of the CPU chain, then holds the f32 reference lane against the CPU")]
-def test_kitten_synthesis_metal(t : T?) {
-    t |> run("nano: the synthesis on the Metal tower vs the CPU chain, the served lane") @(t : T?) {
-        tts_gpu_synthesis(t, gguf_path("nano"), "The tower serves the generator, and the words still land.", "Bella")
+// The reference pipeline truncates a chunk past the encoder's positions and logs it; nothing on
+// the served path may panic on a long one.
+[cold_path]
+def private test_kitten_over_long_chunk(t : T?; m : TtsModel) {
+    unsafe {
+        t |> run("nano: a chunk past the encoder's positions is truncated, not refused") @capture(& m)(t : T ?) {
+            let cap = m.model.albert.max_pos
+            let said = styletts2_spoken(m.model, int(cap) + 64)
+            t |> equal(int64(said.ids), cap + 64l, "the chunk is 64 ids past the encoder's {cap} positions")
+            t |> success(said.samples > 0l, "{said.ids} ids spoke {said.samples} samples")
+            t |> equal(said.counted, said.samples, "the timings count the samples the truncated chunk produced")
+        }
+    }
+}
+
+// Kitten nano's file of floats, one block: the image form carries the facade's cells (`_tts_facade_cells.das` and this
+// file's), the lane forms the served synthesis across the tower knob and the parity rail.
+[test(description = "kitten-nano.gguf loads once a form. Its image form through the facade lists 8 voices at 24 kHz and speaks a 51-character sentence as 1 to 10 seconds of finite audio peaking above 0.05, with every stage clock running and the total covering its parts; a registered generator hook is called once per chunk, serves nothing when it declines while the CPU chain speaks, and its silent waveform reaches the facade when it serves; an id sequence 64 past the encoder's max positions is truncated, not refused, the timings counting its samples exactly; `tts_phonemize` reproduces the pinned corpus rows' misaki phonemes bare and with en-us, the model declares en-us alone and an undeclared language panics; the model's own chunker appends the driver's comma; a streamed synthesis at one lane concatenates to the buffered one at the box's lane count sample for sample; the source window and `tts_release_scratch` leave the next synthesis sample-identical and a 24-codepoint cap yields more chunks of audible speech. Its lane forms on the GPU tower hold the f32 reference lane against the CPU, then serve every seat once a chunk on the served and recipe lanes above the 0.05 peak floor within a twentieth of the CPU chain's sample count; against onnxruntime dumps with captured noise every case's token ids and sample count match and each traced stage holds 1e-4 of the oracle's peak, with poisoned controls, the q8 and recipe lanes' decode on the tower within their bars")]
+def test_kitten_nano(t : T?) {
+    let path = path_join(models_dir(), "kitten-nano.gguf")
+    var inscope rows = St2LaneRows()
+    with_dasllama_jobque_() {
+        with_model_once(t, "tts", "kitten-nano.gguf", styletts2_lane_forms(true), @@styletts2_form) $(var m; form) {
+            styletts2_form_is(t, m, path_join(models_dir(), "kitten-nano.gguf"), form)
+            if (form == "image") {
+                kitten_facade_cell(t, m, "nano")
+                test_kitten_generator_hook(t, m, path)
+                test_kitten_over_long_chunk(t, m)
+                tts_facade_kitten_cells(t, m, path)
+            } else {
+                test_kitten_synthesis_metal(t, m, form, path)
+                test_kitten_oracle(t, m, form, "nano", rows)
+            }
+        }
+    }
+}
+
+[test(description = "The published kitten nano files that store a lane - the Q8_0 lane and the recipe lane - each load once and through the facade list 8 voices at 24 kHz and speak a 51-character sentence as 1 to 10 seconds of finite audio peaking above 0.05, with every stage clock running and the total covering its parts")]
+def test_kitten_facade(t : T?) {
+    with_dasllama_jobque_() {
+        with_model_once(t, "tts", "kitten-nano-q8.gguf", ["image"], @@styletts2_form) $(var m; form) {
+            styletts2_form_is(t, m, path_join(models_dir(), "kitten-nano-q8.gguf"), form)
+            kitten_facade_cell(t, m, "nano-q8")
+        }
+        with_model_once(t, "tts", "kitten-nano-kq.gguf", ["image"], @@styletts2_form) $(var m; form) {
+            styletts2_form_is(t, m, path_join(models_dir(), "kitten-nano-kq.gguf"), form)
+            kitten_facade_cell(t, m, "nano-kq")
+        }
+    }
+}
+
+[test(description = "Kitten mini, a form loaded once each, against onnxruntime dumps with captured noise: every case's token ids and sample count match the oracle, and each traced stage holds 1e-4 of the oracle's peak, with poisoned controls, the q8 and recipe lanes' decode on the tower within their bars")]
+def test_kitten_mini(t : T?) {
+    var inscope rows = St2LaneRows()
+    with_dasllama_jobque_() {
+        with_model_once(t, "tts", "kitten-mini.gguf", styletts2_lane_forms(false), @@styletts2_form) $(var m; form) {
+            styletts2_form_is(t, m, path_join(models_dir(), "kitten-mini.gguf"), form)
+            test_kitten_oracle(t, m, form, "mini", rows)
+        }
     }
 }
 
@@ -214,25 +282,6 @@ def test_tts_lane_pin(t : T?) {
             t |> success(tts_serves_q8(), "the q8 pin")
             reset_tts_q8()
             t |> success(tts_serves_q8(), "reset from the q8 pin returns to the policy default")
-        }
-    }
-}
-
-// The reference pipeline truncates a chunk past the encoder's positions and logs it; nothing on
-// the served path may panic on a long one.
-[test(description = "`styletts2_synthesize` on kitten nano truncates an id sequence 64 past the encoder's max positions instead of panicking, producing samples that the timings count exactly")]
-def test_kitten_over_long_chunk(t : T?) {
-    t |> run("nano: a chunk past the encoder's positions is truncated, not refused") @(t : T?) {
-        if (!model_available(t, gguf_path("nano"))) {
-            return
-        }
-        with_dasllama_jobque_() {
-            var inscope m <- load_styletts2(gguf_path("nano"))
-            let cap = m.albert.max_pos
-            let said = styletts2_spoken(m, int(cap) + 64)
-            t |> equal(int64(said.ids), cap + 64l, "the chunk is 64 ids past the encoder's {cap} positions")
-            t |> success(said.samples > 0l, "{said.ids} ids spoke {said.samples} samples")
-            t |> equal(said.counted, said.samples, "the timings count the samples the truncated chunk produced")
         }
     }
 }
@@ -365,7 +414,8 @@ def private stored_file_pins(t : T?; src : string) {
 
 [test(description = "kitten-nano written as a file that stores the Q8_0 lane's weights, and as one that stores the recipe lane's, stages the lane's own quant bytes with each Q8_0 scale as a half, is smaller than its source, serves the lane it names over an f32 pin and a recipe ask, and speaks; a pinned group is stored in its pin's format and a stored file bakes and loads on its own lane under a pin; a layout this build does not read, an unknown lane, a quantized tensor in a file that declares no layout, a format a site does not take, a conv whose channels the file does not name, a half-quantized LSTM, a rewrite of a stored file and an unwritable destination are refused or declined by name")]
 def test_kitten_stored_file(t : T?) {
-    let src = gguf_path("nano")
+    own_load("the cell holds several models loaded at once: a stored file's staging beside its source's lane and the source's other lane, byte against byte, and a stored file's own load writes an image beside it")
+    let src = path_join(models_dir(), "kitten-nano.gguf")
     return if (!model_available(t, src))
     defer() {
         reset_styletts2_recipe()
@@ -419,15 +469,6 @@ def test_kitten_stored_file(t : T?) {
         }
         for (lane in fixed_array("q8", "kq")) {
             remove(stored_tmp(lane))
-        }
-    }
-}
-
-[test(description = "Kitten nano and mini against onnxruntime dumps with captured noise: every case's token ids and sample count match the oracle, and each traced stage holds 1e-4 of the oracle's peak, with poisoned controls")]
-def test_kitten_oracle(t : T?) {
-    for (size in ["nano", "mini"]) {
-        t |> run("{size} against onnxruntime, captured noise") @(t : T?) {
-            tts_parity(t, TtsParityRig(family = "kitten-tts", gguf = gguf_path(size), oracle_dir = oracle_dir(size), ids = @@kitten_ids_of))
         }
     }
 }

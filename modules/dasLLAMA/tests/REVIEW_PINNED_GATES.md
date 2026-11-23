@@ -210,7 +210,7 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   names in dispatch order, and `pocket_gpu_stats` panicking on a name it does not list.
 - `test_tts_pocket.das`'s `test_pocket_q8_file` cell must hold the published file's tensor
   formats against the f16 file's load-time quants.
-- `test_tts_pocket.das`'s `test_pocket_parity` cell must hold, on the f32 CPU lane against the English oracle's dumps
+- `test_tts_pocket.das`'s `test_pocket_parity` cell (on the file's pocket-tts-en block) must hold, on the f32 CPU lane against the English oracle's dumps
   (`oracle_dir()`), the codec decoder at `CODEC_BAR`, and on the first two voiced cases the prompt trim at `TRIM_BAR`
   - a clip with one kept sample moved landing outside it - the codec encoder at `ENCODER_BAR` with the trimmed clip's
   frame count, and the voice state's K/V rows at `FRAME_BAR` with the prompt the BOS row plus the frames.
@@ -221,7 +221,7 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   the same file under `Q8_FILE_BAR`; the kq lane against the exact lane under `KQ_EXACT_BAR`; the flow head on its
   Q8_0 route against the oracle's frames under `KQ_HEAD_BAR`; the stored roster voice against the reference encoder;
   and a clone over a roster name keeping the roster at 19 voices and speaking.
-- `test_tts_pocket.das`'s `test_pocket_quiet_floor` cell must hold the served lane's quiet floor against the f32 lane's.
+- `test_tts_pocket.das`'s `test_pocket_quiet_floor` cell (on the file's pocket-tts-en-kq block) must hold the served lane's quiet floor against the f32 lane's.
 - `test_tts_pocket.das`'s `test_pocket_small_models` cell must hold, for each `SMALL` row's published file, the
   19-voice English roster and the four character replacements its config carries, as the reference build's config
   lists them, each seat serving, or declining with the `shape` reason, as that row's seat columns say, and a low-rank
@@ -243,13 +243,13 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
 - `test_nmt.das`'s `test_nmt_q8_lane` cell, an external-reference compare, must hold the q8 lane at
   `Q8_LINES_FLOOR` (25 of 30) lines of `tokens.json`'s ids on the ru/en base-memory pairs, the same
   file with its classifier's Q8_0 copy zeroed moving every line and falling under the floor.
-- `test_tts_g2p_ru.das`'s `test_ru_stress_encoder` cell, an external-reference compare, must hold, on the 20 sentences of
+- `test_tts_g2p_ru.das`'s `test_ru_stress_encoder` cell (on the file's ru-stress-rubert-base block, a form each), an external-reference compare, must hold, on the 20 sentences of
   `tts_oracle/ru_stress/`, the piece ids the dumps' own, the last hidden state within `F32_BAR` on the f32 lane and
   `Q8_BAR` on the q8 lane, the head's logits within the lane's logit bar and the f32 lane's every pick the reference's,
   each lane with the word's pieces as `[UNK]` landing outside both bars.
-- `test_tts_g2p_ru.das`'s `test_ru_stress_api` cell must hold the word finder on the manifest's span and the catalog's
+- `test_tts_g2p_ru.das`'s `test_ru_stress_api` cell (on the file's ru-stress-rubert-base block, its f32 form) must hold the word finder on the manifest's span and the catalog's
   mask the manifest's for every case, the batch picks bit for bit the single picks, and a maskless pick on the largest logit.
-- `test_tts_kokoro.das`'s `test_kokoro_ru_mixed_script` cell must hold the facade's phonemes of a text with Latin runs
+- `test_tts_kokoro.das`'s `test_kokoro_ru_mixed_script` cell (on the file's kokoro-ru block) must hold the facade's phonemes of a text with Latin runs
   around two homographs to the context pass's marking of the normalized text, the Latin runs spliced after, the pack's
   marking another string; and with no context model, the pack's marking, the same whether the splice runs first or last.
 

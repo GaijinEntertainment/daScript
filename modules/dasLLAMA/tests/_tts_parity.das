@@ -22,7 +22,7 @@ require daslib/linq
 require _tts_oracle
 require _model_tier
 require _gpu_knobs public
-require _f32_tile_pin   // with_reference_f32_tile: the parity bars at the tile's reference order
+require _f32_tile_pin   // with_reference_f32_tile: the parity bars at the tile's reference order; with_put_back: a form's lane unset
 
 // The parity rail both StyleTTS2 families run against their onnxruntime / PyTorch oracle
 // dumps (harness/kitten_oracle.py, harness/kokoro_oracle.py): the token ids against the
@@ -110,13 +110,69 @@ def private seat_present(t : T?; tag, stage : string) : bool {
     return false
 }
 
-//! The facade minted in memory from the GGUF's staging on the lane `q8` and `recipe` name - no `.dlim` baked, no pin taken.
-def private mint_tts_model(path : string; q8 : bool; recipe : bool = false) : TtsModel {
+//! whether every front-end pack the voices of the model at `path` ask for sits beside it
+def private voice_packs_present(path : string) : bool {
+    for (pack in tts_pack_names(path)) {
+        return false if (!stat(path_join(dir_name(path), pack)).is_valid)
+    }
+    return true
+}
+
+//! whether this build carries a GPU home the TTS seats serve on
+def tts_gpu_build() : bool {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        return true
+    } else {
+        return false
+    }
+}
+
+//! the forms a StyleTTS2 voice's block loads where its cells read every lane: the lanes only the tower's cells read load
+//! where the build carries a GPU home
+def styletts2_lane_forms(image : bool) : array<string> {
+    var forms <- image ? ["image", "f32"] : ["f32"]
+    if (tts_gpu_build()) {
+        forms |> push("q8")
+        forms |> push("kq")
+    }
+    return <- forms
+}
+
+//! One form of a StyleTTS2 voice file (KittenTTS, Kokoro) as the facade holds it, its block's form loader: `image` is the
+//! facade's own load, through the image rail on the lane an unpinned load serves; `f32`, `q8` and `kq` are the reference,
+//! served and recipe lanes minted in memory from the GGUF's staging - no `.dlim` baked, no pin taken. The front-end packs
+//! load where every pack the file's voices ask for sits beside it; without them the form carries the voice alone.
+def styletts2_form(path, form : string) : TtsModel {
+    let packs = voice_packs_present(path)
+    return <- load_tts_model(path) if (form == "image" && packs)
     var inscope m = TtsModel()
-    var inscope stg <- stage_styletts2(path, q8, recipe)
+    if (form == "image") {
+        m.model <- load_styletts2(path)
+        return <- m
+    }
+    var inscope stg <- stage_styletts2(path, form != "f32", form == "kq")
     mint_styletts2(stg, m.model)
-    tts_finish_styletts2(m, path)
+    if (packs) {
+        tts_finish_styletts2(m, path)
+    }
     return <- m
+}
+
+//! The form is the lane it names: on `m`, a form of the StyleTTS2 voice at `path` (`styletts2_form`), the model's own lane
+//! flags - the f32, q8 or recipe lane of a minted form, on the image form the lane the file stores or else the q8 lane an
+//! unpinned load serves.
+def styletts2_form_is(t : T?; m : TtsModel; path, form : string) {
+    let kq = form == "image" ? styletts2_stored_lane(path) == "kq" : form == "kq"
+    t |> success(m.model.q8 == (form != "f32") && m.model.kq == kq, "{base_name(path)}: the {form} form serves the lane it names (q8 {m.model.q8}, kq {m.model.kq})")
+}
+
+//! The form is the lane it names: on `m`, a form of a Pocket file (`pocket_form`), the model's own lane flag on a pinned
+//! form, and no lane left pinned behind the load.
+def pocket_form_is(t : T?; m : TtsModel; form : string) {
+    if (form == "f32" || form == "q8") {
+        t |> equal(m.pocket.q8, form == "q8", "the {form} form serves the lane it names")
+    }
+    t |> success(pocket_serves_native(), "the {form} form's load leaves no lane pinned")
 }
 
 //! A Pocket model minted in memory from the GGUF's staging on the lane the pins name - what `load_pocket` serves, with no
@@ -136,13 +192,34 @@ def pocket_tts_minted(path : string) : TtsModel {
     return <- m
 }
 
-//! One family's rig: where its model and dumps live, and how it turns the fixture's phoneme
-//! string into token ids.
+//! One form of a Pocket TTS file as the facade holds it, its block's form loader: `image` is the facade's own load, through
+//! the image rail; `native`, `q8` and `f32` are the lane minted in memory from the GGUF's staging with no `.dlim` baked -
+//! the file's own quants with no lane pinned, the q8 pin, the f32 pin - the lane unset however the mint leaves, a panic
+//! included.
+def pocket_form(path, form : string) : TtsModel {
+    return <- load_tts_model(path) if (form == "image")
+    if (form == "native") {
+        reset_pocket_q8()
+    } else {
+        set_pocket_q8(form == "q8")
+    }
+    var inscope m = TtsModel()
+    with_put_back($ {
+        reset_pocket_q8()
+    }) {
+        delete m
+        m <- pocket_tts_minted(path)
+    }
+    return <- m
+}
+
+//! One family's rig: where its dumps live, how it turns the fixture's phoneme string into token
+//! ids, and what it holds the loaded model to before its cases (`prepare`, where it names one).
 struct TtsParityRig {
     family : string
-    gguf : string
     oracle_dir : string
     ids : function<(ps : string) : array<int>>
+    prepare : function<(t : T?; m : StyleTts2Model) : void>
 }
 
 //! How `bar_diff` reads a distance, and the poisoned expectation that must red its bar
@@ -217,9 +294,23 @@ def spectrum_diff(t : T?; tag : string; ours, ref : array<float>; bins, frames :
 def case_noise(dump : table<string; TtsDumpTensor>) : TtsNoise
     => <- TtsNoise(uniform <- dump_tensor(dump, type<float>, "noise_uniform"), normal <- dump_tensor(dump, type<float>, "noise_normal"), captured = true)
 
+//! One bring-up case's decode inputs as the f32 form's CPU stages made them: what the q8 and recipe forms' decode cells feed.
+struct ParityDecode {
+    tag : string
+    ten_c : array<float>
+    n_tok : int64
+    dur_c : array<int>
+    frames : int64
+    f0_c : array<float>
+    n_c : array<float>
+    f2 : int64
+    style_dec : array<float>
+    noise : TtsNoise
+}
+
 // the generator fed the oracle's own F0 curve, source signal and decoder output: block
 // correctness at the seams, with the phase drift the predictor's rounding noise induces taken out
-def private seam_check(t : T?; m, m8, mkq : StyleTts2Model; tag : string; dump : table<string; TtsDumpTensor>) {
+def private seam_check(t : T?; m : StyleTts2Model; tag : string; dump : table<string; TtsDumpTensor>; var decodes : array<ParityDecode>) {
     var inscope f0 <- dump_tensor(dump, type<float>, "f0")
     var inscope gen_in <- dump_tensor(dump, type<float>, "gen_in")
     var inscope style <- dump_tensor(dump, type<float>, "style")
@@ -247,7 +338,7 @@ def private seam_check(t : T?; m, m8, mkq : StyleTts2Model; tag : string; dump :
     styletts2_generator(m.decoder, gen_in, cw, f2, style_dec, spec, frames, tr, wave, sc)
     with_gpu_knobs() {
         gpu_seam_check(t, m, tag, gen_in, cw, f2, style_dec, spec, frames, wave, sc)
-        gpu_stage_checks(t, m, m8, mkq, tag, dump, noise, sc)
+        gpu_stage_checks(t, m, tag, dump, noise, sc, decodes)
     }
     stage_diff(t, "{tag} SEAM", "stft_re", tr.stft_re, dump)
     stage_diff(t, "{tag} SEAM", "ups0", tr.ups0, dump)
@@ -398,12 +489,48 @@ def seat_leg(t : T?; family : TtsFamily; tag, stage : string; bar : float; var c
     }
 }
 
+//! `rig`'s oracle manifest; where its dumps are not stocked, a loud skip and no cases
+def private rig_manifest(t : T?; rig : TtsParityRig) : TtsOracleManifest {
+    var inscope mf <- load_tts_oracle_manifest(rig.oracle_dir)
+    if (empty(mf.cases)) {
+        t |> skip("{rig.oracle_dir} not stocked")
+    }
+    return <- mf
+}
+
+//! One bring-up case's decode inputs off the CPU chain, the tower knob off: PL-BERT, the text encoder, the duration
+//! encoder, the durations and prosody over the oracle's ids and style, the oracle's noise beside them - what the q8 and
+//! recipe forms' decode cells feed, whatever the tower serves on the f32 form. The knob stays off.
+def private cpu_decode_inputs(m : StyleTts2Model; tag : string; dump : table<string; TtsDumpTensor>; noise : TtsNoise) : ParityDecode {
+    var inscope ids <- dump_tensor(dump, type<int>, "input_ids")
+    var inscope style <- dump_tensor(dump, type<float>, "style")
+    let hs = m.style_dim / 2l
+    var inscope style_pro <- copy_span(style, hs, hs)
+    var inscope sc = St2Scratch()
+    var d = ParityDecode(tag = tag, n_tok = long_length(ids))
+    d.style_dec <- copy_span(style, 0l, hs)
+    d.noise := noise
+    set_serving_gpu_tower(false, TowerFamily.tts)
+    var inscope bert_c, d_c, raw_c, en : array<float>
+    styletts2_albert(m.albert, ids, bert_c, sc)
+    styletts2_text_encoder(m.text_encoder, ids, d.ten_c, sc)
+    styletts2_duration_encoder(m.predictor, bert_c, d.n_tok, style_pro, d_c, sc)
+    d.frames = styletts2_durations(m.predictor, d_c, d.n_tok, 1.0, d.dur_c, raw_c, sc)
+    let dc = m.predictor.bert_encoder.nout + hs
+    align_expand_rows(d_c, d.n_tok, dc, d.dur_c, en)
+    d.f2 = styletts2_prosody(m.predictor, en, dc, d.frames, style_pro, d.f0_c, d.n_c, sc)
+    return <- d
+}
+
 //! Every front, predictor and decoder stage on the tower fed the CPU stage's own inputs (the
 //! oracle's ids, style and captured noise): each within its bar, each served once, a scaled or
-//! reversed input as each compare's control; the durations token for token.
-[unused_argument(t, m, m8, mkq, tag, dump, noise, sc)]   // off-Apple the gated body is empty
-def private gpu_stage_checks(t : T?; m, m8, mkq : StyleTts2Model; tag : string; dump : table<string; TtsDumpTensor>; var noise : TtsNoise; var sc : St2Scratch) {
+//! reversed input as each compare's control; the durations token for token. The case's decode
+//! inputs (`cpu_decode_inputs`) are kept in `decodes` for the q8 and recipe forms' decode cells.
+[unused_argument(t, m, tag, dump, noise, sc, decodes)]   // off-Apple the gated body is empty
+def private gpu_stage_checks(t : T?; m : StyleTts2Model; tag : string; dump : table<string; TtsDumpTensor>; var noise : TtsNoise; var sc : St2Scratch;
+                             var decodes : array<ParityDecode>) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        decodes |> emplace(cpu_decode_inputs(m, tag, dump, noise))
         var inscope ids <- dump_tensor(dump, type<int>, "input_ids")
         var inscope style <- dump_tensor(dump, type<float>, "style")
         let hs = m.style_dim / 2l
@@ -444,13 +571,34 @@ def private gpu_stage_checks(t : T?; m, m8, mkq : StyleTts2Model; tag : string; 
         let f2 = gpu_prosody_check(t, m, tag, d_c, n_tok, dur_c, frames, style_pro, f0_c, n_c, sc)
         return if (f2 < 0l)
         gpu_decode_check(t, m, tag, ten_c, n_tok, dur_c, frames, f0_c, n_c, f2, style_dec, noise, sc, GPU_DECODE_BAR)
-        // the served q8 lane: the same inputs through the q8 planes, the CPU chain quantizing its
-        // activations against the tower's dequantized weights - the q8 slab writes' only numeric gate
-        var inscope sc8 = St2Scratch()
-        gpu_decode_check(t, m8, "{tag} q8 lane", ten_c, n_tok, dur_c, frames, f0_c, n_c, f2, style_dec, noise, sc8, GPU_DECODE_Q8_BAR)
-        // the recipe lane: the K-quant convs and the Q6_K upsamplers through the slab's row reads - their only numeric gate
-        var inscope sckq = St2Scratch()
-        gpu_decode_check(t, mkq, "{tag} recipe lane", ten_c, n_tok, dur_c, frames, f0_c, n_c, f2, style_dec, noise, sckq, GPU_DECODE_KQ_BAR)
+    }
+}
+
+//! The f32 form's decode inputs through `m`, the q8 form's planes or (`recipe`) the recipe form's, on the tower against the
+//! CPU chain. The served q8 lane: the CPU chain quantizes its activations against the tower's dequantized weights - the q8
+//! slab writes' only numeric gate. The recipe lane: the K-quant convs and the Q6_K upsamplers through the slab's row reads -
+//! their only numeric gate. Skips, as the f32 form's cell does, where `rig`'s dumps are not stocked; the decode seat's own
+//! verdict skips where no device serves; a stocked oracle that left the lane no bring-up case is a red.
+[unused_argument(rig, m, recipe, decodes)]   // off-Apple the gated body is a skip
+def tts_parity_decode(t : T?; rig : TtsParityRig; m : StyleTts2Model; recipe : bool; var decodes : array<ParityDecode>) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        var inscope mf <- rig_manifest(t, rig)
+        return if (empty(mf.cases))
+        if (empty(decodes)) {
+            t |> failure("{rig.oracle_dir}: no bring-up case reached the {recipe ? "recipe" : "q8"} lane - its decode on the tower gates nothing")
+            return
+        }
+        with_reference_f32_tile(t) {   // the bars are measured at the tile's reference order, whatever this box crowned
+            for (d in decodes) {
+                var inscope sc = St2Scratch()
+                with_gpu_knobs() {
+                    gpu_decode_check(t, m, "{d.tag} {recipe ? "recipe" : "q8"} lane", d.ten_c, d.n_tok, d.dur_c, d.frames, d.f0_c, d.n_c, d.f2,
+                        d.style_dec, d.noise, sc, recipe ? GPU_DECODE_KQ_BAR : GPU_DECODE_Q8_BAR)
+                }
+            }
+        }
+    } else {
+        t |> skip("no GPU module in this build")
     }
 }
 
@@ -529,29 +677,30 @@ def private gpu_decode_check(t : T?; m : StyleTts2Model; tag : string; ten_c : a
 //! The seats one served chunk encodes: every seat of the engine's record but the generator, which only a declined decode reaches.
 def private served_seat_count() : int64 => long_length(styletts2_gpu_seats()) - 1l
 
-//! The served synthesis across the tower knob on both lanes; skips without the model, the front-end packs, or a serving tower.
-[unused_argument(path, text, voice), cold_path]   // off-Apple the gated body is a skip
-def tts_gpu_synthesis(t : T?; path, text, voice : string) {
+//! One lane of the served synthesis across the tower knob, on its form `m` of the voice at `path`: the f32 form the
+//! reference lane, the q8 form the lane an unpinned load serves, the kq form the recipe lane. Skips without the front-end
+//! packs or a GPU home in the build, and - the lane's own verdict - where no device serves its seats.
+[unused_argument(m, form, text, voice)]   // off-Apple the gated body is a skip
+def tts_gpu_synthesis_lane(t : T?; var m : TtsModel; path, form, text, voice : string) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         return if (tts_data_missing(t, path))
-        with_gpu_cell() {
-            return if (!gpu_served_lane(t, path, text, voice, false))
-            gpu_served_lane(t, path, text, voice, true)
-            gpu_reference_lane(t, path, text, voice)
+        with_gpu_knobs() {
+            if (form == "f32") {
+                gpu_reference_lane(t, m, path, text, voice)
+            } else {
+                gpu_served_lane(t, m, path, text, voice, form == "kq")
+            }
         }
     } else {
         t |> skip("no GPU module in this build")
     }
 }
 
-//! A quantized lane's leg of `tts_gpu_synthesis` - the lane an unpinned load serves, or the recipe lane: false where the
-//! tower did not serve.
-def private gpu_served_lane(t : T?; path, text, voice : string; recipe : bool) : bool {
+//! A quantized lane's leg of `tts_gpu_synthesis_lane` - the lane an unpinned load serves, or the recipe lane.
+def private gpu_served_lane(t : T?; var m : TtsModel; path, text, voice : string; recipe : bool) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        reset_tts_q8()   // the served lane is the unpinned default, whatever an earlier cell left
-        var inscope m <- mint_tts_model(path, recipe || tts_serves_q8(), recipe)
         let msg = "{base_name(path)} {recipe ? "recipe" : "served"} lane"
-        return served_lane_counters(t, m, text, voice, msg, "generator") $(a, b : TtsAudio; chunks : int; encodes : int64) {
+        served_lane_counters(t, m, text, voice, msg, "generator") $(a, b : TtsAudio; chunks : int; encodes : int64) {
             t |> equal(encodes, int64(chunks) * served_seat_count(), "{msg}: one tower encode per seat per chunk")
             let peak = logits_maxabs(b.pcm)
             t |> success(peak > 0.05, "peak {peak}: the tower leg spoke")
@@ -561,8 +710,6 @@ def private gpu_served_lane(t : T?; path, text, voice : string; recipe : bool) :
             t |> success(within_twentieth(long_length(b.pcm), long_length(a.pcm)), "the sample counts {length(b.pcm)} against {length(a.pcm)} within a twentieth")
             t |> success(!within_twentieth(long_length(b.pcm), long_length(a.pcm) / 2l), "half the count reds the twentieth (the bound's control)")
         }
-    } else {
-        return false
     }
 }
 
@@ -614,9 +761,9 @@ def served_lane_counters(t : T?; var m : TtsModel; text, voice, msg, unserved : 
     }
 }
 
-def private gpu_reference_lane(t : T?; path, text, voice : string) {
+//! The f32 lane's leg, where alone the durations round as the CPU's.
+def private gpu_reference_lane(t : T?; var m : TtsModel; path, text, voice : string) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        var inscope m <- mint_tts_model(path, false)   // the f32 lane: the durations round as the CPU's only there
         set_serving_gpu_tower(false, TowerFamily.tts)
         var inscope sized <- synthesize(m, text, voice)   // the untrimmed count the captured stream covers
         let nh = m.model.source.n_harm
@@ -671,84 +818,103 @@ def speech_level(pcm : array<float>) : tuple<finite : bool; peak : float; rms : 
     return (finite = finite, peak = logits_maxabs(pcm), rms = rms(pcm))
 }
 
-//! a facade cell: the model (and the front-end packs under `gate_on_packs`) gated, loaded on a job queue, caps at 24 kHz with `n_voices` voices, then `body`
-def facade_smoke(t : T?; path : string; gate_on_packs : bool; n_voices : int; body : block<(var m : TtsModel; c : TtsCaps) : void>) {
-    return if (gate_on_packs ? tts_data_missing(t, path) : !model_available(t, path))
-    with_dasllama_jobque_() {
-        var inscope m <- load_tts_model(path)
-        var inscope c <- caps(m)
-        t |> equal(c.sample_rate, 24000)
-        t |> equal(length(c.voices), n_voices, "the voices the facade lists")
-        invoke(body, m, c)
+//! a facade cell on `m`, the image form of the voice at `path`: the front-end packs gated under `gate_on_packs`, caps at 24 kHz with `n_voices` voices, then `body`
+def facade_smoke_cell(t : T?; var m : TtsModel; path : string; gate_on_packs : bool; n_voices : int; body : block<(var m : TtsModel; c : TtsCaps) : void>) {
+    return if (gate_on_packs && tts_data_missing(t, path))
+    var inscope c <- caps(m)
+    t |> equal(c.sample_rate, 24000)
+    t |> equal(length(c.voices), n_voices, "the voices the facade lists")
+    invoke(body, m, c)
+}
+
+//! One family's rig on `m`, the f32 form of its model: skips loudly when its dumps are not stocked. The bring-up cases'
+//! decode inputs are left in `decodes` for the q8 and recipe forms (`tts_parity_decode`).
+def tts_parity(t : T?; rig : TtsParityRig; m : StyleTts2Model; var decodes : array<ParityDecode>) {
+    if (rig.prepare != null) {
+        invoke(rig.prepare, t, m)
+    }
+    var inscope mf <- rig_manifest(t, rig)
+    return if (empty(mf.cases))
+    with_reference_f32_tile(t) {   // the bars are measured at the tile's reference order, whatever this box crowned
+        t |> equal(m.family, rig.family)
+        t |> equal(m.sample_rate, 24000)
+        var ids_ok = 0
+        var same_length = 0
+        var worst = 0.0
+        var worst_case = ""
+        for (c in mf.cases) {
+            let tag = "{rig.family} {c.id} {c.voice}"
+            var inscope dump <- load_tts_dump(path_join(rig.oracle_dir, c.file))
+            var inscope ids <- dump_tensor(dump, type<int>, "input_ids")
+            var inscope ours <- invoke(rig.ids, c.ps_espeak)
+            if (sequence_equal(ours, ids)) {
+                ids_ok++
+            } else {
+                to_log(LOG_INFO, "{tag}: token ids differ - ours {ours}\n   oracle {ids}\n")
+            }
+            var inscope noise <- case_noise(dump)
+            var tr = new StyleTts2Trace()
+            var tm = TtsTimings()
+            var inscope sc = St2Scratch()
+            styletts2_synthesize(m, ids, dump_tensor(dump, type<float>, "style"), c.speed, noise, 0ul, tr, tm, sc)
+            let wave & = sc.wave
+            dump |> get("waveform") $(ref) {
+                if (length(wave) != length(ref.f)) {
+                    t |> failure("{tag}: {length(wave)} samples, oracle has {length(ref.f)} (frames {tr.frames} vs {c.duration_sum})")
+                } else {
+                    same_length++
+                    let d = max_abs_diff(wave, ref.f)
+                    to_log(LOG_INFO, "{tag}: waveform maxdiff {d} over {length(ref.f)} samples (informational); {timings_line(tm, m.sample_rate)}\n")
+                    if (d > worst) {
+                        worst = d
+                        worst_case = "{c.id} {c.voice}"
+                    }
+                }
+            }
+            if (c.stages) {
+                seam_check(t, m, tag, dump, decodes)
+                stage_checks(t, tag, tr, dump)
+            }
+            unsafe {
+                delete tr
+            }
+        }
+        t |> equal(ids_ok, length(mf.cases), "cases whose token ids match the reference driver")
+        t |> equal(same_length, length(mf.cases), "cases whose durations, hence sample counts, match the oracle")
+        to_log(LOG_INFO, "{rig.family}: worst end-to-end waveform maxdiff {worst} at {worst_case} over {length(mf.cases)} cases (informational)\n")
     }
 }
 
-//! Run one family's rig, or skip loudly when its model or dumps are not stocked.
-[cold_path]
-def tts_parity(t : T?; rig : TtsParityRig) {
-    return if (!model_available(t, rig.gguf))
-    var inscope mf <- load_tts_oracle_manifest(rig.oracle_dir)
-    if (empty(mf.cases)) {
-        t |> skip("{rig.oracle_dir} not stocked")
-        return
+//! What a StyleTTS2 voice's block carries from form to form.
+struct St2LaneRows {
+    decodes : array<ParityDecode>   //! the f32 form's decode inputs, for the q8 and recipe forms
+}
+
+//! the name a lane form's cells give it
+def private st2_lane_name(form : string) : string => form == "f32" ? "f32 reference" : (form == "kq" ? "recipe" : "served")
+
+//! A lane form's cell of the served synthesis across the tower knob (`f32`, `q8`, `kq` of the voice at `path`), named
+//! `cell` and its lane: `tts_gpu_synthesis_lane`.
+def styletts2_synthesis_cell(t : T?; var m : TtsModel; form, path, cell, text, voice : string) {
+    unsafe {
+        t |> run("{cell}, the {st2_lane_name(form)} lane") @capture(& m)(t : T ?) {
+            tts_gpu_synthesis_lane(t, m, path, form, text, voice)
+        }
     }
-    with_dasllama_jobque_() {
-        with_reference_f32_tile(t) {   // the bars are measured at the tile's reference order, whatever this box crowned
-            var inscope stg <- stage_styletts2(rig.gguf, false)   // the bars are the f32 lane's; minted in memory, no .dlim baked
-            var inscope m = StyleTts2Model()
-            mint_styletts2(stg, m)
-            var inscope stg8 <- stage_styletts2(rig.gguf, true)
-            var inscope m8 = StyleTts2Model()   // the served lane's planes, for the q8 decode cell
-            mint_styletts2(stg8, m8)
-            var inscope stgkq <- stage_styletts2(rig.gguf, true, true)
-            var inscope mkq = StyleTts2Model()   // the recipe lane's planes, for its decode cell
-            mint_styletts2(stgkq, mkq)
-            t |> equal(m.family, rig.family)
-            t |> equal(m.sample_rate, 24000)
-            var ids_ok = 0
-            var same_length = 0
-            var worst = 0.0
-            var worst_case = ""
-            for (c in mf.cases) {
-                let tag = "{rig.family} {c.id} {c.voice}"
-                var inscope dump <- load_tts_dump(path_join(rig.oracle_dir, c.file))
-                var inscope ids <- dump_tensor(dump, type<int>, "input_ids")
-                var inscope ours <- invoke(rig.ids, c.ps_espeak)
-                if (sequence_equal(ours, ids)) {
-                    ids_ok++
-                } else {
-                    to_log(LOG_INFO, "{tag}: token ids differ - ours {ours}\n   oracle {ids}\n")
-                }
-                var inscope noise <- case_noise(dump)
-                var tr = new StyleTts2Trace()
-                var tm = TtsTimings()
-                var inscope sc = St2Scratch()
-                styletts2_synthesize(m, ids, dump_tensor(dump, type<float>, "style"), c.speed, noise, 0ul, tr, tm, sc)
-                let wave & = sc.wave
-                dump |> get("waveform") $(ref) {
-                    if (length(wave) != length(ref.f)) {
-                        t |> failure("{tag}: {length(wave)} samples, oracle has {length(ref.f)} (frames {tr.frames} vs {c.duration_sum})")
-                    } else {
-                        same_length++
-                        let d = max_abs_diff(wave, ref.f)
-                        to_log(LOG_INFO, "{tag}: waveform maxdiff {d} over {length(ref.f)} samples (informational); {timings_line(tm, m.sample_rate)}\n")
-                        if (d > worst) {
-                            worst = d
-                            worst_case = "{c.id} {c.voice}"
-                        }
-                    }
-                }
-                if (c.stages) {
-                    seam_check(t, m, m8, mkq, tag, dump)
-                    stage_checks(t, tag, tr, dump)
-                }
-                unsafe {
-                    delete tr
-                }
+}
+
+//! A lane form's cell of the parity rail, named `cell`: the oracle's cases on the f32 form (`tts_parity`), the lane's decode
+//! on the tower on the q8 and kq forms (`tts_parity_decode`).
+def styletts2_parity_cell(t : T?; m : TtsModel; form : string; rig : TtsParityRig; cell : string; var rows : St2LaneRows) {
+    unsafe {
+        if (form == "f32") {
+            t |> run(cell) @capture(& m, & rows)(t : T ?) {
+                tts_parity(t, rig, m.model, rows.decodes)
             }
-            t |> equal(ids_ok, length(mf.cases), "cases whose token ids match the reference driver")
-            t |> equal(same_length, length(mf.cases), "cases whose durations, hence sample counts, match the oracle")
-            to_log(LOG_INFO, "{rig.family}: worst end-to-end waveform maxdiff {worst} at {worst_case} over {length(mf.cases)} cases (informational)\n")
+        } else {
+            t |> run("{cell}: the {st2_lane_name(form)} lane's decode on the tower") @capture(& m, & rows)(t : T ?) {
+                tts_parity_decode(t, rig, m.model, form == "kq", rows.decodes)
+            }
         }
     }
 }

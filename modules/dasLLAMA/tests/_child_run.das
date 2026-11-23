@@ -6,6 +6,7 @@ module _child_run shared public
 require daslib/fio
 require daslib/strings_boost
 require strings
+require daslib/env_registry   // env_value_of: the log levels a child's run is put back to
 require ../performance/box_ident.das   // probe_cpu_brand: the exe is built for this box's CPU
 
 // a test's child process: this binary on a root fixture of this folder, under named environment
@@ -15,6 +16,18 @@ require ../performance/box_ident.das   // probe_cpu_brand: the exe is built for 
 def das_exe() : string {
     let args <- get_command_line_arguments()
     return empty(args) ? "" : args[0]
+}
+
+//! `blk` with DAS_LOG_LEVEL and DAS_LOGGER_LEVEL (which wins where both are set) both info for the children it spawns,
+//! each put back after: the lines a child logs at LOG_INFO reach its captured output whatever level the test runs under
+def with_child_log_info(blk : block<() : void>) {
+    let level = env_value_of("DAS_LOG_LEVEL")
+    let logger_level = env_value_of("DAS_LOGGER_LEVEL")
+    set_env_variable("DAS_LOG_LEVEL", "info")
+    set_env_variable("DAS_LOGGER_LEVEL", "info")
+    invoke(blk)
+    set_env_variable("DAS_LOG_LEVEL", level)
+    set_env_variable("DAS_LOGGER_LEVEL", logger_level)
 }
 
 //! run `cmd` to its end (five minutes at most); `output` is everything it printed, the result its exit code

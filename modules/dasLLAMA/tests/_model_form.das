@@ -3,6 +3,7 @@ options _dasllama_internal = true
 
 module _model_form shared public
 
+require dastest/testing_boost   // T: a block's gate skips on it
 require dasllama/dasllama_common   // QuantMode, Model
 require dasllama/dasllama_kv_dtype   // KVDtype
 require daslib/fio   // base_name
@@ -246,6 +247,29 @@ def form_name(f : ModelForm) : string {
     let shape = "{f.ring ? "rings" : "flat"}, {f.gather ? "device gather" : "host embed"}"
     return "the per-op form ({f.kv} asked, the whole-model route off)" if (f.perop)
     return "the device form ({f.kv} mirror, {shape}{regions}{planes}{fuse}{experts}{window}{depth}{head}{mmq}{host_ctx}{bisect}{heat}{whole}{pinned})"
+}
+
+//! where a block's seconds went, a line a form: under `DAS_LOG_LEVEL=info`
+def log_form_seconds(name : string; load_usec, cells_usec : int) {
+    to_log(LOG_INFO, "FORM {name}: load {float(load_usec) * 1e-6f:.3f} s, cells {float(cells_usec) * 1e-6f:.3f} s\n")
+}
+
+//! The forms of one model file at `path`, a form at a time, behind the file's gate: where `available` - the gate, which
+//! skips loudly on `t` - answers false nothing loads and the call answers false; else `load` builds the model of each
+//! form of `forms`, in the list's order, `cells` runs on it, and it drops before the next form loads.
+def model_once_at(t : T?; area, file, path : string; forms : array<string>; available : function<(t : T?; path : string) : bool>;
+                  load : function<(path : string; form : string) : auto(MODEL)>;
+                  cells : block<(var m : MODEL; form : string) : void>) : bool {
+    return false if (!invoke(available, t, path))
+    for (form in forms) {
+        let t0 = ref_time_ticks()
+        var inscope m <- invoke(load, path, form)
+        let loaded = get_time_usec(t0)
+        let t1 = ref_time_ticks()
+        invoke(cells, m, form)
+        log_form_seconds("{area} {file} {form}", loaded, get_time_usec(t1))
+    }
+    return true
 }
 
 //! the declaration a function makes that holds a load of a model file its block does not load: `why`, a string literal
