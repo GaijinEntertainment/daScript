@@ -175,8 +175,12 @@ holding its model file, ending `0 pending, 0 failed` with the row or entry `ok`.
 interpolates, records in the PR description one unscoped `fetch_models.das --` run ending `0 failed`
 in which every row or entry it repoints reads `ok`; a row it does not repoint may read `pending`.**
 
+**A diff that adds an entry to `UNPINNED_MAIN` (`../tests/test_model_specs.das`) is a defect: the
+new url pins a `resolve/<commit>` revision.** A sha-pinned url at `resolve/main` may serve other
+bytes under the same name.
+
 **A diff that changes what `models_provenance()` or `board_provenance()` (`profile_common.das`)
-return - the body of either or of `provenance_walk`, or a row a walk emits removed or renamed - or
+return - the body of either or of `provenance_walk`, or a row a walk emits added, removed or renamed - or
 changes `fetch_models.das` beyond its comments, records in the PR description one unscoped
 `fetch_models.das --` run ending `0 failed` in which every row or entry whose model file the box
 holds reads `ok`.**

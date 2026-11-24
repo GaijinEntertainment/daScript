@@ -512,7 +512,6 @@ def test_metal_support_matrix(t : T?) {
             // past ADD_RMS_MAX_DIM the batched add+rms re-reads the columns past its slab, and past the
             // mv8 probe's dim 3072 the B > 4 GEMM tier serves any width — an 8B (dim 4096)
             // batches at every B and a 70B-class kq model (dim 8192) serves all three paths.
-            // Both are large-tier: they run only under DASLLAMA_PARITY_FULL (the pre-commit gate).
             if (arm_on(t, "dim8b")) {
                 let path8 = path_join(models_dir(), "Meta-Llama-3.1-8B-Instruct-Q8_0.gguf")
                 if (model_available(t, path8)) {
@@ -2357,8 +2356,7 @@ def test_metal_family_matrix(t : T?) {
                 "gemma3-4b/q8/f16", uint(MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.sliding |
                     MetalNeed.pre_post_norm | MetalNeed.geglu | MetalNeed.qd_neq_dim),
                 "")
-            // ... and the K-quant carrier: gemma-3-12b Q4_K_M (k4 / k6 planes, the Q6_K token table) on the same three paths;
-            // 7.3GB, DASLLAMA_PARITY_FULL-gated
+            // ... and the K-quant carrier: gemma-3-12b Q4_K_M (k4 / k6 planes, the Q6_K token table) on the same three paths
             family_cells(t, path_join(models_dir(), "gemma-3-12b-it-Q4_K_M.gguf"), "gemma3",
                 "gemma3-12b/k4/f16", uint(MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.sliding |
                     MetalNeed.pre_post_norm | MetalNeed.geglu | MetalNeed.qd_neq_dim),
@@ -2368,7 +2366,7 @@ def test_metal_family_matrix(t : T?) {
             // 16q/8kv/256, global 16q/1kv/512 MQA), V-from-K on global layers, v_norm,
             // out_scale on the whole layer output, unit attn scale, final softcap + suppress.
             // All three paths serve (stage 3d: per-class batch uniforms + the prefix `lay`).
-            // 7.4GB > the 6GiB tier — runs under DASLLAMA_PARITY_FULL=1 (like the 8B rows).
+            // 7.4GB > the 6GiB tier: the gemma4-dense category's, as the 8B rows are llama31-8b's.
             gemma4_hetero_row(t, path_join(models_dir(), "gemma-4-12B-it-Q4_K_M.gguf"))
             // the q8 twin drives the hetero fixed-B mul_mv rail (a class the k4 row never
             // dispatches); 12.5GB — DASLLAMA_PARITY_FULL-gated like the row above

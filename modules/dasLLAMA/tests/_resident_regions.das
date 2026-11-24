@@ -20,7 +20,8 @@ require dasllama/dasllama_gpu_resident   // set_gpu_resident_regions_, moe_gpu_r
 require dasllama/dasllama_gpu_math   // nolint:STYLE030,LINT019 — the grid helpers, read under the vulkan static_if, unused in the darwin world
 require ?vulkan dasllama/dasllama_vulkan_common   // the prompt window's rows, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_token_n_rows: the N-row command served the batched cells' rows
-require ?vulkan dasllama/dasllama_vulkan_classes   // the discrete layer's GEMV_COL_TILE through it: the groups cell's column tiles
+require dasllama/dasllama_gpu_kernels_discrete   // GEMV_COL_TILE: the groups cell's tiles, any home
+require ?vulkan dasllama/dasllama_vulkan_classes   // da_slab_of, da_attn_stamp_name: the decode attention stamp's census key
 require ?vulkan dasllama/dasllama_vulkan_prefill   // vk_rdec_prefill_segment_windows: the device-mode tick's segmented-window witness
 require ?cuda dasllama/dasllama_cuda_decode   // the same witnesses on the CUDA home
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate

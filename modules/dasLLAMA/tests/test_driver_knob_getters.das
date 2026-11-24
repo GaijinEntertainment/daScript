@@ -13,6 +13,7 @@ require dasllama/dasllama_gpu_tier   // the vulkan_trim lever
 require dasllama/dasllama_gpu_resident   // the lane_read and gpu_kv_want levers
 require _override_probes   // decode_declines: the fake override's step
 require dasllama/dasllama_kv_codec   // cvt_q8kv_to_f32: a poisoned q8_0 row read back
+require dasllama/dasllama_env   // g_env_engine: the cpu_prefill lever's unpinned knob
 require daslib/linq   // all
 require daslib/rtti   // this_context: the panic a lever's with re-raised
 require strings
@@ -79,6 +80,57 @@ def test_unregister_decode_override(t : T?) {
         unregister_decode_override(PROBE)
         t |> equal(active_decode_override(), found, "the selection found is put back")
         t |> success(!has_decode_override(PROBE), "the probe is unregistered after the cell")
+    }
+}
+
+[unused_argument(t, segs)]
+def private probe_segs(t : Model; var segs : array<PrefillSeg>) : bool => false
+
+[unused_argument(t, s, npos, start_pos)]
+def private gather_on_device(t : Model; s : Session; npos : int64; start_pos : int64) : bool => true
+
+//! whether the active prefill override claims any seat registered beside it
+def private prefill_seats_armed() : bool {
+    return (active_prefill_serves_segments() || active_prefill_splits_span() || active_prefill_serves_mrope()
+        || active_prefill_serves_ds())
+}
+
+[test(description = "`unregister_prefill_override` removes a probe prefill override and every seat registered under its name, deselects it only when active, and a re-registered bare name claims no seat while a re-registered seat does")]
+def test_unregister_prefill_override(t : T?) {
+    t |> run("unregister_prefill_override drops the override and its seats, deselecting it where it is active") @(t : T?) {
+        let found = active_prefill_override()
+        t |> success(!has_prefill_override(PROBE), "the probe is not registered before the cell")
+        register_prefill_override(PROBE, @@prefill_declines)
+        register_prefill_segments_override(PROBE, @@probe_segs)
+        register_prefill_override_split_span(PROBE)
+        register_prefill_override_mrope_tables(PROBE)
+        register_prefill_override_ds_adds(PROBE)
+        register_embed_dev_gates(PROBE, @@gather_on_device, @@gather_on_device)
+        t |> success(select_prefill_override(PROBE), "the probe selects")
+        t |> success(active_prefill_serves_segments() && active_prefill_splits_span() && active_prefill_serves_mrope()
+            && active_prefill_serves_ds(), "the probe's four seats are armed")
+        t |> success(has_embed_dev_prefill_gate(PROBE), "the probe's gather gate is registered under its name")
+        unregister_prefill_override(PROBE)
+        t |> success(!has_prefill_override(PROBE), "the probe is gone from the registry")
+        t |> success(!has_embed_dev_prefill_gate(PROBE), "and so is its gather gate")
+        t |> equal(active_prefill_override(), "", "an active override unregistered is deselected")
+        t |> success(!select_prefill_override(PROBE), "an unregistered name no longer selects")
+        register_prefill_override(PROBE, @@prefill_declines)
+        register_prefill_override(PROBE_OTHER, @@prefill_declines)
+        select_prefill_override(PROBE_OTHER)
+        unregister_prefill_override(PROBE)
+        t |> equal(active_prefill_override(), PROBE_OTHER, "an inactive override unregistered leaves the active one selected")
+        select_prefill_override(found)
+        unregister_prefill_override(PROBE_OTHER)
+        register_prefill_override(PROBE, @@prefill_declines)
+        select_prefill_override(PROBE)
+        t |> success(!prefill_seats_armed(), "the seats went with the override: the name re-registered bare claims none")
+        register_prefill_override_split_span(PROBE)
+        t |> success(prefill_seats_armed(), "the control: a seat registered under the name arms with it")
+        select_prefill_override(found)
+        unregister_prefill_override(PROBE)
+        t |> equal(active_prefill_override(), found, "the selection found is put back")
+        t |> success(!has_prefill_override(PROBE), "the probe is unregistered after the cell")
     }
 }
 
@@ -303,14 +355,27 @@ def private bool_lever_walk(t : T?; name : string; get : function<() : bool>; se
     t |> success(back.pinned == found.pinned && (!found.pinned || back.value == found.value), "{name}: the pin is back as found")
 }
 
-[test(description = "Each of the engine's levers - source_release, image_save, host_planes, vulkan_trim, lane_read, and the enum levers kv_init and gpu_kv_want - reads its knob unpinned, the pinned value once set, `with_`'s value inside its block alone, and comes back as found through `_pin` / `restore_`")]
+[test(description = "Each of the engine's levers - source_release, image_save, host_planes, vulkan_trim, lane_read, cpu_prefill, and the enum levers kv_init and gpu_kv_want - reads its knob unpinned, the pinned value once set, `with_`'s value inside its block alone, and comes back as found through `_pin` / `restore_`, and `allow_cpu_prefill` writes the cpu_prefill lever")]
 def test_engine_levers(t : T?) {
-    t |> run("the five bool levers") @(t : T?) {
+    t |> run("the six bool levers") @(t : T?) {
         bool_lever_walk(t, "source_release", @@source_release, @@set_source_release, @@reset_source_release, @@source_release_pin, @@restore_source_release, @@with_source_release)
         bool_lever_walk(t, "image_save", @@image_save_enabled, @@set_image_save, @@reset_image_save, @@image_save_pin, @@restore_image_save, @@with_image_save)
         bool_lever_walk(t, "host_planes", @@host_planes, @@set_host_planes, @@reset_host_planes, @@host_planes_pin, @@restore_host_planes, @@with_host_planes)
         bool_lever_walk(t, "vulkan_trim", @@vulkan_trim, @@set_vulkan_trim, @@reset_vulkan_trim, @@vulkan_trim_pin, @@restore_vulkan_trim, @@with_vulkan_trim)
         bool_lever_walk(t, "lane_read", @@lane_read, @@set_lane_read, @@reset_lane_read, @@lane_read_pin, @@restore_lane_read, @@with_lane_read)
+        bool_lever_walk(t, "cpu_prefill", @@cpu_prefill_allowed, @@set_cpu_prefill, @@reset_cpu_prefill, @@cpu_prefill_pin, @@restore_cpu_prefill, @@with_cpu_prefill)
+    }
+    t |> run("allow_cpu_prefill writes the cpu_prefill lever its getter reads") @(t : T?) {
+        let found = cpu_prefill_pin()
+        reset_cpu_prefill()
+        t |> equal(cpu_prefill_allowed(), g_env_engine.cpu_prefill, "unpinned, the getter reads DASLLAMA_CPU_PREFILL")
+        for (v in fixed_array(false, true)) {
+            allow_cpu_prefill(v)
+            t |> success(cpu_prefill_allowed() == v && cpu_prefill_pin().pinned, "allow_cpu_prefill({v}) reads back pinned")
+        }
+        restore_cpu_prefill(found)
+        let back = cpu_prefill_pin()
+        t |> success(back.pinned == found.pinned && back.value == found.value, "the declaration found is put back")
     }
     t |> run("the two enum levers") @(t : T?) {
         let start = kv_init_pin()

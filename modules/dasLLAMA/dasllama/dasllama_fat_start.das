@@ -6,7 +6,7 @@ module dasllama_fat_start shared private
 
 require dasllama/dasllama_lint public
 require dasllama/dasllama_common
-require dasllama/dasllama_env   // nolint:STYLE030,LINT019 - dasllama_home_dir, used only inside the llvm_tune static_if half
+require dasllama/dasllama_env   // nolint:STYLE030,LINT019 - dasllama_home_dir, tune_policy_keeps_crowns, used only inside the llvm_tune static_if half
 require daslib/fio
 require dasllama/dasllama_math   // the runtime knob getters the snapshot records
 require dasllama/dasllama_par    // get_total_hw_jobs - the advisory "threads" entry
@@ -383,9 +383,8 @@ var private g_box_race_ran = false
 [arch(at = "../ARCHITECTURE_MEASUREMENT_FAT_START.md#box-runtime-file")]
 def public dasllama_box_runtime_file() : string {
     static_if (typeinfo module_exists(llvm_tune)) {
-        return "" if (tune_fat_built() || tune_manifest_explicit() || is_standalone_exe())
-        let policy = tune_policy_env()
-        return "" if (policy == "reference" || policy == "fallback")
+        return "" if (tune_fat_built() || tune_manifest_explicit() || is_standalone_exe()
+            || !tune_policy_keeps_crowns(tune_policy_env()))
         let path = dasllama_box_runtime_path()
         let digest = dasllama_kernel_sources_digest()
         return path if (dasllama_box_runtime_valid(path, digest))

@@ -1613,7 +1613,9 @@ def private mx4_streamed_mint(t : T?; path : string) {
     if (get_platform_name() == "darwin") {
         let root = get_das_root()
         var out = ""
-        let code = run_child("/usr/bin/time -l \"{das_exe()}\" -jit -dasroot \"{root}\" \"{root}/modules/dasLLAMA/tests/_mx4_mint_root.das\" -- \"{path}\" 2>&1", out)
+        let exe = "\"{das_exe()}\"{child_disable_flags()}"
+        let mint = "\"{root}/modules/dasLLAMA/tests/_mx4_mint_root.das\""
+        let code = run_child("/usr/bin/time -l {exe} -jit -dasroot \"{root}\" {mint} -- \"{path}\" 2>&1", out)
         let peak = time_l_field(out, "peak memory footprint")
         let marker = "MX4_MINT mapped=true mx4=true planes="
         let at = find(out, marker)

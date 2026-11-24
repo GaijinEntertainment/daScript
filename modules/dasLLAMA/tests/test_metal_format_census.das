@@ -18,6 +18,7 @@ require daslib/fio   // nolint:STYLE030,LINT019 - path_join and fmap, inside the
 require math   // nolint:STYLE030,LINT019 - min, inside the das_metal halves
 require daslib/linq   // long_count: the planes a format tags
 require _model_tier
+require _model_form   // own_load: the nv4 MoE cell's own loads
 require dasllama/dasllama_env   // nolint:STYLE030,LINT019 - parity_full_mode, inside the das_metal half
 require _format_census   // census_cell, census_sites_all: the census both homes run
 require dasllama/dasllama_gguf   // nolint:STYLE030,LINT019 - parse_gguf_meta, inside the das_metal halves
@@ -430,6 +431,7 @@ let private NV4_MOE_BAR = 3.0
 //! on the nv4 routed stamps against the CPU chain
 [test(description = "On Qwen3-30B-A3B-7L NVFP4-pure, the seven-block cut, every routed stack loads as nv4 with every site native, and the Metal window and six steps ride the nv4 routed stamps and GEMV within 3.0 of the CPU chain")]
 def test_metal_format_census_nv4_moe(t : T?) {
+    own_load("the cell holds several models loaded at once: the planar load and its blob twin")
     t |> run("Qwen3-30B-A3B-7L-NVFP4-pure-local.gguf: the nv4 routed stacks serve their own bytes on Metal - census, window and steps") <| @(t : T?) {
         if (!family_on(t, "qwen3moe") || !arm_on(t, "census-moe-nv4")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {

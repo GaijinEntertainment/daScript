@@ -22,7 +22,6 @@ require daslib/defer
 require math
 require strings
 require _model_tier   // model_available() presence/size-tier gate (see the file's header)
-require dasllama/dasllama_env   // parity_full_mode: the full suite's flag
 require ?das_metal dasllama/dasllama_metal_asr_dec   // set_metal_wdec — the CPU-claim cells pin the GPU cross-KV hook off
 require ?das_metal dasllama/dasllama_metal_tower     // set_metal_tower — the mtmd-oracle cells pin the GPU conv hook off
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown — the crown-pin cell drops the trio's cached flags
@@ -34,7 +33,7 @@ require dasllama/dasllama_load   // load_model_ - the canary decoder built in me
 require _tower_twin
 require _audio_twin   // jfk_twin_why: the discrete twin's reason
 require _model_once   // with_model_once_at: a whisper bin's one block in the area; own_load
-require _f32_tile_pin   // with_put_back: a form's pin and knobs put back however its load leaves
+require dasllama/dasllama_lever   // with_put_back: a form's pin and knobs put back however its load leaves
 require _image_memory   // read_page_aligned: a host's own copy of an image
 require dasllama/dasllama_image   // with_image_destination: the cold mint's scratch path
 require _child_run   // DASLLAMA_AUDIO_LANE loads once at context init: a value a process
@@ -46,8 +45,8 @@ require _audio_asr_cells   // session_segs, transcribe_segs, the reused-session 
 // needs ggml-tiny.bin and ggml-large-v3-turbo.bin plus jfk.wav, and runs on whisper's home (`_gpu_knobs`'
 // `CUDA_AUDIO_FAMILIES`); it skips without that home's device under DASLLAMA_GPU=1, on the Vulkan home under the
 // CUDA ask (DASLLAMA_CUDA=1 or set_gpu_home("cuda"), where the Vulkan tower's seats stand down - `vulkan_twin_seat`),
-// on a build with das_metal, and when interpreted. The Qwen3-Omni pair is large tier (DASLLAMA_PARITY_FULL=1) and skips
-// under a family filter leaving `qwen3` out.
+// on a build with das_metal, and when interpreted. The Qwen3-Omni pair is the qwen3omni-30b category's, run only where
+// a run names it (`--category qwen3omni-30b`), and skips under a family filter leaving `qwen3` out.
 // A whisper bin loads once a form, in its one `with_model_once_at` block (`whisper_form`): the facade's image forms carry
 // the loader's, the surface's and the q8 gate's cells, the forms minted in memory the Metal post-norm seat's and the
 // discrete twin's. A form's cells run on one home, so a compare of the CPU chain with a device chain is two forms, made
@@ -1333,16 +1332,11 @@ def private q3omni_form(path, form : string) : AsrModel {
     return <- m
 }
 
-// The Qwen3-Omni-30B pair: the mmproj's block, whose one form is the facade's load with the thinker - the full suite's alone.
+// The Qwen3-Omni-30B pair: the mmproj's block, whose one form is the facade's load with the thinker - the qwen3omni-30b category run's alone.
 [test(description = "Qwen3-Omni-30B audio-in, with the shared qwen3a AuT tower feeding the MoE thinker, transcribes jfk and two librispeech clips to llama-mtmd-cli's full greedy id sequences, trailing im_end included")]
 def test_qwen3omni_pair(t : T?) {
     let cell = "Qwen3-Omni-30B greedy audio transcription is token-for-token with llama-mtmd-cli"
-    return if (!family_on(t, "qwen3"))
-    if (!parity_full_mode()) {   // ~34 GB (Q8 thinker + bf16 mmproj) - large-tier
-        skip_cell(t, "{cell} - Qwen3-Omni-30B is large-tier, set DASLLAMA_PARITY_FULL=1 to run")
-        return
-    }
-    return if (!asr_decoder_available(t, "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf"))
+    return if (!family_on(t, "qwen3") || !asr_decoder_available(t, "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf"))   //! the qwen3omni-30b category's
     with_model_once(t, "audio", "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf", ["image_asr"], @@q3omni_form) $(var m; form) {
         t |> success(m.kind == AsrKind.qwen3omni, "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf: the {form} form is the facade's Qwen3-Omni pair")
         tower_cell(t, cell, m, @@test_qwen3omni_audio_oracle)

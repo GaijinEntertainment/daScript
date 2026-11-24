@@ -12,8 +12,8 @@ require dasllama/dasllama_gguf   // gguf_header_read, gguf_find_tensor: the draf
 require dasllama/dasllama_math   // with_dasllama_jobque
 require ?das_metal dasllama/dasllama_metal_kernels   // nolint:STYLE030,LINT019 - the Metal decode driver, inside the das_metal half
 require ?das_metal dasllama/dasllama_metal_dflash   // nolint:STYLE030,LINT019 - the drafter's device arm registers at init; its site counters
-require ?das_metal dasllama/dasllama_metal_decode   // nolint:STYLE030,LINT019 - metal_decode_shutdown
-require ?das_metal dasllama/dasllama_metal_prefill   // nolint:STYLE030,LINT019 - metal_prefill_shutdown, metal_rows8_on
+require ?das_metal dasllama/dasllama_metal_decode   // nolint:STYLE030,LINT019 - the Metal decode driver registers at init
+require ?das_metal dasllama/dasllama_metal_prefill   // nolint:STYLE030,LINT019 - metal_rows8_on
 require ?das_metal metal/das_metal_boost   // nolint:STYLE030,LINT019 - the system device the rows8 layout probe runs on
 require ?das_metal _metal_kernel_common   // nolint:STYLE030,LINT019 - with_metal_cell: the probe's planes
 require ?das_metal _rows8_probe   // nolint:STYLE030,LINT019 - rows8_probe_ok: the rows8 witnesses' layout fact
@@ -26,7 +26,7 @@ require _model_tier   // _model_tier::models_dir() + model_available() presence/
 require _scratch_dir   // scratch_path / scratch_file: the refusal fixtures' files
 require _dflash_cells   // the walks every trunk runs: lossless, sampled, the planes' tags, the discrete legs
 require _mtp_cpu_cells   // invariance_ok, forced_invariance_ok, MTP_PROMPT: the NextN head's invariance pair on the large -MTP- carriers
-require _compares   // first_mismatch, mismatch_rel: the facade streams' ids and the capture sums
+require _compares   // first_mismatch: the facade streams' ids
 require dasllama/dasllama_scheduler   // the joint round's two streams
 require _scheduler_rig   // make_req, drain, toks_of
 require _resident_feed   // resident_trunk, load_resident_at: the discrete homes' trunk
@@ -44,7 +44,11 @@ require ?cuda dasllama/dasllama_cuda_dflash   // nolint:STYLE030,LINT019 - the C
 // drafter runs on the routed gemma-4-26B and, on the Metal home, on the dense Qwen3-4B (its Q8_0 file), whose device arm is a
 // counted skip: its device pass does not reproduce the CPU arm's drafts. The 27B trunk's CPU cells and its discrete-home legs
 // ride one load a form (`test_dflash_27b_trunk`); the routed 26B's CPU and discrete-home cells ride that trunk's block in
-// `test_gpu_resident_gemma4_moe.das`; the Metal home's cells load their own trunk (the blocks have no Metal form). A cell skips
+// `test_gpu_resident_gemma4_moe.das`; the regular DFlash drafter's Metal arms on the routed 26B and the dense Qwen3-4B ride
+// the Metal form of those trunks' blocks (`metal_drafter_cell`, `_dflash_cells.das`), the 26B's prompt-capture rows its
+// CPU and Metal forms (`test_mtp_gemma_drafter.das`); the 27B GGUF trunk's Metal cells ride its block's Metal form, the blob
+// twin under the required mode; the snapshot trunk's and the E2B facade's Metal cells load their trunk off the image rail
+// through `with_metal_trunk`. A cell skips
 // without its files (the trunk, the drafters, the 27B snapshot), above the large tier without DASLLAMA_PARITY_FULL=1, and
 // on the Metal device arms on a build without das_metal; the discrete-home cells skip on a build with no discrete GPU home,
 // with no armed GPU tier (`gpu_tier_armed`), where the residency plan does not fit the card, and when interpreted.
@@ -57,7 +61,6 @@ def private allow_cpu_prefill_intent() {
     allow_cpu_prefill()   // the CPU arm prefills on the CPU by design
 }
 
-let private TRUNK_FILE = "Qwen3.8-27B-Q4_K_M.gguf"
 let private SNAPSHOT_REPO = "mlx-community/Qwen3.8-27B-4bit"   //! the same model's affine 4-bit snapshot: mlx4b planes, no NextN head
 let private DRAFTER_FILE = "drafters/Qwen3.8-27B-DFlash2-GGUF/Qwen3.8-27B-DFlash2-Q8_0.gguf"
 let private DRAFTER_K4_FILE = "drafters/Qwen3.8-27B-DFlash2-GGUF/Qwen3.8-27B-DFlash2-Q4_K_M.gguf"
@@ -179,26 +182,6 @@ def test_dflash_refusals(t : T?) {
     }
 }
 
-//! the Metal drivers' trunk calls: prefills, single-row decodes and batched steps (0 off the Metal build)
-def private metal_trunk_calls() : int64 {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        return metal_prefill_stats().prefills + metal_decode_stats().decodes + metal_batch_decode_stats().steps
-    } else {
-        return 0l
-    }
-}
-
-//! the lossless walk over the Metal-served trunk, each walk's trunk calls asserted rising on the Metal drivers
-def private metal_lossless_walk(t : T?; m : Model; drafter : string; device : bool; tag : string; chat : bool = false) : int64 {
-    return lossless_walk(t, m, drafter, device, tag, walk_text(chat), chat) $(spec; walk) {
-        let c0 = metal_trunk_calls()
-        var ids <- invoke(walk)
-        let c1 = metal_trunk_calls()
-        t |> success(c1 > c0, "{tag}: the {spec ? "speculative" : "plain"} walk's trunk ran {c1 - c0} prefills and steps on the Metal device")
-        return <- ids
-    }
-}
-
 //! the trunk at `path` loaded off the image rail - parsed into RAM, no `.dlim` minted or mapped beside it - and, for the Metal
 //! home (`metal`), turned into the blob form the drivers serve, as the engine's own load does with the rail off
 def private load_trunk(t : T?; path : string; metal : bool) : Model {
@@ -281,12 +264,6 @@ def private depth_walk(t : T?; m : Model; drafter : string; depth : int64; tag :
         delete s1
         delete s2
     }
-}
-
-//! the planar Q4_K_M trunk's path; "" with the loud skip where it is absent or off the tier
-def private gguf_trunk(t : T?) : string {
-    let trunk = path_join(_model_tier::models_dir(), TRUNK_FILE)
-    return model_available(t, trunk) ? trunk : ""
 }
 
 //! the affine snapshot trunk's directory (large tier, as `test_mlx_snapshot.das`'s 27B cell); "" with the loud skip where it is
@@ -379,30 +356,27 @@ def private set_metal_dflash_knobs(k : MetalDflashKnobs) {
     }
 }
 
-//! `body` on the served `trunk` under the Metal home - the mode required, the box's crowns applied as the server applies
-//! them, the decode override Metal's - then the decode and prefill drivers shut down and the override and the mode put back;
-//! under `leaks` the block drafter shuts down too, and no Metal object outlives the shutdown (asserted under `tag`)
-def private with_metal_trunk(t : T?; trunk, tag : string; leaks : bool; body : block<(var m : Model) : void>) {
+//! `body` on the served `trunk` loaded for the Metal home - the mode required, the box's crowns applied as the server applies
+//! them - then the mode put back
+def private load_metal_trunk(t : T?; trunk : string; body : block<(var m : Model) : void>) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let prior = get_metal_mode()
         set_metal_mode(MetalMode.required)
         apply_box_profile_runtime()
-        let override0 = active_decode_override()
-        select_decode_override("metal")
         with_dasllama_jobque() {
             var m <- load_trunk(t, trunk, true)
             invoke(body, m)
             delete m
         }
-        if (leaks) {
-            metal_dflash_shutdown()
-        }
-        metal_decode_shutdown()
-        metal_prefill_shutdown()
-        select_decode_override(override0)
         set_metal_mode(prior)
-        if (leaks) {
-            t |> equal(metal_log_leaks_if_any(), 0l, "{tag}: no leaked Metal objects after shutdown")
+    }
+}
+
+//! `body` on the served `trunk` (`load_metal_trunk`) under the Metal home's decode override (`on_metal_trunk`)
+def private with_metal_trunk(t : T?; trunk : string; body : block<(var m : Model) : void>) {
+    load_metal_trunk(t, trunk) $(var m) {
+        on_metal_trunk() {
+            invoke(body, m)
         }
     }
 }
@@ -413,12 +387,12 @@ def private with_metal_trunk(t : T?; trunk, tag : string; leaks : bool; body : b
 //! the device, every reject's replay unwaited over the tape in place; the same walk with the host's accept over every landed
 //! row and every replay waited, then with the host's selector over the device pass and the tape copied back,
 //! each drafting the same ids and accepting the same count; then the CPU arm fed by the device's captures accepting the same count
-def private metal_lossless_cell(t : T?; trunk, drafter : string; fmts, trunk_fmts : array<KqFmt>; tag : string; rows8 : bool = true) {
+def private metal_lossless_legs(t : T?; var m : Model; drafter : string; fmts, trunk_fmts : array<KqFmt>;
+                                tag : string; rows8 : bool) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        return if (empty(trunk) || !model_available(t, path_join(_model_tier::models_dir(), drafter)))
         let knobs0 = metal_dflash_knobs()
         set_metal_dflash_knobs(MetalDflashKnobs(record = true, select = true, accept = true, tape = true, unwaited = true))
-        with_metal_trunk(t, trunk, "", false) $(var m) {
+        on_metal_trunk() {
             let rp0 = metal_verify_replays()
             let tape0 = metal_verify_replays_in_place()
             let dev = metal_lossless_walk(t, m, drafter, true, "{tag} device arm")
@@ -469,6 +443,17 @@ def private metal_lossless_cell(t : T?; trunk, drafter : string; fmts, trunk_fmt
             depth_walk(t, m, drafter, 0l, "{tag} device arm, no depth set")
         }
         set_metal_dflash_knobs(knobs0)
+    }
+}
+
+//! the lossless legs (`metal_lossless_legs`) over the served `trunk` ("" where its skip is taken), the drafter file present
+def private metal_lossless_cell(t : T?; trunk, drafter : string; fmts, trunk_fmts : array<KqFmt>;
+                                tag : string; rows8 : bool = true) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return if (empty(trunk) || !model_available(t, path_join(_model_tier::models_dir(), drafter)))
+        load_metal_trunk(t, trunk) $(var m) {
+            metal_lossless_legs(t, m, drafter, fmts, trunk_fmts, tag, rows8)
+        }
     } else {
         t |> skip("{tag}: no das_metal in this build")
     }
@@ -506,15 +491,85 @@ def private dflash_27b_discrete_cells(t : T?; m : Model) {
         "dflash-27b-discrete", [DRAFTER_FILE, DRAFTER_K4_FILE, DRAFTER_NV4_FILE], "27B discrete")
 }
 
-//! whether a 27B cell's arm is on, no skip registered: a block none of whose arms the filter keeps loads nothing
-def private dflash_27b_arms_on() : bool {
-    for (a in fixed_array("dflash-27b-sampled-cpu", "dflash-27b-cpu", "dflash-27b-k4-cpu", "dflash-27b-nv4-cpu", "dflash-27b-discrete")) {
-        return true if (empty(arm_why(a)))
+//! the 27B trunk's Metal cells on its Metal form `m` (the blob twin, required), each under its arm and with its drafter file:
+//! the sampled acceptances, the lossless gate of each drafter file, the joint streams
+def private dflash_27b_metal_cells(t : T?; var m : Model) {
+    unsafe {   //! the cells capture the loaded trunk by reference
+        t |> run("On the Metal device arm over the 27B GGUF trunk, the sampled DFlash walks hold the CPU arm's exact and rejection contracts, drawn drafts end on the device selector, and verify-ahead off or the soft pick off reproduce the same stream") @capture(& m)(t : T ?) {
+            let drafter = path_join(_model_tier::models_dir(), DRAFTER_FILE)
+            return if (!arm_on(t, "dflash-27b-sampled-metal") || !model_available(t, drafter))
+            on_metal_trunk() {
+                sampled_modes_walk(t, m, DRAFTER_FILE, true, "sampled metal")
+            }
+        }
+        t |> run("On the Metal device arm over the 27B GGUF trunk the greedy DFlash walk is lossless; device accept and selector match the host's drafts and accept count, replays commit unwaited on the tape, the CPU arm accepts the same count, and depth pins hold") @capture(& m)(t : T ?) {
+            let drafter = path_join(_model_tier::models_dir(), DRAFTER_FILE)
+            return if (!arm_on(t, "dflash-27b-metal") || !model_available(t, drafter))
+            metal_lossless_legs(t, m, DRAFTER_FILE, [KqFmt.q8], array<KqFmt>(), "metal", true)
+        }
+        t |> run("The Q4_K_M DFlash2 drafter tags planes by disk type and its greedy walk on the Metal device arm is lossless, with k4 and k6 sites encoded by the pass and device and host accept and selector agreeing") @capture(& m)(t : T ?) {
+            let drafter = path_join(_model_tier::models_dir(), DRAFTER_K4_FILE)
+            return if (!arm_on(t, "dflash-27b-k4-metal") || !model_available(t, drafter))
+            planes_tag_disk_types(t, drafter, "k4 metal")
+            metal_lossless_legs(t, m, DRAFTER_K4_FILE, [KqFmt.k4, KqFmt.k6], array<KqFmt>(),
+                "k4 metal", true)
+        }
+        t |> run("The NVFP4 DFlash2 drafter's greedy walk on the Metal device arm is the plain walk's on the same device (a driver-against-itself compare, every walk's trunk calls counted on the device), with nv4 sites encoded by the pass, the selector walking its NVFP4 codebooks on the device, and device and host accept and selector agreeing") @capture(& m)(t : T ?) {
+            let drafter = path_join(_model_tier::models_dir(), DRAFTER_NV4_FILE)
+            return if (!arm_on(t, "dflash-27b-nv4-metal") || !model_available(t, drafter))
+            planes_tag_disk_types(t, drafter, "nv4 metal")
+            metal_lossless_legs(t, m, DRAFTER_NV4_FILE, [KqFmt.nv4], array<KqFmt>(), "nv4 metal",
+                false)
+        }
+        t |> run("On the 27B hybrid's Metal home with its DFlash2 drafter attached, two streams through the scheduler ride the verify seat's joint groups, each the plain scheduler's token for token, together accepting what each accepts alone within a fifth") @capture(& m)(t : T ?) {
+            let drafter = path_join(_model_tier::models_dir(), DRAFTER_FILE)
+            return if (!arm_on(t, "dflash-27b-joint") || !model_available(t, drafter))
+            on_metal_trunk() {
+                set_dflash_device(true)
+                t |> equal(attach_block_drafter(m, drafter), "", "the drafter attaches")
+                joint_streams_leg(t, m)
+                detach_block_drafter()
+            }
+        }
     }
-    return false
 }
 
-[test(description = "On the planar Qwen3.8-27B Q4_K_M trunk on the CPU arm, with the Q8_0 DFlash2 drafter the exact-accept sampled speculative walk equals the plain seeded sampled walk with drafts accepted, honors a stop id, and both rejection walks accept some drafts and reject some, and the greedy speculative walks of the Q8_0, Q4_K_M and NVFP4 drafters emit the plain greedy walk's ids token for token with drafts accepted, the K-quant and NVFP4 files' planes tagged with their disk types; on the serving discrete home's drafter form each drafter's greedy walk on the device arm is the plain walk's on the same device, every pass ending on the device's top-k and walk, the host's walk and selector drafting the same ids; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked-prefill arm; each form loads once")]
+let private DFLASH_27B_METAL_ARMS = fixed_array("dflash-27b-sampled-metal", "dflash-27b-metal",
+    "dflash-27b-k4-metal",     "dflash-27b-nv4-metal", "dflash-27b-joint")
+
+//! whether a 27B cell's arm is on, no skip registered: a block none of whose arms the filter keeps loads nothing
+def private dflash_27b_arms_on() : bool {
+    return (any_arm_on(["dflash-27b-sampled-cpu", "dflash-27b-cpu", "dflash-27b-k4-cpu",
+        "dflash-27b-nv4-cpu", "dflash-27b-discrete"]) || any_arm_on(DFLASH_27B_METAL_ARMS))
+}
+
+[test(description = "`arms_reached` keeps a list of arms when the arm filter is empty or one of its stripped tokens is a substring of one of the names, and drops it when no token reaches any name")]
+def test_arms_reached(t : T?) {
+    t |> success(arms_reached("", ["a-cpu"]), "an empty filter reaches every list")
+    t |> success(arms_reached("x, -metal", fixed_array("a-cpu", "b-metal")), "a token, its comma space stripped, reaches the second name")
+    t |> success(!arms_reached("gpu", ["a-cpu", "b-metal"]), "no token reaches any name (the control)")
+    t |> success(!arms_reached("cpu", array<string>()), "an empty list under a filter")
+}
+
+[test(description = "`on_metal_dflash_trunk` (`on_metal_trunk` with the block drafter) runs its body under the Metal decode override, then puts back the override it found, the block drafter and the decode and prefill drivers down with no Metal object left; a skip on a build without das_metal")]
+def test_on_metal_trunk(t : T?) {
+    static_if (!typeinfo builtin_module_exists(das_metal)) {
+        t |> skip("no das_metal in this build")
+    } else {
+        let found = active_decode_override()
+        select_decode_override("")
+        var inside = ""
+        on_metal_dflash_trunk() {
+            inside = active_decode_override()
+        }
+        t |> equal(inside, "metal", "the body runs under the Metal decode override")
+        t |> equal(active_decode_override(), "", "the override found (none) is back")
+        t |> equal(metal_log_leaks_if_any(), 0l, "no Metal object left after the drivers' shutdown")
+        select_decode_override(found)
+    }
+}
+
+[test(description = "On the planar Qwen3.8-27B Q4_K_M trunk on the CPU arm, with the Q8_0 DFlash2 drafter the exact-accept sampled speculative walk equals the plain seeded sampled walk with drafts accepted, honors a stop id, and both rejection walks accept some drafts and reject some, and the greedy speculative walks of the Q8_0, Q4_K_M and NVFP4 drafters emit the plain greedy walk's ids token for token with drafts accepted, the K-quant and NVFP4 files' planes tagged with their disk types; on the serving discrete home's drafter form each drafter's greedy walk on the device arm is the plain walk's on the same device, every pass ending on the device's top-k and walk, the host's walk and selector drafting the same ids; on the Metal form, the file's blob twin under the required mode, the sampled walks hold the CPU arm's exact and rejection contracts with drawn drafts on the device selector, each drafter file's greedy walk on the device arm is lossless with its formats' sites encoded by the pass, device and host accept and selector agreeing, replays unwaited on the tape and the CPU arm on the device's captures accepting the same count, depth pins hold, and two streams through the scheduler ride the verify seat's joint groups, each the plain scheduler's token for token; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked-prefill arm; each form loads once")]
 def test_dflash_27b_trunk(t : T?) {
     return if (!family_on(t, "qwen35"))
     if (!dflash_27b_arms_on()) {
@@ -527,9 +582,14 @@ def test_dflash_27b_trunk(t : T?) {
     } else {
         t |> skip("27B discrete: no discrete GPU home in this build")
     }
+    if (any_arm_on(DFLASH_27B_METAL_ARMS)) {
+        forms |> push(metal_form(required = true, ctx = HOST_CTX))
+    }
     let parity = empty(arm_why("dflash-27b-cpu"))
     with_cpu_and_gpu_model(t, "llm", "Qwen3.8-27B-Q4_K_M.gguf", HOST_CTX, forms, parity = parity) $(var m, form) {
-        if (form.on_gpu) {
+        if (form.on_metal) {
+            dflash_27b_metal_cells(t, m)
+        } elif (form.on_gpu) {
             dflash_27b_discrete_cells(t, m)
         } else {
             dflash_27b_cpu_cells(t, m)
@@ -542,20 +602,12 @@ def test_dflash_27b_trunk(t : T?) {
 def private sampled_metal_cell(t : T?; trunk : string; tag : string) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         return if (empty(trunk) || !model_available(t, path_join(_model_tier::models_dir(), DRAFTER_FILE)))
-        with_metal_trunk(t, trunk, "", false) $(var m) {
+        with_metal_trunk(t, trunk) $(var m) {
             sampled_modes_walk(t, m, DRAFTER_FILE, true, tag)
         }
     } else {
         t |> skip("{tag}: no das_metal in this build")
     }
-}
-
-[test(description = "On the Metal device arm over the 27B GGUF trunk, the sampled DFlash walks hold the CPU arm's exact and rejection contracts, drawn drafts end on the device selector, and verify-ahead off or the soft pick off reproduce the same stream")]
-def test_dflash_27b_sampled_metal(t : T?) {
-    if (!arm_on(t, "dflash-27b-sampled-metal") || !family_on(t, "qwen35")) {
-        return
-    }
-    sampled_metal_cell(t, gguf_trunk(t), "sampled metal")
 }
 
 [test(description = "The sampled DFlash walks on the Metal device arm hold over the 27B affine mlx 4-bit snapshot trunk: exact equals the plain sampled walk, rejection walks accept and reject, and device and host draws give the same stream")]
@@ -566,180 +618,12 @@ def test_dflash_27b_mlx_sampled(t : T?) {
     sampled_metal_cell(t, snapshot_trunk(t), "mlx sampled metal")
 }
 
-[test(description = "On the Metal device arm over the 27B GGUF trunk the greedy DFlash walk is lossless; device accept and selector match the host's drafts and accept count, replays commit unwaited on the tape, the CPU arm accepts the same count, and depth pins hold")]
-def test_dflash_27b_metal(t : T?) {
-    if (!arm_on(t, "dflash-27b-metal") || !family_on(t, "qwen35")) {
-        return
-    }
-    metal_lossless_cell(t, gguf_trunk(t), DRAFTER_FILE, [KqFmt.q8], array<KqFmt>(), "metal")
-}
-
 [test(description = "The lossless greedy DFlash gate on the Metal device arm holds over the 27B mlx 4-bit snapshot trunk, with device and host accept and selector agreeing and mlx4b planes among the trunk's rows8 verify sites where rows8 runs")]
 def test_dflash_27b_mlx_metal(t : T?) {
     if (!arm_on(t, "dflash-27b-mlx-metal") || !family_on(t, "qwen35")) {
         return
     }
     metal_lossless_cell(t, snapshot_trunk(t), DRAFTER_FILE, [KqFmt.q8], [KqFmt.mlx4b], "mlx metal")
-}
-
-[test(description = "The Q4_K_M DFlash2 drafter tags planes by disk type and its greedy walk on the Metal device arm is lossless, with k4 and k6 sites encoded by the pass and device and host accept and selector agreeing")]
-def test_dflash_27b_k4_metal(t : T?) {
-    if (!arm_on(t, "dflash-27b-k4-metal") || !family_on(t, "qwen35")) {
-        return
-    }
-    let drafter = path_join(_model_tier::models_dir(), DRAFTER_K4_FILE)
-    return if (!model_available(t, drafter))
-    planes_tag_disk_types(t, drafter, "k4 metal")
-    metal_lossless_cell(t, gguf_trunk(t), DRAFTER_K4_FILE, [KqFmt.k4, KqFmt.k6], array<KqFmt>(), "k4 metal")
-}
-
-[test(description = "The NVFP4 DFlash2 drafter's greedy walk on the Metal device arm is the plain walk's on the same device (a driver-against-itself compare, every walk's trunk calls counted on the device), with nv4 sites encoded by the pass, the selector walking its NVFP4 codebooks on the device, and device and host accept and selector agreeing")]
-def test_dflash_27b_nv4_metal(t : T?) {
-    if (!arm_on(t, "dflash-27b-nv4-metal") || !family_on(t, "qwen35")) {
-        return
-    }
-    let drafter = path_join(_model_tier::models_dir(), DRAFTER_NV4_FILE)
-    return if (!model_available(t, drafter))
-    planes_tag_disk_types(t, drafter, "nv4 metal")
-    metal_lossless_cell(t, gguf_trunk(t), DRAFTER_NV4_FILE, [KqFmt.nv4], array<KqFmt>(), "nv4 metal", false)
-}
-
-[test(description = "On the 27B hybrid's Metal home with its DFlash2 drafter attached, two streams through the scheduler ride the verify seat's joint groups, each the plain scheduler's token for token, together accepting what each accepts alone within a fifth")]
-def test_dflash_27b_joint(t : T?) {
-    if (!arm_on(t, "dflash-27b-joint") || !family_on(t, "qwen35")) {
-        return
-    }
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let trunk = gguf_trunk(t)
-        let drafter = path_join(_model_tier::models_dir(), DRAFTER_FILE)
-        return if (empty(trunk) || !model_available(t, drafter))
-        with_metal_trunk(t, trunk, "", false) $(var m) {
-            set_dflash_device(true)
-            t |> equal(attach_block_drafter(m, drafter), "", "the drafter attaches")
-            joint_streams_leg(t, m)
-            detach_block_drafter()
-        }
-    } else {
-        t |> skip("27B joint streams: no das_metal in this build")
-    }
-}
-
-let private G26_TRUNK_FILE = "gemma-4-26B-A4B-it-Q4_K_M.gguf"
-let private CAPTURE_STEPS = 4l
-let private CAPTURE_REL = 0.05   //! the two routes' sums part by up to 3.2% at the deepest layers (the routed experts' float order); a row short moves every slot 7% or more
-
-//! what the forward of `prompt` hands the drafter on `m`: the prompt commit's last row, a sum of magnitudes a captured layer,
-//! off a speculative walk of CAPTURE_STEPS tokens with the drafter attached on the asked arm
-def private prompt_capture_sums(t : T?; m : Model; prompt : array<int64>; device : bool; tag : string) : array<float> {
-    set_dflash_device(device)
-    let why = attach_dflash_drafter(m, path_join(_model_tier::models_dir(), G26_DRAFTER_FILE))
-    t |> equal(why, "", "{tag}: the drafter attaches")
-    return <- array<float>() if (!empty(why))
-    set_dflash_record(true)
-    var s = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
-    var nd = 0l
-    var na = 0l
-    let spec <- generate_mtp_greedy(m, s, prompt, long_length(prompt) - 1l + CAPTURE_STEPS, nd, na)
-    t |> success(!empty(spec), "{tag}: the walk ran")
-    var sums <- dflash_recorded_prompt_sums()
-    set_dflash_record(false)
-    detach_dflash_drafter()
-    delete s
-    return <- sums
-}
-
-[test(description = "On gemma-4-26B, whose layers close on the gemma MoE step, the Metal prefill window hands the block drafter the prompt's layer rows: every captured layer's sum over the prompt's last row is the CPU route's within 5%, the CPU route's row for a prompt one token short outside it")]
-def test_dflash_26b_prompt_capture(t : T?) {
-    if (!arm_on(t, "dflash-26b-capture") || !family_on(t, "gemma4moe")) {
-        return
-    }
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let trunk = path_join(_model_tier::models_dir(), G26_TRUNK_FILE)
-        return if (!model_available(t, trunk) || !model_available(t, path_join(_model_tier::models_dir(), G26_DRAFTER_FILE)))
-        let prior = get_metal_mode()
-        let override0 = active_decode_override()
-        var inscope cpu, cpu_short, dev : array<float>
-        with_dasllama_jobque() {
-            set_metal_mode(MetalMode.off)
-            var mc <- load_trunk(t, trunk, false)
-            var inscope prompt <- encode(mc, PROMPT, true)
-            cpu <- prompt_capture_sums(t, mc, prompt, false, "26B capture, CPU route")   // nolint:PERF030,LINT019 — fresh; the Metal half alone compiles the line
-            var inscope short_prompt <- [for (i in range(length(prompt) - 1)); prompt[i]]
-            cpu_short <- prompt_capture_sums(t, mc, short_prompt, false, "26B capture, CPU route a token short")   // nolint:PERF030,LINT019 — fresh; the Metal half alone compiles the line
-            delete mc
-            set_metal_mode(MetalMode.required)
-            apply_box_profile_runtime()
-            select_decode_override("metal")
-            var md <- load_trunk(t, trunk, true)
-            let pf0 = metal_prefill_stats().prefills
-            dev <- prompt_capture_sums(t, md, prompt, true, "26B capture, Metal window")   // nolint:PERF030,LINT019 — fresh; the Metal half alone compiles the line
-            t |> success(metal_prefill_stats().prefills > pf0, "the prompt ran as a device prefill window")
-            delete md
-        }
-        metal_dflash_shutdown()
-        metal_decode_shutdown()
-        metal_prefill_shutdown()
-        select_decode_override(override0)
-        set_metal_mode(prior)
-        t |> equal(metal_log_leaks_if_any(), 0l, "26B capture: no leaked Metal objects after shutdown")
-        t |> success(!empty(cpu) && length(cpu) == length(dev), "both routes recorded every captured layer ({length(cpu)} CPU, {length(dev)} device)")
-        to_log(LOG_INFO, "26B prompt capture sums: CPU {cpu}, device {dev}, CPU a token short {cpu_short}\n")
-        t |> equal(mismatch_rel("26B capture, device against CPU", dev, cpu, CAPTURE_REL), 0, "the device window's captured rows are the CPU route's")
-        t |> equal(length(cpu_short), length(cpu), "the short prompt recorded every captured layer too")
-        t |> success(mismatch_rel("26B capture CONTROL(expected-red)", cpu_short, cpu, CAPTURE_REL) > 0, "a prompt one token short reads other rows (the bar's control)")
-    } else {
-        t |> skip("26B capture: no das_metal in this build")
-    }
-}
-
-//! the lossless gate on the Metal device arm over `trunk_file`, every walk over a chat turn: the device arm's walk, where `joint`
-//! (a trunk the single-stream verify seat does not take, a gemma-4 shape) every block round run as the home's joint round on the
-//! batch rail, and the CPU arm over the device's captures accepting the same count; a `device_gap` holds the device arm and the
-//! count compare as a counted skip of their own naming it, the CPU arm's walk still lossless
-def private metal_arms_cell(t : T?; trunk_file, drafter, tag : string; joint : bool; device_gap : string = "") {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let trunk = path_join(_model_tier::models_dir(), trunk_file)
-        return if (!model_available(t, trunk) || !model_available(t, path_join(_model_tier::models_dir(), drafter)))
-        with_metal_trunk(t, trunk, tag, true) $(var m) {
-            if (!empty(device_gap)) {
-                skip_cell(t, "{tag} device arm: {device_gap}")
-                metal_lossless_walk(t, m, drafter, false, "{tag}, the CPU arm on the device's captures", true)
-                detach_dflash_drafter()
-                return
-            }
-            let rounds0 = metal_dflash_joint_rounds().rounds
-            let dev = metal_lossless_walk(t, m, drafter, true, "{tag} device arm", true)
-            let rounds = metal_dflash_joint_rounds().rounds - rounds0
-            detach_dflash_drafter()
-            if (joint) {
-                t |> success(rounds > 0l, "{tag}: the block rounds ran as the home's joint rounds on the batch rail ({rounds})")
-            }
-            let cpu = metal_lossless_walk(t, m, drafter, false, "{tag}, the CPU arm on the device's captures", true)
-            detach_dflash_drafter()
-            t |> equal(dev, cpu, "{tag}: both arms accept the same count")
-        }
-    } else {
-        t |> skip("{tag}: no das_metal in this build")
-    }
-}
-
-[test(description = "On the Metal device arm over the gemma-4-26B Q4_K_M trunk the greedy DFlash walk over a chat turn is lossless, its block rounds run as joint rounds on the batch rail, and the CPU arm accepts the same count")]
-def test_dflash_26b_metal(t : T?) {
-    if (!arm_on(t, "dflash-26b-metal") || !family_on(t, "gemma4moe")) {
-        return
-    }
-    metal_arms_cell(t, G26_TRUNK_FILE, G26_DRAFTER_FILE, "26B metal", true)
-}
-
-let private QWEN3_4B_DEVICE_GAP = "a regular DFlash drafter's Metal device pass does not reproduce the CPU arm's drafts on this trunk - the walk parts from the plain walk at its third generated id, tokens doubled"
-
-[test(description = "On the Metal home over the dense Qwen3-4B Q4_K_M trunk with its Q8_0 DFlash drafter, over a chat turn, the greedy walk with the drafter's pass on the CPU arm over the device's captures emits the plain greedy walk's ids token for token with drafts accepted; the device arm's lossless walk and its count against the CPU arm's are a counted skip: a regular DFlash drafter's Metal device pass does not reproduce the CPU arm's drafts on this trunk")]
-def test_dflash_qwen3_4b_metal(t : T?) {
-    if (!arm_on(t, "dflash-qwen3-4b-metal") || !family_on(t, "qwen3")) {
-        return
-    }
-    own_load("the cell runs on the Metal home, which the file's block does not load")
-    metal_arms_cell(t, QWEN3_4B_TRUNK_FILE, QWEN3_4B_DRAFTER_FILE, "Qwen3-4B metal", false, QWEN3_4B_DEVICE_GAP)
 }
 
 let private CHAT_TURNS = fixed_array("Describe the TCP three-way handshake in three sentences.", "Now name the side that picks the first sequence number, in one sentence.")
@@ -829,7 +713,7 @@ def test_dflash_e2b_facade_streams(t : T?) {
         let trunk = path_join(_model_tier::models_dir(), E2B_TRUNK_FILE)
         let drafter = path_join(_model_tier::models_dir(), E2B_DRAFTER_FILE)
         return if (!model_available(t, trunk) || !model_available(t, drafter))
-        with_metal_trunk(t, trunk, "", false) $(var m) {
+        with_metal_trunk(t, trunk) $(var m) {
             let prompt <- encode(m, PROMPT, true)
             var inscope plain_replies <- chat_replies(m)
             var s1 = make_run_state(m.config, KVDtype.f16, KVDtype.f16)

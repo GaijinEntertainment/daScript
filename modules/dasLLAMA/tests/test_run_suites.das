@@ -1,4 +1,5 @@
 options gen2
+options _dasllama_internal = true   // the large-model gate reads the size tier's engine module
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
@@ -6,6 +7,9 @@ require dastest/testing_boost public
 require run
 require dastest/kill_switch   // KILL_SWITCH_EXIT_CODE: the exit of a child its test wall ended
 require _model_categories
+require dasllama/dasllama_gguf   // model_tier_skip_reason: a file past the tier is a category's
+require dasllama/dasllama_env   // models_dir_resolved: the models directory the runner reads
+require _child_run   // disable_module_flags, child_cmd_root_leaving: what a spawned child leaves out
 require daslib/fio
 require daslib/strings_boost
 require strings
@@ -19,30 +23,52 @@ require math
 //! the calls through which a test reaches a machine-local fixture root (_model_tier.das)
 let FIXTURE_ROOTS <- ["models_dir()", "model_available(", "llama2c_dir()", "whisper_dir()", "corpus_dir()", "asr_clip(", "asr_oracle_dir("]
 
-def private text_reaches_fixture_root(text : string) : bool {
-    for (root in FIXTURE_ROOTS) {
-        if (find(text, root) >= 0) {
-            return true
-        }
+def private text_holds(text : string; needles : array<string>) : bool {
+    for (n in needles) {
+        return true if (find(text, n) >= 0)
     }
     return false
 }
 
-//! a test reaches a fixture root through its own text or through a shared fixture module beside it - a same-folder
-//! `require _<fixture>` (test_gpu_resident_gemma4_26b_host.das reaches `model_available` through `_gemma_resident` alone)
-def private reaches_fixture_root(file : string) : bool {
+//! whether `file`, or a same-folder fixture it requires (`require _<fixture>`) down to `depth` levels (-1: any depth),
+//! holds one of `needles`; `seen` holds the files read, each read once
+def private reaches_text(file : string; needles : array<string>; depth : int; var seen : table<string>) : bool {
+    return false if (key_exists(seen, file))
+    seen |> insert(file)
     let text = fread(file)
-    if (text_reaches_fixture_root(text)) {
-        return true
-    }
+    return true if (text_holds(text, needles))
+    return false if (depth == 0)
     for (line in split(text, "\n")) {
         continue if (!(line |> starts_with("require _")))
         var inscope name <- split_by_chars(slice(line, length("require ")), " \t/\r")
-        if (text_reaches_fixture_root(fread(path_join(dir_name(file), "{name[0]}.das")))) {
-            return true
-        }
+        let fixture = path_join(dir_name(file), "{name[0]}.das")
+        return true if (fexist(fixture) && reaches_text(fixture, needles, depth - 1, seen))
     }
     return false
+}
+
+//! a test reaches a fixture root through its own text or through a shared fixture module beside it, one level down - a
+//! same-folder `require _<fixture>` (test_gpu_resident_gemma4_26b_host.das reaches `model_available` through
+//! `_gemma_resident` alone)
+def private reaches_fixture_root(file : string) : bool {
+    var inscope seen : table<string>
+    return reaches_text(file, FIXTURE_ROOTS, 1, seen)
+}
+
+[test(description = "`reaches_text` finds a needle in the file's own text, in a same-folder fixture it requires down to the depth asked and no deeper, at any depth for -1, and reads a require cycle once")]
+def test_reaches_text(t : T?) {
+    let dir = test_temp_dir()
+    t |> success(fwrite(path_join(dir, "top.das"), "require _mid public\n")
+        && fwrite(path_join(dir, "_mid.das"), "require _leaf\nrequire _top_again\n")
+        && fwrite(path_join(dir, "_top_again.das"), "require _mid\n")
+        && fwrite(path_join(dir, "_leaf.das"), "the NEEDLE text\n"), "the fixture files are written")
+    let top = path_join(dir, "top.das")
+    var inscope s0, s1, s2, sa, sl : table<string>
+    t |> success(!reaches_text(top, ["NEEDLE"], 0, s0), "depth 0 reads the file's own text alone")
+    t |> success(!reaches_text(top, ["NEEDLE"], 1, s1), "depth 1 stops at the fixture it requires")
+    t |> success(reaches_text(top, ["NEEDLE"], 2, s2), "depth 2 reaches the fixture's fixture")
+    t |> success(reaches_text(top, ["absent", "NEEDLE"], -1, sa), "-1 reaches any depth, any needle of the list")
+    t |> success(!reaches_text(top, ["absent"], -1, sl), "a needle no file holds is found nowhere, the cycle read once")
 }
 
 [test(description = "Every model-free suite file reaches no machine-local fixture root by its text or a same-folder fixture, every stocked file reaches one and declares persistent_heap, and no file sits in both lists")]
@@ -268,11 +294,6 @@ def test_argument_contracts(t : T?) {
     t |> equal(child_timeout(RunArgs(area = "tts")), 1200, "... and so does an area run")
 }
 
-def private das_exe() : string {
-    let args <- get_command_line_arguments()
-    return empty(args) ? "" : args[0]
-}
-
 //! the runner on `args`; `env` is a POSIX prefix of `NAME=value ` tokens its children inherit
 def private run_runner(args : string; var output : string&; env : string = "") : int {
     //! the runner's child logs land in the test's own folder; cmd.exe has no `NAME=value` prefix, and `temp_dir` reads TEMP there
@@ -339,24 +360,27 @@ def start_timeout(out : string; tag : string) : int {
     return to_int(slice(v, 0, find(v, " ")))
 }
 
-//! a batch whose child ends before any verdict reruns its files one child each, each red single child a failure of its
-//! own; a batch's timeout is its file count times the single's
-[test(description = "A batch child that exits red before any verdict reruns each file alone and counts each red single as a failure, the batch timeout is file count times the single's, and a green child retries nothing")]
-def test_runner_retries_a_verdictless_batch(t : T?) {
+[test(description = "A batch child that exits red before any verdict stops the run as LOST on a run with no wall, no file of the batch started again alone, the batch timeout is file count times a one-file child's, and a green child stops nothing")]
+def test_runner_stops_at_a_verdictless_batch(t : T?) {
     return if (get_platform_name() == "windows")   //! the child binary stands in a POSIX one, as test_runner_dry_run's
     var out : string
     let rc = run_runner("--area infra --only test_box --das /usr/bin/false", out)
-    t |> success(rc != 0, "a run whose every child exits red exits red:\n{out}")
+    t |> success(rc != 0, "a run whose child exits red before any verdict exits red:\n{out}")
     t |> success(find(out, "START test_box_ident.das+1: ") >= 0, "the two files ride one batch:\n{out}")
-    t |> success(find(out, "RETRY test_box_ident.das: ") >= 0 && find(out, "RETRY test_box_profile.das: ") >= 0, "a child red before any verdict retries every file:\n{out}")
-    t |> success(find(out, "START test_box_ident.das: ") >= 0 && find(out, "START test_box_profile.das: ") >= 0, "each retried file runs alone:\n{out}")
-    t |> success(find(out, "2 file(s), 2 failed") >= 0, "a red single child is a failure of its own:\n{out}")
-    let single = start_timeout(out, "test_box_ident.das")
-    t |> success(single > 0, "the single child carries a timeout:\n{out}")
+    t |> success(find(out, "LOST test_box_ident.das+1: the batch ended with exit 1: 0 of 2 files have a verdict") >= 0,
+        "with no wall a batch red before any verdict is lost by that name:\n{out}")
+    t |> success(find(out, "START test_box_ident.das: ") < 0 && find(out, "START test_box_profile.das: ") < 0,
+        "no file of the lost batch is started again on its own:\n{out}")
+    t |> success(find(out, "RESUME once it is fixed: this command with --skip 0\n") >= 0 && find(out, "STOPPED, the files after it not run") >= 0,
+        "the run stops there and says how to resume:\n{out}")
+    var lone : string
+    t |> equal(run_runner("--area infra --only test_box --das /usr/bin/true --batch 1", lone), 0, "a dry run one file a child exits clean:\n{lone}")
+    let single = start_timeout(lone, "test_box_ident.das")
+    t |> success(single > 0, "a one-file child carries a timeout:\n{lone}")
     t |> equal(start_timeout(out, "test_box_ident.das+1"), 2 * single, "the batch's timeout is its file count times the single's")
     var clean : string
-    t |> equal(run_runner("--area infra --only test_box --das /usr/bin/true", clean), 0, "a green child with no verdict is no retry:\n{clean}")
-    t |> success(find(clean, "RETRY") < 0, "nothing retried:\n{clean}")
+    t |> equal(run_runner("--area infra --only test_box --das /usr/bin/true", clean), 0, "a green child with no verdict stops nothing:\n{clean}")
+    t |> success(find(clean, "LOST ") < 0, "the control: nothing lost:\n{clean}")
 }
 
 [test(description = "The model-free suite's wall is 30 s outside the full suite and the run's own under --test-wall, its batch is the whole suite off Windows and --batch where given, the kill switch's line is read out of a child's log, and the device kernel files sit beside the model-free ones as files that load no model")]
@@ -434,7 +458,6 @@ def test_walled_run_stops_at_a_lost_batch(t : T?) {
     let at = child_index(out, tag)
     t |> success(!empty(at) && find(out, "RESUME once it is fixed: remove {stop}, then this command with --skip {at}\n") >= 0,
         "the line to resume on names the lost child ({tag}, child {at}):\n{out}")
-    t |> success(find(out, "RETRY") < 0, "no file of the batch reruns alone:\n{out}")
     t |> success(find(out, "STOPPED, the files after it not run") >= 0, "the run says it stopped short:\n{out}")
     t |> success(find(fread(stop), tag) >= 0, "the stop wrote the run's stop file, naming the child: {stop}")
     var marked : string
@@ -448,12 +471,12 @@ def test_walled_run_stops_at_a_lost_batch(t : T?) {
     t |> success(find(resumed, "START failed_dasllama_lint_require.das: ") < 0, "... and has no START line:\n{resumed}")
     t |> success(find(resumed, "test wall 30 s resumed at child 1") >= 0, "the REPORT carries the wall and the resume:\n{resumed}")
     var open_run : string
-    t |> success(run_runner("--suite model-free --test-wall 0 --das /usr/bin/false --skip {at}", open_run) != 0, "with no wall the red batch is retried:\n{open_run}")
+    t |> success(run_runner("--suite model-free --test-wall 0 --das /usr/bin/false --skip {at}", open_run) != 0, "with no wall the red batch stops the run all the same:\n{open_run}")
     t |> success(find(open_run, " --test-wall ") < 0 && find(open_run, " no test wall resumed at child {at}") >= 0,
         "--test-wall 0 hands the children no wall and says so in the REPORT:\n{open_run}")
     let first = slice(tag, 0, find(tag, "+"))
-    t |> success(find(open_run, "RETRY {tag}: ") >= 0 || find(open_run, "RETRY {first}: ") >= 0, "the batch's files are retried:\n{open_run}")
-    t |> success(find(open_run, "START {first}: ") >= 0 && find(open_run, "SKIP {first}: ") < 0, "the retry starts at its own first file, whatever --skip the run took:\n{open_run}")
+    t |> success(find(open_run, "LOST {tag}: ") >= 0, "the batch is lost by its name, wall or none:\n{open_run}")
+    t |> success(find(open_run, "START {first}: ") < 0, "and no file of it is started again on its own:\n{open_run}")
 }
 
 //! a stand-in child binary under the test's temp folder: it prints the file FAKE_CHILD_LOG names and exits with FAKE_CHILD_RC
@@ -483,13 +506,23 @@ def test_runner_reads_a_red_child(t : T?) {
     fwrite(log, "=== RUN 'test_x'\n{said}\n")
     run_runner("--suite model-free --das {child}", out, "FAKE_CHILD_RC=125 FAKE_CHILD_LOG={log} ")
     t |> success(find(out, "WALL failed_dasllama_lint_require.das: {said}") >= 0, "the WALL line is the switch's own:\n{out}")
-    fwrite(log, "[E] Failed to compile the together root x.das\nFAIL modules/dasLLAMA/tests/test_box_ident.das (0.0s)\nFAIL modules/dasLLAMA/tests/test_box_profile.das (0.0s)\n")
+    fwrite(log, "error[30341]: no matching functions or generics: f(bool)\n[E] Failed to compile the together root x.das\nFAIL modules/dasLLAMA/tests/test_box_ident.das (0.0s)\nFAIL modules/dasLLAMA/tests/test_box_profile.das (0.0s)\n")
     run_runner("--area infra --only test_box --test-wall 30 --das {child}", out, "FAKE_CHILD_RC=2 FAKE_CHILD_LOG={log} ")
-    t |> success(find(out, "LOST test_box_ident.das+1: the batch ended with exit 2: its root failed, no file ran") >= 0,
-        "a walled batch whose root failed is lost by that name:\n{out}")
+    t |> success(find(out, "LOST test_box_ident.das+1: the batch ended with exit 2: its root failed, no file ran: error[30341]: no matching functions or generics: f(bool) (read its log)") >= 0,
+        "a batch whose root failed is lost by that name, its first compiler error on the line:\n{out}")
+    run_runner("--area infra --only test_box --das {child}", out, "FAKE_CHILD_RC=2 FAKE_CHILD_LOG={log} ")
+    t |> success(find(out, "LOST test_box_ident.das+1: ") >= 0 && find(out, "START test_box_ident.das: ") < 0,
+        "with no wall the same batch is lost the same way, no file of it run alone:\n{out}")
+    t |> equal(log_error_line("no error here\n"), "", "a log with no compiler error names none")
+    let long_error = "error[30341]: {repeat("x", 300)}"
+    t |> equal(length(log_error_line("[E] {long_error}\nnext\n")), 240, "an error line past 240 characters is cut there")
+    t |> equal(log_error_line("[E] error[1]: the first\nerror[2]: a second"), "error[1]: the first",
+        "the first compiler error is named, from its `error[`")
+    t |> equal(log_error_line("a warning\nerror[2]: the last line"), "error[2]: the last line",
+        "an error on a last line with no newline is that line whole")
     fwrite(log, "PASS modules/dasLLAMA/tests/test_box_ident.das (0.1s)\nFAIL modules/dasLLAMA/tests/test_box_profile.das (0.1s)\n")
     run_runner("--area infra --only test_box --test-wall 30 --das {child}", out, "FAKE_CHILD_RC=1 FAKE_CHILD_LOG={log} ")
-    t |> success(find(out, "LOST ") < 0 && find(out, "RETRY") < 0 && find(out, "2 file(s), 1 failed (test_box_profile.das)") >= 0,
+    t |> success(find(out, "LOST ") < 0 && find(out, "2 file(s), 1 failed (test_box_profile.das)") >= 0,
         "a walled batch with every verdict counts its failures and stops nothing:\n{out}")
     remove(log)
     remove(child)
@@ -564,7 +597,8 @@ def test_model_categories(t : T?) {
             "Qwen3.8-27B-UD-IQ4_XS.gguf", "Qwen3.8-27B-4bit", "Qwen3.8-27B-DFlash2-Q8_0.gguf", "Qwen3.6-27B-MTP-Q4_K_M.gguf")) {
         t |> equal(model_category(whole), "qwen35-27b", "{whole}, a whole 27B file, stays the 27B category's")
     }
-    t |> equal(model_category("Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf"), "", "the Flash-Next trunk, under the same 3.8 prefix, is no category's")
+    t |> equal(model_category("Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf"), "flash-next", "the Flash-Next trunk, under the same 3.8 prefix, is its own category's")
+    t |> success(model_category("Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf") == "flash-next" && !empty(category_skip_reason("Qwen3.8-Flash-Next-IQ4_XS-pure.gguf", "")), "... as its split head is, and a run naming no category opens none of them")
     t |> equal(model_category("Qwen3-4B-Instruct-2507-Q8_0.gguf"), "qwen3-4b", "the dense qwen3's 4B shape is its category's")
     //! a format carrier is no category's: its cells claim a format the family's small carrier lacks, so every per-PR run
     //! opens it - a category holds a larger model on the small carrier's own path
@@ -597,6 +631,83 @@ def test_model_categories(t : T?) {
     for (cat in model_categories()) {
         t |> success(!empty(cat.name) && !empty(cat.stems) && !empty(cat.topics), "the category {cat.name} names its files and its topics")
         t |> success(!empty(category_files(cat.name)), "... and a test file names one of its models")
+    }
+}
+
+[test(description = "A category run opens the towers its row names beside its own files - the gemma4-dense decoders' image chat towers - which a run naming no category opens too and a run naming another leaves, and a tower a row opens is no category's own file")]
+def test_category_opens(t : T?) {
+    let mm12 = "mmproj-gemma-4-12B-it-BF16.gguf"
+    t |> equal(category_skip_reason(mm12, "gemma4-dense"), "",
+        "a tower the category's decoder pairs with opens")
+    t |> equal(category_skip_reason("mmproj-gemma-3-4b-it-F16.gguf", "other, gemma4-dense"), "",
+        "... the gemma-3-4b's too")
+    t |> equal(category_skip_reason(mm12, ""), "", "... which a run naming no category opens still")
+    let other = category_skip_reason(mm12, "gemma4-e4b")
+    t |> success(find(other, "outside the named categories") >= 0,
+        "... and a run naming another category leaves")
+    for (cat in model_categories()) {
+        for (stem in split(cat.opens, ",")) {
+            continue if (empty(strip(stem)))
+            t |> equal(model_category("{strip(stem)}-x.gguf"), "",
+                "{cat.name} opens {stem}, a file of no category")
+        }
+    }
+}
+
+[test(description = "A large-tier model's row holds its whole file and leaves its small siblings and its towers out, and a category run takes the test files that walk the spec table to a category's row")]
+def test_large_model_rows(t : T?) {
+    for (whole, cat in fixed_array("Meta-Llama-3.1-8B-Instruct-Q8_0.gguf",
+            "Llama-3.3-70B-Instruct-Q4_K_M.gguf", "gemma-3-12b-it-Q4_K_M.gguf",
+            "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf", "qwen2audio-7b-q8_0.gguf",
+            "Mistral-7B-Instruct-v0.3-Q8_0.gguf", "Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf",
+            "Qwen3VL-8B-Instruct-Q8_0.gguf", "Qwen3-Coder-Next-Q4_K_M.gguf",
+            "Qwen3-Coder-30B-A3B-Instruct-Q8_0.gguf", "Qwen3-8B-BF16.gguf",
+            "Qwen3-30B-A3B-Q8_0.gguf", "Qwen3-30B-A3B-NVFP4-pure-local.gguf",
+            "Qwen3.6-35B-A3B-Q8_0.gguf", "Qwen3.5-35B-A3B-UD-IQ3_S.gguf"),
+        fixed_array("llama31-8b", "llama33-70b", "gemma3-12b", "qwen3omni-30b", "qwen2audio-7b",
+            "mistral-7b", "mistral3-24b", "qwen3vl-8b", "qwen3coder-next", "qwen3coder-30b",
+            "qwen3-8b", "qwen3moe-30b", "qwen3moe-30b", "qwen35moe-35b", "qwen35moe-35b")) {
+        t |> equal(model_category(whole), cat, "{whole} is the {cat} category's")
+    }
+    for (small in fixed_array("Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+            "Meta-Llama-3.1-8B-Instruct-Q4_0-local.gguf",
+            "Meta-Llama-3.1-8B-Instruct-NVFP4-local.gguf",
+            "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf", "mmproj-gemma-3-12b-it-F16.gguf",
+            "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf", "qwen2audio-mmproj-f32.gguf",
+            "mmproj-Qwen3VL-8B-Instruct-F16.gguf", "Llama-3.2-1B-Instruct-Q8_0.gguf")) {
+        t |> equal(model_category(small), "",
+            "{small}, a small sibling or a tower, is in no category: every run opens it")
+    }
+    var inscope walker <- category_files("mistral3-24b")
+    t |> success(has_value(walker, "{TESTS_DIR}/test_parity.das"),
+        "the 24B, which no model test names, runs in the file walking the spec table: {walker}")
+    t |> success(!has_value(walker, "{TESTS_DIR}/test_chat.das"),
+        "... and in no file that names none of its models")
+}
+
+[test(description = "Every model file this folder's sources or the spec table's name that the models directory holds past `MODEL_TIER_CEILING_BYTES` - its split shards and NextN head summed, as the size tier sums them - is a model category's file, so no run opens it unless the run names its category")]
+def test_large_stocked_models_have_a_category(t : T?) {
+    var names : table<string>
+    for (folder in fixed_array(TESTS_DIR, dir_name(SPEC_TABLE))) {
+        dir(folder) $(name) {
+            return if (!(name |> ends_with(".das")))
+            for (model in model_paths(fread("{folder}/{name}"))) {
+                names |> insert(model)
+            }
+        }
+    }
+    t |> success(key_exists(names, "Qwen3-8B-BF16.gguf"),
+        "the spec table's rows are among the names")
+    let models = models_dir_resolved()
+    for (model in keys(names)) {
+        let path = path_join(models, model)
+        // stocked whole - every shard present - and past the line
+        let whole = empty(model_tier_skip_reason(path, true))
+        continue if (!whole || empty(model_tier_skip_reason(path, false)))
+        t |> success(!empty(model_category(model)),
+            ("{model} is past MODEL_TIER_CEILING_BYTES in {models} and no category holds it - add "
+                + "it to a model_categories() row (_model_categories.das) and that row of "
+                + "../TEST_CATEGORIES.md"))
     }
 }
 
@@ -791,22 +902,19 @@ def test_only_filter(t : T?) {
 }
 
 //! the text by which a test file reaches the CUDA home: the home
-//! ask, or a CUDA fixture
+//! ask, a CUDA fixture, a fixture seating a tower twin on the CUDA
+//! tower under the ask, or a CUDA tower module
 let private CUDA_REACH <- [
-    "gpu_want_cuda()", "require _cuda_", "require ?cuda _cuda_", "cuda_tower_asked"]
+    "gpu_want_cuda()", "require _cuda_", "require ?cuda _cuda_", "cuda_tower_asked",
+    "require _tower_twin", "require _audio_twin", "require _vision_forms",
+    "require ?cuda dasllama/dasllama_cuda_tower", "require ?cuda dasllama/dasllama_cuda_dflash"]
 
 //! the files whose text names the CUDA home and that hold no CUDA cell
 let private CUDA_REACH_NO_CELL <- [
     "test_gpu_home.das",   // a unit of the home pick itself, on no device
     "test_run_suites.das",   // this file, which names the reach text
-    "test_vulkan_moe_cm2.das" ]   // its CUDA branch only skips
-
-def private text_reaches_cuda(text : string) : bool {
-    for (r in CUDA_REACH) {
-        return true if (find(text, r) >= 0)
-    }
-    return false
-}
+    "test_vulkan_moe_cm2.das",   // its CUDA branch only skips
+    "uncategorized__dasllama_internal_persistent_heap_stack_524288.das" ]   // a twin's verdict on synthetic rows
 
 //! the `--only` tokens of the CUDA home's pass, read off its command
 //! line in `CLAUDE.md`
@@ -836,7 +944,7 @@ def test_cuda_pass_keeps_every_cuda_file(t : T?) {
     var reach = 0
     for (file in census) {
         let no_cell = find_index(CUDA_REACH_NO_CELL, base_name(file)) >= 0
-        continue if (no_cell || !text_reaches_cuda(fread(file)))
+        continue if (no_cell || !text_holds(fread(file), CUDA_REACH))
         reach++
         t |> success(find_index(kept, file) >= 0,
             "a file reaching the CUDA home sits in the CUDA pass - add a token: {file}")
@@ -967,17 +1075,15 @@ def test_pass_stamp(t : T?) {
     t |> success(pass_stamp(dir, names, "cpu one", "DASLLAMA_GPU=1") != resized, "a model file of another time is another stamp")
     t |> equal(cached_files("CACHED a.das\n\x1b[32mCACHED b.das\x1b[0m\n[I] a line that says CACHED later\nPASS c.das\n"), 2, "a child's CACHED lines count, colored or not, and no other line does")
     var cfg = RunArgs()
-    let full_suite = !skips_cached(cfg)   //! this very run under DASLLAMA_PARITY_FULL=1 skips nothing either
-    t |> success(skips_cached_in(cfg, false), "a run reports a file from its pass on record")
-    t |> success(!skips_cached_in(cfg, true), "the full suite runs every file")
+    t |> success(skips_cached(cfg), "a run reports a file from its pass on record, the full suite's as any other")
     cfg.rerun = true
-    t |> success(!skips_cached_in(cfg, false) && !skips_cached(cfg), "a --rerun runs every file")
+    t |> success(!skips_cached(cfg), "a --rerun runs every file")
     t |> equal(cached_report(0), "", "a run that ran every file says nothing of files not run")
     t |> success(find(cached_report(3), " 3 of them not run") == 0 && find(cached_report(3), "--rerun") > 0, "the REPORT's count of files not run names --rerun: {cached_report(3)}")
     return if (get_platform_name() == "windows")   //! the dry run's no-op child binary is a POSIX one, as test_runner_dry_run's
     var out : string
     t |> equal(run_runner("--area infra --das /usr/bin/true", out), 0, "an infra dry run exits clean:\n{out}")
-    t |> equal(find(out, " --skip-fully-cached --pass-stamp 0x") >= 0, !full_suite, "a child command carries the flag and its stamp, and under the full suite (DASLLAMA_PARITY_FULL=1) none:\n{out}")
+    t |> success(find(out, " --skip-fully-cached --pass-stamp 0x") >= 0, "a child command carries the flag and its stamp:\n{out}")
     t |> equal(run_runner("--area infra --das /usr/bin/true --rerun", out), 0, "a --rerun infra dry run exits clean:\n{out}")
     t |> success(find(out, "--skip-fully-cached") < 0, "a --rerun's children get no flag:\n{out}")
 }
@@ -1099,26 +1205,45 @@ def test_media_run_heap(t : T?) {
     t |> success(find(child_envs(cfg, true, true), "glibc.malloc") < 0, "nor does cmd.exe's form")
 }
 
-//! the first `--pass-stamp` value a dry run's output carries, "" where none
-def private first_stamp(out : string) : string {
-    let key = " --pass-stamp "
-    let at = find(out, key)
-    return "" if (at < 0)
-    let from = at + length(key)
-    let stop = find(out, " ", from)
-    return slice(out, from, stop < 0 ? length(out) : stop)
+//! the `--pass-stamp` values of a dry run's output, in order: every line's, or the START lines' alone where `start_only`
+def private pass_stamps(out : string; start_only : bool) : array<string> {
+    var stamps : array<string>
+    for (line in split(out, "\n")) {
+        let at = find(line, " --pass-stamp ")
+        continue if (at < 0 || (start_only && find(line, "START ") < 0))
+        let rest = slice(line, at + length(" --pass-stamp "))
+        let end = find(rest, " ")
+        stamps |> push(end < 0 ? rest : slice(rest, 0, end))
+    }
+    return <- stamps
 }
 
-[test(description = "A dry run's children carry a pass stamp that changes with the GPU home and holds across the scratch folder, a named scratch folder is the children's TMPDIR and is announced, the full suite's children carry no skip flag, only a media run's Linux children keep the heap, the whisper-class tower's image arm is audio's alone, and a media file's name outside the tests folder is no media file")]
+//! the first `--pass-stamp` value a dry run's output carries, "" where none
+def private first_stamp(out : string) : string {
+    var inscope stamps <- pass_stamps(out, start_only = false)
+    return empty(stamps) ? "" : stamps[0]
+}
+
+[test(description = "`pass_stamps` reads each line's `--pass-stamp` value to the next space or the line's end, the START lines' alone where asked, and `first_stamp` is the first of every line's, \"\" where none")]
+def test_pass_stamps(t : T?) {
+    let out = "PLAN x --pass-stamp p0 y\nSTART a --pass-stamp s1 -jit\nSTART b --pass-stamp s2\nSTART c no stamp"
+    t |> equal(join(pass_stamps(out, start_only = true), ","), "s1,s2", "the START lines' stamps, the last read to its line's end")
+    t |> equal(join(pass_stamps(out, start_only = false), ","), "p0,s1,s2", "every line's stamp")
+    t |> equal(first_stamp(out), "p0", "the first stamp of any line")
+    t |> equal(first_stamp("START c no stamp"), "", "no stamp, no value")
+}
+
+[test(description = "A dry run's children carry a pass stamp that changes with the GPU home and holds across the scratch folder, a named scratch folder is the children's TMPDIR and is announced, the full suite's children record their passes too, keyed apart, only a media run's Linux children keep the heap, the whisper-class tower's image arm is audio's alone, and a media file's name outside the tests folder is no media file")]
 def test_run_wiring(t : T?) {
     t |> success(find_index(split(area_image_arms("audio"), ","), "tower") >= 0, "the tower image arm is the audio area's")
     t |> success(find_index(split(area_image_arms("vision"), ","), "tower") < 0, "and not the vision area's")
     t |> success(!media_run(["elsewhere/test_whisper.das"]), "a media file's name outside the tests folder is no media file")
-    return if (get_platform_name() == "windows" || !skips_cached(RunArgs()))   //! a POSIX no-op child; the full suite stamps nothing
+    return if (get_platform_name() == "windows")   //! a POSIX no-op child
     let dry = "--area infra --das /usr/bin/true"
     var vulkan, cuda, moved, full, audio : string
-    t |> equal(run_runner(dry, vulkan, "DASLLAMA_GPU=1 "), 0, "a dry run on one GPU home exits clean:\n{vulkan}")
-    t |> equal(run_runner(dry, cuda, "DASLLAMA_GPU=1 DASLLAMA_CUDA=1 "), 0, "and on another:\n{cuda}")
+    let scratch_unset_env = "DASLLAMA_SCRATCH_DIR= "   //! a box that names a scratch folder for its own runs names none for these
+    t |> equal(run_runner(dry, vulkan, "{scratch_unset_env}DASLLAMA_GPU=1 "), 0, "a dry run on one GPU home exits clean:\n{vulkan}")
+    t |> equal(run_runner(dry, cuda, "{scratch_unset_env}DASLLAMA_GPU=1 DASLLAMA_CUDA=1 "), 0, "and on another:\n{cuda}")
     let scratch = path_join(test_temp_dir(), "wiring_scratch")
     t |> equal(run_runner(dry, moved, "DASLLAMA_GPU=1 DASLLAMA_SCRATCH_DIR='{scratch}' "), 0, "and with a scratch folder named:\n{moved}")
     t |> success(!empty(first_stamp(vulkan)), "a child carries a pass stamp:\n{vulkan}")
@@ -1127,9 +1252,11 @@ def test_run_wiring(t : T?) {
     t |> success(find(moved, "TMPDIR=\"{scratch}\" ") >= 0, "a child's command line carries the scratch folder as its TMPDIR:\n{moved}")
     t |> success(find(moved, "SCRATCH {scratch}") >= 0 && stat(scratch).is_dir, "the run announces the folder and makes it:\n{moved}")
     t |> success(find(vulkan, "TMPDIR=\"") < 0 && find(vulkan, "SCRATCH ") < 0, "a run that names none hands its children none:\n{vulkan}")
-    t |> equal(run_runner(dry, full, "DASLLAMA_PARITY_FULL=1 "), 0, "a dry run of the full suite exits clean:\n{full}")
-    t |> success(find(full, "--skip-fully-cached") < 0, "the full suite's children carry no skip flag:\n{full}")
-    t |> equal(run_runner("--area audio --das /usr/bin/true", audio), 0, "a dry audio run exits clean:\n{audio}")
+    t |> equal(run_runner(dry, full, "{scratch_unset_env}DASLLAMA_PARITY_FULL=1 "), 0, "a dry run of the full suite exits clean:\n{full}")
+    var plain : string
+    t |> equal(run_runner(dry, plain, "{scratch_unset_env}DASLLAMA_PARITY_FULL= "), 0, "a dry run outside the full suite exits clean:\n{plain}")
+    t |> success(!empty(first_stamp(full)) && first_stamp(full) != first_stamp(plain), "the full suite's children record their passes too, keyed apart from a default run's ({first_stamp(plain)} / {first_stamp(full)})")
+    t |> equal(run_runner("--area audio --das /usr/bin/true", audio, scratch_unset_env), 0, "a dry audio run exits clean:\n{audio}")
     let linux = get_platform_name() == "linux"
     t |> equal(find(audio, "glibc.malloc.mmap_max=0") >= 0, linux, "a media run's children keep the heap on Linux alone:\n{audio}")
     t |> success(find(vulkan, "glibc.malloc") < 0, "a run of another area's files names no heap setting:\n{vulkan}")
@@ -1290,4 +1417,176 @@ def test_runner_await_models(t : T?) {
     t |> success(find(green, "START test_gpu_model_swap.das") >= 0 && find(green, " s waited on the model copy") >= 0, "the child starts and the REPORT carries the wait:\n{green}")
     t |> success(find(green, "WAIT child 0/1 test_gpu_model_swap.das: started after ") >= 0 && find(green, "3 file(s) it was not given read where they link") >= 0, "a child started over links says so:\n{green}")
     rmdir_rec(dir, why)
+}
+
+[test(description = "Under DASLLAMA_DISABLE_MODULES every child of a run starts with `--disable-module <name>` for each name, right after the binary and ahead of -jit, and its pass stamp is another than the same run's without the knob, whose children carry no such flag; a test's spawned child takes the same flags after the binary (`child_cmd_root_leaving`), and the comma list maps to one flag pair a name")]
+def test_runner_disabled_modules(t : T?) {
+    let pair = " --disable-module dasVulkan --disable-module dasCUDA"
+    t |> equal(disable_module_flags("dasVulkan, dasCUDA"), pair, "one flag pair a name, trimmed")
+    t |> equal(disable_module_flags(""), "", "no name, no flag")
+    let none : array<tuple<name : string; value : string>>
+    let spawned = child_cmd_root_leaving("/x/root.das", none, "", "-jit", "dasCUDA")
+    t |> success(find(spawned, "\"{das_exe()}\" --disable-module dasCUDA -jit -dasroot") >= 0,
+        "a spawned child leaves the named module out, right after the binary: {spawned}")
+    if (get_platform_name() == "windows") {
+        t |> skip("the dry run stands in a POSIX no-op binary for the child")
+        return
+    }
+    let dry = "--area translate --das /usr/bin/true"
+    var plain : string
+    t |> equal(run_runner(dry, plain, "DASLLAMA_DISABLE_MODULES= "), 0, "a dry run is clean:\n{plain}")
+    t |> success(find(plain, "--disable-module") < 0 && find(plain, "\"/usr/bin/true\" -jit ") >= 0,
+        "without the knob no child leaves a module out:\n{plain}")
+    var off : string
+    t |> equal(run_runner(dry, off, "DASLLAMA_DISABLE_MODULES=dasVulkan,dasCUDA "), 0,
+        "a dry run under the knob exits clean:\n{off}")
+    t |> success(find(off, "\"/usr/bin/true\"{pair} -jit ") >= 0,
+        "under the knob every child leaves the modules out, ahead of -jit:\n{off}")
+    let announced = find(off, "MODULES dasVulkan,dasCUDA (DASLLAMA_DISABLE_MODULES): every child")
+    t |> success(announced >= 0 && announced < find(off, "START "),
+        "the run announces the modules its children leave out, ahead of its first child:\n{off}")
+    t |> success(find(plain, "(DASLLAMA_DISABLE_MODULES)") < 0,
+        "the control: a run without the knob announces none:\n{plain}")
+    var inscope plain_stamps <- pass_stamps(plain, start_only = true)
+    var inscope off_stamps <- pass_stamps(off, start_only = true)
+    let stamped = !empty(plain_stamps) && length(plain_stamps) == length(off_stamps)
+    t |> success(stamped, "both runs stamp their children")
+    for (a, b in plain_stamps, off_stamps) {
+        t |> success(a != b, "a pass with a module left out is keyed apart ({a} vs {b})")
+    }
+}
+
+//! the test child's `disable-flags` report under DASLLAMA_DISABLE_MODULES=`modules` ("" unsets it):
+//! its lines by tag
+def private disable_flags_report(t : T?; modules : string) : table<string; string> {
+    var out = ""
+    let envs = [(name = "DASLLAMA_DISABLE_MODULES", value = modules)]
+    let rc = run_verb_child(child_verb_cmd("disable-flags", envs), out)
+    t |> success(rc == 0 && find(out, "ROOT_DONE") >= 0,
+        "the disable-flags verb ran under '{modules}':\n{out}")
+    var lines : table<string; string>
+    for (line in split(out, "\n")) {
+        let sp = find(line, " ")
+        if (sp > 0) {
+            lines |> insert(slice(line, 0, sp), slice(line, sp + 1))
+        }
+    }
+    return <- lines
+}
+
+[test(description = "In a process under DASLLAMA_DISABLE_MODULES each child builder leaves the modules out right after the binary - `daslang_argv`, `child_cmd` through `child_cmd_root`, the compile child's argv - and the test child's exe key moves with the knob; with the knob unset none carries the flag", timeout = 1200)]
+def test_child_builders_read_the_knob(t : T?) {
+    var inscope on <- disable_flags_report(t, "dasVulkan,dasCUDA")
+    var inscope off <- disable_flags_report(t, "")
+    let pair = " --disable-module dasVulkan --disable-module dasCUDA"
+    let argv = on?["ARGV"] ?? ""
+    let cmd = on?["CMD"] ?? ""
+    let compile = on?["COMPILE"] ?? ""
+    t |> success(find(argv, "das{pair} root.das") >= 0, "a daslang argv leaves them out: {argv}")
+    t |> success(find(cmd, "\"{pair} -dasroot") >= 0, "a test's child command too: {cmd}")
+    t |> success(find(compile, "{pair} -dasroot") >= 0, "and the compile child: {compile}")
+    for (tag in fixed_array("ARGV", "CMD", "COMPILE")) {
+        let line = off?[tag] ?? ""
+        t |> success(!empty(line) && find(line, "--disable-module") < 0,
+            "the control: unset, the {tag} line carries none: {line}")
+    }
+    let key_on = on?["KEY"] ?? ""
+    t |> success(!empty(key_on) && key_on != (off?["KEY"] ?? ""),
+        "the exe key moves with the knob ({key_on})")
+}
+
+//! the text by which a file or a fixture it requires reaches the Vulkan home's module
+let private VULKAN_REACH <- ["require ?vulkan ", "builtin_module_exists(vulkan)"]
+
+//! the model-free files that reach Vulkan and hold no Vulkan cell: the CUDA stamps over
+//! `_discrete_cells`' shared case bodies, this file, which names the reach text, and the file whose
+//! twin verdict reads synthetic rows
+let private VULKAN_REACH_NO_CELL <- ["test_cuda_tower_front.das", "test_cuda_tower_blocks.das",
+    "test_cuda_tower_asr.das", "test_run_suites.das",
+    "uncategorized__dasllama_internal_persistent_heap_stack_524288.das"]
+
+[test(description = "Every model-free file whose text, or a fixture it requires, reaches the Vulkan module sits in the two-pod fleet Vulkan home's slice of the model-free suite (`VULKAN_FREE_ONLY`) but the declared case-body files - the CUDA home runs the suite without that module - and the slice keeps no file that reaches none")]
+def test_vulkan_free_slice(t : T?) {
+    var inscope free <- suite_files("model-free")
+    let kept <- only_files(free, VULKAN_FREE_ONLY)
+    var reach = 0
+    for (file in free) {
+        var inscope seen : table<string>
+        let vulkan = reaches_text(file, VULKAN_REACH, -1, seen)
+        let declared = find_index(VULKAN_REACH_NO_CELL, base_name(file)) >= 0
+        reach += vulkan ? 1 : 0
+        if (vulkan && !declared) {
+            t |> success(find_index(kept, file) >= 0,
+                "a model-free file reaching Vulkan sits in VULKAN_FREE_ONLY - add a token: {file}")
+        }
+        if (find_index(kept, file) >= 0) {
+            t |> success(vulkan, "VULKAN_FREE_ONLY keeps a file that reaches no Vulkan: {file}")
+        }
+    }
+    t |> success(reach > 10, "the walk found the Vulkan files ({reach})")
+}
+
+//! the require of a CUDA kernel-class module with no `?cuda` guard: what makes a test file the CUDA home's alone
+let private CUDA_CLASSES_REQUIRE <- ["require dasllama/dasllama_cuda_classes"]
+
+[test(description = "`CUDA_ONLY_EXCLUDE` leaves out exactly the test files that require a CUDA kernel-class module with no `?cuda` guard, themselves or through a fixture, the files a two-pod fleet's Vulkan home does not run")]
+def test_cuda_only_exclude(t : T?) {
+    var files : array<string>
+    dir(TESTS_DIR) $(name) {
+        if (name |> ends_with(".das") && (name |> starts_with("test_") || name |> starts_with("uncategorized"))) {
+            files |> push("{TESTS_DIR}/{name}")
+        }
+    }
+    var inscope dropped <- exclude_files(files, CUDA_ONLY_EXCLUDE).dropped
+    var reach = 0
+    for (file in files) {
+        continue if (base_name(file) == "test_run_suites.das")   //! this file names the require as a string
+        var inscope seen : table<string>
+        let cuda_only = reaches_text(file, CUDA_CLASSES_REQUIRE, -1, seen)
+        reach += cuda_only ? 1 : 0
+        t |> equal(find_index(dropped, file) >= 0, cuda_only,
+            "CUDA_ONLY_EXCLUDE leaves out a file exactly where it requires the CUDA kernel classes unguarded: {file}")
+    }
+    t |> success(reach >= 5, "the walk found the CUDA-only files ({reach})")
+}
+
+[test(description = "`box_race_possible` owes the per-box runtime file's race ahead of the first child only on a build with the Metal module whose children read no tune manifest and keep the crowns: not under --no-tune, a manifest, or the reference or fallback policy")]
+def test_box_race_possible(t : T?) {
+    t |> success(box_race_possible(metal_build = true, no_tune = false, manifest = "", policy = ""), "a Metal build with no manifest races")
+    t |> success(box_race_possible(metal_build = true, no_tune = false, manifest = "", policy = "default"), "a crown-keeping policy too")
+    t |> success(!box_race_possible(metal_build = false, no_tune = false, manifest = "", policy = ""), "no Metal module, no crowns")
+    t |> success(!box_race_possible(metal_build = true, no_tune = true, manifest = "", policy = ""), "--no-tune runs the reference bodies")
+    t |> success(!box_race_possible(metal_build = true, no_tune = false, manifest = "/m5.tune.json", policy = ""), "a manifest holds them")
+    t |> success(!box_race_possible(metal_build = true, no_tune = false, manifest = "", policy = "reference"), "reference is crownless")
+    t |> success(!box_race_possible(metal_build = true, no_tune = false, manifest = "", policy = "fallback"), "and so is the fallback policy")
+}
+
+[test(description = "The per-box runtime file is made ready only for a run on its own binary whose children may race the crowns, its manifest the caller's, else the box file where valid, else none; the race program's exit and output make the BOXRACE line: a failed line on a nonzero exit or no file named, the raced line with its seconds, none where a valid file held")]
+def test_box_runtime_lines(t : T?) {
+    t |> equal(box_manifest_pick("/caller.json", "/box.json", true), "/caller.json",
+        "the caller's manifest wins")
+    t |> equal(box_manifest_pick("", "/box.json", true), "/box.json",
+        "else the box file where valid")
+    t |> equal(box_manifest_pick("", "/box.json", false), "", "and none where it is not")
+    t |> success(box_runtime_owed(das_standin = "", metal_build = true, no_tune = false, manifest = "", policy = ""),
+        "a run on its own binary owes the file where the crowns may race")
+    t |> success(!box_runtime_owed(das_standin = "/usr/bin/true", metal_build = true, no_tune = false, manifest = "", policy = ""),
+        "a --das stand-in owes none")
+    t |> success(!box_runtime_owed(das_standin = "", metal_build = true, no_tune = false, manifest = "/m5.tune.json", policy = ""),
+        "nor a run whose children read a manifest")
+    let failed = box_race_line(3, "the program's output", 1.0lf)
+    let failed_line = find(failed.text, "BOXRACE failed (exit 3)") >= 0
+    t |> success(failed.warn && failed_line && find(failed.text, "the program's output") >= 0,
+        "a nonzero exit is a failed line carrying the output: {failed.text}")
+    let unnamed = box_race_line(0, "BOX_FILE=[]", 1.0lf)
+    t |> success(unnamed.warn && find(unnamed.text, "BOXRACE failed (exit 0)") >= 0,
+        "a clean exit naming no file fails too: {unnamed.text}")
+    let raced = box_race_line(0, "BOX_FILE=[/box.json] metal crowns raced", 42.5lf)
+    let raced_line = find(raced.text, "BOXRACE Metal crowns raced") >= 0
+    t |> success(!raced.warn && raced_line && find(raced.text, "(42.5s)") >= 0,
+        "a race is its line with its seconds: {raced.text}")
+    let held = box_race_line(0, "BOX_FILE=[/box.json]", 1.0lf)
+    t |> success(!held.warn && empty(held.text),
+        "the control: a valid file held says nothing: '{held.text}'")
+    t |> equal(disabled_modules_line(""), "", "no module left out, no MODULES line")
 }

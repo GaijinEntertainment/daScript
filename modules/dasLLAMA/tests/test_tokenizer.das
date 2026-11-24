@@ -16,7 +16,9 @@ require _tokenizer_corpus
 // machine-local (gitignored model dir), so each case skips cleanly when absent - the file rides
 // the runner's model-free suite and reports SKIPPED where the vocab fixtures are not stocked. A
 // snapshot twin case also skips where its HF-cache snapshot or its GGUF twin is not stocked, and
-// where the twin is large-tier (the Qwen3.8-27B one) without DASLLAMA_PARITY_FULL=1.
+// where the twin is a category's (the Qwen3.8-27B one, qwen35-27b) the run does not name. The
+// Mistral v0.3 byte-piece cell's file is the mistral-7b category's: it runs under
+// `--category mistral-7b` alone.
 
 // Run the .inp/.out corpus for one vocab: every input must encode to the reference ids, and
 // decode(encode(x)) must round-trip losslessly. The first divergence of each kind is carried in
@@ -261,10 +263,7 @@ def test_tokenizer_spm_byte_pieces_by_name(t : T?) {
 def test_tokenizer_mistral_v03_byte_pieces(t : T?) {
     t |> run("Mistral v0.3: byte pieces past 768 control tokens, llama-tokenize's ids") @(t : T?) {
         let path = path_join(models_dir(), "Mistral-7B-Instruct-v0.3-Q8_0.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
-            return
-        }
+        return if (!model_available(t, path))   //! the mistral-7b category's
         var tk <- load_tokenizer_auto(path)
         t |> equal(781l, tk.spm.byte_piece_id[10], "<0x0A> is piece 781 in this vocabulary")
         t |> equal("[control_11]", tk.spm.vocab[13],

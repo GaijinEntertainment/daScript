@@ -4,7 +4,7 @@
 doc: `../ARCHITECTURE.md`.
 
 **A diff that adds or moves a `[test]` here applies `tests/REVIEW.md` (repo root) too, with this
-folder's `REVIEW.das` as its gate; a diff that weakens it is a defect.**
+folder's `REVIEW.das` as its gate.**
 
 **A test or a cell a diff moves to another file, its text unchanged or not, is moved: every rule of
 `REVIEW.md` (beside this file) or a companion beside it that a diff adding or moving a test or a
@@ -17,8 +17,8 @@ cell triggers binds it, whether or not the move reaches the cell.**
 arms - `--arm`, or the `image` suite arms a `--changed` or `--area` plan owns (`area_image_arms`,
 `run.das`) - never in a `model-free`, `gpu-kernels` or `stocked` run.
 
-**A `[test]` a diff adds or moves that reaches no stocked artifact goes into a `model-free`
-file - into a `gpu-kernels` file where it compiles a kernel on a Vulkan or CUDA device - never a
+**A `[test]` that reaches no stocked artifact once a diff adds it, moves it, or moves cells out of
+it goes into a `model-free` file - into a `gpu-kernels` file where it compiles a kernel on a Vulkan or CUDA device - never a
 `stocked` one; a diff that weakens the model-free/stocked check of `test_run_suites.das` is a
 defect.** A stocked file runs only where the models are stocked, so a model-free test inside it
 stops running on every other box; a device's first compile of a kernel is the driver's time,
@@ -33,17 +33,19 @@ process it runs in, a server started by its command line, the runner itself. Wea
 gate is a defect.** The runner builds the test child once a run as an exe, so a verb is a process
 start, where a root of its own is an engine compile inside its test's wall.
 
-**A diff that adds, renames, merges or removes a test file keeps every `--only` / `--exclude`
-token written in `CLAUDE.md` (beside this file) or `../CLAUDE.md` matching every file that now
+**A diff that adds, renames, merges or removes a test file, or moves a cell to another file, keeps
+every `--only` / `--exclude` token written in `CLAUDE.md` (beside this file) or `../CLAUDE.md` matching every file that now
 holds a test the token reached before, or corrects the token there in the same change.** A
 token that stops matching drops its files from the run without a red.
 
-**A diff that registers a test file of this folder in a `CMakeLists.txt` is a defect - list it
-in a `run.das` suite instead. The per-PR lanes in `../CMakeLists.txt` are the exception: a diff
-adds a file there only when the file is in the `model-free` suite and guards something a PR
-without a pod run can break.** A second list drifts from the runner's tables, and a CMake lane
-has no models. A lane may run such a file interpreted (`FILES`, not `JIT_FILES`), outside the
-`-jit` rule of `REVIEW.md`, only when no cell of the file skips for want of the JIT.
+**A diff that registers a test file of this folder in a `CMakeLists.txt` other than in a per-PR
+lane of `../CMakeLists.txt` is a defect - list it in a `run.das` suite instead.** A second list
+drifts from the runner's tables.
+
+**A diff that adds a test file of this folder to a per-PR lane in `../CMakeLists.txt` adds only a
+file in the `model-free` suite that guards something a PR without a pod run can break, and lists it
+in the lane's `FILES` (run interpreted) rather than its `JIT_FILES` only when no cell of the file
+skips for want of the JIT.** A CMake lane has no models.
 
 **An `[init]` in a test file here, or in a `_*.das` fixture one requires, calls nothing but
 `allow_cpu_prefill()`; the value a cell needs - a K/V codec, a prompt window, a mirror context,
@@ -63,6 +65,14 @@ also runs starts every child of that file on that entry file in one working dire
 `test_temp_dir()` (`dastest/testing_boost`, repo root), and passes none of them `-no-module-cache`,
 `-jit-no-cache` or a `-module-cache` path of its own.** Children sharing one working directory share
 its module and JIT caches, so the file compiles that program once instead of once a child.
+
+**A diff that adds a line in this folder starting the daslang binary through a spelling
+`check_child_binary_flags` (`REVIEW.das`) does not read - a binary path held in a variable or taken
+from the command line - builds that command with `daslang_argv` or puts `child_disable_flags()`
+right after the binary (`_daslang_argv.das`); an entry a diff adds to `BINARY_UNFLAGGED` starts a
+program whose require closure names no GPU module, optional requires included; a diff that weakens the check is a defect.** A child without
+the run's `--disable-module` flags compiles another module set than the run's records hold and
+reparses the engine inside its test's wall.
 
 **A `standalone` reason here that says the test loads a model is a defect - the test goes to
 its topic's file.** A cell frees its model before it returns.

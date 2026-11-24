@@ -35,8 +35,8 @@ require math
 // so a layout misread fails loudly with no model files needed. The dequant arithmetic itself is
 // proven bit-exact against gguf-py's dequantize (harness/q4k_dequant_probe.das); the real-file
 // arm cross-checks against the Q8_0 twin of the same weights at known quantization-error levels.
-// The repacked-plane cell is JIT-only, needs the large-tier gemma-4-26B_q4_0-it.gguf
-// (DASLLAMA_PARITY_FULL=1) and a backend carrying kq slots - each absence is a loud skip. That file's block also carries its
+// The repacked-plane cell is JIT-only, needs gemma-4-26B_q4_0-it.gguf
+// (the gemma4-moe category's, `--category gemma4-moe`) and a backend carrying kq slots - each absence is a loud skip. That file's block also carries its
 // model_specs parity row on the row's CPU form (`parity_spec_cell`), skipped where the box cannot take DASLLAMA_PIN_BACKEND's pin.
 
 //! the superblock format ids the kq gates walk

@@ -327,6 +327,20 @@ def select_prefill_override(name : string) : bool {
 
 def active_prefill_override : string => g_prefill_override_name
 
+//! Drops the prefill override `name` and every seat registered under its name - the segments form, the split-span, mrope
+//! and deepstack capabilities, the token-table gather gate - deselecting it first where it is the active one
+def unregister_prefill_override(name : string) {
+    if (g_prefill_override_name == name) {
+        select_prefill_override("")
+    }
+    g_prefill_overrides |> erase(name)
+    g_prefill_seg_overrides |> erase(name)
+    g_prefill_split_span |> erase(name)
+    g_prefill_mrope_tables |> erase(name)
+    g_prefill_ds_adds |> erase(name)
+    g_embed_dev_prefill_gates |> erase(name)
+}
+
 //! The GPU-PLE pre-step gates, one list per direction: every driver that builds the E-series PLE side input on device
 //! registers its prefill gate and its decode gate (a build carries both GPU homes, each gate answering for its own armed
 //! driver); the first gate that takes a call has the hub skip the CPU pre-step for that call only.
@@ -383,6 +397,10 @@ def register_embed_dev_gates(name : string; prefill, decode : EmbedGpuGateFn) {
     g_embed_dev_prefill_gates[name] = prefill
     g_embed_dev_decode_gates[name] = decode
 }
+
+//! whether the override `name` holds its own prefill gather gate (`register_embed_dev_gates`). Non-private: the knob
+//! getters' tests read it
+def has_embed_dev_prefill_gate(name : string) : bool => key_exists(g_embed_dev_prefill_gates, name)
 
 var private g_embed_dev_batch_gates : table<string; EmbedGpuGateFn>
 
@@ -1637,25 +1655,16 @@ def has_prefill_override(name : string) : bool => key_exists(g_prefill_overrides
 // PANICS there unless the caller declares CPU intent (the API below or DASLLAMA_CPU_PREFILL=1).
 let CPU_PREFILL_PANIC_NPOS = 32l
 
-var private g_cpu_prefill_allowed = -1   // -1 = read DASLLAMA_CPU_PREFILL on first check
+//! Whether this process declared CPU prefill on purpose: the lever (`allow_cpu_prefill`, `set_cpu_prefill`), else
+//! ``DASLLAMA_CPU_PREFILL``; `cpu_prefill_pin` / `restore_cpu_prefill` put a declaration back
+[lever(name = cpu_prefill)]
+def cpu_prefill_allowed() : bool => g_env_engine.cpu_prefill
 
 //! Declare that this process runs CPU prefill ON PURPOSE — disarms the Metal-capable-build panic
 //! on batched prefills longer than ``CPU_PREFILL_PANIC_NPOS`` tokens. ``DASLLAMA_CPU_PREFILL=1``
 //! is the no-recompile equivalent (the test rail exports it).
 def allow_cpu_prefill(on : bool = true) {
-    g_cpu_prefill_allowed = on ? 1 : 0
-}
-
-[cold_path]   // one-time env resolution; the accessor is a global test after the first call
-def private load_cpu_prefill_allowed() {
-    g_cpu_prefill_allowed = g_env_engine.cpu_prefill ? 1 : 0
-}
-
-def private cpu_prefill_allowed : bool {
-    if (g_cpu_prefill_allowed < 0) {
-        load_cpu_prefill_allowed()
-    }
-    return g_cpu_prefill_allowed == 1
+    set_cpu_prefill(on)
 }
 
 // The blob-only tripwire: a metal-flavor (blob-only) model carries no planar CPU planes — any

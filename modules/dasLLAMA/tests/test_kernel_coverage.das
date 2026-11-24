@@ -1232,7 +1232,7 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the per-expert streamed chain's by-row gather and combine: the whole-model driver's streamed layers dispatch them, and
     // no stocked carrier streams (every zoo MoE fits the card whole); their coverage is test_vkd_moe_gather_row and
     // test_vkd_combine_row in test_vulkan_kernels.das, the chain's test_vulkan_moe_cm2_split, and the model-level
-    // test_gpu_resident_moe_formats cells (large-tier, DASLLAMA_PARITY_FULL=1)
+    // test_gpu_resident_moe_formats cells (their models' categories, `--category`)
     "moe_gather_f16_row_cls_spv", "combine_row_cls_spv",
     // the Bergamot translation driver's step and attention stamps: the Vulkan serving census loads no translation model (its
     // Bergamot row, `cov_tower_bergamot`, serves on the Metal seat alone); their coverage is test_vkt_nmt and test_vkt_nmt_attn

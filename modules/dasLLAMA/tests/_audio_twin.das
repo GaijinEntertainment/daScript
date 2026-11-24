@@ -372,3 +372,22 @@ def twin_regrow_held(t : T?; tag : string; fam : TowerFamily; exactly_three : bo
     t |> success(k.poison_encodes > 0l, "{tag} poison: device-served (encodes delta)")
     tower_twin_poisoned(t, tag, fam, reference, k.poisoned, bar)
 }
+
+//! a jfk twin cell's seat, each miss a loud skip (the JIT under `jit_only`, the model and jfk.wav, `fam`'s twin seat), then `body` over the clip, the knobs put back
+[unused_argument(tt, model_path, jit_only, fam, body)]
+def jfk_twin_cell(tt : T?; model_path : string; jit_only : bool; fam : TowerFamily; body : block<(samples : array<float>) : void>) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda) || typeinfo builtin_module_exists(das_metal)) {
+        if (jit_only && !jit_enabled()) {
+            tt |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        if (!model_available(tt, model_path)) {
+            return
+        }
+        let samples <- asr_samples(tt, "jfk.wav")
+        return if (empty(samples) || !discrete_audio_twin_seat(tt, fam))
+        with_gpu_knobs() {
+            invoke(body, samples)
+        }
+    }
+}

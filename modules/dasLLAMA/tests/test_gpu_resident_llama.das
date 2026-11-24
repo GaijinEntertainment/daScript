@@ -35,6 +35,8 @@ require _parity_cells   // SmolLM2's tied rows (tied_cls_rows, tied_cls_q8_rows_
 require _sampling_cells   // constrained_sampler_cell
 require _embedding_cells   // the tinyllama embedding cells
 require _ffn_slice_cells   // last_layer_slice_cell: the 1B's default form
+require _mlx_cells   // mlx_llama_1b_8bit_cell: the 1B MLX snapshot on the uncached form
+require _metal_batched_cells   // metal_llama_1b_cells: the 1B Q8_0 file's Metal form's cells
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -75,7 +77,7 @@ def private allow_cpu_prefill_intent() {
 //   on the host, the `SEG_WINDOW`-row prompt window - their by-design passes reset after them.
 // - Llama-3.2-1B IQ4_XS on the Vulkan home: the q8_0 mirror's forced feed and the tq4 mirror's distance form at 40 tokens.
 // - Llama-3.2-1B Q8_0's default form also runs the last layer's FFN slice (`_ffn_slice_cells.das`), and its q8 uncached CPU form,
-//   on every box, the chat cells (`_chat_cells.das`).
+//   on every box, the chat cells (`_chat_cells.das`) and the 1B MLX 8-bit snapshot against the file (`_mlx_cells.das`).
 // - On every box, the parity row of each 1B file model_specs pins one for - Q8_0, the Q4_0 and IQ4_NL mints, Q4_K_M, IQ4_XS
 //   and the NVFP4 mint - on its CPU form (the row's load mode and K-quant knob under DASLLAMA_PIN_BACKEND's pin): the row's
 //   frozen greedy ids (`parity_spec_cell`); the form skips where the box cannot take the pin.
@@ -84,6 +86,9 @@ def private allow_cpu_prefill_intent() {
 //   `_fused_decode_cells.das`, `_parity_cells.das`, `_chat_cells.das`, `_sampling_cells.das`, `_embedding_cells.das`);
 //   SmolLM2's portable-pinned CPU form carries the cells whose load lays the q8 rows out for the portable backend (the
 //   q8_0 K/V decode cell, the fused attention chain's portable pass and the deep-context witness cells).
+// - Llama-3.2-1B Q8_0's Metal form (`metal_form`, the blob twin) carries the Metal batched driver's cells
+//   (`_metal_batched_cells.das`): the batched row, the batched gather, the pre-encode rail, the landing across a move and a
+//   release, and the per-row tick. The form is one skipped cell on a build without das_metal.
 // Every test skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, without its file under models_dir(),
 // or where a form's plan does not fit the card; a codec form is a held skip where DASLLAMA_VK_KV32=1 arms an f32 mirror,
 // a two-window feed where the prompt window is not PF_WINDOW_ROWS rows. Under DASLLAMA_CUDA=1 the Vulkan home's cells -
@@ -457,7 +462,7 @@ struct Llama1bRows {
 def private llama_1b_forms(var r : Llama1bRows) : array<ModelForm> {
     if (!r.feeds.cuda) {
         return <- [device_form(), device_form(regions = 1l), device_form(regions = 2l, ctx = BATCH_RIG_CTX), segment_form(),
-            cpu_cells_form(uncached = true)]
+            cpu_cells_form(uncached = true), metal_form(ctx = METAL_ROW_CTX)]
     }
     var forms <- [device_form(), device_form(regions = 1l, cuda_window_fault = true), device_form(regions = 1l),
         device_form(regions = 2l, ctx = BATCH_RIG_CTX), segment_form()]
@@ -466,6 +471,7 @@ def private llama_1b_forms(var r : Llama1bRows) : array<ModelForm> {
     r.codec.prompts <- [40l, TWO_WINDOWS]
     codec_forms(forms, r.codec.h, [KVDtype.q8_0], device_form()) $(kv) => "{FILE_1B}: the {kv} mirror's feeds on the CUDA driver"
     forms |> push(cpu_cells_form(uncached = true))
+    forms |> push(metal_form(ctx = METAL_ROW_CTX))
     return <- forms
 }
 
@@ -483,8 +489,11 @@ def private kernel_skip_on(t : T?; var m : Model) {
 //! one form's collection of the Q8_0 file's cells into `r`; the fault, one-, two- and twelve-region forms' and the per-op
 //! form's own cells run on their load, and the default form's kernel skip after its feeds
 def private llama_1b_rows(t : T?; var r : Llama1bRows; var m : Model; form : ModelForm) {
-    if (!form.on_gpu && form.uncached) {
+    if (form.on_metal) {
+        metal_llama_1b_cells(t, m)
+    } elif (!form.on_gpu && form.uncached) {
         chat_llama32_cells(t, m)
+        mlx_llama_1b_8bit_cell(t, m)
     } elif (form.perop) {
         declined_runs_on_cpu_cell(t, m)
     } elif (form.pf_window_rows == SEG_WINDOW) {
@@ -517,7 +526,7 @@ def private llama_1b_rows(t : T?; var r : Llama1bRows; var m : Model; form : Mod
     }
 }
 
-[test(description = "On Llama-3.2-1B Q8_0 the resident chain holds the CPU chain's logits within 6 percent of the max over one and two windows plus eight steps, on the Vulkan home with the GPU spin window in force while armed, on the CUDA driver with every position served and the captured graph replayed; at one region a short tail of 1, 2, 5 and 8 rows peels within the split bar of the row-at-a-time tail, one row more or the lever off taking the window chain, and the greedy chain's steps reproduce the plain steps bit for bit; on the Vulkan home bench_tg_batched_rep refuses by name past the homed streams and serves a row it homes; on the CUDA home two and twelve sessions batched through the N-row command land every row within the split bar of each alone, on the rows tensor leaf and with its knee off, a q8_0 K/V mirror holds the CPU chain on q8_0 sessions within 10 percent over one and two windows, and with the whole-model route off no layer sits on the device and the CPU rails run the window and eight steps, and under the window-fault seat the driver arms without its window chain's planes and a prompt window refuses by name while the next load, the seat lifted, holds the planes before any prompt and serves the window and its steps; on the segment form two sessions' tails as one segmented window, within and across windows, hold the split bar of their solo windows, ownership binds owners first and the decline arms fall back unsegmented; on the default form the home's kernel-skip setter (`set_vulkan_kernel_skip`, under the CUDA ask `set_cuda_kernel_skip`) drops the recorded step: under a skip naming the decode attention the next step dispatches none of it and the q8 GEMV anew, and cleared the attention dispatches again, the unskipped step counting both alike, and a 512-token prefill with the last layer's FFN sliced yields the whole window's logits bit for bit, split-k pinned off for both arms; on the q8 uncached CPU form, on every box, the Llama-3 header prefill and the template's dated system header with and without a tool render; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+[test(description = "On Llama-3.2-1B Q8_0 the resident chain holds the CPU chain's logits within 6 percent of the max over one and two windows plus eight steps, on the Vulkan home with the GPU spin window in force while armed, on the CUDA driver with every position served and the captured graph replayed; at one region a short tail of 1, 2, 5 and 8 rows peels within the split bar of the row-at-a-time tail, one row more or the lever off taking the window chain, and the greedy chain's steps reproduce the plain steps bit for bit; on the Vulkan home bench_tg_batched_rep refuses by name past the homed streams and serves a row it homes; on the CUDA home two and twelve sessions batched through the N-row command land every row within the split bar of each alone, on the rows tensor leaf and with its knee off, a q8_0 K/V mirror holds the CPU chain on q8_0 sessions within 10 percent over one and two windows, and with the whole-model route off no layer sits on the device and the CPU rails run the window and eight steps, and under the window-fault seat the driver arms without its window chain's planes and a prompt window refuses by name while the next load, the seat lifted, holds the planes before any prompt and serves the window and its steps; on the segment form two sessions' tails as one segmented window, within and across windows, hold the split bar of their solo windows, ownership binds owners first and the decline arms fall back unsegmented; on the default form the home's kernel-skip setter (`set_vulkan_kernel_skip`, under the CUDA ask `set_cuda_kernel_skip`) drops the recorded step: under a skip naming the decode attention the next step dispatches none of it and the q8 GEMV anew, and cleared the attention dispatches again, the unskipped step counting both alike, and a 512-token prefill with the last layer's FFN sliced yields the whole window's logits bit for bit, split-k pinned off for both arms; on the q8 uncached CPU form, on every box, the Llama-3 header prefill and the template's dated system header with and without a tool render, and the Llama-3.2-1B MLX 8-bit snapshot loads NEOX-roped with the file's config and mlx8 planes everywhere, its teacher-forced logits within 8 percent of the file's range and within 0.4 of the snapshot runtime's top-1 logits; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; on the Metal home's blob twin, one load on a das_metal build: on Llama-3.2-1B Q8 with no whole-model driver homing a stream, the batched bench row serves four host-cached streams at a rate, every timed step a Metal batched-driver device step, none on the CPU stack; on Llama-3.2-1B Q8, the Metal batched step gathers every row of three sessions off its token id on the device, its logits bit for bit those with the gather off, where the host embeds every row; on Llama-3.2-1B Q8, four greedy streams emit the same tokens with batched steps pre-encoded under the step before (16 or more taken) as encoded at call, and retiring a parked step leaks no Metal object; on Llama-3.2-1B Q8, two streams stepped through the Metal batched driver emit the same tokens with the pre-encode rail on and with the pipelined landing on as with each step built at its call, across a move of both sessions (the step encoded ahead commits through the sessions' new addresses) and the release of one (which leaves no landing naming a session, and lands the step in flight); on Llama-3.2-1B Q8, two sampled streams through two-row ticks the batched driver declines step one row at a time, landing every selection, and emit what each samples right after its own forward; each form loads once")]
 def test_gpu_resident_llama_1b(t : T?) {
     return if (!family_on(t, "llama"))
     var r : Llama1bRows

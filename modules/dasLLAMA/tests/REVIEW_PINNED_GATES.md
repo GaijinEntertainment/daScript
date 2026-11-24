@@ -3,8 +3,7 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_CELL_BARS.md`. Planned work: `../followup_general.md`.
 
-A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the asserts
-of every helper it calls. A file entry opens on a file alone (`` `<file>` must hold ``) and pins
+Terms this checklist does not define are as `REVIEW.md` (beside this file) defines them. A file entry opens on a file alone (`` `<file>` must hold ``) and pins
 every cell of that file. A named-cell entry opens on a `[test]` function, or on a cell function a block's `[test]` runs (`` `<file>`'s `<function>`
 cell must hold ``), and pins every cell that function runs. A pinned test
 cell is a cell an entry pins, in the set before the diff or in the set after it; the pinned set
@@ -12,40 +11,39 @@ alone decides whether a cell is one. A bar is the tolerance a compare accepts; a
 whose two sides the cell computes is never a value an outside source can change, whatever model file
 it was measured on. The pinned set, one entry a line, each with what it must keep holding:
 
-- `test_run_suites.das` must hold the per-PR split (`model-free`, `gpu-kernels`, `stocked`), the folder census, the area
-  tables (each standing area over the per-PR census, the on-demand `examples` area the `examples` suite's files and none of it), the `--exclude` and `--only` filters, the `--batch` chunking and defaults (`child_chunks`,
-  `batch_files`: `per` files a child in order; an area run's image file, a `cant_` / `failed_` / `invalid_` file and a tier
-  contract file alone, the files around it in one batch), the batch dry run (a batch child's `START` line carrying `--together`,
-  `--batch 1` one `--test` child a file), the test wall (`wall_seconds_in`, `log_wall_line`, a walled run's `LOST` stop with no `RETRY`, the `--skip` resume), the reach plan behind `--changed` -
-  which test files each kind of changed path runs (an on-demand area's file for its own change alone), every `MODULE_WITNESSES` row and
-  `LLM_CORE_WITNESSES` naming only census files, and every witness row's module existing with a
-  `MODULE_AREAS` row that holds `llm` -, the children's module-cache folder, the model files a
-  run names that its models directory lacks (the `MISSING` lines), the image reap behind
-  `--reap-images` and its gate, the K/V start `--poison-kv` hands the children, the `options persistent_heap` line of the
-  `stocked` files, the model categories and families, the `--category` run, a child's `--run-env` filters, the forced tune file,
-  the skip of what passed (`pass_stamp`'s inputs, the environment among them; the flag and stamp every run's children carry but a `--rerun`'s and the full suite's; the `REPORT` count of files not run), a media run's heap setting, the children's scratch folder.
+- `test_run_suites.das` must hold the per-PR split (`model-free`, `gpu-kernels`, `stocked`), the folder census, the area tables (each standing area over the
+  per-PR census, the on-demand `examples` area the `examples` suite's files and none of it), the `--exclude` and `--only` filters, the `--batch` chunking and
+  defaults (`child_chunks`, `batch_files`: `per` files a child in order; an area run's image file, a `cant_` / `failed_` / `invalid_` file and a tier contract
+  file alone, the files around it in one batch), the batch dry run (a batch child's `START` line carrying `--together`, `--batch 1` one `--test` child a file),
+  the test wall (`wall_seconds_in`, `log_wall_line`, a run's `LOST` stop at a batch without every verdict, wall or none, no file of it run alone, the `--skip` resume), the reach plan behind `--changed` - which
+  test files each kind of changed path runs (an on-demand area's file for its own change alone), every `MODULE_WITNESSES` row and `LLM_CORE_WITNESSES` naming
+  only census files, and every witness row's module existing with a `MODULE_AREAS` row that holds `llm` -, the children's module-cache folder, the model files a
+  run names that its models directory lacks (the `MISSING` lines), the image reap behind `--reap-images` and its gate, the K/V start `--poison-kv` hands the
+  children, the `options persistent_heap` line of the `stocked` files, the model categories and families, the `--category` run, a child's `--run-env` filters,
+  the forced tune file, the skip of what passed (`pass_stamp`'s inputs, the environment among them; the flag and stamp every run's children carry but a
+  `--rerun`'s, the full suite's keyed apart; the `REPORT` count of files not run), a media run's heap setting, the children's scratch folder, the `--disable-module`
+  flags each child of a `DASLLAMA_DISABLE_MODULES` run carries and the pass stamp they key apart, the crown race's gate (`box_race_possible`,
+  `box_runtime_owed`, `box_manifest_pick`, the `BOXRACE` lines), every stocked model past the large tier a category's, and the fleet's
+  Vulkan-free slice of the model-free suite (`VULKAN_FREE_ONLY`) and the CUDA-only files its Vulkan home leaves out (`CUDA_ONLY_EXCLUDE`).
 - `test_facade_docs.das`'s `test_program_roots` cell must hold the `ROOT_DIRS` sweep, `options stack = 524288` and the prefill intent.
 - `test_env_registry.das` must hold the `../ENVIRONMENT.md` knob contract.
-- `test_model_specs.das` must hold `../performance/model_specs.das`'s model-set table, `spec_by_file` answering by the
-  models-dir path and by the gguf's base name (a split-shard row sits in a subfolder), the fixture compare
-  (`prefix_match_len` / `fixture_ok`: a flipped last id red under the strict form and held under the half-span one, a
-  flip inside the first half red under both), `fetch_models --convert`'s route (`convert_route`) and quantize mint
-  steps (`mint_steps`), the board fetch (`board_provenance`) holding every file the board sweeps read and no off-board
-  row and no on-box parity oracle (`tts_oracle*`), and the companion contract: a companion two rows pin (each row's
-  cell consumes it) carries one provenance - url, bytes, sha256 - on both, and the provenance view holds it once.
-- `uncategorized_persistent_heap_stack_524288.das`'s `test_float_a_gate` cell must hold the MSL
-  emitter's refusal of a float A operand (the activation input) to `tmm2d_q8u_f32` in a kernel
-  that lacks `[metal_kernel(float_a_ok=true)]`, the error naming the FLOAT A operand, and the same
-  kernel compiling under that annotation.
-- `test_rope.das` must hold `../dasllama/dasllama_rope.das`'s table builders (`build_rope_tabs`
-  and its packed, rows, imrope, mrope and vision forms) against their per-element references and
-  against each other bit for bit, `mrope_span_positions`' map and its refusal of a grid that does
-  not match the span, `rope_factor_tensor`'s pick, and `../dasllama/dasllama_math.das`'s `rope`,
-  at the bar each cell sets.
-- `test_rope_apply.das` must hold `../dasllama/dasllama_math.das`'s rope application
-  (`rope_scaled_*`, `rope_apply`) and `yarn_rope_freqs` against their fp64 references, each
-  tabled form against its un-tabled twin, and `build_rope_tabs` over 120000 rows and over none,
-  at the bar each cell sets.
+- `test_model_specs.das` must hold `../performance/model_specs.das`'s model-set table, `spec_by_file` answering by the models-dir path and by the gguf's base
+  name (a split-shard row sits in a subfolder), the fixture compare (`prefix_match_len` / `fixture_ok`: a flipped last id red under the strict form and held
+  under the half-span one, a flip inside the first half red under both), `fetch_models --convert`'s route (`convert_route`) and quantize mint steps
+  (`mint_steps`; a minted row names its fetched source, and a published one pins bytes and sha256, as `CLAUDE.md`'s entry states), the board fetch (`board_provenance`) holding every file the board sweeps read and no off-board row and no on-box parity oracle
+  (`tts_oracle*`), and the companion contract: a companion two rows pin (each row's cell consumes it) carries one provenance - url, bytes, sha256 - on both, and
+  the provenance view holds it once; every sha-pinned provenance url at a revision, never `resolve/main` (`UNPINNED_MAIN` the entries owed one);
+  and every provenance entry past `MODEL_TIER_CEILING_BYTES` a category's (`test_large_rows_have_a_category`).
+- `uncategorized_persistent_heap_stack_524288.das`'s `test_float_a_gate` cell must hold the MSL emitter's refusal of a
+  float A operand (the activation input) to `tmm2d_q8u_f32` in a kernel that lacks `[metal_kernel(float_a_ok=true)]`,
+  the error naming the FLOAT A operand, and the same kernel compiling under that annotation.
+- `test_rope.das` must hold `../dasllama/dasllama_rope.das`'s table builders (`build_rope_tabs` and its packed, rows,
+  imrope, mrope and vision forms) against their per-element references and against each other bit for bit,
+  `mrope_span_positions`' map and its refusal of a grid that does not match the span, `rope_factor_tensor`'s pick, and
+  `../dasllama/dasllama_math.das`'s `rope`, at the bar each cell sets.
+- `test_rope_apply.das` must hold `../dasllama/dasllama_math.das`'s rope application (`rope_scaled_*`, `rope_apply`) and
+  `yarn_rope_freqs` against their fp64 references, each tabled form against its un-tabled twin, and `build_rope_tabs`
+  over 120000 rows and over none, at the bar each cell sets.
 - `test_metal_prefill_kernels.das`'s `test_metal_prefill_kernels` cell must hold every kernel gate
   it calls, at the bar each gate sets, with its `attn_trio_gate` calls whose `AttnKeys` sets
   `softcap`, `hass`, `uend` or `ulo`; and by name:
@@ -78,13 +76,11 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
     the one-stream / one-row dispatches, and `b32_dense_twins`; and `moe_gemv_gate`'s wide rows exact on
     every `B32_MOE_WIDE_FMTS` member (shared-x, per-slot with an odd row past the last pair, a stride
     and a tail under batch streams).
-- `test_metal_prefill_parity.das`'s `test_metal_prefill_kq_tail` cell must hold every stocked
-  K-quant, grid and per-32 short window's served form - the row-batched GEMV peel past the whole
-  tiles and the split stamps of a window under one tile, the 16-row split stamps on a window of 16
-  rows or fewer - against the CPU control at its bar.
-- `test_metal_prefill_kernels.das`'s `test_pf_bf16_tile_pick` cell must hold the window
-  projection's tile pick: the bf16 tile only where layers x ple is a multiple of 64 and the dim a
-  multiple of 32.
+- `test_metal_prefill_parity.das`'s `test_metal_prefill_kq_tail` cell must hold every stocked K-quant, grid and per-32
+  short window's served form - the row-batched GEMV peel past the whole tiles and the split stamps of a window under one
+  tile, the 16-row split stamps on a window of 16 rows or fewer - against the CPU control at its bar.
+- `test_metal_prefill_kernels.das`'s `test_pf_bf16_tile_pick` cell must hold the window projection's tile pick: the bf16
+  tile only where layers x ple is a multiple of 64 and the dim a multiple of 32.
 - `test_metal_misc_kernels.das`'s `test_metal_misc_kernels` cell must hold every kernel gate it calls, at the bar each
   gate sets; and by name: its token-table gathers bit for bit: `embed_q8_gate`, `embed_b32_gate` on q51, iq4nl32,
   q4032 and q5032 at 96 wide, at 2048 wide past a whole other table's blocks, and at a lead off a superblock boundary
@@ -100,10 +96,9 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   whole-K tile: `q8_split_gate`, `kq_split_gate` on every split K-quant format, `base_split_gate`
   on the q8 and K-quant base split stamps, `bf16_split_gate`, and the dev-W half tile's split
   (`q8_devw_split_leg`) through the reduce's strided mode, a column tile narrower than its row.
-- `test_metal_gemv_kernels.das`'s `test_metal_kq_gemv_kernels` cell must hold every GEMV gate it
-  calls, at the bar each gate sets - `kq_mvb_gate` and `moe_kq_gemv_gate` among them - and its
-  `test_metal_kq_half_forms` cell every format's half-x route against the CPU reference at every
-  row count the dispatcher serves.
+- `test_metal_gemv_kernels.das`'s `test_metal_kq_gemv_kernels` cell must hold every GEMV gate it calls, at the bar each
+  gate sets - `kq_mvb_gate` and `moe_kq_gemv_gate` among them - and its `test_metal_kq_half_forms` cell every format's
+  half-x route against the CPU reference at every row count the dispatcher serves.
 - `test_site_records.das` must hold the byte-compare of `site/files/dasllama/bench_records.json`
   and of `site/files/dasllama/bench_cells.json` (repo root) - the smaller copy the site page loads
   first - against a fresh `merge_site_records` run, and `bench_cells.json` keeping every field
@@ -150,9 +145,8 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   in place against the CPU finish a slice at a time, one norm over every slice its control.
 - `test_vulkan_kernels.das`'s `test_vkd_ple_act_f32` cell must hold gelu(gate) x the side rows'
   layer slice, position-major rows apart, the contiguous read its control.
-- `test_vulkan_kernels.das`'s `test_vkd_ple_bf16_cvt` cell must hold the bf16 rows as f16 bit
-  for bit the widened value's half, saturated past the half range, the elements past the count
-  kept.
+- `test_vulkan_kernels.das`'s `test_vkd_ple_bf16_cvt` cell must hold the bf16 rows as f16 bit for bit the widened
+  value's half, saturated past the half range, the elements past the count kept.
 - `test_vulkan_kernels.das`'s `test_vkd_dn_cap_tail` cell must hold the checkpoint capture's
   history write (`dn_cap_tail_cls`) bit for bit to the ring hand-off's CPU form for a window cut at
   the capture's row - two captures in one dispatch, one past the taps and one under them reading
@@ -232,6 +226,11 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   CPU chain and on the GPU tower that serves canary's default lane (the encoder minted on that lane in that tower's
   flavor, each walk counted as a device encode), its control the same walk fed each id one step early with the oracle
   id outside the bar at every step that input moved, and the greedy ids equal to the oracle's up to the first tie.
+- `_audio_asr_cells.das`'s `test_parakeet_oracle`, `test_parakeet_v3_oracle` and `test_gemma4a_audio_oracle` cells (the
+  first two on the `image` forms of `test_audio.das`'s parakeet v2 and v3 blocks, the third on the `image_asr` form of
+  its E2B mmproj's block), external-reference compares, must hold the greedy ids against the tool's: jfk.wav's against
+  parakeet-cli's - the token count, each token id the cell names and the text - and `gemma4a_test2.wav`'s first 40
+  against llama-mtmd-cli's, id for id.
 - `test_nmt.das`'s `test_nmt_spm` cell, an external-reference compare, must hold the model-file
   tokenizer id for id against `nmt_oracle/<dir>/`'s `tokens.json` source ids and `spm_edge.json` on
   every stocked student, its control the charsmap dropped spelling the normalizer fixture apart.
@@ -280,7 +279,7 @@ replacement's output to the deleted assert's bound or tighter, with its control,
 testing the replacement, or names in the old cell's pinned-set entry the pinned cell that already
 asserts the replacement's output to that bound.**
 
-**A diff that adds a cell or an assert - a cell moved whole, its asserts unchanged, is not added - whose expected value the cell does not compute from its own
+**A diff that adds a cell or an assert - a cell moved or re-hosted (run from another `[test]`) whole, its asserts unchanged, is not added - whose expected value the cell does not compute from its own
 input, and that an outside source can change while no sha, row or tag in this repository changes,
 adds the cell to the pinned set in the same change.** Such a value is a literal or a copied
 condition restating that source, or a read of a file under `models_dir()` that the cell does not
@@ -295,6 +294,6 @@ evidence - adds the cell to the pinned set in the same change.**
 **A diff that adds a cell to the pinned set adds it as a named-cell entry, or, when the new cell leaves
 every cell of its file pinned, replaces the file's named cells with one file entry naming what it pins.**
 
-**A diff that moves or renames a pinned test cell, in the same change, rewrites the cell's
-named-cell entry to its new file and function, or, when the cell's old file has a file entry, adds a
+**A diff that moves, renames or re-hosts a pinned test cell, in the same change, rewrites
+the cell's named-cell entry to its new file and function, or, when the cell's old file has a file entry, adds a
 named-cell entry for the cell at its new file and function.**

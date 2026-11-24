@@ -71,7 +71,7 @@ let FLASH_NEXT_HEAD = "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared
 
 [test(description = "On Metal with the Flash-Next n-gram carrier, four stops in one window attach and continue as a fresh prefill, and the captured side input holds exact last tokens and history within 1 percent of max")]
 def test_scheduler_capture_stops_ngram(t : T?) {
-    t |> run("Metal prefill: the four stops ride ONE window on the n-gram side-input carrier, each attaches and continues as a fresh prefill does (needs Qwen3.8-Flash-Next, DASLLAMA_PARITY_FULL=1)") @(t : T?) {
+    t |> run("Metal prefill: the four stops ride ONE window on the n-gram side-input carrier, each attaches and continues as a fresh prefill does (needs Qwen3.8-Flash-Next, --category flash-next)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let path = path_join(models_dir(), FLASH_NEXT_FILE)
             let hpath = path_join(models_dir(), FLASH_NEXT_HEAD)

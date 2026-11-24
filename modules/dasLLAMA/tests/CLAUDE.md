@@ -8,7 +8,7 @@ full-suite run turns a one-arm fix into an afternoon.
 
 ```
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --arm <filter> [--suite decode|mtp|prefill|matrix|kernels|image|image-vulkan|coverage|all] [--family llama]
-./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free        # the per-PR gate that needs no models - runs the same on a bare box, no --arm. Outside the full suite (DASLLAMA_PARITY_FULL=1) every [test] function has a 30 s wall: a test past it ends the child with exit code 125 and the run with it (a WALL line, no later file, no retry), and a batch that ends without every file's verdict stops the run the same way (LOST)
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free        # the per-PR gate that needs no models - runs the same on a bare box, no --arm. Outside the full suite (DASLLAMA_PARITY_FULL=1) every [test] function has a 30 s wall: a test past it ends the child with exit code 125 and the run with it (a WALL line, no later file), and on every run, wall or none, a batch that ends without every file's verdict stops the run the same way (LOST)
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --category gemma4-e4b               # a model category (../TEST_CATEGORIES.md): the test files naming its model files, every cell on another model skipped
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free --skip 4          # the resume of a stopped run: no child before the run's 4th (counted from 0) starts - the N a WALL or LOST stop's RESUME line names; the REPORT says "resumed at child 4"
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free --test-wall 0     # one [test] function's wall in seconds for this run, on any suite; 0 = no wall; the REPORT carries it
@@ -18,9 +18,7 @@ full-suite run turns a one-arm fix into an afternoon.
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked --exclude <file>   # the iteration form - drops a file the change does not reach
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite gpu-kernels       # the extended model-free pass - the Vulkan and CUDA device kernel files: no model and no test wall. On a box you keep it costs the tests' own work and no compile, because the GPU driver caches every kernel it compiled, and nothing where no device answers: run it beside model-free. Only a box that never ran it pays the driver's first compile of every kernel. The stocked suite runs these files first
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite wasm              # the kernel files with a wasm seat, as one wasm64 release under node; takes emcc, node and the wasm64 archives
-DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --only cuda,regions,resident_moe,embeddings,gptoss,gemma4_dense,gemma4_moe,gemma2_3,gemma4_e2b,mtp_gemma_drafter,resident_hybrid,resident_qwen2,resident_qwen3,resident_qwen_moe,resident_format_census,resident_llama   # the CUDA home's pass: the run's CUDA files, the segmented window, the regions rig, the resident MoE files and the gemma, gpt-oss and drafter files whose cells run on the CUDA home under the ask
-DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area vision --only gemma4uv,gemma4v,gemma3v,qwen3v,qwen25v   # the CUDA home's vision run: the five vision family files, whose discrete-home cells the first run's --only tokens do not reach
-DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio --only audio,whisper,gigaam,rnnt,vad   # the CUDA home's audio run: the files holding the audio families' discrete-home cells (each family on the CUDA home by its `CUDA_AUDIO_FAMILIES` row)
+DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --only cuda,regions,resident_moe,embeddings,gptoss,gemma4_dense,gemma4_moe,gemma2_3,gemma4_e2b,mtp_gemma_drafter,resident_hybrid,resident_qwen2,resident_qwen3,resident_qwen_moe,resident_format_census,resident_llama,audio,whisper,gigaam,rnnt,vad,gemma4uv,gemma4v,gemma3v,qwen3v,qwen25v,vision_chat,dflash_drafter   # the CUDA home's pass: the run's CUDA files, the segmented window, the regions rig, the resident MoE files, the gemma, gpt-oss and drafter files (the DFlash2 drafter by its CUDA arm), and the audio and vision files whose tower twins run on the CUDA tower under the ask (each audio family by its `CUDA_AUDIO_FAMILIES` row)
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --poison-kv             # every child's K/V caches start as NaN (DASLLAMA_KV_INIT=poison): a read of a row no store wrote reds its cell; each session touches its whole cache, so the run's memory is not the product's
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio            # one area: audio | vision | tts | translate | llm | infra (comma list)
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area examples         # the browser examples' smoke tests (storyteller, storywish, parrot, interpreter): on demand - no other run takes them
@@ -53,18 +51,24 @@ are the caller's to scope. A core change is the per-edit gate only: the whole st
 the `NEXT` line says so. The fleet is two pods, one a GPU home: the first runs the whole
 `run.das` command on the Vulkan home, the second the same command on the CUDA home
 (`DASLLAMA_CUDA=1`) kept to the CUDA pass's files (`--only` the `CUDA_PASS_ONLY` tokens of
-`_model_categories.das`, the command below), and a `run` whose `--args` carry an `--only` of their
+`_model_categories.das`, the command below), the Vulkan home of a two-pod fleet leaving out the CUDA-only files
+(`--exclude` the `CUDA_ONLY_EXCLUDE` tokens, which `test_run_suites.das` holds to the files requiring the CUDA kernel
+classes unguarded), and a `run` whose `--args` carry an `--only` of their
 own is refused. Both homes run the command thirty files a child (`--batch 30`, `FLEET_BATCH`): a cold child
 pays the engine's parse and JIT once a batch, and the pod's memory holds a child of thirty files; a `--batch` in
 `--args` wins, and the model-free suite keeps its own whole-suite batch. No file runs split across pods, and a home's run that outgrows its pod cuts
 tests rather than adding a pod - every pod of a split compiles its own shaders and kernels. `up`
 refuses a third pod; a one-pod fleet runs the Vulkan home, its `run` line saying the CUDA home has
 no pod. A session deletes its fleet (`down`) when its runs are done: a stopped pod
-bills its disk, keeps no container state, and restarts only while its host has a card free. The model-free suite runs once a fleet (`home_plan`): on the CUDA home's pod, or on a one-pod
-fleet's lone pod; the other home's log reads `MODEL-FREE-EXIT=none (the cuda home runs it)`. Ahead of the suites each home's run warms the CUDA home's kernels into its tree's cubin cache
-(`../harness/cuda_prewarm.das`, its `PREWARM` line in the home's log; a red one reds `RUN-EXIT` and stops no suite):
-the model-free suite's test wall does not admit a fresh cache's compile, and a build with the CUDA module arms the
-card on either home. A home's caches live on the volume between sessions, a folder a home (`/workspace/cache/<home>/daslang`,
+bills its disk, keeps no container state, and restarts only while its host has a card free. On a two-pod fleet each home leaves out the other home's dynamic module (`DASLLAMA_DISABLE_MODULES`: dasVulkan on
+the CUDA home, dasCUDA on the Vulkan home; a caller's `--env` value wins, a lone pod leaves out none), so its children,
+the children a test spawns and its prewarm compile only its own GPU module. The model-free suite runs once a fleet
+(`home_plan`): whole on the CUDA home's pod, or on a one-pod fleet's lone pod; a two-pod fleet's Vulkan home runs the
+suite's Vulkan files (`--only` the `VULKAN_FREE_ONLY` tokens of `_model_categories.das`, which `test_run_suites.das`
+holds to every model-free file reaching Vulkan), its exit in its own `MODEL-FREE-EXIT`. Ahead of the suites each
+home's run warms the CUDA home's kernels into its tree's cubin cache (`../harness/cuda_prewarm.das`, its `PREWARM`
+line in the home's log, `PREWARM none` on a home that leaves the CUDA module out; a red one reds `RUN-EXIT` and stops
+no suite): the model-free suite's test wall does not admit a fresh cache's compile. A home's caches live on the volume between sessions, a folder a home (`/workspace/cache/<home>/daslang`,
 the tree's `.cache/daslang`: AST records, JIT objects, the test child's exe, cubins; `/workspace/cache/<home>/nvidia`,
 the NVIDIA driver's disk cache of Vulkan pipelines): a home's run copies them onto the pod ahead of its model list
 (`rsync -a`, mtimes kept, which the caches' keys read; `CACHE-IN <size>`) and back once its runs end, whatever the
@@ -81,8 +85,9 @@ and each try's cores when all three come in under it. A fleet pod reads the mode
 (`--reap-images`, which the tool passes where its environment names that folder: every `.dlim` and save `.tmp` under
 the models directory, at any depth, that was not there when the run started; a run pointed at the volume's own
 directory reaps nothing, the images there being every pod's). The tool's default environment keeps the image rail off (`DASLLAMA_IMAGE=0`), so each model arm of
-`test_model_image.das` is a loud skip there (`image_rail_on`), not a run, and the large tier off: `run --full`
-adds `DASLLAMA_PARITY_FULL=1` for an arc's final run. The image suite's
+`test_model_image.das` is a loud skip there (`image_rail_on`), not a run, and the size tier on: `run --full`
+adds `DASLLAMA_PARITY_FULL=1` for an arc's final run, lifting it for the files no category holds - a model past it
+is a category's and runs only under `run.das --category`. The image suite's
 arms the plan owns run on one box with the rail on, through dastest's `--test` with `DASLLAMA_TEST_ARMS` set to
 them, and the PR cites that run beside the fleet's two home runs. The run starts with a `MISSING` line a model file its files - and
 the fixtures they require - name that the models directory does not hold, and ends with `REPORT` (files, failures,
@@ -92,9 +97,9 @@ kB and its file, `harness/pod_mem_track.sh`, which also drops the model copies' 
 the pod stands past half its memory limit - the limit counts the cache, and a cache at it stalls loads and CPU cells on
 reclaim; the copier drops each copy's pages as it lands); `pod_fleet.das -- times`
 reads a run's child logs into where its test time went: every file's seconds and the longest cells. The fleet's pods
-carry 62 GB of container memory with their card: a child that crosses it is killed (`exit=137`, no verdict), the runner
-then reruns its verdict-less files one child each, and a file whose one cell needs more - the 30B carriers with their
-routed layers' experts pinned to the host - dies alone too.
+carry 62 GB of container memory with their card: a child that crosses it is killed (`exit=137`, no verdict) and the run
+stops there (`LOST`), as it does for a file whose one cell needs more - the 30B carriers with their routed layers'
+experts pinned to the host.
 
 `all` (the default) runs the decode, MTP and prefill parity files, the support matrix, the kernel
 files and `test_model_image` - it omits `test_mtp_gemma_drafter.das`, `image-vulkan`, `coverage`,
@@ -117,15 +122,13 @@ on an `EXCLUDED` line, so a trimmed run cannot read as full; `--only <substr,...
 whose name contains a token and drops the rest, each kept file on an `ONLY` line and the tokens on
 the `REPORT` line. The CUDA home's pass runs under `DASLLAMA_GPU=1` and the CUDA ask -
 `DASLLAMA_CUDA=1` or `set_gpu_home("cuda")` on a dasCUDA build (`cuda_tower_asked`) - beside the
-Vulkan home's whole run, never in its place, as two runs. The first is
-`--changed --only cuda,regions,resident_moe,embeddings,gptoss,gemma4_dense,gemma4_moe,gemma2_3,gemma4_e2b,mtp_gemma_drafter,resident_hybrid,resident_qwen2,resident_qwen3,resident_qwen_moe,resident_format_census,resident_llama`
+Vulkan home's whole run, never in its place: `--changed --only cuda,regions,resident_moe,embeddings,gptoss,gemma4_dense,gemma4_moe,gemma2_3,gemma4_e2b,mtp_gemma_drafter,resident_hybrid,resident_qwen2,resident_qwen3,resident_qwen_moe,resident_format_census,resident_llama,audio,whisper,gigaam,rnnt,vad,gemma4uv,gemma4v,gemma3v,qwen3v,qwen25v,vision_chat,dflash_drafter`
 (the CUDA files, the segmented window, the regions rig, the resident MoE files, whose fixtures
-read the armed home's witnesses, and the gemma, gpt-oss, qwen35 hybrid, llama, drafter and Vulkan format census files that branch on
-`gpu_want_cuda()`; the tokens are `CUDA_PASS_ONLY` in `_model_categories.das`, and
-`test_run_suites.das` reds a file that reaches the CUDA home and no token keeps, and a copy of the
-command here that differs from the constant); the second is `--area vision --only gemma4uv,gemma4v,gemma3v,qwen3v,qwen25v`, the run
-that reaches the five vision family files (`test_gemma4uv`, `test_gemma4v`, `test_gemma3v`,
-`test_qwen3v`, `test_qwen25v`), whose discrete-home cells run on the CUDA tower under the ask. Beyond those five, the CUDA pass's `--only`
+read the armed home's witnesses, the gemma, gpt-oss, qwen35 hybrid, llama, drafter and Vulkan format census files that branch on
+`gpu_want_cuda()`, and the audio and vision files whose tower twins seat on the CUDA tower under the ask -
+`_tower_twin`, `_audio_twin`, `_vision_forms` or a CUDA tower module; the tokens are `CUDA_PASS_ONLY` in
+`_model_categories.das`, and `test_run_suites.das` reds a file that reaches the CUDA home and no token keeps, and a
+copy of the command here that differs from the constant). The CUDA pass's `--only`
 tokens must match every file holding a cell that runs on the CUDA home. Under the ask every other
 file runs the Vulkan home's tests on a home that serves the dense slice alone, and reds on its
 declines.
@@ -151,10 +154,10 @@ and a `--das` dry run keeps them. `--batch N` (default the whole suite in one ch
 `--together`: a generated root requires every file, so the engine's parse and JIT - the 20 s a small file pays - are
 paid once a batch, and each file then runs in a clone of that program's one context - globals, heaps and `[init]`s
 of its own, the code and its JIT link shared, so a file costs a clone and no relink), each file still
-reporting its own `PASS` / `FAIL` line and the child's timeout N times the single's; a batch that dies before every
-file's verdict reruns the verdict-less files one child each (`RETRY` lines) - under a test wall it stops the run
-instead (a `LOST` line), as a test past the wall does (`WALL`), each with the `RESUME` line naming the `--skip N` that
-starts the run again at that child - and the image suite's child, every
+reporting its own `PASS` / `FAIL` line and the child's timeout N times the single's; a batch that ends before every
+file's verdict - its root did not compile, or it died midway - stops the run (a `LOST` line, the root's first compiler
+error on it), on every run, as a test past the wall does (`WALL`), each with the `RESUME` line naming the `--skip N`
+that starts the run again at that child; no run starts a batch's files again one child each - and the image suite's child, every
 expected-failure compile test (`cant_*`, `failed_*`, `invalid_*` - a root requiring one fails to compile whole) and the
 tier contract files (`TIER_CONTRACT_FILES`: `test_gpu_tier.das`, `test_gpu_serving_declines.das`) run alone whatever
 the batch, without cutting the batch around them. A file's own context means fresh globals,
@@ -164,7 +167,7 @@ file's context, so a batch-mate requiring the engine core brings the Vulkan home
 "unset" seats, a shell's load with no decline) holds only alone. For the same reason no test file or fixture sets a
 knob or a pin at `[init]` - every module's `[init]` runs in every batch-mate's context - and a file's cells pin what
 they need (a codec pin around the cells, `set_pf_window_rows_pin`, `vk_force_coopmat_mode`, a tier want, a
-fixture's context cap beside its load) at the top of each `[test]` (`REVIEW_FILES.md`). A red that appears only under `--batch` names that test, not the batch. Every run but a `--rerun` and the full suite's (`skips_cached`) hands every child dastest's `--skip-fully-cached` and a `--pass-stamp` (`pass_stamp`: the box's CPU, the environment the child runs under - its command line's prefix and every declared knob the environment sets, `env_set_knobs`, so a pass on one GPU home is none on another - and the size and time of every model file the child opens: what a pass rests on and the child's compile record does not see): a child whose program loads whole from its record reports each file that passed last time as `CACHED` and runs the others, and where every file is cached it neither links the JIT nor loads a model. The record is one a child, so an edit to any file of a child - or to a module one of them requires - runs every file of that child again. On Linux every child runs with `GLIBC_TUNABLES=glibc.rtld.optional_static_tls=16384`: glibc
+fixture's context cap beside its load) at the top of each `[test]` (`REVIEW_FILES.md`). A red that appears only under `--batch` names that test, not the batch. Every run but a `--rerun` (`skips_cached`) - the full suite's included, its passes keyed apart by the knob that asks for it - hands every child dastest's `--skip-fully-cached` and a `--pass-stamp` (`pass_stamp`: the box's CPU, the environment the child runs under - its command line's prefix and every declared knob the environment sets, `env_set_knobs`, so a pass on one GPU home is none on another, nor a pass with a module left out one with it - and the size and time of every model file the child opens: what a pass rests on and the child's compile record does not see): a child whose program loads whole from its record reports each file that passed last time as `CACHED` and runs the others, and where every file is cached it neither links the JIT nor loads a model. The record is one a child, so an edit to any file of a child - or to a module one of them requires - runs every file of that child again. Ahead of its first child, a run whose children may race the Metal crowns at their first Metal load - a build with the Metal module, no tune manifest the children read, no `--no-tune` and no reference or fallback policy (`box_race_possible`) - starts the per-box runtime file's program (`_box_runtime_root.das`) under the children's environment, outside any test wall: where no file valid for this tree's kernels exists it races the crowns and writes the file, said on one `BOXRACE` line with its seconds; a valid file costs that program's start and says nothing (the gate, the manifest pick and the line: `test_box_race_possible`, `test_box_runtime_lines`). Where `DASLLAMA_DISABLE_MODULES` names dynamic modules, every child's command line - the runner's and the children a test spawns (`child_cmd_root`) - carries `--disable-module <name>` for each, right after the binary, and the run names them on one `MODULES` line ahead of its first child (`test_runner_disabled_modules`); every other daslang child a test starts takes them through `_daslang_argv.das` (`daslang_argv` for an argv, `child_disable_flags()` in a command string - `compile_argv`, the spawned compile, held by `test_compile_argv_leaves_modules_out`; the test child's `disable-flags` verb, run under the knob and without it, shows each builder and the child exe's key reading it, `test_child_builders_read_the_knob`), and `REVIEW.das` reds a test-folder line that starts the binary without them. On Linux every child runs with `GLIBC_TUNABLES=glibc.rtld.optional_static_tls=16384`: glibc
 parks each late-loaded module's thread-local block in a 512-byte surplus, and `LLVM.dll`, a shared module (dasHV,
 which the server tests require) and the NVIDIA Vulkan driver's three libraries overrun it together - the driver's
 `vkCreateInstance` then fails for the rest of the process with `ERROR_INCOMPATIBLE_DRIVER`, whatever the order
@@ -376,8 +379,8 @@ arm's gates and the served arms' GPU home: the file's entry below), its arms:
   stream's mirror asserted standing, so the round finds both warm and their draft chains run; no stream carried, no round
   counted, each stream one plain step whose logits are a plain decode step's bit for bit, both argmax pieces logged; the
   control is the same tick on one codec carrying both streams;
-- `mtp-gdraft-ring` (served) - the drafter past a sliding capture layer's ring: the 26B loaded under the ring pin on and off
-  (`with_gpu_kv_ring`), a counting prompt past the ring prefilled in 512-row calls (a Metal ring grows to the widest window),
+- `mtp-gdraft-ring` (served) - the drafter past a sliding capture layer's ring: the 26B under the ring pin on and off
+  (`with_gpu_kv_ring` - a load each on a discrete home, one load on Metal, whose mirror reads the pin live), a counting prompt past the ring prefilled in 512-row calls (a Metal ring grows to the widest window),
   one one-row step and a three-step draft chain at the anchor, then a depth-3 speculating stream; the one-row chain's logits
   and the drafter's first step's logits at the anchor bit for bit across the pins on Vulkan (on Metal, whose AV pass splits a
   ringed key run at the wrap, the trunk's pick alike), the drafts and the streams token for token, the ringed run's accepted
@@ -391,11 +394,14 @@ arm's gates and the served arms' GPU home: the file's entry below), its arms:
 - `mtp-gdraft-codec` (served) - the depth-2 walk on q8_0 and tq4 sessions, the rounds on the device;
 - `mtp-gdraft-iq3` (served) - the UD-IQ3_XXS trunk, whose Q6_K token table the seed embed gathers, at depth 2.
 
-Every served walk logs both streams decoded. On the Metal home every served arm loads its target through
-`load_model_cached`, so the file mints a `.dlim` for it - ledgered at `../ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`.
+Every served walk logs both streams decoded. On the Metal home the served arms are cells of the Metal form of their
+trunk's block - the Q4_K_M trunk's seven arms on one load, `mtp-gdraft-iq3` on the UD-IQ3_XXS trunk's - the served image
+(`metal_form(image = true)`, loaded through `load_model_cached`), so the file mints a `.dlim` for it - ledgered at
+`../ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`; the drivers go down and the leak gate reads once a form, after its cells.
 
 The `mtp` suite also carries `test_dflash_drafter.das` (the DFlash2 block drafter, also in the stocked suite; every trunk
-loads off the image rail - `load_model_`, the Metal arms' blob form converted in RAM - every `dflash-27b-*` arm carries
+loads off the image rail - `load_model_`, the Metal arms' blob form converted in RAM, the GGUF trunk's Metal arms cells of
+its block's Metal form (`metal_form(required = true)`, the blob twin) - every `dflash-27b-*` arm carries
 the family tag `qwen35`, every lossless walk's control is its speculative ids against the plain walk's one step on, which
 must miss, every pair of recorded drafts it compares is logged decoded, a side a record, and every cell sets each knob its
 asserts read - `set_dflash_device`, `set_dflash_record`, `set_dflash_device_selector` and the Metal select, accept and replay
@@ -445,18 +451,16 @@ knobs - before its first walk and puts each back at the value its getter read be
   with no selector) - the Metal prefill window hands the drafter the prompt's layer rows on a trunk whose layers close on
   the gemma MoE step: the prompt commit's last row, a sum of magnitudes a captured layer (`dflash_recorded_prompt_sums`),
   is the CPU route's within 5% at every captured layer, the prompt counted as a device prefill; the CPU route's row for a
-  prompt one token short is outside the bar (the control); skips without das_metal;
-- `dflash-qwen3-4b-metal` (family `qwen3`, every run: the dense Qwen3-4B Q4_K_M trunk, a format carrier in no category, with
-  its regular DFlash Q8_0 drafter) - on the Metal home, over a chat turn, the greedy walk with the drafter's pass on the CPU
-  arm over the device's captures emits the plain walk's ids token for token with drafts accepted; the device arm's walk and
-  its count against the CPU arm's are a counted skip naming the defect (`QWEN3_4B_DEVICE_GAP`: the device pass does not
-  reproduce the CPU arm's drafts on this trunk, the walk parting from the plain walk at its third generated id); skips
-  without das_metal;
+  prompt one token short is outside the bar (the control); its CPU rows ride the CPU form and its Metal rows the Metal form
+  of `test_gemma_drafter_26b_trunk`'s block (`test_mtp_gemma_drafter.das`), the compare a cell after it; skips without
+  das_metal;
 - `dflash-26b-cpu` / `dflash-26b-metal` / `dflash-26b-discrete` (family `gemma4moe`, the `gemma4-moe` category) - the same
   trunk's drafted greedy walk is the plain walk's token for token, over one chat turn (a raw prompt leaves the routed trunk
   at near-tie logits): on the CPU arm; on the Metal device arm, whose block rounds run as joint rounds on the batch rail
   (a gemma-4 trunk takes no single-stream verify seat), the CPU arm over the device's captures accepting the same count
-  and no Metal object left alive; on the serving discrete home with the Q8_0 and the Q4_K_M drafter files;
+  and no Metal object left alive; on the serving discrete home with the Q8_0 and the Q4_K_M drafter files - all three
+  cells of the trunk's block in `test_mtp_gemma_drafter.das` (`test_gemma_drafter_26b_trunk`), the Metal one
+  (`metal_drafter_cell`, `_dflash_cells.das`) on its Metal form's served image ahead of the served arms;
 - `dflash-e2b-facade` (family `gemma4e`: gemma-4-E2B Q8_0 with its DFlash2 Q8_0 drafter) - the facade's streams over an
   attached block drafter (`attach_block_drafter`): a two-turn greedy chat's replies through `respond` and a greedy
   completion's ids through `generate_drafted` are the plain model's token for token, the chat's turns counted as draft
@@ -538,8 +542,8 @@ panel form: the continuations' last-row logits within the mirror arm's bar, eigh
 for token and every one of them a device decode (`metal_decode_stats().decodes`), then both openings as one window
 from position zero the same way; every segmented window counted by `metal_prefill_segment_windows` and as one device
 prefill by `metal_prefill_stats().prefills` (`segments_window` in `_metal_blob_twin.das`, the two-window reference
-`two_window_greedy` in `_model_tier.das`); the deltanet form's cell is `test_metal_segments_deltanet` in
-`test_metal_batched_row.das`, two Qwen3.5-0.8B sessions' tails as one window and 24 greedy steps each token for
+`two_window_greedy` in `_model_tier.das`); the deltanet form's cell is `segments_deltanet` in
+`_metal_batched_cells.das`, two Qwen3.5-0.8B sessions' tails as one window and 24 greedy steps each token for
 token their single windows' on the same witnesses; kq-tail = the dense
 K-quant and per-32 sites' row-batched GEMV peel on a window of eight rows or fewer (`test_metal_prefill_kq_tail`, Llama-3.2-1B
 Q4_K_M, IQ4_XS and the Q5_1 mint, Qwen3-4B Q4_K_M, Qwen2.5-0.5B's IQ4_NL mint, the same two-window shape as moe-gemv at 2, 4, 5 and 8 rows - past four rows the split-K tile takes the sites under its knee, its site counter the witness, and at 5 and 8 rows the 16-row
@@ -1868,7 +1872,9 @@ knees) writing a valid file with no kernels section that the apply reads, and th
 manifest; and, in the full suite alone (`test_box_runtime_file_is_raced` skips outside `DASLLAMA_PARITY_FULL=1` on
 every box - the race runs the Metal ladders and each child compiles the engine), the race writing such a file and two
 children on `_box_runtime_root.das` under a temp home (`_child_run.das` spawns them): one with no manifest reads the box
-file under that home, raced and written first, and one on `DAS_TUNE_POLICY=reference` reads "" and writes nothing.
+file under that home, raced and written first, and one on `DAS_TUNE_POLICY=reference` reads "" and writes nothing;
+and the kernel sources' digest (`test_kernel_digest_reads_content`, `test_kernel_digest_skips_unreadable`): by content,
+not mtime, a source it cannot open left out.
 `test_fat_hook_umbrella.das` - model-free: a program requiring the engine umbrella alone (what
 the shipped bench requires, never the facade) carries the first-start race hook - the umbrella's
 `[init]` set registers it, or a fat bench exe would serve Metal uncrowned forever.
@@ -2752,7 +2758,12 @@ dispatching none of it and the GEMV anew, and, the skip cleared, a step dispatch
 coverage census. The 1B Q8_0 and Q4_K_M blocks each carry a segment form (`device_form(regions = 2l, host = true,
 pf_window_rows = SEG_WINDOW)`) running the segmented window's cells (`_segment_cells.das`, its entry below). The 1B Q8_0
 block's default form also runs the last layer's FFN slice (`last_layer_slice_cell`, `_ffn_slice_cells.das`) after its
-feeds, and its q8 uncached CPU form, on every box, `chat_llama32_cells` (`_chat_cells.das`). `test_gpu_resident_smollm2`
+feeds, and its q8 uncached CPU form, on every box, `chat_llama32_cells` (`_chat_cells.das`) and `mlx_llama_1b_8bit_cell`
+(`_mlx_cells.das`): the Llama-3.2-1B 8-bit mlx-community snapshot, loaded inside the cell, ropes NEOX where the file ropes
+adjacent pairs, carries the file's config otherwise (the file's context read off its header, the form's cap aside), serves
+mlx8 planes at every dense site with no q8 copy, and its teacher-forced logits sit within 8 percent of the file's range
+(top-1 equal at 17 of 20 positions) and within 0.4 of the snapshot runtime's top-1 logits; a skip where the snapshot is
+not stocked. `test_gpu_resident_smollm2`
 and `test_gpu_resident_tinyllama` are CPU-only blocks, on every box, of cells the topic files' fixture modules hold (their
 entries name the cells): SmolLM2-135M at 512 positions - on its q8 form the scheduler's cells, `batch_decode_codec_cells`,
 `batch_decode_row_refuses_cell`, `kv_q8_prefill_vs_decode_cell`, `kv_paged_q8_cell`, `fused_attn_chain_cell` where the
@@ -3018,8 +3029,8 @@ prefill would take a live session's region, which the engine leaves to the sched
 counter then `cud_rdec_prefill_segment_windows`, the recurrent, E-series and captures cells among them. Each skips as its
 block's segment form does: without the model or the armed tier, and on a card whose room the plan does not fit at two regions.
 `with_cpu_and_gpu_model` (`_cpu_gpu_model.das`) is the one loader of a model file for a run area's cells, device forms and CPU
-forms alike. Where the GPU tier is not armed (this Mac: CPU and Metal only) every device form is a skipped cell of its own,
-named, and the block's CPU loads still run: a CPU form whose cells stand alone (`cpu_cells_form(quant, uncached, mtp_head,
+forms alike, and of its Metal forms. Where the GPU tier is not armed (this Mac: CPU and Metal only) every device form is a
+skipped cell of its own, named, and the block's CPU loads still run: a CPU form whose cells stand alone (`cpu_cells_form(quant, uncached, mtp_head,
 backend, kq_native)`: its load mode; `load_model_uncached` where `uncached`; the NextN head file pinned for the load where
 `mtp_head` names one; the kernel backend pinned for the load and its cells where `backend` names one - a pin the box refuses
 skips the form loudly where `DASLLAMA_PIN_BACKEND` names that backend, and fails it otherwise; the K-quant native knob
@@ -3034,12 +3045,21 @@ true)`, no load knob: the marked form is still the driver's default form) holds 
 one ran, and a drop cell on any other form is a failure and does not run. The block accounts for every form it was asked:
 each form, and the parity row's form where the `parity` knob is on, reaches the body or skips loudly, else the block fails
 naming the form - a form asked alone that never runs is a failure, and a CPU form not asked alone skips loudly where no
-device form ran. Its context is the call's `ctx`; a cell that
+device form ran. A Metal form (`metal_form(image, required, ctx)`) loads once on a das_metal build, after the device forms
+and ahead of the CPU loads: the file's blob twin (`blob_twin`) under `MetalMode.when_available` - `required` where asked -
+or, `image`, its served image (`load_model_cached` under `MetalMode.required`, a skipped cell where that image is no
+metal-blob on the box), its context cut to the form's `ctx` (0 the call's); the mode holds through the form's cells, and
+the home goes back as the form found it - the mode, the overrides, the prefill floor, the kernel backend and its pin
+(`metal_home_seat` / `restore_metal_home`, `_metal_blob_twin.das`). On any other build the form is one skipped cell of its
+own (`metal_pass`, `metal_build_why`). It is no CPU load (`on_gpu` holds) and no form of the whole-model driver
+(`device_default` and `is_lane_form` false), it arms no CPU answer, and a knob the Metal drivers read live - the ring pin,
+a session's codec, a drafter attached or not, a driver lever - is a cell's to set on the one load and put back. Its context
+is the call's `ctx`; a cell that
 runs on a shorter one cuts it for itself (`with_ctx_cut(m, cap)`: the sessions' `seq_len` at most `cap` for the cell, put
 back after). A function holding a load of a model file its block does not load declares `own_load("<why>")`: a string
 literal `REVIEW.das` reads, saying why the load cannot be a form of its model's block, logged as it runs. `ModelForm`, its
-constructors, its pure parts (`form_name`, `device_default`, `main_side`, `same_cpu_load`, `codec_pass`, the account's
-`form_owed` and `alone_pass_of`), `with_ctx_cut`, `own_load`, `skip_cell` and `served_forms` are `_model_form.das`'s, which `_cpu_gpu_model.das`
+constructors, its pure parts (`form_name`, `device_default`, `main_side`, `same_cpu_load`, `codec_pass`, `metal_form_mode`,
+`metal_pass`, the account's `form_owed` and `alone_pass_of`), `with_ctx_cut`, `own_load`, `skip_cell` and `served_forms` are `_model_form.das`'s, which `_cpu_gpu_model.das`
 requires publicly; `test_model_form_knobs` and `test_model_form_account` hold them model-free.
 `with_model_once` (`_model_once.das`) is the one loader of a model file that is no chat model - a TTS voice, a front-end
 pack, a stress model, a translation student, a decoder a facade wraps - for a run area's cells: `with_model_once(t, "<area>", "<file>", forms, @@<form loader>) $(var m;
@@ -3068,7 +3088,7 @@ build's translation seat serves (`translator_form_why`: `nmt_seat_why`). The TTS
 `_tts_parity.das`'s, each answering the facade's `TtsModel`: `styletts2_form` (`image`: the facade's load through the image
 rail; `f32`, `q8`, `kq`: the lane minted in memory, no `.dlim` baked; the packs read where they sit beside the file) and
 `pocket_form` (`image`; `native`, `f32`, `q8`: minted with no lane pinned, the f32 pin, the q8 pin, the lane unset after
-the mint, a panic included - `with_put_back`, `_f32_tile_pin.das`). Each block's first step holds the form to the lane its name says (`styletts2_form_is`,
+the mint, a panic included - `with_put_back`, `dasllama_lever.das`). Each block's first step holds the form to the lane its name says (`styletts2_form_is`,
 `pocket_form_is`, `ru_stress_form_is`). A cell
 that reads two files runs in the inner of two nested calls; a cell that is its file's only cell holds the call inside its
 subtest, so an absent file skips that cell; a compare of two forms follows the call, on what the cells kept.
@@ -3106,37 +3126,42 @@ context cut to 64; and on SmolLM2-135M's q8 CPU form (`test_gpu_resident_smollm2
 the context cut to 64) and `batch_decode_row_refuses_cell`, the batched bench row's refusal contract: the row serves at a
 positive rate on the CPU batched stack, and with the classic rope path forcing per-row steps it refuses by name, reads 0
 and the census counts the per-row steps.
-`test_metal_batched_row.das` is the row's Metal twin: with no whole-model driver homing a
+`_metal_batched_cells.das` holds the row's Metal twin, its cells on the Metal form (`metal_form`, the blob twin) of each
+carrier's load-once block - `metal_llama_1b_cells` on `test_gpu_resident_llama_1b`, `metal_gemma4_e2b_cells` on
+`test_gpu_resident_gemma4_e2b` (under its `g4e` arm), `metal_qwen_moe_cells` on `test_gpu_resident_moe_q8`,
+`metal_qwen35_cells` on `test_gpu_resident_hybrid_q8` and `metal_qwen35_mtp_cells` on `test_gpu_resident_hybrid_mtp` - one
+load a carrier, inside the block's job queue, each cell under its own family filter with the sessions' context cut to its own
+(`metal_cell`: 256, 512 or 1024 positions): with no whole-model driver homing a
 stream the row runs host-cached through the Metal batched driver - Llama-3.2-1B Q8, the
 E-series gemma-4-E2B Q8, the shared-expert Qwen1.5-MoE-A2.7B-4L Q8_0 (the four-block cut, its blocks asserted on the load), the deltanet
 hybrid Qwen3.5-0.8B Q8 (at four streams and at nine - more than the recurrent mirror cache rests
 at, which grows to the batch) and, under the scheduler's self-speculative mode, Qwen3.5-0.8B-MTP Q8 -
 a rate, every timed step counted a device step by `batch_step_census`; the Llama and E-series carriers also run the
-gather cell (`test_metal_batch_gather_*`): three host-cached sessions through six batched steps, every row gathered off its
+gather cell (`batch_gather`): three host-cached sessions through six batched steps, every row gathered off its
 id (`metal_batch_rows_gathered` up by the rows, `batch_rows_host_embedded` unmoved), every row's logits bit for bit the same
 steps' with the gather off (`set_metal_batch_gather(false)`: the host embeds every row and the step pokes it up, no row
 gathered - the control); the shared-expert
-carrier also runs the one-row same-slab cell (`test_metal_batched_row_shexp_sameslab`; same-slab =
+carrier also runs the one-row same-slab cell (`batched_row_shexp_sameslab`; same-slab =
 consecutive positions of ONE session as the rows of one batched step, `../ARCHITECTURE_GPU_MTP.md#batch-same-slab`):
 twelve rounds of one row through `verify_batch_step` against the single-row step on a second
 session of the same prompt, the logits within the plain-MoE bar of 2.0 at every round (the one-step-off control asserted outside the bar),
 every round served by the batched driver - a rows step at one row takes the rows forms, never the
 single-row step's shared-expert GEMV over its `bh12s` panel
 (`../ARCHITECTURE_GPU_MTP_DECODE.md#metal-layer-enc`); the MTP carrier also runs the depth-2 cell
-(`test_metal_batched_row_mtp_depth2`): a greedy walk (`generate_mtp_greedy`) at depth 1 and at
+(`batched_row_mtp_depth2`): a greedy walk (`generate_mtp_greedy`) at depth 1 and at
 depth 2 over up to 24 reply tokens, the same tokens, the depth-2 walk drafting more than the
 depth-1 walk (at depth 2 each draft joins on the host before the next is made) and accepting some; the pick cell
-(`test_metal_pick_ask`): a greedy scheduler stream's steps land their device pick in the logits' place
+(`pick_ask`): a greedy scheduler stream's steps land their device pick in the logits' place
 (`metal_picks_landed` up, at most one a token) and emit token for token what `generate()` emits off the host's
 argmax, and a stream whose sampler is not a bare argmax lands none (the control);
 the MTP carrier also runs the three-stream invariance cell
-(`test_metal_batched_row_mtp_joint_invariance`): three speculative streams admitted together emit,
+(`batched_row_mtp_joint_invariance`): three speculative streams admitted together emit,
 token for token, what each emits alone on a one-stream speculative scheduler, every tick stepping each
 stream through its own round (`mtp_joined_max` 0), the ticks' draft and accept counts equal the three
 solo streams' sums, the solo rounds accept more than half their drafts; and its staggered twin
-(`test_metal_batched_row_mtp_joint_staggered`): the same three streams with the LAST one on a prompt past
+(`batched_row_mtp_joint_staggered`): the same three streams with the LAST one on a prompt past
 200 tokens across three 64-row chunk boundaries, each round's chunk count and attention form its own
-stream's, and the paged cell (`test_metal_paged_mtp`): one speculative stream of 150 reply
+stream's, and the paged cell (`paged_mtp`): one speculative stream of 150 reply
 tokens on a scheduler of 64-row pages - the server's session kind - emits token for token what a
 flat session emits, drafts accepted on both sides, the stream's rows asserted to span three pages
 so rounds cross page boundaries, and a Metal-served model's `chunk_defaults` read as
@@ -3145,33 +3170,33 @@ runs the pre-encode cell: four greedy streams through the scheduler with the bat
 pre-encoded step off (the reference, its taken count pinned at zero) and on (the taken count at
 sixteen or more; the shipped default reads off), token for token per stream, then the rail's
 retire under a parked step and the drivers' shutdown against the Metal live-object count, and the per-row tick cell
-(`test_metal_per_row_tick_sampled`): two sampled streams (temp 0.8, top-k 40) through twelve two-row ticks the batched driver
+(`per_row_tick_sampled`): two sampled streams (temp 0.8, top-k 40) through twelve two-row ticks the batched driver
 declines (the probe seam `set_metal_mirror_device_max_probe_` at one and a half sessions' mirrors), every tick a per-row step
 by `batch_step_census` and every row's selection landed, each stream token for token what it emits sampling right after its
 own forward - the landing is one a process, so each row's lands into its own logits before the next row's forward - with
 the device's own bound (no per-row tick) and the landing off (no selection) as the controls, and the landing
-release cell (`test_metal_batched_row_landing_release`): two greedy streams held by value in an array through
+release cell (`landing_release`): two greedy streams held by value in an array through
 `eval_batch_` - a step over both, a second after the array moved them, the first deleted and erased, three steps
 of the second alone - with every step built at its call (the reference), with the pre-encode rail on (the
 second step commits the step encoded ahead of the move, each session's carry mark moved where it stands now)
 and with the pipelined landing on (`set_metal_batch_pipe`; the release lands the step in flight), token for
 token, a session's release leaving no landing that names a session (`metal_batch_landing_parked`); the
-deltanet carrier also runs the greedy chain cell (`test_metal_deltanet_greedy_chain`): 24 steps with the single-row
+deltanet carrier also runs the greedy chain cell (`deltanet_greedy_chain`): 24 steps with the single-row
 chain off and forced on, fed the greedy pick and then fed off the pick every third step - the chain's hits counted
 on both feeds and its misses on the off-pick one, every step a device decode, the tokens and every step's logits
 bit for bit the plain run's (a mispredicted chained step that wrote the live recurrent state would part them), the
-released-sessions cell (`test_metal_deltanet_released_sessions`): sessions one more than twice the mirror cap
+released-sessions cell (`deltanet_released_sessions`): sessions one more than twice the mirror cap
 (`dn_mirrors_cap`) each stepped alone and deleted - its state held while it lives and gone from the mirrors and the
 stash after (`dn_mirror_holds`) - then as many live sessions stepping in turn, every step a device decode, the stashes
 rebuilding the evicted mirrors, each session's tokens its own alone, and the
-paged cell (`test_metal_paged_deltanet`): one and two greedy
+paged cell (`paged_deltanet`): one and two greedy
 streams of 40 prompt and 40 reply tokens on a scheduler of 64-row pages - the server's session
 kind, each stream's rows past one page - emit token for token what flat sessions emit (one code
 path over one set of bytes: the mirror gathers the pool's rows verbatim), each side's Metal
 decode steps counted on their own with a one-token reply as the floor's control, both streams
 decoded in the log (a recurrent layer owns no K/V rows, so its pool blob is empty and the
 mirror's walk reads no base for it); the MTP carrier also runs the prefix checkpoint cells
-(`ARCHITECTURE_ENGINE_SERVING.md#prefix-recurrent-checkpoints`): `test_metal_prefix_checkpoint` - three
+(`ARCHITECTURE_ENGINE_SERVING.md#prefix-recurrent-checkpoints`): `prefix_checkpoint` - three
 prompts on one shared opening (asserted past two 64-row pages and off a page boundary) through one speculative scheduler: the first two attach nothing,
 the second's prefill leaves the checkpoint at the opening inside its window, the third attaches it, and the
 second and third reply token for token as on a scheduler with no cache whose chunk is the opening
@@ -3179,27 +3204,28 @@ second and third reply token for token as on a scheduler with no cache whose chu
 chunk is three quarters of the opening with the idle quantum off: the first tick prefills the whole
 opening: the first tick's window is the chunk alone and leaves no checkpoint, the second carries the opening's stop inside
 it and leaves the checkpoint captured at the stop's row, the run ending on two (the opening's and the finished turn's);
-`test_metal_prefix_checkpoint_hinted` - a
+`prefix_checkpoint_hinted` - a
 request marked with its stable opening (`PendingReq.stable_at`) leaves the checkpoint at once, the
 second prompt attaches it; a marked first request leaves two checkpoints (its opening and its
 finished turn), an unmarked one its prompt's end and its finished turn, and the attached reply is token for
 token the uncached reply at the same cut;
-`test_metal_prefix_checkpoint_logits` - the verbs direct: a session attached at a checkpoint off a
+`prefix_checkpoint_logits` - the verbs direct: a session attached at a checkpoint off a
 page boundary lands the donor's logits bit for bit after the same tail (the carry's position
 restored, the partial page its own copy), a checkpoint with its recurrent state zeroed lands
 logits 5% of the largest or more away, every page back in the pool - the reply to a strongly
 prompted tail survives a lost state, which is why this cell holds the logits;
-`test_metal_prefix_checkpoint_capture_logits` - a checkpoint captured inside one window: a request marked at a stop past two
+`prefix_checkpoint_capture_logits` - a checkpoint captured inside one window: a request marked at a stop past two
 pages and off a page boundary, its whole prompt one prefill call (`prefill_evals` 1, one checkpoint standing after that
 window), then a fresh session attached at the capture and fed the tail lands within 0.2% of the largest logit of an uncached
 session prefilled over the opening and then the tail (the capture stands inside a window of the whole prompt, the reference's
 state at the end of a window of the opening alone, so the scans and GEMM tiles round apart: reads 0.055%, the prompt as one
 window 0.049% off the reference), the capture with its recurrent state zeroed landing finite logits 5% of the largest or more
 away (reads 17.5%);
-`test_metal_prefix_checkpoint_next_turn` - a finished turn's checkpoint: the prompt plus its 40
+`prefix_checkpoint_next_turn` - a finished turn's checkpoint: the prompt plus its 40
 counted tokens attach for the next turn, which continues the count token for token against an
-uncached 80-token stream. Stocked
-suite; skips off the JIT, without dasMetal, or without the carrier. The row's refusal contract - a timed step that ran its rows one at a time refuses by
+uncached 80-token stream. The cells run where their hosts do (the
+stocked suite); a carrier's Metal form is one skipped cell on a build without das_metal, and the block skips off the JIT or
+without the carrier. The row's refusal contract - a timed step that ran its rows one at a time refuses by
 name and reads 0 - lives in `test_batch_decode.das` on the SmolLM2 fixture with the rope table
 off, where every step is per-row by construction.
 `test_gpu_resident_format_census.das` - stocked suite, `-jit` only, `DASLLAMA_GPU=1`; the census rides `_format_census.das`
@@ -3929,18 +3955,21 @@ another RR and a stamp file with no `override RR` each one finding, a kernel fil
 `test_load_once_gate`: the load-once check of this folder's `REVIEW.das` over its `--load-once <file>...` rail, the files
 read as one llm area, `--loaders <name>...` the loader list in `LOADERS`' place (the stale-loader check over it) and
 `--area-run <run.das>` the runner whose `area_tests` lists the area's files - a block alone, a second load under `own_load`
-with a reason, a listed loader passing its own parameter, a call whose name ends a longer name or follows a `.`, and a load
-in a file the runner does not list green; a second loader of a blocked file, a load through a listed helper whose file a
+with a reason, a listed loader passing its own parameter, a call whose name ends a longer name or follows a `.`, a load
+in a file the runner does not list, a column-0 `let` inside a function (no top-level binding, one file or two) and a block
+passing its own file's table row green; a block passing another file's table row, a second loader of a blocked file, a load through a listed helper whose file a
 local (one hop or two), a top-level constant or another file's constant binds, two loads of a file no block loads, an
 `own_load` with an empty or non-literal reason, a block naming its area or file by a non-literal, a function passing its
 parameter to an unlisted loader (the block's home among them), a second block of one file, a one-line function's load on
-its def line, a listed loader no file defines, an area whose runner lists no file and a held file found clean each red,
-the finding naming its site's file and line and the model file; a held file's block owns its file where no unheld block
-does, and its second block of a file an unheld file blocks is a held site, the unheld block its owner. A
+its def line, a listed loader no file defines and an area whose runner lists no file each red, the finding naming its
+site's file and line and the model file; of two files' blocks of one file the first file read owns it, a block owns its
+file in a file whose other loads are findings, and no finding is held - a file named after `--unfolded` is read like any
+other. A
 `with_model_once` call and a `with_model_once_at` call are blocks too: a second load of the file red, a second block of
 one area and file red, a block an area green, a file the block's form loader loads beside its own a load site of that
-file, a held file's `with_model_once` block named by its call; `--area <name>...` names the areas the rail reads the files as - two loads of a `.bin` pack red in the tts area and
-green in the llm area, and a held file one area finds dirty no clean file of another.
+file, a `with_model_once` block read first the owner of a chat models' block after it; `--area <name>...` names the areas
+the rail reads the files as - two loads of a `.bin` pack red in the tts area and green in the llm area, and one area's two
+loads its findings while another area's block is none.
 `test_block_file_floor`: the file-shape check of this folder's `REVIEW.das` over its `--floor <folder>` rail - a file whose
 one `[test]` holds a block (`with_model_once`) green, a file whose one `[test]` holds none red on the three-tests floor.
 `test_cell_pins_gate`: the cell-pin check of this folder's `REVIEW.das` over its `--cell-pins <file>...` rail - a fixture
@@ -4171,7 +4200,8 @@ mmproj, the canary f32 encoder, the parakeet f32 encoder, the ultravox f16 mmpro
 jfk.wav, without the serving discrete home's twin seat (the CUDA tower's under the CUDA ask, else a Vulkan device
 under `DASLLAMA_GPU=1`), and on a das_metal build.
 `test_whisper.das` - stocked suite; the whisper bins load once a form in their blocks (`test_whisper_tiny`, `test_whisper_turbo`)
-and the Qwen3-Omni-30B pair in its mmproj's (`test_qwen3omni_pair`, large tier, the facade's two-file load its one form);
+and the Qwen3-Omni-30B pair in its mmproj's (`test_qwen3omni_pair`, the `qwen3omni-30b` category's - a run naming it opens the pair, no other run does -, the facade's
+two-file load its one form);
 the parakeet, canary, gemma4a and qwen3a oracle cells, the E4B facade cell and the mel state-reuse cells described here are
 `_audio_asr_cells.das`'s, run under their files' blocks in `test_audio.das`; the qwen3a mel cell (model-free: the lanes' mel image against the one-lane
 image element for element - the DFT GEMM splits on whole 4-row tiles so every row rounds as one lane's); model-gated: the whisper/parakeet/canary/gemma4a/omni
@@ -4249,17 +4279,34 @@ trunks' blocks, under each trunk's perplexity arm (`g4mk`, `g4m`), its model_spe
 run with no model - its gather cell gates on the 440 MiB sidecar, `--family gemma4moe` and a das_metal build, its
 type-decline cell on the Q4_0 head and `--family gemma4moe`, its Vulkan driver check on the dasVulkan module;
 the other arms gate on the files and `--family gemma4moe` - the target PARITY_FULL-gated on `mtp-gdraft-cpu` and every served arm, the sidecar through `model_available`.
-The served arms run on any GPU home - Metal, Vulkan under `DASLLAMA_GPU=1`, CUDA under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1` -
+The served arms run on any GPU home - Metal, Vulkan under `DASLLAMA_GPU=1`, CUDA under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1` - as
+cells of the trunks' blocks (`test_gemma_drafter_26b_trunk`, `test_gemma_drafter_26b_iq3_trunk`: the Metal form, or the
+discrete homes' device forms),
 skip on a build with none, and skip where the card holds the trunk only with routed layers' experts on the host (the
 round's verify rides the N-row token command, which has no host-experts form on either discrete home - the 26B on a 16 GB
 card); `mtp-gdraft-vdecl` runs on Metal alone, since the discrete rounds bind no stream off the mirror's codec.
+`test_model_forms.das` - model-free: the load-once forms and blocks (`_model_form.das`) on fake loaders, no model file read.
+`test_model_form_knobs`: the load-once forms' pure parts (`_model_form.das`) - a knob-free device form is the driver's
+default form on the environment's codec (a region count or an asked codec the control), `drops_device` no load knob; a
+cells form defaults to the q8 cached load, alone, no pin (the CPU form answering the device forms not alone, the
+control); a backend pin or a K-quant knob (the Q4_0 native `on_q40` too) makes a load of its own that `form_name` names and that answers no device form
+(`main_side`), the knob-free cells form answering the default form on its armed codec; and a cells load stands alone on
+its first codec's pass alone (`codec_pass`), a load no form asks alone never.
+`test_model_form_account`: a load-once block's account (`form_owed`, `alone_pass_of`) - a form that reached its cells or
+skipped loudly is owed nothing; a pending form asked alone or on the device is a failure, a device form ran or not; a
+pending CPU form not asked alone skips loudly where no device form ran and is a failure where one did; a load's pass
+stands alone only off the device, asked alone and on that load.
+`test_staged_once_block` and `test_model_once_block`: a block's loops (`staged_once_at`, `model_once_at`) over a stub file and
+fake loaders - a load a form in the list's order, one model alive inside each cells call, a staged read once a key - and
+`served_forms` leaving out, as one skipped cell, a form the box cannot serve.
 `test_model_specs.das` - model-free: the model-set table's shape invariants
 (`../performance/model_specs.das`: unique file/display keys, official => provenance pinned,
 parity-evidence shape - a `prefix_bar` carrier holds at least two ids, so its half-span bar is a
 token or more), the fixture compare the gates read (`prefix_match_len` / `fixture_ok` on hand rows:
 the strict form reds a flipped last id where the half-span form holds it, a flip inside the first
 half reds both, the bar sits exactly at half the span), the derived provenance view's invariants (unique names, sha-or-recipe,
-https urls), the quantize-minted rows (`test_quantize_rows`: each names a fetched source row, carries the recipe
+https urls, and a sha256-pinned entry's source at a revision, not `resolve/main` - `UNPINNED_MAIN` lists the entries
+still owed one and reds an entry that no longer floats), the quantize-minted rows (`test_quantize_rows`: each names a fetched source row, pins bytes and sha256 where it is also published, carries the recipe
 `quantize_commands` spells, and reaches the provenance view with its `quantize`; `fetch_models --convert`'s route
 `convert_route` - a quantize row to the mint even under a canary name, a canary row to its conversion, any other to the
 no-recipe warning, Windows refused - and the mint's `mint_steps` - no source refused, an absent importance matrix built
@@ -4381,7 +4428,7 @@ Requires `run` by bare same-dir name.
 `uncategorized_persistent_heap_stack_524288.das` - model-free: the tune interrupt gate in a
 spawned child (`test_interrupt_aborts_without_minting`), the Metal lens's FLOAT A refusal (`test_float_a_gate`) and
 the class mint's returned text (`test_class_mint_text`: `../harness/class_mint_text.das`'s two forms, each parsed back).
-`test_pod_fleet.das` - model-free, the same options as the file above: the pod fleet's planners, twelve tests.
+`test_pod_fleet.das` - model-free, the same options as the file above: the pod fleet's planners, fourteen tests.
 `test_fleet_create_argv` and `test_fleet_commands` (pod-free): the pod fleet's planners (`../harness/pod_fleet.das`) -
 the `runpodctl pod create` argument list (the models volume and its data center, the GPU, the
 disk, the ssh port, the key in the boot's environment, the boot installing sshd, rsync, git and
@@ -4395,8 +4442,13 @@ the log, detached so the ssh call returns), the status's `MISSING` and stop line
 `test_fleet_home_plan` (pod-free): a pod a GPU home - two pods seat the Vulkan then the CUDA home in the
 fleet's order whatever their indices, one pod the Vulkan home with the CUDA home unseated, and `fleet_refusal`
 refusing a third pod with the rule and `--pods 0`. `test_fleet_model_free_once` (pod-free): the model-free
-suite on the CUDA home's command alone on two pods, the Vulkan home's log naming who runs it with its `RUN-EXIT`
-not reddened, and on the lone pod's Vulkan command on one. `test_fleet_home_commands` (pod-free): the two homes' remote
+suite whole on the CUDA home's command on two pods and its Vulkan files (`VULKAN_FREE_ONLY`) on the Vulkan home's,
+that slice's exit reddening the Vulkan home's `RUN-EXIT`, and the whole suite on the lone pod's Vulkan command on one.
+`test_fleet_home_modules` (pod-free): the CUDA home's environment `DASLLAMA_DISABLE_MODULES=dasVulkan` and the Vulkan
+home's `dasCUDA` on two pods, none on a lone pod, the prewarm's command line leaving the same module out, and a
+caller's `--env` value winning on both. `test_fleet_cuda_only_excluded` (pod-free): the two-pod Vulkan home's model
+list, model-free slice and given command carrying `--exclude` the `CUDA_ONLY_EXCLUDE` tokens, one `--exclude` joining
+a caller's own, none on the CUDA home or a lone pod. `test_fleet_home_commands` (pod-free): the two homes' remote
 commands - the same command on both, `DASLLAMA_CUDA=1` and `--only` the CUDA pass on the CUDA home's alone,
 an `--only` in the caller's `--args` refused, no `--shard` on either,
 `--batch 30` on both unless the caller's `--args` name a `--batch` (`batched_args`; the model-free suite's `--args`
@@ -4497,19 +4549,12 @@ model-free, a hand-built vocabulary with control tokens ahead of its byte pieces
 layout, where 3 + the byte is a control token) encodes a newline as its `<0x0A>` piece and no
 control id, the Llama-2 layout (byte pieces right after eos) reads the same pieces, and a
 vocabulary with no byte pieces panics on a byte it cannot spell; model-gated, Mistral-7B-Instruct-v0.3
-Q8_0 reads `<0x0A>` at 781 with 13 a control token, and the newline and tab samples encode to
+Q8_0 (the `mistral-7b` category's, opened by a run naming it alone) reads `<0x0A>` at 781 with 13 a control token, and the newline and tab samples encode to
 `llama-tokenize --no-bos`'s ids and decode back.
-`test_embeddings.das` - stocked suite, `-jit` only; every load in memory (no `.dlim`); its other model cells are
-`_embedding_cells.das`'s on their models' blocks (that entry below), the two model cells here on loads of their own.
-`test_embeddings_hidden_only_window` (a dasMetal build): an embedding's Metal window on the blob twin runs no classifier and feeds no decode mirror where a chat
-window does both, one window an embed, the card's matrix holding and the mean read missing it; the short window's q8 sites
-take the split-K form (`metal_prefill_split_k_sites` and the q8 split stamps' census count), `set_metal_prefill_split_k(false)`
-the control moving neither; the empty text - its EOS alone, one row - rides one Metal window and lands the planar f32 model's
-vector within `EMB_F32_BAR` (cosine 0.9999; the f32 "x" missing it; the reference is f32 because the CPU q8 chain's Q8_0 activations read a
-first row about a percent of cosine off it, logged beside), and a batch holding it reads the single's vector
-(the batch's other text missing it); with Metal off a planar model's embed rides no Metal window.
+`test_embeddings.das` - stocked suite, `-jit` only; every load in memory (no `.dlim`); its model cells are
+`_embedding_cells.das`'s on their models' blocks (that entry below) but the one model cell here on loads of its own.
 Model-free `test_embeddings_session_rules`: `session_keeps_rows_only` per
-config field, and two models of one geometry with no fblob read two embed pool keys. `test_embeddings_batch_fresh_sessions`
+config field; `test_embeddings_pool_key`: two models of one geometry with no fblob read two embed pool keys. `test_embeddings_batch_fresh_sessions`
 (`own_load`: it holds three models loaded at once):
 a recurrent model (Qwen3.5-0.8B) takes fresh sessions - its batch and singles leave `embed_pool_builds` where they found it
 - and matches its singles under the mean, and a pooled model of another
@@ -4524,7 +4569,16 @@ alone, in input order, in one window, across windows of 40 rows and under the 25
 `embeddings_lone_forwards_cell` and on the q4_0 form `embeddings_lone_forwards_q4_0_cell` - `embed_window` runs a one-row text and every
 q4_0 text through `embed_forward` alone (`embed_lone_forwards` up by one for the one-row text beside two others, by three
 for the q4_0 batch, unmoved for two several-row texts - the control), and each batch matches its singles (another text's
-single misses the bar). On tinyllama Q8's uncached CPU form (`test_gpu_resident_tinyllama`, `test_gpu_resident_llama.das`)
+single misses the bar). The file's Metal cell runs on the block's Metal form (the blob twin at 4096 positions, a skipped
+cell on a build without das_metal), `embeddings_metal_window_rows`: an embedding's Metal
+window runs no classifier and feeds no decode mirror where a chat window does both, one window an embed, the card's matrix
+holding and the mean read missing it; the short window's q8 sites take the split-K form (`metal_prefill_split_k_sites` and the
+q8 split stamps' census count), `set_metal_prefill_split_k(false)` the control moving neither; the empty text - its EOS
+alone, one row - rides one Metal window, and a batch holding it reads the single's vector (the batch's other text missing
+it). On the q8 CPU form `embeddings_metal_off_cell`: with Metal off the embed rides no Metal window; on the f32 CPU form (a
+dasMetal build's) `embeddings_f32_one_rows`; after the block `embeddings_metal_f32_within`: the one-row Metal vector is the
+f32 form's within `EMB_F32_BAR` (cosine 0.9999; the f32 "x" missing it; the reference is f32 because the CPU q8 chain's
+Q8_0 activations read a first row about a percent of cosine off it, logged beside). On tinyllama Q8's uncached CPU form (`test_gpu_resident_tinyllama`, `test_gpu_resident_llama.das`)
 `embeddings_past_the_context_cell` and `embeddings_chat_model_default_mean_cell`: on tinyllama (a chat model) the default read is the mean, float for float, no EOS appended; a text past the context embeds its
 leading seq_len tokens.
 On an armed Vulkan tier, each device cell pinning the whole-model route on and the region pin and putting both back:
@@ -4569,8 +4623,8 @@ the `max_unreserved_size` guard that must not panic.
 pool and restored into a pool of another page size, a recurrent request's two checkpoints with their state, a file cut
 inside a checkpoint or holding another model's, and every refusal by name with no page held), the SPIR-V dump differ, the parity
 reference cache's load (`test_parity_cache_roundtrip`, `test_parity_cache_rejects_corruption`), the `.dlim` wipe
-(`test_dlim_wipe`), the `[from_template]` stamp, the load-once forms' knobs (`test_model_form_knobs`) and account
-(`test_model_form_account`), and the Silero
+(`test_dlim_wipe`), the `[from_template]` stamp, a twin's held verdict on synthetic rows (`test_twin_rows_owed_poison`:
+a twin that owes its input poison and kept none fails one assert, one that kept it or owes none holds), and the Silero
 VAD's load from bytes its host holds
 (`test_vad_from_memory`: the checked-in bin read one byte past a page boundary, its CPU probabilities those of the file
 load bit for bit after the host bytes are zeroed, a copy with 4096 bytes zeroed giving a different probability in some
@@ -4583,16 +4637,6 @@ path.
 `test_from_template`: the `[from_template]` stamp (`dasllama/dasllama_tune`) - a
 placeholder call renames to the annotation's target per stub, and the stub's signature types the
 clone so one template stamps both plane overloads.
-`test_model_form_knobs`: the load-once forms' pure parts (`_model_form.das`) - a knob-free device form is the driver's
-default form on the environment's codec (a region count or an asked codec the control), `drops_device` no load knob; a
-cells form defaults to the q8 cached load, alone, no pin (the CPU form answering the device forms not alone, the
-control); a backend pin or a K-quant knob (the Q4_0 native `on_q40` too) makes a load of its own that `form_name` names and that answers no device form
-(`main_side`), the knob-free cells form answering the default form on its armed codec; and a cells load stands alone on
-its first codec's pass alone (`codec_pass`), a load no form asks alone never.
-`test_model_form_account`: a load-once block's account (`form_owed`, `alone_pass_of`) - a form that reached its cells or
-skipped loudly is owed nothing; a pending form asked alone or on the device is a failure, a device form ran or not; a
-pending CPU form not asked alone skips loudly where no device form ran and is a failure where one did; a load's pass
-stands alone only off the device, asked alone and on that load.
 `test_kv_prefix.das` - stocked suite; beside each attach below, the probe `prefix_match_len_` reads the
 count the attach then attaches (0 on a recurrent cache, which attaches at checkpoints); model-free cells on a synthetic Config: the prefix cache's page
 accounting, the LRU budget and the token verify, then a recurrent session's checkpoints - one
@@ -4670,11 +4714,13 @@ pointee's const, the staged GEMM's device step and the device-pair step and stor
 inline-addr operands (a wrong role on either refused), a generic helper resolved by base name, and
 a body that delegates to methods. Without das_metal the device-pair cell skips and the other cells
 pass after logging that the lens does not load.
-`test_driver_knob_getters.das` - model-free: the driver knobs' getters and the decode registry's removal verb -
+`test_driver_knob_getters.das` - model-free: the driver knobs' getters and the decode and prefill registries' removal verbs -
 `mtp_depth_pin` reads whether `set_mtp_depth` pinned a depth and the depth, and `restore_mtp_depth` puts back a pinned and an
 unpinned depth; `unregister_decode_override` drops an override and its batched step - the name re-registered single-stream arms no batch twin,
 its batched step registered again arming one (the control) - deselecting it where it is active and leaving another selection as
-found; on a das_metal build `get_metal_decode_fuse`, `get_metal_prefill_lastrow`, `gemma_trace` and
+found; `unregister_prefill_override` drops an override and every seat under its name, its gather gate among them - the
+name re-registered bare claims no seat, a seat registered again arming (the control) - deselecting it where it is active
+and leaving another active override selected; on a das_metal build `get_metal_decode_fuse`, `get_metal_prefill_lastrow`, `gemma_trace` and
 `gemma_carry_pre_norm` read back every value their setters write and the value found once it is put back, the h reading set with no
 drafter attached leaving the decode's carry alone (skips without das_metal). `test_kv_start`: a session's K/V
 buffers start as `set_kv_init` asks - the unfilled start sizes a flat session's slabs and writes no byte
@@ -4685,8 +4731,9 @@ and anything else as unfilled, and the pin restores as found. `test_lever_macro`
 getters - a bool lever follows its knob unpinned and its pin once set, `reset_` lifts the pin, `_pin` /
 `restore_` carry a pinned and an unpinned state back, `with_` pins for its block and nests; an enum lever
 named apart from its getter answers a pin without running the getter's body.
-`test_engine_levers`: each of the engine's seven levers through its generated functions - the knob unpinned, the
-pin once set, `with_`'s value inside its block alone, the pin back as found.
+`test_engine_levers`: each of the engine's eight levers through its generated functions - the knob unpinned, the
+pin once set, `with_`'s value inside its block alone, the pin back as found; `allow_cpu_prefill` writes the cpu_prefill
+lever its getter `cpu_prefill_allowed` reads, which unpinned reads `DASLLAMA_CPU_PREFILL`.
 `test_kernel_backend.das` - model-free: the kernel-backend registry - the portable backend
 registered at `[init]` with a row-major default active (`test_portable_backend_always_registered`),
 select / pin / for-load pick a registered backend and an unknown name changes nothing
@@ -5861,8 +5908,8 @@ CPU-served one is a silent fallback);
 same stories15M fixture, deliberately never calls `allow_cpu_prefill()` (which is why it
 cannot live in test_attn_span - that file arms it in `[init]`). Metal-capable builds only;
 plain dastest only.
-`test_vision_chat.das` - stocked suite; the gemma-3-12b pair's blocks (`test_vision_chat_gemma3_12b_pair`: the large-tier
-decoder's block first, the mmproj's nested in it). The image chat turn's cells are `_vision_chat_cells.das`'s, each run
+`test_vision_chat.das` - stocked suite; the gemma-3-12b pair's blocks (`test_vision_chat_gemma3_12b_pair`: the `gemma3-12b`
+category's decoder's block first, the mmproj's nested in it). The image chat turn's cells are `_vision_chat_cells.das`'s, each run
 from its tower's block with the decoder's block nested in the tower's `image` form: `test_gemma4uv.das` (the 12B
 gemma4uv pair), `test_gemma4v.das` (the two E2B pairs), `test_gemma3v.das` (gemma-3-4b), `test_qwen3v.das` (the Omni
 pair and the showcase; the 4B deepstack pair and the rows seam), `test_qwen25v.das` (Qwen2.5-Omni and the plain-chat
@@ -5877,7 +5924,7 @@ E2B instruct-mode cell (the Q4_K_M decoder + the same mmproj, thinking off, the 
 first turn under the chat sampler preset at seed 1234: the turn answers with the cats in the
 content half and the history holds no thought - red without the channel-marker guard), the
 gemma-3-4b gemma3v pair (small tier), the gemma-3-12b pair (the same SigLIP tower at projection
-3840 - large tier, `DASLLAMA_PARITY_FULL=1`), and the Qwen3-Omni qwen3v pair (large tier - the
+3840 - the `gemma3-12b` category), and the Qwen3-Omni qwen3v pair (the `qwen3omni-30b` category - the
 mrope leg: grid reaches the chat, the session's rope delta reflects the grid advance), the
 Qwen3-VL 4B deepstack pair (small tier - wide 10240-float rows through the chat, the caption, and
 the zeroed-slices decoder control: tails zeroed on the same rows must move the prefill logits,
@@ -5941,11 +5988,13 @@ that carries no tag; a file no row holds - a tower, a speech model, a fixture - 
 filter. Family tokens: `llama` (`--suite decode`, `prefill`, `matrix` and
 `coverage`, plus the image `smol`, `untied`, `metal` and `metal-untied` arms and the `image-vulkan` `vulkan` arm),
 `qwen2`, `qwen3`, `phi3`,
-`gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe`, `qwen4exp` (the support-matrix family cells; `qwen35` also tags `test_vulkan_mint.das`, `test_metal_batched_row.das` and the `dflash-27b-*` arms of `test_dflash_drafter.das`; `qwen3` and `qwen35` also tag the chat decoder cells of `test_nmt.das`; `gemma3`, `gemma4`, `gemma4e` and `qwen3` the image chat decoder cells under the vision tower blocks), `gemma`,
-`ultravox`, `whisper`, `voxtral`, `parakeet`, `gigaam`, `qwen3a`, `canary`, `gemma4a` (image suite arms),
+`gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe`, `qwen4exp` (the support-matrix family cells; `qwen35` also tags `test_vulkan_mint.das`, `_metal_batched_cells.das`'s Qwen3.5 cells and the `dflash-27b-*` arms of `test_dflash_drafter.das`; `qwen3` and `qwen35` also tag the chat decoder cells of `test_nmt.das`; `gemma3`, `gemma4`, `gemma4e` and `qwen3` the image chat decoder cells under the vision tower blocks), `gemma`,
+`ultravox`, `whisper`, `voxtral`, `parakeet`, `gigaam`, `qwen3a`, `canary`, `gemma4a` (image suite arms, and each
+family's tower blocks in the audio test files), `qwen2a` (the Qwen2-Audio tower's block), `qwen25a` (the Qwen2.5-Omni
+audio towers' blocks),
 `gemma3v`, `qwen25v`, `qwen3v` (the coverage census tower rows and each family's tower blocks in the vision test files; `gemma3v` also the image suite's `gemma3v` arm), `gemma4v` (the gemma4v and gemma4uv tower blocks, and the image suite's
 `gemma4v`, `gemma4uv` and `gemma4uv-metal` arms), `kitten` (the image suite's
-kitten arm), `kokoro`, `pocket` (the coverage census TTS rows), `vad` (the coverage census silero VAD row), `bergamot` (the image suite's
+kitten arm), `kokoro` (kitten and kokoro are two families of one architecture), `pocket` (the coverage census TTS rows), `vad` (the coverage census silero VAD row), `bergamot` (the image suite's
 bergamot arm and the coverage census Bergamot row, ru-en tiny on the Metal seat),
 `gemma4e` (support-matrix rows under `fam-gemma4e` - E2B Q8_0, Q4_K_M and
 Q4_0, small-tier always-on - what the rows assert is the
@@ -5959,21 +6008,25 @@ model-loading block is `REVIEW.md`'s obligation.
 
 A category (`../TEST_CATEGORIES.md`, the table `_model_categories.das`) is a set of model files `model_available`
 opens only in a run that names it: `run.das -- --category <names>` (env `DASLLAMA_TEST_CATEGORIES`, comma list)
-runs every test file that names one of its files, opens those files past the tier ceiling, and skips every cell on
-another model. The files of a model suite (decode, mtp, prefill, matrix, kernels, image, image-vulkan, coverage) ride a
+runs every test file that names one of its files - or walks the spec table (`model_specs()`) to one of its rows -
+opens those files past the tier ceiling and the files its row opens beside them (`opens`: files of no category its
+decoders pair with or its cells nest in, which every run opens too), and skips every cell on another model. The files of a model suite (decode, mtp, prefill, matrix, kernels, image, image-vulkan, coverage) ride a
 child a suite, as that suite runs them - their device leak gates count the whole process - and the other files ten a
 child. A run that names no category skips every cell on a category's file. `--category` takes `--only`
 and `--exclude`, and no `--suite`, `--area`, `--changed`, `--arm`, `--full` or `--family`. A category's
-file is its own under `DASLLAMA_PARITY_FULL=1` too: the full suite opens none it does not name. The gemma-4
+file is its own under `DASLLAMA_PARITY_FULL=1` too: the full suite opens none it does not name. Every model file past
+the tier ceiling is a category's (`test_large_stocked_models_have_a_category` over the stocked files the tests and the
+spec table name, `test_model_specs.das`'s `test_large_rows_have_a_category` over the rows' `bytes`), so the full
+suite's lifted tier reaches only files under it. The gemma-4
 categories leave the E2B as the one gemma-4 decoder every other run opens: `gemma4-e4b` (the E4B decoder and mmproj),
-`gemma4-dense` (the 12B), `gemma4-31b` (the Metal matrix's past-slab row) and `gemma4-moe` (the 26B-A4B and its draft
+`gemma4-dense` (the 12B and the gemma-3-4b, opening their image chat towers), `gemma4-31b` (the Metal matrix's past-slab row) and `gemma4-moe` (the 26B-A4B and its draft
 heads).
 
 ## Model tiers
 
-`model_available(t, path)` is the size gate; the tier rule is `REVIEW.md`'s. Set
-`DASLLAMA_PARITY_FULL=1` explicitly with an `--arm` run when a change genuinely needs the
-large tier. A run reporting SKIPPED for those arms is correct, not a failure. `REVIEW.md` bans a
+`model_available(t, path)` is the size gate; the tier rule is `REVIEW.md`'s. A change that
+genuinely needs a large model runs its category (`--category <name>`); `DASLLAMA_PARITY_FULL=1`
+opens no file past the tier. A run reporting SKIPPED for those cells is correct, not a failure. `REVIEW.md` bans a
 batched-vs-sequential parity cell on a carrier above the tier: streaming a 70B's 40GB on the CPU
 while the GPU has the same bytes wired OOM-kills a 64GB box, so small-model pins carry that
 coverage instead (e.g. `set_metal_batch_addrms_unfused`); the f32-on-disk beta/alpha arm of the

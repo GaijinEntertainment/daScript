@@ -4,11 +4,12 @@
 doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
 `../followup_metal.md`.
 
-- A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the
-  asserts of every helper it calls.
+Terms this checklist does not define are as `REVIEW.md` (beside this file) defines them.
+
 - An encoder is the silero VAD, or any stage of a vision tower, an audio tower or a speech
   synthesizer on any chain - the log-mel front, the blocks and the projector among them; a head that
-  decodes encoder rows - a CTC head, a transducer, a whisper or language-model decoder - is not one.
+  decodes encoder rows into tokens - a CTC head, a transducer, a whisper or language-model decoder -
+  is not one.
 - An ASR serving lane is a weight format the family serves, one chain (CPU or device) over one
   format, or one kernel form of one format.
 - A transcript an external engine produced (an oracle dump's) stands for the lane that serves the
@@ -20,7 +21,7 @@ doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`, `../followup_
 - A rows-held transcript compare is equal transcript text or equal `transcript_words` lists beside
   the encoder output rows held within a tolerance of the other side's, or equal transcript text
   beside the encoder output rows held by the twin bar; its words form forgives a flipped token that
-  carries punctuation or casing alone, so it also runs a device-route control whose words must differ.
+  carries punctuation or casing alone.
 
 **A cell that runs with no model loaded and encodes, preprocesses, or asserts on media bytes
 an encoder consumes - pixels or audio samples, not a `.dlim` model image - builds its fixture
@@ -51,6 +52,10 @@ token-id sequences; equal `transcript_words` lists (`_model_tier.das`) when the 
 kernel form and its tensor twin; a forced-feed logits compare within a tolerance bar; or a
 rows-held transcript compare - never a text compare alone.** A tensor twin's rounding legitimately
 flips tokens.
+
+**A rows-held transcript compare in its words form runs, in the same cell, a device-route control
+whose `transcript_words` list differs from the other side's.** The words form forgives a flip of
+punctuation or casing, so only a control shows the compare can fail.
 
 **An ASR cell comparing a transcript against a reference text - a human's, or an external
 engine's that does not stand for the cell's lane - asserts a word-agreement floor (the share of

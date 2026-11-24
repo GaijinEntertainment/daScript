@@ -31,6 +31,7 @@ require dasllama/dasllama_moe   // shexp_gpu_decode_rows: the 35B per-op form's 
 require _segment_cells   // recurrent_segments_cell, SEG_WINDOW: the 35B cut's segmented windows
 require _parity_cells   // parity_qwen2moe_cut_cell, parity_qwen35moe_cut_cell: the cuts' parity streams on their pinned CPU forms; the 30B's parity row
 require _batch_decode_cells   // batch_decode_hybrid_moe_cell: the 35B UD-Q4_K_M cut's portable-pinned CPU form
+require _metal_batched_cells   // metal_qwen_moe_cells: the Qwen1.5 Q8_0 cut's Metal form's cells
 
 // The whole-model resident driver on a MoE under DASLLAMA_GPU=1, on the Vulkan home or under DASLLAMA_CUDA=1 on the CUDA home:
 // the expert stacks in the arena beside the attention quads and the shared experts, the window chain's routed block (the
@@ -57,8 +58,10 @@ require _batch_decode_cells   // batch_decode_hybrid_moe_cell: the 35B UD-Q4_K_M
 // The Qwen3-30B UD-IQ2_XXS, the MoE with no shared expert (the residual step's add partner off), holds the format census
 // first - every site the file carries read in its own format - as does the Q4_K_M host-layer fixture; the Qwen3.6-35B
 // cuts' blocks follow the per-op heat cell. Qwen3-Coder-Next
-// (512 experts) holds the device select past 256 experts beside the host-layer split. Those whole-file fixtures are large-tier
-// (DASLLAMA_PARITY_FULL=1) or their category's. The file is -jit only, and skips without the file or the armed tier; a codec form skips where
+// (512 experts) holds the device select past 256 experts beside the host-layer split. Those whole-file fixtures are their categories'
+// (qwen3moe-30b, qwen35moe-35b, qwen3coder-next), run under `--category`. The Qwen1.5 Q8_0 cut's Metal form (`metal_form`, the blob twin) carries the
+// Metal batched driver's shared-expert cells (`_metal_batched_cells.das`: the batched row and the one-row same-slab verify), one
+// skipped cell on a build without das_metal. The file is -jit only, and skips without the file or the armed tier; a codec form skips where
 // DASLLAMA_VK_KV32=1 arms the f32 mirror over its codec; the two-window feeds where the prompt window is not PF_WINDOW_ROWS
 // rows; the CUDA home's own cells off DASLLAMA_CUDA=1, the pool cells where DASLLAMA_GPU_HEAT shadows their slot ask or the
 // plan seats no pool; the per-op heat cells skip under DASLLAMA_CUDA=1 (the per-op tier and its heat pool are the Vulkan
@@ -515,7 +518,7 @@ def test_gpu_resident_moe(t : T?) {
 let private PARITY_CUT_CTX = 2048l   //! the parity row's load context (`parity_row_load`)
 
 
-[test(description = "On Qwen1.5-MoE-A2.7B-4L Q8_0, the four-block cut over Q8_0 expert stacks, two of the four routed layers' experts asked onto the host hold the CPU chain within the routed bar over one and two windows and the streamed windows the stream twin's bar of the host's sums; the N-row command's plain act and shared-expert requant batch two sessions bit for bit what each reads alone, at one window and past the unsplit position; on the CUDA driver under the pinned MMQ winners the one-window feed and the host cells hold 20 percent of max logit of the CPU chain, the meet splitting the experts and the prompt stream off as control; on the q8 CPU form, on every box, the cut fed the parity reference's greedy stream after the counting fixture keeps every reference id within 2% of its row's top logit, the stream one step late outside; each form loads once")]
+[test(description = "On Qwen1.5-MoE-A2.7B-4L Q8_0, the four-block cut over Q8_0 expert stacks, two of the four routed layers' experts asked onto the host hold the CPU chain within the routed bar over one and two windows and the streamed windows the stream twin's bar of the host's sums; the N-row command's plain act and shared-expert requant batch two sessions bit for bit what each reads alone, at one window and past the unsplit position; on the CUDA driver under the pinned MMQ winners the one-window feed and the host cells hold 20 percent of max logit of the CPU chain, the meet splitting the experts and the prompt stream off as control; on the q8 CPU form, on every box, the cut fed the parity reference's greedy stream after the counting fixture keeps every reference id within 2% of its row's top logit, the stream one step late outside; on the Metal home's blob twin, one load on a das_metal build: on the shared-expert Qwen1.5-MoE-A2.7B-4L Q8_0, the batched bench row serves four streams at a rate through the Metal batched driver's rows site, every timed step a device step, none on the CPU stack; on Qwen1.5-MoE-A2.7B-4L Q8_0, one row through the batched driver's same-slab verify lands logits within 2.0 of the single-row step's over 12 rounds, while the one-step-off control lands outside that bar; each form loads once")]
 def test_gpu_resident_moe_q8(t : T?) {
     return if (!family_on(t, "qwen2moe"))
     var r = QwenMoeRows()
@@ -534,11 +537,16 @@ def test_gpu_resident_moe_q8(t : T?) {
     forms |> push(device_form(regions = 2l, ctx = REGIONS_RIG_CTX))
     //! the parity row's environment pin; the row's K-quant native knob reads nothing on a file whose tagged sites are all Q8_0
     forms |> push(cpu_cells_form(backend = g_env_engine.pin_backend))
+    forms |> push(metal_form(ctx = METAL_ROW_CTX))
     let pins = pin_stream(0l)   //! the device claims first: the meet's share the host cells pin live
     var ran = false
     var dev_ran = false
     with_cuda_mmq_winners() {
         ran = with_cpu_and_gpu_model(t, "llm", "Qwen1.5-MoE-A2.7B-4L-Q8_0-local.gguf", MOE_CUT_CTX, forms) $(var m, form) {
+            if (form.on_metal) {
+                metal_qwen_moe_cells(t, m)
+                return
+            }
             dev_ran ||= form.on_gpu
             if (dev_ran && (form.on_gpu || empty(form.backend))) {
                 qwen_moe_rows(t, r, m, form, Q8, false)

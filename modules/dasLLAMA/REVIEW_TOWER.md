@@ -23,73 +23,65 @@ kernel template such a class stamps (instantiates into a concrete kernel); the M
 reached by a touch of `dasllama/dasllama_metal_asr_dec.das` or `dasllama/dasllama_metal_common.das`.
 An edit that changes no compiled code - a comment, an `[arch(at=...)]` citation - reaches no tower.
 
-The TTS seat cells are `test_kitten_synthesis_metal` and `test_kitten_oracle` in
-`tests/test_tts_kitten.das`, `test_kokoro_synthesis_metal` and `test_kokoro_oracle` in
-`tests/test_tts_kokoro.das`, and `test_pocket_codec_metal`, `test_pocket_codec_metal_served`,
-`test_pocket_frames_metal`, `test_pocket_frames_metal_served`, `test_pocket_frames_after_model_drop`,
-`test_pocket_synthesis_metal`, `test_pocket_small_models` and `test_pocket_small_refl` in
-`tests/test_tts_pocket.das`.
+The TTS seat tests are the `[test]`s `test_kitten_nano` and `test_kitten_mini` in
+`tests/test_tts_kitten.das`, `test_kokoro_82m` in `tests/test_tts_kokoro.das`, and `test_pocket_en`,
+`test_pocket_en_q8`, `test_pocket_en_kq`, `test_pocket_small_models` and `test_pocket_small_refl` in
+`tests/test_tts_pocket.das`. A run list names whole test files and `[test]`s; a `[test]`
+counts as run only with none of its cells filtered out.
 
 **A non-comment diff routed here that reaches no tower says so in the PR body.**
 
-**A cell any run list in this checklist names that skips for a missing model counts as not run.**
+**A cell of a `[test]` or file any run list in this checklist names that skips for a missing model
+counts as not run.**
 
 **A diff reaching the Metal tower runs the vision gates `tests/test_gemma4uv.das`,
-`tests/test_gemma4v.das`, `tests/test_gemma3v.das`, `test_qwen3v_omni` and `test_qwen3v_4b` (the
-`test_qwen3v_tier1_metal` and `test_qwen3v_tier1_metal_f16` cells) in `tests/test_qwen3v.das` and
-`test_qwen25v_tower` (its `test_qwen25v_tier1_gpu` cell) in `tests/test_qwen25v.das`; the audio gates
+`tests/test_gemma4v.das`, `tests/test_gemma3v.das`, `test_qwen3v_omni` (a `--category qwen3omni-30b`
+run, the category holding its decoder cell) and `test_qwen3v_4b` in
+`tests/test_qwen3v.das` and `test_qwen25v_tower` in `tests/test_qwen25v.das`; the audio gates
 `tests/test_whisper.das`, `tests/test_audio.das`, `tests/test_audio_embedder.das`, `tests/test_vad.das`,
 `test_rnnt_device_twin` in `tests/test_rnnt.das` and `test_gigaam_carriers_e2e_rnnt` and
-`test_gigaam_carrier_rnnt` (the `test_gigaam_device_decode_twin` cells) in `tests/test_gigaam.das`; the TTS
-seat cells; `test_metal_prefill_kernels` in `tests/test_metal_prefill_kernels.das`, the gate of
-the kernels the tower chains share; and the audio-tower run, `tests/test_model_image.das` with the
-`mtower` arm and no `--family` filter (`DASLLAMA_TEST_FAMILY` unset), with `metal_tower_stats()`'s
-encode count rising across the run.** A family filter skips other families' cells; a shared path
-or borrowed kernel reaches the ASR decoder with its file untouched.
+`test_gigaam_carrier_rnnt` in `tests/test_gigaam.das`; the TTS seat tests; `test_metal_prefill_kernels`
+in `tests/test_metal_prefill_kernels.das`, the gate of the kernels the tower chains share; and the
+audio-tower run, `tests/test_model_image.das` with the `mtower` arm and no `--family` filter
+(`DASLLAMA_TEST_FAMILY` unset), with `metal_tower_stats()`'s encode count rising across the run.** A
+family filter skips other families' cells; a shared path or borrowed kernel reaches the ASR decoder
+with its file untouched.
 
 **A diff reaching the Vulkan tower runs, on a build without the Metal module and with
-`DASLLAMA_CUDA` unset, `test_gemma4v_e2b` (the `test_gemma4v_tier1_vulkan` and `test_gemma4v_discrete_twin`
-cells) in `tests/test_gemma4v.das`, `test_gemma3v_tower` (the `test_gemma3v_discrete_twin` cell) in
-`tests/test_gemma3v.das`, `test_qwen3v_4b` (the `test_qwen3v_discrete_twin` cell) in `tests/test_qwen3v.das`,
-`test_qwen25v_tower` (the `test_qwen25v_discrete_twin` cell) in `tests/test_qwen25v.das`,
-`test_gemma4uv_embedder` (the `test_gemma4uv_tier1_vulkan` cell) in `tests/test_gemma4uv.das`,
-`test_whisper_tiny` and `test_whisper_turbo` (the `test_whisper_discrete_twin` cells) in
-`tests/test_whisper.das`, `test_qwen2audio_carrier`, `test_voxtral_carrier`, `test_omni3b_carrier` and
-`test_ultravox_v0_5_carrier` (the `test_encoder_blocks_vulkan` cells), `test_gemma4a_carrier_e2b` and
-`test_gemma4a_carrier_e4b` (the `test_gemma4a_discrete_twin` cells), `test_canary_carrier` (the
-`test_canary_discrete_twin` cell) and `test_qwen3a_carrier` (the `test_qwen3a_vulkan_front` cell) in
-`tests/test_audio.das`, `test_gigaam_carriers_e2e_rnnt` (the `test_gigaam_discrete_twin` cell) in
-`tests/test_gigaam.das`, `test_vad_silero` (the `test_vad_gpu_twin` cell) in `tests/test_vad.das`,
+`DASLLAMA_CUDA` unset, `test_gemma4v_e2b` in `tests/test_gemma4v.das`, `test_gemma3v_tower` in
+`tests/test_gemma3v.das`, `test_qwen3v_4b` in `tests/test_qwen3v.das`, `test_qwen25v_tower` in
+`tests/test_qwen25v.das`, `test_gemma4uv_embedder` in `tests/test_gemma4uv.das`, `test_whisper_tiny`
+and `test_whisper_turbo` in `tests/test_whisper.das`, `test_qwen2audio_carrier`,
+`test_voxtral_carrier`, `test_omni3b_carrier`, `test_ultravox_v0_5_carrier`,
+`test_gemma4a_carrier_e2b`, `test_gemma4a_carrier_e4b`, `test_canary_carrier` and
+`test_qwen3a_carrier` in `tests/test_audio.das`, `test_gigaam_carriers_e2e_rnnt` in
+`tests/test_gigaam.das`, `test_vad_silero` in `tests/test_vad.das`,
 `tests/test_vulkan_tower_kernels.das`, the TTS kernel gates `tests/test_vulkan_tts_kernels.das`,
 `tests/test_vulkan_tts_conv_kernels.das`, `tests/test_vulkan_tts_source_kernels.das` and
-`tests/test_vulkan_tts_pocket_kernels.das`, and the TTS seat cells; each named `test_*` cell sees
-the counter of every hook the cell covers rise.**
+`tests/test_vulkan_tts_pocket_kernels.das`, and the TTS seat tests; each cell of those `[test]`s that
+runs a stage on the tower sees the counter of every hook the cell covers rise.**
 
 **A diff reaching the CUDA tower runs, on a build carrying dasCUDA on a machine with a CUDA
-device and with `DASLLAMA_GPU=1` and `DASLLAMA_CUDA=1` set, `test_gemma4v_e2b` (the
-`test_gemma4v_tier1_vulkan`, `test_gemma4v_discrete_twin` and `test_vision_chat_e2b` cells) in
-`tests/test_gemma4v.das`, `test_gemma3v_tower` (the `test_gemma3v_discrete_twin` and `test_vision_chat_gemma3`
-cells) in `tests/test_gemma3v.das`, `test_qwen3v_4b` (the `test_qwen3v_discrete_twin` and
-`test_vision_chat_deepstack` cells) in `tests/test_qwen3v.das`, `test_qwen25v_tower` (the
-`test_qwen25v_discrete_twin` and `test_vision_chat_qwen25o` cells) in `tests/test_qwen25v.das`,
-`test_gemma4uv_embedder` (the `test_gemma4uv_tier1_vulkan` and `test_gemma4uv_device_twin` cells) in
-`tests/test_gemma4uv.das`, and the audio files `tests/test_audio.das`,
+device and with `DASLLAMA_GPU=1` and `DASLLAMA_CUDA=1` set, `test_gemma4v_e2b` in
+`tests/test_gemma4v.das`, `test_gemma3v_tower` in `tests/test_gemma3v.das`, `test_qwen3v_4b` in
+`tests/test_qwen3v.das`, `test_qwen25v_tower` in `tests/test_qwen25v.das`, `test_gemma4uv_embedder`
+in `tests/test_gemma4uv.das`, and the audio files `tests/test_audio.das`,
 `tests/test_audio_embedder.das`, `tests/test_whisper.das`, `tests/test_cuda_tower_whisper_chain.das`,
 `tests/test_gigaam.das`, `tests/test_rnnt.das` and `tests/test_vad.das`, and the CUDA tower kernel
-gates `tests/test_cuda_tower_front.das`,
-`tests/test_cuda_tower_blocks.das` and `tests/test_cuda_tower_asr.das`; each twin and device-twin
-cell of the run sees the counter of every hook the cell covers rise; the two tier-1 cells run against the encode dumps of the reference
-build (the third-party engine this module's figures compare with), and a tier-1 cell that skips
-for a missing dump counts as not run.**
+gates `tests/test_cuda_tower_front.das`, `tests/test_cuda_tower_blocks.das` and
+`tests/test_cuda_tower_asr.das`; each twin and device-twin cell of the run sees the counter of every
+hook the cell covers rise; the cells of `test_gemma4v_e2b` and `test_gemma4uv_embedder` that compare
+against the encode dumps of the reference build (the third-party engine this module's figures compare with) run, and one
+that skips for a missing dump counts as not run.**
 
 **A change to a Vulkan or CUDA ASR-decoder driver file, to a kernel class it dispatches, or to a
 function it calls that another file defines runs `test_whisper_vulkan_wdec_lifetime`
 (`tests/test_whisper.das`), `test_rnnt_device_twin` (`tests/test_rnnt.das`),
-`test_parakeet_carrier_v2` and `test_parakeet_carrier_v3` (the `test_parakeet_device_decode_twin` cells,
-`tests/test_audio.das`) and `test_gigaam_carriers_e2e_rnnt` and `test_gigaam_carrier_rnnt` (the
-`test_gigaam_device_decode_twin` cells, `tests/test_gigaam.das`) on a build without the Metal module, once
-for each driver file the change reaches: with `DASLLAMA_CUDA` unset for a Vulkan file, and on a build carrying dasCUDA, on a
-machine with a CUDA device, with `DASLLAMA_GPU=1` and `DASLLAMA_CUDA=1` set, for a CUDA file.**
+`test_parakeet_carrier_v2` and `test_parakeet_carrier_v3` (`tests/test_audio.das`) and
+`test_gigaam_carriers_e2e_rnnt` and `test_gigaam_carrier_rnnt` (`tests/test_gigaam.das`) on a build
+without the Metal module, once for each driver file the change reaches: with `DASLLAMA_CUDA` unset
+for a Vulkan file, and on a build carrying dasCUDA, on a machine with a CUDA device, with
+`DASLLAMA_GPU=1` and `DASLLAMA_CUDA=1` set, for a CUDA file.**
 Their CPU-vs-GPU cells are the decoder driver's parity instrument, and a shared function reaches
 the driver with no line of its own file touched.
 

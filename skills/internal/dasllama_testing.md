@@ -8,9 +8,10 @@ tests; `modules/dasLLAMA/tests/CLAUDE.md` says how the runner works, and
 
 - **Intermediate** - the default: a PR inside an arc, or one outside any arc. It tests
   what its change can realistically break, and nothing else.
-- **Final** - the PR that closes an arc. It runs everything, on the change of the arc's PRs
-  together - every file, by `run.das --rerun` or the full suite: a plain run reports an
-  unchanged file from its last pass and does not run it.
+- **Final** - the PR that closes an arc. It runs every suite, area, category and home the
+  arc's PRs together reach. Like every run it reports a file whose sources, models and
+  environment are unchanged from its last pass on that box and does not run it again; it
+  passes no `--rerun`.
 
 The PR body's Validation section opens with the kind: `Kind: intermediate PR of the <arc>
 arc.` (`Kind: intermediate PR, no arc.` outside one) or `Kind: final PR of the <arc> arc.`
@@ -46,7 +47,10 @@ and any measurement (see Profiling).
 
 A model category is owed by intent, never by a file list: the PR whose work touches a topic
 of a category's row runs `run.das -- --category <name>` and cites its `REPORT` line, and the
-body's Validation names the categories the work touched.
+body's Validation names the categories the work touched. No other run opens a category's
+files - the full suite's included - and every model past the large tier is a category's, so
+a large model's cells run in a category run or not at all
+(`modules/dasLLAMA/tests/REVIEW_RUNS.md`).
 
 The body's Validation carries the scope report: each RUN entry's command with that run's
 `REPORT` line, and each NOT RUN entry with its reason.

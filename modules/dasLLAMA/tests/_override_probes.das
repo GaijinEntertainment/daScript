@@ -12,3 +12,7 @@ require dasllama/dasllama_common
 //! a decode override's step that declines every call
 [unused_argument(t, s, token, pos)]
 def decode_declines(t : Model; var s : Session; token, pos : int64) : bool => false
+
+//! a prefill override that declines every call
+[unused_argument(t, s, npos, start_pos)]
+def prefill_declines(t : Model; var s : Session; npos, start_pos : int64) : bool => false

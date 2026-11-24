@@ -14,6 +14,10 @@ defines it.
 
 **A PR whose change reaches a test file or a cell runs `run.das -- --suite model-free`.**
 
+**A PR quotes each `run.das` run it cites by its whole `REPORT` line, the count of files not run
+included, and a cited run passes no `--rerun`.** A file the run reports from an earlier pass counts
+as run; `--rerun` runs every file and records no pass.
+
 **A final PR runs `run.das -- --changed --base <the commit its body names>` on a box holding the
 stocked artifacts of every file its `PLAN` line counts, never a whole-directory run instead.**
 
@@ -36,11 +40,15 @@ a capability no native box has and a wasm build does - a kernel only the wasm64 
 that cell in `run.das -- --suite wasm`, and cites that run's `REPORT` line in the PR body.** A
 native run skips such a cell, or runs its other path, on every box.
 
-**A final PR that adds a cell loading a model above the large tier (`MODEL_TIER_CEILING_BYTES`,
-`../dasllama/dasllama_gguf.das`), or whose change reaches such a cell, runs that cell under
-`DASLLAMA_PARITY_FULL=1` on a box with the model stocked - in a `run.das -- --changed` run whose
-`PLAN` holds the cell's file, or in a `run.das --suite` run listing the file, with `--arm` naming
-the cell where that suite takes `--arm` - and names the box in the PR body.** A run without
+**A PR whose change reaches a cell that loads a model file a category holds runs `run.das --
+--category <name>` for that category on a box holding its files, and cites that run's `REPORT` line
+and the box in the PR body; a final PR names each category it did not run, with the reason.** No
+other run opens a category's files, the full suite's included.
+
+**A final PR whose change reaches a cell that runs only in the full suite (`parity_full_mode`) runs
+that cell under `DASLLAMA_PARITY_FULL=1` - in a `run.das -- --changed` run whose `PLAN` holds the
+cell's file, or in a `run.das --suite` run listing the file, with `--arm` naming the cell where
+that suite takes `--arm` - and names the box in the PR body.** A run without
 `DASLLAMA_PARITY_FULL=1` skips every such cell and passes.
 
 **The `--changed` run a final PR cites carries no `--exclude` and no `--only`.** A trimmed run never

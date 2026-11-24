@@ -65,7 +65,8 @@ public require, and that directly requires none of `dasllama/dasllama_audio.das`
 and otherwise only dims, row counts and formats, and whose result is a bool or a count, with nothing
 read off a device, lands in the tower chain file (`dasllama/dasllama_tower_chains*.das`,
 `dasllama/dasllama_asr_dec_chains.das`) that directly requires the struct's declaring file, and in
-the declaring file when no chain file requires it.**
+the declaring file when no chain file requires it or the chain file is not among the requires of the
+`dasllama_metal*.das` file that calls the function.**
 
 **A Vulkan descriptor set's writer - a host-side ensure/set/encode chain whose pick reads driver
 state (`g_rd`, or an `RLayer` field read from a global or an argument), or a function that builds

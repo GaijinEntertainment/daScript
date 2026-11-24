@@ -3,6 +3,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 require dastest/testing_boost public
+require _daslang_argv   // daslang_argv, child_disable_flags: a spawned child's module flags
 require ../harness/class_mint_text.das
 require daslib/json
 require daslib/json_boost
@@ -24,7 +25,8 @@ def private run_probe(control_env : string) : string {
         ? (win ? "set \"DAS_TUNE_CONTROL=\"&& " : "env -u DAS_TUNE_CONTROL ")
         : (win ? "set \"DAS_TUNE_CONTROL={control_env}\"&& "
                : "DAS_TUNE_CONTROL=\"{control_env}\" "))
-    let cmd = "{envs}\"{get_das_exe()}\" \"modules/dasLLAMA/tests/_interrupt_probe.das\" -dasroot \"{get_das_root()}\" 2>&1"
+    let exe = "\"{get_das_exe()}\"{child_disable_flags()}"
+    let cmd = "{envs}{exe} \"modules/dasLLAMA/tests/_interrupt_probe.das\" -dasroot \"{get_das_root()}\" 2>&1"
     var out = ""
     unsafe(popen(cmd) $(f) {
         if (f != null) {
@@ -121,7 +123,8 @@ def private spawn_compile(flag, tag : string) : tuple<rc : int; out : string> {
     let argv <- get_command_line_arguments()
     let self = find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
     var out : string
-    let rc = run_and_capture([self, "-compile-only", path], out, 120.0)
+    var inscope compile <- daslang_argv(self, ["-compile-only", path])
+    let rc = run_and_capture(compile, out, 120.0)
     rmdir_rec_result(dir)
     return (rc = rc, out = out)
 }

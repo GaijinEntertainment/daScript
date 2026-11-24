@@ -69,6 +69,29 @@ def test_model_tier_skip_reason(t : T?) {
     t |> equal(model_tier_skip_reason(whole, true, 9ul), "", "a full run takes the large tier")
 }
 
+[test(description = "`gguf_file_int` reads an integer key off a GGUF's header alone, and answers its default for a missing key, a string-typed key, a file that is not a GGUF and a missing file")]
+def test_gguf_file_int(t : T?) {
+    var b : array<uint8>
+    gguf_header(b, 0ul, 2ul)
+    gguf_kv_str(b, "general.architecture", "llama")
+    gguf_kv_u32(b, "llama.context_length", 4096ul)
+    let path = path_join(test_temp_dir(), "dasllama_file_int.gguf")
+    let junk = path_join(test_temp_dir(), "dasllama_file_int_junk.gguf")
+    fopen(path, "wb") $(f) {
+        if (f != null) {
+            fwrite(f, b)
+        }
+    }
+    delete b
+    t |> success(stat(path).size > 0ul && fwrite(junk, "not a gguf header at all"), "the files are written")
+    t |> equal(gguf_file_int(path, "{gguf_file_arch(path)}.context_length", 0l), 4096l, "the u32 key, widened")
+    t |> equal(gguf_file_int(path, "llama.block_count", -1l), -1l, "a missing key answers the default")
+    t |> equal(gguf_file_int(path, "general.architecture", -2l), -2l, "a string key answers the default")
+    t |> equal(gguf_file_int(junk, "llama.context_length", -3l), -3l, "a file that is not a GGUF")
+    t |> equal(gguf_file_int(path_join(test_temp_dir(), "absent.gguf"), "llama.context_length", -4l), -4l,
+        "a missing file")
+}
+
 [test(description = "`gguf_shard_paths` appends the NextN head as the last shard: the same-named mtp sibling, else the stem Q8_0 head (also for a -UD trunk), or the override exclusively; a missing override attaches nothing and a head never recurses")]
 def test_shard_mtp_head_sidecar(t : T?) {
     var terr = ""

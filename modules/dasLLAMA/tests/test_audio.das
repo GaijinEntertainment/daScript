@@ -38,7 +38,7 @@ require _model_once   // with_model_once: a Parakeet carrier's one block in the 
 require _audio_asr_cells   // the ASR families' oracle and facade cells, run under their files' blocks
 require _audio_embedder_cells   // the audio carrier's gemma4a cells, run under the E2B mmproj's block
 require _cpu_gpu_model   // with_cpu_and_gpu_model: a chat decoder's one block in the area
-require _f32_tile_pin   // with_put_back: a mint's lane pin put back however its staging leaves
+require dasllama/dasllama_lever   // with_put_back: a mint's lane pin put back however its staging leaves
 require dasllama/dasllama_env   // parity_full_mode: the full suite's flag
 require _image_memory   // read_page_aligned: a host's own copy of an image
 require dasllama/dasllama_image   // with_image_destination: the cold mint's scratch path
@@ -474,6 +474,7 @@ def private ultravox_1b_tower(t : T?; tw : AudioTower) {
 
 [test(description = "mmproj-ultravox-1b-f32.gguf loads once: its exact lane's CPU image is a stack-8 projector with proj_dim 2048 read from mm2 and 187 tokens a chunk, and its CPU encode of a constant mel matches llama-mtmd-debug token 0, mean and max")]
 def test_ultravox_tower(t : T?) {
+    return if (!family_on(t, "ultravox"))
     with_model_once(t, "audio", "mmproj-ultravox-1b-f32.gguf", ["image_f32"], @@aud_stage_key, @@aud_stage, @@aud_form) $(var h; form) {
         aud_form_is(t, "mmproj-ultravox-1b-f32.gguf", form, h)
         tower_cell(t, "ultravox mmproj: stack-8 projector shapes + 187 tokens/chunk", h.tw, @@ultravox_1b_tower)
@@ -524,6 +525,7 @@ def private test_voxtral_tower(t : T?; tw : AudioTower) {
 // The voxtral mini mmproj's tower, one block.
 [test(description = "voxtral-mini-mmproj-f32.gguf loads its tower once a form. Its exact lane's CPU image is an avg-pooled stack-4 projector with proj_dim 3072 and 187 tokens a chunk, and its CPU encode of a constant mel matches llama-mtmd-debug token 0, mean and max. On Metal the tower runs every block and the projector tail on the q8 slab within the three-way bar on a synthetic mel, a poison exceeds it, and the f16 exact lane holds; on the discrete home every block and the projector tail run on the device within the three-way bar, a poison exceeds it, and the exact lane holds")]
 def test_voxtral_carrier(t : T?) {
+    return if (!family_on(t, "voxtral"))
     var inscope kept = AudTwinKept(family = "voxtral", kind = AudioProjKind.voxtral,
         metal_cell = "voxtral tower: the Metal chain vs the CPU encoder - pair pool, post-norm, stacked GELU MLP",
         discrete_cell = "voxtral tower: the discrete home's blocksvs the CPU q8 chain on the synthetic mel")
@@ -1763,7 +1765,8 @@ struct private Q3aKept {
     c_q8 : bool
     c_cq8 : bool
     win0 : Q3aWindowKept = Q3aWindowKept()
-    win1 : Q3aWindowKept = Q3aWindowKept(off = QWEN3A_WINDOW)
+    //! the tail window takes no poison: window 0's is the twin's control
+    win1 : Q3aWindowKept = Q3aWindowKept(off = QWEN3A_WINDOW, rows = TwinRows(poison_owed = false))
     exact : ExactFlavorKept
 }
 
@@ -1880,6 +1883,7 @@ def private test_qwen3a_vulkan_front(t : T?; var k : Q3aKept) {
 // device forms first, the first of them keeping jfk's two mels.
 [test(description = "mmproj-Qwen3-ASR-0.6B-bf16.gguf loads its qwen3a tower once a form. On the CPU f32 rail it loads its shape and encodes jfk window 0 to a first token within 5e-3 of llama-mtmd's embeddings on its first four values. On the discrete home it computes the jfk log-mel within 1e-3 of the CPU mel, then serves front, blocks and projector on windows 0 and the tail within the three-way bar, a poison and the exact lane holding theirs")]
 def test_qwen3a_carrier(t : T?) {
+    return if (!family_on(t, "qwen3a"))
     var inscope kept = Q3aKept()
     let twin_why = jfk_twin_why(TowerFamily.qwen3a)
     let discrete_on = empty(twin_why)
@@ -1997,6 +2001,7 @@ def private test_encoder_oracle(t : T?; tw : AudioTower) {
 // The Qwen2-Audio mmproj's tower, one block.
 [test(description = "qwen2audio-mmproj-f32.gguf loads its tower once a form. Its exact lane's CPU image has the pinned shape, and its CPU encode of an all-ones mel matches the llama-mtmd-debug token 0 values within 5e-3 and the mean and max of the output. On Metal the tower runs all 32 blocks and the projector tail on the q8 slab within the three-way bar on a synthetic mel, a poison exceeds it, and the f16 exact lane holds; on the discrete home all 32 blocks and the projector tail run on the device within the three-way bar, a poison exceeds it, and the exact lane holds")]
 def test_qwen2audio_carrier(t : T?) {
+    return if (!family_on(t, "qwen2a"))
     var inscope kept = AudTwinKept(family = "qwen2audio", kind = AudioProjKind.qwen2a, layers = 32l,
         metal_cell = "qwen2audio tower: the Metal chain vs the CPU encoder, 32 layers",
         discrete_cell = "qwen2audio tower: the discrete home's blocksvs the CPU q8 chain on the synthetic mel, 32 layers")
@@ -2019,6 +2024,7 @@ def test_qwen2audio_carrier(t : T?) {
 // The omni-3b f32 mmproj's audio tower, one block; its Metal twin reads the Qwen2.5-Omni 3B f16 mmproj's.
 [test(description = "mmproj-omni-3b-f32.gguf loads its audio tower once a form. Its exact lane's CPU image is a qwen2a tower (proj_dim 2048, 32 layers, 750 tokens a chunk) with the vision tensors skipped. On the discrete home every block and the projector tail run on the device within the three-way bar on a synthetic mel, a poison exceeds it, and the exact lane holds")]
 def test_omni3b_carrier(t : T?) {
+    return if (!family_on(t, "qwen25a"))
     var inscope kept = AudTwinKept(family = "omni-3b", kind = AudioProjKind.qwen2a,
         discrete_cell = "omni-3b audio tower: the discrete home's blocksvs the CPU q8 chain on the synthetic mel")
     var inscope forms <- ["image_f32"]
@@ -2040,6 +2046,7 @@ def test_omni3b_carrier(t : T?) {
 // The Qwen2.5-Omni 3B f16 mmproj's audio tower, one block; its discrete twin reads the omni-3b f32 mmproj's.
 [test(description = "mmproj-Qwen2.5-Omni-3B-f16.gguf loads its audio tower once a form. The audio carrier's load takes its audio side as the whisper-class tower beside its vision tensors at the probed width 2048, encodes finite rows a chunk (750) deterministically on a reused state without heap growth, another clip's rows apart. On Metal the tower runs every block and the projector tail on the q8 slab within the three-way bar on a synthetic mel, a poison exceeds it, and the f16 exact lane holds")]
 def test_qwen25_omni_carrier(t : T?) {
+    return if (!family_on(t, "qwen25a"))
     var inscope kept = AudTwinKept(family = "mmproj-Qwen2.5-Omni-3B-f16.gguf", kind = AudioProjKind.qwen2a,
         metal_cell = "omni-3b tower: the Metal chain vs the CPU encoder - pair pool, post-norm, one biased linear")
     var inscope forms <- ["image_emb"]
@@ -2061,6 +2068,7 @@ def test_qwen25_omni_carrier(t : T?) {
 // The ultravox v0_5 f16 mmproj's audio tower, one block.
 [test(description = "mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf loads its audio tower once a form. The audio carrier's load holds the whisper-class tower at the probed width 2048, encodes finite rows a chunk (187) deterministically on a reused state without heap growth, another clip's rows apart. On Metal the tower runs every block - post-norm, stacked rms - and the gated-MLP tail on the q8 slab within the three-way bar on a synthetic mel, a poison exceeds it, and the f16 exact lane holds; on the discrete home every block and the gated-MLP tail run on the device within the three-way bar, a poison exceeds it, and the exact lane holds")]
 def test_ultravox_v0_5_carrier(t : T?) {
+    return if (!family_on(t, "ultravox"))
     var inscope kept = AudTwinKept(family = "ultravox", kind = AudioProjKind.ultravox,
         metal_cell = "ultravox tower: the Metal chain vs the CPU encoder - post-norm, stacked rms, gated MLP",
         discrete_cell = "ultravox audio tower: the discrete home's blocksand the gated-MLP tail vs the CPU q8 chain on the synthetic mel")
@@ -2357,6 +2365,7 @@ def private canary_encoder_block(t : T?; var dec : Model?) {
     let twin_why = either_why(metal_why, discrete_why)
     let metal_on = empty(metal_why)
     let discrete_on = !metal_on && empty(discrete_why)
+    kept.twin.rows.poison_owed = !discrete_on   // the discrete twin's poison rides its regrow legs (`twin_regrow_held`)
     kept.tag = metal_on ? "canary metal jfk" : "canary jfk"
     kept.clips.tag = "canary"
     var walk_form = ""
@@ -2516,6 +2525,7 @@ def test_gemma4a_carrier_e2b(t : T?) {
     let discrete_why = audio_discrete_form_why(TowerFamily.gemma4a)
     let metal_on = empty(metal_why)
     let discrete_on = !metal_on && empty(discrete_why)
+    kept.twin.rows.poison_owed = !discrete_on   // the discrete twin's poison rides its regrow legs (`twin_regrow_held`)
     kept.tag = metal_on ? "gemma4a E2B metal jfk" : "gemma4a E2B jfk"
     kept.clips.tag = "gemma4a"
     g4a_twin_skips(t, "E2B", metal_why, discrete_why)
@@ -2562,6 +2572,7 @@ def test_gemma4a_carrier_e4b(t : T?) {
     let discrete_why = audio_discrete_form_why(TowerFamily.gemma4a)
     let metal_on = empty(metal_why)
     let discrete_on = !metal_on && empty(discrete_why)
+    kept.twin.rows.poison_owed = !discrete_on   // the discrete twin's poison rides its regrow legs (`twin_regrow_held`)
     kept.tag = metal_on ? "gemma4a E4B metal jfk" : "gemma4a E4B jfk"
     g4a_twin_skips(t, "E4B", metal_why, discrete_why)
     var inscope forms : array<string>

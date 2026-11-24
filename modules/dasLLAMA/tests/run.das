@@ -173,6 +173,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_math_activations.das",
                     "modules/dasLLAMA/tests/test_math_elementwise.das",
                     "modules/dasLLAMA/tests/test_matmul_batch.das",
+                    "modules/dasLLAMA/tests/test_model_forms.das",
                     "modules/dasLLAMA/tests/test_model_specs.das",
                     "modules/dasLLAMA/tests/test_mxfp4.das",
                     "modules/dasLLAMA/tests/test_par_indexed.das",
@@ -268,7 +269,6 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_kv_codec.das",
                     "modules/dasLLAMA/tests/test_kv_paged.das",
                     "modules/dasLLAMA/tests/test_kv_prefix.das",
-                    "modules/dasLLAMA/tests/test_metal_batched_row.das",
                     "modules/dasLLAMA/tests/test_metal_format_census.das",
                     "modules/dasLLAMA/tests/test_mtp_gemma_drafter.das",
                     "modules/dasLLAMA/tests/test_dflash_drafter.das",
@@ -365,7 +365,7 @@ def area_tests(area : string) : array<string> {
                     "test_box_ident.das", "test_box_profile.das", "test_compares.das", "test_dasllama_lint_contracts.das",
                     "test_env_registry.das",
                     "test_exchange_schema.das", "test_facade.das", "test_facade_docs.das", "test_fat_hook_umbrella.das", "test_fat_start.das", "test_gen_records_args.das",
-                    "test_model_specs.das", "test_pod_fleet.das", "test_run_suites.das", "test_run_summary.das", "test_served_bench.das",
+                    "test_model_forms.das", "test_model_specs.das", "test_pod_fleet.das", "test_run_suites.das", "test_run_summary.das", "test_served_bench.das",
                     "test_site_records.das", "test_sizing_helpers.das", "test_tok_seed.das",
                     "uncategorized__dasllama_internal_persistent_heap_stack_524288.das", "uncategorized_persistent_heap_stack_524288.das" ]
     } elif (area == "llm") {
@@ -374,9 +374,9 @@ def area_tests(area : string) : array<string> {
                     "test_forward.das", "test_fused_decode.das", "test_gguf_quant.das", "test_gguf_shards.das", "test_mlx_snapshot.das", "test_mlx_qwen4exp.das",
                     "test_gpu_home.das", "test_gpu_model_swap.das", "test_gpu_resident_gemma2_3.das", "test_gpu_resident_gemma4_dense.das", "test_gpu_resident_gemma4_moe.das", "test_gpu_resident_gemma4_26b_host.das", "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hc.das", "test_gpu_resident_hc_micro.das", "test_gpu_resident_hybrid.das", "test_gpu_resident_llama.das", "test_gpu_resident_qwen_moe.das", "test_gpu_resident_moe_formats.das", "test_gpu_resident_format_census.das", "test_gpu_resident_qwen2.das", "test_gpu_resident_regions_hybrid_formats.das", "test_gpu_resident_qwen3.das", "test_gpu_serving_declines.das", "test_gpu_tier.das", "test_groupn.das",
                     "test_embeddings.das", "test_jobque_tripwire.das", "test_kernel_backend.das", "test_kqformat.das", "test_kquant.das",
-                    "test_kv_codec.das", "test_kv_paged.das", "test_kv_prefix.das", "test_metal_batched_row.das", "test_metal_format_census.das", "test_math_activations.das",
+                    "test_kv_codec.das", "test_kv_paged.das", "test_kv_prefix.das", "test_metal_format_census.das", "test_math_activations.das",
                     "test_math_elementwise.das", "test_matmul_batch.das", "test_f32_batch_tile_perms.das",
-                    "test_mtp_gemma_drafter.das", "test_dflash_drafter.das", "test_mtp_sampled_walk.das", "test_mtp_snapshot.das", "test_mtp_accept_walks.das", "test_mxfp4.das",
+                    "test_mtp_gemma_drafter.das", "test_dflash_drafter.das", "test_mtp_sampled_walk.das", "test_mtp_snapshot.das", "test_mtp_accept_walks.das", "test_model_forms.das", "test_mxfp4.das",
                     "test_par_indexed.das", "test_parity.das", "test_parity_pregate.das",
                     "test_plane.das", "test_ple_check.das", "test_prefill.das", "test_prefill_cpu_kernels.das",
                     "test_q8q8_family.das", "test_quant.das", "test_qwen4exp.das",
@@ -490,7 +490,7 @@ let LLM_CORE_WITNESSES <- [
 let CUDA_WITNESSES = "test_cuda_kernels.das,test_gpu_resident_llama.das,test_gpu_resident_hybrid.das,test_gpu_resident_qwen3.das,test_gpu_resident_qwen2.das,test_gpu_resident_qwen_moe.das,test_mtp_gemma_drafter.das,test_cuda_mint.das,test_gpu_resident_gptoss.das,test_gpu_resident_gemma4_dense.das,test_gpu_resident_gemma4_moe.das"
 let KV_CODEC_WITNESSES = "test_kv_codec.das,test_vulkan_kv_codec_kernels.das,test_gpu_resident_llama.das,test_gpu_resident_qwen3.das,test_gpu_resident_qwen2.das"
 let TOKENIZER_WITNESSES = "test_tokenizer.das,test_tts_textnorm.das,test_chat.das,test_tok_seed.das"
-let METAL_WITNESSES = "test_metal_batched_row.das,test_metal_format_census.das,test_matmul_batch.das,uncategorized_no_aot_persistent_heap.das,uncategorized_persistent_heap_stack_524288.das"
+let METAL_WITNESSES = "test_gpu_resident_llama.das,test_gpu_resident_hybrid.das,test_gpu_resident_qwen_moe.das,test_gpu_resident_gemma4_e2b.das,test_metal_format_census.das,test_matmul_batch.das,uncategorized_no_aot_persistent_heap.das,uncategorized_persistent_heap_stack_524288.das"
 
 //! engine module stem -> the llm files a change to it reaches (base names, comma-separated) in place of the core
 //! witnesses: a leaf module's own carriers and kernel cells. A module with no row here and an llm reach in
@@ -775,12 +775,12 @@ def only_files(files : array<string>; only : string) : array<string> {
 // printing one — crash, kill, or compile error). A final line with no trailing newline counts:
 // a killed run's last bytes are exactly the ones worth reporting.
 // Non-private: test_run_summary.das gates it.
-def log_summary(log_path : string) : string => last_line_with(fread(log_path), " tests, ").line
+def log_summary(log_path : string) : string => line_with(fread(log_path), " tests, ", last = true).line
 
 //! a child's summary line by its exit code and log text: none where the kill switch ended it - the switch writes no
 //! summary, so a line there carrying the marker is a cell's own text. Non-private: test_run_suites.das gates it
 def child_summary(rc : int; log_text : string) : string
-    => rc == KILL_SWITCH_EXIT_CODE ? "" : last_line_with(log_text, " tests, ").line
+    => rc == KILL_SWITCH_EXIT_CODE ? "" : line_with(log_text, " tests, ", last = true).line
 
 //! the DONE line's account of a child: its summary, else the kill switch's line where the switch ended it, else that
 //! it died early. Non-private: test_run_suites.das gates it
@@ -793,13 +793,15 @@ def child_verdict(rc : int; summary, log_text : string) : string {
     return "no dastest summary - the run died early (read the log)"
 }
 
-//! the last non-empty line of `text` that holds `needle`, and where in it the needle starts ("" and -1 where none does)
-def private last_line_with(text, needle : string) : tuple<line : string; at : int> {
+//! the non-empty line of `text` that holds `needle` - its last such line where `last`, else its first - and where in it
+//! the needle starts ("" and -1 where none does)
+def private line_with(text, needle : string; last : bool) : tuple<line : string; at : int> {
     var found = (line = "", at = -1)
     for (line in non_empty_lines(text)) {
         let at = find(line, needle)
         if (at >= 0) {
             found = (line = clone_string(line), at = at)
+            break if (!last)
         }
     }
     return found
@@ -851,6 +853,17 @@ def child_run_env(cfg : RunArgs; arm : string) : string {
     return join([for (pair in pairs); " --run-env \"{pair}\""], "")
 }
 
+//! the tune manifest a run's children read: the caller's `caller`, else the per-box file `box`
+//! where `box_valid`, else none
+def box_manifest_pick(caller, box : string; box_valid : bool) : string
+    => !empty(caller) ? caller : (box_valid ? box : "")
+
+//! the tune manifest this run's children read (`box_manifest_pick` on the caller's DAS_TUNE_MANIFEST and the box's file)
+def private children_manifest() : string {
+    let box = box_tune_manifest(g_env_prof.box)
+    return box_manifest_pick(g_env_core.tune_manifest, box, stat(box).is_valid)
+}
+
 // CPU_PREFILL: the suites' CPU truth halves and parity controls prefill on the CPU by intent.
 // HAZARD_STRICT: the scheduling-unification ratchet's runtime half — an undeclared dispatch
 // on an armed hazard oracle PANICS here, so declaration gaps can never ship quietly.
@@ -899,13 +912,10 @@ def child_envs(cfg : RunArgs; win : bool; media : bool = false; scratch : string
     // (observed 2026-07-30: fam-gemma4 freed 34 GB of bench flavors). A caller-set
     // DAS_TUNE_MANIFEST inherits; a box without a minted manifest keeps sidecar behavior. The
     // --no-tune arm pins nothing: an explicit manifest disables the policy rail it runs on.
-    if (empty(g_env_core.tune_manifest) && !cfg.no_tune) {
-        let manifest = box_tune_manifest(g_env_prof.box)
-        var mst : FStat
-        if (stat(manifest, mst)) {
-            envs = (win ? "{envs}set \"DAS_TUNE_MANIFEST={manifest}\"&& "
-                : "DAS_TUNE_MANIFEST='{manifest}' {envs}")
-        }
+    let manifest = children_manifest()
+    if (empty(g_env_core.tune_manifest) && !cfg.no_tune && !empty(manifest)) {
+        envs = (win ? "{envs}set \"DAS_TUNE_MANIFEST={manifest}\"&& "
+            : "DAS_TUNE_MANIFEST='{manifest}' {envs}")
     }
     return forced_env(envs, forced_tune_file(cfg), win)
 }
@@ -928,7 +938,7 @@ def forced_tune_file(cfg : RunArgs) : string
 //! `DAS_TUNE_MANIFEST`, `box_manifest` the box's own. Non-private: test_run_suites.das pins each answer
 def forced_tune_file_of(no_tune : bool; caller_forced, manifest, box_manifest : string) : string {
     return "" if (no_tune || !empty(caller_forced))
-    let file = empty(manifest) ? box_manifest : manifest
+    let file = box_manifest_pick(manifest, box_manifest, stat(box_manifest).is_valid)
     return stat(file).is_valid ? file : ""
 }
 
@@ -1111,8 +1121,17 @@ def wall_seconds_in(cfg : RunArgs; full : bool) : int
 //! the line a child's kill switch printed as it ended the process ("" where the log holds none). Non-private:
 //! test_run_suites.das gates it
 def log_wall_line(log_text : string) : string {
-    let said = last_line_with(log_text, "kill switch: ")
+    let said = line_with(log_text, "kill switch: ", last = true)
     return said.at < 0 ? "" : slice(said.line, said.at)
+}
+
+//! the first compiler error a child's log holds, from its `error[` and cut at 240 characters ("" where it holds none):
+//! what a batch whose root failed stopped on. Non-private: test_run_suites.das gates it
+def log_error_line(log_text : string) : string {
+    let said = line_with(log_text, "error[", last = false)
+    return "" if (said.at < 0)
+    let line = slice(said.line, said.at)
+    return length(line) > 240 ? slice(line, 0, 240) : line
 }
 
 //! a child's dastest timeout in seconds: the full gate, the stocked gate and --changed (the stocked files a change
@@ -1133,7 +1152,7 @@ def check_suite_args(cfg : RunArgs) : int {
             return 2
         }
     } elif (cfg.full == !empty(cfg.arm)) {   // both set, or neither
-        to_log(LOG_ERROR, "pass --arm <filter> scoped to what the change can affect (--full is disabled while the Metal build-out is in progress; large tier = DASLLAMA_PARITY_FULL=1 with --arm)\n")
+        to_log(LOG_ERROR, "pass --arm <filter> scoped to what the change can affect (--full is disabled while the Metal build-out is in progress; a large model's cells = --category <name>)\n")
         return 2
     }
     if (cfg.full) {
@@ -1143,18 +1162,31 @@ def check_suite_args(cfg : RunArgs) : int {
     return 0
 }
 
+//! the model spec table: a test file that walks it (`model_specs()` in its text) reaches every
+//! row's file
+let SPEC_TABLE = "modules/dasLLAMA/performance/model_specs.das"
+
+//! whether a model of `models` is a file of one of the categories `named` lists; a model of no
+//! category is no category's, whatever `named` holds
+def private has_category_model(models : array<string>; named : string) : bool {
+    for (model in models) {
+        let cat = model_category(model)
+        return true if (!empty(cat) && list_names(named, cat))
+    }
+    return false
+}
+
 //! the test files of this folder that name a model file of one of the categories `named` lists - by its name or by its path
-//! under the models directory
+//! under the models directory, or through a row of the spec table they walk (`SPEC_TABLE`)
 def category_files(named : string) : array<string> {
     var files : array<string>
+    let spec_named = has_category_model(model_paths(fread(SPEC_TABLE)), named)
     dir(TESTS_DIR) $(name) {
         return if (!(name |> ends_with(".das")) || !(name |> starts_with("test_") || name |> starts_with("uncategorized")))
-        for (model in model_paths(fread("{TESTS_DIR}/{name}"))) {
-            let cat = model_category(model)
-            if (!empty(cat) && list_names(named, cat)) {   //! a model of no category is no category's, whatever `named` holds
-                files |> push("{TESTS_DIR}/{name}")
-                break
-            }
+        let text = fread("{TESTS_DIR}/{name}")
+        let walks_specs = find(text, "model_specs()") >= 0
+        if (has_category_model(model_paths(text), named) || (spec_named && walks_specs)) {
+            files |> push("{TESTS_DIR}/{name}")
         }
     }
     sort(files)
@@ -1248,11 +1280,9 @@ def pass_stamp(dir : string; opened : array<string>; cpu, env : string) : string
     return "{hash(text)}"
 }
 
-//! whether a run reports a file from its pass on record: every run but a `--rerun` and the full suite's (`full_suite`)
-def skips_cached_in(cfg : RunArgs; full_suite : bool) : bool => !cfg.rerun && !full_suite
-
-//! `skips_cached_in` for this run, the full suite read off its environment
-def skips_cached(cfg : RunArgs) : bool => skips_cached_in(cfg, parity_full_mode())
+//! whether a run reports a file from its pass on record, and records the passes it makes: every run but a `--rerun`,
+//! the full suite's included - its passes are keyed apart by the knob that asks for it (`pass_stamp`)
+def skips_cached(cfg : RunArgs) : bool => !cfg.rerun
 
 //! the dastest flags that report the child over `chunk` from its passes on record (`skips_cached`): the flag and the
 //! child's `pass_stamp`, over `envs` - the prefix its command line carries - and the knobs the environment sets
@@ -1513,11 +1543,11 @@ def private log_missing_models(files : array<string>) {
 
 //! one dastest child per file, `--nreps` times. On an area run the image suite's child gets the
 //! areas' arms and every other child none; a suite run passes --arm through to every child
-//! A child that ended red, by its log - true where it ends the run, no later file and no retry: a test past the wall, or
-//! under a wall (`wall` > 0) a batch without every file's verdict - its root failed, or it died midway; `--batch 1` is
-//! the run that finds the file. Else a lone file is the red, and a batch's verdicts are counted (`count_batch`)
-def private red_child(cfg : RunArgs; wall : int; tag : string; chunk : array<string>; log_path : string; rc, at : int;
-                      var tally : RunTally; var retry : array<string>) : bool {
+//! A child that ended red, by its log - true where it ends the run, no later file started and none run again: a test
+//! past the wall, or a batch without every file's verdict - its root failed, or it died midway; `--batch 1` is the run
+//! that finds the file. Else a lone file is the red, and a batch's verdicts are counted (`count_batch`)
+def private red_child(cfg : RunArgs; tag : string; chunk : array<string>; log_path : string; rc, at : int;
+                      var tally : RunTally) : bool {
     if (rc == KILL_SWITCH_EXIT_CODE) {
         let said = log_wall_line(fread(log_path))
         stop_run(cfg, tag, "WALL", empty(said) ? "a child ended with the kill switch's exit code {rc}" : said, at, tally)
@@ -1531,41 +1561,29 @@ def private red_child(cfg : RunArgs; wall : int; tag : string; chunk : array<str
     }
     let verdicts <- log_verdicts(log_path)
     let have = length(verdicts.passed) + length(verdicts.failed)
-    if (wall > 0 && (verdicts.root_failed || have != n)) {
+    if (verdicts.root_failed || have != n) {
         tally.failures += length(verdicts.failed)
         tally.failed_tags |> push_from(verdicts.failed)
-        let got = verdicts.root_failed ? "its root failed, no file ran" : "{have} of {n} files have a verdict"
+        let err = log_error_line(fread(log_path))
+        let said = empty(err) ? "" : ": {err}"
+        let got = verdicts.root_failed ? "its root failed, no file ran{said}" : "{have} of {n} files have a verdict"
         stop_run(cfg, tag, "LOST", "the batch ended with exit {rc}: {got} (read its log)", at, tally)
         return true
     }
-    count_batch(tag, chunk, verdicts, rc, tally, retry)
+    count_batch(tag, n, verdicts, rc, tally)
     return false
 }
 
-//! a red batch's verdicts: each file's own counts, the files that have none rerun alone (`retry`), and - every file
-//! passed, the exit still red - the batch is its own red
-def private count_batch(tag : string; chunk : array<string>; verdicts : tuple<passed : array<string>; failed : array<string>; root_failed : bool>;
-                        rc : int; var tally : RunTally; var retry : array<string>) {
-    let n = length(chunk)
-    if (verdicts.root_failed) {
-        // the root failed to compile or to simulate, or refused the list: no file ran, every file reruns alone
-        to_log(LOG_WARNING, "RETRY {tag}: the batch's root failed - its {n} files run one child each\n")
-        retry |> push_from(chunk)
-        return
-    }
+//! a red batch's verdicts, every file of its `n` having one: each failed file's own count, and - every file passed, the
+//! exit still red - the batch is its own red
+def private count_batch(tag : string; n : int; verdicts : tuple<passed : array<string>; failed : array<string>; root_failed : bool>;
+                        rc : int; var tally : RunTally) {
     tally.failures += length(verdicts.failed)
     tally.failed_tags |> push_from(verdicts.failed)
     if (empty(verdicts.failed) && length(verdicts.passed) == n) {
         // every file passed and the child still exited red - a crash at its shutdown: the batch's own red
         tally.failures++
         tally.failed_tags |> push("{tag} (exit {rc} after every verdict)")
-    }
-    for (f in chunk) {
-        let b = base_name(f)
-        if (find_index(verdicts.passed, b) < 0 && find_index(verdicts.failed, b) < 0) {
-            to_log(LOG_WARNING, "RETRY {b}: the batch {tag} ended without its verdict - it runs alone\n")
-            retry |> push(f)
-        }
     }
 }
 
@@ -1672,31 +1690,35 @@ def media_run(files : array<string>) : bool {
     return !empty(files)
 }
 
-def private run_files(cfg : RunArgs; files : array<string>; image_arms : string; area_run : bool) : RunTally {
+//! `envs` the children's environment (`child_envs` with the scratch folder), `media` whether `files` are a media run alone
+def private run_files(cfg : RunArgs; files : array<string>; image_arms : string; area_run : bool; envs : string;
+                      media : bool) : RunTally {
     let tmp = temp_dir()
     let win = get_platform_name() == "windows"
-    let media = media_run(files)
-    let envs = child_envs(cfg, win, media, g_env_test.scratch_dir)
     let stamp_envs = child_envs(cfg, win, media)   //! the scratch folder is where a child writes, no part of what it proves
     if (!empty(g_env_test.scratch_dir)) {
         mkdir_rec(g_env_test.scratch_dir)
         to_log(LOG_WARNING, "SCRATCH {g_env_test.scratch_dir} (DASLLAMA_SCRATCH_DIR): the children write their temp files there\n")
     }
+    let modules_line = disabled_modules_line(child_disabled_modules())
+    if (!empty(modules_line)) {
+        to_log(LOG_WARNING, modules_line)
+    }
     let tmo = child_timeout(cfg)
     let wall = wall_seconds(cfg)
     let wall_flag = wall > 0 ? " --test-wall {wall}" : ""
     let reps = max(cfg.nreps, 1)
-    let das_exe = empty(cfg.das) ? get_command_line_arguments()[0] : cfg.das
+    let exe = empty(cfg.das) ? das_exe() : cfg.das
     mkdir(dir_name(MODULE_CACHE))
-    let cache_dir = child_cache_dir(das_exe, empty(cfg.das))
+    let cache_dir = child_cache_dir(exe, empty(cfg.das))
     let cache_flag = empty(cache_dir) ? "" : " --module-cache-dir {cache_dir}"
+    let disabled = child_disable_flags()   // a GPU home's run compiles only its own module
     to_log(LOG_INFO, empty(cache_dir) ? "CACHE none - the binary could not be stat'd, every child parses the engine\n" : "CACHE {cache_dir}\n")
     let models = models_dir_resolved()
     let kept_images <- images_at_start(cfg, models)
     var tally : RunTally
     for (rep in range(reps)) {
         let rep_tag = reps > 1 ? " rep {rep + 1}/{reps}" : ""
-        var inscope retry : array<string>
         var inscope chunks <- run_chunks(cfg, files, area_run)
         for (chunk, at in chunks, count()) {
             let n = length(chunk)
@@ -1711,7 +1733,7 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
             return <- tally if (stopped_by_marker(cfg, tag, tally) || await_child_models(cfg, models, chunk, seat, tag, at, tally))
             let run_env = child_run_env(cfg, (area_run && tag == "test_model_image.das") ? image_arms : cfg.arm)
             let skip = skip_flags(cfg, models, stamp_envs, chunk)
-            let cmd = "{envs}\"{das_exe}\" -jit -module-cache {MODULE_CACHE} dastest/dastest.das --{file_args} --timeout {tmo * n}{wall_flag}{cache_flag}{skip}{run_env} > \"{log_path}\" 2>&1"
+            let cmd = "{envs}\"{exe}\"{disabled} -jit -module-cache {MODULE_CACHE} dastest/dastest.das --{file_args} --timeout {tmo * n}{wall_flag}{cache_flag}{skip}{run_env} > \"{log_path}\" 2>&1"
             to_log(LOG_INFO, "START {tag}{rep_tag}: {seat}: {cmd}\n")
             let t0 = ref_time_ticks()
             let rc = unsafe(popen(cmd) $(f) {
@@ -1726,15 +1748,7 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
             tally.cached += cached_files(log_text)
             reap_after(cfg, models, kept_images, tag)
             continue if (rc == 0)
-            return <- tally if (red_child(cfg, wall, tag, chunk, log_path, rc, at, tally, retry))
-        }
-        if (!empty(retry)) {
-            var single := cfg
-            single.batch = 1
-            single.nreps = 1
-            single.skip = 0
-            tally += run_files(single, retry, image_arms, area_run)
-            return <- tally if (!empty(tally.walled))
+            return <- tally if (red_child(cfg, tag, chunk, log_path, rc, at, tally))
         }
     }
     return <- tally
@@ -1816,7 +1830,7 @@ def private wasm_step(tag, cmd, log_path : string) : int {
 //! --suite wasm: `files` built as one wasm64 release by `daspkg release wasm` and run under node; the
 //! package and the release tree are removed, the two logs stay
 def private run_wasm(cfg : RunArgs; files : array<string>) : RunTally {
-    let das_exe = empty(cfg.das) ? get_command_line_arguments()[0] : cfg.das
+    let exe = empty(cfg.das) ? das_exe() : cfg.das
     let stamp = ref_time_ticks()
     let work = path_join(temp_dir(), "dasllama_wasm_tests_{stamp}")
     let pkg = path_join(work, "package")
@@ -1830,7 +1844,7 @@ def private run_wasm(cfg : RunArgs; files : array<string>) : RunTally {
         fwrite(path_join(pkg, name), text)
     }
     var tally : RunTally
-    let build = "\"{das_exe}\" utils/daspkg/main.das -- release wasm --root \"{pkg}\" --out \"{out}\""
+    let build = "\"{exe}\" utils/daspkg/main.das -- release wasm --root \"{pkg}\" --out \"{out}\""
     if (wasm_step("wasm release", build, build_log) != 0) {
         to_log(LOG_ERROR, "the wasm release did not build: it takes emcc on PATH and the wasm64 archives (`daspkg build --wasm`)\n")
         tally.failures = 1
@@ -1851,6 +1865,64 @@ def private run_wasm(cfg : RunArgs; files : array<string>) : RunTally {
     return <- tally
 }
 
+//! the per-box runtime file's program (`dasllama_box_runtime_file`): it races the Metal crowns where the file is not
+//! valid for this tree's kernels, and says where the file is
+let BOX_RUNTIME_ROOT = "modules/dasLLAMA/tests/_box_runtime_root.das"
+//! that program's compile record
+let private BOX_RUNTIME_CACHE = ".cache/daslang/module_cache/box_runtime.dascache"
+
+//! Whether a run's children may race the Metal crowns at their first Metal load, inside a test's wall: a build with the
+//! Metal module, children reading no tune manifest (`manifest`, the caller's or the box's), a kernel policy that keeps
+//! the crowns (not `--no-tune`'s reference, nor `fallback`). Non-private: test_run_suites.das pins each answer
+def box_race_possible(metal_build, no_tune : bool; manifest, policy : string) : bool
+    => metal_build && !no_tune && empty(manifest) && tune_policy_keeps_crowns(policy)
+
+//! whether the runner makes the per-box runtime file ready ahead of its first child: a run on its
+//! own binary (no `--das` stand-in) whose children may race the crowns (`box_race_possible`).
+//! Non-private: test_run_suites.das pins it
+def box_runtime_owed(das_standin : string; metal_build, no_tune : bool; manifest, policy : string) : bool
+    => empty(das_standin) && box_race_possible(metal_build, no_tune, manifest, policy)
+
+//! the BOXRACE line the per-box runtime program's exit `rc` and output `out` make, `secs` its
+//! seconds: `warn` where it failed - a nonzero exit, or no file named - the race's line where it
+//! raced, no line where a valid file held. Non-private: test_run_suites.das pins each line
+def box_race_line(rc : int; out : string; secs : double) : tuple<warn : bool; text : string> {
+    if (rc != 0 || find(out, "BOX_FILE=[]") >= 0) {
+        return (warn = true,
+            text = "BOXRACE failed (exit {rc}): the children race themselves\n{out}\n")
+    } elif (find(out, "metal crowns raced") >= 0) {
+        return (warn = false,
+            text = "BOXRACE Metal crowns raced for the box file, no wall ({secs}s)\n")
+    }
+    return (warn = false, text = "")
+}
+
+//! the line that announces the modules every child of the run leaves out (`names`,
+//! DASLLAMA_DISABLE_MODULES); none for an empty list. Non-private: test_run_suites.das pins it
+def disabled_modules_line(names : string) : string {
+    return "" if (empty(names))
+    return "MODULES {names} (DASLLAMA_DISABLE_MODULES): every child leaves these modules out\n"
+}
+
+//! the per-box runtime file made ready ahead of the first child, outside any wall, where the children may race the Metal
+//! crowns (`box_runtime_owed`): its program (`BOX_RUNTIME_ROOT`) under the children's environment `envs` races only where no
+//! file valid for this tree's kernels exists, logs `box_race_line`'s line, and a failure of its own stops no child
+def private box_runtime_ready(cfg : RunArgs; envs : string) {
+    let metal = typeinfo builtin_module_exists(das_metal)
+    return if (!box_runtime_owed(cfg.das, metal, cfg.no_tune, children_manifest(), g_env_tune.tune_policy))
+    let tail = "-jit -module-cache {BOX_RUNTIME_CACHE} {BOX_RUNTIME_ROOT} 2>&1"
+    let cmd = "{envs}\"{das_exe()}\"{child_disable_flags()} {tail}"
+    let t0 = ref_time_ticks()
+    var out = ""
+    let rc = unsafe(popen(cmd) $(f) {
+        out = fread(f)
+    })
+    let line = box_race_line(rc, out, double(get_time_nsec(t0)) / 1000000000.0lf)
+    if (!empty(line.text)) {
+        to_log(line.warn ? LOG_WARNING : LOG_INFO, line.text)
+    }
+}
+
 //! the run's executor: the wasm suite's one release, else the dastest children
 def private run_plan(cfg : RunArgs; files : array<string>; image_arms : string; area_run : bool) : RunTally {
     return <- run_wasm(cfg, files) if (cfg.suite == "wasm" && !area_run)
@@ -1860,7 +1932,10 @@ def private run_plan(cfg : RunArgs; files : array<string>; image_arms : string; 
         tally.failed_tags |> push("the test child's exe")
         return <- tally
     }
-    return <- run_files(cfg, files, image_arms, area_run)
+    let media = media_run(files)
+    let envs = child_envs(cfg, get_platform_name() == "windows", media, g_env_test.scratch_dir)
+    box_runtime_ready(cfg, envs)
+    return <- run_files(cfg, files, image_arms, area_run, envs, media)
 }
 
 def operator +=(var a : RunTally; b : RunTally) {

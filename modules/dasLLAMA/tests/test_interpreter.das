@@ -10,6 +10,7 @@ require strings
 require math
 require _model_tier
 require _example_rail
+require _daslang_argv   // daslang_argv: the example leaves out the modules this run leaves out
 require ../../../examples/dasLLAMA/interpreter/turn.das
 
 // Interpreter (examples/dasLLAMA/interpreter): the listen's pure side (turn.das) is tested directly - the utterance's
@@ -179,8 +180,9 @@ def test_smoke_hears_translates_and_speaks(t : T?) {
         return if (!ready(t))
         var out = ""
         let root = get_das_root()
-        let argv <- [example_daslang(), "-jit", "-dasroot", root, "{root}/examples/dasLLAMA/interpreter/main.das", "--",
-                     "--models", models_dir(), "--smoke", "--clip", "{root}/examples/dasLLAMA/interpreter/models.json"]
+        let argv <- daslang_argv(example_daslang(), ["-jit", "-dasroot", root,
+            "{root}/examples/dasLLAMA/interpreter/main.das", "--", "--models", models_dir(), "--smoke", "--clip",
+            "{root}/examples/dasLLAMA/interpreter/models.json"])
         let rc = run_and_capture(argv, out, 240.0)   // the cap covers a cold JIT of the whole facade (ASR, translation, TTS), past a minute on a slow box
         t |> success(rc != 0, "a clip that does not decode is a refusal, not a run")
         t |> success(find(out, "did not decode") >= 0, "and it says so by name:\n{example_tail(out)}")

@@ -80,6 +80,15 @@ struct ModelForm {
     //! a device form whose last cell drops the device model
     //! (`device_drop_cell`): the driver held armed up to that cell
     drops_device : bool
+    //! a form on the Metal home (`metal_form`), on a das_metal build: no
+    //! CPU load (`on_gpu` holds) and no whole-model driver's
+    on_metal : bool
+    //! a Metal form loads the file's served image (`load_model_cached`),
+    //! else its blob twin (`blob_twin`)
+    metal_image : bool
+    //! a Metal form loads and runs under `MetalMode.required`, else
+    //! `when_available`; a served image always does
+    metal_required : bool
 }
 
 //! a device form on the environment's mirror codec
@@ -96,6 +105,33 @@ def device_form(ring : bool = true; gather : bool = true; regions : int64 = 0l; 
         mtp_depth = mtp_depth, head_off = head_off, mmq_off = mmq_off, host_ctx = host_ctx,
         fuse_bisect = fuse_bisect, perop = perop, pool_slots = pool_slots, strict_ctx = strict_ctx,
         cuda_window_fault = cuda_window_fault, mtp_head = mtp_head, drops_device = drops_device)
+
+//! a form on the Metal home: the file's blob twin (`blob_twin`: the q8 load turned into the blob the Metal drivers serve)
+//! under `MetalMode.when_available` - `required` where asked - or, `image`, its served image (`load_model_cached` under
+//! `MetalMode.required`, the metal-blob `.dlim` minted beside the file where none stands); the context cut to `ctx` (0 the
+//! call's). The mode holds through the form's cells
+def metal_form(image : bool = false; required : bool = false; ctx : int64 = 0l) : ModelForm =>
+    ModelForm(on_gpu = true, on_metal = true, metal_image = image, metal_required = image || required,
+        kv = KVDtype.f16, ring = true, gather = true, quant = QuantMode.q8, ctx = ctx,
+        pf_stream = true)
+
+//! the Metal mode a Metal form loads and runs under
+def metal_form_mode(f : ModelForm) : MetalMode =>
+    f.metal_required ? MetalMode.required : MetalMode.when_available
+
+//! what a block's Metal pass does with an asked form
+enum MetalPass {
+    other   //! a form of another home: passed by
+    skip    //! a Metal form on a build that lacks the home: a skipped cell of its own
+    load    //! a Metal form the build serves: its load and its cells
+}
+
+//! what a block's Metal pass does with the asked form `f`, `lacks` what the build lacks for the Metal home (`metal_build_why`,
+//! "" where it serves)
+def metal_pass(f : ModelForm; lacks : string) : MetalPass {
+    return MetalPass.other if (!f.on_metal)
+    return empty(lacks) ? MetalPass.load : MetalPass.skip
+}
 
 //! the form `f` with its mirror asking the codec `kv` (`with_gpu_kv_dtype`): `device_form(...) |> asking(kv)`
 def asking(f : ModelForm; kv : KVDtype) : ModelForm {
@@ -151,9 +187,12 @@ def codec_pass(load : ModelForm; kv : KVDtype; first : bool) : ModelForm {
     return f
 }
 
+//! a form of the Vulkan or CUDA device home: on the GPU and not on Metal
+def on_device_home(f : ModelForm) : bool => f.on_gpu && !f.on_metal
+
 //! the driver's default form on the device: the environment's codec, the rings, the token gather, the load's own regions,
 //! context and planes
-def device_default(f : ModelForm) : bool => (f.on_gpu && !f.kv_asked && f.ring && f.gather && f.regions == 0l && !f.host && !f.split_forms
+def device_default(f : ModelForm) : bool => (on_device_home(f) && !f.kv_asked && f.ring && f.gather && f.regions == 0l && !f.host && !f.split_forms
     && f.ctx == 0l && f.mtp_depth == 0l && !f.head_off && !f.mmq_off && f.host_ctx == 0l && f.fuse_bisect < 0l
     && !f.perop && f.pool_slots == 0l && !f.strict_ctx && !f.cuda_window_fault && empty(f.mtp_head))
 
@@ -213,7 +252,7 @@ def form_owed(f : ModelForm; mark : FormMark; device_ran : bool) : FormOwed {
 //! rail is on: every expert on the device (a lane bakes its
 //! host-layers split and its pool), no host planes, and no fault seat
 //! (the seat's load streams the file)
-def is_lane_form(f : ModelForm) : bool => (f.on_gpu && !f.host && f.host_layers == 0l && !f.perop && f.pool_slots == 0l
+def is_lane_form(f : ModelForm) : bool => (on_device_home(f) && !f.host && f.host_layers == 0l && !f.perop && f.pool_slots == 0l
     && !f.cuda_window_fault && empty(f.mtp_head))
 
 //! a CPU form as its messages name it
@@ -226,9 +265,18 @@ def private cpu_form_name(f : ModelForm) : string {
     return "the CPU form ({f.kv} sessions{loader})"
 }
 
+//! a Metal form as its messages name it
+def private metal_form_name(f : ModelForm) : string =>
+    "the Metal form (the {f.metal_image ? "served image" : "blob twin"}, {metal_form_mode(f)})"
+
 //! the form as its messages name it
 def form_name(f : ModelForm) : string {
     return cpu_form_name(f) if (!f.on_gpu)
+    return f.on_metal ? metal_form_name(f) : device_form_name(f)
+}
+
+//! a device form as its messages name it
+def private device_form_name(f : ModelForm) : string {
     let regions = f.regions > 0l ? ", {f.regions} regions" : ""
     let planes = f.host ? ", host planes" : ""
     let fuse = f.split_forms ? ", split forms" : ""

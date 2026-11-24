@@ -13,6 +13,8 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_bake_tag: the device cells' arme
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active / gpu_resident_prefills_: the device cells' served witness
 require daslib/strings_boost
 require _cpu_gpu_model   // with_ctx_cut: the past-the-context cell's cut
+require _metal_blob_twin   // metal_kernel_count_compiled: the Metal cell's split-K stamps
+require ?das_metal dasllama/dasllama_metal_prefill   // the Metal cell's window witnesses
 require math
 
 // The embeddings read per model, on the loads their models' blocks make: an embedding file names its pooling
@@ -350,6 +352,7 @@ def private resident_driver_rows(tt : T?; m : Model) {
         tt |> success(abs(g - w) <= EMB_BAR, "the card's cosine {w} on the device reads {g}")
     }
     var inscope mean <- cosine_matrix(m, POOLING_MEAN)
+    tt |> success(all_finite(mean), "every cosine of the mean read on the device is finite before the control")
     tt |> success(card_misses(mean) > 0, "the control: the mean read on the device misses the card's matrix ({mean})")
     var texts <- batch_texts()
     let n = long_length(texts)
@@ -518,6 +521,143 @@ def embeddings_ple_no_scratch_cell(t : T?; var m : Model) {
             let other = batch_vs_single(m, texts, POOLING_MEAN, 0l, EMBED_WINDOW_ROWS, 1)
             tt |> success(other < 0.9999, "the control: against another text's single the bar misses ({other})")
             delete texts
+        }
+    }
+}
+
+let private EMB_F32_BAR = 0.9999   //! the Metal window's vector against the CPU f32 model's, one row or many (reads 0.9999991 to 1.0 on the M5 Max)
+
+//! the Metal cell's reads of Qwen3-Embedding for the compares after its block: the Metal window's one-row vector (`metal` where
+//! its cell ran), the q8 CPU form's one-row vector, and the f32 CPU form's one-row vector and another text's
+struct EmbMetalRows {
+    metal : bool
+    one_row : array<float>
+    q8_one : array<float>
+    f32_one : array<float>
+    f32_x : array<float>
+}
+
+//! the q8 blob's split-K stamps' dispatches since the census reset: the 32- and 16-row stamps, half and f32 activations
+def private q8_split_dispatches() : int64 {
+    var n = 0l
+    for (v in fixed_array("THSk", "TSk", "THSk16", "TSk16")) {
+        n += metal_kernel_count_compiled("MetalQ8MulMm{v}_metal_q8_mulmm_t")
+    }
+    return n
+}
+
+//! the short window's q8 split-K form on the blob twin `m`: the embedding query of a few rows splits its sites' K, split-K off
+//! walks it whole; the lever put back
+def private q8_split_leg(tt : T?; m : Model) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let prior_split = get_metal_prefill_split_k()
+        set_metal_prefill_split_k(true)
+        let sites0 = metal_prefill_split_k_sites()
+        let q8sk0 = q8_split_dispatches()
+        var inscope short_v <- embed(m, EMB_DOCS[0])
+        let split_sites = metal_prefill_split_k_sites() - sites0
+        let q8sk = q8_split_dispatches() - q8sk0
+        tt |> success(split_sites > 0l && q8sk > 0l, "the short window's q8 sites took the split-K form ({split_sites} sites, {q8sk} q8 split dispatches)")
+        set_metal_prefill_split_k(false)
+        let sites1 = metal_prefill_split_k_sites()
+        let q8sk1 = q8_split_dispatches()
+        var inscope whole_v <- embed(m, EMB_DOCS[0])
+        tt |> equal(metal_prefill_split_k_sites(), sites1, "the control: split-K off, no site split")
+        tt |> equal(q8_split_dispatches(), q8sk1, "... and no q8 split stamp dispatched")
+        set_metal_prefill_split_k(prior_split)
+    }
+}
+
+//! on the blob twin `m` of Qwen3-Embedding, under the Metal mode and the prefill mirror the caller pins: the embedding rides one
+//! Metal window with no classifier and no decode mirror where a chat forward does both, takes split-K on q8 sites, and lands
+//! the card's matrix; the one-row window's vector kept into `r` for the f32 compare after the block
+def embeddings_metal_window_rows(tt : T?; var m : Model; var r : EmbMetalRows) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let served0 = metal_prefill_stats().prefills
+        var inscope qv <- embed(m, "{EMB_TASK}{EMB_QUERIES[0]}")
+        tt |> equal(metal_prefill_stats().prefills, served0 + 1l, "the embedding's forward rode the Metal window, one window")
+        let fe = metal_prefill_window_forms()
+        tt |> equal(fe.logits, "none", "the embedding's window runs no classifier (logits={fe.logits})")
+        tt |> equal(fe.kv, "panels", "... and converts no K/V row into a decode mirror (kv={fe.kv})")
+        var s <- create_session(m)
+        var inscope toks <- encode(m, EMB_DOCS[1])
+        eval(m, s, toks)
+        let fc = metal_prefill_window_forms()
+        tt |> equal(fc.logits, "gpu", "the control: a chat forward's window lands its logits on the GPU (logits={fc.logits})")
+        tt |> success(fc.kv != "panels", "... and feeds the decode mirror (kv={fc.kv})")
+        delete s
+        q8_split_leg(tt, m)
+        //! a one-row text - the EOS alone - is a one-row window too
+        var inscope eos_ids <- encode(m, "", true, false)
+        tt |> equal(long_length(eos_ids), 1l, "the empty text encodes to its EOS alone ({eos_ids})")
+        let served_one = metal_prefill_stats().prefills
+        var one_row <- embed(m, "")
+        tt |> equal(metal_prefill_stats().prefills, served_one + 1l, "the one-row embedding rode the Metal window")
+        var inscope pair <- embed_batch(m, ["", EMB_DOCS[0]])
+        let pair_c = cosine(pair[0], one_row)
+        to_log(LOG_INFO, "one-row text in a batch on the Metal window: cosine {pair_c} to its single\n")
+        tt |> success(pair_c > 0.9999, "the batch's one-row text reads its single's vector (cosine {pair_c})")
+        let pair_other = cosine(pair[1], one_row)
+        tt |> success(is_finite(pair_other) && pair_other < 0.9999, "the control: the batch's other text misses the bar ({pair_other})")
+        var inscope got <- cosine_matrix(m, POOLING_LAST)
+        for (g, w in got, EMB_REF) {
+            tt |> success(abs(g - w) <= EMB_BAR, "the card's cosine {w} on the Metal window reads {g}")
+        }
+        var inscope mean <- cosine_matrix(m, POOLING_MEAN)
+        tt |> success(all_finite(mean), "every cosine of the mean read on the Metal window is finite before the control")
+        tt |> success(card_misses(mean) > 0, "the control: the mean read on the Metal window misses the card's matrix ({mean})")
+        r.one_row <- one_row
+        r.metal = true
+    }
+}
+
+//! on Qwen3-Embedding's q8 CPU form `cpu`, where the Metal cell ran: with Metal off the embedding rides no Metal window; the
+//! one-row text's q8 read kept into `r` for the log after the block
+def embeddings_metal_off_cell(t : T?; cpu : Model; var r : EmbMetalRows) {
+    return if (!r.metal)
+    unsafe {
+        let name = "the control: with Metal off the q8 CPU form rides no Metal window (0.6B Q8_0)"
+        t |> run(name) @capture(& cpu, & r)(tt : T ?) {
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                let prior_mode = get_metal_mode()
+                set_metal_mode(MetalMode.off)
+                let served1 = metal_prefill_stats().prefills
+                var inscope cpu_v <- embed(cpu, EMB_DOCS[0])
+                tt |> equal(metal_prefill_stats().prefills, served1, "the control: with Metal off the embedding rides no Metal window")
+                r.q8_one <- embed(cpu, "")
+                set_metal_mode(prior_mode)
+            }
+        }
+    }
+}
+
+//! on Qwen3-Embedding's f32 CPU form `f32`, where the Metal cell ran: the one-row text's vector and another text's, the Metal
+//! window's reference, kept into `r`
+def embeddings_f32_one_rows(f32 : Model; var r : EmbMetalRows) {
+    return if (!r.metal)
+    r.f32_one <- embed(f32, "")
+    r.f32_x <- embed(f32, "x")
+}
+
+//! after the block, where the Metal cell ran: the one-row Metal window's vector is the CPU f32 model's within EMB_F32_BAR and
+//! another text's f32 vector misses it - the reference is the f32 model: the CPU q8 chain quantizes its activations to Q8_0
+//! blocks, which a first row's outlier activations cost about a percent of cosine (the q8 read logged beside)
+def embeddings_metal_f32_within(t : T?; r : EmbMetalRows) {
+    return if (!r.metal)
+    unsafe {
+        let name = "the one-row Metal vector is the f32 CPU form's, another text's missing it (0.6B)"
+        t |> run(name) @capture(& r)(tt : T ?) {
+            if (empty(r.f32_one)) {
+                tt |> failure("the f32 CPU form collected no vector: the Metal vector's reference")
+                return
+            }
+            let one_c = cosine(r.one_row, r.f32_one)
+            let other_c = cosine(r.one_row, r.f32_x)
+            let q8_c = cosine(r.q8_one, r.f32_one)
+            to_log(LOG_INFO, "one-row embedding: Metal against the CPU f32 model cosine {one_c}; "
+                + "against its \"x\" {other_c}; the CPU q8 chain against f32 {q8_c}\n")
+            tt |> success(one_c >= EMB_F32_BAR, "the one-row window's vector is the CPU f32 model's (cosine {one_c})")
+            tt |> success(is_finite(other_c) && other_c < EMB_F32_BAR, "the control: against another text's f32 vector it misses the bar ({other_c})")
         }
     }
 }

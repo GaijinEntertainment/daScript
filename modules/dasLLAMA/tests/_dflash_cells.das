@@ -21,6 +21,10 @@ require dasllama/dasllama_sampling   // generate_, generate_mtp_sampled, set_see
 require dasllama/dasllama_gguf   // gguf_header_read, gguf_find_tensor: the drafter file's disk types against the loader's tags
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_verifies: the discrete walks' verifies on the resident driver
 require ?das_metal dasllama/dasllama_metal_dflash   // nolint:STYLE030,LINT019 - the device selector's counters, inside the das_metal half
+require ?das_metal dasllama/dasllama_metal_common   // nolint:STYLE030,LINT019 - the decode drivers' counts, inside the das_metal half
+require ?das_metal dasllama/dasllama_metal_decode   // nolint:STYLE030,LINT019 - metal_decode_shutdown, inside the das_metal half
+require ?das_metal dasllama/dasllama_metal_prefill   // nolint:STYLE030,LINT019 - metal_prefill_stats, metal_prefill_shutdown, inside the das_metal half
+require ?das_metal metal/das_metal_boost   // nolint:STYLE030,LINT019 - metal_log_leaks_if_any, inside the das_metal half
 require daslib/fio
 require math   // min, max, abs
 require _model_tier   // _model_tier::models_dir() + model_available() presence/size-tier gate
@@ -514,4 +518,108 @@ def with_cpu_drafter_scope(var m : Model; body : block<void>) {
     set_metal_mode(MetalMode.off)
     with_ctx_cut(m, HOST_CTX, body)
     set_metal_mode(prior)
+}
+
+//! the Metal drivers' trunk calls: prefills, single-row decodes and batched steps (0 off the Metal build)
+def metal_trunk_calls() : int64 {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return metal_prefill_stats().prefills + metal_decode_stats().decodes + metal_batch_decode_stats().steps
+    } else {
+        return 0l
+    }
+}
+
+//! the lossless walk over the Metal-served trunk, each walk's trunk calls asserted rising on the Metal drivers
+def metal_lossless_walk(t : T?; m : Model; drafter : string; device : bool; tag : string; chat : bool = false) : int64 {
+    return lossless_walk(t, m, drafter, device, tag, walk_text(chat), chat) $(spec; walk) {
+        let c0 = metal_trunk_calls()
+        var ids <- invoke(walk)
+        let c1 = metal_trunk_calls()
+        t |> success(c1 > c0, "{tag}: the {spec ? "speculative" : "plain"} walk's trunk ran {c1 - c0} prefills and steps on the Metal device")
+        return <- ids
+    }
+}
+
+let QWEN3_4B_DEVICE_GAP = "a regular DFlash drafter's Metal device pass does not reproduce the CPU arm's drafts on this trunk - the walk parts from the plain walk at its third generated id, tokens doubled"
+
+//! the lossless gate on the Metal device arm over the Metal-served trunk `m`, every walk over a chat turn: the device arm's
+//! walk, where `joint` (a trunk the single-stream verify seat does not take, a gemma-4 shape) every block round run as the home's
+//! joint round on the batch rail, and the CPU arm over the device's captures accepting the same count; a `device_gap` holds the
+//! device arm and the count compare as a counted skip of their own naming it, the CPU arm's walk still lossless
+def private metal_drafter_arms(t : T?; m : Model; drafter, tag : string; joint : bool; device_gap : string) {   // nolint:LINT012,LINT019 - the body is the das_metal half
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (!empty(device_gap)) {
+            skip_cell(t, "{tag} device arm: {device_gap}")
+            metal_lossless_walk(t, m, drafter, false, "{tag}, the CPU arm on the device's captures", true)
+            detach_dflash_drafter()
+            return
+        }
+        let rounds0 = metal_dflash_joint_rounds().rounds
+        let dev = metal_lossless_walk(t, m, drafter, true, "{tag} device arm", true)
+        let rounds = metal_dflash_joint_rounds().rounds - rounds0
+        detach_dflash_drafter()
+        if (joint) {
+            t |> success(rounds > 0l, "{tag}: the block rounds ran as the home's joint rounds on the batch rail ({rounds})")
+        }
+        let cpu = metal_lossless_walk(t, m, drafter, false, "{tag}, the CPU arm on the device's captures", true)
+        detach_dflash_drafter()
+        t |> equal(dev, cpu, "{tag}: both arms accept the same count")
+    }
+}
+
+//! the Metal decode and prefill drivers shut down: what a cell's leak check follows
+def metal_drivers_down() {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        metal_decode_shutdown()
+        metal_prefill_shutdown()
+    }
+}
+
+//! the Metal block drafter shut down, then the decode and prefill drivers (`metal_drivers_down`)
+def metal_dflash_drivers_down() {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        metal_dflash_shutdown()
+    }
+    metal_drivers_down()
+}
+
+//! `body` over a Metal-served trunk with the decode override Metal's, then the drivers down (`metal_drivers_down`) and
+//! the override put back
+def on_metal_trunk(body : block<void>) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let override0 = active_decode_override()
+        select_decode_override("metal")
+        invoke(body)
+        metal_drivers_down()
+        select_decode_override(override0)
+    }
+}
+
+//! `on_metal_trunk` with the Metal block drafter shut down too, ahead of the other drivers
+def on_metal_dflash_trunk(body : block<void>) {
+    on_metal_trunk() {
+        invoke(body)
+        metal_dflash_drivers_down()
+    }
+}
+
+//! the Metal home's drafter arms (`metal_drafter_arms`) as the cell `title` of a Metal form's trunk `m`, the form under
+//! `MetalMode.required`: under the arm `arm` where one is named, with the drafter file present, the context cut to HOST_CTX; then the block
+//! drafter and the decode and prefill drivers down, and no Metal object left (asserted under `tag`)
+def metal_drafter_cell(t : T?; var m : Model; title, arm, drafter, tag : string; joint : bool;
+                       device_gap : string = "") {
+    unsafe {   //! the cell captures the loaded trunk by reference
+        t |> run(title) @capture(& m)(t : T ?) {
+            return if ((!empty(arm) && !arm_on(t, arm))
+                || !model_available(t, path_join(_model_tier::models_dir(), drafter)))
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                with_ctx_cut(m, HOST_CTX) {
+                    metal_drafter_arms(t, m, drafter, tag, joint, device_gap)
+                }
+                metal_dflash_drivers_down()
+                t |> equal(metal_log_leaks_if_any(), 0l,
+                    "{tag}: no leaked Metal objects after shutdown")
+            }
+        }
+    }
 }

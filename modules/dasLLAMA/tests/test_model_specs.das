@@ -5,6 +5,8 @@ require dastest/testing_boost public
 require ../performance/profile_common.das
 require ../performance/fetch_models.das   // FetchArgs - the settling command's flags
 require daslib/clargs
+require dasllama/dasllama_gguf   // MODEL_TIER_CEILING_BYTES: a file past it is a category's
+require _model_categories   // model_category: the category that holds a file
 
 // The shape invariants of the model-set table (../performance/model_specs.das, re-exported by
 // profile_common — the one source of truth behind llm_catalog / official_catalog /
@@ -240,7 +242,59 @@ def test_models_provenance_invariants(t : T?) {
     }
 }
 
-[test(description = "Every quantize-minted spec row names a fetched source and carries the recipe its quantize spells into the provenance view, `convert_route` picks quantize, canary, no-recipe or a Windows refusal, and `mint_steps` refuses a missing source")]
+[test(description = "Every `models_provenance` entry - a spec row's own pin, its companions, an ASR carrier - whose `bytes` put its file past `MODEL_TIER_CEILING_BYTES` is a model category's file, so no run opens it unless the run names its category")]
+def test_large_rows_have_a_category(t : T?) {
+    var inscope entries <- models_provenance()
+    var large = 0
+    for (e in entries) {
+        continue if (e.bytes <= int64(MODEL_TIER_CEILING_BYTES))
+        large++
+        t |> success(!empty(model_category(e.name)),
+            ("{e.name} pins {e.bytes >> 30l} GiB, past MODEL_TIER_CEILING_BYTES, and no category "
+                + "holds it - add it to a model_categories() row (_model_categories.das) and that "
+                + "row of ../TEST_CATEGORIES.md"))
+    }
+    t |> success(large > 0, "the table pins files past the line (the control the check needs)")
+}
+
+//! the entries whose source still floats at `resolve/main` beside a pinned sha256, each owing a revision
+let private UNPINNED_MAIN = fixed_array(
+    "Llama-3.2-1B-Instruct-Q5_K_M.gguf", "Llama-3.2-1B-Instruct-Q8_0.gguf",
+    "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf", "Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf",
+    "Phi-3.5-mini-instruct-Q4_K_M.gguf", "Phi-3.5-mini-instruct-Q8_0.gguf",
+    "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf", "Qwen3.5-0.8B-MTP-Q8_0.gguf",
+    "Qwen3.5-4B-MTP-Q8_0.gguf", "Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf", "Qwen3.6-27B-MTP-Q4_K_M.gguf",
+    "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf",
+    "Qwen3VL-8B-Instruct-Q8_0.gguf",
+    "drafters/Qwen3.8-27B-DFlash2-GGUF/Qwen3.8-27B-DFlash2-Q4_K_M.gguf",
+    "drafters/Qwen3.8-27B-DFlash2-GGUF/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+    "drafters/Qwen3.8-27B-DFlash2-NVFP4-GGUF/Qwen3.8-27B-DFlash2-NVFP4.gguf",
+    "gemma-3-12b-it-Q4_K_M.gguf", "gemma-4-12B-it-Q4_K_M.gguf", "gemma-4-12B-it-Q8_0.gguf",
+    "gemma-4-26B-A4B-it-Q4_0.gguf", "gemma-4-26B-A4B-it-Q4_K_M.gguf",
+    "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf", "gemma-4-26B-A4B-it-UD-IQ4_XS.gguf",
+    "gemma-4-31B-it-Q4_K_M.gguf", "gemma-4-E2B-it-Q4_0.gguf", "gemma-4-E2B-it-Q8_0.gguf",
+    "gemma-4-E4B-it-Q8_0.gguf", "micro-qwen4exp/micro-qwen4exp-realqsa-mtp.gguf",
+    "micro-qwen4exp/micro-qwen4exp-realqsa.gguf", "microsoft_Phi-4-mini-instruct-Q8_0.gguf",
+    "mmproj-Qwen3VL-8B-Instruct-F16.gguf", "mmproj-gemma-3-12b-it-F16.gguf",
+    "mmproj-gemma-3-4b-it-F16.gguf")
+
+[test(description = "A provenance entry that pins a sha256 names its source at a revision, never at `resolve/main`, where the hub may serve other bytes under the same URL; `UNPINNED_MAIN` lists the entries still owed a revision, and none that names one")]
+def test_provenance_urls_pin_a_revision(t : T?) {
+    var inscope entries <- models_provenance()
+    var floating : table<string>
+    for (e in entries) {
+        continue if (empty(e.sha256) || find(e.url, "/resolve/main/") < 0)
+        floating |> insert(e.name)
+        t |> success(has_value(UNPINNED_MAIN, e.name),
+            "a sha256-pinned entry names its source at a revision, not resolve/main: {e.name}")
+    }
+    for (name in UNPINNED_MAIN) {
+        t |> success(key_exists(floating, name), "UNPINNED_MAIN lists {name}, which no longer floats: drop it")
+    }
+    delete floating
+}
+
+[test(description = "Every quantize-minted spec row names a fetched source, pins bytes and sha256 where it is also published, and carries the recipe its quantize spells into the provenance view, `convert_route` picks quantize, canary, no-recipe or a Windows refusal, and `mint_steps` refuses a missing source")]
 def test_quantize_rows(t : T?) {
     t |> run("a quantize-minted row names a fetched source and reaches fetch_models with its recipe") @(t : T?) {
         var inscope entries <- models_provenance()
@@ -255,7 +309,9 @@ def test_quantize_rows(t : T?) {
         for (s in specs) {
             continue if (empty(s.quantize.fmt))
             minted++
-            t |> success(empty(s.url) && key_exists(fetched, s.quantize.source), "{s.file} mints from the fetched row {s.quantize.source}")
+            t |> success(key_exists(fetched, s.quantize.source), "{s.file} mints from the fetched row {s.quantize.source}")
+            t |> success(empty(s.url) || key_exists(fetched, s.file),
+                "{s.file}: a published mint pins its bytes and sha256 beside the recipe that remakes it")
             let steps = quantize_commands(s.quantize, s.file, "", "calib.txt", "llama-imatrix", "llama-quantize")
             t |> equal(s.recipe, "{steps.imatrix}; {steps.quantize}", "{s.file}'s recipe spells its quantize")
             var reached = false

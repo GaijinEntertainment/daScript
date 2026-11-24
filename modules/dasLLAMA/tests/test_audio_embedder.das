@@ -18,6 +18,7 @@ require daslib/fio
 require math
 require _model_tier   // models_dir() + model_available() gate
 require _cpu_gpu_model   // with_cpu_and_gpu_model: SmolLM2's one block in the area; tower_cell, own_load
+require dasllama/dasllama_common   // with_cpu_prefill: the cell's CPU-prefill intent, put back however it leaves
 
 // the audio twin of test_vision_embedder
 
@@ -86,7 +87,6 @@ def test_audio_embedder_tower_arm(t : T?) {
 // A chat template with no audio span markers, on SmolLM2's CPU form - the planar rail, no .dlim beside the model.
 [cold_path]
 def private audio_arm_refusal(t : T?; var m : Model) {
-    allow_cpu_prefill()
     with_dasllama_jobque() {
         var chat <- create_chat(m, "", 8l)
         var rows : array<float>
@@ -113,6 +113,8 @@ def test_audio_rows_need_an_audio_arm(t : T?) {
     return if (!family_on(t, "llama"))
     with_cpu_and_gpu_model(t, "audio", "SmolLM2-135M-Instruct-Q8_0.gguf", 512l, [cpu_cells_form(QuantMode.q8, true)]) $(var m; form) {
         return if (!form.alone)
-        tower_cell(t, "a family with no audio span markers refuses the rows by name", m, @@audio_arm_refusal)
+        with_cpu_prefill(true) {
+            tower_cell(t, "a family with no audio span markers refuses the rows by name", m, @@audio_arm_refusal)
+        }
     }
 }

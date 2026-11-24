@@ -2,9 +2,9 @@
 // model-loading tests.
 //
 // The parity/audio fixtures load multi-GB GGUFs; loading every one on every iteration is the
-// suite's main time sink. This gate keeps the fast iteration loop to each arch's small carrier
-// and defers the large models (Mistral-7B, gemma-4-12B/E4B, gpt-oss-20b, the MoEs) to a pre-PR
-// run. The large tier runs only when DASLLAMA_PARITY_FULL is set. CI has no models on disk, so
+// suite's main time sink. This gate keeps the fast iteration loop to each arch's small carrier;
+// every model past the large-tier line is a category's (`_model_categories.das`) and runs only
+// where a run names its category (`--category`). CI has no models on disk, so
 // every case skips there regardless of tier — the gate only ever bites on a local box.
 
 options gen2
@@ -161,16 +161,25 @@ def private filter_why(filter, env, what, name : string; exact : bool) : string 
     return "{what} '{name}' filtered out ({env}={filter})"
 }
 
-//! `arm_on` over every arm one load serves: true where the arm
-//! filter reaches any of `names`; else the cell has registered the
-//! one loud skip naming them all
-def arms_on(t : T?; names : array<string>) : bool {
-    let filter = g_env_test.test_arms
+//! whether the arm filter `filter` (a DASLLAMA_TEST_ARMS value) reaches any of `names`: it is empty, or one of its tokens
+//! is a substring of one of them
+def arms_reached(filter : string; names) : bool {
     return true if (empty(filter))
     for (name in names) {
         return true if (token_in(filter, name))
     }
-    t |> skip("arms {names} filtered out (DASLLAMA_TEST_ARMS={filter})")
+    return false
+}
+
+//! `arm_why` over a list: whether the arm filter reaches any of `names`, no skip registered
+def any_arm_on(names) : bool => arms_reached(g_env_test.test_arms, names)
+
+//! `arm_on` over every arm one load serves: true where the arm
+//! filter reaches any of `names`; else the cell has registered the
+//! one loud skip naming them all
+def arms_on(t : T?; names : array<string>) : bool {
+    return true if (any_arm_on(names))
+    t |> skip("arms {names} filtered out (DASLLAMA_TEST_ARMS={g_env_test.test_arms})")
     return false
 }
 
