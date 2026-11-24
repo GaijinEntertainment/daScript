@@ -7,6 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require _model_tier
 require dasllama/dasllama_prefix
+require _kv_prefix_cells   // mk_config, mk_recurrent
 require dasllama/dasllama_math   // reserve_resize
 require daslib/fio
 require daslib/linq
@@ -17,11 +18,6 @@ require daslib/linq
 // (classic prefill is chunk-invariant, so attached pages + a tail eval reproduce the cold logits
 // byte for byte).
 
-def private mk_config(layers, heads, kv_heads, hs, ctx : int64) : Config {
-    return Config(dim = heads * hs, hidden_dim = 32l, n_layers = layers, n_heads = heads,
-        n_kv_heads = kv_heads, vocab_size = 8l, seq_len = ctx, head_size = hs,
-        kv_dim = kv_heads * hs, shared_weights = true, rope_freq_base = 10000.0)
-}
 
 [test(description = "Prefix-cache refcounts on a synthetic Config: inserted pages outlive the donor, an attach shares whole pages and copies the partial one up to one token short, a divergent prompt takes nothing, and release returns every page")]
 def test_prefix_accounting(t : T?) {
@@ -389,19 +385,6 @@ def test_prefix_verify_tokens(t : T?) {
 }
 
 //! a paged session that reads as recurrent to the cache, standing at `n` evaled rows with its state at the same position
-def private mk_recurrent(c : Config; var pool : KVPool; n : int64) : Session {
-    var s <- make_run_state_paged(c, pool)
-    s.dn_state_prefix |> push(0l)
-    s.dn_conv_prefix |> push(0l)
-    s.dn_state <- [for (i in range64(8l)); float(n * 10l + i)]   // one recurrent layer's state, a value a position
-    s.dn_conv_state <- [for (i in range64(4l)); float(n * 100l + i)]
-    if (n > 0l) {
-        kv_ensure(s, n)
-    }
-    s.n_past = n
-    s.dn_pos = n
-    return <- s
-}
 
 def private live_refs(pool : KVPool) : int {
     var live = 0
