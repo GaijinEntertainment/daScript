@@ -129,10 +129,10 @@ def public bench_pp_rep(t : Model; var s : Session; plen, seed : int64) : double
     return double(plen) * 1.0e9lf / double(get_time_nsec(t0))   // the 64-bit clock: a rep on a slow box outlives the 32-bit microsecond one
 }
 
-//! the tg row's untimed warmup: one token, llama-bench's test_gen(ctx, 1)
+//! the tg row's untimed warmup: one token at position `pos0`
 [cold_path]
-def public bench_tg_warm(t : Model; var s : Session) {
-    forward(t, s, bench_synth_id(0l, BENCH_WARM_SEED), 0l)
+def public bench_tg_warm(t : Model; var s : Session; pos0 : int64 = 0l) {
+    forward(t, s, bench_synth_id(0l, BENCH_WARM_SEED), pos0)
 }
 
 //! one token of a tg rep - the forward at position `i` under the rep's seed - returning the
@@ -145,13 +145,14 @@ def public bench_tg_step(t : Model; var s : Session; i, seed : int64) : int64 {
     return get_time_nsec(t0)
 }
 
-//! one timed tg rep: `ngen` single-token forwards at pos 0.., feeding synthetic ids, one clock
-//! window over the whole loop as llama-bench times it; returns tok/s
+//! one timed tg rep: `ngen` single-token forwards at pos `pos0`.., feeding synthetic ids, one clock
+//! window over the whole loop; returns tok/s. A `pos0` above 0 decodes on from the `pos0` rows the session
+//! already holds, so the session's cache holds `pos0 + ngen` rows
 [cold_path]
-def public bench_tg_rep(t : Model; var s : Session; ngen, seed : int64) : double {
+def public bench_tg_rep(t : Model; var s : Session; ngen, seed : int64; pos0 : int64 = 0l) : double {
     let t0 = ref_time_ticks()
     for (i in range64(ngen)) {
-        forward(t, s, bench_synth_id(i, seed), i)
+        forward(t, s, bench_synth_id(i, seed), pos0 + i)
     }
     return double(ngen) * 1.0e9lf / double(get_time_nsec(t0))
 }
