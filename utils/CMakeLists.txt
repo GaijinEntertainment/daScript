@@ -224,7 +224,7 @@ endforeach()
 das_lane_dastest_target(run_tests_dasllama_ladder COMMENT "Testing dasllama-ladder" FILES ${_ci_dasllama_ladder})
 
 set(_ci_dasweb_buildd)
-foreach(_s test_buildd_config test_buildd_core uncategorized_persistent_heap uncategorized)
+foreach(_s test_buildd_config test_buildd_core test_buildd_client uncategorized)
     list(APPEND _ci_dasweb_buildd utils/internal/dasweb-buildd/${_s}.das)
 endforeach()
 das_lane_dastest_target(run_tests_dasweb_buildd COMMENT "Testing dasweb-buildd" FILES ${_ci_dasweb_buildd})

@@ -32,9 +32,38 @@ def test_source_filename_validation(t : T?) {
 def test_unpack_raw_source(t : T?) {
     with_temp_dir("buildd_src_") $(dir) {
         t |> run("raw das text becomes main.das") @(tt : T?) {
-            let entry = unpack_sources(dir, "print(\"hi\")")
+            let entry = unpack_sources(dir, "print(\"hi\")").entry
             tt |> equal(entry, "main.das")
             tt |> equal(fread(path_join(dir, "main.das")), "print(\"hi\")")
+        }
+    }
+}
+
+[test(description = "a source this service cannot write is its own failure, and a refused document is not")]
+def test_unpack_write_failure(t : T?) {
+    with_temp_dir("buildd_src_") $(dir) {
+        let missing = path_join(dir, "no_such_directory")
+        t |> run("a raw source with nowhere to land") @(tt : T?) {
+            let unpacked = unpack_sources(missing, "print(\"hi\")")
+            tt |> equal(unpacked.entry, "")
+            tt |> success(unpacked.write_failed, "write failure reported")
+        }
+        t |> run("a bundle with nowhere to land") @(tt : T?) {
+            var files_obj <- { "main.das" => JV("print(1)") }
+            let unpacked = unpack_sources(missing,
+                                          write_json(
+                                                     JV(
+                                                        (files = JV(files_obj),
+                                                         active = "main.das"))))
+            tt |> equal(unpacked.entry, "")
+            tt |> success(unpacked.write_failed, "write failure reported")
+        }
+        t |> run("a refused document is not a write failure") @(tt : T?) {
+            var files_obj <- { "a.das" => JV("print(1)") }
+            let unpacked = unpack_sources(dir,
+                                          write_json(JV((files = JV(files_obj), active = "c.das"))))
+            tt |> equal(unpacked.entry, "")
+            tt |> success(!unpacked.write_failed, "the document's own fault")
         }
     }
 }
@@ -45,7 +74,7 @@ def test_unpack_bundle(t : T?) {
         t |> run("a bundle with files and active materializes with its entry") @(tt : T?) {
             var files_obj <- { "main.das" => JV("require live_stub\nprint(1)"), "live_stub.das" => JV("// stub") }
             let bundle = write_json(JV((files = JV(files_obj), active = "main.das")))
-            let entry = unpack_sources(dir, bundle)
+            let entry = unpack_sources(dir, bundle).entry
             tt |> equal(entry, "main.das")
             tt |> equal(fread(path_join(dir, "live_stub.das")), "// stub")
         }
@@ -54,17 +83,17 @@ def test_unpack_bundle(t : T?) {
         t |> run("a bundle with a hostile file name is refused whole") @(tt : T?) {
             var files_obj <- { "main.das" => JV("print(1)"), "../../evil.das" => JV("boom") }
             let bundle = write_json(JV((files = JV(files_obj), active = "main.das")))
-            tt |> equal(unpack_sources(dir, bundle), "")
+            tt |> equal(unpack_sources(dir, bundle).entry, "")
         }
         t |> run("a bundle whose active is not among its files is refused") @(tt : T?) {
             var files_obj <- { "a.das" => JV("print(1)"), "b.das" => JV("print(2)") }
             let bundle = write_json(JV((files = JV(files_obj), active = "c.das")))
-            tt |> equal(unpack_sources(dir, bundle), "")
+            tt |> equal(unpack_sources(dir, bundle).entry, "")
         }
         t |> run("a bundle without active is refused") @(tt : T?) {
             var files_obj <- { "a.das" => JV("print(1)"), "b.das" => JV("print(2)") }
             let bundle = write_json(JV((files = JV(files_obj))))
-            tt |> equal(unpack_sources(dir, bundle), "")
+            tt |> equal(unpack_sources(dir, bundle).entry, "")
         }
         t |> run("a file whose content is not text is refused, not emptied") @(tt : T?) {
             // POST /api/samples stores arbitrary text, so a stored bundle can
@@ -73,19 +102,64 @@ def test_unpack_bundle(t : T?) {
             // read the compile error as a fault in code that was discarded.
             var files_obj <- { "main.das" => JV(123), "other.das" => JV("print(1)") }
             let bundle = write_json(JV((files = JV(files_obj), active = "main.das")))
-            tt |> equal(unpack_sources(dir, bundle), "")
+            tt |> equal(unpack_sources(dir, bundle).entry, "")
             tt |> success(!stat(path_join(dir, "main.das")).is_reg ||
                 !empty(fread(path_join(dir, "main.das"))), "no empty stand-in was compiled")
         }
     }
 }
 
-[test(description = "an empty build command reports itself unconfigured, a real one has its output captured, and a failing one keeps its exit code", timeout = 1200)]
+[test(description = "only the verdict exit is the sample's own failure: success is no fault, and every other status - a shell error's 1, the recipe's, the sandbox's, a failed spawn, the timeout kill - is a build-service fault")]
+def test_is_build_fault(t : T?) {
+    t |> success(!is_build_fault(0), "success")
+    t |> success(!is_build_fault(BUILD_VERDICT_EXIT), "the sandboxed build failed")
+    t |> success(is_build_fault(1), "a shell error in the recipe")
+    t |> success(is_build_fault(10), "the recipe's own check")
+    t |> success(is_build_fault(20), "the sandbox could not run")
+    t |> success(is_build_fault(-1), "a failed spawn")
+    t |> success(is_build_fault(popen_timed_out), "the timeout kill")
+}
+
+[test(description = "a job that fails reports a fault for every cause but the sample's own: a sources write failure and the timeout kill are faults, a refused document and the verdict exit are not, and a recipe exit carries its fault flag")]
+def test_job_failure_outcomes(t : T?) {
+    t |> run("sources this service could not write") @(tt : T?) {
+        let outcome = unpack_failure(UnpackedSources(write_failed = true))
+        tt |> success(outcome.fault, "a fault")
+        tt |> success(!empty(outcome.error), "with a reason")
+    }
+    t |> run("a refused document") @(tt : T?) {
+        let outcome = unpack_failure(UnpackedSources())
+        tt |> success(!outcome.fault, "the sample's own")
+        tt |> equal(outcome.error, "malformed source document")
+    }
+    t |> run("the timeout kill names its budget and keeps the output") @(tt : T?) {
+        let outcome = build_failure(
+                                    BuildRunResult(fault = true, exit_code = popen_timed_out,
+                                                   output = "half a log"), 600)
+        tt |> success(outcome.fault, "a fault")
+        tt |> equal(outcome.error, "build timed out after 600 seconds\nhalf a log")
+    }
+    t |> run("the verdict exit carries the compiler's output") @(tt : T?) {
+        let outcome = build_failure(
+                                    BuildRunResult(exit_code = BUILD_VERDICT_EXIT,
+                                                   output = "error[30101]: nope"), 600)
+        tt |> success(!outcome.fault, "the sample's own")
+        tt |> equal(outcome.error, "error[30101]: nope")
+    }
+    t |> run("a recipe exit is a fault, and a silent one names its status") @(tt : T?) {
+        let outcome = build_failure(BuildRunResult(fault = true, exit_code = 16), 600)
+        tt |> success(outcome.fault, "a fault")
+        tt |> equal(outcome.error, "build failed (exit code 16)")
+    }
+}
+
+[test(description = "an empty build command reports itself unconfigured as a fault, a real one has its output captured, and a failing one keeps its exit code and is a fault unless that code is the verdict", timeout = 1200)]
 def test_run_build_command(t : T?) {
     t |> run("empty build_cmd reports itself") @(tt : T?) {
         let r = run_build_command("", "s", "o", "module", "main.das", 5.0)
         tt |> success(!r.ok, "not ok")
         tt |> success(find(r.output, "not configured") >= 0, "explains why")
+        tt |> success(r.fault, "the builder's own fault")
     }
     t |> run("a real command runs and its output is captured") @(tt : T?) {
         let r = run_build_command("git --version", "s", "o", "module", "main.das", 30.0)
@@ -93,9 +167,11 @@ def test_run_build_command(t : T?) {
         tt |> success(find(r.output, "git version") >= 0, "stdout captured")
     }
     t |> run("a failing command reports its exit code") @(tt : T?) {
-        let r = run_build_command("git definitely-not-a-subcommand", "s", "o", "module", "main.das", 30.0)
+        let r = run_build_command("git definitely-not-a-subcommand", "s", "o", "module", "main.das",
+                                  30.0)
         tt |> success(!r.ok, "nonzero exit")
         tt |> success(r.exit_code != 0, "code preserved")
+        tt |> equal(r.fault, r.exit_code != BUILD_VERDICT_EXIT)
     }
 }
 
@@ -200,7 +276,8 @@ def test_write_page_package(t : T?) {
                 find(body, "release_embed_file(\"{wt}/tutorials/_assets/gltf/BoomBox.glb\", \"/tutorials/_assets/gltf/BoomBox.glb\")") >= 0,
                 "embed line carries absolute src and MEMFS dst")
             // embedded files live in the data segment: the package must widen INITIAL_MEMORY
-            tt |> success(find(body, "release_emcc_arg(\"-sINITIAL_MEMORY=") >= 0, "initial memory covers embeds")
+            tt |> success(find(body, "release_emcc_arg(\"-sINITIAL_MEMORY=") >= 0,
+                          "initial memory covers embeds")
         }
     }
 }

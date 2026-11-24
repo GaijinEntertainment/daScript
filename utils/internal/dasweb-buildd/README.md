@@ -61,7 +61,21 @@ The service refuses to start without a token and a build command.
    plus one file part per artifact (libhv reads the files itself - bytes never pass through a
    das string); failure = the build output as the error. Every claim this service sees resolves
    with one of the two - the queue's stale-requeue sweep is for builder *death*, not builder
-   code paths.
+   code paths. A failure is one of two kinds. A build that ran in the sandbox and failed, a
+   source document that cannot be built, or an asset declaration the builder refuses is the
+   sample's own: it goes up plain and the server
+   stores it as the sample's verdict. Everything else - no scratch space, sources this service
+   could not write, a build directory it could not prepare, a recipe or sandbox failure
+   (`is_build_fault`), the timeout kill, a build that passed and left no artifact, an artifact
+   the server did not accept - is a **fault** of the build service and goes up with `fault=1`;
+   the server re-queues the job and never stores a fault as a verdict on the sample.
+
+   A result POST whose status is unsettled - no response, or a 5xx - is sent again, up to
+   `ResultRetry.attempts` times with a pause that doubles to a cap: 120 seconds of pauses by
+   default (`buildd_client.das`), so a server restart or a deploy does not cost a finished
+   build. A 4xx is settled and is not retried. A success upload that never settles goes up
+   as a fault, with the same retries; a server that takes neither leaves the claim to the
+   stale-requeue sweep, and the job builds again after `build_claim_timeout_seconds`.
 
 ## The sandbox
 
@@ -105,9 +119,16 @@ Verified on zen4 by building a hostile sample: a compile-time `[init]` that `fre
 token environment variable comes back empty, `popen` runs but resolves no hostnames, and a
 `leak.js` it wrote beside the real output never leaves the box.
 
+`run_build.sh` exits 0 for a build that passed and 65 for one that ran in the sandbox and
+failed, whatever status the build itself returned. Every other status is a fault: 10 to 17 for
+the recipe's own checks (no host, no runtime archive, no podman, an unknown mode, no image, a
+missing argument or environment variable), 20 when podman could not run the build (its 125,
+126 or 127), and 1 for a shell error in the script. The verdict is not 1 for that last reason -
+a recipe that breaks must never read as a verdict on the sample it was building.
+
 A build blocks the tick thread, so `/healthz` goes dark for the build's duration; the watchdog
 only logs health transitions (it restarts on process exit, never on health), and
-`build_timeout_seconds` bounds the window.
+`build_timeout_seconds` plus the result POST's retries bound the window.
 
 The image also carries the X11/GL *runtime* libraries (no X server, no GPU): the host daslang
 dlopens the tree's `.shared_module` dylibs while **compiling** a sample (`require glfw` needs

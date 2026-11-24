@@ -6,6 +6,7 @@ module buildd_client public
 require dashv/dashv_boost public
 require daslib/json_boost
 require daslib/logger
+require math
 require buildd_core
 
 //! The HTTP side of dasweb-buildd: claim, result upload, toolchain announce —
@@ -21,13 +22,45 @@ struct ClaimedBuild {
     source : string
 }
 
+let HTTP_NO_RESPONSE = -1
+
+//! Every call here runs on the service's tick thread, so each one is
+//! bounded.
+let CONNECT_TIMEOUT_SECONDS = 10
+let CONTROL_TIMEOUT_SECONDS = 30
+let UPLOAD_TIMEOUT_SECONDS = 300
+
+struct ResultRetry {
+    //! How long a result POST keeps trying while its status is unsettled.
+    attempts : int = 8
+    first_pause_ms : uint = 2000u
+    max_pause_ms : uint = 30000u
+}
+
+def retry_pause_ms(retry : ResultRetry; attempt : int) : uint {
+    //! The pause after unsettled attempt number `attempt`, counted from
+    //! 1.
+    var pause = min(retry.first_pause_ms, retry.max_pause_ms)
+    for (_doubling in range(1, attempt)) {
+        pause = min(pause * 2u, retry.max_pause_ms)
+    }
+    return pause
+}
+
+def private prepare_post(var req : HttpRequest?#; url : string; token : string;
+                         timeout_seconds : int) {
+    req.method = http_method.POST
+    req.url := url
+    req.connect_timeout = uint16(CONNECT_TIMEOUT_SECONDS)
+    req.timeout = uint16(timeout_seconds)
+    set_bearer_token_auth(req, token)
+}
+
 def claim_build(server_url : string; token : string; toolchain : string) : ClaimedBuild {
     //! POST /api/build/next with the builder's toolchain; 204 = queue idle.
     var out = ClaimedBuild()
     with_http_request() $(var req) {
-        req.method = http_method.POST
-        req.url := "{server_url}/api/build/next"
-        set_header(req, "Authorization", "Bearer {token}")
+        prepare_post(req, "{server_url}/api/build/next", token, CONTROL_TIMEOUT_SECONDS)
         req.body := toolchain
         request(req) $(resp) {
             if (resp == null) {
@@ -59,9 +92,7 @@ def announce_toolchain(server_url : string; token : string; toolchain : string) 
     //! The go-live for a toolchain id. Only call after the ABI canary ran clean.
     var ok = false
     with_http_request() $(var req) {
-        req.method = http_method.POST
-        req.url := "{server_url}/api/build/toolchain"
-        set_header(req, "Authorization", "Bearer {token}")
+        prepare_post(req, "{server_url}/api/build/toolchain", token, CONTROL_TIMEOUT_SECONDS)
         req.body := toolchain
         request(req) $(resp) {
             ok = resp != null && resp.status_code == http_status.OK
@@ -73,51 +104,82 @@ def announce_toolchain(server_url : string; token : string; toolchain : string) 
     return ok
 }
 
-def upload_success(server_url : string; token : string; hash : string; toolchain : string; files : array<BuiltFile>) : bool {
+def is_settled_status(status : int) : bool {
+    //! A status the playground itself gave. No response and a 5xx are
+    //! unsettled: the same POST can still land.
+    return status != HTTP_NO_RESPONSE && status < 500
+}
+
+def status_text(status : int) : string => status == HTTP_NO_RESPONSE ? "no response" : "{status}"
+
+def post_until_settled(retry : ResultRetry; what : string; post_once : block<() : int>) : int {
+    //! Repeats `post_once` until it returns a settled status; returns the
+    //! last unsettled one once `retry.attempts` are spent.
+    var status = HTTP_NO_RESPONSE
+    for (attempt in range(1, retry.attempts + 1)) {
+        status = invoke(post_once)
+        return status if (is_settled_status(status))
+        if (attempt < retry.attempts) {
+            logger_warning("buildd.client", "{what} unsettled ({status_text(status)}); retrying",
+                JV((attempt = attempt, attempts = retry.attempts)))
+            sleep(retry_pause_ms(retry, attempt))
+        }
+    }
+    return status
+}
+
+def private post_result(server_url, token, hash, toolchain, what : string; retry : ResultRetry;
+                        fill : block<(var req : HttpRequest?#) : void>) : bool {
+    let status = post_until_settled(retry, "{what} {hash}") $() : int {
+        var status_code = HTTP_NO_RESPONSE
+        with_http_request() $(var req) {
+            prepare_post(req, "{server_url}/api/build/result", token, UPLOAD_TIMEOUT_SECONDS)
+            set_form_data(req, "hash", hash)
+            set_form_data(req, "toolchain", toolchain)
+            invoke(fill, req)
+            request(req) $(resp) {
+                if (resp != null) {
+                    status_code = int(resp.status_code)
+                }
+            }
+        }
+        return status_code
+    }
+    let accepted = status == int(http_status.OK)
+    if (!accepted) {
+        logger_error("buildd.client", "{what} not accepted: {status_text(status)}",
+            JV((hash = hash, toolchain = toolchain)))
+    }
+    return accepted
+}
+
+def upload_success(server_url : string; token : string; hash : string; toolchain : string;
+                   files : array<BuiltFile>;
+                   retry : ResultRetry = ResultRetry()) : bool {
     //! Multipart result: manifest + one file part per artifact, part name =
     //! artifact name. libhv reads the files itself, so the bytes never pass
     //! through a das string.
-    var ok = false
-    with_http_request() $(var req) {
-        req.method = http_method.POST
-        req.url := "{server_url}/api/build/result"
-        set_header(req, "Authorization", "Bearer {token}")
-        set_form_data(req, "hash", hash)
-        set_form_data(req, "toolchain", toolchain)
+    return post_result(server_url, token, hash, toolchain, "success upload", retry) $(var req) {
         set_form_data(req, "ok", "1")
         set_form_data(req, "manifest", manifest_json(files))
         for (f in files) {
             set_form_file(req, f.name, f.path)
         }
-        request(req) $(resp) {
-            ok = resp != null && resp.status_code == http_status.OK
-            if (!ok) {
-                logger_error("buildd.client", "result upload refused: {resp == null ? -1 : int(resp.status_code)}",
-                    JV((hash = hash, toolchain = toolchain)))
-            }
-        }
     }
-    return ok
 }
 
-def upload_failure(server_url : string; token : string; hash : string; toolchain : string; error_text : string) : bool {
-    //! ok=0 result: the compiler/build error becomes the user-facing failure.
-    var ok = false
-    with_http_request() $(var req) {
-        req.method = http_method.POST
-        req.url := "{server_url}/api/build/result"
-        set_header(req, "Authorization", "Bearer {token}")
-        set_form_data(req, "hash", hash)
-        set_form_data(req, "toolchain", toolchain)
+def upload_failure(server_url : string; token : string; hash : string; toolchain : string;
+                   error_text : string;
+                   fault : bool; retry : ResultRetry = ResultRetry()) : bool {
+    //! ok=0 result. `fault` false: the failure is the sample's own, and
+    //! the error is stored as its verdict. `fault` true: the build
+    //! service failed, and the server re-queues the job instead of
+    //! judging the sample.
+    return post_result(server_url, token, hash, toolchain, "failure upload", retry) $(var req) {
         set_form_data(req, "ok", "0")
         set_form_data(req, "error", error_text)
-        request(req) $(resp) {
-            ok = resp != null && resp.status_code == http_status.OK
-            if (!ok) {
-                logger_error("buildd.client", "failure upload refused: {resp == null ? -1 : int(resp.status_code)}",
-                    JV((hash = hash, toolchain = toolchain)))
-            }
+        if (fault) {
+            set_form_data(req, "fault", "1")
         }
     }
-    return ok
 }

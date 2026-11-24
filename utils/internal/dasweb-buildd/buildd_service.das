@@ -124,7 +124,8 @@ def private new_scratch_dir(var error : string&) : string {
     return ""
 }
 
-def private declared_page_assets(src_dir, entry, mode, worktree : string; var why : string&) : array<string> {
+def private declared_page_assets(src_dir, entry, mode, worktree : string;
+                                 var why : string&) : array<string> {
     //! Assets a page entry declares (`// wasm-assets: <path>`) embed into the
     //! artifact's MEMFS. User-authored paths: validated against the worktree
     //! allowlist BEFORE the generated package references them; an invalid line
@@ -139,12 +140,39 @@ def private declared_page_assets(src_dir, entry, mode, worktree : string; var wh
     return <- out
 }
 
-def private run_one_job(job : ClaimedBuild) {
-    //! One claimed job, start to finish: materialize, build, upload, clean up.
-    //! Every outcome resolves the job on the server — a claim this function
-    //! saw must never be left to the stale-requeue sweep.
-    g_job_counter ++
-    let t0 = ref_time_ticks()
+def private build_and_publish(job : ClaimedBuild; src_dir, out_dir : string) : JobOutcome {
+    let unpacked = unpack_sources(src_dir, job.source)
+    if (empty(unpacked.entry)) return unpack_failure(unpacked)
+    var asset_why = ""
+    let assets <- declared_page_assets(src_dir, unpacked.entry, job.mode, g_cfg.worktree, asset_why)
+    if (!empty(asset_why)) return JobOutcome(error = asset_why)
+    // A page build compiles under a generated .das_package (the release-wasm
+    // rail wants one; job sources can never carry their own). Written by THIS
+    // service into a dir it owns, before the sandbox ever runs.
+    if (job.mode == "page"
+        && !write_page_package(src_dir, unpacked.entry, assets, g_cfg.worktree)) {
+        return JobOutcome(error = "builder could not prepare the build directory", fault = true)
+    }
+    let r = run_build_command(g_cfg.build_cmd, src_dir, out_dir, job.mode, unpacked.entry,
+        float(g_cfg.build_timeout_seconds))
+    if (!r.ok) {
+        logger_warning("buildd", "build exited nonzero",
+            JV((hash = job.hash, exit_code = r.exit_code, fault = r.fault)))
+        return build_failure(r, g_cfg.build_timeout_seconds)
+    }
+    let files <- collect_artifacts(out_dir, job.mode)
+    if (empty(files)) return JobOutcome(error = "build produced no artifacts\n{r.output}",
+                                        fault = true)
+    if (!upload_success(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain, files)) {
+        return JobOutcome(error = "the builder could not publish this build's artifact",
+                          fault = true)
+    }
+    return JobOutcome()
+}
+
+def private build_in_scratch(job : ClaimedBuild) : JobOutcome {
+    //! Builds the job in a scratch directory of its own and removes the
+    //! directory.
     // Unpredictable, freshly created, and ours: a name derived from the job
     // would be guessable by anyone with a local account on this box, who could
     // then pre-create the output directory or plant a symlink in it before the
@@ -153,66 +181,45 @@ def private run_one_job(job : ClaimedBuild) {
     let root = new_scratch_dir(mk_err)
     if (empty(root)) {
         logger_error("buildd", "cannot create scratch dir: {mk_err}", JV((hash = job.hash)))
-        upload_failure(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain,
-            "builder could not allocate scratch space")
-        return
+        return JobOutcome(error = "builder could not allocate scratch space", fault = true)
     }
     let src_dir = path_join(root, "src")
     let out_dir = path_join(root, "out")
     mkdir_rec(src_dir)
     mkdir_rec(out_dir)
-    logger_info("buildd", "job start", JV((hash = job.hash, mode = job.mode, toolchain = job.toolchain)))
-    let entry = unpack_sources(src_dir, job.source)
-    var asset_why = ""
-    let assets <- declared_page_assets(src_dir, entry, job.mode, g_cfg.worktree, asset_why)
-    // A page build compiles under a generated .das_package (the release-wasm
-    // rail wants one; job sources can never carry their own). Written by THIS
-    // service into a dir it owns, before the sandbox ever runs.
-    let packaged = (empty(entry) || job.mode != "page" ||
-        (empty(asset_why) && write_page_package(src_dir, entry, assets, g_cfg.worktree)))
-    if (empty(entry) || !packaged) {
-        // Three different faults, and the user must not be told their source is
-        // malformed when the builder is what failed.
-        let why = (empty(entry) ? "malformed source document"
-            : (!empty(asset_why) ? asset_why : "builder could not prepare the build directory"))
-        logger_warning("buildd", "job failed: {why}",
-            JV((hash = job.hash, duration_ms = get_time_usec(t0) / 1000)))
-        upload_failure(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain, why)
-    } else {
-        let r = run_build_command(g_cfg.build_cmd, src_dir, out_dir, job.mode, entry,
-            float(g_cfg.build_timeout_seconds))
-        if (!r.ok) {
-            logger_warning("buildd", "build failed",
-                JV((hash = job.hash, exit_code = r.exit_code, duration_ms = get_time_usec(t0) / 1000)))
-            upload_failure(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain,
-                empty(r.output) ? "build failed (exit code {r.exit_code})" : r.output)
-        } else {
-            let files <- collect_artifacts(out_dir, job.mode)
-            if (empty(files)) {
-                logger_warning("buildd", "job failed: no artifacts collected",
-                    JV((hash = job.hash, mode = job.mode, duration_ms = get_time_usec(t0) / 1000)))
-                upload_failure(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain,
-                    "build produced no artifacts\n{r.output}")
-            } elif (upload_success(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain, files)) {
-                logger_info("buildd", "job done",
-                    JV((hash = job.hash, files = length(files), duration_ms = get_time_usec(t0) / 1000)))
-            } else {
-                // The build worked; publishing it did not. A server that
-                // REFUSED the artifact is reachable, so say so and let the user
-                // see a failure now instead of waiting out the claim timeout.
-                // Only a genuinely unreachable server falls through to the
-                // stale-claim sweep, which is what that sweep is for.
-                logger_error("buildd", "artifact upload refused; reporting the job failed",
-                    JV((hash = job.hash, duration_ms = get_time_usec(t0) / 1000)))
-                if (!upload_failure(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain,
-                        "the builder could not publish this build's artifact")) {
-                    logger_error("buildd", "claim left unresolved: server unreachable",
-                        JV((hash = job.hash, toolchain = job.toolchain)))
-                }
-            }
-        }
-    }
+    let outcome = build_and_publish(job, src_dir, out_dir)
     rmdir_rec(root)
+    return outcome
+}
+
+def private first_line(text : string) : string {
+    let line_end = find(text, "\n")
+    return line_end >= 0 ? slice(text, 0, line_end) : text
+}
+
+def private run_one_job(job : ClaimedBuild) {
+    //! One claimed job, start to finish: materialize, build, upload,
+    //! clean up. Every outcome is reported to the server; only a server
+    //! that takes no report leaves the claim to the stale-requeue sweep.
+    g_job_counter ++
+    let t0 = ref_time_ticks()
+    logger_info("buildd", "job start",
+                JV((hash = job.hash, mode = job.mode, toolchain = job.toolchain)))
+    let outcome = build_in_scratch(job)
+    let duration_ms = get_time_usec(t0) / 1000
+    if (empty(outcome.error)) {
+        logger_info("buildd", "job done", JV((hash = job.hash, duration_ms = duration_ms)))
+        return
+    }
+    logger_warning("buildd", "job failed", JV((hash = job.hash, fault = outcome.fault,
+        duration_ms = duration_ms, reason = first_line(outcome.error))))
+    if (
+        !upload_failure(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain, outcome.error,
+                        outcome.fault)) {
+        logger_error("buildd",
+                     "failure report not accepted; the claim is left to the stale-claim sweep",
+            JV((hash = job.hash, toolchain = job.toolchain)))
+    }
 }
 
 def update_service : bool {

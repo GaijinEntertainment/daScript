@@ -25,6 +25,7 @@ struct BuiltFile {
 
 struct BuildRunResult {
     ok : bool
+    fault : bool
     exit_code : int
     output : string   // combined stdout+stderr (the build script redirects its own stderr)
 }
@@ -145,35 +146,40 @@ def is_valid_job_hash(h : string) : bool {
 
 def is_valid_job_toolchain(t : string) : bool => is_lower_hex(t, 7, 64)
 
-def unpack_sources(src_dir : string; source : string) : string {
-    //! Materialize a job's source document into src_dir and return the entry
-    //! file name; "" = malformed document (refused). Two shapes, the same two
-    //! the playground stores: a raw `.das` text (entry `main.das`), or the
-    //! multi-file `{files, active}` JSON bundle.
+struct UnpackedSources {
+    entry : string        // "" = nothing to build: the document was refused, or `write_failed`
+    write_failed : bool   // the service's own failure, not the document's
+}
+
+def unpack_sources(src_dir : string; source : string) : UnpackedSources {
+    //! Materialize a job's source document into src_dir and return the
+    //! entry file name. Two shapes, the same two the playground stores: a
+    //! raw `.das` text (entry `main.das`), or the multi-file `{files,
+    //! active}` JSON bundle.
     var jerr = ""
     var doc = read_json(source, jerr)
     if (doc == null || !(doc.value is _object) || !key_exists(doc.value as _object, "files")) {
         // raw single-file source
         if (!fwrite(path_join(src_dir, "main.das"), source)) {
             logger_error("buildd.core", "cannot write main.das into {src_dir}")
-            return ""
+            return UnpackedSources(write_failed = true)
         }
-        return "main.das"
+        return UnpackedSources(entry = "main.das")
     }
     let files = doc?["files"]
     if (files == null || !(files.value is _object)) {
-        return ""
+        return UnpackedSources()
     }
     let entry : string = doc?["active"] ?? ""
     if (!is_valid_source_filename(entry)) {
         logger_error("buildd.core", "bundle has no usable active entry")
-        return ""
+        return UnpackedSources()
     }
     var entry_seen = false
     for (name, v in keys(files.value as _object), values(files.value as _object)) {
         if (!is_valid_source_filename(name)) {
             logger_error("buildd.core", "refusing bundle file name {name}")
-            return ""
+            return UnpackedSources()
         }
         // Refuse a file whose content is not text, rather than coercing it to
         // "" — `?? ""` would quietly compile an EMPTY file under a hash that
@@ -183,28 +189,61 @@ def unpack_sources(src_dir : string; source : string) : string {
         // carry a number or an object here.
         if (v == null || !(v.value is _string)) {
             logger_error("buildd.core", "bundle file {name} is not text")
-            return ""
+            return UnpackedSources()
         }
         let content : string = v ?? ""
         if (!fwrite(path_join(src_dir, name), content)) {
             logger_error("buildd.core", "cannot write {name} into {src_dir}")
-            return ""
+            return UnpackedSources(write_failed = true)
         }
         if (name == entry) {
             entry_seen = true
         }
     }
-    return entry_seen ? entry : ""
+    return UnpackedSources(entry = entry_seen ? entry : "")
 }
 
-def run_build_command(build_cmd : string; src_dir : string; out_dir : string; mode : string; entry : string; timeout_seconds : float) : BuildRunResult {
+//! The one `run_build.sh` exit status that judges the sample: the
+//! build ran in the sandbox and failed.
+let BUILD_VERDICT_EXIT = 65
+
+def is_build_fault(exit_code : int) : bool {
+    //! Every nonzero status but `BUILD_VERDICT_EXIT`: the build service
+    //! failed, not the sample.
+    return exit_code != 0 && exit_code != BUILD_VERDICT_EXIT
+}
+
+struct JobOutcome {
+    error : string   //! "" = nothing failed: the artifact is published
+    fault : bool     //! the build service failed, not the sample
+}
+
+def unpack_failure(unpacked : UnpackedSources) : JobOutcome {
+    //! Why a job whose sources gave no entry cannot be built.
+    let cannot_write = "builder could not write the job's sources"
+    if (unpacked.write_failed) return JobOutcome(error = cannot_write, fault = true)
+    return JobOutcome(error = "malformed source document")
+}
+
+def build_failure(r : BuildRunResult; timeout_seconds : int) : JobOutcome {
+    //! What a build that exited nonzero reports.
+    if (r.exit_code == popen_timed_out) {
+        return JobOutcome(error = "build timed out after {timeout_seconds} seconds\n{r.output}",
+                          fault = true)
+    }
+    return JobOutcome(error = empty(r.output) ? "build failed (exit code {r.exit_code})" : r.output,
+                      fault = r.fault)
+}
+
+def run_build_command(build_cmd : string; src_dir : string; out_dir : string; mode : string;
+                      entry : string; timeout_seconds : float) : BuildRunResult {
     //! Invoke `<build_cmd> <src_dir> <out_dir> <mode> <entry>` via argv — no
     //! shell, so nothing in a path or name is ever interpreted. build_cmd is a
     //! space-separated prefix (`bash run_build.sh`); the timeout is the
     //! wall-clock kill for a wedged build.
     var argv <- [for (part in split(build_cmd, " ")); part; where !empty(part)]
     if (empty(argv)) {
-        return BuildRunResult(exit_code = -1, output = "build_cmd is not configured")
+        return BuildRunResult(fault = true, exit_code = -1, output = "build_cmd is not configured")
     }
     argv |> push(src_dir)
     argv |> push(out_dir)
@@ -216,7 +255,7 @@ def run_build_command(build_cmd : string; src_dir : string; out_dir : string; mo
             output = fread(f)
         }
     })
-    return BuildRunResult(ok = rc == 0, exit_code = rc, output = output)
+    return BuildRunResult(ok = rc == 0, fault = is_build_fault(rc), exit_code = rc, output = output)
 }
 
 def expected_artifact_names(mode : string) : array<string> {
@@ -233,7 +272,8 @@ def expected_artifact_names(mode : string) : array<string> {
     return <- array<string>()
 }
 
-def write_page_package(src_dir : string; entry : string; assets : array<string>; worktree : string) : bool {
+def write_page_package(src_dir : string; entry : string; assets : array<string>;
+                       worktree : string) : bool {
     //! The .das_package a page build compiles under — daspkg's release-wasm rail
     //! wants one, and a job's sources can never carry their own (bundle names
     //! must be plain `.das`). Naming the app `sample` pins the exact artifact
@@ -297,7 +337,8 @@ def collect_artifacts(out_dir : string; mode : string) : array<BuiltFile> {
     }
     for (name in seen |> keys()) {
         if (find_index(wanted, name) < 0) {
-            logger_warning("buildd.core", "ignoring unexpected build output", JV((name = name, mode = mode)))
+            logger_warning("buildd.core", "ignoring unexpected build output",
+                           JV((name = name, mode = mode)))
         }
     }
     out |> reserve(length(wanted))
@@ -310,7 +351,8 @@ def collect_artifacts(out_dir : string; mode : string) : array<BuiltFile> {
         // publishes it. Refuse the job rather than resolve the link.
         var link_err = ""
         if (is_symlink(full, link_err)) {
-            logger_error("buildd.core", "refusing symlinked artifact", JV((name = name, mode = mode)))
+            logger_error("buildd.core", "refusing symlinked artifact",
+                         JV((name = name, mode = mode)))
             out |> clear()
             return <- out
         }
@@ -325,7 +367,8 @@ def collect_artifacts(out_dir : string; mode : string) : array<BuiltFile> {
         }
         let hex = sha256_file_hex(full)
         if (empty(hex)) {
-            logger_error("buildd.core", "expected artifact unreadable or empty", JV((name = name, mode = mode)))
+            logger_error("buildd.core", "expected artifact unreadable or empty",
+                         JV((name = name, mode = mode)))
             out |> clear()
             return <- out
         }
