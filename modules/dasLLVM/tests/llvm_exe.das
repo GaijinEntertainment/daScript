@@ -6,6 +6,8 @@ require daslib/env_registry
 require daslib/strings_boost
 require strings
 require ../../../utils/daspkg/utils.das
+require llvm/daslib/llvm_jit_common   // lto_linker_args: the LTO link's flags
+require jit   // host_jit_triple: whether the link is a native one
 require _exe_test_common
 
 // A standalone exe registers its functions and globals one at a time and seals the lookup tables
@@ -272,6 +274,27 @@ def test_lto_driver_gate_parsing(t : T?) {
         t |> equal(22, driver_major("clang version 22.1.5\n"))
         t |> equal(0, driver_major("g++ (GCC) 13.2.0\n"))
         t |> success(bundled_llvm_major() >= 16, "the CMake pin names the bundled LLVM's major: {bundled_llvm_major()}")
+    }
+}
+
+[test(description = "the LTO link's flags name the opt level and the inline threshold in the form this platform's native linker takes: lld-link's /mllvm on Windows, ld64's -mllvm and no -plugin-opt on macOS, lld's -plugin-opt elsewhere")]
+def test_lto_linker_args(t : T?) {
+    if (!empty(host_jit_triple())) {
+        t |> skip("the host toolchain's triple is not LLVM's: the link is no native one")
+        return
+    }
+    let args = lto_linker_args(2u)
+    let platform = get_platform_name()
+    if (platform == "windows") {
+        t |> success(find(args, "/opt:lldlto=2 /mllvm:-inline-threshold=") >= 0,
+            "lld-link's form: {args}")
+    } elif (platform == "darwin") {
+        t |> success(find(args, "-flto -O2 -Wl,-mllvm,-inline-threshold=") >= 0,
+            "ld64's -mllvm: {args}")
+        t |> success(find(args, "-plugin-opt") < 0, "ld64 takes no -plugin-opt: {args}")
+    } else {
+        t |> success(find(args, "-flto -O2 -Wl,-plugin-opt=-inline-threshold=") >= 0,
+            "lld's -plugin-opt: {args}")
     }
 }
 

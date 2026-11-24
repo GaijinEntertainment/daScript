@@ -1153,10 +1153,13 @@ def public write_lto_bitcode(mod : LLVMOpaqueModule?; triple : string;
 [arch(at="../ARCHITECTURE_EXE.md#split-exe-lto")]
 //! the LTO link's flags at the run's opt level: regular LTO (one merged module, its optimization serial - the bitcode carries no summary, so a ThinLTO job count would be inert)
 def public lto_linker_args(opt_level : uint) : string {
-    let msvc_lld = get_platform_name() == "windows" && empty(host_jit_triple())
+    let native = empty(host_jit_triple())
+    let msvc_lld = get_platform_name() == "windows" && native
+    let apple_ld = get_platform_name() == "darwin" && native   // ld64 has no -plugin-opt
     let level = int(opt_level)   // a uint interpolates as hex
     let threshold = int(LLVM_INLINE_THRESHOLD)
     return (msvc_lld ? "/opt:lldlto={level} /mllvm:-inline-threshold={threshold}"
+        : apple_ld ? "-flto -O{level} -Wl,-mllvm,-inline-threshold={threshold}"
         : "-flto -O{level} -Wl,-plugin-opt=-inline-threshold={threshold}")
 }
 
