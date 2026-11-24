@@ -2375,6 +2375,10 @@ def private trim_emb_gather(t : Model; f : KqFmt; woff, n, rows, mr, kgroup, wbi
     let elems = n * rows
     var view = Model()
     view.quant = t.quant
+    view.kq_repacked = t.kq_repacked   // the pack holds a K-quant table in the model's interleave, the one the CPU embed reads it at
+    for (p, i in t.kq, count()) {
+        view.kq[i].mr = p.mr
+    }
     if (f == KqFmt.q8) {
         let blk = Q8_QPB + Q8_SPB
         let b0 = (woff - r.off) / Q8_BLOCK_ELEMS

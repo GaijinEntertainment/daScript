@@ -75,7 +75,8 @@ def test_vulkan_live_load(tst : T?) {
 }
 
 //! the families whose trimmed lane the whole-model driver serves beside the dense q8 one: biased routed experts over an untied
-//! q8 token table, per-layer embeddings, and the gemma-4 routed block with its dense shared expert - a test a family:
+//! q8 token table, per-layer embeddings, the gemma-4 routed block with its dense shared expert, and K-quant routed stacks
+//! under an untied K-quant token table - a test a family:
 //! its trimmed lane minted with no planar family on the host, then served cold, warm and re-armed
 def private family_lane_test(tst : T?; family, file : string) {
     tst |> run("{file}: the trimmed lane serves the live load's tokens cold, warm and re-armed, the token rows gathered where the staged load's are") @(t : T?) {
@@ -98,6 +99,11 @@ def test_vulkan_mint_family_lane_gemma4e(tst : T?) {
 [test(description = "gemma-4-26B-A4B-6L, with its routed block and dense shared expert, mints a trimmed Vulkan lane with no planar family on the host, and the lane - cold, warm and re-armed - serves the live load's greedy tokens exactly")]
 def test_vulkan_mint_family_lane_gemma4moe(tst : T?) {
     family_lane_test(tst, "gemma4moe", "gemma-4-26B-A4B-6L-Q4_K_M-local.gguf")
+}
+
+[test(description = "Qwen3-30B-A3B Q4_K_M, with its K-quant routed stacks under an untied K-quant token table, mints a trimmed Vulkan lane with no planar family on the host, and the lane - cold, warm and re-armed - serves the live load's greedy tokens exactly")]
+def test_vulkan_mint_family_lane_qwen3moe(tst : T?) {
+    family_lane_test(tst, "qwen3moe", "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf")
 }
 
 let private MOE_FILE = "Qwen1.5-MoE-A2.7B-4L-Q4_K_M-local.gguf"   //! the Q4_K_M mint's four-block cut
