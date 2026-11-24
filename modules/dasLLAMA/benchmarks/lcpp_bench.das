@@ -49,7 +49,7 @@ require dasllama/dasllama_env
 // llama-bench mirror — EXACTLY llama.cpp's test shapes, rep counts, and timing boundaries, and
 // NOTHING else. Two independent rows, each = one untimed warmup + -r timed reps, mean ± stdev:
 //   pp: one batched forward_prefill of -p tokens from an empty cache per rep
-//   tg: -n single-token forwards at pos 0.. per rep, feeding synthetic ids with NO logit read
+//   tg: -n single-token forwards at pos 0.. per rep (at pos -p.. under --tg-after), feeding synthetic ids with NO logit read
 //       (llama-bench never samples — sampling cost is excluded by design)
 //   tg-real<n> (--mtp-ab, --tok) drops no warmup round: every rep is timed; tg<n>@<npl> drops none either - each rep's
 //       batched command opens with one untimed warm step inside the rep
@@ -90,6 +90,10 @@ struct Args {
     @clarg_short = "r"
     @clarg_doc = "Timed repetitions per row (default: 5, llama-bench -r)"
     reps : int = 5
+
+    @clarg_name = "tg-after"
+    @clarg_doc = "The tg row decodes on from the pp row's prompt - positions -p onward, over the prompt's K/V - instead of from an empty context; the row reads tg<n>+<p> (needs -p above 0)"
+    tg_after : bool = false
 
     @clarg_short = "t"
     @clarg_doc = "Worker threads (default: the box profile; DAS_JOBQUE_THREADS still wins)"
@@ -921,9 +925,26 @@ def flat_row_plen(plen, ngen, row_ctx : int64; real_row : bool) : int64
 //! the context every row of one model needs: the batched streams' prompt, window, a slot a stream
 //! for the admits and the margin (times `spec_rows` under the self-speculative arm), and never under
 //! the flat rows' own need - the flat session has no capacity check on its prefill path, so a cap
-//! under `plen` is a prefill written past the cache
-def rows_ctx_need(plen, ngen, bplen : int64; npl : int; spec_rows : int64) : int64
-    => max(npl > 1 ? bplen + bench_stream_rows(ngen, int64(npl), spec_rows) : 0l, max(plen, ngen))
+//! under `plen` is a prefill written past the cache; under `tg_after` the tg row decodes on from the prompt's rows
+def rows_ctx_need(plen, ngen, bplen : int64; npl : int; spec_rows : int64; tg_after : bool = false) : int64
+    => max(npl > 1 ? bplen + bench_stream_rows(ngen, int64(npl), spec_rows) : 0l, tg_after ? plen + ngen : max(plen, ngen))
+
+//! the recurrent state the pp row's prompt left in `s`, which every --tg-after rep decodes on from; empty where the flag is off
+def private tg_after_base(var s : Session; on : bool) : DnSnapshot {
+    if (on) {
+        return <- dn_snapshot_take(s)
+    }
+    var none : DnSnapshot
+    return <- none
+}
+
+//! a tg rep from `pos0`: past 0 the session first takes back `base`, the state the warm-up token and the rep before moved on from
+def private tg_rep_from(t : Model; var s : Session; ngen, seed, pos0 : int64; base : DnSnapshot) : double {
+    if (pos0 > 0l) {
+        dn_snapshot_restore(s, base)
+    }
+    return bench_tg_rep(t, s, ngen, seed, pos0)
+}
 
 // Raw corpus file read; leading '#' lines are provenance headers, not corpus bytes.
 // Non-private: tests/test_tok_seed.das gates the header walk.
@@ -1773,7 +1794,7 @@ def main() : int {
         let bplen = cfg.npl_plen > 0 ? int64(cfg.npl_plen) : (plen > 0l ? plen : BENCH_PP_TOKENS)   //! the batched row's prompts: --npl-plen, else -p, else the flat reference exe's -p default when the pp row is off
         //! the self-speculative streams emit up to depth + 1 tokens a tick: their rows take the rep's whole budget
         let spec_rows = cfg.npl_mtp ? (cfg.mtp_depth > 0 ? int64(cfg.mtp_depth) : get_mtp_depth()) + 1l : 1l
-        let rows_ctx = rows_ctx_need(plen, ngen, bplen, cfg.npl, spec_rows)
+        let rows_ctx = rows_ctx_need(plen, ngen, bplen, cfg.npl, spec_rows, cfg.tg_after)
         if (cfg.npl > 1) {
             set_gpu_resident_regions(int64(cfg.npl))   //! the batched row's streams each home in a region: asked before the load sizes the mirror
             if (!real_row) {
@@ -2059,12 +2080,17 @@ def main() : int {
                 }
             }
             if (ngen > 0l) {
-                bench_tg_warm(t, s)   // one untimed token, llama-bench's test_gen(ctx, 1)
-                if (!bench_output_gate(t, s, fmt, "tg{ngen}{dtag}")) {
-                    panic("lcpp_bench: output sanity gate refused tg{ngen}{dtag} - see the REFUSED line")
+                verify(!cfg.tg_after || plen > 0l, "lcpp_bench: --tg-after decodes on from the pp row's prompt - pass -p above 0")
+                verify(!cfg.tg_after || empty(cfg.ref), "lcpp_bench: --tg-after has no reference row - the reference's tg row decodes from an empty context; drop --ref")
+                let tg_pos0 = cfg.tg_after ? plen : 0l
+                let tg_tag = cfg.tg_after ? "tg{ngen}+{plen}{dtag}" : "tg{ngen}{dtag}"
+                var inscope tg_base <- tg_after_base(s, cfg.tg_after)
+                bench_tg_warm(t, s, tg_pos0)   // one untimed token
+                if (!bench_output_gate(t, s, fmt, tg_tag)) {
+                    panic("lcpp_bench: output sanity gate refused {tg_tag} - see the REFUSED line")
                 }
-                var inscope tps <- [for (rep in range(reps)); bench_tg_rep(t, s, ngen, int64(rep))]
-                say_row(fmt, "tg{ngen}{dtag}", "", tps, results)
+                var inscope tps <- [for (rep in range(reps)); tg_rep_from(t, s, ngen, int64(rep), tg_pos0, tg_base)]
+                say_row(fmt, tg_tag, "", tps, results)
             }
             if (ngen > 0l && cfg.npl > 1) {
                 let npl = int64(cfg.npl)

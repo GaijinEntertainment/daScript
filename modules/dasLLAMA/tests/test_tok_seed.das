@@ -56,6 +56,8 @@ def test_flat_row_plen(t : T?) {
         t |> equal(rows_ctx_need(64l, 4l, 8l, 4, 1l), 64l, "the flat rows' need wins at every scale")
         t |> equal(rows_ctx_need(512l, 128l, 512l, 0, 1l), 512l, "no batched row: the flat rows alone")
         t |> equal(rows_ctx_need(0l, 128l, 128l, 4, 3l), 548l, "the self-speculative streams take depth + 1 rows a tick")
+        t |> equal(rows_ctx_need(512l, 128l, 512l, 0, 1l, true), 640l, "--tg-after decodes on from the prompt: its rows and the reply's")
+        t |> equal(rows_ctx_need(512l, 128l, 512l, 0, 1l, false), 512l, "control: the same row from an empty context needs the longer of the two")
     }
 }
 
