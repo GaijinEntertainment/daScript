@@ -3335,8 +3335,8 @@ struct DnSnapshot {
     @exact_size conv : array<float>
     @exact_size state : array<float>
     @exact_size ple_hist : array<float>
-    ple_prev : array<int64>
-    mtp_h : array<float>   //! the draft head's carry at `pos` - empty when it stood elsewhere
+    @exact_size ple_prev : array<int64>
+    @exact_size mtp_h : array<float>   //! the draft head's carry at `pos` - empty when it stood elsewhere
 }
 
 //! Per-step scratch buffers and the KV cache (allocated once, reused every token).

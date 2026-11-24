@@ -35,9 +35,9 @@ any sibling companion that sends a reader to it.
   (`ARCHITECTURE_ENGINE_MECHANISMS.md#rope-scaling-bake`), and the decode pick tape a parity cell
   pins one arm's routing on another with (`ARCHITECTURE_ENGINE_MECHANISMS.md#moe-pick-tape`).
 - `ARCHITECTURE_ENGINE_SERVING.md` - the serving charter, the prefix cache's partial page
-  (`ARCHITECTURE_ENGINE_SERVING.md#prefix-tail-page`), its checkpoints on a recurrent model, the
-  reasoning budget that closes a thinking span for the model, and the host pool behind
-  device-home streams (`ARCHITECTURE_ENGINE_SERVING.md#device-home-pool`).
+  (`ARCHITECTURE_ENGINE_SERVING.md#prefix-tail-page`), its checkpoints on a recurrent model, a cached
+  context in a file (`ARCHITECTURE_ENGINE_SERVING.md#context-file`), the reasoning budget that closes a
+  thinking span, and the host pool behind device-home streams (`ARCHITECTURE_ENGINE_SERVING.md#device-home-pool`).
 - `ARCHITECTURE_ENGINE_FORMATS.md` - the format, load-rail and CPU-kernel-tier charters, plus
   the shapes they key off - the bigram merge heap the two LLM tokenizer backends run
   (`ARCHITECTURE_ENGINE_FORMATS.md#bpe-merge-heap`), the one RoPE fill over a position source

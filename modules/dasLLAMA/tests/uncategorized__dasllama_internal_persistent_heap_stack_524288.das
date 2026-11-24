@@ -13,6 +13,7 @@ require dasllama/dasllama_core   // kernel_report, prepared_image_alignment: a h
 require dasllama/dasllama_vad   // load_vad_model, vad_probs_cpu: the load from bytes
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require _image_memory   // read_page_aligned, zero_bytes: a host's own copy of the bin
+require _kv_prefix_cells   // the context file's cells on a synthetic Config
 require _model_form   // ModelForm and its pure parts: the load-once forms' knobs, names and pairing; served_forms
 require strings   // find: a refusal's words
 require daslib/strings_boost   // join: a block's loads and forms as one line
@@ -487,5 +488,27 @@ def test_model_once_block(t : T?) {
             delete p
         }
         delete cells
+    }
+}
+
+[test(description = "A context file carries a cached prefix between caches: a dense session's rows, and a recurrent checkpoint's rows and state, restore bit for bit into a pool of another page size - a recurrent request's every checkpoint, the stop its prefill left and its finished turn, each with its own state - where a prompt opening with the file's tokens attaches all of them, and the save leaves the cache holding the context; a context the cache does not hold, a path that does not open either way, a file that is not a context file, another model's, another codec's, one past the server's context, a cut one, one naming a token past the vocabulary, a dense file offered to a recurrent model, a file cut inside a checkpoint, a checkpoint of another model's shape and one the cache declines each refuse by name and leave no page held")]
+def test_prefix_context_file(t : T?) {
+    let c = mk_config(2l, 4l, 2l, 16l, 32l)
+    let dense_path = path_join(test_temp_dir(), "dasllama_ctx_dense.bin")
+    let state_path = path_join(test_temp_dir(), "dasllama_ctx_state.bin")
+    t |> run("a dense context: saved off one pool, restored into a pool of another page size, attached whole with the donor's bytes") @(t : T?) {
+        context_dense_cell(t, c, dense_path)
+    }
+    t |> run("a recurrent checkpoint: its rows and its state come back, the state standing at the checkpoint") @(t : T?) {
+        context_recurrent_cell(t, c, state_path)
+    }
+    t |> run("a recurrent file cut inside a checkpoint, and one whose checkpoint is another model's, refuse by name") @(t : T?) {
+        context_cut_cells(t, c, state_path)
+    }
+    t |> run("the refusals, each by name, none leaving a page held") @(t : T?) {
+        context_refusal_cells(t, c, dense_path, state_path)
+    }
+    t |> run("a save picks the checkpoints its tokens open with, shortest first, whatever order the cache holds them in") @(t : T?) {
+        context_pick_cell(t, c, path_join(test_temp_dir(), "dasllama_ctx_pick.bin"))
     }
 }

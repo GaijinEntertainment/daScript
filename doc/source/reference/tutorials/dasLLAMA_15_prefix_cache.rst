@@ -111,6 +111,36 @@ places a request names (the opening's shared head, the system opening, the
 request's own stable stop, its last message's close), within a byte budget - a quarter
 of the box's RAM unless ``--prefix-state-mb`` says otherwise.
 
+A cached context in a file
+==========================
+
+The cache lives in memory, so it ends with the process. ``prefix_file_save``
+writes one cached context to a file: the token ids and the KV rows of the
+longest prefix of ``tokens`` the cache holds. A model that carries state
+between tokens saves its checkpoints with them. ``prefix_file_restore`` reads
+the file into a cache, the same way a finished request donates its pages.
+
+We save the context of the first section, release the cache — a restart loses
+the same — and restore it. The next stream attaches the restored pages and
+prefills only its tail:
+
+.. code-block:: das
+
+   var saved <- prefix_file_save(m, cache, pool, p1, "store.ctx")
+   print("saved {saved.tokens} tokens, {saved.bytes} bytes\n")
+   prefix_release(cache, pool)   // empty now, as after a restart
+
+   var back <- prefix_file_restore(m, cache, pool, "store.ctx")
+   var s3 = create_session(m, pool)
+   let matched3 = prefix_attach(cache, pool, s3, p2)
+   // eval() only p2's tokens from matched3 on
+
+Both calls answer a ``ContextFile``. Its ``why`` is empty when the call
+worked. A restore that did not work says why: the file is another model's, it
+is cut short, or the cache declined it. ``dasllama-server`` keeps a long
+system prompt or a long document across restarts through the same two calls
+(its slot routes, ``--slot-save-path``).
+
 What the cache holds, and giving it back
 ========================================
 

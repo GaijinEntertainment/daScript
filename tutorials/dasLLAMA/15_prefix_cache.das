@@ -4,6 +4,7 @@ options fast_math = true  // ggml-parity FP laxity; drop for bit-exact work
 
 require dasllama/dasllama
 require daslib/jobque_boost
+require daslib/fio
 require strings
 
 // Tutorial dasLLAMA-15: The Prefix Cache by Hand
@@ -15,6 +16,7 @@ require strings
 //   - prefix_attach: the next request skips the donated prefill
 //   - prefix_chain_list + prefix_held_groups: what the cache holds
 //   - render_turn_marked + prefix_checkpoint_at: models that carry state between tokens
+//   - prefix_file_save + prefix_file_restore: a context in a file
 //   - prefix_release: give every page back before the pool dies
 //
 // Tutorial 13's scheduler ran a prefix cache for us. Here we drive the same
@@ -34,6 +36,7 @@ let SYSTEM = "You are a terse assistant for a hardware store. Answer in one sent
 let Q1 = " Do you sell drills?"
 let Q2 = " When do you open?"
 let PAGE_ROWS = 16l
+let CONTEXT_FILE = "dasllama_tutorial_15.ctx"
 
 // ──────────────────────────────────────────────────────────────────────────
 // Section 1 — Donate, then attach
@@ -118,8 +121,48 @@ def section_checkpoint(m : Model; var pool : KVPool; var cache : PrefixCache) {
     delete chat
 }
 
+// ───────────────────────────────────────────────────────────────────
+// Section 3 — A cached context in a file
+// ───────────────────────────────────────────────────────────────────
+//
+// The cache lives in memory, so it ends with the process.
+// prefix_file_save writes one cached context to a file: the token
+// ids and the KV rows of the longest prefix of `tokens` the cache
+// holds. A model that carries state between tokens saves its
+// checkpoints with them. prefix_file_restore reads the file into a
+// cache, the same way a finished request donates its pages.
+//
+// We save the context of section 1, release the cache — a restart
+// loses the same — and restore it. Stream C attaches the restored
+// pages and prefills only its tail. Both calls answer a ContextFile:
+// `why` is empty when the call worked, `tokens` and `bytes` say how
+// much moved.
+
+def section_save_restore(m : Model; var pool : KVPool; var cache : PrefixCache) {
+    let p1 <- encode(m, "{SYSTEM}{Q1}")
+    var saved <- prefix_file_save(m, cache, pool, p1, CONTEXT_FILE)
+    print("saved {saved.tokens} tokens of context, {saved.bytes} bytes {saved.why}\n")
+    delete saved
+    prefix_release(cache, pool)   // empty now, as after a restart
+
+    var back <- prefix_file_restore(m, cache, pool, CONTEXT_FILE)
+    print("restored {back.tokens} tokens {back.why}\n")
+    delete back
+    let p3 <- encode(m, "{SYSTEM}{Q2}")
+    var s3 = create_session(m, pool)
+    let matched = prefix_attach(cache, pool, s3, p3)
+    let total = long_length(p3)
+    let tail <- [for (i in range64(matched, total)); p3[i]]
+    eval(m, s3, tail)
+    let answer = piece(m, sample(s3, SamplingParams()))
+    print("C matched {matched} of {total} tokens off the file; answer: '{answer}...'\n\n")
+    release_kv_pages(s3)
+    delete s3
+    remove(CONTEXT_FILE)
+}
+
 // ──────────────────────────────────────────────────────────────────────────
-// Section 3 — What the cache holds, and giving it back
+// Section 4 — What the cache holds, and giving it back
 // ──────────────────────────────────────────────────────────────────────────
 //
 // prefix_chain_list snapshots every donation: how many tokens it covers, how
@@ -161,6 +204,7 @@ def main() {
         setup_dasllama_jobque()
         section_donate_attach(m, pool, cache)
         section_checkpoint(m, pool, cache)
+        section_save_restore(m, pool, cache)
         section_observe_release(pool, cache)
     }
     delete cache

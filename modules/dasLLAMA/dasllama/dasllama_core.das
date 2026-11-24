@@ -142,6 +142,19 @@ def prefix_insert(var cache : PrefixCache; var pool : KVPool; var session : Sess
     return prefix_insert_(cache, pool, session, tokens, preview, opening)
 }
 
+def prefix_file_save(model : Model; var cache : PrefixCache; var pool : KVPool; tokens : array<int64>; path : string) : ContextFile {
+    //! Write the cached context that opens with ``tokens`` to ``path``: the longest prefix of them the cache holds - token ids,
+    //! every K/V plane's rows in the pool's codec, a recurrent model's state after the last. ``why`` empty = written.
+    return <- prefix_file_save_(model, cache, pool, tokens, path)
+}
+
+def prefix_file_restore(model : Model; var cache : PrefixCache; var pool : KVPool; path : string) : ContextFile {
+    //! Read the context file at ``path`` into the cache, as a finished turn's donation: a prompt opening with its tokens
+    //! (``ids``) attaches there and prefills only the rest. ``why`` empty = taken; else the file is another model's, another
+    //! codec's, cut short, or the cache declined it.
+    return <- prefix_file_restore_(model, cache, pool, path)
+}
+
 def prefix_chain_list(cache : PrefixCache) : array<PrefixChain> {
     //! Snapshot of the cache's donated chains for dashboards: per donation — page-covered token
     //! count, live pages, hit count, born/last-hit ticks, and the caller-provided preview.

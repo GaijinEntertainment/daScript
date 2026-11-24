@@ -6,6 +6,11 @@ module dasllama_prefix shared public
 
 require dasllama/dasllama_lint public
 require dasllama/dasllama_common   // KVPool, Session, kv_pool_release_group
+require daslib/fio   // the context file
+require daslib/array_boost   // array_view: a page of a plane as the write's buffer
+require daslib/cmp   // cmp_by: the checkpoints by their length
+require daslib/math_bits   // float_bits_to_uint: a model's mark off its weights
+require dasllama/dasllama_math   // reserve_resize
 require math   // min
 
 // The prefix cache, page-granular: completed streams donate their full KV pages,
@@ -139,14 +144,17 @@ def private snapshot_bytes_(snap : DnSnapshot; n : int64) : int64 =>
     (4l * (long_length(snap.conv) + long_length(snap.state) + long_length(snap.ple_hist) + long_length(snap.mtp_h))
         + 8l * (long_length(snap.ple_prev) + n))
 
-//! the bytes of one page group of `pool`
-def private page_bytes_(pool : KVPool) : int64 {
+//! the bytes of one position of `pool`: its K and V rows over every plane
+def private position_bytes_(pool : KVPool) : int64 {
     var row_bytes = 0l
     for (k, v in pool.krow_bytes, pool.vrow_bytes) {
         row_bytes += k + v
     }
-    return pool.page_rows * row_bytes
+    return row_bytes
 }
+
+//! the bytes of one page group of `pool`
+def private page_bytes_(pool : KVPool) : int64 => pool.page_rows * position_bytes_(pool)
 
 //! what a checkpoint of `n` tokens costs alone: its snapshot's arrays, its token list, and the rows of the pages it holds
 def private prefix_state_bytes_(pool : KVPool; snap : DnSnapshot; n : int64) : int64 {
@@ -680,4 +688,296 @@ def prefix_chain_list_(cache : PrefixCache) : array<PrefixChain> {
         out |> push(c)
     }
     return <- out
+}
+
+let private CONTEXT_FILE_MAGIC = int64(0x3130305854434C44ul)   //! "DLCTX001"
+let private CONTEXT_FILE_VERSION = 1l
+let private CONTEXT_HDR_WORDS = 16l
+let private CONTEXT_STATE_WORDS = 4l   //! a checkpoint's own words: its position, its kind, its window's and its draft carry's lengths
+
+//! what a context file's save or restore did: `why` empty where it ran, else the reason nothing was written or taken
+struct ContextFile {
+    why : string         //! "" where the save or the restore ran
+    tokens : int64       //! the token ids the file holds
+    bytes : int64        //! the bytes written or read
+    ids : array<int64>   //! a restore's token ids, in order (a save leaves it empty)
+}
+
+//! the context file's header: the counts every later block is sized by - the tokens, the K/V planes, a recurrent
+//! checkpoint's fixed arrays, the checkpoints - and the session facts a restored context stands at
+struct private ContextHeader {
+    tokens : int64
+    nblobs : int64
+    kdt : int64
+    vdt : int64
+    conv : int64
+    state : int64
+    ple_hist : int64
+    checkpoints : int64
+    ring_floor : int64
+    vocab : int64
+    layers : int64
+    mark : int64   //! the recording model's weights, hashed (`context_model_mark`); 0 where the caller named none
+}
+
+def private context_header_words(h : ContextHeader) : array<int64>
+    => <- [CONTEXT_FILE_MAGIC, CONTEXT_FILE_VERSION, h.tokens, h.nblobs, h.kdt, h.vdt, h.conv, h.state, h.ple_hist, h.checkpoints, h.ring_floor, h.vocab, h.layers, h.mark, 0l, 0l]
+
+//! a mark of `model`'s weights: its final norm's weights hashed (FNV-1a over their bits), never 0 - two models of one
+//! geometry carry two marks, so a context file restores only into the model that recorded it
+def context_model_mark(model : Model) : int64 {
+    var h = 0xcbf29ce484222325ul
+    for (i in range64(model.config.dim)) {
+        h = (h ^ uint64(float_bits_to_uint(model.fblob[model.rms_final_off + i]))) * 0x100000001b3ul
+    }
+    return int64(h | 1ul)
+}
+
+//! why a file of header `h` and row sizes `row_bytes` (K then V bytes a plane) is not a context of a model of `c` and weights
+//! mark `mark` on `pool` whose fresh session is `s`; "" where it is
+def private context_header_why(c : Config; pool : KVPool; h : ContextHeader; row_bytes : array<int64>; s : Session; mark : int64) : string {
+    if (h.vocab != c.vocab_size || h.layers != c.n_layers) {
+        return "the file is another model's: {h.layers} layers and a vocabulary of {h.vocab}, this model {c.n_layers} and {c.vocab_size}"
+    }
+    return "the file is another model's: its weights are not this model's (a model of the same geometry recorded it)" if (h.mark != mark)
+    if (h.kdt != int64(pool.kdt) || h.vdt != int64(pool.vdt)) {
+        return "the file's K/V codecs ({h.kdt}, {h.vdt}) are not this server's ({pool.kdt}, {pool.vdt})"
+    }
+    for (b in range64(pool.nblobs)) {
+        if (row_bytes[2l * b] != pool.krow_bytes[b] || row_bytes[2l * b + 1l] != pool.vrow_bytes[b]) {
+            return "the file's K/V rows of plane {b} are {row_bytes[2l * b]} and {row_bytes[2l * b + 1l]} bytes, this model's {pool.krow_bytes[b]} and {pool.vrow_bytes[b]}"
+        }
+    }
+    let state = long_length(s.dn_state)
+    let conv = long_length(s.dn_conv_state)
+    let ple_hist = long_length(s.ple_conv_hist)
+    if (h.conv != conv || h.state != state || h.ple_hist != ple_hist || (h.checkpoints > 0l) != (h.state > 0l)) {
+        return "the file's recurrent state ({h.checkpoints} checkpoints of {h.state} state, {h.conv} conv and {h.ple_hist} window floats) is not this model's ({state}, {conv}, {ple_hist})"
+    }
+    if (h.tokens <= 0l || h.tokens > c.seq_len) {
+        return "the file holds {h.tokens} tokens, this server's context {c.seq_len}"
+    }
+    return ""
+}
+
+//! the rows of positions [0, n) of one K/V plane - `blob`, a page a group of `groups`, `row_bytes` a position - moved between
+//! the plane and `f` in position order, each page straight off or onto the plane: written where `write`, else read. The bytes
+//! moved; a page that moves short ends the walk
+def private context_rows_move(f : file; var blob : array<uint8>; groups : array<int>; page_rows, row_bytes, n : int64; write : bool) : int64 {
+    var left = n
+    var moved = 0l
+    for (g in groups) {
+        break if (left <= 0l || row_bytes <= 0l)
+        let rows = min(left, page_rows)
+        let nb = rows * row_bytes
+        var took = 0l
+        array_view(blob, int64(g) * page_rows * row_bytes, nb) $(var page) {
+            took = write ? long_fwrite(f, page) : long_fread(f, page)
+        }
+        moved += took
+        break if (took != nb)
+        left -= rows
+    }
+    return moved
+}
+
+//! every plane's rows of positions [0, n), K then V a plane, between the pages `groups` and `f`; the bytes moved
+def private context_planes_move(f : file; var pool : KVPool; groups : array<int>; n : int64; write : bool) : int64 {
+    var moved = 0l
+    for (b in range64(pool.nblobs)) {
+        moved += context_rows_move(f, pool.kblobs[b], groups, pool.page_rows, pool.krow_bytes[b], n, write)
+        moved += context_rows_move(f, pool.vblobs[b], groups, pool.page_rows, pool.vrow_bytes[b], n, write)
+    }
+    return moved
+}
+
+//! the checkpoints of `cache` whose every token opens `tokens`, shortest first: the stops one request's prefill and its
+//! finished turn left
+def private context_states_of(cache : PrefixCache; tokens : array<int64>) : array<int> {
+    var picks <- [for (st, i in cache.states, count()); i; where long_length(st.tokens) <= long_length(tokens) && common_prefix_len(st.tokens, tokens) == long_length(st.tokens)]
+    sort(picks) <| cmp_by(long_length(cache.states[_].tokens))
+    return <- picks
+}
+
+//! one checkpoint's block written to `f`: its position, kind and variable lengths, then its arrays; the bytes written
+def private context_state_write(f : file; st : PrefixState) : int64
+    => (long_fwrite(f, [st.snap.pos, st.kind == PrefixStateKind.opening ? 1l : 0l, long_length(st.snap.ple_prev), long_length(st.snap.mtp_h)])
+        + long_fwrite(f, st.snap.conv) + long_fwrite(f, st.snap.state) + long_fwrite(f, st.snap.ple_hist)
+        + long_fwrite(f, st.snap.ple_prev) + long_fwrite(f, st.snap.mtp_h))
+
+//! the bytes `context_state_write` writes for a checkpoint of header `h` with `ple_prev` window ids and `mtp_h` carry floats
+def private context_state_bytes(h : ContextHeader; ple_prev, mtp_h : int64) : int64
+    => 8l * CONTEXT_STATE_WORDS + 4l * (h.conv + h.state + h.ple_hist + mtp_h) + 8l * ple_prev
+
+//! `s` is the caller's fresh session of `pool`, the carrier; it leaves holding no page, and the cache keeps what it held.
+//! `mark` is the model's weights mark the file carries.
+[cold_path, arch(at="../ARCHITECTURE_ENGINE_SERVING.md#context-file")]
+def prefix_file_save_(c : Config; var cache : PrefixCache; var pool : KVPool; var s : Session; tokens : array<int64>; path : string; mark : int64 = 0l) : ContextFile {
+    var out : ContextFile
+    var inscope picks <- context_states_of(cache, tokens)
+    let recurrent = !empty(s.dn_state_prefix)
+    let longest = empty(picks) ? -1 : picks[length(picks) - 1]
+    var n = 0l
+    if (recurrent && longest >= 0) {
+        n = long_length(cache.states[longest].tokens)
+    } elif (!recurrent) {
+        var inscope ask := tokens   // an attach stops a token short of its prompt: one more id lets the whole list attach
+        ask |> push(0l)
+        n = prefix_attach_(cache, pool, s, ask)
+    }
+    if (n <= 0l) {
+        out.why = "the cache holds no context that opens with the slot's {length(tokens)} tokens"
+    } else {
+        var h = ContextHeader(tokens = n, nblobs = pool.nblobs, kdt = int64(pool.kdt), vdt = int64(pool.vdt), ring_floor = s.kv_ring_floor,
+            vocab = c.vocab_size, layers = c.n_layers, mark = mark)
+        if (recurrent) {
+            let first & = unsafe(cache.states[picks[0]])
+            h.conv = long_length(first.snap.conv)
+            h.state = long_length(first.snap.state)
+            h.ple_hist = long_length(first.snap.ple_hist)
+            h.checkpoints = long_length(picks)
+        }
+        fopen(path, "wb") $(f) {
+            if (f == null) {
+                out.why = "'{path}' does not open for writing"
+                return
+            }
+            var inscope row_bytes : array<int64>
+            row_bytes |> reserve(2l * pool.nblobs)
+            for (kb, vb in pool.krow_bytes, pool.vrow_bytes) {
+                row_bytes |> push(kb)
+                row_bytes |> push(vb)
+            }
+            var inscope ids <- [for (i in range64(n)); tokens[i]]
+            var want = 8l * CONTEXT_HDR_WORDS + 16l * pool.nblobs + 8l * n + position_bytes_(pool) * n
+            out.bytes = long_fwrite(f, context_header_words(h)) + long_fwrite(f, row_bytes) + long_fwrite(f, ids)
+            out.bytes += context_planes_move(f, pool, recurrent ? cache.states[longest].groups : s.block_table, n, true)
+            if (recurrent) {
+                for (at in picks) {
+                    let st & = unsafe(cache.states[at])
+                    out.bytes += context_state_write(f, st)
+                    want += context_state_bytes(h, long_length(st.snap.ple_prev), long_length(st.snap.mtp_h))
+                }
+            }
+            if (out.bytes != want) {
+                out.why = "'{path}' took {out.bytes} of {want} bytes - the disk is full or the write failed"
+            }
+        }
+        out.tokens = n
+    }
+    release_kv_pages_(s)
+    s.n_past = 0l
+    return <- out
+}
+
+//! ... over a carrier the call makes off `model` and drops
+def prefix_file_save_(model : Model; var cache : PrefixCache; var pool : KVPool; tokens : array<int64>; path : string) : ContextFile {
+    var s <- create_session_(model, pool)
+    var out <- prefix_file_save_(model.config, cache, pool, s, tokens, path, context_model_mark(model))
+    delete s
+    return <- out
+}
+
+//! `s` is the caller's fresh session of `pool`, the carrier the file fills; it leaves holding no page. The answer carries the
+//! file's ids. `mark` is this model's weights mark: a file of another refuses. A file that refuses leaves the cache as it stood.
+[cold_path, arch(at="../ARCHITECTURE_ENGINE_SERVING.md#context-file")]
+def prefix_file_restore_(c : Config; var cache : PrefixCache; var pool : KVPool; var s : Session; path : string; mark : int64 = 0l) : ContextFile {
+    var out : ContextFile
+    let size = int64(stat(path).size)
+    fopen(path, "rb") $(f) {
+        if (f == null) {
+            out.why = "'{path}' does not open"
+            return
+        }
+        var inscope w : array<int64>
+        w |> resize(CONTEXT_HDR_WORDS)
+        if (long_fread(f, w) != 8l * CONTEXT_HDR_WORDS || w[0] != CONTEXT_FILE_MAGIC || w[1] != CONTEXT_FILE_VERSION) {
+            out.why = "'{path}' is not a context file of this version"
+            return
+        }
+        let h = ContextHeader(tokens = w[2], nblobs = w[3], kdt = w[4], vdt = w[5], conv = w[6], state = w[7], ple_hist = w[8], checkpoints = w[9],
+            ring_floor = w[10], vocab = w[11], layers = w[12], mark = w[13])
+        if (h.nblobs != pool.nblobs) {
+            out.why = "the file holds {h.nblobs} K/V planes, this model {pool.nblobs}"
+            return
+        }
+        var inscope row_bytes <- [for (_ in range64(2l * pool.nblobs)); 0l]
+        out.why = long_fread(f, row_bytes) != 16l * pool.nblobs ? "'{path}' is cut short" : context_header_why(c, pool, h, row_bytes, s, mark)
+        if (empty(out.why)) {
+            out.why = context_restore_body(f, c, cache, pool, s, h, size, out)
+            out.bytes += 8l * CONTEXT_HDR_WORDS + 16l * pool.nblobs
+            out.tokens = empty(out.why) ? h.tokens : 0l
+        }
+        release_kv_pages_(s)
+        s.n_past = 0l
+    }
+    if (!empty(out.why)) {
+        out.ids |> clear()
+    }
+    return <- out
+}
+
+//! ... over a carrier the call makes off `model` and drops
+def prefix_file_restore_(model : Model; var cache : PrefixCache; var pool : KVPool; path : string) : ContextFile {
+    var s <- create_session_(model, pool)
+    var out <- prefix_file_restore_(model.config, cache, pool, s, path, context_model_mark(model))
+    delete s
+    return <- out
+}
+
+//! the body of a context file of header `h` read from `f` into the fresh session `s` and donated: the ids into `out.ids`, the
+//! rows, then each checkpoint with its state, or the page chain of a file that holds none; "" where the cache holds them all,
+//! `out.bytes` the bytes read. Every checkpoint's words and the file's `size` are read before the first donation
+def private context_restore_body(f : file; c : Config; var cache : PrefixCache; var pool : KVPool; var s : Session; h : ContextHeader; size : int64; var out : ContextFile) : string {
+    let n = h.tokens
+    let body = 8l * n + position_bytes_(pool) * n
+    out.ids |> reserve_resize(n)
+    out.bytes = long_fread(f, out.ids)
+    kv_ensure(s, n)
+    out.bytes += context_planes_move(f, pool, s.block_table, n, false)
+    return "the file is cut short: {out.bytes} of {body} bytes of tokens and rows" if (out.bytes != body)
+    for (id in out.ids) {
+        return "the file names token {id}, past this model's vocabulary of {c.vocab_size}" if (id < 0l || id >= c.vocab_size)
+    }
+    s.kv_ring_floor = h.ring_floor
+    if (h.checkpoints == 0l) {
+        s.n_past = n
+        return prefix_insert_(cache, pool, s, out.ids)
+    }
+    let window = long_length(s.ple_prev)
+    let first = 8l * CONTEXT_HDR_WORDS + 16l * pool.nblobs + body   //! where the file's checkpoints begin
+    var inscope words <- [for (_ in range64(CONTEXT_STATE_WORDS)); 0l]
+    var at = first
+    for (i in range64(h.checkpoints)) {
+        return "the file is cut short at checkpoint {i} of {h.checkpoints}" if (fseek(f, at, seek_set) != 0l || long_fread(f, words) != 8l * CONTEXT_STATE_WORDS)
+        if (words[0] <= 0l || words[0] > n || words[2] != window || (words[3] != 0l && words[3] != long_length(s.mtp_h))) {
+            return "checkpoint {i} is not this model's: it stands at {words[0]} of the file's {n} tokens with a window of {words[2]} ids and a draft carry of {words[3]} floats"
+        }
+        at += context_state_bytes(h, words[2], words[3])
+        return "the file is cut short at checkpoint {i} of {h.checkpoints}" if (at > size)
+    }
+    return "the file is cut short at checkpoint 0 of {h.checkpoints}" if (fseek(f, first, seek_set) != 0l)
+    for (i in range64(h.checkpoints)) {
+        return "the file is cut short at checkpoint {i} of {h.checkpoints}" if (long_fread(f, words) != 8l * CONTEXT_STATE_WORDS)
+        let pos = words[0]
+        let opening = words[1] == 1l
+        let window_ids = words[2]
+        let carry = words[3]
+        var inscope snap : DnSnapshot
+        snap.conv |> reserve_resize(h.conv)
+        snap.state |> reserve_resize(h.state)
+        snap.ple_hist |> reserve_resize(h.ple_hist)
+        snap.ple_prev |> reserve_resize(window_ids)
+        snap.mtp_h |> reserve_resize(carry)
+        snap.pos = pos
+        let took = (long_fread(f, snap.conv) + long_fread(f, snap.state) + long_fread(f, snap.ple_hist)
+            + long_fread(f, snap.ple_prev) + long_fread(f, snap.mtp_h))
+        out.bytes += 8l * CONTEXT_STATE_WORDS + took
+        return "the file is cut short at checkpoint {i} of {h.checkpoints}" if (took != context_state_bytes(h, window_ids, carry) - 8l * CONTEXT_STATE_WORDS)
+        dn_snapshot_restore(s, snap)
+        s.n_past = pos
+        let why = prefix_insert_(cache, pool, s, out.ids, "", opening)
+        return why if (!empty(why))
+    }
+    return ""
 }

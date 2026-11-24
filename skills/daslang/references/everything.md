@@ -3207,6 +3207,8 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `prefix_attach_state_split` - Attach the deepest recurrent checkpoint opening `prompt` apart: its pages shared into `pages` (a fresh session of `pool` that only reads them), its state into `state`.
 - `prefix_chain_list` - Snapshot of the cache's donated chains for dashboards: per donation — page-covered token count, live pages, hit count, born/last-hit ticks, and the caller-provided preview.
 - `prefix_checkpoint_at` - Where a recurrent `session`'s prefill of `prompt` should stop for a `prefix_insert`, after `prefix_attach` matched `matched` tokens: `stable_at` (`render_turn_marked`'s opening) when the caller knows it, else the longest opening an earlier checkpoint shares.
+- `prefix_file_restore` - Read the context file at `path` into the cache, as a finished turn's donation: a prompt opening with its tokens (`ids`) attaches there and prefills only the rest.
+- `prefix_file_save` - Write the cached context that opens with `tokens` to `path`: the longest prefix of them the cache holds - token ids, every K/V plane's rows in the pool's codec, a recurrent model's state after the last.
 - `prefix_held_groups` - Pages the cache currently holds (== pool groups retained for reuse).
 - `prefix_insert` - Donate a session's KV pages to the cache: `tokens` is its EVALED history (the first `n_past` rows exist), every full page not already cached survives `release_kv_pages`, `preview` labels the chain.
 - `prefix_insert_snapshot` - A recurrent checkpoint of the first `n_past` of `tokens` out of `session`'s pages, its state `snap` (moved in) taken elsewhere - a device's slots, or a window's capture at `upto` (0 = the tokens' end).
