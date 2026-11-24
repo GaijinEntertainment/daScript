@@ -165,6 +165,7 @@ def private device_form_load(t : T?; path : string; call_ctx : int64; form : Mod
     if (form.strict_ctx) {
         set_gpu_ctx_strict(true)
     }
+    set_gpu_resident_block_rounds_(form.block_rounds)   //! every form writes the ask: the driver sizes the verify at load
     static_if (typeinfo builtin_module_exists(vulkan)) {
         if (form.split_forms) {
             g_vk_fuse = 0   //! the split one-row forms for the load; the levers put the knob back after it

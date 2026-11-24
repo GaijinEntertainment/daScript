@@ -187,23 +187,36 @@ def private deep_walk(t : T?; tr : Model; reply : int64) : DeepWalk {
     return <- r
 }
 
-//! the -MTP- carrier loaded under the depth-8 knob: the driver prepares the nine verify rows past the leaves' eight columns,
-//! and the greedy walk on it emits the plain decode, every round's verify on the device and none passed as `verify_rows`;
-//! the depth-1 form's `mtp_depth1_cell` is its control
-[cold_path]
-def mtp_depth8_cell(t : T?; var tr : Model) {
+//! the carrier's greedy walk of `reply` tokens on a driver prepared for the widest verify: the nine rows past the leaves'
+//! eight columns, the walk the plain decode's, every round's verify on the device and none passed as `verify_rows`;
+//! `deep` where a round drafts more than one token
+def private wide_verify_cell(t : T?; var tr : Model; name : string; reply : int64; deep : bool) {
     unsafe {
-        t |> run("Qwen3.5-0.8B-MTP under the depth-8 knob: the driver prepares nine verify rows, and its walk serves on the device") @capture(& tr)(t : T ?) {
-            var deep <- deep_walk(t, tr, 32l)
-            t |> equal(deep.prepared_rows, 9l, "the driver was prepared for the depth-8 verify's nine rows")
-            t |> success(ids_equal(deep.ids, deep.plain), "the walk emits the plain greedy decode token for token")
-            t |> success(deep.drafted > 0l && deep.verifies > 0l, "the walk drafted ({deep.drafted}) and verified on the device ({deep.verifies} verifies)")
-            t |> success(deep.drafted > deep.verifies, "a round drafts more than one token at depth 8 ({deep.drafted} drafts over {deep.verifies} verifies)")
-            to_log(LOG_INFO, "depth 8 walk: {deep.drafted} drafts over {deep.verifies} device verifies for {length(deep.ids)} ids\n")
-            t |> equal(deep.verify_rows_passes, 0l, "no verify passed to the CPU as verify_rows")
-            delete deep
+        t |> run(name) @capture(& tr)(t : T ?) {
+            var walk <- deep_walk(t, tr, reply)
+            t |> equal(walk.prepared_rows, MTP_MAX_ROWS, "the driver was prepared for the widest round's verify rows")
+            t |> success(ids_equal(walk.ids, walk.plain), "the walk emits the plain greedy decode token for token")
+            t |> success(walk.drafted > 0l && walk.verifies > 0l, "the walk drafted ({walk.drafted}) and verified on the device ({walk.verifies} verifies)")
+            if (deep) {
+                t |> success(walk.drafted > walk.verifies, "a round drafts more than one token ({walk.drafted} drafts over {walk.verifies} verifies)")
+                to_log(LOG_INFO, "deep walk: {walk.drafted} drafts over {walk.verifies} device verifies for {length(walk.ids)} ids\n")
+            }
+            t |> equal(walk.verify_rows_passes, 0l, "no verify passed to the CPU as verify_rows")
+            delete walk
         }
     }
+}
+
+//! the -MTP- carrier loaded under the depth-8 knob; the depth-1 form's `mtp_depth1_cell` is its control
+[cold_path]
+def mtp_depth8_cell(t : T?; var tr : Model) {
+    wide_verify_cell(t, tr, "Qwen3.5-0.8B-MTP under the depth-8 knob: the driver prepares nine verify rows, and its walk serves on the device", 32l, true)
+}
+
+//! the -MTP- carrier loaded under the block-rounds ask and no depth: the head's own walk on the widest verify
+[cold_path]
+def mtp_block_rounds_cell(t : T?; var tr : Model) {
+    wide_verify_cell(t, tr, "Qwen3.5-0.8B-MTP under the block-rounds ask: the driver prepares a block drafter's widest round, and the head's walk serves on the device", 16l, false)
 }
 
 //! the depth-8 cell's control on the carrier loaded at depth 1: the driver prepares two verify rows, and a round drafts one

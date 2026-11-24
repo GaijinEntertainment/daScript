@@ -2407,7 +2407,7 @@ bounds - a window past the planes read 30-72% off the chain.
 the speculative carry (its two-region form runs the recurrent segmented cells first, `_segment_cells.das`'s entry), its cells `_mtp_resident_cells.das`'s - one body a cell for both discrete homes, each cell's device rows
 asserting the CUDA driver's position counter rising (`mtp_cell_served`; the unhomed pass arm its control, the counter
 standing). Every device form keeps the planes on the host (the cells run the CPU head on the model) at the block's 4096-row
-context (`CARRY_RIG_CTX`): one region, two regions, the head kept off, depth 8, depth 1, depth 2, and the q8_0 and tq4 mirrors
+context (`CARRY_RIG_CTX`): one region, two regions, the head kept off, depth 8, depth 1, depth 2, the block-rounds ask, and the q8_0 and tq4 mirrors
 (a codec the environment keeps off a logged skip), one region at 512 positions (`MTP_SCHED_CTX`: the resident scheduler
 cells, `test_scheduler_mtp_resident_picks` and `test_scheduler_mtp_device_home`) and the driver's own regions (the
 self-speculative streams against the plain scheduler, `scheduler_mtp_cell`); each asserts the file carries its NextN head (`mtp_carrier_held`). Its q8
@@ -2539,7 +2539,10 @@ form loaded under the depth-8 knob (the form's `mtp_depth`, `set_mtp_depth` put 
 (`rdec_verify_rows`), past the N-column leaves' eight, and the greedy walk on it (`generate_mtp_greedy`,
 32 reply tokens on the counting prompt) emits the plain decode token for token, its drafts and verifies on
 the device and none passed as `verify_rows`; on the form loaded at depth 1 the driver prepares two and drafts one token a verify (`mtp_depth1_cell`, the
-control for the drafts-over-verifies bound). The sampled-selection cell (the depth-2 form) runs a sampled stream (temp 0.7,
+control for the drafts-over-verifies bound). The block-rounds cell (`mtp_block_rounds_cell`) runs on the form loaded under
+the block-rounds ask (the form's `block_rounds`, `set_gpu_resident_block_rounds_` put back by the levers) with no depth set: the
+driver prepares the widest verify (`MTP_MAX_ROWS`), and the head's own walk of 16 reply tokens emits the plain decode token for
+token, verified on the device, none passed as `verify_rows` - one body with the depth-8 cell (`wide_verify_cell`). The sampled-selection cell (the depth-2 form) runs a sampled stream (temp 0.7,
 top-p 0.9, seeded) at depth 2 (the driver's three verify rows asserted) twice over the counting prompt, the rows landed and the selection landed (`sampled_stream` of
 `_resident_feed.das`, `set_select_landing` put back): the rows-landed stream asks no selection, the selection serves every
 step of the other with no late landing, and the two agree token for token with the same drafts accepted - the streams share

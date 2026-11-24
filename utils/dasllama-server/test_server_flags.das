@@ -328,6 +328,11 @@ def test_drafter_flag_and_key(t : T?) {
         t |> equal(boot_slot_opts(ModelEntry(path = "m.gguf", drafter = "df.gguf")).drafter, "df.gguf")
         t |> equal(boot_slot_opts(ModelEntry(path = "m.gguf")).drafter, "", "no key: no drafter (the control)")
     }
+    t |> run("a slot's boot drafter is its entry's, else the flag's on the default model alone") @(t : T?) {
+        t |> equal(boot_slot_drafter(ModelEntry(path = "m.gguf", drafter = "df.gguf"), true, "cli.gguf"), "df.gguf", "the entry's own wins")
+        t |> equal(boot_slot_drafter(ModelEntry(path = "m.gguf"), true, "cli.gguf"), "cli.gguf", "the default model takes the flag's")
+        t |> equal(boot_slot_drafter(ModelEntry(path = "m.gguf"), false, "cli.gguf"), "", "another model takes none")
+    }
     t |> run("a [[models]] table's drafter key and the flat key both read back on the config surface") @(t : T?) {
         let path = path_join(test_temp_dir(), "drafter_roster.toml")
         t |> success(fwrite(path, "drafter = \"flat.gguf\"\n\n[[models]]\npath = \"a.gguf\"\ndrafter = \"df.gguf\"\n\n[[models]]\npath = \"b.gguf\"\n"), "wrote the roster")
@@ -599,6 +604,34 @@ def test_slot_mtp_platforms(t : T?) {
             "the slot's mtp = false over the server's true")
         let on = runtime_slot_opts(no_row, false)
         t |> success(slot_mtp_arms(on, 1, 4l, false, "cpu"), "an ask on arms anywhere")
+    }
+}
+
+[test(description = "the residency ask of a slot that names a block drafter asks the driver for the drafter's round, a plain slot's ask clears it, and a re-arm asks again what the slot's load asked")]
+def test_residency_ask_block_rounds(t : T?) {
+    let pins0 = gpu_ctx_pins()
+    let kv_pin0 = gpu_kv_dtype_pin()
+    let regions0 = gpu_resident_regions_want()
+    let rounds0 = gpu_resident_block_rounds_want()
+    gpu_residency_ask(1l, 0l, KVDtype.f16, true)
+    t |> success(gpu_resident_block_rounds_want(), "a slot with a block drafter: the next load prepares the drafter's round")
+    gpu_residency_ask(1l, 0l)
+    t |> success(!gpu_resident_block_rounds_want(), "a plain slot's ask clears it for the load that follows")
+    var slot = ModelSlot(gpu_ask_streams = 1l, gpu_ask_block_rounds = true)
+    slot_residency_ask(slot)
+    t |> success(gpu_resident_block_rounds_want(), "a re-arm asks again what the slot's load asked")
+    slot.gpu_ask_block_rounds = false
+    slot_residency_ask(slot)
+    t |> success(!gpu_resident_block_rounds_want(), "and a plain slot's re-arm asks plain")
+    unsafe {
+        delete slot
+    }
+    gpu_residency_ask(regions0, pins0.ctx_max, KVDtype.f16, rounds0)
+    set_gpu_ctx_strict(pins0.strict)
+    if (kv_pin0.pinned) {
+        set_gpu_kv_dtype(kv_pin0.dt)
+    } else {
+        reset_gpu_kv_dtype()
     }
 }
 

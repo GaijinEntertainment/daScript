@@ -361,6 +361,12 @@ def section_device_streams(m : Model; var sch : Scheduler) {
 // speculates through it, respond drafts its text turns, and
 // generate_drafted is generate with the rounds inside. One block
 // drafter is attached a process.
+//
+// A trunk with a draft head of its own (a Qwen -MTP- file) prepares
+// its device verify for that head's short round. Asked before the
+// load, set_gpu_resident_block_rounds(true) has the device prepare
+// the drafter's whole round instead. It takes more device memory, so
+// main asks only when a drafter was named.
 
 def section_block_drafter(m : Model; drafter : string) {
     print("\n=== 6. a block drafter ===\n")
@@ -405,7 +411,10 @@ def main() {
     // a plain MoE's experts where the card holds them; n here moves
     // the first n layers' to the host
     set_gpu_host_layers(0l)
+    // section 6: the drafter's whole round, where one was named
+    set_gpu_resident_block_rounds(!empty(drafter_path()))
     var m <- load_model(path, QuantMode.q8)
+    set_gpu_resident_block_rounds(false)   // the next load: no ask
     set_gpu_ctx_max(pins.ctx_max)   // the pins back, for whoever loads next in this process
     set_gpu_ctx_strict(pins.strict)
     set_gpu_host_layers(host_pin)   // -1 lifts the pin again

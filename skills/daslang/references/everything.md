@@ -3386,6 +3386,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `set_gpu_ctx_strict` - The `set_gpu_ctx_max` pin is the context asked, not a cap, for the models loaded next: a K/V mirror the card cannot hold at it declines the whole-model GPU driver instead of shortening the context, and the per-op rails serve the asked context (DASLLAMA_GPU_CTX_STRICT in the environment).
 - `set_gpu_host_layers` - Serve at least `n` routed layers' experts on the host - the first in layer order - on the whole-model GPU driver of a plain MoE loaded next, whatever the card holds (DASLLAMA_GPU_HOST_LAYERS in the environment): the host-layers form reached on any card.
 - `set_gpu_kv_dtype` - Ask the whole-model GPU driver to hold its K/V mirror in codec `dt` for the models loaded next - the codec of their sessions (`gpu_device_session_dtype` reads what armed; `q8_0` is about half the `f16` mirror's bytes, `tq4` a quarter; `f32` reads as `f16`).
+- `set_gpu_resident_block_rounds` - Tell the whole-model GPU driver the models loaded next take a block drafter (`attach_block_drafter`): a model with its own NextN head then verifies the drafter's whole round on the device, for more device scratch - without the ask its round stops at the head's depth.
 - `set_gpu_resident_regions` - Ask the whole-model GPU driver for `n` K/V regions on the models loaded next, so `n` sessions keep their K/V on the device at once - a server's stream count.
 
 ## dasllama_tts

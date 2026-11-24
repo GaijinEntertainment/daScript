@@ -1002,7 +1002,7 @@ def private resident_routed_layers(t : Model) : int64 => t.config.n_layers + (re
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
 def private rdec_verify_rows_want(t : Model) : int64 {
     return 0l if (!rdec_verify_installed())
-    return get_mtp_depth() + 1l if (resident_head_on(t))
+    return (g_rdec_block_rounds_want ? MTP_MAX_ROWS : get_mtp_depth() + 1l) if (resident_head_on(t))
     //! a trunk with no head of its own: a block drafter attached past the load asks rows with no head row, to the round's widest
     return (t.config.n_layer_nextn == 0l && rdec_verify_plain()) ? MTP_MAX_ROWS : 0l
 }
@@ -1984,6 +1984,16 @@ def set_gpu_resident_regions_(n : int64) {
 
 //! The mirror regions the next load asks for (`set_gpu_resident_regions_`).
 def gpu_resident_regions_want() : int64 => g_rdec_regions_want
+
+var private g_rdec_block_rounds_want = false
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
+def set_gpu_resident_block_rounds_(on : bool) {
+    g_rdec_block_rounds_want = on
+}
+
+//! Whether the next load prepares a block drafter's round (`set_gpu_resident_block_rounds_`).
+def gpu_resident_block_rounds_want() : bool => g_rdec_block_rounds_want
 
 //! The mirror region `s` prefills and decodes in, or -1 when every region holds a live device-home session and the call must pass.
 //! A session that lost its region gets its saved rows back first; a region another host-cached session holds rows in that its
@@ -3179,7 +3189,8 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     select_decode_override("vulkan")
     let regions = g_rdec_regions_want > 1l ? " x {g_rdec_regions_want} regions (set_gpu_resident_regions in process: each region takes a share of the mirror's context)" : ""
     let slab_say = slabs.n_slabs > 1l ? " in {slabs.n_slabs} mirror slabs" : ""
-    to_log(LOG_INFO, "dasLLAMA: resident driver armed ({c.n_layers} layers, dim {dim}, ctx {seq_cap}{regions}, kv {kvname}{slab_say}, device prefill + decode)\n")
+    let rounds = g_rdec_block_rounds_want && resident_head_on(t) ? ", {MTP_MAX_ROWS} verify rows for a block drafter's round (set_gpu_resident_block_rounds)" : ""
+    to_log(LOG_INFO, "dasLLAMA: resident driver armed ({c.n_layers} layers, dim {dim}, ctx {seq_cap}{regions}, kv {kvname}{slab_say}{rounds}, device prefill + decode)\n")
     return true
 }
 

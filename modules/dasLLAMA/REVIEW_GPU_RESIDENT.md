@@ -47,7 +47,7 @@ session holds is free (`gpu_free_regions()` or `gpu_free_regions_()` above zero)
 host-cached sessions when none is.** The driver panics on a device-home session that finds no region.
 
 **A diff that calls a listed setter calls it before the load it governs - the `set_gpu_*` and
-`reset_gpu_*` functions of `dasllama/dasllama_core.das`, `set_pf_window_rows_pin`,
+`reset_gpu_*` functions of `dasllama/dasllama_core.das`, `set_gpu_resident_block_rounds_`, `set_pf_window_rows_pin`,
 `set_expert_cache_mb`, `set_gpu_want_pf_stream`, `set_cuda_mmq_pin`, `set_resident_upload_fault`,
 `set_cuda_window_fault_`, `set_moe_gpu_streams`, `vk_rdec_chain_mode_set`,
 `cud_rdec_chain_mode_set`, `install_moe_gpu_resident_site_feeds`,
