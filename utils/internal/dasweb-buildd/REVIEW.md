@@ -7,8 +7,9 @@
 `CMakeLists.txt` - a `[test]` file for this directory lives here and requires its siblings by
 bare name.**
 
-**A test that reaches any host or port other than the stub playground in
-`uncategorized_persistent_heap.das` (the buildd client test), on this directory's reserved test port 19014, is a defect.**
+**A test that reaches anything but loopback port 19014 (the stub playground in
+`test_buildd_client.das`) or loopback port 19016 (the health port of the service
+`test_buildd_client.das` starts) is a defect.**
 
 **A test of `buildd_core.das` that reaches the network at all is a defect.**
 
@@ -67,6 +68,16 @@ to `maybe_collect_gc()`.**
 is a defect.** Leaving the claim for the stale-requeue sweep - the server-side sweep that
 re-queues jobs from builders that died - is not a resolution.
 
+**A diff that lets a claimed job's failure reach `upload_failure` with `fault` false for
+anything but a build that exited `BUILD_VERDICT_EXIT`, a source document `unpack_sources`
+refuses, or an asset declaration `validate_asset_paths` refuses is a defect - set
+`fault = true` on its `JobOutcome`.** The server stores an unflagged failure as the sample's
+verdict, and nothing but an operator removes it.
+
+**A diff that adds an exit with the verdict status (65) to `run_build.sh` anywhere but the
+mapping after the sandbox returns is a defect - exit a `FAULT_*` status instead - and so is
+weakening `test_build_exit_contract`.**
+
 **Never let a job resolve without removing its per-job scratch directory.**
 
 **Never retain a route callback with `emplace` - use `push` instead.**
@@ -118,6 +129,11 @@ its line here, with its tests, in the same change.**
   command invocation, artifact collection and hashing, toolchain derivation. Zero network.
 - `buildd_client.das` - the outbound HTTP calls (claim, result upload, announce). Zero
   filesystem beyond handing paths to the multipart uploader.
+- `test_buildd_config.das`, `test_buildd_core.das`, `test_buildd_client.das`,
+  `uncategorized.das` - the dastest suites: config, core, the client and the service loop
+  against the stub playground, and the two shell recipes through bash.
+- `_build_recipe.das` - the stand-in build recipe the service test spawns; does what the job's
+  entry file says. No sandbox, never shipped.
 - `run_build.sh` - the box-side build recipe and its sandbox invocation; the only place a
   sandboxed build invocation or a sandbox mount lives.
 - `roll_toolchain.sh` - the box-side toolchain-bump recipe; the only place a roll step lives,

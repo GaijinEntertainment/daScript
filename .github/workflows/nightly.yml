@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       nightly: ${{ steps.nightly.outputs.nightly }}
+      live_site: ${{ steps.nightly.outputs.live_site }}
     steps:
       - id: nightly
         env:
@@ -27,10 +28,14 @@ jobs:
         run: |
           set -eu
           nightly=false
+          # live_site gates the lanes that drive the DEPLOYED site (daslang.io). Nothing in a
+          # pull request's tree reaches that site before a deploy, so a pull request armed only
+          # by its paths does not run them; one that opts in by tag or label does.
+          live_site=false
           case "${{ github.event_name }}" in
             schedule)
-              if [ '${{ github.repository }}' = 'GaijinEntertainment/daScript' ]; then nightly=true; fi ;;
-            workflow_dispatch) nightly=true ;;
+              if [ '${{ github.repository }}' = 'GaijinEntertainment/daScript' ]; then nightly=true; live_site=true; fi ;;
+            workflow_dispatch) nightly=true; live_site=true ;;
             pull_request)
               if gh api graphql -f owner='${{ github.repository_owner }}' -f name='${{ github.event.repository.name }}' \
                    -F number=${{ github.event.pull_request.number }} -f query='
@@ -50,6 +55,7 @@ jobs:
                            then "armed" else empty end' | grep -q .
               then
                 nightly=true
+                live_site=true
               elif gh api --paginate \
                      'repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files' \
                      --jq '.[].filename' | grep -qE '^(include|src)/'
@@ -59,6 +65,7 @@ jobs:
               ;;
           esac
           echo "nightly=$nightly" >> "$GITHUB_OUTPUT"
+          echo "live_site=$live_site" >> "$GITHUB_OUTPUT"
 
   build:
     needs: pre_job
@@ -100,7 +107,7 @@ jobs:
 
   playground:
     needs: pre_job
-    if: needs.pre_job.outputs.nightly == 'true'
+    if: needs.pre_job.outputs.live_site == 'true'
     permissions:
       contents: read
     uses: ./.github/workflows/nightly_playground.yml

@@ -6,6 +6,7 @@
 #include "ast_parse.h"
 #include "daScript/misc/job_que.h"
 #include "daScript/misc/performance_time.h"
+#include "daScript/simulate/das_qsort_r.h"
 
 #include <atomic>
 #include <thread>
@@ -421,7 +422,7 @@ namespace das {
             }
 
             void push ( JobQue & que, vector<int32_t> & ready ) {
-                stable_sort(ready.begin(), ready.end(), [&]( int32_t a, int32_t b ) { return levels[a] > levels[b]; });
+                if ( ready.size() > 1 ) das_stable_sort(ready.data(), ready.data() + ready.size(), [&]( int32_t a, int32_t b ) { return levels[a] > levels[b]; });
                 for ( auto node : ready ) que.push([this, &que, node]() { compileNode(que, node); }, 0, JobPriority::Default);
             }
 

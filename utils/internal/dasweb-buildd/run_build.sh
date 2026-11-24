@@ -8,7 +8,8 @@
 #                              files this mode declares, by name, and ignores
 #                              anything else in <out_dir>. A build cannot widen
 #                              its own output set, and must not be changed to.
-#   - nonzero exit          => failure, stdout becomes the user-facing error
+#   - exit 65 (VERDICT)     => the sandboxed build failed: stdout is the sample's verdict
+#   - any other nonzero     => a build-service fault (FAULT_* below, or 1 for a shell error)
 #   - stderr is redirected into stdout here — the service captures one stream
 #
 # THE SANDBOX IS THE SECURITY BOUNDARY. Compiling user .das is remote code
@@ -50,13 +51,27 @@
 set -u
 exec 2>&1
 
-SRC_DIR="${1:?usage: run_build.sh <src_dir> <out_dir> <mode> <entry>}"
-OUT_DIR="${2:?missing out_dir}"
-MODE="${3:?missing mode}"
-ENTRY="${4:?missing entry}"
+FAULT_NO_DASLANG_HOST=10
+FAULT_NO_RUNTIME=11
+FAULT_NO_PODMAN=12
+FAULT_BAD_MODE=14
+FAULT_NO_IMAGE=16
+FAULT_MISSING_INPUT=17
+FAULT_SANDBOX_NOT_RUN=20
+VERDICT=65
 
-WORKTREE="${DASWEB_WASM_WORKTREE:?DASWEB_WASM_WORKTREE is not set}"
-EMSDK_ROOT="${EMSDK:?EMSDK is not set (the pinned emsdk root)}"
+missing_input_fault() { echo "$1"; exit "$FAULT_MISSING_INPUT"; }
+
+[ "$#" -ge 4 ] || missing_input_fault "usage: run_build.sh <src_dir> <out_dir> <mode> <entry>"
+SRC_DIR="$1"
+OUT_DIR="$2"
+MODE="$3"
+ENTRY="$4"
+
+[ -n "${DASWEB_WASM_WORKTREE:-}" ] || missing_input_fault "DASWEB_WASM_WORKTREE is not set"
+[ -n "${EMSDK:-}" ] || missing_input_fault "EMSDK is not set (the pinned emsdk root)"
+WORKTREE="$DASWEB_WASM_WORKTREE"
+EMSDK_ROOT="$EMSDK"
 IMAGE="${DASWEB_BUILDER_IMAGE:-dasweb-builder:2}"
 LLVM_LIB="${DASWEB_LLVM_LIB:-/usr/lib/llvm-19/lib}"
 BUILD_MEMORY="${DASWEB_BUILD_MEMORY:-8g}"
@@ -64,19 +79,19 @@ BUILD_PIDS="${DASWEB_BUILD_PIDS:-512}"
 BUILD_CPUS="${DASWEB_BUILD_CPUS:-8}"
 
 command -v podman >/dev/null 2>&1 || {
-    echo "podman is not installed — refusing to build untrusted source"; exit 12; }
+    echo "podman is not installed — refusing to build untrusted source"; exit "$FAULT_NO_PODMAN"; }
 podman image exists "$IMAGE" 2>/dev/null || {
     echo "sandbox image '$IMAGE' is missing; build it with:"
     echo "  podman build -t $IMAGE -f utils/internal/dasweb-buildd/Containerfile ."
-    exit 16; }
+    exit "$FAULT_NO_IMAGE"; }
 
 DASLANG="$WORKTREE/bin/daslang"
-[ -x "$DASLANG" ] || { echo "no daslang host at $DASLANG (run web/build_wasm_host.sh first)"; exit 10; }
+[ -x "$DASLANG" ] || { echo "no daslang host at $DASLANG (run web/build_wasm_host.sh first)"; exit "$FAULT_NO_DASLANG_HOST"; }
 
 # The wasm64 runtime archive jit-runtime-lib links against; `daspkg build
 # --wasm` stages it (with the module archives) into web/output64/lib.
 RUNTIME_LIB="$(ls "$WORKTREE"/web/output64/lib/*libDaScript_runtime*.a 2>/dev/null | head -1)"
-[ -n "$RUNTIME_LIB" ] || { echo "no wasm64 runtime archive under $WORKTREE/web/output64/lib (run daspkg build --wasm)"; exit 11; }
+[ -n "$RUNTIME_LIB" ] || { echo "no wasm64 runtime archive under $WORKTREE/web/output64/lib (run daspkg build --wasm)"; exit "$FAULT_NO_RUNTIME"; }
 
 # EM_FROZEN_CACHE: the emcc cache is mounted read-only and frozen, so one job
 # can never poison what later jobs link against. The toolchain-bump protocol
@@ -128,6 +143,16 @@ page)
     ;;
 *)
     echo "unknown mode '$MODE'"
-    exit 14
+    exit "$FAULT_BAD_MODE"
     ;;
+esac
+sandbox_rc=$?
+
+case "$sandbox_rc" in
+0)  exit 0 ;;
+125|126|127)
+    echo "the sandbox could not run the build (podman exit $sandbox_rc)"
+    exit "$FAULT_SANDBOX_NOT_RUN"
+    ;;
+*)  exit "$VERDICT" ;;
 esac

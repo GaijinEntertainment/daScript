@@ -24,7 +24,10 @@ sudo deploy.sh <short-sha> /tmp/dasweb-playground-<short-sha>.tar.gz
 `-?` prints flag help (the daslang host eats `--help`). Config: `dasweb-playground.toml` in cwd
 or beside the tool, keys = flag names; precedence defaults < toml < explicit CLI flags, flipped
 by `authoritative = true`. A key whose value has the wrong type is a startup error, not a
-silent zero. The effective config is logged at startup with per-key provenance.
+silent zero. The effective config is logged at startup with per-key provenance. A key absent
+from the deployed toml takes its default - `build_fault_retry_seconds` is 300 there unless the
+operator adds it. The bundle ships `samples_store.das` and `build_queue.das` beside `admin.das`,
+which requires both.
 
 The checked-in toml holds development values, because it is discovered automatically beside the
 module. The deployed values on `dasweb-1` are `db = "/srv/dasweb-playground/samples.db"`,
@@ -73,13 +76,14 @@ service's, with its JSON error body, rather than the proxy's bare response.
 | `GET /healthz` | `ok` (watchdog poll target) |
 | `POST /shutdown` | graceful stop, exit 0 (watchdog contract); loopback peers only, else 403 |
 | `POST /admin/reimport` | re-run the curated importer; 503 when `curated_dir` unset; loopback peers only, else 403 |
+| `POST /admin/build/requeue/<hash>` | re-queue a failed build under the current toolchain with fresh attempts -> the status payload; a job in any other state is returned as it is; 404 when the sample has no job under the current toolchain; loopback peers only, else 403 |
 | `GET /api/build/info` | `{enabled, toolchain}` - whether builds are available at all; the playground asks once at load to decide whether to offer the wasm engine |
 | `POST /api/build/request/<hash>` | enqueue a wasm build of a stored sample under the current toolchain -> the status payload; 404 unknown sample, 503 while builds are unavailable |
-| `GET /api/build/status/<hash>` | `{state}` + state-specific fields: `position` (queued), `error` (failed), `files` = artifact URLs (done); 404 when never requested |
+| `GET /api/build/status/<hash>` | `{state}` + state-specific fields: `position` (queued), `error` and `fault` (failed), `files` = artifact URLs (done); 404 when never requested |
 | `GET /api/build/artifact/<toolchain>/<hash>/<file>` | a built artifact file, immutable cache headers + `nosniff`; every component validated, 404 otherwise |
 | `POST /api/build/toolchain` | **bearer** - the builder announces its toolchain id (body = git sha) after its ABI canary ran clean; this is the toolchain's go-live |
 | `POST /api/build/next` | **bearer** - claim the oldest queued job for the builder's toolchain (body = its git sha) -> `{hash, toolchain_id, mode, source}`; 204 when idle |
-| `POST /api/build/result` | **bearer** - multipart result: fields `hash`, `toolchain`, `ok`; `ok=0` carries `error` (stored, shown to the user), `ok=1` carries `manifest` (`[{name, sha256}]`) plus one file part per name; 409 when the job is not building |
+| `POST /api/build/result` | **bearer** - multipart result: fields `hash`, `toolchain`, `ok`; `ok=0` carries `error` (stored, shown to the user) and `fault=1` when the failure is the build service's own, `ok=1` carries `manifest` (`[{name, sha256}]`) plus one file part per name; 409 when the job is not building |
 
 Client identity for the rate ceiling is the **last** `X-Forwarded-For` hop - the one Caddy
 appends. Earlier hops are client-authored. The operator routes verify the transport peer
@@ -97,9 +101,16 @@ manifest path that would escape `curated_dir` is refused, and an import in which
 readable keeps the previous listings rather than emptying the dropdown. The site deploy nudges
 `/admin/reimport` so a newly shipped sample appears without a restart.
 
-Manual curation and build-queue operation: `admin.das`
-(`--op list | promote | demote | enqueue | build-status | set-toolchain`), shipped in the
-bundle and run with a daslang SDK on the box (the baked exe has no interpreter):
+Re-queueing a failed build needs nothing but the running service - it is a loopback route:
+
+```bash
+curl -X POST http://127.0.0.1:8101/admin/build/requeue/<hash>
+```
+
+Manual curation and the other build-queue operations: `admin.das`
+(`--op list | promote | demote | enqueue | build-status | set-toolchain`). The bundle ships it
+with the two store modules it requires, and it runs only where a daslang SDK is installed (the
+baked exe has no interpreter):
 
 ```bash
 /opt/daslang/bin/daslang admin.das -- --db /srv/dasweb-playground/samples.db --op list
@@ -118,9 +129,19 @@ same on both boxes). Nothing here ever connects to the builder, so builder death
 backed-up queue, never an outage. A build job is a `(source hash x toolchain id)` pair;
 `toolchain_id` = the builder worktree's git sha, so a toolchain bump lazily invalidates the
 artifact cache by construction. A claimed job the builder never resolves returns to the queue
-after `build_claim_timeout_seconds`; `max_build_attempts` claims later it fails for good. A
-failed build is terminal - compile errors are deterministic - until an operator re-enqueues
-with `admin.das --op enqueue --force`.
+after `build_claim_timeout_seconds`.
+
+A failed build is one of two kinds, and the job row's `Fault` column says which. A failure that
+is the sample's own - a compile error - is deterministic, so it is terminal: a later request
+returns the stored error, and only `POST /admin/build/requeue/<hash>` builds it again. A
+**fault** is a failure of the build service: the builder reports one with `fault=1` (it could
+not publish, stage or prepare the build), and a claim abandoned `max_build_attempts` times is
+one too. A fault says nothing about the sample, so it is never a verdict: a reported fault
+returns the job to the queue while it has attempts left, and a job that fails as a fault is
+re-queued with fresh attempts by the first public request that arrives
+`build_fault_retry_seconds` after it failed. That wait bounds how often a broken builder is
+asked to rebuild one sample. The status payload carries `fault` so a reader can tell a broken
+sample from a broken service.
 
 Artifacts are **file sets** (a playground sample is one `.wasm`; a game page is
 `html + js + wasm`), stored under `<blobs_dir>/<toolchain>/<hash>/` and served static with

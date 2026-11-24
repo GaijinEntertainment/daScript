@@ -24,3 +24,4 @@ blobs_dir = "blobs"
 page_origin = ""
 build_claim_timeout_seconds = 600
 max_build_attempts = 3
+build_fault_retry_seconds = 300

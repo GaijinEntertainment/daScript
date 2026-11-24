@@ -100,6 +100,14 @@
             return { ok: true, kind: status.kind || 'module', files: status.files, hash };
         }
         if (status.state === 'failed') {
+            // A fault is the build service failing, not this program: the server
+            // stores no verdict for it and builds again on a later request.
+            if (status.fault) {
+                return {
+                    ok: false,
+                    error: 'build service fault, try again in a few minutes: ' + (status.error || 'no detail'),
+                };
+            }
             return { ok: false, error: status.error || 'build failed', compileError: true };
         }
         return { ok: false, error: 'build ended in state "' + status.state + '"' };

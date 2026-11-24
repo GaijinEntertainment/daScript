@@ -53,6 +53,7 @@ test('classifyOutput catches runtime markers that arrived uncoloured', () => {
         'assert failed, expected 4',
         'Aborted(OOM)',
         'asset /a/b.png: 404',
+        'build service fault, try again in a few minutes: the builder could not publish this build\'s artifact',
     ];
     for (const text of cases) {
         const { errors } = P.classifyOutput([line(text)]);

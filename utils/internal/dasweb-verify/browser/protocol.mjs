@@ -25,6 +25,7 @@ export const ERROR_MARKERS = [
     /^FS error writing /,
     /^asset .+: /,
     /^build failed/,
+    /^build service fault/,
     /^build request failed/,
     /^build status failed/,
     /^build timed out/,

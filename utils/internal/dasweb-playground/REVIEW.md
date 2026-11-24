@@ -25,9 +25,9 @@ only.**
 **A diff that adds a SQL statement puts it through a `daslib/sql_linq` call macro or bound
 parameters.** A query assembled by string interpolation or `format` is a defect.
 
-**A route that accepts a body without a `request_body` limit in `caddy.snippet` in front of it
-is a defect, as is a hash or insert reachable without the size check against the configured
-cap.** The service can only check a body already buffered in full.
+**A `caddy.snippet` handle that forwards a route accepting a body, with no `request_body`
+limit in that handle, is a defect, as is a hash or insert reachable without the size check
+against the configured cap.** The service can only check a body already buffered in full.
 
 **A `max_source_bytes` at or above the `request_body max_size` standing in front of
 `/api/samples*` in `caddy.snippet` is a defect.** Whichever limit is lower produces the 413, and
@@ -92,7 +92,8 @@ status, duration, client ip, bytes - is a defect, as is a diff that gives `GET /
 line.** The watchdog polls it every few seconds, and logging it would bury the signal.
 
 **A diff that adds a store mutation or a job/state transition also emits a structured line for
-it.** A failure path that can trigger without leaving a log line is a defect.
+it - a `logger_*` call whose `JV(...)` argument names what changed.** A failure path that can trigger
+without leaving a log line is a defect.
 
 **Never serve the first request before the startup banner has logged the full effective config
 with per-key provenance.**
@@ -117,8 +118,8 @@ thread that serves it.**
 `dasweb-playground.toml`; use the development equivalent.** The config file is discovered
 automatically beside the module, so whatever it names is what an in-repo run opens.
 
-**A diff that edits a shipped `[sql_migration]` body is a defect - a schema change adds a new
-version instead.**
+**A diff that edits a `[sql_migration]` present on master, or any function reachable from one,
+is a defect - a schema or data change adds a new migration version instead.**
 
 **Placement - one file, one line: a diff keeps each file inside its line, and a new file adds
 its line here, with its tests, in the same change.**
@@ -136,7 +137,7 @@ its line here, with its tests, in the same change.**
   hashing, and every policy decision (size cap, rate ceiling, listing). Zero HTTP.
 - `build_queue.das` - the build queue: `BuildJob`/`BuildMeta` schema, the migrations it owns,
   the job state machine, mode selection from a job's source document, and queue policy (claim
-  timeout, attempt ceiling). Zero HTTP and zero filesystem.
+  timeout, attempt ceiling, fault retry wait). Zero HTTP and zero filesystem.
 - `build_artifacts.das` - the artifact cache: blobs layout, toolchain/hash/filename validation
   (including which suffixes are documents, for the origin gate), integrity verification,
   stage-then-rename placement, serving-path resolution, and every path the cache assembles. The
