@@ -10,7 +10,8 @@ module _f32_tile_pin shared public
 require dasllama/dasllama_lint public
 require math   // mad: the cloned tile bodies call it
 require dastest/testing_boost
-require daslib/rtti   // this_context: the panic's text re-raised once the pin is put back
+require dasllama/dasllama_common
+require dasllama/dasllama_lever public   // with_put_back: the restore a pin returns through, panic or not
 require dasllama/dasllama_math
 require dasllama/dasllama_par   // maybe_parallel_for
 require dasllama/dasllama_tune   // [dasllama_grid], [dasllama_fallbacks]
@@ -67,23 +68,6 @@ def private pinned_f32_batch(var yp : float?; wp : float const?; xp : float cons
     }
     batch_dot_rows(yp, wp, xp, n, d, 0l, d, t4, ntok)
     return true
-}
-
-//! `blk`, then `restore`, however `blk` leaves: a panic is re-raised once `restore` has run (a `defer` does not run when
-//! its scope panics)
-def with_put_back(restore : block<() : void>; blk : block<() : void>) {
-    var raised = false
-    var why = ""
-    try {
-        invoke(blk)
-    } recover {
-        raised = true
-        why = this_context().last_exception
-    }
-    invoke(restore)
-    if (raised) {
-        panic(why)
-    }
 }
 
 //! `blk` with every fp32 batch GEMM (`matmul_batch`, every form) served through the tile's reference

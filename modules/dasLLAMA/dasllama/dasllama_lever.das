@@ -8,11 +8,13 @@ require dasllama/dasllama_lint public
 require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost
+require daslib/rtti   // this_context: the panic's text re-raised once the pin is put back
 
 //! `[lever]` on a knob's getter - a function of no arguments and a declared result `T` whose body reads the knob. The
 //! getter answers the in-process pin where one stands, its own body where none does, and the module gains, for a lever
 //! named `X` (the getter's name, or `name = X`): `set_X(v : T)`, `reset_X()`, `X_pin() : tuple<pinned : bool; value : T>`,
-//! `restore_X(pin)` and `with_X(v : T) { ... }`, each as visible as the getter.
+//! `restore_X(pin)` and `with_X(v : T) { ... }`, each as visible as the getter; `with_X` puts the pin back however its
+//! block leaves, a panic included.
 [function_macro(name = "lever")]
 class private LeverMacro : AstFunctionAnnotation {
     [arch(at = "../ARCHITECTURE_ENGINE.md#levers")]
@@ -66,9 +68,12 @@ class private LeverMacro : AstFunctionAnnotation {
             let was = $i(value)
             $i(pinned) = true
             $i(value) = v
-            invoke(blk)
-            $i(pinned) = was_pinned
-            $i(value) = was
+            dasllama_lever::with_put_back($ {
+                $i(pinned) = was_pinned
+                $i(value) = was
+            }) {
+                invoke(blk)
+            }
         }
         lever_add(mod, fset, func)
         lever_add(mod, freset, func)
@@ -76,6 +81,23 @@ class private LeverMacro : AstFunctionAnnotation {
         lever_add(mod, frestore, func)
         lever_add(mod, fwith, func)
         return true
+    }
+}
+
+//! `blk`, then `restore`, however `blk` leaves: a panic is re-raised once `restore` has run (a `defer` does not run when
+//! its scope panics)
+def with_put_back(restore : block<() : void>; blk : block<() : void>) {
+    var raised = false
+    var why = ""
+    try {
+        invoke(blk)
+    } recover {
+        raised = true
+        why = this_context().last_exception
+    }
+    invoke(restore)
+    if (raised) {
+        panic(why)
     }
 }
 
