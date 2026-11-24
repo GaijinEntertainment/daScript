@@ -14,6 +14,18 @@ require daslib/ast_boost
 require daslib/rtti
 require daslib/strings
 require daslib/contracts
+require daslib/cmp
+
+//! the callee set is keyed by address: its order differs per run
+[macro_function]
+def private callees_in_name_order(var fun : Function?) : array<Function?> {
+    var callees : array<Function?>
+    fun |> get_use_functions() $(f) {
+        callees |> push(f)
+    }
+    sort(callees) <| cmp_by(string(_.name), get_mangled_name(_))
+    return <- callees
+}
 
 [macro_function]
 def check_recursive(at : LineInfo; var fun : Function?; var call_graph : array<Function?>; var visited : table<Function?>) {
@@ -34,7 +46,7 @@ def check_recursive(at : LineInfo; var fun : Function?; var call_graph : array<F
     if (visited |> key_exists(fun)) return
     visited |> insert(fun)
     call_graph |> push(fun)
-    fun |> get_use_functions() $(f) {
+    for (f in callees_in_name_order(fun)) {
         check_recursive(at, f, call_graph, visited)
     }
     call_graph |> pop()
