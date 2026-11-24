@@ -109,6 +109,7 @@ struct BuildJob {
     StartedAt : int64
     FinishedAt : int64
     Error : string = ""
+    Fault : bool = false
     ArtifactPath : string = ""    // blobs-relative artifact dir ("<toolchain>/<hash>")
     ArtifactFiles : string = ""   // JSON array of artifact file names
 }
@@ -139,10 +140,47 @@ def build_queue_migration_004(db : SqlRunner) {
     db |> exec("CREATE TABLE build_meta (MetaKey TEXT PRIMARY KEY, MetaValue TEXT NOT NULL)")
 }
 
+def private is_build_service_error(error : string) : bool {
+    //! The error texts only the build service itself writes, never a
+    //! compiler.
+    for (start in fixed_array("builder could not ", "build produced no artifacts",
+            "podman is not installed", "sandbox image '", "no daslang host at ",
+            "no wasm64 runtime archive under ", "unknown mode '")) {
+        return true if (starts_with(error, start))
+    }
+    return (error == "the builder could not publish this build's artifact" ||
+        (starts_with(error, "build timed out after ") && ends_with(error, " attempt(s)")))
+}
+
+def mark_stored_faults(db : SqlRunner) : int {
+    //! Marks the build-service faults among the failures stored before
+    //! the Fault column existed, told apart by their error text. Returns
+    //! the rows marked.
+    let failed <- _sql(db |> select_from(type<BuildJob>) |> _where(_.State == BUILD_STATE_FAILED))
+    var marked = 0
+    for (job in failed) {
+        continue if (job.Fault || !is_build_service_error(job.Error))
+        db |> _sql_update(type<BuildJob>, _.Hash == job.Hash && _.ToolchainId == job.ToolchainId,
+                          (Fault = true))
+        marked ++
+    }
+    logger_info("playground.build", "stored build-service faults marked", JV((jobs = marked)))
+    return marked
+}
+
+[
+ sql_migration(version = 5,
+               description = "a failed build records whether the fault was the build service's")]
+def build_queue_migration_005(db : SqlRunner) {
+    db |> add_column(type<BuildJob>, "Fault", false)
+    mark_stored_faults(db)
+}
+
 struct BuildConfig {
     //! Queue policy; the launcher fills it from config.
     claim_timeout_seconds : int = 600
     max_build_attempts : int = 3
+    fault_retry_seconds : int = 300   //! the wait before a request re-queues a failed fault
 }
 
 struct EnqueueResult {
@@ -163,6 +201,7 @@ struct BuildStatus {
     mode : string
     attempts : int
     error : string
+    fault : bool
     artifact_path : string
     artifact_files : string   // JSON array text as stored
     position : int            // 1-based place among queued jobs; 0 unless queued
@@ -183,12 +222,14 @@ def set_current_toolchain(db : SqlRunner; toolchain : string) {
     if (empty(current_toolchain(db))) {
         db |> insert(BuildMeta(MetaKey = "current_toolchain", MetaValue = toolchain))
     } else {
-        db |> _sql_update(type<BuildMeta>, _.MetaKey == "current_toolchain", (MetaValue = toolchain))
+        db |> _sql_update(type<BuildMeta>, _.MetaKey == "current_toolchain",
+                          (MetaValue = toolchain))
     }
     logger_info("playground.build", "current toolchain set", JV((toolchain = toolchain)))
 }
 
-def forget_stale_toolchain_jobs(db : SqlRunner; current_toolchain : string; toolchains_with_artifacts : array<string>; before : int64) : int {
+def forget_stale_toolchain_jobs(db : SqlRunner; current_toolchain : string;
+                                toolchains_with_artifacts : array<string>; before : int64) : int {
     //! Drop every job row minted under a toolchain other than current_toolchain
     //! that has no artifact tree any more and was queued before `before`;
     //! nothing when no toolchain is announced. A row whose tree still stands
@@ -199,7 +240,9 @@ def forget_stale_toolchain_jobs(db : SqlRunner; current_toolchain : string; tool
     if (empty(current_toolchain)) {
         return 0
     }
-    let old <- _sql(db |> select_from(type<BuildJob>) |> _where(_.ToolchainId != current_toolchain && _.QueuedAt < before))
+    let old <- _sql(
+                    db |> select_from(type<BuildJob>) |> _where(_.ToolchainId != current_toolchain
+                                                                && _.QueuedAt < before))
     var treeless : table<string>
     for (row in old) {
         if (find_index(toolchains_with_artifacts, row.ToolchainId) < 0) {
@@ -223,24 +266,74 @@ def private job_rows(db : SqlRunner; hash : string; toolchain : string) : array<
         |> take(1))
 }
 
-def enqueue_build(db : SqlRunner; hash : string; toolchain : string; mode : string; now : int64; force : bool = false) : EnqueueResult {
-    //! Idempotent: an existing job in any state is returned as-is. `force`
-    //! re-queues a failed job (admin retry) — a failed build is deterministic,
-    //! so a plain re-request must not burn attempts on it.
+def enqueue_build(db : SqlRunner; hash : string; toolchain : string; mode : string; now : int64;
+                  force : bool = false) : EnqueueResult {
+    //! Idempotent: an existing job in any state is returned as-is.
+    //! `force` re-queues a failed job with fresh attempts; without it a
+    //! failed job is returned as it is, so a re-request burns no attempts
+    //! on a compile error.
     let rows <- job_rows(db, hash, toolchain)
     if (!empty(rows)) {
         if (rows[0].State == BUILD_STATE_FAILED && force) {
             db |> _sql_update(type<BuildJob>, _.Hash == hash && _.ToolchainId == toolchain,
-                (State = BUILD_STATE_QUEUED, Attempts = 0, Error = "", QueuedAt = now,
+                (State = BUILD_STATE_QUEUED, Attempts = 0, Error = "", Fault = false,
+                 QueuedAt = now,
                     StartedAt = 0l, FinishedAt = 0l, ArtifactPath = "", ArtifactFiles = ""))
-            logger_info("playground.build", "re-enqueue failed job", JV((hash = hash, toolchain = toolchain)))
+            logger_info("playground.build", "re-enqueue failed job",
+                        JV((hash = hash, toolchain = toolchain)))
             return EnqueueResult(state = BUILD_STATE_QUEUED, created = true)
         }
         return EnqueueResult(state = rows[0].State, created = false)
     }
     db |> insert(BuildJob(Hash = hash, ToolchainId = toolchain, Mode = mode, QueuedAt = now))
-    logger_info("playground.build", "enqueue", JV((hash = hash, toolchain = toolchain, mode = mode)))
+    logger_info("playground.build", "enqueue",
+                JV((hash = hash, toolchain = toolchain, mode = mode)))
     return EnqueueResult(state = BUILD_STATE_QUEUED, created = true)
+}
+
+def request_build(db : SqlRunner; cfg : BuildConfig; hash : string; toolchain : string;
+                  mode : string; now : int64) : EnqueueResult {
+    //! What a public build request does: enqueue a job that does not
+    //! exist, and re-queue one that failed on a build-service fault once
+    //! `cfg.fault_retry_seconds` have passed. A failure that is the
+    //! sample's own stays as it is - it is deterministic.
+    let rows <- job_rows(db, hash, toolchain)
+    let fault_retry_due = (!empty(rows) && rows[0].State == BUILD_STATE_FAILED && rows[0].Fault &&
+        now - rows[0].FinishedAt >= int64(cfg.fault_retry_seconds))
+    return enqueue_build(db, hash, toolchain, mode, now, force = fault_retry_due)
+}
+
+def requeue_failed_build(db : SqlRunner; hash : string; now : int64) : bool {
+    //! The operator's retry: a failed build under the current toolchain
+    //! returns to the queue with fresh attempts, and a job in any other
+    //! state stays as it is. False when the sample has no job under the
+    //! current toolchain.
+    let toolchain = current_toolchain(db)
+    let rows <- job_rows(db, hash, toolchain)
+    if (empty(toolchain) || empty(rows)) return false
+    enqueue_build(db, hash, toolchain, rows[0].Mode, now, force = true)
+    return true
+}
+
+def private requeue_or_fail_as_fault(db : SqlRunner; cfg : BuildConfig; job : BuildJob;
+                                     error : string; now : int64) : string {
+    //! A job the build service failed on returns to the queue while it
+    //! has attempts left, and fails as a fault after that. Returns its
+    //! new state.
+    if (job.Attempts < cfg.max_build_attempts) {
+        db |> _sql_update(type<BuildJob>, _.Hash == job.Hash && _.ToolchainId == job.ToolchainId,
+            (State = BUILD_STATE_QUEUED))
+        logger_warning("playground.build", "requeue after a build-service fault",
+            JV(
+               (hash = job.Hash, toolchain = job.ToolchainId, attempts = job.Attempts,
+                error = error)))
+        return BUILD_STATE_QUEUED
+    }
+    db |> _sql_update(type<BuildJob>, _.Hash == job.Hash && _.ToolchainId == job.ToolchainId,
+        (State = BUILD_STATE_FAILED, FinishedAt = now, Fault = true, Error = error))
+    logger_error("playground.build", "job failed on a build-service fault: attempts exhausted",
+        JV((hash = job.Hash, toolchain = job.ToolchainId, attempts = job.Attempts, error = error)))
+    return BUILD_STATE_FAILED
 }
 
 def requeue_stale_claims(db : SqlRunner; cfg : BuildConfig; now : int64) : int {
@@ -251,23 +344,13 @@ def requeue_stale_claims(db : SqlRunner; cfg : BuildConfig; now : int64) : int {
     let stale <- _sql(db |> select_from(type<BuildJob>)
         |> _where(_.State == BUILD_STATE_BUILDING && _.StartedAt <= cutoff))
     for (j in stale) {
-        if (j.Attempts >= cfg.max_build_attempts) {
-            db |> _sql_update(type<BuildJob>, _.Hash == j.Hash && _.ToolchainId == j.ToolchainId,
-                (State = BUILD_STATE_FAILED, FinishedAt = now,
-                    Error = "build timed out after {j.Attempts} attempt(s)"))
-            logger_error("playground.build", "job failed: attempts exhausted",
-                JV((hash = j.Hash, toolchain = j.ToolchainId, attempts = j.Attempts)))
-        } else {
-            db |> _sql_update(type<BuildJob>, _.Hash == j.Hash && _.ToolchainId == j.ToolchainId,
-                (State = BUILD_STATE_QUEUED))
-            logger_warning("playground.build", "requeue stale claim",
-                JV((hash = j.Hash, toolchain = j.ToolchainId, attempts = j.Attempts)))
-        }
+        requeue_or_fail_as_fault(db, cfg, j, "build timed out after {j.Attempts} attempt(s)", now)
     }
     return length(stale)
 }
 
-def claim_next_build(db : SqlRunner; cfg : BuildConfig; toolchain : string; now : int64) : ClaimedJob {
+def claim_next_build(db : SqlRunner; cfg : BuildConfig; toolchain : string;
+                     now : int64) : ClaimedJob {
     //! Oldest queued job for the builder's own toolchain — a builder must never
     //! receive a job minted for a different toolchain id. Empty hash = nothing
     //! to claim. Stale claims are swept first, so a dead builder's jobs come
@@ -288,16 +371,27 @@ def claim_next_build(db : SqlRunner; cfg : BuildConfig; toolchain : string; now 
         mode = rows[0].Mode, attempts = rows[0].Attempts + 1)
 }
 
-def record_build_done(db : SqlRunner; hash : string; toolchain : string; artifact_path : string; artifact_files_json : string; now : int64) : bool {
+def private building_job(db : SqlRunner; hash : string; toolchain : string;
+                         result_kind : string) : array<BuildJob> {
+    //! The job's row while it is still `building`; empty, with the
+    //! refusal logged, for a result that arrives in any other state.
+    var rows <- job_rows(db, hash, toolchain)
+    if (empty(rows) || rows[0].State != BUILD_STATE_BUILDING) {
+        logger_error("playground.build", "refused {result_kind} result",
+            JV(
+               (hash = hash, toolchain = toolchain,
+                state = empty(rows) ? "missing" : rows[0].State)))
+        rows |> clear()
+    }
+    return <- rows
+}
+
+def record_build_done(db : SqlRunner; hash : string; toolchain : string; artifact_path : string;
+                      artifact_files_json : string; now : int64) : bool {
     //! Only a job still in `building` may resolve — a result arriving after the
     //! claim was requeued is refused, and the builder discards its work (the
     //! artifact is content-addressed, so the next attempt finds it anyway).
-    let rows <- job_rows(db, hash, toolchain)
-    if (empty(rows) || rows[0].State != BUILD_STATE_BUILDING) {
-        logger_error("playground.build", "refused done result",
-            JV((hash = hash, toolchain = toolchain, state = empty(rows) ? "missing" : rows[0].State)))
-        return false
-    }
+    if (empty(building_job(db, hash, toolchain, "done"))) return false
     db |> _sql_update(type<BuildJob>, _.Hash == hash && _.ToolchainId == toolchain,
         (State = BUILD_STATE_DONE, FinishedAt = now, Error = "",
             ArtifactPath = artifact_path, ArtifactFiles = artifact_files_json))
@@ -306,19 +400,27 @@ def record_build_done(db : SqlRunner; hash : string; toolchain : string; artifac
     return true
 }
 
-def record_build_failed(db : SqlRunner; hash : string; toolchain : string; error : string; now : int64) : bool {
-    //! A failed build is terminal (a compile error is deterministic); the error
-    //! text is the user-facing product and is stored capped.
-    let rows <- job_rows(db, hash, toolchain)
-    if (empty(rows) || rows[0].State != BUILD_STATE_BUILDING) {
-        logger_error("playground.build", "refused failure result",
-            JV((hash = hash, toolchain = toolchain, state = empty(rows) ? "missing" : rows[0].State)))
-        return false
-    }
+def record_build_failed(db : SqlRunner; hash : string; toolchain : string; error : string;
+                        now : int64) : bool {
+    //! The sample's own failure: terminal, because a compile error is
+    //! deterministic. The error text is the user-facing product and is
+    //! stored capped.
+    if (empty(building_job(db, hash, toolchain, "failure"))) return false
     db |> _sql_update(type<BuildJob>, _.Hash == hash && _.ToolchainId == toolchain,
         (State = BUILD_STATE_FAILED, FinishedAt = now, Error = capped_error(error)))
     logger_info("playground.build", "failed", JV((hash = hash, toolchain = toolchain)))
     return true
+}
+
+def record_build_fault(db : SqlRunner; cfg : BuildConfig; hash : string; toolchain : string;
+                       error : string; now : int64) : string {
+    //! The builder reported a build-service fault - it could not publish,
+    //! stage or prepare the build. The job returns to the queue while it
+    //! has attempts left, and fails as a fault after that. Returns the
+    //! job's new state, "" when the result is refused.
+    let rows <- building_job(db, hash, toolchain, "fault")
+    if (empty(rows)) return ""
+    return requeue_or_fail_as_fault(db, cfg, rows[0], capped_error(error), now)
 }
 
 def private capped_error(error : string) : string {
@@ -336,12 +438,13 @@ def build_status(db : SqlRunner; hash : string; toolchain : string) : BuildStatu
         return BuildStatus()
     }
     var st = BuildStatus(found = true, state = rows[0].State, mode = rows[0].Mode,
-        attempts = rows[0].Attempts, error = rows[0].Error,
+        attempts = rows[0].Attempts, error = rows[0].Error, fault = rows[0].Fault,
         artifact_path = rows[0].ArtifactPath, artifact_files = rows[0].ArtifactFiles)
     if (rows[0].State == BUILD_STATE_QUEUED) {
         let qa = rows[0].QueuedAt
         st.position = _sql(db |> select_from(type<BuildJob>)
-            |> _where(_.State == BUILD_STATE_QUEUED && _.ToolchainId == toolchain && _.QueuedAt <= qa)
+            |> _where(_.State == BUILD_STATE_QUEUED && _.ToolchainId == toolchain
+                      && _.QueuedAt <= qa)
             |> count())
     }
     return st

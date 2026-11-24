@@ -176,6 +176,10 @@ class PlaygroundServer : HvWebServer {
         POST("/admin/reimport") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_reimport(req, resp)
         }
+        POST("/admin/build/requeue/:hash") <| @(var req : HttpRequest?;
+                                                var resp : HttpResponse?) : http_status {
+            return handle_build_requeue(req, resp)
+        }
         GET("/api/build/info") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_build_info(req, resp)
         }
@@ -439,6 +443,19 @@ def manifest_matches_mode(files : array<ArtifactFile> const; mode : string) : bo
     return true
 }
 
+def private record_failed_result(var req : HttpRequest?; hash : string;
+                                 toolchain : string) : string {
+    // compiler error text is line-oriented; a das string ends at the first
+    // NUL, which such text cannot contain, so get_form_data is byte-faithful here
+    let error_text = get_form_data(req, "error")
+    let now = current_unix_time()
+    if (get_form_data(req, "fault") == "1") {
+        return record_build_fault(g_db, g_build.queue, hash, toolchain, error_text, now)
+    }
+    record_build_failed(g_db, hash, toolchain, error_text, now)
+    return BUILD_STATE_FAILED
+}
+
 def private handle_build_result(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     let t0 = ref_time_ticks()
     let auth = build_auth_status(req)
@@ -462,10 +479,7 @@ def private handle_build_result(var req : HttpRequest?; var resp : HttpResponse?
     }
     let ok_field = get_form_data(req, "ok")
     if (ok_field == "0") {
-        // compiler error text is line-oriented; a das string ends at the first
-        // NUL, which such text cannot contain, so get_form_data is byte-faithful here
-        record_build_failed(g_db, hash, toolchain, get_form_data(req, "error"), current_unix_time())
-        let fail_body = write_json(JV((state = BUILD_STATE_FAILED)))
+        let fail_body = write_json(JV((state = record_failed_result(req, hash, toolchain))))
         log_request("POST", "/api/build/result", 200, ip, raw_bytes, length(fail_body), t0)
         return resp |> JSON(fail_body)
     }
@@ -529,7 +543,7 @@ def private build_status_payload(hash : string; toolchain : string) : string {
         return write_json(JV((state = st.state, position = st.position)))
     }
     if (st.state == BUILD_STATE_FAILED) {
-        return write_json(JV((state = st.state, error = st.error)))
+        return write_json(JV((state = st.state, error = st.error, fault = st.fault)))
     }
     if (st.state == BUILD_STATE_DONE) {
         // page artifacts live on the run origin (separate from this one), so their
@@ -599,12 +613,35 @@ def private handle_build_request(var req : HttpRequest?; var resp : HttpResponse
         return resp |> JSON(write_json(JV((error = "page builds are not available on this server"))), http_status.SERVICE_UNAVAILABLE)
     }
     // no extra limiter by design: the queue plus baking time is the throttle
-    enqueue_build(g_db, hash, toolchain, mode, current_unix_time())
+    request_build(g_db, g_build.queue, hash, toolchain, mode, current_unix_time())
     let body = build_status_payload(hash, toolchain)
     resp |> set_header("Cache-Control", "no-store")
     // the payload carries the stored compiler error, which is user-derived text
     resp |> set_header("X-Content-Type-Options", "nosniff")
     log_request("POST", "/api/build/request/:hash", 200, ip, 0, length(body), t0)
+    return resp |> JSON(body)
+}
+
+def private handle_build_requeue(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
+    let ip = client_ip_of(req)
+    if (!is_loopback_caller(req)) {
+        log_request("POST", "/admin/build/requeue/:hash", 403, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "forbidden"))), http_status.FORBIDDEN)
+    }
+    let hash = get_param(req, "hash")
+    if (!is_valid_hash(hash)) {
+        log_request("POST", "/admin/build/requeue/:hash", 400, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "malformed hash"))), http_status.BAD_REQUEST)
+    }
+    if (!requeue_failed_build(g_db, hash, current_unix_time())) {
+        log_request("POST", "/admin/build/requeue/:hash", 404, ip, 0, 0, t0)
+        let refusal = write_json(JV((error = "no build job under the current toolchain")))
+        return resp |> JSON(refusal, http_status.NOT_FOUND)
+    }
+    let body = build_status_payload(hash, current_toolchain(g_db))
+    resp |> set_header("X-Content-Type-Options", "nosniff")
+    log_request("POST", "/admin/build/requeue/:hash", 200, ip, 0, length(body), t0)
     return resp |> JSON(body)
 }
 

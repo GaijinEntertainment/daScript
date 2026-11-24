@@ -14,6 +14,7 @@ let TEST_PORT = 19013   // 19011/19012 are test_playground_server's
 
 let TEST_TOKEN = "test-build-token-3a"
 let TC = "abc1234def567890abc1234def567890abc12345"
+let PUBLISH_FAULT = "the builder could not publish this build's artifact"
 
 // Same local-harness rules as test_playground_server: all setup happens inside
 // the server thread (module globals are per-context), shutdown goes through
@@ -23,14 +24,17 @@ def private with_build_server(token : string; blobs_dir : string; blk : block<(b
     with_page_build_server(token, blobs_dir, "", blk)
 }
 
-def private with_page_build_server(token : string; blobs_dir : string; page_origin : string; blk : block<(base_url : string) : void>) {
+def private with_queue_build_server(token : string; blobs_dir : string; page_origin : string;
+                                    queue : BuildConfig; blk : block<(base_url : string) : void>) {
     with_job_status(1) $(finished) {
         let token_copy = token
         let blobs_copy = blobs_dir
         let origin_copy = page_origin
+        let queue_copy = queue
         new_thread() @() {
             run_server(TEST_PORT, ":memory:", StorePolicy(), "https://test.example", "",
-                BuildOptions(token = token_copy, blobs_dir = blobs_copy, page_origin = origin_copy))
+                BuildOptions(token = token_copy, blobs_dir = blobs_copy, page_origin = origin_copy,
+                    queue = queue_copy))
             finished |> notify_and_release
         }
         let base_url = "http://127.0.0.1:{TEST_PORT}"
@@ -55,12 +59,35 @@ def private with_page_build_server(token : string; blobs_dir : string; page_orig
     }
 }
 
+def private with_page_build_server(token : string; blobs_dir : string; page_origin : string; blk : block<(base_url : string) : void>) {
+    with_queue_build_server(token, blobs_dir, page_origin, BuildConfig(), blk)
+}
+
 def private authed_post(url : string; body : string; token : string; blk : block<(resp : HttpResponse?) : void>) {
     with_http_request() $(var req) {
         req.method = http_method.POST
         req.url := url
         set_header(req, "Authorization", "Bearer {token}")
         req.body := body
+        request(req) $(resp) {
+            invoke(blk, resp)
+        }
+    }
+}
+
+def private post_failure(base_url : string; hash : string; error_text : string; fault : bool;
+                         blk : block<(resp : HttpResponse?) : void>) {
+    with_http_request() $(var req) {
+        req.method = http_method.POST
+        req.url := "{base_url}/api/build/result"
+        set_header(req, "Authorization", "Bearer {TEST_TOKEN}")
+        set_form_data(req, "hash", hash)
+        set_form_data(req, "toolchain", TC)
+        set_form_data(req, "ok", "0")
+        set_form_data(req, "error", error_text)
+        if (fault) {
+            set_form_data(req, "fault", "1")
+        }
         request(req) $(resp) {
             invoke(blk, resp)
         }
@@ -257,17 +284,8 @@ def test_build_flow_end_to_end(t : T?) { // nolint:STYLE038 — sequential pipel
             }
         }
         t |> run("a late result for a resolved job is 409") @(tt : T?) {
-            with_http_request() $(var req) {
-                req.method = http_method.POST
-                req.url := "{base_url}/api/build/result"
-                set_header(req, "Authorization", "Bearer {TEST_TOKEN}")
-                set_form_data(req, "hash", hash)
-                set_form_data(req, "toolchain", TC)
-                set_form_data(req, "ok", "0")
-                set_form_data(req, "error", "too late")
-                request(req) $(resp) {
-                    tt |> equal(int(resp.status_code), 409)
-                }
+            post_failure(base_url, hash, "too late", false) $(resp) {
+                tt |> equal(int(resp.status_code), 409)
             }
         }
     }
@@ -290,17 +308,8 @@ def test_build_failure_paths(t : T?) { // nolint:STYLE038 — sequential refusal
             let bad = posted_hash(base_url, "this does not compile")
             POST("{base_url}/api/build/request/{bad}", "") $(_resp) {}
             authed_post("{base_url}/api/build/next", TC, TEST_TOKEN) $(_resp) {}
-            with_http_request() $(var req) {
-                req.method = http_method.POST
-                req.url := "{base_url}/api/build/result"
-                set_header(req, "Authorization", "Bearer {TEST_TOKEN}")
-                set_form_data(req, "hash", bad)
-                set_form_data(req, "toolchain", TC)
-                set_form_data(req, "ok", "0")
-                set_form_data(req, "error", "error[30101]: no such thing")
-                request(req) $(resp) {
-                    tt |> equal(int(resp.status_code), 200)
-                }
+            post_failure(base_url, bad, "error[30101]: no such thing", false) $(resp) {
+                tt |> equal(int(resp.status_code), 200)
             }
             GET("{base_url}/api/build/status/{bad}") $(resp) {
                 var doc = json_of(resp)
@@ -590,6 +599,83 @@ def test_announce_retires_stale_toolchain(t : T?) {
             }
             tt |> success(gone, "stale toolchain tree removed")
             tt |> success(stat(blobs).is_valid, "blobs root untouched")
+        }
+    }
+    rmdir_rec(blobs)
+}
+
+[test(description = "a build-service fault re-queues the job and only fails it once its attempts are spent, the next public request then re-queues that fault, a failure that is the sample's own stays failed until the loopback requeue route resets it, and that route refuses an unknown or malformed hash", timeout = 1200)]
+def test_build_fault_paths(t : T?) {
+    var err = ""
+    let blobs = create_temp_directory("dasweb_ep_blobs_", err)
+    let queue = BuildConfig(max_build_attempts = 2, fault_retry_seconds = 0)
+    with_queue_build_server(TEST_TOKEN, blobs, "", queue) $(base_url) {
+        authed_post("{base_url}/api/build/toolchain", TC, TEST_TOKEN) $(resp) {
+            assert(int(resp.status_code) == 200, "toolchain announced")
+        }
+        let flaky = posted_hash(base_url, "print(\"published on a bad day\")")
+        t |> run("a fault with attempts left re-queues the job") @(tt : T?) {
+            POST("{base_url}/api/build/request/{flaky}", "") $(_resp) {}
+            authed_post("{base_url}/api/build/next", TC, TEST_TOKEN) $(_resp) {}
+            post_failure(base_url, flaky, PUBLISH_FAULT, true) $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                var doc = json_of(resp)
+                tt |> equal(doc?["state"] ?? "", "queued")
+            }
+            GET("{base_url}/api/build/status/{flaky}") $(resp) {
+                var doc = json_of(resp)
+                tt |> equal(doc?["state"] ?? "", "queued")
+            }
+        }
+        t |> run("a fault on the last attempt fails the job and says it was a fault") @(tt : T?) {
+            authed_post("{base_url}/api/build/next", TC, TEST_TOKEN) $(_resp) {}
+            post_failure(base_url, flaky, PUBLISH_FAULT, true) $(resp) {
+                var doc = json_of(resp)
+                tt |> equal(doc?["state"] ?? "", "failed")
+            }
+            GET("{base_url}/api/build/status/{flaky}") $(resp) {
+                var doc = json_of(resp)
+                tt |> equal(doc?["state"] ?? "", "failed")
+                tt |> equal(doc?["fault"] ?? false, true)
+                tt |> equal(doc?["error"] ?? "", PUBLISH_FAULT)
+            }
+        }
+        t |> run("the next public request re-queues a fault") @(tt : T?) {
+            POST("{base_url}/api/build/request/{flaky}", "") $(resp) {
+                var doc = json_of(resp)
+                tt |> equal(doc?["state"] ?? "", "queued")
+            }
+        }
+        let broken = posted_hash(base_url, "this does not compile either")
+        t |> run("a failure that is the sample's own survives a public request") @(tt : T?) {
+            POST("{base_url}/api/build/request/{broken}", "") $(_resp) {}
+            // the re-queued fault above is older, so it is claimed first
+            authed_post("{base_url}/api/build/next", TC, TEST_TOKEN) $(_resp) {}
+            authed_post("{base_url}/api/build/next", TC, TEST_TOKEN) $(_resp) {}
+            post_failure(base_url, broken, "error[30101]: no such thing", false) $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+            }
+            POST("{base_url}/api/build/request/{broken}", "") $(resp) {
+                var doc = json_of(resp)
+                tt |> equal(doc?["state"] ?? "", "failed")
+                tt |> equal(doc?["fault"] ?? true, false)
+            }
+        }
+        t |> run("the loopback requeue route resets it") @(tt : T?) {
+            POST("{base_url}/admin/build/requeue/{broken}", "") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                var doc = json_of(resp)
+                tt |> equal(doc?["state"] ?? "", "queued")
+            }
+        }
+        t |> run("the requeue route refuses an unknown or malformed hash") @(tt : T?) {
+            let unknown = "4444444444444444444444444444444444444444444444444444444444444444"
+            POST("{base_url}/admin/build/requeue/{unknown}", "") $(resp) {
+                tt |> equal(int(resp.status_code), 404)
+            }
+            POST("{base_url}/admin/build/requeue/not-a-hash", "") $(resp) {
+                tt |> equal(int(resp.status_code), 400)
+            }
         }
     }
     rmdir_rec(blobs)

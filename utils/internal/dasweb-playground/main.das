@@ -74,7 +74,8 @@ def init {
             page_origin = g_cfg.page_origin,
             queue = BuildConfig(
                 claim_timeout_seconds = g_cfg.build_claim_timeout_seconds,
-                max_build_attempts = g_cfg.max_build_attempts)))
+                max_build_attempts = g_cfg.max_build_attempts,
+                fault_retry_seconds = g_cfg.build_fault_retry_seconds)))
     if (!g_ready) {
         g_exit_code = 1
     }

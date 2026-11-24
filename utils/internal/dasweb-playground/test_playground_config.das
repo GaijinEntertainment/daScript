@@ -49,7 +49,8 @@ def test_defaults_and_toml(t : T?) {
         var sources : table<string; string>
         var err = ""
         let args <- no_args()
-        t |> success(!apply_config_text(cfg, "max_source_bytes = \"256k\"\n", args, sources, err), "string for a number fails")
+        t |> success(!apply_config_text(cfg, "max_source_bytes = \"256k\"\n", args, sources, err),
+                     "string for a number fails")
         t |> success(find(err, "max_source_bytes") >= 0, "error names the key")
         t |> equal(cfg.max_source_bytes, 524288)   // default stands
     }
@@ -58,7 +59,8 @@ def test_defaults_and_toml(t : T?) {
         var sources : table<string; string>
         var err = ""
         let args <- no_args()
-        t |> success(!apply_config_text(cfg, "db = 7\n", args, sources, err), "number for a string fails")
+        t |> success(!apply_config_text(cfg, "db = 7\n", args, sources, err),
+                     "number for a string fails")
         t |> success(find(err, "db") >= 0, "error names the key")
     }
 }
@@ -75,7 +77,7 @@ def test_load_config_and_banner(t : T?) {
     }
     t |> run("explicit config file loads and merges") @(t : T?) {
         var terr = ""
-        let dir = temp_directory(terr)
+        let dir = create_temp_directory("pg_cfg_", terr)
         let path = path_join(dir, "pg_cfg_test.toml")
         fwrite(path, "port = 9210\n")
         var cfg = ServerArgs()
@@ -85,8 +87,7 @@ def test_load_config_and_banner(t : T?) {
         t |> success(load_config(cfg, sources, err), "config loads")
         t |> equal(cfg.port, 9210)
         t |> equal(sources?["port"] ?? "", "toml")
-        var rerr = ""
-        remove(path, rerr)
+        rmdir_rec(dir)
     }
     t |> run("banner carries every key with provenance") @(t : T?) {
         let cfg = ServerArgs()
@@ -97,7 +98,8 @@ def test_load_config_and_banner(t : T?) {
                 "\"base_url\"", "\"max_source_bytes_src\"", "\"max_inserts_per_ip_hour_src\"",
                 "\"curated_dir_src\"", "\"blobs_dir_src\"", "\"page_origin_src\"",
                 "\"build_claim_timeout_seconds_src\"",
-                "\"max_build_attempts_src\"", "\"build_token_src\"")) {
+                "\"max_build_attempts_src\"", "\"build_fault_retry_seconds_src\"",
+                "\"build_token_src\"")) {
             t |> success(find(body, key) >= 0, "banner contains {key}")
         }
     }
@@ -112,13 +114,16 @@ def test_build_keys_merge(t : T?) {
         let args <- no_args()
         let body = ("build_token = \"s3cret\"\nblobs_dir = \"/srv/blobs\"\n" +
             "page_origin = \"https://run.test.example\"\n" +
-            "build_claim_timeout_seconds = 900\nmax_build_attempts = 5\n")
+            "build_claim_timeout_seconds = 900\nmax_build_attempts = 5\n" +
+            "build_fault_retry_seconds = 60\n")
         t |> success(apply_config_text(cfg, body, args, sources, err), "toml parses")
         t |> equal(cfg.build_token, "s3cret")
         t |> equal(cfg.blobs_dir, "/srv/blobs")
         t |> equal(cfg.page_origin, "https://run.test.example")
         t |> equal(cfg.build_claim_timeout_seconds, 900)
         t |> equal(cfg.max_build_attempts, 5)
+        t |> equal(cfg.build_fault_retry_seconds, 60)
+        t |> equal(sources?["build_fault_retry_seconds"] ?? "", "toml")
         t |> equal(sources?["build_token"] ?? "", "toml")
         t |> equal(sources?["page_origin"] ?? "", "toml")
     }
@@ -175,6 +180,19 @@ def test_cli_precedence(t : T?) {
         t |> equal(cfg.port, 7777)
         t |> equal(sources?["port"] ?? "", "cli")
     }
+    t |> run("the fault retry wait defaults to five minutes, and its flag beats toml") @(t : T?) {
+        var cfg = ServerArgs()
+        t |> equal(cfg.build_fault_retry_seconds, 300)
+        cfg.build_fault_retry_seconds = 7   // as if parsed from the flag
+        var sources : table<string; string>
+        var err = ""
+        let args <- ["--build-fault-retry-seconds=7"]
+        mark_cli_sources(args, sources)
+        t |> success(apply_config_text(cfg, "build_fault_retry_seconds = 60\n", args, sources, err),
+                     "toml parses")
+        t |> equal(cfg.build_fault_retry_seconds, 7)
+        t |> equal(sources?["build_fault_retry_seconds"] ?? "", "cli")
+    }
     t |> run("short -p counts as the port flag") @(t : T?) {
         var cfg = ServerArgs()
         cfg.port = 7778
@@ -192,7 +210,9 @@ def test_cli_precedence(t : T?) {
         var err = ""
         let args <- ["--port=7777"]
         mark_cli_sources(args, sources)
-        t |> success(apply_config_text(cfg, "authoritative = true\nport = 9000\n", args, sources, err), "toml parses")
+        t |> success(
+                     apply_config_text(cfg, "authoritative = true\nport = 9000\n", args, sources,
+                                       err), "toml parses")
         t |> equal(cfg.port, 9000)
         t |> equal(sources?["port"] ?? "", "toml")
     }
@@ -203,7 +223,8 @@ def test_cli_precedence(t : T?) {
         var err = ""
         let args <- ["--max-source-bytes=555"]
         mark_cli_sources(args, sources)
-        t |> success(apply_config_text(cfg, "max_source_bytes = 9999\n", args, sources, err), "toml parses")
+        t |> success(apply_config_text(cfg, "max_source_bytes = 9999\n", args, sources, err),
+                     "toml parses")
         t |> equal(cfg.max_source_bytes, 555)
         t |> equal(sources?["max_source_bytes"] ?? "", "cli")
     }
