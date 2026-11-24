@@ -1019,8 +1019,8 @@ def test_child_chunks(t : T?) {
 def test_missing_models(t : T?) {
     let names <- model_names("let a = \"B-model.gguf\"\nlet b = \"\{stem\}.gguf\"\nlet c = \"dir/C.gguf\"\nlet d = \"*.gguf\"\nrun(\"A-model.gguf\", \"B-model.gguf\", \"note.txt\")\n")
     t |> equal(join(names, ","), "A-model.gguf,B-model.gguf", "whole quoted names once each, in order; an interpolated name, a path and a pattern are not names")
-    let paths <- model_paths("\"../x.gguf\" \"/a/b.gguf\" \"d\\e.gguf\" \"drafters/d/f.gguf\"")
-    t |> equal(join(paths, ","), "drafters/d/f.gguf", "`model_paths` keeps a path under the models folder and drops a climb, an absolute path and a backslash path")
+    let paths <- model_paths("\"../x.gguf\" \"/a/b.gguf\" \"D:/m/g.gguf\" \"d\\e.gguf\" \"drafters/d/f.gguf\"")
+    t |> equal(join(paths, ","), "drafters/d/f.gguf", "`model_paths` keeps a path under the models folder and drops a climb, an absolute path, a drive path and a backslash path")
     let dir = path_join(test_temp_dir(), "dasllama_missing_models")
     mkdir_rec(dir)
     let run <- ["{TESTS_DIR}/test_gpu_model_swap.das"]

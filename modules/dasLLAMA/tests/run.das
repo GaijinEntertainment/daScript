@@ -1290,13 +1290,13 @@ def child_cache_dir(das_exe : string; own_binary : bool) : string {
 }
 
 //! the model files `text` names under the models directory: every quoted name ending `.gguf` that is one file name or a
-//! relative path to one (`drafters/<dir>/<file>`); a name built by interpolation, an absolute path, a climb out (`..`)
+//! relative path to one (`drafters/<dir>/<file>`); a name built by interpolation, an absolute path (a drive path too), a climb out (`..`)
 //! and a pattern are not. Non-private: test_run_suites.das pins it
 def model_paths(text : string) : array<string> {
     var names : table<string>
     for (part in split(text, "\"")) {
         if (part |> ends_with(".gguf") && find(part, "\{") < 0 && !(part |> starts_with("/")) && find(part, "..") < 0
-                && find(part, "\\") < 0 && find(part, " ") < 0 && find(part, "*") < 0) {
+                && find(part, "\\") < 0 && find(part, " ") < 0 && find(part, "*") < 0 && find(part, ":") < 0) {
             names |> insert(part)
         }
     }
