@@ -10,6 +10,97 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-11-24, `direction-grade`) - the nv4 device unit and the block-rounds ask: the all-NVFP4 27B and the
+  NVFP4 35B served on both discrete homes against llama.cpp 4483b2b, the 27B before and after, and the verify rows'
+  device scratch (RunPod RTX PRO 4500 Blackwell 32 GB).** Box: the RunPod RTX PRO 4500 Blackwell 32 GB (`nvidia-smi`:
+  NVIDIA RTX PRO 4500 Blackwell, driver 595.112.07, 32623 MiB), AMD EPYC 7663, Ubuntu 24.04.1. Exe: the daslang binary
+  built from origin/master 1febab27ee's C++, running the `modules/dasLLAMA` and `utils/dasllama-server` .das sources of
+  this change (tree bcc10487e83f). Flags: `-jit` (every das figure here is a `-jit` script reading - `debug-jit`), the
+  home by the server's `--gpu cuda|vulkan`; `DAS_NO_HUGEPAGE_HINT`, `DAS_TUNE_POLICY`, `DASLLAMA_COOPMAT`,
+  `DASLLAMA_CUDA_MMQ`, `DASLLAMA_CUDA_PDL` and `DASLLAMA_VK_DECVEC` unset; the box's kernels unminted, so no figure here
+  is a board row.
+  Harness: `bin/daslang -jit modules/dasLLAMA/harness/model_bench_run.das -- --gpu <home> --out-dir <dir> --models-dir
+  <models> --model <entry> --boot-seconds 2400 --only pp,tg,nextn,dflash2,dflash2_nvfp4 --slot-dir <dir>` for our leg
+  and the same line with `--llama-server <llama.cpp>/build-<home>/bin/llama-server` for the reference's
+  (`harness/model_bench.json`'s entries: a server of 4 streams at context 32768, each row one stream; `tg128+N` decodes
+  128 tokens behind an N-token prompt, `tg512:<arm>` 512 tokens under a speculative arm). Each figure is the mean +- the
+  standard deviation of three reps, tok/s. The reference: llama.cpp 4483b2b98, `cmake -DCMAKE_BUILD_TYPE=Release
+  -DGGML_NATIVE=ON` with `-DGGML_CUDA=ON` (`build-cuda`) or `-DGGML_VULKAN=ON` (`build-vulkan`), served as
+  `<llama.cpp>/build-cuda/bin/llama-server -m <models>/Qwen3.8-27B-NVFP4-MTP-N4_0.gguf --port 8911 -ngl 99 -np 4 -c 131072 --temp 0`
+  (the drafter arms' `--spec-type` lines are the card's `cmd`). Model files: `Qwen3.8-27B-NVFP4-MTP-N4_0.gguf` (its own
+  NextN head; drafters `Qwen3.8-27B-DFlash2-Q8_0.gguf` and `Qwen3.8-27B-DFlash2-NVFP4.gguf`) and
+  `Qwen3.6-35B-A3B-NVFP4.gguf` (routed, no head; its two DFlash2 drafters). The 27B's NextN arm runs the box knob's depth
+  (1, unminted); its block-drafter arms run under the block-rounds ask (`set_gpu_resident_block_rounds`), which the
+  server makes where a slot names a drafter.
+
+    Qwen3.8-27B-NVFP4-MTP-N4_0, tok/s
+
+    | row | CUDA ours | CUDA llama.cpp | ours / theirs | Vulkan ours | Vulkan llama.cpp | ours / theirs |
+    | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+    | pp2048 | 3535.1 +- 3.2 | 2512.7 +- 13.0 | 1.41 | 1368.6 +- 2.4 | 1191.6 +- 304.3 | 1.15 |
+    | pp4096 | 3702.8 +- 2.5 | 2973.6 +- 20.0 | 1.25 | 1528.9 +- 1.8 | 1346.6 +- 9.2 | 1.14 |
+    | pp8192 | 3730.8 +- 3.8 | 3065.7 +- 32.6 | 1.22 | 1655.2 +- 3.4 | 1379.1 +- 7.7 | 1.20 |
+    | pp16384 | 3570.5 +- 4.6 | 3053.7 +- 27.3 | 1.17 | 1573.9 +- 3.9 | 1368.3 +- 25.0 | 1.15 |
+    | tg128 | 45.6 +- 0.0 | 46.7 +- 0.0 | 0.98 | 44.4 +- 0.0 | 28.0 +- 0.2 | 1.59 |
+    | tg128+2048 | 44.8 +- 0.0 | 46.2 +- 0.0 | 0.97 | 43.2 +- 0.0 | 27.4 +- 0.0 | 1.57 |
+    | tg128+4096 | 44.2 +- 0.0 | 45.7 +- 0.0 | 0.97 | 42.8 +- 0.0 | 27.0 +- 0.1 | 1.59 |
+    | tg128+8192 | 43.1 +- 0.0 | 45.1 +- 0.0 | 0.96 | 41.7 +- 0.0 | 26.7 +- 0.0 | 1.56 |
+    | tg128+16384 | 41.1 +- 0.0 | 43.6 +- 0.1 | 0.94 | 39.8 +- 0.0 | 26.1 +- 0.1 | 1.53 |
+    | tg512:nextn | 71.9 +- 0.5 | 103.8 +- 0.6 | 0.69 | 72.6 +- 0.6 | 53.7 +- 0.9 | 1.35 |
+    | tg512+4096:nextn | 66.6 +- 0.6 | 94.3 +- 5.0 | 0.71 | 65.8 +- 0.3 | 45.6 +- 0.4 | 1.44 |
+    | tg512:dflash2 | 136.6 +- 3.3 | 109.3 +- 2.8 | 1.25 | 101.2 +- 1.7 | 55.7 +- 0.2 | 1.82 |
+    | tg512+4096:dflash2 | 77.6 +- 7.3 | 94.7 +- 2.0 | 0.82 | 75.1 +- 2.7 | 48.2 +- 0.3 | 1.56 |
+    | tg512:dflash2_nvfp4 | 133.4 +- 8.4 | 112.8 +- 0.4 | 1.18 | 107.2 +- 1.2 | 55.3 +- 0.2 | 1.94 |
+    | tg512+4096:dflash2_nvfp4 | 80.9 +- 6.7 | 94.6 +- 3.6 | 0.86 | 73.2 +- 0.6 | 45.4 +- 0.6 | 1.61 |
+
+    Qwen3.6-35B-A3B-NVFP4, tok/s
+
+    | row | CUDA ours | CUDA llama.cpp | ours / theirs | Vulkan ours | Vulkan llama.cpp | ours / theirs |
+    | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+    | pp2048 | 9687.7 +- 47.2 | 5621.1 +- 60.8 | 1.72 | 6472.6 +- 29.3 | 3271.4 +- 12.3 | 1.98 |
+    | pp4096 | 10263.8 +- 42.5 | 6918.4 +- 122.2 | 1.48 | 6956.7 +- 17.8 | 3739.6 +- 32.8 | 1.86 |
+    | pp8192 | 10682.4 +- 10.1 | 7407.1 +- 32.7 | 1.44 | 7065.2 +- 6.4 | 3924.3 +- 17.7 | 1.80 |
+    | pp16384 | 10576.2 +- 4.4 | 7622.6 +- 53.1 | 1.39 | 6972.4 +- 3.6 | 3952.1 +- 13.2 | 1.76 |
+    | tg128 | 194.5 +- 0.1 | 134.2 +- 0.1 | 1.45 | 168.2 +- 0.0 | 99.8 +- 0.2 | 1.69 |
+    | tg128+2048 | 188.6 +- 0.0 | 133.2 +- 0.2 | 1.42 | 158.7 +- 0.1 | 98.7 +- 0.1 | 1.61 |
+    | tg128+4096 | 184.9 +- 0.0 | 131.6 +- 0.0 | 1.41 | 157.0 +- 0.1 | 97.5 +- 0.2 | 1.61 |
+    | tg128+8192 | 178.8 +- 0.1 | 129.8 +- 0.0 | 1.38 | 150.0 +- 0.1 | 96.8 +- 0.1 | 1.55 |
+    | tg128+16384 | 166.6 +- 0.1 | 125.5 +- 0.1 | 1.33 | 137.6 +- 0.0 | 94.4 +- 0.2 | 1.46 |
+    | tg512:dflash2 | 276.6 +- 5.0 | 208.1 +- 6.7 | 1.33 | 203.1 +- 11.1 | 130.9 +- 3.5 | 1.55 |
+    | tg512+4096:dflash2 | 210.2 +- 6.4 | 201.3 +- 5.7 | 1.04 | 183.1 +- 10.0 | 127.5 +- 4.6 | 1.44 |
+    | tg512:dflash2_nvfp4 | 258.5 +- 15.5 | 186.9 +- 3.3 | 1.38 | 199.5 +- 5.8 | 136.9 +- 3.0 | 1.46 |
+    | tg512+4096:dflash2_nvfp4 | 211.6 +- 3.3 | 170.5 +- 9.4 | 1.24 | 152.1 +- 0.5 | 118.5 +- 2.2 | 1.28 |
+
+  The before arm: the same box, exe, flags and harness line over origin/master d28d31b11f's `modules/dasLLAMA` and
+  `utils/dasllama-server` sources (the run's tree, e5f4a345ec, differs from them in `benchmarks/lcpp_bench.das` alone).
+  The prefill rows move with the device unit and the block-drafter rows with the ask; the decode and NextN rows hold
+  level.
+
+    Qwen3.8-27B-NVFP4-MTP-N4_0, tok/s, the sources before this change against this change's
+
+    | row | CUDA before | CUDA this change | after / before | Vulkan before | Vulkan this change | after / before |
+    | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+    | pp2048 | 2720.1 +- 1.2 | 3535.1 +- 3.2 | 1.30 | 1287.8 +- 1.8 | 1368.6 +- 2.4 | 1.06 |
+    | pp4096 | 3008.6 +- 4.7 | 3702.8 +- 2.5 | 1.23 | 1440.5 +- 3.1 | 1528.9 +- 1.8 | 1.06 |
+    | pp8192 | 3029.9 +- 4.0 | 3730.8 +- 3.8 | 1.23 | 1562.5 +- 5.8 | 1655.2 +- 3.4 | 1.06 |
+    | pp16384 | 2935.5 +- 2.7 | 3570.5 +- 4.6 | 1.22 | 1491.6 +- 1.6 | 1573.9 +- 3.9 | 1.06 |
+    | tg128 | 45.6 +- 0.0 | 45.6 +- 0.0 | 1.00 | 44.3 +- 0.0 | 44.4 +- 0.0 | 1.00 |
+    | tg128+2048 | 44.8 +- 0.0 | 44.8 +- 0.0 | 1.00 | 43.1 +- 0.0 | 43.2 +- 0.0 | 1.00 |
+    | tg128+4096 | 44.2 +- 0.0 | 44.2 +- 0.0 | 1.00 | 42.7 +- 0.0 | 42.8 +- 0.0 | 1.00 |
+    | tg128+8192 | 43.1 +- 0.2 | 43.1 +- 0.0 | 1.00 | 41.6 +- 0.0 | 41.7 +- 0.0 | 1.00 |
+    | tg128+16384 | 41.0 +- 0.0 | 41.1 +- 0.0 | 1.00 | 39.7 +- 0.2 | 39.8 +- 0.0 | 1.00 |
+    | tg512:nextn | 71.0 +- 1.0 | 71.9 +- 0.5 | 1.01 | 71.8 +- 0.3 | 72.6 +- 0.6 | 1.01 |
+    | tg512+4096:nextn | 66.3 +- 1.1 | 66.6 +- 0.6 | 1.00 | 65.1 +- 0.5 | 65.8 +- 0.3 | 1.01 |
+    | tg512:dflash2 | 63.6 +- 0.2 | 136.6 +- 3.3 | 2.15 | 63.7 +- 0.9 | 101.2 +- 1.7 | 1.59 |
+    | tg512+4096:dflash2 | 53.2 +- 1.8 | 77.6 +- 7.3 | 1.46 | 55.7 +- 1.3 | 75.1 +- 2.7 | 1.35 |
+    | tg512:dflash2_nvfp4 | 64.7 +- 0.2 | 133.4 +- 8.4 | 2.06 | 65.0 +- 0.6 | 107.2 +- 1.2 | 1.65 |
+    | tg512+4096:dflash2_nvfp4 | 57.8 +- 1.5 | 80.9 +- 6.7 | 1.40 | 56.7 +- 0.4 | 73.2 +- 0.6 | 1.29 |
+
+  The verify rows' device scratch on the 27B (a trunk with its own head, 4 regions, context 32768; the server's
+  `resident image` line on the CUDA home): 4017 MB with the head's two rows (the NextN arm's server), 5104 MB
+  with the block-rounds ask's nine (the DFlash2 arm's server) - a rollback copy of every recurrent layer's state a
+  verify row past the first.
+
 - **MEASURED (2026-11-14, `direction-grade`) - the final tree's token rows on both discrete homes against llama.cpp
   5676dfb: pp512, tg128, batched streams, the NextN head, the assistant drafter and the block drafter (RunPod RTX PRO 4500
   Blackwell 32 GB).** Box: the RunPod RTX PRO 4500 Blackwell 32 GB (`nvidia-smi`: NVIDIA RTX PRO 4500 Blackwell, driver
