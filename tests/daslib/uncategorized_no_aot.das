@@ -190,7 +190,7 @@ def test_recursion_walk_visits_each_function_once(t : T?) {
     }
 }
 
-[test(description = "a cycle closing through a shared function is still reported as recursion")]
+[test(description = "a cycle closing through a shared function is still reported as recursion, through the same branch on every run", timeout = 1200)]
 def test_recursion_through_a_shared_callee_is_still_reported(t : T?) {
     t |> run("cycle closing through a shared function fails to compile") @(t : T?) {
         var inscope access <- make_file_access("")
@@ -202,6 +202,26 @@ def test_recursion_through_a_shared_callee_is_still_reported(t : T?) {
                     t |> success(!ok, "cyclic fixture must not compile")
                     t |> success(find("{issues}", "recursive calls are not allowed") >= 0,
                                  "expected a recursion error, got: {issues}")
+                }
+            }
+        }
+    }
+    t |> run("the reported cycle goes through the first branch by name") @(t : T?) {
+        var inscope access <- make_file_access("")
+        using() $(var mg : ModuleGroup) {
+            using() $(var cop : CodeOfPolicies) {
+                cop.threadlock_context = true
+                compile_file(verify_fixture_path("cycle"), access, unsafe(addr(mg)),
+                             cop) $(ok; program; issues) {
+                    let text = "{issues}"
+                    let head = "-> branch_top -> branch_"
+                    let tail = " -> shared_tail -> branch_top"
+                    t |> success(find(text, "{head}a{tail}") >= 0,
+                                 "the cycle from branch_top is reported through branch_a")
+                    for (later in ["b", "c", "d", "e", "f", "g", "h"]) {
+                        t |> success(find(text, "{head}{later}{tail}") < 0,
+                                     "branch_top's cycle is not reported through branch_{later}")
+                    }
                 }
             }
         }
