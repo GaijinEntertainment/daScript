@@ -1055,6 +1055,30 @@ def test_wasm_archive_staging(t : T?) {
     }
 }
 
+[test(description = "build --wasm configures a new build directory in full, points an existing one at the running daslang, and leaves one that already names it")]
+def test_wasm_configure_command(t : T?) {
+    let daslang = "C:\\sdk\\bin\\daslang.exe"
+    let host_flag = "-DDAS_HOST_DASLANG_OVERRIDE=\"{daslang}\""
+    let full = configure_for(daslang, "")
+    t |> success(starts_with(full, "emcmake cmake -S \"/sdk/web\" -B \"/sdk/web/build64\""),
+        "no cache is a full configure: {full}")
+    t |> success(find(full, host_flag) >= 0, "the full configure names the host: {full}")
+    let host_only = "cmake -S \"/sdk/web\" -B \"/sdk/web/build64\" {host_flag}"
+def private configure_for(daslang, cache_text : string) : string =>
+    wasm_configure_command("/sdk", "/sdk/web/build64", "/sdk/web/output64", daslang, cache_text)
+
+    let no_host = "CMAKE_BUILD_TYPE:STRING=Release\nDAS_WASM_MEMORY64:BOOL=ON\n"
+    t |> equal(configure_for(daslang, no_host), host_only,
+        "a cache without a host daslang gets the override alone")
+    let other_host = "{no_host}DAS_HOST_DASLANG_OVERRIDE:UNINITIALIZED=C:/old/bin/daslang.exe\n"
+    t |> equal(configure_for(daslang, other_host), host_only,
+        "a cache naming another daslang gets the override alone")
+    let this_host = ("{no_host}DAS_HOST_DASLANG_OVERRIDE:UNINITIALIZED=" +
+        "C:/sdk/bin/daslang.exe\r\nDAS_WASM_PTHREADS:BOOL=ON\n")
+    t |> equal(configure_for(daslang, this_host), "",
+        "a cache naming this daslang, other slash and CRLF line end, needs no configure")
+}
+
 [test(description = "external files declared by a release ship into the bundle")]
 def test_ship_external_files(t : T?) {
     let tmp = create_temp_directory_result("daspkg external ")

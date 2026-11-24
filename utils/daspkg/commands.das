@@ -20,6 +20,7 @@ require utils
 require index
 require package_runner
 require release_workspace
+require ../common/cmake_cache.das
 
 
 [CommandLineArgs]
@@ -1184,6 +1185,22 @@ def cmd_build(root : string; is_global : bool = false; only_pkg : string = "") {
     return 0
 }
 
+[arch(at="README.md#wasm-host-daslang")]
+def wasm_configure_command(das_root, build_dir, out_dir, daslang, cache_text : string) : string {
+    //! cache_text is "" when build_dir has no CMakeCache.txt;
+    //! returns "" when the cache already names this daslang
+    let host_override_flag = "-DDAS_HOST_DASLANG_OVERRIDE=\"{daslang}\""
+    if (empty(cache_text)) {
+        return ("emcmake cmake -S \"{das_root}/web\" -B \"{build_dir}\" -G Ninja "
+            + "-DCMAKE_BUILD_TYPE=Release -DDAS_WEB_OUTPUT_DIR=\"{out_dir}\" "
+            + "-DDAS_WASM_MEMORY64=ON -DDAS_WASM_PTHREADS=ON "
+            + "-DCMAKE_CXX_FLAGS=-sMEMORY64=1 -DCMAKE_C_FLAGS=-sMEMORY64=1 {host_override_flag}")
+    }
+    let cached = to_generic_path(cmake_cache_value(cache_text, "DAS_HOST_DASLANG_OVERRIDE"))
+    return (cached == to_generic_path(daslang) ? "" :
+        "cmake -S \"{das_root}/web\" -B \"{build_dir}\" {host_override_flag}")
+}
+
 // `daspkg build --wasm` — build the wasm64 (memory64) runtime + module archives
 // that `daspkg release wasm` links against, and consolidate them into <lib_dir>
 // (default <das_root>/web/output64/lib). Requires an activated emscripten SDK
@@ -1200,21 +1217,22 @@ def cmd_build_wasm(_root : string; lib_dir_override : string) : int {
         return 1
     }
 
+    // An existing web/build64 is pointed at this daslang, not rebuilt.
     // Configure web/build64 for memory64 + threads if it isn't already. DAS_WASM_PTHREADS makes
     // new_thread / JobQue / parallel_for map to real Web Workers (the runtime caps the pool at
     // DAS_MAX_HW_JOBS so a 64-core box does not spawn 64 workers). The released app is linked
     // -pthread to match, and must be served cross-origin-isolated (COOP/COEP) to instantiate.
-    if (!fexist("{build_dir}/CMakeCache.txt")) {
-        log("build --wasm: configuring {build_dir} (memory64 + threads)...\n")
-        let cfg = ("emcmake cmake -S \"{das_root}/web\" -B \"{build_dir}\" -G Ninja "
-            + "-DCMAKE_BUILD_TYPE=Release -DDAS_WEB_OUTPUT_DIR=\"{out_dir}\" "
-            + "-DDAS_WASM_MEMORY64=ON -DDAS_WASM_PTHREADS=ON "
-            + "-DCMAKE_CXX_FLAGS=-sMEMORY64=1 -DCMAKE_C_FLAGS=-sMEMORY64=1 "
-            + "-DDAS_HOST_DASLANG_OVERRIDE=\"{get_daslang_path()}\"")
-        var cfg_out : string
-        let cfg_rc = run_cmd(cfg, cfg_out)
-        if (cfg_rc != 0) {
-            to_log(LOG_ERROR, "build --wasm: cmake configure failed (rc={cfg_rc}):\n{cfg_out}\n")
+    let cache_path = "{build_dir}/CMakeCache.txt"
+    let daslang = get_daslang_path()
+    let cache_text = fexist(cache_path) ? fread(cache_path) : ""
+    let configure_cmd = wasm_configure_command(das_root, build_dir, out_dir, daslang, cache_text)
+    if (!empty(configure_cmd)) {
+        log("build --wasm: configuring {build_dir} (memory64 + threads, host {daslang})...\n")
+        var configure_out : string
+        let configure_rc = run_cmd(configure_cmd, configure_out)
+        if (configure_rc != 0) {
+            to_log(LOG_ERROR,
+                "build --wasm: cmake configure failed (rc={configure_rc}):\n{configure_out}\n")
             return 1
         }
     }

@@ -276,6 +276,16 @@ new toolchain id. Staging still identifies each archive by content - it walks th
 members to the first object and asks for the wasm magic - and refuses a native one, so a web
 build directory configured for another target is caught before `release wasm` fails to link.
 
+### Wasm host daslang {#wasm-host-daslang}
+
+The web build runs a host `daslang` to cross-compile. Given `DAS_HOST_DASLANG_OVERRIDE` it runs
+that binary; without it, it builds one of its own with the box's default C++ compiler, which
+need not be a compiler this tree builds with. `build --wasm` runs under a `daslang` that
+already fits the tree, so it names that binary as the override in the full configure of a new
+build directory. On an existing build directory whose `CMakeCache.txt` names no host or a
+different one, it re-runs cmake with the override alone. The two paths match whichever slash
+they use.
+
 ### Web build stamp {#web-build-stamp}
 
 `release wasm` stamps the page it releases. Where the shell's markup carries the
