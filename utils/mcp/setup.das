@@ -6,6 +6,7 @@ require daslib/json_boost
 require daslib/strings_boost
 require strings
 require jobque
+require ../common/cmake_cache.das
 
 // daslang MCP worktree bootstrap.
 //
@@ -79,15 +80,8 @@ def shell_unsafe(s : string) : bool {
 //! with the platform default lands on Unix Makefiles, whose `cmake --build --parallel`
 //! is unbounded `make -j`; matching the source tree keeps a bootstrapped worktree on the
 //! generator the box already builds with.
-def source_tree_generator : string {
-    let cache = path_join(get_das_root(), path_join("build", "CMakeCache.txt"))
-    if (!fexist(cache)) return ""
-    let key = "CMAKE_GENERATOR:INTERNAL="
-    for (line in fread(cache) |> split("\n")) {
-        if (starts_with(line, key)) return strip(slice(line, length(key), length(line)))
-    }
-    return ""
-}
+def source_tree_generator : string =>
+    cmake_build_generator(path_join(get_das_root(), "build"))
 
 def build_worktree(root, openssl_dir : string) : bool {
     let build_dir = path_join(root, "build")

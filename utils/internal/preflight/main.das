@@ -29,6 +29,7 @@ require ../../common/verify_pool.das
 require ../../common/git_signature.das
 require ../../common/log_floor.das
 require ../../common/text_lines.das
+require ../../common/cmake_cache.das
 require ../../../dastest/worker_policy.das
 require config
 require compile_db
@@ -248,16 +249,6 @@ def detect_build_config(daslang : string) : string {
     if (find(generic, "/Debug/") >= 0) return "Debug"
     if (find(generic, "/RelWithDebInfo/") >= 0) return "RelWithDebInfo"
     return "Release"
-}
-
-def is_multi_config(build_dir : string) : bool {
-    let cache = fread(path_join(build_dir, "CMakeCache.txt"))
-    for (line in split(cache, "\n")) {
-        if (starts_with(line, "CMAKE_GENERATOR:INTERNAL=")) {
-            return find(line, "Visual Studio") >= 0 || find(line, "Xcode") >= 0 || find(line, "Multi-Config") >= 0
-        }
-    }
-    return false
 }
 
 def find_vs_clang_cl() : string {
@@ -1932,7 +1923,7 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
     }
     if (fexist(path_join(cfg.build_dir, "CMakeCache.txt"))) {
         ctx.build_dir = cfg.build_dir
-        ctx.multi_config = is_multi_config(cfg.build_dir)
+        ctx.multi_config = is_multi_config_generator(cmake_build_generator(cfg.build_dir))
     }
     let clang_info = find_clang(cfg.clang, ctx.build_dir)
     ctx.clang = clang_info.exe
