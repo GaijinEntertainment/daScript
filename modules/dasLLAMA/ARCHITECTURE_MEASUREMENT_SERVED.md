@@ -135,13 +135,63 @@ measured rates predict past the cell's time, and a turn that outlasts three time
 cut off: a slow box gets a shorter ladder, and a collapse is a refused cell, not a hang. A cell that
 a turn failed, cut short or read off a cache is refused with its reason and never averaged in.
 
-The width rows send a wave of streams at once, each its own prompt, at two lengths: a row is the
+The width rows send a wave of streams at once, each its own prompt and its own task (`wave_task`: a subject a stream, a
+language every eighth stream on), at two lengths. Copies of one task decode one reply in step, and a routed model's
+streams then pick the same experts at every step and read each stack once, so a wave of copies reads a rate
+no two users' requests reach, and reads another rate on the run where one stream starts a token late. A width row
+carries the wave's end too (`done_ms`, the page's "wave done, s"): the time from the wave's send to its last stream's
+last text. The summed decode rate counts a stream's wait for another stream's prompt as its decode time, so a server
+that answers the first prompt while it reads the second sums lower than one that reads both prompts and then answers
+both, though its first text comes sooner and its wave ends sooner. A row is the
 streams combined - their prompt tokens over the time to the wave's last first text, their decode
 rates summed. A wave wider than the server's streams is not sent, since it would time the server's
 queue. A speculative arm's rows are long replies at the same two lengths at one stream, read against
 plain rows of the same reply length, each with the drafted and accepted tokens the server reports
 (`timings.draft_n`, `draft_n_accepted`); a round's verify pays attention over the whole context, so
 an arm's gain shrinks with the prompt, and the row at the longer length shows where it ends.
+
+A run opens on its eyeball, ahead of any timing: obvious asks whose replies a reader checks at a glance and the bench
+checks by rule, so a server that answers fast and wrong stops the run at its first lines and no test has to find it. At one
+stream it asks why the sky is blue and asks for a count from 1 to 20 - on an arm's server those two turns are the
+speculative path - and on a plain server it sends a wave of two and a wave of four, a stream an ask (the capital of
+France, 2 + 2), none wider than the server's streams. A wave's reply that differs from its ask's one-stream reply is
+read by the same rule and its line says so (`not the one-stream reply`); it is no refusal, since rows batched together may
+round a near-tie the other way. The eyeball reads a reply's answer, its reasoning left out: the
+opening of the answer is a printed `EYEBALL <mode> <ask>` line and a record of the run file; the count must run on in
+order to ten, each other reply must hold one of its ask's words, a reply that spent its tokens on reasoning has no answer
+to read, and a reply that reads wrong is a refusal that ends the run before its first timed cell (`EYEBALL FAILED`, exit
+1). An entry's `eyeball_reply_tokens` gives the turn room where a model reasons ahead of every answer (gpt-oss). The arms'
+plain long-reply run and the wide pass ride a server the plain run has read and ask nothing.
+
+The ultralong pass is off unless asked for (`--ultralong`, or `--only ultralong` for it alone): one more server start under
+the entry's `ultralong_server` - the model's whole context, one stream - and the rows of prompts of 65536 and 131072 tokens
+and of that context less 512, each that fits it (`pp65536`, `tg128+65536`, ...). The corpus is shorter than those prompts,
+so the pass repeats it behind a marked seam; a cell's time budget is an hour (`ULTRALONG_CELL_SECONDS`), and a model that cannot hold the context refuses its
+row as any cell does. The lengths are the ones a short ladder never reaches: the quadratic terms, the rings and the
+mirror's sizing are read there.
+
+The behind pass reads the same depth without paying its prefill a run (`--behind`, or `--only behind` alone): a server
+start under `ultralong_server` with a slot directory (`--slot-save-path`, the flag ours and llama-server share), and at each
+base of 32768, 65536 and 131072 tokens that fits the context, and the deepest that does, a base turn the server holds from
+then on - restored off its slot file (`POST /slots/0?action=restore`, row `restore<base>`), else prefilled cold (row
+`cold<base>`, one turn) and saved (`save<base>`). A `restore<base>` or `save<base>` row is one rep: the tokens the slot
+route moved over the milliseconds the server reports for the move (`timings.restore_ms`, `timings.save_ms`) - the server's
+clock, not the client's. The timed turns replay that turn, a fixed reply after it, and add a
+message of 4096 new tokens under a fresh id: `pp4096+<base>` is the tokens prefilled past the cache over the time to the
+first text - the cached share's attach is inside that time, as a user's turn pays it - and `tg<reply>+4096+<base>` the
+decode after them; a turn whose base did not come off the cache refuses its cell. The base carries no id and its characters
+come from the run's own calibration, so one server life's file opens the next life's prompt; the files stay in the
+runner's `--slot-dir` from run to run, a tag a model and side. A restored base carries the rounding of the build that
+recorded it (`ARCHITECTURE_ENGINE_SERVING.md#context-file`): the pass times what follows a long context and is no
+correctness cell. Our server arms a NextN head by itself for a slot of one stream, so the runner starts this pass and the
+ultralong one with `--mtp=false`: their decode rows are plain rows, as the reference's are.
+
+A run takes a part of that on request, for a change that moves one kind of row. `--only` names the row kinds of a plain
+run - `pp`, `tg`, `width`, or `eyeball` for the eyeball and no timed cell - and `--lengths` names the ladder in the config's place. The prefill rows asked for alone cut each
+turn's reply to eight tokens and skip the task-alone turn; the width rows asked for alone run their one-stream turns at the
+width lengths and record no row for them. The runner's `--only` takes the same kinds for the plain start, `long` for its
+long-reply rows, an arm by its name and `eyeball` for every start's eyeball, and makes no server start that nothing names. A run file and a card of such a run
+hold the rows that ran and nothing in place of the others; the command line they carry says what was asked for.
 
 A row is named as the ladder names its rows, with the context a decode ran after, the width and the
 arm: `pp4096`, `tg128+4096`, `pp4096@4`, `tg128@8`, `tg512+4096:dflash2`. A row carries its flags -
@@ -177,3 +227,17 @@ identity, and the bench's rows as its `tests`. The bench's own run file beside i
 record's schema does not carry - a row's token count, flags and draft counts, what was refused and
 why - and every timed request is a line of a third file. The files land under the tree's ignored
 `logs/model_bench` unless the run names a folder.
+
+The page (`<entry>.md`, `harness/_model_bench_report.das`) is what a reader opens. The reference's
+files carry `.ref` in their names, so both servers' runs of a model share a folder, and each run
+ends by writing the page again from every run file and card the folder holds for the model: who ran
+each side, then a table a section - prefill and decode at one stream, the streams at once, the
+speculative arms, the rows behind a long context with the prompt tokens each read off the cache -
+where a rate cell reads `ours / the reference's` with ours over the reference's
+beside it, an arm's row carries its rate over the plain row of its reply and its accepted share of
+the drafted tokens, and a row one side did not run shows a dash. A streams row's reply rate on the
+page is the wave's reply tokens over the wave's wall, from the send to the last stream's last text
+(`done_ms`): the bench's summed rate runs each stream's clock from its own first text, so it charges
+a server for answering one stream sooner. A streams prompt row's rate is the bench's own. The flags
+and the refused cells
+close the page. `--report` writes the pages of a folder and starts nothing.

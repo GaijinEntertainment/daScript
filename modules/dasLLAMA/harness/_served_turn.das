@@ -12,6 +12,19 @@ require daslib/jobque_boost   // Atomic32: the first reply text signalled to ano
 let CALIBRATION_CHARS = 8000   //! the untimed probe turn's context, the ruler for characters per token
 let CV_ROW_PCT = 3.0           //! a one-stream row's cv past this percent is not a clean measurement
 let REPLY_HEAD_CHARS = 96      //! the reply's opening a turn keeps, for a look at what was generated
+let ANSWER_HEAD_CHARS = 160    //! the opening of a reply's answer a turn keeps: a count to twenty whole
+
+//! the first `limit` bytes of `text`, less the bytes of a character the cut would split
+def text_head(text : string; limit : int) : string {
+    return text if (length(text) <= limit)
+    var cut = limit
+    peek_data(text) $(d) {
+        while (cut > 0 && (int(d[cut]) & 0xC0) == 0x80) {
+            cut--
+        }
+    }
+    return slice(text, 0, cut)
+}
 
 //! the client clock's marks over one streamed reply, in microseconds from the send
 struct ReplyMarks {
