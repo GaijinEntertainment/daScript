@@ -254,6 +254,42 @@ def private q3v_metal_q8_leg(tt : T?; twq : Qwen3vTower) {
     }
 }
 
+//! The taps past a cut on the Metal tower, on the 4B file's `q8_2L@dev` form of a das_metal build: the 4B's taps sit at
+//! blocks 5, 11 and 17, past the two blocks the form keeps, so the wide rows' tap slices read zero as the CPU chain leaves them.
+[cold_path]
+def private q3v_metal_cut_taps(tt : T?; tw : Qwen3vTower) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_gpu_knobs() {
+            set_metal_tower(true)
+            var st = Qwen3vState()
+            var out : array<float>
+            let planes <- make_planes("cb", 448, 448)
+            let e0 = gpu_tower_counters(TowerFamily.vision).encodes
+            let nout = qwen3v_encode(tw, st, planes, 448l, 448l, out)
+            tt |> success(gpu_tower_counters(TowerFamily.vision).encodes > e0,
+                "the cut tower's encode ran on the Metal tower")
+            knob_off_unrouted(tt, "qwen3v cut tower", TowerFamily.vision) {
+                var st_off = Qwen3vState()
+                var out_off : array<float>
+                qwen3v_encode(tw, st_off, planes, 448l, 448l, out_off)
+                delete out_off
+                delete st_off
+            }
+            let width = qwen3v_row_width(tw)
+            var nonzero = 0
+            for (r in range64(nout)) {
+                for (i in range64(tw.proj_dim, width)) {
+                    nonzero += out[r * width + i] != 0.0 ? 1 : 0
+                }
+            }
+            tt |> equal(nonzero, 0,
+                "the {tw.n_deepstack} taps past the {tw.n_layer} blocks read zero in every wide row")
+            delete out
+            delete st
+        }
+    }
+}
+
 // A canvas's device-side dump bar poisoned, on the 4B file's `q8_z13@dev` form: the deepstack q8 tower with `POISON_BLOCK`
 // zeroed must exceed the bar the cb 448 dump holds.
 [cold_path]
@@ -539,7 +575,7 @@ def private qwen3vl_4b_decoder(t : T?; var emb : VisionEmbedder) {
 }
 
 // The Qwen3-VL 4B mmproj, one block.
-[test(description = "The Qwen3-VL 4B deepstack tower's mmproj loads once a form. On the exact CPU lane it loads three taps at blocks 5/11/17 with a 10240-wide row and matches the mtmd dumps on four canvases within 2e-4 abs plus 4e-2 of token rms. On the Metal tower it matches the dumps within 8e-2 of token rms with every gated encode and block counted, the q8 lane serves on its bar with a red zeroed-layer poison, every gated encode rides the f16-W route and the knob-off leg stays on the f32 GEMM route. The q8 lane matches the dumps within 0.82 of token rms at the reference f32 tile, and zeroing the tap-1 block's qblob reds that bar. On the serving discrete home, the device chain holds to the CPU q8 and exact chains at 1, 2, 6 and 24 blocks on structured canvases, a one-block zeroed poison exceeds the bar, and the exact lane is device-served. Under the mmproj's image form the Qwen3-VL 4B decoder loads once: the deepstack turn carries 10240-wide rows (1+3 taps of 2560) into the chat and captions the cats, zeroing the deepstack slices moves the decoder's logits by over 1e-2, pre-encoded wide rows fed to a plain chat through `add_user_image_rows_` produce the embedder chat's greedy reply token for token, and narrow rows on a deepstack decoder or a second image before respond panic")]
+[test(description = "The Qwen3-VL 4B deepstack tower's mmproj loads once a form. On the exact CPU lane it loads three taps at blocks 5/11/17 with a 10240-wide row and matches the mtmd dumps on four canvases within 2e-4 abs plus 4e-2 of token rms. On the Metal tower it matches the dumps within 8e-2 of token rms with every gated encode and block counted, the q8 lane serves on its bar with a red zeroed-layer poison, every gated encode rides the f16-W route and the knob-off leg stays on the f32 GEMM route. A two-block cut of the q8 tower on the Metal tower, every tap past its blocks, reads zero in the tap slices of its wide rows. The q8 lane matches the dumps within 0.82 of token rms at the reference f32 tile, and zeroing the tap-1 block's qblob reds that bar. On the serving discrete home, the device chain holds to the CPU q8 and exact chains at 1, 2, 6 and 24 blocks on structured canvases, a one-block zeroed poison exceeds the bar, and the exact lane is device-served. Under the mmproj's image form the Qwen3-VL 4B decoder loads once: the deepstack turn carries 10240-wide rows (1+3 taps of 2560) into the chat and captions the cats, zeroing the deepstack slices moves the decoder's logits by over 1e-2, pre-encoded wide rows fed to a plain chat through `add_user_image_rows_` produce the embedder chat's greedy reply token for token, and narrow rows on a deepstack decoder or a second image before respond panic")]
 def test_qwen3v_4b(t : T?) {
     return if (!family_on(t, "qwen3v"))
     var inscope twin <- qwen3v_twin()
@@ -549,6 +585,9 @@ def test_qwen3v_4b(t : T?) {
     add_served_forms(t, forms, MM_4B, ["q8_z13@dev"], @@metal_form_why)
     forms |> push_from(["image_f32", "image_q8", "q8_z11"])
     add_served_forms(t, forms, MM_4B, [for (f in TWIN_FORMS); f], @@twin_form_why)
+    if (!twin_on) {
+        add_served_forms(t, forms, MM_4B, ["q8_2L@dev"], @@metal_form_why)
+    }
     let ran = with_model_once(t, "vision", "mmproj-Qwen3VL-4B-Instruct-F16.gguf", forms, @@tower_stage_key, @@qwen3v_stage, @@qwen3v_form) $(var e; form) {
         tower_form_is(t, MM_4B, form, e.qwen3v)
         twin.form = form
@@ -568,6 +607,8 @@ def test_qwen3v_4b(t : T?) {
             tower_cell(t, "the serving discrete home's chain, the {form} form's legs", e.qwen3v, twin, @@twin_legs)
         } elif (form == "q8@dev") {
             tower_cell(t, "tier-1 on the Metal tower: the q8 lane", e.qwen3v, @@q3v_metal_q8_leg)
+        } elif (form == "q8_2L@dev") {
+            tower_cell(t, "the Metal tower's taps past a cut read zero", e.qwen3v, @@q3v_metal_cut_taps)
         }
     }
     if (ran && twin_on) {
@@ -578,6 +619,18 @@ def test_qwen3v_4b(t : T?) {
 
 // the lane policy itself - model-free: the default follows the GPU tower's exact lane and the box's
 // accelerate tier (q8 when neither serves), the pin flips it either way, reset returns to the policy
+[test(description = "`qwen3v_tap_layer` reads the block each deepstack tap sits at, and `qwen3v_tap_of` maps each block back to its tap, -1 off the taps")]
+def test_qwen3v_tap_layer(t : T?) {
+    let tw = Qwen3vTower(ds_l0 = 5l, ds_l1 = 11l, ds_l2 = 17l)
+    t |> equal(qwen3v_tap_layer(tw, 0l), 5l, "tap 0 at block 5")
+    t |> equal(qwen3v_tap_layer(tw, 1l), 11l, "tap 1 at block 11")
+    t |> equal(qwen3v_tap_layer(tw, 2l), 17l, "tap 2 at block 17")
+    for (k in range64(3l)) {
+        t |> equal(qwen3v_tap_of(tw, qwen3v_tap_layer(tw, k)), k, "block {qwen3v_tap_layer(tw, k)} maps back to tap {k}")
+    }
+    t |> equal(qwen3v_tap_of(tw, 6l), -1l, "a block off the taps")
+}
+
 [test(description = "The qwen3v lane default is q8 unless the GPU exact lane or the accelerate tier serves, the pin forces q8 or exact either way, and reset from the exact pin returns to the policy default")]
 def test_qwen3v_lane_knob(t : T?) {
     t |> run("the q8 lane pin and policy default") @(tt : T?) {

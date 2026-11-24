@@ -3588,6 +3588,9 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; planes : a
     unsafe {
         zero_rows(bk, npos, nk64, dp)
         zero_rows(bx, npos, rows_ext, d)
+        if (btap != null && qwen3v_tap_unreached(t)) {   // the CPU chain leaves those rows zero
+            memset8(reinterpret<uint8?>(metal_buffer_contents(btap)), 0u8, int(uint64(nds) * bytes_pr))
+        }
         if (bposr != null) {
             memcpy(metal_buffer_contents(bposr), addr(s.pos_rs[0]), npos * d * 4l)
         }
