@@ -322,6 +322,89 @@ def private check_box_file(t : T?; path : string; wrote : bool) {
     remove(path)
 }
 
+//! one kernel source set under `root`: an engine folder with two Metal driver files and an unrelated one, an emitter folder
+//! with one; `body` is the second Metal file's text
+def private write_kernel_set(root, body : string) : tuple<engine : string; emitter : string> {
+    let engine = path_join(root, "engine")
+    let emitter = path_join(root, "emitter")
+    mkdir_rec(engine)
+    mkdir_rec(emitter)
+    fwrite(path_join(engine, "dasllama_metal_a.das"), "options gen2\nlet A = 1\n")
+    fwrite(path_join(engine, "dasllama_metal_b.das"), body)
+    fwrite(path_join(engine, "dasllama_other.das"), "options gen2\n")
+    fwrite(path_join(emitter, "msl.das"), "options gen2\nlet E = 3\n")
+    return (engine = engine, emitter = emitter)
+}
+
+[test(description = "The kernel sources' digest reads their content: two copies of one source set written at different times digest the same, one changed byte changes it, and a touched mtime leaves it")]
+def test_kernel_digest_reads_content(t : T?) {
+    var terr = ""
+    let tmp = temp_directory(terr)
+    t |> success(terr == "", "temp_directory resolves")
+    let root = path_join(tmp, "dasllama_test_kernel_digest_{get_time_usec(0l)}")
+    let body = "options gen2\nlet B = 2\n"
+    let a = write_kernel_set(path_join(root, "a"), body)
+    let b = write_kernel_set(path_join(root, "b"), body)
+    let old = stat(path_join(get_das_root(), "daslib/fio.das")).mtime
+    for (dir in [a.engine, a.emitter]) {
+        fio::dir(dir) $(fname) {
+            if (fname |> ends_with(".das")) {
+                var err = ""
+                let moved = set_mtime(path_join(dir, fname), old, err)
+                t |> success(moved, "the copy's mtime moves back ({err})")
+            }
+        }
+    }
+    let f_a = path_join(a.engine, "dasllama_metal_b.das")
+    let f_b = path_join(b.engine, "dasllama_metal_b.das")
+    t |> success(stat(f_a).mtime != stat(f_b).mtime,
+        "the two copies carry different mtimes (the compare's precondition)")
+    let da = dasllama_kernel_sources_digest_of(a.engine, a.emitter)
+    t |> success(!empty(da), "a source set digests to a name")
+    t |> equal(dasllama_kernel_sources_digest_of(b.engine, b.emitter), da,
+        "two copies of one source set digest the same")
+    fwrite(f_b, "options gen2\nlet B = 3\n")
+    t |> success(dasllama_kernel_sources_digest_of(b.engine, b.emitter) != da,
+        "one changed byte changes the digest (the control)")
+    fwrite(f_b, body)
+    var err = ""
+    let touched = set_mtime(f_b, old, err)
+    t |> success(touched, "the touch lands ({err})")
+    t |> equal(dasllama_kernel_sources_digest_of(b.engine, b.emitter), da,
+        "a touched mtime leaves the digest")
+    t |> equal(dasllama_kernel_sources_digest_of(path_join(root, "none"), b.emitter), "",
+        "no engine sources: no digest")
+    let t0 = ref_time_ticks()
+    let live = dasllama_kernel_sources_digest()
+    let ms = double(get_time_usec(t0)) / 1000.0lf
+    to_log(LOG_INFO, "the engine's kernel sources digest to {live} in {ms} ms\n")
+    rmdir_rec(root)
+}
+
+[test(description = "A kernel source the digest cannot open - a link to no file - is left out of the digest, the set digesting as it does without it, where a readable file under that name changes it", timeout = 1200)]
+def test_kernel_digest_skips_unreadable(t : T?) {
+    if (get_platform_name() == "windows") {
+        t |> skip("the unreadable source is a dangling symlink, which `ln -s` makes on a POSIX box")
+        return
+    }
+    let root = path_join(test_temp_dir(), "kernel_digest_unreadable")
+    let a = write_kernel_set(root, "options gen2\nlet B = 2\n")
+    let clean = dasllama_kernel_sources_digest_of(a.engine, a.emitter)
+    let gone = path_join(a.engine, "dasllama_metal_gone.das")
+    let rc = unsafe(popen("ln -s \"{path_join(a.engine, "nowhere.txt")}\" \"{gone}\" 2>&1") $(f) {
+        let _drain = fread(f)
+    })
+    t |> equal(rc, 0, "the dangling link is made")
+    t |> success(!fexist(gone), "the link reaches no file")
+    t |> equal(dasllama_kernel_sources_digest_of(a.engine, a.emitter), clean,
+        "an unreadable source is left out of the digest")
+    remove(gone)
+    fwrite(gone, "options gen2\nlet G = 4\n")
+    t |> success(dasllama_kernel_sources_digest_of(a.engine, a.emitter) != clean,
+        "the control: a readable file under that name changes it")
+    rmdir_rec(root)
+}
+
 //! the per-box runtime file: its path under the home's tune/, what makes it valid for this run (this box, these kernels, a
 //! runtime section), the writer writing one the apply reads, and the hook standing down under an explicit manifest
 [test(description = "The per-box runtime file sits at a stable box-keyed path under tune, is valid only for this box, these kernels and a runtime section, is written by its writer in a form the apply reads, and stands down under an explicit manifest")]

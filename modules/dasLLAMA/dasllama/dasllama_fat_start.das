@@ -237,7 +237,7 @@ def public dasllama_place_fat_sidecar {
     }
 }
 
-// the files of `dir` whose names `keep` admits, sorted, each as name:size:mtime
+//! the files of `dir` whose names `keep` admits, sorted, each as its name and the FNV-1a hash of its bytes
 def private digest_files(dir : string; keep : block<(fname : string) : bool>; var w : StringBuilderWriter) : int {
     var names : array<string>
     fio::dir(dir) $(fname) {
@@ -247,26 +247,37 @@ def private digest_files(dir : string; keep : block<(fname : string) : bool>; va
     }
     sort(names)
     for (n in names) {
-        var fs : FStat
-        if (stat(path_join(dir, n), fs)) {
-            write(w, "{n}:{fs.size}:{fs.mtime};")
+        fopen(path_join(dir, n), "rb") $(f) {
+            return if (f == null)
+            fread(f) $(text) {
+                let h = fnv1a(unsafe(reinterpret<string>(text)))   // the hash reads the temp text, keeps none
+                write(w, "{n}:{h};")
+            }
         }
     }
     return length(names)
 }
 
-//! The digest of the sources this process compiles its Metal kernels from: the name, size and mtime of every
-//! `dasllama_metal*.das`, the shared kernel templates and the spliced math helpers beside this file, and the MSL emitter
-//! under `modules/dasMetal/metal/`; "" where the engine's sources are not on disk.
-def public dasllama_kernel_sources_digest() : string {
-    let dir = get_this_module_dir()
+//! The digest of the Metal kernel sources under `engine_dir` - every `dasllama_metal*.das`, the shared kernel templates
+//! and the spliced math helpers - and the MSL emitter's under `emitter_dir`: each file's name and the hash of its
+//! content, so two copies of one source set agree; "" where `engine_dir` holds none of them.
+def public dasllama_kernel_sources_digest_of(engine_dir, emitter_dir : string) : string {
     var seen = 0
     let acc = build_string() $(w) {
-        seen = digest_files(dir, $(fname) => fname |> starts_with("dasllama_metal") || fname == "dasllama_gpu_kernels_common.das"
-            || fname == "dasllama_gpu_math.das", w)
-        digest_files(path_join(path_join(path_join(dir, ".."), ".."), path_join("dasMetal", "metal")), $(_fname) => true, w)
+        seen = digest_files(engine_dir, $(fname) => (fname |> starts_with("dasllama_metal")
+            || fname == "dasllama_gpu_kernels_common.das" || fname == "dasllama_gpu_math.das"), w)
+        digest_files(emitter_dir, $(_fname) => true, w)
     }
     return seen > 0 ? "{fnv1a(acc)}" : ""
+}
+
+//! The digest of the sources this process compiles its Metal kernels from (`dasllama_kernel_sources_digest_of`): the
+//! engine's own source directory and the MSL emitter under `modules/dasMetal/metal/`; "" where the engine's sources are
+//! not on disk.
+def public dasllama_kernel_sources_digest() : string {
+    let dir = get_this_module_dir()
+    let emitter = path_join(path_join(path_join(dir, ".."), ".."), path_join("dasMetal", "metal"))
+    return dasllama_kernel_sources_digest_of(dir, emitter)
 }
 
 //! Where every run on this box keeps the runtime section it raced: `<dasllama home>/tune/box-<box key>.tune.json`, the
