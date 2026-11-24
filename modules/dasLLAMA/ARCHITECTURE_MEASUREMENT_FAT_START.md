@@ -73,9 +73,11 @@ the file like any other script.
 The file holds the runtime section alone - the Metal twin crowns and the knob snapshot
 (`dasllama_runtime_snapshot`) - beside the box identity and `kernel_library`, the digest of the
 Metal driver sources this process compiles its kernels from (`dasllama_kernel_sources_digest`: the
-name, size and mtime of every `dasllama_metal*.das`, `dasllama_gpu_kernels_common.das` and
+name and content hash of every `dasllama_metal*.das`, `dasllama_gpu_kernels_common.das` and
 `dasllama_gpu_math.das` beside the engine's own source, located through `get_this_module_dir`,
-and of the MSL emitter under `modules/dasMetal/metal/`, whose edits move every kernel's text). A file whose identity or digest
+and of the MSL emitter under `modules/dasMetal/metal/`, whose edits move every kernel's text). The
+content hash is FNV-1a, which costs 3.6-4.0 ms a process on an M5 Max where SHA-256 costs
+9.3-13.5 ms, against a 10 ms budget. A file whose identity or digest
 differs is not valid for this run (`dasllama_box_runtime_valid`), and the hook races again
 (`dasllama_box_runtime_race`: the same synthetic twin race the fat exe runs, no model, no child)
 and overwrites it through `dasllama_box_runtime_write`, the file's one writer - the identity, the
