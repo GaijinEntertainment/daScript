@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
+#include "daScript/misc/das_common.h"
 #include "ast_derive_alias.h"
 
 namespace das {
@@ -17,7 +18,7 @@ namespace das {
                 indGlobalVariables[var] = lookup;
             }
         }
-        for ( auto fun : lookup->useFunctions ) {
+        for ( auto fun : ordered(lookup->useFunctions, StableOrder()) ) {
             appendIndVariables(fun, indGlobalVariables, accessed);
         }
     }
@@ -292,7 +293,7 @@ namespace das {
         }
     // do globals
         func->resultAliasesGlobals.clear();
-        for ( auto & it : ind ) {
+        for ( auto & it : ordered(ind, StableOrder()) ) {
             if ( !(it.first->type->isRef() || it.first->type->baseType==Type::tPointer) || it.first->type->temporary) {
                 continue;
             }

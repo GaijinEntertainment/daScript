@@ -572,8 +572,14 @@ namespace das {
         DAS_SER_PROFILE(*this, "HashMap");
         if ( writing ) {
             uint64_t size = value.size(); *this << size;
-            for ( auto & item : value ) {
-                serializeTemp(item.first); serializeTemp(item.second);
+            if constexpr ( std::is_pointer_v<K> ) {
+                for ( auto & item : ordered(value, StableOrder()) ) {
+                    serializeTemp(item.first); serializeTemp(item.second);
+                }
+            } else {
+                for ( auto & item : value ) {
+                    serializeTemp(item.first); serializeTemp(item.second);
+                }
             }
             return;
         }
@@ -603,8 +609,14 @@ namespace das {
         DAS_SER_PROFILE(*this, "HashMap");
         if ( writing ) {
             uint64_t size = value.size(); *this << size;
-            for ( auto & item : value ) {
-                serializeTemp(item.first); serializeTemp(item.second);
+            if constexpr ( std::is_pointer_v<K> ) {
+                for ( auto & item : ordered(value, StableOrder()) ) {
+                    serializeTemp(item.first); serializeTemp(item.second);
+                }
+            } else {
+                for ( auto & item : value ) {
+                    serializeTemp(item.first); serializeTemp(item.second);
+                }
             }
             return;
         }
@@ -2555,7 +2567,7 @@ namespace das {
             ser << f->name;
             uint64_t sz = f->useFunctions.size();
             ser << sz;
-            for ( auto & usedFun : f->useFunctions ) {
+            for ( auto & usedFun : ordered(f->useFunctions, StableOrder()) ) {
                 // cross-module refs by module+mangled-name-hash — see serializeUseVariables(FunctionPtr)
                 bool builtin = usedFun->module->builtIn || usedFun->module != f->module;
                 ser << builtin;
@@ -2607,7 +2619,7 @@ namespace das {
             ser << f->name;
             uint64_t sz = f->useFunctions.size();
             ser << sz;
-            for ( auto & usedFun : f->useFunctions ) {
+            for ( auto & usedFun : ordered(f->useFunctions, StableOrder()) ) {
                 // cross-module refs by module+mangled-name-hash — see serializeUseVariables(FunctionPtr)
                 bool builtin = usedFun->module->builtIn || usedFun->module != f->module;
                 ser << builtin;
@@ -2659,7 +2671,7 @@ namespace das {
             ser << f->name;
             uint64_t sz = f->useGlobalVariables.size();
             ser << sz;
-            for ( auto & use : f->useGlobalVariables ) {
+            for ( auto & use : ordered(f->useGlobalVariables, StableOrder()) ) {
                 // cross-module refs must resolve by module+name: the owning module's content
                 // is NOT re-serialized in this program's stream (isNew=false skips it), so a
                 // SerializeNodeId written here would be unresolvable on read. The id branch is
@@ -2714,7 +2726,7 @@ namespace das {
             ser << f->name;
             uint64_t sz = f->useGlobalVariables.size();
             ser << sz;
-            for ( auto & use : f->useGlobalVariables ) {
+            for ( auto & use : ordered(f->useGlobalVariables, StableOrder()) ) {
                 // cross-module refs by module+name — see serializeUseVariables(FunctionPtr)
                 bool builtin = use->module->builtIn || use->module != f->module;
                 ser << builtin;
@@ -3065,9 +3077,9 @@ namespace das {
                     }
                 }
             }
-            for ( auto [module, required] : mod->requireModule ) {
-                if ( module != mod ) {
-                    visit(module);
+            for ( auto [dep, required] : ordered(mod->requireModule, StableOrder()) ) {
+                if ( dep != mod ) {
+                    visit(dep);
                 }
             }
             visited[mod] = FINISHED;

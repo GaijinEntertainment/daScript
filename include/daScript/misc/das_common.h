@@ -18,6 +18,17 @@ namespace das {
         return pctx;
     }
 
+    struct StableOrder {
+        static string moduleName ( const Module * mod ) { return mod ? mod->name : string(); }
+        bool operator () ( const Module * a, const Module * b ) const { return moduleName(a) < moduleName(b); }
+        template <typename T>
+        bool operator () ( const T * a, const T * b ) const {
+            if ( a->module != b->module ) return moduleName(a->module) < moduleName(b->module);
+            if ( a->name != b->name ) return a->name < b->name;
+            return a != b && a->getMangledName() < b->getMangledName();
+        }
+    };
+
     template <typename K, typename V, typename Compare = std::less<K>>
     vector<pair<K, V>> ordered(const das_hash_map<K, V> &unsorted_map, Compare cmp = {}) {
         static_assert(!is_pointer_v<K> ||
