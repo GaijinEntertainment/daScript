@@ -34,7 +34,8 @@ answers to it wherever the diff puts it under this module.
 - **A diff that adds or changes a branch keyed on what `get_platform_name()`,
   `get_architecture_name()`, `cpu_supports()`, or `host_llvm_feature()` returns, directly or
   through a value built from it, runs the module-owned suite on a machine that takes that
-  branch, when a build that targets the machine it runs on can take that branch.** A child run
+  branch, when a build that targets the machine it runs on can take that branch, and names in
+  the PR body the cell of that run that executed the changed arm.** A child run
   under a forced CPU feature (`DAS_JIT_ARM64_FORCE_FEATURES`, `DAS_JIT_X64_FORCE_FEATURES`)
   that reaches the branch's code counts as such a machine. A test's own check that skips the
   test on other platforms is not such a branch.
