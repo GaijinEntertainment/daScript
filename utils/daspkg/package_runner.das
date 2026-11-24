@@ -43,6 +43,7 @@ struct PackageReleaseInfo {
     emcc_args : array<string>
     embed_paths : array<string>
     web_shell : string
+    disabled_modules : array<string>
     wasm_disabled_modules : array<string>
     wasm_build_command : string
     wasm_archives : array<string>
@@ -153,6 +154,9 @@ def run_das_package_release(das_package_path : string; var info : PackageRelease
                 info.embed_paths |> push(clone_string(e))
             }
             info.web_shell = clone_string(src.web_shell)
+            for (m in src.disabled_modules) {
+                info.disabled_modules |> push(clone_string(m))
+            }
             for (m in src.wasm_disabled_modules) {
                 info.wasm_disabled_modules |> push(clone_string(m))
             }

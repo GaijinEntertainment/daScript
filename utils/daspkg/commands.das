@@ -1716,12 +1716,15 @@ def private release_manifest_env(manifest : string) : string {
 //! was never measured on this box), and under `--fat` the fat gate refuses the release the way
 //! the main exe's does. Returns 0, or 1 with the reason logged and the half-built files removed;
 //! `deps_file` is left for the caller to merge.
-def private release_build_program(daslang, main_path, bundle_dir, name, deps_file, fat, manifest, force_args : string; main_scopes : array<string>; is_mac_app : bool; var shipped : array<string>) : int {
+def private release_build_program(daslang, main_path, bundle_dir, name, deps_file, fat : string;
+                                  manifest, force_args, disable_args : string;
+                                  main_scopes : array<string>; is_mac_app : bool;
+                                  var shipped : array<string>) : int {
     let exe_path = path_join(bundle_dir, name)
     let module_args = release_module_args(get_command_line_arguments())
     let cmd = ("{release_fat_env(fat)}{release_manifest_env(manifest)}\"{daslang}\" -exe "
         + "-output \"{exe_path}.exe\" --list-shared-modules \"{deps_file}\"{force_args}"
-        + "{module_args} \"{main_path}\"")
+        + "{disable_args}{module_args} \"{main_path}\"")
     let mode_note = empty(fat) ? "" : " ({fat} class, fat)"
     log("  build: companion {name} from {base_name(main_path)}{mode_note}\n")
     let t0 = ref_time_ticks()
@@ -1820,14 +1823,16 @@ def private release_fat_gate(deps : ReleaseDeps; fat : string) : string {
     return ""
 }
 
-def private release_tuner_cmd(daslang : string; ts : TuneScopeDep; paranoid : bool) : string {
+def private release_tuner_cmd(daslang, disable_args : string; ts : TuneScopeDep;
+                              paranoid : bool) : string {
     let win = get_platform_name() == "windows"
     let envs = (win ?
         "set \"DAS_TUNE_MODE=tune\"&& set \"DAS_TUNE_MANIFEST={ts.manifest}\"&& set \"DAS_TUNE_COMPILE_FALLBACKS={ts.fallbacks}\"&& " :
         "DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=\"{ts.manifest}\" DAS_TUNE_COMPILE_FALLBACKS=\"{ts.fallbacks}\" ")
     let tune_args = paranoid ? " -- --tune-paranoid" : ""
     let module_args = release_module_args(get_command_line_arguments())
-    return "{envs}\"{daslang}\"{module_args} -jit \"{ts.tuner}\" -dasroot \"{get_das_root()}\"{tune_args}"
+    return ("{envs}\"{daslang}\"{disable_args}{module_args} -jit \"{ts.tuner}\" " +
+        "-dasroot \"{get_das_root()}\"{tune_args}")
 }
 
 def private release_elapsed(t0 : int64) : string =>
@@ -2492,6 +2497,30 @@ def private get_daslang_path() : string {
     return get_platform_name() == "windows" ? replace(joined, "/", "\\") : joined
 }
 
+//! the first name that is not one bare word of a command line, or ""
+def first_unsafe_module_name(names : array<string>) : string {
+    for (name in names) {
+        return name if (!is_safe_pkg_name(name))
+    }
+    return ""
+}
+
+def release_disable_args(names : array<string>) : string {
+    return build_string() $(var writer) {
+        for (name in names) {
+            write(writer, " --disable-module {name}")
+        }
+    }
+}
+
+//! dashv (no wasm build), then the package's release-wide and
+//! wasm-only disables, in that order
+def wasm_release_disabled_modules(spec : PackageReleaseInfo) : array<string> {
+    var names <- ["dashv"]
+    names |> push_from(spec.disabled_modules, spec.wasm_disabled_modules)
+    return <- names
+}
+
 [arch(at="README.md#external-module-forwarding")]
 def release_module_args(arguments : array<string>) : string {
     return build_string() $(var writer) {
@@ -2560,6 +2589,13 @@ def private release_in_workspace(root, out_dir, workspace : string; paranoid, qu
         // release() is missing entirely and when it's present but never calls
         // release_main(). Phrase the error to cover both.
         to_log(LOG_ERROR, "release: {das_package} has no release() hook, or release() didn't call release_main(<script.das>)\n")
+        return 1
+    }
+    let unsafe_module = first_unsafe_module_name(spec.disabled_modules)
+    if (!empty(unsafe_module)) {
+        to_log(LOG_ERROR,
+            "release: unsafe module name `{unsafe_module}` in release_disable_module " +
+            "(letters, digits, `_`, `-` and `.` only; not `.` or `..`)\n")
         return 1
     }
     if (spec.requires_jit) {
@@ -2714,9 +2750,11 @@ def private release_in_workspace(root, out_dir, workspace : string; paranoid, qu
         to_log(LOG_ERROR, "release --fat: '{fat}' is not a CPU class name (letters, digits, '-', '_' and '.' only)\n")
         return 1
     }
+    let disable_args = release_disable_args(spec.disabled_modules)
     let module_args = release_module_args(get_command_line_arguments())
     let cmd = ("{release_fat_env(fat)}\"{daslang}\" -exe -output \"{exe_path}.exe\" "
-        + "--list-shared-modules \"{deps_file}\"{force_args}{module_args} \"{main_path}\"")
+        + "--list-shared-modules \"{deps_file}\"{force_args}{disable_args}{module_args} "
+        + "\"{main_path}\"")
     if (!empty(fat)) {
         log("  build: fat exe for the {fat} class (DAS_JIT_BASELINE={fat}, DAS_TUNE_MODE=fat)\n")
     }
@@ -2775,7 +2813,7 @@ def private release_in_workspace(root, out_dir, workspace : string; paranoid, qu
                 log("  tune: scope `{ts.name}` -> {ts.manifest}\n")
                 let tune_t0 = ref_time_ticks()
                 var tout : string
-                let trc = run_cmd(release_tuner_cmd(daslang, ts, paranoid), tout)
+                let trc = run_cmd(release_tuner_cmd(daslang, disable_args, ts, paranoid), tout)
                 let tune_seconds = release_elapsed(tune_t0)
                 if (trc != 0) {
                     // a nonzero tuner is a REFUSAL (noise gate, validation) or a failure —
@@ -2831,7 +2869,8 @@ def private release_in_workspace(root, out_dir, workspace : string; paranoid, qu
     for (p in programs) {
         run_cmd_counter ++
         let pdeps = path_join(workspace, "companion_{run_cmd_counter}.json")
-        let rc_p = release_build_program(daslang, path_join(root, p.script), bundle_dir, p.name, pdeps, fat, ship_manifest, force_args, main_scopes, is_mac_app, shipped)
+        let rc_p = release_build_program(daslang, path_join(root, p.script), bundle_dir, p.name,
+            pdeps, fat, ship_manifest, force_args, disable_args, main_scopes, is_mac_app, shipped)
         if (rc_p != 0) {
             return rc_p
         }
@@ -3226,11 +3265,13 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
         to_log(LOG_ERROR, "release wasm: unsafe app name `{app_name}` (letters, digits, `_`, `-` and `.` only; not `.` or `..`)\n")
         return 1
     }
-    for (m in disabled_modules) {   // a .das_package string that reaches the cross-compile command line
-        if (!is_safe_pkg_name(m)) {
-            to_log(LOG_ERROR, "release wasm: unsafe module name `{m}` in release_wasm_disable_module (letters, digits, `_`, `-` and `.` only; not `.` or `..`)\n")
-            return 1
-        }
+    let unsafe_module = first_unsafe_module_name(disabled_modules)
+    if (!empty(unsafe_module)) {
+        to_log(LOG_ERROR,
+            "release wasm: unsafe module name `{unsafe_module}` in release_disable_module " +
+            "or release_wasm_disable_module (letters, digits, `_`, `-` and `.` only; " +
+            "not `.` or `..`)\n")
+        return 1
     }
     let main_path = path_join(root, main_script)
     if (!fexist(main_path)) {
@@ -3253,24 +3294,20 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
 
     // 1. Cross-compile to a wasm64 object (link skipped via --jit-emit-object),
     //    with --list-shared-modules writing the referenced-module set.
-    //    --disable-module dashv: libhv is native-only (no wasm archive), so keep it
-    //    unloaded on the cross-compile host — a guarded `require ?dashv` then resolves
-    //    as absent instead of pulling in a module whose wasm archive can't exist.
     //    -project-root {root}: dyn-module discovery roots at the PACKAGE dir, not the
     //    main script's dir. They differ when release_main() points outside the package
     //    (e.g. an example whose .das_package sits beside the source) — without this the
     //    cross-compile scans the script's folder and misses the package's modules/<dep>.
     // --jit-threads: emit +atomics,+bulk-memory so the object's ABI matches the -pthread runtime
     // archive (the wasm build is threaded — see cmd_build_wasm). The link below adds -pthread.
-    let disable_args = build_string() $(w) {
-        write(w, "--disable-module dashv")
-        for (m in disabled_modules) {
-            write(w, " --disable-module {m}")
-        }
-    }
+    let disable_args = release_disable_args(disabled_modules)
     let debug_args = include_symbols ? " --jit-debug --jit-stack" : ""
     let module_args = release_module_args(get_command_line_arguments())
-    let xc_cmd = "\"{daslang}\" -exe -output \"{obj_path}\" --list-shared-modules \"{deps_file}\" -project-root \"{root}\" {disable_args}{module_args} \"{main_path}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-check-abi --jit-threads{debug_args} --jit-runtime-lib=\"{runtime_archive}\""
+    let xc_cmd = ("\"{daslang}\" -exe -output \"{obj_path}\" " +
+        "--list-shared-modules \"{deps_file}\" -project-root \"{root}\"" +
+        "{disable_args}{module_args} \"{main_path}\" -- " +
+        "--jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-check-abi " +
+        "--jit-threads{debug_args} --jit-runtime-lib=\"{runtime_archive}\"")
     var xc_out : string
     let xc_rc = run_cmd(xc_cmd, xc_out)
     if (xc_rc != 0 || !fexist(obj_path)) {
@@ -3512,7 +3549,9 @@ def cmd_release_wasm(root : string; out_dir : string; wasm_lib_dir_override : st
     }
 
     mkdir_rec(out_dir)
-    let result = release_one_wasm_app(root, out_dir, bundle_name, main_script, wasm_lib_dir, runtime_archive, shell_path, spec.include_globs, spec.exclude_globs, spec.wasm_disabled_modules, spec.emcc_args, spec.include_symbols)
+    let result = release_one_wasm_app(root, out_dir, bundle_name, main_script, wasm_lib_dir,
+        runtime_archive, shell_path, spec.include_globs, spec.exclude_globs,
+        wasm_release_disabled_modules(spec), spec.emcc_args, spec.include_symbols)
     if (result != 0){return result}
     var inscope shipped : array<string>
     let app_out_dir = path_join(out_dir, bundle_name)
