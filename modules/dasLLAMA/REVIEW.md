@@ -6,9 +6,8 @@ Planned work: `followup_general.md`, `followup_vulkan.md`, `followup_metal.md`. 
 `performance/` and `harness/` carry their own `REVIEW.md`.
 
 **A change to the tokenizer - `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
-`dasllama/dasllama_bpe.das` or `dasllama/dasllama_pretok.das` - or to a string any `special_id`
-overload receives, wherever that string is written, applies `REVIEW_TOKENIZER.md` (beside this
-file) too.**
+`dasllama/dasllama_bpe.das` or `dasllama/dasllama_pretok.das` - or to a string any `special_id` overload
+receives, wherever that string is written, applies `REVIEW_TOKENIZER.md` (beside this file) too.**
 
 **A diff that touches a `followup_*.md`, an `ARCHITECTURE*.md` or a `HOW_TO_*.md` under this folder,
 removes or rewrites the problem a `followup_*.md` row states, renames, moves or deletes an identifier
@@ -29,13 +28,13 @@ is a wall or rate it timed on its own clock (not a spawned child's), not a time 
 work it does; a kernel race - a run timing two kernel variants (arms) against each other in one
 process; a file `benchmarks/lcpp_bench.das` requires directly.**
 
-**A diff that writes a measured number (not one file's size or hash) down - into `PERF_LEDGER.md`, a
+**A diff that edits `PERF_LEDGER.md`, writes a measured number (not one file's size or hash) - into a
 checked-in doc outside `site*/` (repo root), a code comment, checked-in data a run produced, a commit
-message, or a PR body - or adds a serving path or moves an existing one onto other code, or changes what
-a measured or served run with no flags and no environment variables set computes (a change only to when,
-or in what order, it does the same work does not route), applies `REVIEW_MEASUREMENT.md`.** A serving
-path is the end-to-end route a run takes from prompt to tokens; its compile tier (interpreted, JIT, AOT)
-and its cross target (a build for another platform) are part of it.
+message, or a PR body - or adds a serving path or moves an existing one onto other code, or changes what a
+measured or served run with no flags and no environment variables set computes (a change only to when, or
+in what order, it does the same work does not route), applies `REVIEW_MEASUREMENT.md`.** A serving path is
+the end-to-end route a run takes from prompt to tokens; its compile tier (interpreted, JIT, AOT) and its
+cross target (a build for another platform) are part of it.
 
 **A diff that does any of these, wherever it puts it, applies `REVIEW_HOT_PATH.md` (beside this
 file) together with this list: adds a kernel, loop or call path the runtime re-enters once per
@@ -44,13 +43,13 @@ moves, renames or removes a `[hot_path]`, `[cold_path]`, `[no_alloc]`, `[no_env]
 annotation; adds or changes a test, harness, benchmark or performance-rig function that reaches a
 function carrying `[hot_path]`, `[no_alloc]`, `[no_env]` or `[no_io]`.**
 
-**A diff that adds an allocation, changes an allocation's size formula, or adds, changes or
-drops a `resize` or an `@exact_size` on a buffer; that adds or changes a module global (an
-`[EnvConfig]` field is a declared environment variable, not a global), a call to a function-typed
-one, or the `[init]` that sets one; that adds or changes code a job runs in a forked context or code
-reachable from a `team_parallel_*` or `maybe_parallel_for*` body; that adds or changes a load arm, a file mapping,
-or what a load or a session keeps on the host; or that changes which load, mint or convert function a
-`utils/dasllama-convert/` file calls, wherever the diff puts it, applies `REVIEW_MEMORY.md` (beside this file) too.**
+**A diff that adds an allocation, changes an allocation's size formula, or adds, changes or drops a `resize`
+or an `@exact_size` on a buffer; that adds or changes a module global (an `[EnvConfig]` field is a declared
+environment variable, not a global), a call to a function-typed one, or the `[init]` that sets one; that adds
+or changes code a job runs in a forked context or code reachable from a `team_parallel_*` or
+`maybe_parallel_for*` body; that adds or changes a model family's arm of an engine load function, a file mapping, or what a load or
+a session keeps on the host; or that changes which load, mint or convert function a `utils/dasllama-convert/`
+file calls, wherever the diff puts it, applies `REVIEW_MEMORY.md` (beside this file) too.**
 
 **A change to what enters `performance/records/`, to a model file's provenance - its source url,
 byte size, sha256 or conversion recipe, wherever it is declared - or to WHICH model file a recorded
@@ -69,10 +68,11 @@ gives it a `MODULE_AREAS` row naming those areas and, where those areas include 
 in the same change.** A module with no row runs every standing area; one with `llm` and no witness
 row runs every model-free `llm` file and the `LLM_CORE_WITNESSES` list: safe, and slower each PR.
 
-**A diff after which a test file of a standing area runs an existing module's code, where that
-module's `MODULE_AREAS` row reaches the file through none of its areas and its `MODULE_WITNESSES`
-row does not name it - so `tests/run.das -- --changed` does not plan the file for that module -
-adds one area or the file to the row in the same change.** A test file that starts loading an LLM
+**A diff after which a test file of a standing area runs an existing module's code, where that module's
+`MODULE_AREAS` row reaches the file through none of its areas and its `MODULE_WITNESSES` row does not name
+it - so `tests/run.das -- --changed` does not plan the file for that module - adds in the same change the
+file's area to the module's `MODULE_AREAS` row, or, for an `llm` file where that row holds `llm`, the file
+to its `MODULE_WITNESSES` row, adding that row where none exists.** A test file that starts loading an LLM
 GGUF runs the `dasllama/dasllama_arch_*.das` file registering that GGUF's `general.architecture`.
 
 **A `[test]` file with a `require dasllama/...` line of its own, wherever the diff puts it, and
@@ -96,7 +96,7 @@ reference - another backend's run, an external dump, or the CPU path.**
 
 **A family that gains a thinking or tool-call format the server parses ships, in the same change,
 tests asserting the format's exact wire text, its rendered template output, and a server case gated
-on the family's smallest GGUF under `LARGE_TIER_BYTES` (`tests/_model_tier.das`).**
+on the family's smallest GGUF at or under `MODEL_TIER_CEILING_BYTES` (`dasllama/dasllama_gguf.das`).**
 
 **A change to a GPU kernel, a dispatch class (a class a `[metal_dispatch]`, `[vk_dispatch]` or
 `[cuda_dispatch]` declares), a K/V mirror (the device copy of the K/V cache a GPU decode reads and
@@ -159,7 +159,7 @@ matches, or any other `dasllama/` file holding one stage, in any language, of th
 text into phonemes, or the codepoint scanning or pack file layout those stages share - applies
 `REVIEW_TTS.md`; so does a change to a script that writes a front-end pack (the data file a stage
 loads), a TTS fixture or a TTS GGUF, or to a call that pins a TTS weight lane (`set_tts_q8` /
-`set_styletts2_q8` / `set_pocket_q8`), wherever the diff puts it.**
+`set_styletts2_q8` / `set_pocket_q8` / `set_styletts2_recipe`), wherever the diff puts it.**
 
 **A diff that adds a file under `dasllama/`, or adds or moves a top-level declaration (a `require`
 among them) in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`.**

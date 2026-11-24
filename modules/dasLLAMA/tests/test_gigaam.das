@@ -21,6 +21,7 @@ require daslib/linq   // sequence_equal
 require _model_tier
 require _json_file
 require _npy   // read_npy: the oracle's per-stage dumps
+require _daslang_argv   // daslang_argv: the corpus tool leaves out the modules this run leaves out
 require _compares   // nan_wide_diff: a NaN probability reads as outside the bar
 require _rnnt_oracle   // rnnt_seat_*: the build's device transducer seat, its pin and counters
 require _gpu_knobs   // with_gpu_knobs / set_serving_gpu_tower: the device decode's tower pin
@@ -605,6 +606,7 @@ def private kq_rows_held(t : T?; k : E2eKept) {
 //! The Q4_K carrier under the family's pin: the pin reaches the facade load, and un-pinned the facade load takes the kq lane.
 [test(description = "On the Q4_K GigaAM carrier the family's q8 pin reaches the facade load, which serves the q8 lane, and un-pinned the facade load takes the kq lane")]
 def test_gigaam_kq_lane_pins(tst : T?) {
+    return if (!family_on(tst, "gigaam"))
     with_dasllama_jobque_() {
         let path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
         return if (!model_available(tst, path))
@@ -1483,7 +1485,8 @@ def private run_corpus_eval(args : array<string>; var out : string&) : int {
     let prev_image = env_value_of("DASLLAMA_IMAGE")
     set_env_variable("DASLLAMA_IMAGE", "0")
     let root = get_das_root()
-    var argv <- [example_daslang(), "-jit", "-dasroot", root, "{root}/modules/dasLLAMA/harness/asr_corpus_eval.das", "--"]
+    var argv <- daslang_argv(example_daslang(), ["-jit", "-dasroot", root,
+        "{root}/modules/dasLLAMA/harness/asr_corpus_eval.das", "--"])
     argv |> push_from(args)
     let rc = run_and_capture(argv, out, 300.0)
     set_env_variable("DASLLAMA_IMAGE", prev_image)

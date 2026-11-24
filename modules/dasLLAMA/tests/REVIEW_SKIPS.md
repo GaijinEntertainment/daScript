@@ -4,24 +4,30 @@
 doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
 `../followup_metal.md`.
 
-- A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the
-  asserts of every helper it calls.
-- A stocked artifact is a file a test reads from under `models_dir()` that neither this repo's
-  build nor its tests produce - model files, mmprojs, front-end packs, image fixtures, oracle dumps.
-- A box fact is a condition one box or run mode meets and another does not: the device or its
-  memory, whether the build carries a module (`typeinfo module_exists` or `typeinfo
-  builtin_module_exists`), the value of an environment variable or runner flag the run reads, the
-  value a tune companion returns (a function whose body is the winner the `[tune]` framework picked
-  for this box), a host toolchain, or a stocked artifact's presence.
+Terms this checklist does not define are as `REVIEW.md` (beside this file) defines them.
+
 - A box fact is queried directly when the condition reads that fact from its source - the device,
   the build, the environment or runner flags, the run mode, a tune companion, the host toolchain, or
   the stocked file on disk - itself. A condition is judged by what the called function returns, not
   by its name: a value the engine's loader, a planner or a `set_*` call wrote during this run -
   other than a loaded model's `Config` field the loader copies from the file's header - is a value
-  the run computed.
+  the run computed. A family's `*_serves_q8` accessor, read before the load with every lane pin it
+  consults unset, queries the box fact of the family's unpinned default lane directly.
+- A condition that decides which forms the form list of a `with_cpu_and_gpu_model`,
+  `with_model_once` or `with_model_once_at` call holds is a skip condition of every cell run on a
+  form it can leave out.
+- A return guarded by the condition an assert just before it checks, so that it returns only after
+  that assert failed, is neither a skip condition nor a condition that picks an assert.
 - A model fact is a fact of the model file the cell loads (its architecture or a config field),
   read after the cell has loaded the file or from the file's own metadata in its header - never
   from its name or path.
+
+**A box fact that leaves a form out of a block's form list registers a skipped cell naming the
+file, the form and the reason (`skip_cell`, `_model_form.das`): a `with_model_once` or
+`with_model_once_at` list of form names leaves it out through `served_forms`, which registers it; a
+`with_cpu_and_gpu_model` list of `ModelForm`s calls `skip_cell` where the form is not pushed - never
+a form dropped with no cell.** A form dropped with no cell takes its cells with it: they neither
+run nor skip.
 
 **A cell's skip condition reads only a box fact queried directly or a model fact. The GPU home the
 run armed through the environment (`DASLLAMA_GPU`, `DASLLAMA_CUDA`) is such a box fact: in a file no

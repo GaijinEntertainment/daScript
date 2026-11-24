@@ -7,6 +7,8 @@ require dastest/testing_boost public
 require _compares
 require daslib/math_bits
 require math
+require daslib/strings_boost   // join: an argv as one line
+require daslib/command_line   // get_das_exe: the binary a spawned compile starts
 
 let INF = uint_bits_to_float(0x7f800000u)
 
@@ -293,4 +295,19 @@ def test_sweep_tally(t : T?) {
         }
         t |> equal(fails, 0, "control: one length, one element")
     }
+}
+
+[test(description = "A spawned compile (`compile_argv_leaving`, `spawn_compile_file`'s child) starts the binary leaving out each module the run's DASLLAMA_DISABLE_MODULES names, right after the binary, with or without a compile record; an empty list leaves out none")]
+def test_compile_argv_leaves_modules_out(t : T?) {
+    let root = get_das_root()
+    var inscope plain <- compile_argv_leaving("/p.das", "", "dasVulkan")
+    let exe = get_das_exe()
+    t |> equal(join(plain, " "), "{exe} --disable-module dasVulkan -dasroot {root} -compile-only /p.das",
+        "the module left out right after the binary")
+    var inscope cached <- compile_argv_leaving("/p.das", "/r.dascache", "dasVulkan,dasCUDA")
+    let both = "--disable-module dasVulkan --disable-module dasCUDA"
+    t |> equal(join(cached, " "), "{exe} {both} -dasroot {root} -module-cache /r.dascache -compile-only /p.das",
+        "each module, then the record")
+    var inscope none <- compile_argv_leaving("/p.das", "", "")
+    t |> equal(join(none, " "), "{exe} -dasroot {root} -compile-only /p.das", "no list, no flag")
 }

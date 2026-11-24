@@ -12,8 +12,10 @@ require dastest/testing_boost public
 require dasllama/dasllama_vision_embedder public
 require _tower_twin public   // the twin's kept canvases, the seats, the GPU knobs
 require _vision_oracle   // make_planes: the exact lane's canvas
-require _f32_tile_pin   // with_put_back: a form's pin and knobs put back however its load leaves
+require dasllama/dasllama_lever   // with_put_back: a form's pin and knobs put back however its load leaves
 require _model_form   // either_why, metal_build_why: the seats' reasons
+require _model_tier   // models_dir: an oracle dump's root
+require daslib/fio   // path_join: an oracle dump's path
 
 //! a vision tower's form (`tower_form_of`), its lane `f32` or `q8`
 def tower_form(form : string) : TowerForm => tower_form_of(form, ["f32", "q8"], "vision")
@@ -216,4 +218,13 @@ def vision_twin(kind : string; w, h : int; tag : string; npos : int64) : VisionT
     twin.exact.bar = TWIN_EXACT_REL_L2_VK
     twin.exact.npos = npos
     return <- twin
+}
+
+//! `logname`'s mtmd dump under `oracle_dir` beside the models, or the loud skip naming `mint_hint`; false on the skip
+def oracle_dump(tt : T?; oracle_dir, logname, mint_hint : string; var o : OracleEncode) : bool {
+    if (!load_oracle_encode(path_join(path_join(models_dir(), oracle_dir), logname), o)) {
+        tt |> skip("oracle dump {logname} not present/parseable - mint via {mint_hint}")
+        return false
+    }
+    return true
 }

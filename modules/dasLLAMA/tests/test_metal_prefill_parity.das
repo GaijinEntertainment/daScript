@@ -1456,7 +1456,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
 
             // dim-4096 arm (M2.6): past the fused add+rms+quant slab (dim <= 3072) the prefill
             // driver runs the unfused dispatch set — this is that rail's first real-model
-            // parity. The 8B is large-tier: it runs only under DASLLAMA_PARITY_FULL.
+            // parity.
             if (arm_on(t, "dim")) {
                 let path8 = path_join(models_dir(), "Meta-Llama-3.1-8B-Instruct-Q8_0.gguf")
                 if (model_available(t, path8)) {

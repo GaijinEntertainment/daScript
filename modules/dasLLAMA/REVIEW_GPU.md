@@ -104,15 +104,15 @@ that kernel (one kept as its measured baseline, listed as one in
 the same change, the arms that dispatch the old class at that shape.** An arm timing a body the
 shipped kernel no longer runs at that shape measures the wrong kernel silently.
 
-**A change to anything a GPU decode or prefill call on a session executes, or to what selects what it executes, ships
-GPU-vs-CPU parity - a final PR on every backend whose path the change reaches, an intermediate PR on every backend
-whose driver, kernels or uploaded planes it changes (kinds: `tests/REVIEW_RUNS.md`) - on each of one q8 model, one
-K-quant model and one model of a format outside both whose path it reaches - or names both compares in the PR body:
-its emitted kernels byte-identical before and after (the `*_msl` globals or the AIR, Metal's compiled shader IR, they
-build into; the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes; the CUDA C text globals a `[cuda_kernel]` method
-generates) and the kernel variant the host picks, its dispatch selection and every bind argument (buffer, offset,
-kargs value) unchanged on every input.** Only both compares together show the change cannot alter what the path
-computes or selects.
+**A change outside a tower-driver or ASR-decoder file to anything a GPU decode or
+prefill call on a session executes, or to what selects what it executes, ships GPU-vs-CPU parity - a final PR on
+every backend whose path the change reaches, an intermediate PR on every backend whose driver, kernels or uploaded
+planes it changes (a final PR's Validation opens `Kind: final PR of the <arc> arc.`, any other PR is intermediate) - on each of one q8 model, one K-quant model and one model of a
+format outside both whose path it reaches - or names both compares in the PR body: its emitted kernels byte-identical
+before and after (the `*_msl` globals or the AIR, Metal's compiled shader IR, they build into; the SPIR-V words
+`DASLLAMA_VK_SPV_DUMP` writes; the CUDA C text globals a `[cuda_kernel]` method generates) and the kernel variant the
+host picks, its dispatch selection and every bind argument (buffer, offset, kargs value) unchanged on every input.**
+Only both compares together show the change cannot alter what the path computes or selects.
 
 **Never size a device buffer a dispatch writes to the live count of rows, keys or chunks, or to a
 live width narrower than the stride the dispatch writes at - size it to every element the

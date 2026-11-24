@@ -4,8 +4,8 @@
 docs: `../ARCHITECTURE_GPU.md`, `../ARCHITECTURE_CPU_KERNELS.md`. Planned work:
 `../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 
-- A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the
-  asserts of every helper it calls.
+Terms this checklist does not define are as `REVIEW.md` (beside this file) defines them.
+
 - A CPU kernel is a function in `../dasllama/dasllama_math*.das` that writes an output buffer from
   operand buffers; a function that only invokes an existing kernel-backend slot (a function
   pointer the active backend fills) is a router, not a CPU kernel.

@@ -22,6 +22,7 @@ require ../harness/_corpus.das   // corpus_text
 require ../harness/_prompt_files.das   // id_list, read_ids: the harness's comma lists of numbers
 require ../../../tests/dasHV/_dashv_test_common.das   // with_test_server: a server on its own thread and port
 require _fake_chat_server   // FakeChatServer and the SSE lines it answers with
+require _daslang_argv   // daslang_argv: the fake server leaves out the modules this run leaves out
 
 // The served-turn instrument (harness/served_bench.das), with no model behind it: the stream reader's two clock marks
 // and its usage read over hand-built SSE lines, the system prompt's nonce and size, the corpus filter, the row
@@ -600,7 +601,7 @@ def test_model_bench_against_a_fake_server(t : T?) {
             t |> equal(cell.why, "")
             t |> equal(cell.cut_chars, 200, "100 tokens read where 80 were wanted, 60 of them the task: the cut halves")
             t |> success(cell.prefill.median > 0.0 && cell.prefill.median <= 600.0, "60 uncached tokens over at least a tenth of a second ({cell.prefill.median})")
-            t |> success(cell.decode.median > 0.0 && cell.decode.median <= 10.0, "two tokens over at least two tenths ({cell.decode.median})")
+            t |> success(cell.decode.median > 0.0 && cell.decode.median <= 10.5, "two tokens over two tenths, a clock tick's slack on the rate ({cell.decode.median})")
             t |> equal(cell.server_prefill, 4800.0, "the server's own clock: 60 tokens in 12.5 ms")
             let hit = run_cell(BenchArgs(url = base_url, model_id = "cached"), "pp80", base, "run", 400, 2, 3, 30, 10.0, 80l, 60l)
             t |> success(find(hit.why, "at rep 0") >= 0 && find(hit.why, "came off a cache") >= 0, "a cache hit refuses the cell: {hit.why}")
@@ -929,8 +930,9 @@ def private runner_args(dir, config : string; more : array<string>) : RunnerArgs
     var args <- RunnerArgs(models_dir = dir, out_dir = dir, config = config, quick = true, boot_seconds = 120, port = RUNNER_TEST_PORT,
         server_engine = "fake")
     args.model <- ["stub"]
-    args.server_arg <- [get_das_exe(), path_join(get_das_root(), "modules/dasLLAMA/tests/_fake_chat_root.das"), "-dasroot", get_das_root(), "--",
-        "--word-ms", "20", "--port", "\{port\}", "--name", "\{gguf\}"]
+    let fake = path_join(get_das_root(), "modules/dasLLAMA/tests/_fake_chat_root.das")
+    args.server_arg <- daslang_argv(get_das_exe(), [fake, "-dasroot", get_das_root(), "--", "--word-ms", "20",
+        "--port", "\{port\}", "--name", "\{gguf\}"])
     args.server_arg |> push_from(more)
     return <- args
 }

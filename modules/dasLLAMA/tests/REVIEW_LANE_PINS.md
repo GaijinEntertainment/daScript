@@ -4,8 +4,8 @@
 doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
 `../followup_metal.md`.
 
-- A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the
-  asserts of every helper it calls.
+Terms this checklist does not define are as `REVIEW.md` (beside this file) defines them.
+
 - A family is one model architecture's loader and kernels (`../dasllama/dasllama_<family>.das`).
 - A family's serving lane is the weight form it runs a model's weights in: q8 planes, a quantized
   carrier's own planes (kq), or the exact lane, whose form - f16 or f32 - the `.dlim` flavor baked
@@ -14,18 +14,20 @@ doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`, `../followup_
   serve.
 - A lane setter is a call that pins a family's serving lane - `set_<name>_q8`, the ASR facade's
   `set_asr_fp32` / `set_asr_tower_fp32` / `set_asr_tower_q8` - or a facade call that makes that
-  call; a call that sets a knob a family's `*_serves_q8` accessor reads when no lane is pinned
-  (`set_gpu_gigaam_exact_lane`) is a driver setter.
-- A driver setter is any other `../dasllama/` call the cell makes whose purpose is to set a value
-  - a `set_*`, `enable_*`, `disable_*`, `pin_*`, `reset_*`, `restore_*`, `register_*`,
-  `select_*_override` or `unset_*` call - stored in a module global or process-global state that a
-  later load, route choice or kernel dispatch reads; a call a loader makes on its own is not the
-  cell's.
+  call. A lane setter's paired unset - `reset_<name>_q8`, `set_asr_fp32(false)`,
+  `set_asr_tower_fp32(false)` - is a lane setter too, never a driver setter. A call that sets a knob
+  a family's `*_serves_q8` accessor reads when no lane is pinned (`set_gpu_gigaam_exact_lane`) is a
+  driver setter.
+- A driver setter is any other `../dasllama/` call the cell makes that sets a value stored in a
+  module global or process-global state that a later load, route choice or kernel dispatch reads,
+  whatever its name (`set_*`, `enable_*`, `disable_*`, `allow_*`, `pin_*`, `reset_*`, `restore_*`,
+  `register_*`, `select_*_override` and `unset_*` are the common spellings); a call a loader makes
+  on its own is not the cell's.
 - A route-deciding setter is a driver setter whose last-written value decides which route or
   kernel (which branch of a dispatch) an asserted call takes, whether an assert the cell makes
   passes, or what an assert's expected value is computed from. The GPU home is not one: the home the
   run arms - none, Vulkan under `DASLLAMA_GPU=1`, CUDA where the run also asks for it
-  (`DASLLAMA_CUDA=1`, read through `_gpu_knobs.das`'s `cuda_tower_asked`), or Metal on a build that
+  (`DASLLAMA_CUDA=1`, read through `gpu_want_cuda()`), or Metal on a build that
   carries das_metal - is the run's choice, and a cell reads it rather than setting it. Every other knob's
   environment-read default is a value a route-deciding setter writes.
 - A driver setter's getter is the `../dasllama/` call, or the set of them, that returns the
@@ -95,8 +97,8 @@ override's stages on that model's blob twin (`blob_twin(t, path, seq_cap)`,
 `_metal_blob_twin.das`), both over one `Session`.** The planar model and its blob twin share one
 shape, so one `Session` serves both.
 
-**A diff that adds a cell loading a model on the Vulkan or CUDA home, or changes the load such a
-cell takes, loads through `load_resident`, `load_resident_lane`, `load_resident_host` with `image`
+**A diff that adds a cell loading a chat `Model` on the Vulkan or CUDA home, or changes the load
+such a cell takes, loads through `load_resident`, `load_resident_lane`, `load_resident_host` with `image`
 true, or `load_resident_as` / `load_resident_at` with `host` false (`_resident_feed.das`), which
 keep no host copy of the weight planes; only a cell that runs CPU inference on that model, or reads
 its weight planes, itself or through a helper, loads through `load_resident_host` with `image`

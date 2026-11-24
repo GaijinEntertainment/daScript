@@ -286,6 +286,14 @@ def test_restoring_a_null_hook_disarms_the_race(t : T?) {
     }
 }
 
+[test(description = "`tune_policy_keeps_crowns` keeps the Metal crowns on the default and every named kernel policy but `reference` and `fallback`, the crownless portable arm")]
+def test_tune_policy_keeps_crowns(t : T?) {
+    t |> success(tune_policy_keeps_crowns(""), "the default policy keeps the crowns")
+    t |> success(tune_policy_keeps_crowns("tuned"), "a named policy keeps them")
+    t |> success(!tune_policy_keeps_crowns("reference"), "reference keeps none")
+    t |> success(!tune_policy_keeps_crowns("fallback"), "fallback keeps none")
+}
+
 [test(description = "Outside a fat exe `dasllama_fat_first_start` declines and writes no sidecar")]
 def test_the_fat_hook_is_inert_outside_a_fat_exe(t : T?) {
     with_temp_sidecar(t) $(path) {
@@ -470,7 +478,8 @@ def test_box_runtime_file_is_raced(t : T?) {
         let home = path_join(temp_directory(terr), "dasllama_box_home_{get_time_usec(0l)}")
         mkdir_rec(home)
         let want = dasllama_box_runtime_path_from(dasllama_home_dir_from(home))
-        var no_manifest <- [(name = "HOME", value = home), (name = "USERPROFILE", value = home), (name = "DAS_TUNE_MANIFEST", value = "")]
+        var no_manifest <- [(name = "HOME", value = home), (name = "USERPROFILE", value = home), (name = "DAS_TUNE_MANIFEST", value = ""),
+            (name = "DAS_TUNE_FORCE", value = "")]   // the runner hands its children their manifest as DAS_TUNE_FORCE
         var out : string
         let rc = run_child(child_cmd("_box_runtime_root.das", no_manifest), out)
         t |> equal(0, rc, "the child ran (rc {rc}):\n{out}")

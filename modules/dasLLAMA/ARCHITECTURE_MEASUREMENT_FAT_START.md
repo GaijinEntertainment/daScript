@@ -65,7 +65,8 @@ an apply a caller points at a path of its own never falls back, since the path i
 choice. The hook (`dasllama_box_runtime_file`) answers "" for a process that keeps its manifest - a
 fat exe (its per-user sidecar above), an explicit `DAS_TUNE_MANIFEST`, a standalone exe with its
 sidecar beside it - and for a run on the `reference` or `fallback` kernel policy
-(`tune_policy_env`), the portable tier's arm, which runs crownless by its own contract. The rig and
+(`tune_policy_env`), the portable tier's arm, which runs crownless by its own contract
+(`tune_policy_keeps_crowns`, `dasllama_env.das`, which the suite runner's BOXRACE gate reads too). The rig and
 the records cells set the manifest, and the suite runner sets it on a box whose
 `performance/<box>.tune.json` is committed; a runner on a box with no committed manifest reaches
 the file like any other script.

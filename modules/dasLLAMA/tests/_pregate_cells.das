@@ -27,18 +27,19 @@ require _ffn_slice_cells public   // last_layer_slice_cell: the bench-free cell,
 def fixture_gate_cell(t : T?; var m : Model) {
     unsafe {
         t |> run("the timed run's fixture gate passes the table's fixture, refuses a wrong opening, stands aside without evidence") @capture(& m)(t : T ?) {
-            allow_cpu_prefill()
-            var inscope spec <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
-            with_dasllama_jobque_() {
-                t |> success(fixture_gate_check(m, spec), "the table's own fixture reproduces on the served model")
-                var inscope wrong <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
-                for (i in range(length(wrong.parity.gen))) {
-                    wrong.parity.gen[i] = wrong.parity.gen[i] + 1l
+            with_cpu_prefill(true) {
+                var inscope spec <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
+                with_dasllama_jobque_() {
+                    t |> success(fixture_gate_check(m, spec), "the table's own fixture reproduces on the served model")
+                    var inscope wrong <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
+                    for (i in range(length(wrong.parity.gen))) {
+                        wrong.parity.gen[i] = wrong.parity.gen[i] + 1l
+                    }
+                    t |> success(!fixture_gate_check(m, wrong), "an opening that matches nothing is refused")
+                    var inscope bare <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
+                    bare.parity.gen |> clear()
+                    t |> success(fixture_gate_check(m, bare), "a row with no evidence stands aside")
                 }
-                t |> success(!fixture_gate_check(m, wrong), "an opening that matches nothing is refused")
-                var inscope bare <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
-                bare.parity.gen |> clear()
-                t |> success(fixture_gate_check(m, bare), "a row with no evidence stands aside")
             }
         }
     }

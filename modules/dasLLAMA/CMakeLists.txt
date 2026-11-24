@@ -27,7 +27,8 @@ IF(NOT DAS_LLAMA_INCLUDED)
         modules/dasLLAMA/harness/_gen_probe_fixture.das
         modules/dasLLAMA/harness/tune_tb.das
         modules/dasLLAMA/tests/_kq_dot.das
-        modules/dasLLAMA/tests/_compares.das)
+        modules/dasLLAMA/tests/_compares.das
+        modules/dasLLAMA/tests/_daslang_argv.das)
     # dasllama/, the tuner set, the box probes and the model-set table carry [arch] citations; ship
     # generated excerpts of the cited sections (registry processed by the root CMakeLists)
     string(JOIN "," _das_llama_arch_scan modules/dasLLAMA/dasllama ${DAS_LLAMA_TUNER_FILES}

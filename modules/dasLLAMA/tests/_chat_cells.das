@@ -15,6 +15,7 @@ require daslib/jobque_boost
 require daslib/fio
 require _model_tier   // models_dir, jit_only, ids_equal, kv_rows_differ
 require _cpu_gpu_model   // with_ctx_cut: the cells' 512-position context
+require dasllama/dasllama_common   // with_cpu_prefill: the cell's CPU-prefill intent, put back however it leaves
 
 // The chat renderer's cells per (model file, load form): each entry runs one model's cells in turn on the load its caller
 // makes (its model's block), against pinned token streams.
@@ -511,20 +512,21 @@ def private test_chat_xml_function_turns(t : T?; m : Model) {   // nolint:STYLE0
 def private test_chat_gemma4_instruct_text_turn(t : T?; m : Model) {
     unsafe {
         t |> run("thinking off on E2B: '2+2' answers and a stray channel marker ends the turn") @capture(& m)(t : T ?) {
-            allow_cpu_prefill()
-            with_dasllama_jobque() {
-                var c = create_chat(m, "", 64l)
-                set_thinking(c, false)
-                add_user(c, "What is 2+2? Answer with just the number.")
-                let reply = respond(m, c, SamplingParams()) $(_piece) {
-                    return true
+            with_cpu_prefill(true) {
+                with_dasllama_jobque() {
+                    var c = create_chat(m, "", 64l)
+                    set_thinking(c, false)
+                    add_user(c, "What is 2+2? Answer with just the number.")
+                    let reply = respond(m, c, SamplingParams()) $(_piece) {
+                        return true
+                    }
+                    let sp = split_reasoning(c, reply)
+                    to_log(LOG_INFO, "instruct text turn: '{replace(reply, "\n", "\\n")}' ({stats(c.session).n_gen} tokens)\n")
+                    t |> success(find(sp.content, "4") >= 0, "the answer is 4: '{sp.content}'")
+                    t |> success(find(sp.content, "<channel|>") < 0 && find(sp.content, "<|channel>") < 0, "no channel marker reaches the content half")
+                    t |> success(stats(c.session).n_gen < 64l, "the turn ended on a stop, not the budget ({stats(c.session).n_gen} tokens)")
+                    delete c
                 }
-                let sp = split_reasoning(c, reply)
-                to_log(LOG_INFO, "instruct text turn: '{replace(reply, "\n", "\\n")}' ({stats(c.session).n_gen} tokens)\n")
-                t |> success(find(sp.content, "4") >= 0, "the answer is 4: '{sp.content}'")
-                t |> success(find(sp.content, "<channel|>") < 0 && find(sp.content, "<|channel>") < 0, "no channel marker reaches the content half")
-                t |> success(stats(c.session).n_gen < 64l, "the turn ended on a stop, not the budget ({stats(c.session).n_gen} tokens)")
-                delete c
             }
         }
     }
@@ -574,27 +576,28 @@ let private E_BODY_FAR = 1.0     //! of the peak: text rows under the padding to
 def private test_gemma4_e_media_body(t : T?; m : Model) {
     unsafe {
         t |> run("an E-series media body gives its text rows their own tokens' per-layer input: one call == text / rows / text (needs gemma-4-E2B)") @capture(& m)(t : T ?) {
-            allow_cpu_prefill()
-            with_dasllama_jobque() {
-                var toks <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery", true, false)
-                let np = long_length(toks)
-                t |> success(np > 16l, "the prompt holds a head, a span and a tail ({np} tokens)")
-                var split <- e_series_body_logits(m, toks, 5l, 11l, false, true)
-                var fused <- e_series_body_logits(m, toks, 5l, 11l, true, true)
-                var padded <- e_series_body_logits(m, toks, 5l, 11l, true, false)
-                let peak = logits_maxabs(split)
-                let near = logits_maxdiff(fused, split)
-                let far = logits_maxdiff(padded, split)
-                to_log(LOG_INFO, "E-series media body: one call {near} from three, the padding-id body {far}, at a {peak} peak\n")
-                log_top_token(m, "three calls", split)
-                log_top_token(m, "one call", fused)
-                log_top_token(m, "the padding-id body", padded)
-                t |> success(near < E_BODY_NEAR * peak, "one call reads as three ({near} at a {peak} peak)")
-                t |> success(far > E_BODY_FAR * peak, "the ids are load-bearing: a body without them reads another prompt ({far} at a {peak} peak)")
-                delete split
-                delete fused
-                delete padded
-                delete toks
+            with_cpu_prefill(true) {
+                with_dasllama_jobque() {
+                    var toks <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery", true, false)
+                    let np = long_length(toks)
+                    t |> success(np > 16l, "the prompt holds a head, a span and a tail ({np} tokens)")
+                    var split <- e_series_body_logits(m, toks, 5l, 11l, false, true)
+                    var fused <- e_series_body_logits(m, toks, 5l, 11l, true, true)
+                    var padded <- e_series_body_logits(m, toks, 5l, 11l, true, false)
+                    let peak = logits_maxabs(split)
+                    let near = logits_maxdiff(fused, split)
+                    let far = logits_maxdiff(padded, split)
+                    to_log(LOG_INFO, "E-series media body: one call {near} from three, the padding-id body {far}, at a {peak} peak\n")
+                    log_top_token(m, "three calls", split)
+                    log_top_token(m, "one call", fused)
+                    log_top_token(m, "the padding-id body", padded)
+                    t |> success(near < E_BODY_NEAR * peak, "one call reads as three ({near} at a {peak} peak)")
+                    t |> success(far > E_BODY_FAR * peak, "the ids are load-bearing: a body without them reads another prompt ({far} at a {peak} peak)")
+                    delete split
+                    delete fused
+                    delete padded
+                    delete toks
+                }
             }
         }
     }

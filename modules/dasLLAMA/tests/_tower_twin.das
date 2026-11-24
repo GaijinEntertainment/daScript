@@ -18,7 +18,6 @@ require _f32_tile_pin   // with_put_back: a staging's lane pin put back however 
 require daslib/rtti   // this_context().last_exception: a knob-off leg's refusal as text
 require strings   // rtrim
 require daslib/strings_boost   // split: a form's name
-require daslib/fio   // nolint:STYLE030,LINT019 — path_join: the oracle dump's path
 require _compares   // logits_maxdiff
 require _vision_oracle   // the mtmd dump parser and the canvas fixtures the poison legs read
 require _model_tier   // tower_parity_stats - the rel_l2 statistic the audio twins' bar reads
@@ -206,26 +205,6 @@ def tower_form_of(form : string; lanes : array<string>; area : string) : TowerFo
     return f
 }
 
-//! a jfk twin cell's seat, each miss a loud skip (the JIT under `jit_only`, the model and jfk.wav, `fam`'s twin seat), then `body` over the clip, the knobs put back
-[unused_argument(tt, model_path, jit_only, fam, body)]
-def jfk_twin_cell(tt : T?; model_path : string; jit_only : bool; fam : TowerFamily; body : block<(samples : array<float>) : void>) {
-    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda) || typeinfo builtin_module_exists(das_metal)) {
-        if (jit_only && !jit_enabled()) {
-            tt |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
-        if (!model_available(tt, model_path)) {
-            return
-        }
-        let samples <- asr_samples(tt, "jfk.wav")
-        return if (empty(samples) || !discrete_audio_twin_seat(tt, fam))
-        with_gpu_knobs() {
-            invoke(body, samples)
-        }
-    }
-}
-
-
 //! how a twin reads its distances
 enum TwinMetric {
     maxdiff   //! max |a - b|, read in the reference chain's rms; the bar `TWIN_SLACK_VK` x the CPU q8 chain's own plus `TWIN_ABS_VK` (qwen25v's own bar rides the poison leg alone)
@@ -326,6 +305,7 @@ struct TwinRows {
     cpu_moved : GpuTowerCounters
     dev_moved : GpuTowerCounters
     legs : int   //! the clean legs kept so far
+    poison_owed : bool = true   //! its forms take the input poison, which `twin_rows_held` asks
 }
 
 //! the counters `after` less the counters `before`
@@ -389,9 +369,12 @@ def twin_rows_legs(k : TwinRows) : TwinLegs {
 
 //! The twin `k` held, after its file's block: its three clean legs kept, `counters` over the legs' counters
 //! (`twin_rows_legs`), the device chain within the bar the CPU q8 chain sets from the exact chain (`twin_bar`), and the
-//! input poison past it where a poison leg ran. Answers the exact chain's rms and the bar, zeros where a leg is missing.
+//! input poison past it - kept wherever the twin owes one (`poison_owed`). Answers the exact chain's rms and the bar,
+//! zeros where a leg is missing.
 def twin_rows_held(tt : T?; k : TwinRows; counters : block<(legs : TwinLegs) : void>) : tuple<rms : float; bar : double> {
     tt |> equal(k.legs, 3, "{k.spec.tag}: the twin kept its exact, CPU q8 and device legs")
+    tt |> success(k.zero_block >= 0l || !k.poison_owed,
+        "{k.spec.tag}: the twin kept its input poison leg, its bar's control")
     return (rms = 0.0, bar = 0.0lf) if (k.legs != 3)
     invoke(counters, twin_rows_legs(k))
     let held = twin_bar(tt, k.spec, k.exact, k.cpu, k.dev)
@@ -552,15 +535,6 @@ def dump_poison(tt : T?; family, tag : string; zero_block : int64; bar_rms : flo
     let ex = invoke(excess, out)
     to_log(LOG_INFO, "{family} device poison leg {tag}: block {zero_block} zeroed -> excess {ex} over the {bar_rms} x rms bar\n")
     tt |> success(ex > 0.0, "{tag}: a zeroed block through the device chain reds the bar (excess {ex})")
-}
-
-//! `logname`'s mtmd dump under `oracle_dir` beside the models, or the loud skip naming `mint_hint`; false on the skip
-def oracle_dump(tt : T?; oracle_dir, logname, mint_hint : string; var o : OracleEncode) : bool {
-    if (!load_oracle_encode(path_join(path_join(models_dir(), oracle_dir), logname), o)) {
-        tt |> skip("oracle dump {logname} not present/parseable - mint via {mint_hint}")
-        return false
-    }
-    return true
 }
 
 //! the input poison of a device-side dump bar: `twp`, the family's tower with block `zero_block` zeroed, served by the driver on

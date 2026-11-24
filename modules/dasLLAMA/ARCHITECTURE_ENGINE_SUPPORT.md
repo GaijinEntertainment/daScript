@@ -10,8 +10,8 @@ anchor.
 - **`dasllama_prefix.das`** - the prefix/page cache for evaluated token history.
 - **`dasllama_env.das`** - the `[EnvConfig]` knob declarations, loaded once into the `g_env_*`
   globals, the walks over the declared knobs (`registered_env_names`, `env_set_knobs`), and the
-  paths derived from them: the per-user `~/.dasllama` directory and the config
-  lookup the server, its CLI and the exchange share.
+  paths derived from them: the per-user `~/.dasllama` directory and the config lookup the server,
+  its CLI and the exchange share; and a predicate over a knob's values the test runner shares with the engine.
 - **`dasllama_fat_start.das`** - a fat exe's first start: the runtime-section snapshot the tuner's
   kernel half also writes, the Metal twin crown race and the three homes' short-window knee races
   (`dasllama_metal_knee_race`, `dasllama_vulkan_knee_race`, `dasllama_cuda_knee_race`; synthetic, no model), the first-start hook
@@ -117,25 +117,31 @@ keeps its sidecar beside it, so the per-box file's hook stands down in the test 
 `tests/REVIEW.das`'s `check_one_test_child` reds a `_*_root.das` file, a `child_cmd` or
 `child_cmd_at` call naming a root, and a `child_cmd_root` caller outside its licensed sets.
 `OWN_ROOTS` licenses a program whose claim a verb cannot carry - the program's own compile, the
-process it runs in, a model a stocked test loads, or a server or runner started by its command
-line: `_child_root.das`, `_tuned_fallbacks_root.das`, `_exe_smoke_root.das`,
-`_box_runtime_root.das`, `_audio_lane_whisper_root.das`,
-`_mx4_mint_root.das`, `_fake_chat_root.das`, `run.das` and `dastest.das`. `ROOT_CMD_CALLERS`
-licenses a test file that names its child's root itself: `test_f32_batch_tile_perms.das`, whose
-root is a copy it writes.
+process it runs in, a model a stocked test loads, or a server or runner started by its command line:
+`_child_root.das`, `_tuned_fallbacks_root.das`, `_exe_smoke_root.das`, `_box_runtime_root.das`,
+`_audio_lane_whisper_root.das`, `_mx4_mint_root.das`, `_fake_chat_root.das`, `run.das` and
+`dastest.das`. `ROOT_CMD_CALLERS` licenses a test file that names its child's root itself:
+`test_f32_batch_tile_perms.das`, whose root is a copy it writes. The same gate's
+`check_child_binary_flags` reds a line starting the daslang binary (`BINARY_CALLS`) without the
+flags leaving out the modules `DASLLAMA_DISABLE_MODULES` names (`BINARY_FLAGS`): a child compiling
+another module set than its run misses the run's compile records. `BINARY_UNFLAGGED` licenses a
+program that requires no GPU module, whose compile no flag changes: the runner's dry run
+(`test_run_suites.das`) and the gate children (`test_facade_docs.das`).
 
 ### The model filters of a test run {#test-model-filters}
 
 `tests/_model_categories.das` owns the two tables a run picks model files by. A category is a set
 of files no run opens unless it names the category: a large model whose family's small one takes
 the same paths, held for the cells only the large one reaches. A family is the set of decoder files
-a `--family` run opens; a file's family is the row whose stem opens the most of its name.
+a `--family` run opens; a file's family is the row whose stem opens the most of its name. A
+category's row also names the towers its decoders pair with, files of no category: a run naming it
+opens them beside its own files, as every run does, so its image chat cells reach both halves.
 `model_available` (`tests/_model_tier.das`) is the one gate that reads both, so a test names its
 model file and nothing else. The runner hands `--category`, `--family` and `--arm` to a child as
 dastest `--run-env` pairs, set once the child's program has compiled: a filter value is no part of
 the compile record, and a run under another filter reads the same record. `TEST_CATEGORIES.md`
 carries the categories for a reader, a table row a category under `## Categories`, and
-`tests/REVIEW.das`'s `check_test_categories` holds the table and the document to each other.
+`tests/REVIEW.das`'s `check_test_categories` holds the table and the document to each other; the check licenses none.
 
 ### A model file loads once a form {#test-load-once}
 
@@ -162,7 +168,13 @@ a module free of the fixture root. The first device form streams the file, and w
 list holds three or more such forms each later one maps the file's device lane
 (`ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`). A call's `parity` knob adds the file's model_specs
 parity row's CPU form (`parity_spec_form`, `tests/_parity_cells.das`) and runs the row's cell on it. A
-call names its area and its file by string literals.
+call names its area and its file by string literals. A Metal form (`metal_form`) is a form of the call on a das_metal
+build: the file's blob twin, or its served image, loaded once after the device forms under its Metal mode, the body run on
+it once, and the home - the mode, the overrides, the kernel backend's pin - put back as the form found it; on any other
+build it is one skipped cell. A knob the Metal drivers read live - the ring pin, a session's codec, a drafter attached or
+not - is a cell's on the one load, so forms differ by the flavor and the mode alone. A Metal form loads no CPU model: a
+cell comparing the twin with a CPU reference reads the reference on a CPU form of the call and compares once both ran, or,
+to compare live, loads the CPU model itself (`own_load`).
 
 `tests/_model_once.das` owns the load of a model file that is no chat model - a TTS voice, a front-end
 pack, a stress model, a translation student, a decoder a facade wraps, a vision tower. `with_model_once` takes the area, the file, a list of form names and the
@@ -253,15 +265,18 @@ and file, and in each area `LOAD_ONCE_AREAS` names (`llm`, `tts`, `translate`, `
 area's test files (`run.das`'s `area_tests`): a call of an engine loader or of a helper `LOADERS`
 lists, its model file a `.gguf` literal - or, outside the llm area, a `.bin` pack's - in the call's
 arguments or one an identifier is bound to in
-the holding function, at the file's top level or in a fixture module. A site of a file a call loads,
+the holding function, at the file's top level (a `let` outside every brace, judged by depth, not column) or in a
+fixture module. A site of a file a call loads,
 or one of two sites of a file no call loads, is a finding unless the holding function calls
 `own_load("<why>")` with a non-empty literal reason. A function that passes its own parameter to a
 loader is itself a loader, and one `LOADERS` does not list is a finding; a site whose file is built at run time is
-counted, not read. The llama2.c `stories15M.bin` checkpoint loads once a cell through `load_checkpoint`
+counted, not read. A block whose body indexes a table literal of its file (`NAME[<n>]`) is held to
+that row naming its file - a string of the row is the file's stem or a `-` token of it
+(`check_block_rows`, which licenses none), so a table of languages or sizes and the unrolled blocks that load each file
+cannot drift apart. The llama2.c `stories15M.bin` checkpoint loads once a cell through `load_checkpoint`
 (27 loads in 10 test files, under a second in all), outside the blocks: in an area `GGUF_ONLY_AREAS`
-lists - `llm`, whose `.bin` names are checkpoints - the check drops every `.bin` site, so a checkpoint load there is not a site. `UNFOLDED` names the test files whose cells load
-their own models; their findings print as held lines, and a listed file no area finds a finding
-in is a finding. Its `check_cell_pins` reads the fixture cell modules (`tests/_*_cells.das`): a call there that pins,
+lists - `llm`, whose `.bin` names are checkpoints - the check drops every `.bin` site, so a checkpoint load there is not a site. No
+test file is exempt: every finding fails the gate. Its `check_cell_pins` reads the fixture cell modules (`tests/_*_cells.das`): a call there that pins,
 clears or re-pins the kernel backend or the K-quant native knob is a finding, since both are a
 property of the form's load; the check licenses none.
 

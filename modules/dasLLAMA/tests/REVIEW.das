@@ -45,6 +45,61 @@ def private literal_roots(text, call : string) : array<tuple<root : string; line
     return <- found
 }
 
+//! the calls that name the daslang binary a test starts
+let private BINARY_CALLS = fixed_array("get_das_exe()", "das_exe()", "example_daslang()", "self_daslang()")
+
+//! the spellings that put the modules DASLLAMA_DISABLE_MODULES names after the binary
+let private BINARY_FLAGS = fixed_array("daslang_argv(", "disable_module_args(", "disable_module_flags(",
+    "child_disable_flags()", "--disable-module")
+
+//! the binary's starts that take no flags, each a file and the text of its line: a program that requires no GPU
+//! module - the runner, which hands the knob to its children through their environment, and a gate child
+let private BINARY_UNFLAGGED = fixed_array(
+    "test_run_suites.das|\"\{scratch\}\{env\}\{das_exe()\} -dasroot \{get_das_root()\} \{cache\}",
+    "test_facade_docs.das|[get_das_exe(), \"-dasroot\"")
+
+let private BINARY_FLAGLESS = ("a test of this folder starts the daslang binary without the modules "
+    + "DASLLAMA_DISABLE_MODULES leaves out: build an argv with `daslang_argv(<binary>, [...])`, or put "
+    + "`\{child_disable_flags()\}` right after the binary in a command string (`_daslang_argv.das`) - a child "
+    + "compiling another module set than its parent misses the compile records the run built and reparses "
+    + "the engine inside its test's wall; a start BINARY_UNFLAGGED licenses runs a program that requires no GPU "
+    + "module, so leaving one out changes nothing it compiles (ARCHITECTURE_ENGINE_SUPPORT.md#test-child)")
+
+//! whether `line` holds one of `spellings`
+def private holds_any(line : string; spellings : array<string>) : bool {
+    for (s in spellings) {
+        return true if (find(line, s) >= 0)
+    }
+    return false
+}
+
+//! whether an entry of BINARY_UNFLAGGED licenses `line` of the file `f`
+def private unflagged_licensed(f, line : string) : bool {
+    for (entry in BINARY_UNFLAGGED) {
+        let bar = find(entry, "|")
+        return true if (base_name(f) == slice(entry, 0, bar) && find(line, slice(entry, bar + 1)) >= 0)
+    }
+    return false
+}
+
+//! every line of the folder's `.das` files that names the daslang binary at the head of an argv literal or inside a command
+//! string carries the module flags on the same line, but the starts BINARY_UNFLAGGED licenses
+def private check_child_binary_flags() {
+    var inscope starts <- [for (call in BINARY_CALLS); "[{call}"]
+    starts |> push_from([for (call in BINARY_CALLS); "\{{call}\}"])
+    var inscope flags <- to_array(BINARY_FLAGS)
+    for (f in tracked_files(["modules/dasLLAMA/tests/*.das"], "the binary's starts")) {
+        continue if (base_name(f) == "REVIEW.das")
+        let text = strip_line_comments(fread(f))
+        for (line, i in split(text, "\n"), count(1)) {
+            continue if (!holds_any(line, starts))
+            if (!holds_any(line, flags) && !unflagged_licensed(f, line)) {
+                gate_finding(f, i, BINARY_FLAGLESS)
+            }
+        }
+    }
+}
+
 //! every child process a test of this folder spawns is the one test child, or a licensed program: no root file, no
 //! `child_cmd` / `child_cmd_at` naming a root, and no `child_cmd_root` caller outside the licensed sets
 [arch(at = "../ARCHITECTURE_ENGINE_SUPPORT.md#test-child")]
@@ -73,8 +128,9 @@ def private check_one_test_child() {
 let private CATEGORIES_DOC = "modules/dasLLAMA/TEST_CATEGORIES.md"
 
 let private ONE_CATEGORY_ROW = ("a model category is one row of `model_categories` (`_model_categories.das`) and one table row "
-    + "under `## Categories` of TEST_CATEGORIES.md holding the category's name, each stem of its model files and its topics word "
-    + "for word - add, change or drop the two in the same change (ARCHITECTURE_ENGINE_SUPPORT.md#test-model-filters)")
+    + "under `## Categories` of TEST_CATEGORIES.md holding the category's name, each stem of its model "
+    + "files, its topics word for word and each stem of the files it opens beside its own - add, "
+    + "change or drop the two in the same change (ARCHITECTURE_ENGINE_SUPPORT.md#test-model-filters)")
 
 //! the categories document and the categories table name the same categories, each with its stems and topics
 [arch(at = "../ARCHITECTURE_ENGINE_SUPPORT.md#test-model-filters")]
@@ -85,11 +141,16 @@ def private check_test_categories() {
         known |> insert(cat.name)
         var row_agrees = false
         for (row in rows) {
-            continue if (length(row) < 3 || row[0] != cat.name)
+            continue if (length(row) < 4 || row[0] != cat.name)
             var inscope stems <- split_trimmed(row[1], ",")
-            row_agrees = row[2] == cat.topics
+            var inscope opens <- split_trimmed(row[3], ",")
+            var inscope opened <- split_trimmed(cat.opens, ",")
+            row_agrees = row[2] == cat.topics && length(opens) == length(opened)
             for (stem in split_trimmed(cat.stems, ",")) {
                 row_agrees &&= has_value(stems, stem)
+            }
+            for (stem in opened) {
+                row_agrees &&= has_value(opens, stem)
             }
         }
         if (!row_agrees) {
@@ -131,11 +192,6 @@ let private LOAD_ONCE_AREAS = fixed_array("llm", "tts", "translate", "vision", "
 //! a 60 MB file
 let private GGUF_ONLY_AREAS = fixed_array("llm")
 
-//! the test files whose cells still load their own models: their load-once findings print as held lines, one count a run - the
-//! fold empties the list, and a listed file the check finds clean is a finding of its own
-let private UNFOLDED = fixed_array("test_dflash_drafter.das", "test_embeddings.das", "test_metal_batched_row.das",
-    "test_metal_format_census.das", "test_mlx_snapshot.das", "test_mtp_gemma_drafter.das")
-
 //! the calls that load the model file their arguments name: the engine's loaders, then the folder's helpers that pass a file
 //! to one (a listed helper the scanned files do not define is a finding); a call of a `BLOCKS` name is the area's block,
 //! read apart
@@ -150,18 +206,18 @@ let private ENGINE_LOADERS = fixed_array("load_model_", "load_model", "load_gguf
     "stage_audio_tower", "stage_gemma4a_encoder", "stage_qwen3a_tower", "stage_gemma3v_tower", "stage_gemma4v_tower",
     "stage_gemma4uv_embedder", "stage_qwen3v_tower", "stage_qwen25v_tower", "stage_styletts2", "stage_pocket", "stage_nmt_model")
 let private LOADERS = fixed_array("aud_form", "aud_stage", "blob_twin", "canary_form", "canary_stage", "cuda_feed_rig", "cuda_forced_feed", "dense_feeds_block",
-    "family_lane_cell", "g2p_pack_form", "g4a_stage", "gdraft_target", "gemma3v_12b_form", "gemma3v_form", "gemma3v_stage", "gemma4a_e2b_form", "gemma4a_e4b_form", "gemma4a_form", "gemma4uv_form", "gemma4uv_stage",
+    "family_lane_cell", "g2p_pack_form", "g4a_stage", "gemma3v_12b_form", "gemma3v_form", "gemma3v_stage", "gemma4a_e2b_form", "gemma4a_e4b_form", "gemma4a_form", "gemma4uv_form", "gemma4uv_stage",
     "gemma4v_form", "gemma4v_stage", "gemma_format_cell", "gemma_model", "gigaam_form", "gigaam_minted", "greedy_turn", "image_file_transcript", "image_tower_form", "kq_clone_over_roster",
     "kq_native_load", "kquant_cell", "kv_codecs_cell", "lanes_cell", "live_cell", "load_and_drop", "load_capped",
-    "load_kq_native", "load_model_and_drop", "load_outcome", "load_perop", "load_refusal", "load_resident_lane",
-    "load_trunk", "metal_arms_cell", "metal_lossless_cell", "metal_prefill_cell", "metal_routed_cell",
+    "load_kq_native", "load_metal_trunk", "load_model_and_drop", "load_outcome", "load_perop", "load_refusal", "load_resident_lane",
+    "load_trunk", "metal_lossless_cell", "metal_prefill_cell", "metal_routed_cell",
     "metal_served_cell", "moe_forced_feed", "moe_forced_feed_pinned", "parakeet_form", "parakeet_stage", "parity_row_load", "parity_spec_arms",
     "pk_image_file_rows", "pocket_form", "pocket_minted", "pocket_tts_minted", "ppl_compare", "q3omni_form", "qwen25v_form", "qwen25v_stage",
     "qwen3a_form", "qwen3a_stage", "qwen3v_form", "qwen3v_stage",
-    "ring_draft_run", "ru_pack_form", "ru_stress_form", "sampled_metal_cell", "slot_swap_cycle", "speak_line_of",
+    "ru_pack_form", "ru_stress_form", "sampled_metal_cell", "slot_swap_cycle", "speak_line_of",
     "stage_panic", "staged_tokens_at", "staged_tower_form", "staged_twin_tower", "stored_file_pins",
     "stories15m_form", "stream_twin_within", "styletts2_form", "tagger_pack_form", "tail_after_load",
-    "translator_form", "translator_stage", "vad_form", "whisper_form", "whisper_stage", "with_cold_lane", "with_gemma_rig", "with_metal_trunk", "with_served_drafter")
+    "translator_form", "translator_stage", "vad_form", "whisper_form", "whisper_stage", "with_cold_lane", "with_gemma_rig", "with_metal_trunk")
 
 //! the file whose loads are the block's own body: no helper of it is listed
 let private LOADER_HOMES = fixed_array("_cpu_gpu_model.das")
@@ -247,31 +303,8 @@ def private byte_at(text : string; at : int) : int {
     return b
 }
 
-//! the text between the paren that opens at `open` and the one that closes it, string literals read whole
-def private call_args(text : string; open : int) : string {
-    var stop = length(text)
-    peek_data(text) $(d) {
-        var depth = 0
-        var quote = false
-        for (i in range(open, length(d))) {
-            let b = int(d[i])
-            if (quote) {
-                quote = b != '"' || int(d[i - 1]) == '\\'
-            } elif (b == '"') {
-                quote = true
-            } elif (b == '(') {
-                depth++
-            } elif (b == ')') {
-                depth--
-                if (depth == 0) {
-                    stop = i
-                    break
-                }
-            }
-        }
-    }
-    return slice(text, open + 1, stop)
-}
+//! the text between the paren that opens at `open` and the one that closes it (`bracket_body`)
+def private call_args(text : string; open : int) : string => bracket_body(text, open, '(', ')')
 
 //! the names the last `let` / `var` line of `lines` before line `before` (0: every line) binding `id` holds; where it holds
 //! none, `depth` hops more through the identifiers of its right-hand side, bound in `lines` before it
@@ -299,12 +332,39 @@ def private bound_names(lines : array<string>; id : string; before : int; depth 
     return <- out
 }
 
+//! the `let` lines of `text` outside every brace: a file's top level, judged by depth, not by column
+def private top_level_lets(text : string) : array<string> {
+    var out : array<string>
+    peek_data(text) $(d) {
+        var depth = 0
+        var quote = 0
+        var start = 0
+        for (i in range(length(d) + 1)) {
+            let b = i < length(d) ? int(d[i]) : '\n'
+            if (b == '\n') {
+                if (depth == 0 && quote == 0 && slice(d, start, i) |> starts_with("let ")) {
+                    out |> push(slice(d, start, i))
+                }
+                start = i + 1
+            } elif (quote != 0) {
+                quote = (b == quote && int(d[i - 1]) != '\\') ? 0 : quote
+            } elif (b == '"' || b == '\'') {
+                quote = b
+            } elif (b == '{') {
+                depth++
+            } elif (b == '}') {
+                depth--
+            }
+        }
+    }
+    return <- out
+}
+
 //! the top-level `let` names of `.gguf` literals across `files`: an identifier a call passes resolves here last
 def private global_names(files : array<string>) : table<string; array<string>> {
     var out : table<string; array<string>>
     for (f in files) {
-        for (ln in split(strip_line_comments(fread(f)), "\n")) {
-            continue if (!(ln |> starts_with("let ")))
+        for (ln in top_level_lets(strip_line_comments(fread(f)))) {
             let l = ln |> starts_with("let private ") ? slice(ln, 12) : slice(ln, 4)
             var inscope ids <- idents_of(l)
             continue if (empty(ids))
@@ -379,7 +439,7 @@ def private fn_at(fns : array<SourceFn>; at : int) : int {
 def private load_sites(file : string; loaders : array<string>; globals : table<string; array<string>>;
                        var sites : array<LoadSite>) {
     let text = strip_line_comments(fread(file))
-    var inscope lines <- split(text, "\n")
+    var inscope top <- top_level_lets(text)
     var inscope fns <- source_fns(file, text)
     for (f in fns) {
         g_defined |> insert(f.name)
@@ -394,7 +454,7 @@ def private load_sites(file : string; loaders : array<string>; globals : table<s
             let line = line_at(text, at)
             let fi = fn_at(fns, at)
             let args = call_args(text, at + length(call))
-            var inscope names <- site_names(args, lines, line, fi >= 0 ? fns[fi].start : 0, text, globals)
+            var inscope names <- site_names(args, top, line, fi >= 0 ? fns[fi].start : 0, text, globals)
             if (empty(names) && !(fi >= 0 && passed_param(file, line, fns[fi], call, args, loaders))) {
                 g_unread++
                 to_log(LOG_INFO, "UNREAD {file}:{line}: `{call}` names its model file through a value the load-once check cannot read\n")
@@ -441,14 +501,12 @@ def private no_file_arg(a : string) : bool {
     return a |> starts_with("\"") && empty(gguf_names(a))
 }
 
-//! the model files the first argument of a call's arguments `args` that names some names (`no_file_arg` passed over): its
-//! literals, else the first of its identifiers bound to some in the function holding the call (from `fn_start`, before
-//! `line`), at the file's top level, or in `globals` - a loader takes its model file ahead of a drafter or a companion; an
-//! argument that calls a function and names none ends the search
-def private site_names(args : string; lines : array<string>; line, fn_start : int; text : string;
+//! the model files of the first argument in `args` that names some (`no_file_arg` passed over; a loader takes its model file
+//! ahead of a drafter or a companion): its literals, else the first of its identifiers bound to some in the function holding the
+//! call (from `fn_start`, before `line`), in `top` (the file's top-level `let` lines) or in `globals`; an argument that calls a function and names none ends the search
+def private site_names(args : string; top : array<string>; line, fn_start : int; text : string;
                        globals : table<string; array<string>>) : array<string> {
     var inscope fn_lines <- split(slice(text, fn_start, length(text)), "\n")
-    var inscope top <- [for (l in lines); l; where l |> starts_with("let ")]
     let fn_line = line_at(text, fn_start)
     var out : array<string>
     for (raw in top_args(args)) {
@@ -515,8 +573,8 @@ def private area_files(run_path, area : string) : array<string> {
 let private TESTS = "modules/dasLLAMA/tests"
 
 //! the first line of each block call (`BLOCKS`) in `f`, its area and file where both are literals; a call that names them
-//! otherwise is a finding, held where `held`
-def private block_calls(f : string; held : bool; var hold : int&) : array<tuple<key : string; line : int; call : string>> {
+//! otherwise is a finding
+def private block_calls(f : string) : array<tuple<key : string; line : int; call : string>> {
     var out : array<tuple<key : string; line : int; call : string>>
     let text = fread(f)
     for (call in BLOCKS) {
@@ -528,7 +586,7 @@ def private block_calls(f : string; held : bool; var hold : int&) : array<tuple<
             let at = find_line(text, "{call}(t, {head}")
             var inscope lits <- split(head, "\"")   //! `"area", "file", rest`: empty, the area, the comma, the file, the rest
             if (!(head |> starts_with("\"")) || length(lits) < 5 || strip(lits[2]) != ",") {
-                load_once_finding(f, at, MODEL_LITERAL, held, hold)
+                gate_finding(f, at, MODEL_LITERAL)
                 continue
             }
             out |> push((key = "{lits[1]}, {lits[3]}", line = at, call = call))
@@ -537,28 +595,12 @@ def private block_calls(f : string; held : bool; var hold : int&) : array<tuple<
     return <- out
 }
 
-//! a finding at `f:line`, or a held line where `held` (`hold` counting them)
-def private load_once_finding(f : string; line : int; msg : string; held : bool; var hold : int&) {
-    if (held) {
-        hold++
-        to_log(LOG_INFO, "HELD {f}:{line}: {msg}\n")
-    } else {
-        gate_finding(f, line, msg)
-    }
-}
-
 //! the load-once check over `files` for `area`: the area's blocks (`blocks`, keyed `area, file`) each the one load of its model
 //! file; every other load site of a model a block loads, and every load site of a model loaded at two sites and by no block,
-//! is a finding unless its function declares its own load, a load a call of `loaders` names. A file of `unfolded` has its
-//! findings held, and is counted into `dirty`
+//! is a finding unless its function declares its own load, a load a call of `loaders` names
 def private load_once_area(area : string; files : array<string>; blocks : table<string; string>; globals : table<string; array<string>>;
-                           held_blocks : array<LoadSite>; unfolded, loaders : array<string>; var hold : int&; var dirty : table<string>) {
+                           loaders : array<string>) {
     var inscope sites : array<LoadSite>
-    for (b in held_blocks) {
-        if (has_value(files, b.file)) {
-            sites |> push(b)
-        }
-    }
     for (f in files) {
         load_sites(f, loaders, globals, sites)
     }
@@ -576,19 +618,120 @@ def private load_once_area(area : string; files : array<string>; blocks : table<
         let owner = blocks?["{area}, {s.model}"] ?? ""
         let others = length(unowned?[s.model] ?? array<string>())
         continue if (empty(owner) && others < 2)
-        let held = has_value(unfolded, base_name(s.file))
         let where_ = empty(owner) ? "loaded at {others} sites of the {area} area and by no block: {join(unowned?[s.model] ?? array<string>(), ", ")}" : "its block is {owner}"
-        load_once_finding(s.file, s.line, "`{s.call}` loads {s.model}, {where_} - {LOAD_ONCE}", held, hold)
-        dirty |> insert(base_name(s.file))
+        gate_finding(s.file, s.line, "`{s.call}` loads {s.model}, {where_} - {LOAD_ONCE}")
     }
     delete unowned
 }
 
-//! a finding for each file of `unfolded` no area's check counted into `dirty`: a listed file the check finds clean
-def private stale_unfolded(unfolded : array<string>; dirty : table<string>) {
-    for (u in unfolded) {
-        if (!key_exists(dirty, u)) {
-            gate_finding("{TESTS}/REVIEW.das", "UNFOLDED lists {u}, whose loads the check finds folded: drop it from the list ({LOAD_ONCE_AT})")
+//! the text between the first `open` bracket at or past byte `at` of `text` and the one that
+//! closes it, string literals read whole; "" where none closes
+def private bracket_body(text : string; at : int; open, close : int) : string {
+    var out = ""
+    peek_data(text) $(d) {
+        var depth = 0
+        var quote = false
+        var start = 0
+        for (i in range(at, length(d))) {
+            let b = int(d[i])
+            if (quote) {
+                quote = b != '"' || int(d[i - 1]) == '\\'
+            } elif (b == '"') {
+                quote = true
+            } elif (b == open) {
+                start = depth == 0 ? i + 1 : start
+                depth++
+            } elif (b == close && depth > 0) {
+                depth--
+                if (depth == 0) {
+                    out = slice(d, start, i)
+                    break
+                }
+            }
+        }
+    }
+    return out
+}
+
+//! the string literals of each row of the table literal `name` (`let [private] <name> <- [...]`)
+//! of `text`
+def private table_rows(text, name : string) : array<array<string>> {
+    var rows : array<array<string>>
+    let lines = "\n{text}"   // a table on the first line starts a line too
+    for (head in fixed_array("\nlet private {name} <- [", "\nlet {name} <- [")) {
+        let at = find(lines, head)
+        continue if (at < 0)
+        let body = bracket_body(lines, at + length(head) - 1, '[', ']')
+        rows <- [for (row in top_args(body)); quoted_segments(row)]
+        break
+    }
+    return <- rows
+}
+
+//! each `<name>[<n>]` of `body`, a literal row of a table
+def private row_refs(body : string) : array<tuple<name : string; row : int>> {
+    var out : array<tuple<name : string; row : int>>
+    var inscope parts <- split(body, "[")
+    for (i in range(1, length(parts))) {
+        var index = 0
+        var digits = 0
+        peek_data(parts[i]) $(d) {
+            for (b in d) {
+                break if (!is_number(int(b)))
+                index = index * 10 + int(b) - '0'
+                digits++
+            }
+        }
+        continue if (digits == 0 || byte_at(parts[i], digits) != ']')
+        let prev = parts[i - 1]
+        var start = length(prev)
+        while (start > 0 && is_ident_byte(byte_at(prev, start - 1))) {
+            start--
+        }
+        if (start < length(prev)) {
+            out |> push((name = slice(prev, start), row = index))
+        }
+    }
+    return <- out
+}
+
+let private BLOCK_ROW = ("a load-once block's cells take the row of its own file: a row of a table "
+    + "literal the block passes holds a string that is the block's file stem or one of its `-` "
+    + "tokens (the language code, the file stem)")
+
+//! every block call (`BLOCKS`) of `files` whose body takes a row of a table literal of its file (`<name>[<n>]`) passes a
+//! row naming the block's file - its stem, or a `-` token of it, one of the row's strings
+def private check_block_rows(files : array<string>) {
+    for (f in files) {
+        let text = strip_line_comments(fread(f))
+        for (call in BLOCKS) {
+            var from = 0
+            while (true) {
+                let at = find(text, "{call}(t, ", from)
+                break if (at < 0)
+                from = at + 1
+                continue if (is_ident_byte(byte_at(text, at - 1)))
+                var inscope lits <- quoted_segments(call_args(text, at + length(call)))
+                continue if (length(lits) < 2)
+                let file = lits[1]
+                let dot = rfind(file, ".")
+                let stem = dot > 0 ? slice(file, 0, dot) : file
+                var inscope tokens <- split(stem, "-")
+                for (ref in row_refs(bracket_body(text, at, '{', '}'))) {
+                    var inscope rows <- table_rows(text, ref.name)
+                    continue if (ref.row >= length(rows))
+                    var named = false
+                    for (v in rows[ref.row]) {
+                        named = v == stem || has_value(tokens, v)
+                        break if (named)
+                    }
+                    if (!named) {
+                        let row = "`{ref.name}[{ref.row}]` ({join(rows[ref.row], ", ")})"
+                        let msg = "{BLOCK_ROW} - the block of {file} passes {row} ({LOAD_ONCE_AT})"
+                        gate_finding(f, line_at(text, at), msg)
+                    }
+                }
+            }
         }
     }
 }
@@ -601,9 +744,7 @@ def private check_models_load_once() {
     var inscope files <- tracked_files(["modules/dasLLAMA/tests/test_*.das"], "the model blocks")
     var inscope fixtures <- [for (f in tracked_files(["modules/dasLLAMA/tests/_*.das"], "the fixture modules")); f;
         where !(base_name(f) |> starts_with("_child_")) && !(base_name(f) |> ends_with("_root.das"))]
-    var hold = 0
-    var inscope held_blocks : array<LoadSite>
-    var inscope blocks <- load_once_blocks(files, [for (u in UNFOLDED); u], held_blocks, hold)
+    var inscope blocks <- load_once_blocks(files)
     var inscope globals <- global_names(fixtures)
     var inscope none : array<LoadSite>
     var inscope listed <- [for (l in LOADERS); l]
@@ -611,39 +752,26 @@ def private check_models_load_once() {
     for (f in fixtures) {
         load_sites(f, loaders, globals, none)
     }
-    var dirty : table<string>
     for (area in LOAD_ONCE_AREAS) {
         var inscope area_set <- area_files("{TESTS}/run.das", area)
-        load_once_area(area, area_set, blocks, globals, held_blocks, [for (u in UNFOLDED); u], loaders, hold, dirty)
+        load_once_area(area, area_set, blocks, globals, loaders)
     }
-    stale_unfolded([for (u in UNFOLDED); u], dirty)
-    if (hold > 0) {
-        to_log(LOG_WARNING, "REVIEW.das load-once: {hold} finding(s) held in the {length(UNFOLDED)} file(s) UNFOLDED lists - DAS_LOG_LEVEL=info prints them\n")
-    }
+    check_block_rows(files)
     stale_loaders(listed)
     if (g_unread > 0) {
         to_log(LOG_WARNING, "REVIEW.das load-once: {g_unread} load site(s) name their model file through a value the check cannot read - DAS_LOG_LEVEL=info prints them\n")
     }
 }
 
-//! the blocks of `files` keyed `area, file` to their `file:line`; a second block of one key is a finding. The files `unfolded`
-//! does not list are read first; a block of a listed file owns its key where no block owns it yet, else it is a load site
-//! (`sites`) like any other of its file, its findings held
-def private load_once_blocks(files : array<string>; unfolded : array<string>; var sites : array<LoadSite>; var hold : int&) : table<string; string> {
+//! the blocks of `files` keyed `area, file` to their `file:line`, in the files' order; a second block of one key is a finding
+def private load_once_blocks(files : array<string>) : table<string; string> {
     var blocks : table<string; string>
-    for (pass_held in [false, true]) {
-        for (f in files) {
-            let held = has_value(unfolded, base_name(f))
-            continue if (held != pass_held)
-            for (b in block_calls(f, held, hold)) {
-                if (!key_exists(blocks, b.key)) {
-                    blocks |> insert(b.key, "{base_name(f)}:{b.line}")
-                } elif (held) {
-                    let comma = find(b.key, ", ")
-                    sites |> push(LoadSite(model = slice(b.key, comma + 2), file = f, line = b.line, call = b.call))
-                } else {
-                    load_once_finding(f, b.line, "{MODEL_ONCE} - the first call is {blocks?[b.key] ?? ""}", held, hold)
-                }
+    for (f in files) {
+        for (b in block_calls(f)) {
+            if (!key_exists(blocks, b.key)) {
+                blocks |> insert(b.key, "{base_name(f)}:{b.line}")
+            } else {
+                gate_finding(f, b.line, "{MODEL_ONCE} - the first call is {blocks?[b.key] ?? ""}")
             }
         }
     }
@@ -667,24 +795,20 @@ def private stale_loaders(listed : array<string>) {
 }
 
 //! the load-once check over the named files alone, as the areas `areas` - an area's files the ones the runner `area_run`
-//! lists for it where named, else the named files - the findings of the files `unfolded` names held: its fixture rail. Its
-//! helper loaders are `listed` where it names some, each one a named file must define, else LOADERS
-def private check_load_once_files(files, unfolded, listed, areas : array<string>; area_run : string) {
-    var hold = 0
-    var inscope held_blocks : array<LoadSite>
-    var inscope blocks <- load_once_blocks(files, unfolded, held_blocks, hold)
+//! lists for it where named, else the named files: its fixture rail. Its helper loaders are `listed` where it names some, each
+//! one a named file must define, else LOADERS
+def private check_load_once_files(files, listed, areas : array<string>; area_run : string) {
+    var inscope blocks <- load_once_blocks(files)
     var inscope globals <- global_names(files)
     var inscope loaders <- all_loaders(empty(listed) ? [for (l in LOADERS); l] : listed)
-    var dirty : table<string>
     for (area in areas) {
         var inscope area_set <- empty(area_run) ? [for (f in files); f] : area_files(area_run, area)
-        load_once_area(area, area_set, blocks, globals, held_blocks, unfolded, loaders, hold, dirty)
+        load_once_area(area, area_set, blocks, globals, loaders)
     }
-    stale_unfolded(unfolded, dirty)
+    check_block_rows(files)
     if (!empty(listed)) {
         stale_loaders(listed)
     }
-    to_log(LOG_WARNING, "REVIEW.das load-once: {hold} finding(s) held\n")
 }
 
 let private CELL_PINS = fixed_array("pin_kernel_backend", "pin_kernel_backend_env", "clear_kernel_backend_pin",
@@ -734,7 +858,7 @@ def private check_folder_shape(root : string) {
     check_test_shape_floorless(root, 100, true) $(path : string) => holds_block(path)
 }
 
-//! the gate; `-- --load-once <file>... --unfolded <name>... --loaders <name>... --area-run <run.das> --area <name>...` runs
+//! the gate; `-- --load-once <file>... --loaders <name>... --area-run <run.das> --area <name>...` runs
 //! the load-once check over the named files alone as the named areas, `llm` where none is named (`check_load_once_files`),
 //! `-- --floor <folder>` the file-shape check over that folder, and `-- --cell-pins <file>...` the cell-pin check - its
 //! fixture rails
@@ -747,7 +871,8 @@ def main() : int {
         if (empty(areas)) {
             areas |> push("llm")
         }
-        check_load_once_files(fixtures, gate_flag_args("--unfolded"), gate_flag_args("--loaders"), areas, empty(area_run) ? "" : area_run[0])
+        let run_at = empty(area_run) ? "" : area_run[0]
+        check_load_once_files(fixtures, gate_flag_args("--loaders"), areas, run_at)
         return gate_verdict("modules/dasLLAMA/tests --load-once")
     }
     let floors <- gate_flag_args("--floor")
@@ -762,6 +887,7 @@ def main() : int {
     }
     check_folder_shape(TESTS)
     check_one_test_child()
+    check_child_binary_flags()
     check_test_categories()
     check_models_load_once()
     check_cell_pins()

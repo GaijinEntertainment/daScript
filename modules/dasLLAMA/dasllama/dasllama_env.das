@@ -1033,6 +1033,9 @@ struct public TestEnv {
     @clarg_doc = "Comma-separated model categories the tests run: with none named, a test opens no category's model file; with some named, it opens theirs and no other model. Set by tests/run.das --category."
     test_categories : string = ""
 
+    @clarg_doc = "Comma-separated dynamic module folder names (dasVulkan, dasCUDA) the test children leave out: tests/run.das starts every child, and a test every child it spawns, with `--disable-module <name>` for each, so a guarded `require ?vulkan` / `require ?cuda` resolves as absent and a GPU home's run compiles only its own module. harness/pod_fleet.das sets it per home on a two-pod fleet."
+    disable_modules : string = ""
+
     @clarg_doc = "Debug: dasllama-server runs its validated collection at every lifecycle safe point, so a pointer left to a freed value fails at the tick that left it."
     gc_stress : bool = false
 
@@ -1337,6 +1340,10 @@ def public env_set_knobs() : string {
 
 //! a tri-state pin over an environment knob: -1 the environment's `env`, 0 off, any other value on
 def pin_over_env(pin : int; env : bool) : bool => pin < 0 ? env : pin != 0
+
+//! whether the kernel policy `policy` (DAS_TUNE_POLICY) keeps the Metal crowns a box races: every policy but `reference` and
+//! `fallback`, the portable tier's arm, crownless by its own contract
+def public tune_policy_keeps_crowns(policy : string) : bool => policy != "reference" && policy != "fallback"
 
 //! true in the full suite (`DASLLAMA_PARITY_FULL=1`): the large tier's cells run, and the cells no test wall admits
 def public parity_full_mode() : bool => g_env_test.parity_full

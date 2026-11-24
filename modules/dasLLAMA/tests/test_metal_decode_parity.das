@@ -1339,8 +1339,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
             // past B=4 rides the q8 GEMM tier; the batched unfused add+rms pair (what
             // dim > 4096 selects) parity-rides the 1B via its pin (a 70B batch CPU control
             // streams 40GB against the GPU's wired copy — it OOM-killed this box; the 70B
-            // batch cells stay ENGAGE-gated in the support matrix, GPU-only). The 8B/70B are
-            // large-tier: they run only under DASLLAMA_PARITY_FULL (the pre-commit gate).
+            // batch cells stay ENGAGE-gated in the support matrix, GPU-only).
             if (arm_on(t, "arm12-dim")) {
                 let path8 = path_join(models_dir(), "Meta-Llama-3.1-8B-Instruct-Q8_0.gguf")
                 if (model_available(t, path8)) {

@@ -15,6 +15,7 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require dasllama/dasllama   // nolint:STYLE030,LINT019 - the overrides and the Metal mode, inside the das_metal halves
 require _metal_blob_twin   // nolint:STYLE030,LINT019 - blob_twin and the kernel census, inside the das_metal halves
 require _compares   // nolint:STYLE030,LINT019 - argmax_of, inside the das_metal halves
+require _mlx_cells   // the prompt, the oracles' gate and the teacher-forced rail
 require daslib/strings_boost
 require ?das_metal dasllama/dasllama_metal_common   // nolint:STYLE030,LINT019 - the kernel census, inside the das_metal halves
 require ?das_metal dasllama/dasllama_metal_decode   // nolint:STYLE030,LINT019 - metal_decode_stats and shutdown, inside the das_metal halves
@@ -28,12 +29,9 @@ require math
 // checkpoint, a loose bar) and the snapshot's own runtime on the CPU (the same weights; the gap is the activation forms).
 // A cell skips where its snapshot or its GGUF twin is not stocked, where the snapshot sits above the large tier without
 // DASLLAMA_PARITY_FULL=1, and on the Metal arms where the build carries no dasMetal or the run is interpreted (`jit_only`).
+// The Llama-3.2-1B 8-bit snapshot's cell against its GGUF twin runs on the twin's block (`test_gpu_resident_llama.das`, the
+// cell `_mlx_cells.das`'s), which loads the twin once.
 
-//! the teacher-forced prompt both oracles ran: "The capital of France is Paris. The capital of Germany is Berlin. The sky is blue."
-let private PROMPT_IDS = fixed_array(128000l, 791l, 6864l, 315l, 9822l, 374l, 12366l, 13l, 578l, 3363l, 315l, 9635l, 374l, 7295l, 13l, 578l, 10846l, 374l, 6437l, 13l)
-
-//! the snapshot runtime's top-2 per prompt position (CPU device, the snapshot's own weights): id, logit, runner-up id, logit
-let private ORACLE_1B <- [(16309l, 7.0703, 2l, 7.0664), (2768l, 10.1875, 220l, 10.1016), (315l, 20.4062, 3363l, 18.0156), (9822l, 16.5781, 279l, 16.2656), (374l, 21.3594, 198l, 19.5938), (12366l, 19.0000, 264l, 16.3594), (13l, 22.7969, 627l, 22.3594), (578l, 19.3594, 12366l, 18.9688), (469l, 17.4844, 6864l, 16.9062), (374l, 22.3438, 315l, 21.7812), (12366l, 20.0312, 3021l, 16.4531), (374l, 23.2812, 11l, 21.0625), (7295l, 18.6250, 3967l, 18.4688), (13l, 25.6406, 627l, 22.8750), (578l, 21.1406, 1628l, 18.3125), (6864l, 21.2969, 3363l, 18.2344), (14298l, 13.4766, 6498l, 13.3203), (645l, 15.5625, 264l, 14.1875), (11l, 19.3125, 323l, 19.0938), (578l, 19.0156, 3639l, 16.3281)]
 let private ORACLE_3B <- [(2l, 5.8398, 14924l, 5.7305), (220l, 7.9961, 2768l, 6.9570), (315l, 18.3438, 3363l, 16.9062), (9822l, 13.7266, 8494l, 13.5312), (374l, 18.9844, 11l, 18.2031), (12366l, 17.5625, 7559l, 14.8203), (13l, 19.5469, 11l, 18.9531), (578l, 16.7812, 1102l, 16.3750), (6864l, 16.7969, 3363l, 15.6719), (315l, 19.5156, 374l, 18.7656), (12366l, 17.7969, 22463l, 13.6641), (374l, 18.6406, 11l, 16.4219), (7295l, 16.6719, 1101l, 14.1953), (13l, 20.0625, 627l, 17.6250), (578l, 17.8438, 1628l, 14.9141), (6864l, 17.7500, 7928l, 15.5703), (4409l, 14.6016, 40214l, 13.3125), (22463l, 11.7344, 279l, 11.5000), (13l, 16.5312, 11l, 15.3906), (578l, 16.5781, 358l, 14.1953)]
 
 //! the 27B oracle's text, which its own tokenizer encodes to `PROMPT_27B` (no BOS)
@@ -45,91 +43,6 @@ let private ORACLE_27B <- [(2614l, 9.5000, 220l, 9.2500), (314l, 16.2500, 3177l,
 
 //! mlx-lm's forward of Qwen3.6-35B-A3B-4bit on the GPU over `PROMPT_27B` (the same tokenizer): the top-2 per position
 let private ORACLE_35B <- [(2614l, 13.4375, 1156l, 11.9375), (314l, 17.5000, 3177l, 15.9375), (279l, 14.0000, 9338l, 11.7500), (11l, 19.0000, 369l, 18.6250), (11751l, 17.7500, 264l, 15.7500), (11l, 19.5000, 13l, 19.2500), (198l, 15.4375, 11751l, 15.2500), (6511l, 15.8750, 242476l, 13.7500), (314l, 21.7500, 3177l, 17.3750), (9564l, 16.7500, 17163l, 16.3750), (369l, 22.1250, 11l, 16.5000), (21047l, 19.7500, 43984l, 14.6250), (13l, 21.8750, 11l, 18.6250), (561l, 18.3750, 3437l, 16.1250), (6511l, 20.2500, 89798l, 13.5625), (1881l, 17.7500, 369l, 17.3750), (6105l, 17.5000, 279l, 16.6250), (13l, 20.8750, 11l, 17.5000), (561l, 15.9375, 271l, 15.5625)]
-
-//! the oracle's logit at its top-1 id against ours: the gap the activation forms leave (Q8_0 rows against the runtime's halves)
-let private ORACLE_LOGIT_BAR = 0.4
-//! a position whose oracle top-2 sit closer than this is a near tie: either id may lead
-let private ORACLE_TIE_GAP = 0.5
-
-//! `ids` fed one a position from 0, each position's logits row
-def private teacher_forced(var m : Model; ids : array<int64>) : array<array<float>> {
-    m.config.seq_len = min(m.config.seq_len, 512l)
-    var s <- make_run_state(m.config)
-    var out : array<array<float>>
-    for (id, i in ids, count()) {
-        forward(m, s, id, int64(i))
-        out |> emplace(clone_to_move(s.logits))
-    }
-    delete s
-    return <- out
-}
-
-def private teacher_forced(var m : Model) : array<array<float>> {
-    var inscope ids <- [for (id in PROMPT_IDS); id]
-    return <- teacher_forced(m, ids)
-}
-
-def private argmax(v : array<float>) : int64 => parallel_argmax(v, long_length(v))
-
-//! our teacher-forced logits against the snapshot runtime's top-2 rows
-def private oracle_gate(t : T?; tag : string; lg : array<array<float>>; oracle : array<tuple<int64; float; int64; float>>) {
-    var worst = 0.0
-    var lead_miss = 0
-    for (row, o in lg, oracle) {
-        worst = max(worst, nan_wide_diff(row[o._0], o._1))
-        if (o._1 - o._3 >= ORACLE_TIE_GAP && argmax(row) != o._0) {
-            lead_miss++
-        }
-    }
-    to_log(LOG_INFO, "{tag} vs the snapshot runtime: worst top-1 logit gap {worst}, {lead_miss} lead misses\n")
-    t |> success(worst < ORACLE_LOGIT_BAR, "{tag}: the oracle's top-1 logit within {ORACLE_LOGIT_BAR} at every position (worst {worst})")
-    t |> equal(lead_miss, 0, "{tag}: every position the oracle leads by {ORACLE_TIE_GAP}+ keeps its top-1")
-}
-
-[test(description = "The Llama-3.2-1B MLX 8-bit snapshot loads NEOX-roped with the Q8_0 twin's config and mlx8 planes everywhere, its teacher-forced logits within 8 percent of the twin's range and within 0.4 of the snapshot runtime's top-1 logits")]
-def test_mlx_llama_1b_8bit(t : T?) {
-    t |> run("Llama-3.2-1B 8-bit snapshot: config = the Q8_0 twin's, mlx8 planes at every dense site, logits against both oracles") @(t : T?) {
-        let snap = hf_snapshot_dir("mlx-community/Llama-3.2-1B-Instruct-8bit")
-        let twin = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
-        if (empty(snap)) {
-            t |> skip("the 1B snapshot not present")
-            return
-        }
-        return if (!model_available(t, twin))
-        with_dasllama_jobque_() {
-            var a <- load_model_(snap, QuantMode.q8)
-            var b <- load_model_(twin, QuantMode.q8)
-            t |> success(a.config.rope_neox && !b.config.rope_neox, "the checkpoint's half-split q/k rows rope as NEOX pairs, the converter's permuted rows as adjacent ones")
-            var ca = a.config
-            ca.rope_neox = b.config.rope_neox
-            t |> equal(sprint_json(ca, false), sprint_json(b.config, false), "every other config field equals the twin's")
-            t |> equal(a.emb_fmt, KqFmt.mlx8, "the token table (tied classifier) serves its own mlx8 planes")
-            for (l in range64(a.config.n_layers)) {
-                for (f in [fmt_at(a.wq_fmt, l), fmt_at(a.wk_fmt, l), fmt_at(a.wv_fmt, l), fmt_at(a.wo_fmt, l), fmt_at(a.w1_fmt, l), fmt_at(a.w2_fmt, l), fmt_at(a.w3_fmt, l)]) {
-                    if (f != KqFmt.mlx8) {
-                        t |> failure("layer {l}: a dense plane tagged {f}, not its disk type's mlx8")
-                    }
-                }
-            }
-            t |> equal(long_length(a.qblob), 0l, "no q8 copy of any plane")
-            var inscope la <- teacher_forced(a)
-            var inscope lb <- teacher_forced(b)
-            var worst = 0.0
-            var agree = 0
-            for (ra, rb in la, lb) {
-                let rel = logits_maxdiff(ra, rb) / logits_maxabs(rb)   //! inf / inf where a side holds a NaN: a NaN, read as the worst
-                worst = max(worst, is_nan(rel) ? INFINITE_DIFF : rel)
-                agree += argmax(ra) == argmax(rb) ? 1 : 0
-            }
-            to_log(LOG_INFO, "1B vs the Q8_0 twin: worst max|d|/max|logit| {worst}, top-1 agree {agree}/20\n")
-            t |> success(worst < 0.08, "the twin's teacher-forced logits within 8% of their range (worst {worst}): two quantizers of one checkpoint")
-            t |> success(agree >= 17, "top-1 equal to the twin's at {agree} of 20 positions")
-            oracle_gate(t, "1B", la, ORACLE_1B)
-            delete a
-            delete b
-        }
-    }
-}
 
 [test(description = "The Llama-3.2-3B MLX 4-bit snapshot serves mlx4 planes on the CPU, its teacher-forced logits within 0.4 of the snapshot runtime's top-1 at every position with no lead miss, and a greedy continuation decodes to text")]
 def test_mlx_llama_3b_4bit(t : T?) {
@@ -150,12 +63,12 @@ def test_mlx_llama_3b_4bit(t : T?) {
             var ids : array<int64>
             for (id, i in PROMPT_IDS, count()) {
                 forward(m, s, id, int64(i))
-                tok = argmax(s.logits)
+                tok = argmax_of(s.logits)
             }
             for (i in range(6)) {
                 ids |> push(tok)
                 forward(m, s, tok, int64(length(PROMPT_IDS) + i))
-                tok = argmax(s.logits)
+                tok = argmax_of(s.logits)
             }
             let text = decode(m.tok, ids)
             to_log(LOG_INFO, "3B greedy continuation: '{text}'\n")

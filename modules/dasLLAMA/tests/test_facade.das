@@ -21,6 +21,7 @@ require strings
 require daslib/env_registry
 require _model_tier   // llama2c_dir
 require _facade_cells   // facade_model_cell: the model facade's cell on a loaded Qwen2.5-0.5B
+require _daslang_argv   // daslang_argv: the exe build leaves out the modules this run leaves out
 require _compares   // full_suite_only: the exe smoke's two builds run in the full suite alone
 require ../../dasLLVM/tests/_exe_test_common.das   // lto_driver_missing - the LTO driver gate the dasLLVM exe tests share
 require ../../dasLLVM/tests/_spawn_common.das      // with_child_log_info - the build announces its form at LOG_INFO
@@ -243,8 +244,8 @@ def private smoke_build_and_run(t : T?; tag : string; jit_args : array<string>; 
     let dir = unsafe(dir_r.value)
     let exe = path_join(dir, "smoke.exe")
     var bout = ""
-    var argv <- [self_daslang(), "-jit", "-exe", "-output", exe,
-                 "modules/dasLLAMA/tests/_exe_smoke_root.das"]
+    var argv <- daslang_argv(self_daslang(), ["-jit", "-exe", "-output", exe,
+        "modules/dasLLAMA/tests/_exe_smoke_root.das"])
     if (!empty(jit_args)) {
         argv |> push("--")
         argv |> push_from(jit_args)

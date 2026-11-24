@@ -2953,9 +2953,3 @@
     `records/m5.json` (metal/tuned, cpu/tuned, cpu/accel) hold for these two files were measured on the files they
     replace. Done = `gen_bench_records.das -- --workload tts` over the two files on each of the four boxes in the next
     release re-mint, each row's last board figure beside the new one in that re-mint's `PERF_LEDGER.md` entry.
-317. **Six test files still load their models apart from their models' blocks.** `tests/REVIEW.das`'s `UNFOLDED`
-    lists `test_dflash_drafter.das`, `test_embeddings.das`, `test_metal_batched_row.das`,
-    `test_metal_format_census.das`, `test_mlx_snapshot.das` and `test_mtp_gemma_drafter.das`, so the load-once check
-    prints their findings as held lines (`ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once`). Done = each file's cells on
-    a form of their model's `with_cpu_and_gpu_model` call, or an `own_load` reason naming what no form can serve, and
-    `UNFOLDED` empty.

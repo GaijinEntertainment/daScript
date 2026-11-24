@@ -46,6 +46,9 @@ def test_audio_embedder_gemma4a_arm(t : T?; e : AudioEmbedder) {
     var image_path = ""
     var foreign = ""
     var current <- dlim_current_identities()
+    // the lane the form's load took: on a box whose GPU tower serves the lane, the device flavor's image
+    let lane = tower_dev_tag(gemma4a_lane_tag(e.gemma4a.q8, e.gemma4a.gemm_f16),
+        gemma4a_dev_flavor(e.gemma4a.q8))
     dir(models_dir()) $(name) {
         // the mmproj bakes one dlim PER ARM (gemma4a audio, gemma4v vision) — select by the
         // baked family tag, or directory order hands this audio cell a vision image. The
@@ -53,8 +56,8 @@ def test_audio_embedder_gemma4a_arm(t : T?; e : AudioEmbedder) {
         if (empty(image_path) && starts_with(name, "{base_name(mm)}.") && ends_with(name, ".dlim")) {
             let cand = path_join(models_dir(), name)
             let tag = image_family_tag(cand)
-            //! of the two lanes only the one this box serves: the direct route reads under the lane the loader picked above
-            if (tag == gemma4a_lane_tag(e.gemma4a.q8, e.gemma4a.gemm_f16) && cand == image_path_for(mm, tag)) {
+            //! of the lanes only the one this box serves: the direct route reads under the lane the loader picked above
+            if (tag == lane && cand == image_path_for(mm, tag)) {
                 //! the lane's file name carries no box identity: a models directory another box shares holds that box's bake under it
                 let verdict = dlim_image_verdict(image_peek(cand), current)
                 if (verdict == "CURRENT") {
@@ -131,19 +134,20 @@ def private instruct_audio_turn(t : T?; m : Model; rows : array<float>; n : int6
     delete chat
 }
 
-//! a cell of the rows seam: `cell` on the decoder's form `m` and the carrier `e`, as the subtest `name`, where the form is
-//! the CPU load asked alone (`form.alone`)
+//! a cell of the rows seam: `cell` on the decoder's form `m` and the carrier `e`, as the subtest `name` under the
+//! CPU-prefill intent, where the form is the CPU load asked alone (`form.alone`)
 def audio_chat_cell(t : T?; name : string; var m : Model; form : ModelForm; var e : AudioEmbedder;
                     cell : function<(t : T?; var m : Model; e : AudioEmbedder) : void>) {
     return if (!form.alone)
-    tower_cell(t, name, m, e, cell)
+    with_cpu_prefill(true) {
+        tower_cell(t, name, m, e, cell)
+    }
 }
 
 // Rows land, the turn answers, a second clip appends, and the refusals panic: on the E2B Q4_K_M decoder's CPU form (the
 // planar rail, its context cut to 2048) and the mmproj's encoder minted in memory.
 [cold_path]
 def test_audio_rows_on_a_plain_chat(t : T?; var m : Model; e : AudioEmbedder) {
-    allow_cpu_prefill()
     let dim = m.config.dim
     with_dasllama_jobque() {
         var st = AudioState()

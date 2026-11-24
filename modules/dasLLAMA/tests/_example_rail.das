@@ -52,7 +52,8 @@ def public run_example(main : string; args : array<string>; var out : string&) :
     let prev_image = env_value_of("DASLLAMA_IMAGE")
     set_env_variable("DASLLAMA_IMAGE", "0")
     let root = get_das_root()
-    var argv <- [example_daslang(), "-jit", "-dasroot", root, "{root}/examples/dasLLAMA/{main}", "--", "--models", models_dir(), "--smoke"]
+    var argv <- daslang_argv(example_daslang(), ["-jit", "-dasroot", root,
+        "{root}/examples/dasLLAMA/{main}", "--", "--models", models_dir(), "--smoke"])
     argv |> push_from(args)
     var rc = 0
     with_child_log_info() {

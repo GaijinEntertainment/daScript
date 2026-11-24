@@ -29,6 +29,7 @@ require _compares
 require _gpu_tier_armed   // gpu_tier_why: the device forms skip where the tier is not armed
 require _kv_codec_cells   // codec_env_why: a codec form the environment keeps off
 require ?cuda _cuda_feed   // with_cuda_feed_served, with_cuda_counters_still: the CUDA home's feed witnesses
+require _metal_blob_twin   // blob_twin, metal_home_seat: a Metal form's load and the home it puts back
 
 //! a per-op form for each cell of `run` (`perop_next`): a cell a load, as the census counts a kernel as its command records
 //! and a later session replays it
@@ -263,6 +264,49 @@ def private perop_form_load(t : T?; path : string; ctx : int64; form : ModelForm
     return (ran = true, kv = form.kv)
 }
 
+//! the block's Metal forms of `forms`, in the list's order, one load each (`metal_form_run`), each marked as it went; on a build
+//! with no das_metal each is a skipped cell of its own and `body` never sees it (`metal_pass`)
+def private metal_forms_run(t : T?; path, file : string; ctx : int64; forms : array<ModelForm>;
+                            body : block<(var m : Model; form : ModelForm) : void>) {
+    let lacks = metal_build_why()
+    for (form, i in forms, count()) {
+        let todo = metal_pass(form, lacks)
+        continue if (todo == MetalPass.other)
+        g_account.marks[i] = FormMark.skipped
+        if (todo == MetalPass.skip) {
+            skip_cell(t, "{file}, {form_name(form)}: {lacks}")
+        } elif (metal_form_run(t, path, file, form.ctx > 0l ? form.ctx : ctx, form, body)) {
+            g_account.marks[i] = FormMark.reached
+        }
+    }
+}
+
+//! one Metal form: the home's seat read, the form's mode set, the load - the blob twin, or the served image, a skipped cell where
+//! that image is no metal-blob on this box - its context cut to `ctx`, `body` once on it, the seat put back, the model gone;
+//! false where the load gave `body` no model
+def private metal_form_run(t : T?; path, file : string; ctx : int64; form : ModelForm;
+                           body : block<(var m : Model; form : ModelForm) : void>) : bool {
+    let seat = metal_home_seat()
+    set_metal_mode(metal_form_mode(form))
+    t |> equal(get_metal_mode(), metal_form_mode(form),
+        "{file}, {form_name(form)}: the Metal mode took for the load")
+    let t0 = ref_time_ticks()
+    var m <- form.metal_image ? load_model_cached(path, QuantMode.q8) : blob_twin(t, path, ctx)
+    let served = m.metal_blob
+    if (served) {
+        m.config.seq_len = min(m.config.seq_len, ctx)
+        let t1 = ref_time_ticks()
+        invoke(body, m, form)
+        log_form_seconds(form_name(form), get_time_usec(t0) - get_time_usec(t1), get_time_usec(t1))
+    } elif (form.metal_image) {
+        skip_cell(t,
+            "{file}, {form_name(form)}: the served image is not the metal-blob flavor on this box")
+    }
+    restore_metal_home(seat)
+    delete m
+    return served
+}
+
 //! the CPU form `form` of `path` (its load mode and loader), loaded once under its backend pin (`backend_pinned`): `body` on it
 //! once a codec of `kvs`; every CPU form of the block's that is this load marked as it went (`mark_load`)
 def private cpu_form_run(t : T?; path : string; ctx : int64; form : ModelForm; kvs : array<KVDtype>;
@@ -428,6 +472,7 @@ def with_cpu_and_gpu_model(t : T?; area, file : string; ctx : int64; forms : arr
 
 //! the same where `cpu` says whether the CPU form answering the device forms loads: false for a block whose every compare reads
 //! the device alone - a carrier the CPU form would load whole for no compare
+[arch(at = "../ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once")]
 def with_cpu_and_gpu_model(t : T?; area, file : string; ctx : int64; forms : array<ModelForm>; cpu : bool;
                            body : block<(var m : Model; form : ModelForm) : void>) : bool {
     let path = path_join(models_dir(), file)
@@ -448,6 +493,7 @@ def with_cpu_and_gpu_model(t : T?; area, file : string; ctx : int64; forms : arr
             var inscope after <- dlim_names_beside(path)
             t |> equal(length(after), length(before), "the block left the lanes beside {file} as it found them: {after}")
         }
+        metal_forms_run(t, path, file, ctx, forms, body)
         cpu_forms_run(t, path, ctx, forms, cpu, kvs, body)
     }
     forms_accounted(t, file, !empty(kvs))
@@ -464,7 +510,7 @@ def private device_forms_run(t : T?; path, file : string; ctx : int64; forms : a
     var kvs : array<KVDtype>
     var lane_forms_before = 0
     for (form, i in forms, count()) {
-        continue if (!form.on_gpu)
+        continue if (!on_device_home(form))
         g_account.marks[i] = FormMark.skipped
         if (!empty(tier_why)) {
             skip_cell(t, "{file}, {form_name(form)}: {tier_why}")

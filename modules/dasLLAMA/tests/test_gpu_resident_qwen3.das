@@ -18,6 +18,7 @@ require _dflash_cells   // the block drafter's walks: lossless, the planes' tags
 require _chat_cells   // chat_qwen3_cells: the uncached CPU form's chat cells
 require _kv_codec_cpu_cells   // kv_codec_keeps_tq4_cell: the uncached CPU form's step-down control
 require _embedding_cells   // the Qwen3-Embedding file's cells on its forms
+require ?das_metal dasllama/dasllama_metal_prefill   // the prefill mirror's pin: the Metal cell's
 require dasllama/dasllama_gpu_tier   // reset_gpu_cpu_passes: the passes the by-design cells leave
 require ?vulkan dasllama/dasllama_vulkan_dflash   // nolint:STYLE030,LINT019 - the Vulkan arm registers at init
 require ?cuda dasllama/dasllama_cuda_dflash   // nolint:STYLE030,LINT019 - the CUDA arm registers at init
@@ -47,7 +48,9 @@ def private allow_cpu_prefill_intent() {
 // - Qwen3-Embedding-0.6B Q8_0 (`test_gpu_resident_qwen3_embedding`, `_embedding_cells.das`): on the driver's default form
 //   the whole-model driver serving the embeddings from the device and every region held by a live session, on a region
 //   capped at EMB_REGION_ROWS the batch windows the region bounds; on its q8, uncached and q4_0 CPU forms, on every box, the
-//   card's matrix, the batch against its singles, the lone forwards, and the device cells' CPU halves.
+//   card's matrix, the batch against its singles, the lone forwards, and the device cells' CPU halves; on its Metal form -
+//   the file's blob twin, a skipped cell on a build without das_metal - the Metal cell holds the window's forms, the
+//   split-K leg and the card's matrix, and its one-row vector meets the f32 CPU form's after the block.
 // - Qwen3-4B-Instruct-2507: the Q8_0 file's CUDA forced feed at its 2560-wide rows over 36 layers, and on every box its
 //   parity row's frozen greedy ids on the row's CPU form (`test_gpu_resident_qwen3_4b`, `--category qwen3-4b`,
 //   `../TEST_CATEGORIES.md`).
@@ -310,14 +313,13 @@ struct Qwen3EmbRows {
     cpu_mean : EmbMeanRows
     mean_ran : bool
     window_ran : bool
+    metal : EmbMetalRows
 }
 
-//! one form's cells of the Qwen3-Embedding file: on the driver's default form the resident-driver cell, then the every-region
-//! cell; on the region-capped form the window-rows cell; on the q8 CPU form, once, the lone forwards, the resident-driver
-//! cell's CPU reads and the window-rows cell's CPU half; on the uncached form the card and the batch; on the q4_0 form its lone
-//! forwards
 def private qwen3_emb_rows(t : T?; var r : Qwen3EmbRows; var m : Model; form : ModelForm) {
-    if (form.on_gpu && form.ctx == EMB_REGION_ROWS) {
+    if (form.on_metal) {
+        qwen3_emb_metal_cell(t, r.metal, m)
+    } elif (form.on_gpu && form.ctx == EMB_REGION_ROWS) {
         r.window_ran = embeddings_window_rows_cell(t, m)
         reset_gpu_cpu_passes()   //! the cell's route-off leg passes to the CPU by design
     } elif (form.on_gpu) {
@@ -327,6 +329,8 @@ def private qwen3_emb_rows(t : T?; var r : Qwen3EmbRows; var m : Model; form : M
         reset_gpu_cpu_passes()   //! the cell's host-cached sessions pass to the CPU by design
     } elif (form.quant == QuantMode.q4_0) {
         embeddings_lone_forwards_q4_0_cell(t, m)
+    } elif (form.quant == QuantMode.fp32) {
+        embeddings_f32_one_rows(m, r.metal)
     } elif (form.uncached) {
         embeddings_card_cell(t, m)
         embeddings_batch_matches_single_cell(t, m)
@@ -339,18 +343,41 @@ def private qwen3_emb_rows(t : T?; var r : Qwen3EmbRows; var m : Model; form : M
         if (r.window_ran) {
             embeddings_unserved_window_rows(t, m)
         }
+        embeddings_metal_off_cell(t, m, r.metal)
     }
 }
 
-[test(description = "Qwen3-Embedding 0.6B Q8_0 on one load a form: on the q8 load exactly the one-row text of a host batch runs `embed_forward` alone while multi-row texts share the window; loaded uncached it reads last-token pooling and an appended EOS off the file, its last-token read lands the model card's 2 x 2 cosine matrix within 0.02 while the mean read cannot separate the passages (control), and `embed_batch` gives each text its single `embed` vector at cosine above 0.9999 in one window, in 40-row split windows and under the 256-dim Matryoshka cut, in input order; loaded as q4_0 every text runs alone; each lone text lands its single vector at cosine above 0.9999 with a shifted-text control missing; the whole-model driver serves it on the device with no CPU-rail pass: the card matrix within 0.02, a batch packed in one scratch window matching its singles, and a long mean read equal to the CPU's; `embed_window_rows` is the armed driver's capped region context, so a batch past 256 rows takes the predicted count of scratch windows and matches its singles, and is EMBED_WINDOW_ROWS for an unserved model; with every device region held by a live session `embed_batch` takes host-cached sessions and no scratch window yet reads the same vectors as with a region free, and parking the streams frees every region; each form loads once")]
+let private EMB_METAL_CTX = 4096l   //! the Metal form's context: the Metal cell's windows
+
+//! the Qwen3-Embedding file's Metal cell on its Metal form's blob twin `m`, the prefill mirror pinned for it and put back
+//! (`embeddings_metal_window_rows`)
+def private qwen3_emb_metal_cell(t : T?; var r : EmbMetalRows; var m : Model) {
+    unsafe {
+        t |> run("an embedding's Metal window runs no classifier and feeds no decode mirror, a chat window does both, and the card's matrix holds (0.6B Q8_0)") @capture(& r, & m)(tt : T ?) {
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                let prior_mirror = get_metal_prefill_mirror()
+                set_metal_prefill_mirror(true)   // the chat control's mirror leg reads it
+                embeddings_metal_window_rows(tt, m, r)
+                set_metal_prefill_mirror(prior_mirror)
+            }
+        }
+    }
+}
+
+[test(description = "Qwen3-Embedding 0.6B Q8_0 on one load a form: on the q8 load exactly the one-row text of a host batch runs `embed_forward` alone while multi-row texts share the window; loaded uncached it reads last-token pooling and an appended EOS off the file, its last-token read lands the model card's 2 x 2 cosine matrix within 0.02 while the mean read cannot separate the passages (control), and `embed_batch` gives each text its single `embed` vector at cosine above 0.9999 in one window, in 40-row split windows and under the 256-dim Matryoshka cut, in input order; loaded as q4_0 every text runs alone; each lone text lands its single vector at cosine above 0.9999 with a shifted-text control missing; the whole-model driver serves it on the device with no CPU-rail pass: the card matrix within 0.02, a batch packed in one scratch window matching its singles, and a long mean read equal to the CPU's; `embed_window_rows` is the armed driver's capped region context, so a batch past 256 rows takes the predicted count of scratch windows and matches its singles, and is EMBED_WINDOW_ROWS for an unserved model; with every device region held by a live session `embed_batch` takes host-cached sessions and no scratch window yet reads the same vectors as with a region free, and parking the streams frees every region; on Metal its embed rides one prefill window with no classifier and no decode mirror (a chat forward does both), takes split-K on q8 sites, matches the card matrix within 0.02, and its one-row vector is the CPU f32 form's; each form loads once")]
 def test_gpu_resident_qwen3_embedding(t : T?) {
     return if (!family_on(t, "qwen3"))
     var r : Qwen3EmbRows
     var forms <- [device_form(host = true), device_form(host = true, ctx = EMB_REGION_ROWS, host_ctx = EMB_FILE_CTX), cpu_cells_form(),
         cpu_cells_form(uncached = true), cpu_cells_form(QuantMode.q4_0)]
+    forms |> push(metal_form(ctx = EMB_METAL_CTX))
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        forms |> push(cpu_cells_form(QuantMode.fp32))   // the Metal cell's reference
+    }
     with_cpu_and_gpu_model(t, "llm", "Qwen3-Embedding-0.6B-Q8_0.gguf", EMB_FILE_CTX, forms) $(m, form) {
         qwen3_emb_rows(t, r, m, form)
     }
+    embeddings_metal_f32_within(t, r.metal)
     if (r.mean_ran) {
         embeddings_resident_mean_within(t, r.dev_mean, r.cpu_mean)
     } elif (!empty(r.dev_mean)) {
@@ -400,10 +427,14 @@ def test_gpu_resident_qwen3_4b_kq(t : T?) {
     }
     forms |> push(discrete_drafter_form())
     forms |> push(cpu_cells_form())
+    forms |> push(metal_form(required = true, ctx = HOST_CTX))
     var ran = false
     with_cuda_mmq_winners() {
-        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-4B-Q4_K_M.gguf", GATHER_CTX, forms) $(m, form) {
-            if (form.strict_ctx) {
+        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-4B-Q4_K_M.gguf", GATHER_CTX, forms) $(var m, form) {
+            if (form.on_metal) {
+                metal_drafter_cell(t, m, "On the Metal home over the dense Qwen3-4B Q4_K_M trunk with its Q8_0 DFlash drafter, over a chat turn, the greedy walk with the drafter's pass on the CPU arm over the device's captures emits the plain greedy walk's ids token for token with drafts accepted; the device arm's lossless walk and its count against the CPU arm's are a counted skip",
+                    "", QWEN3_4B_DRAFTER_FILE, "Qwen3-4B metal", false, QWEN3_4B_DEVICE_GAP)
+            } elif (form.strict_ctx) {
                 qwen3_4b_drafter_discrete_cells(t, m)
             } elif (form.perop) {
                 perop_next(t, run, m)

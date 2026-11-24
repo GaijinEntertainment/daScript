@@ -351,6 +351,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `DASLLAMA_TEST_ARMS` | text | unset | Comma-separated filter restricting which parity arms run. |
 | `DASLLAMA_TEST_FAMILY` | text | unset | Comma-separated filter restricting which model families run. |
 | `DASLLAMA_TEST_CATEGORIES` | text | unset | Comma-separated model categories the tests run: with none named, a test opens no category's model file; with some named, it opens theirs and no other model. Set by tests/run.das --category. |
+| `DASLLAMA_DISABLE_MODULES` | text | unset | Comma-separated dynamic module folder names (dasVulkan, dasCUDA) the test children leave out: tests/run.das starts every child, and a test every child it spawns, with `--disable-module <name>` for each, so a guarded `require ?vulkan` / `require ?cuda` resolves as absent and a GPU home's run compiles only its own module. harness/pod_fleet.das sets it per home on a two-pod fleet. |
 | `DASLLAMA_GC_STRESS` | flag | off | Debug: dasllama-server runs its validated collection at every lifecycle safe point, so a pointer left to a freed value fails at the tick that left it. |
 | `DASLLAMA_LLAMA2C_DIR` | path | unset | Directory of llama2.c reference checkpoints for the forward/decode parity tests. |
 | `DASLLAMA_WHISPER_DIR` | path | unset | Directory of whisper models for the audio tests. |

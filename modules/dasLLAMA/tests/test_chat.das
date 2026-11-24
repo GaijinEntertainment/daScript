@@ -390,7 +390,7 @@ def private audio_splice_cell(t : T?; m : Model; before : int) {
 def test_chat_audio_markers(t : T?) {
     t |> run("qwen2audio audio turn is bracketed by <|audio_bos|>/<|audio_eos|>") @(t : T?) {
         let path = path_join(models_dir(), "qwen2audio-7b-q8_0.gguf")
-        if (!model_available(t, path)) {   // 7.7 GB — runs under DASLLAMA_PARITY_FULL=1
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_capped(path)

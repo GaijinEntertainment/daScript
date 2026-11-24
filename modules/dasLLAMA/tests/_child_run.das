@@ -8,6 +8,7 @@ require daslib/strings_boost
 require strings
 require daslib/env_registry   // env_value_of: the log levels a child's run is put back to
 require ../performance/box_ident.das   // probe_cpu_brand: the exe is built for this box's CPU
+require _daslang_argv public   // child_disable_flags: the modules a child leaves out
 
 // a test's child process: this binary on a root fixture of this folder, under named environment
 // settings, its stdout and stderr read whole - the instrument of every once-per-process contract
@@ -58,11 +59,19 @@ def child_cmd(root : string; envs : array<tuple<name : string; value : string>>;
 def child_cmd_at(path : string; envs : array<tuple<name : string; value : string>>; args : string = ""; jit : bool = false) : string
     => child_cmd_root("{get_das_root()}/{path}", envs, args, jit ? "-jit" : "")
 
-//! `child_cmd` for a root at the full path `root`, `host` the host flags ahead of it (`-jit`, `-module-cache <path>`)
-def child_cmd_root(root : string; envs : array<tuple<name : string; value : string>>; args : string = ""; host : string = "") : string {
-    let flags = empty(host) ? "" : " {host}"
+//! `child_cmd` for a root at the full path `root`, `host` the host flags ahead of it (`-jit`, `-module-cache <path>`); the
+//! modules `DASLLAMA_DISABLE_MODULES` names are left out, as the runner leaves them out of its children
+def child_cmd_root(root : string; envs : array<tuple<name : string; value : string>>; args : string = ""; host : string = "") : string
+    => child_cmd_root_leaving(root, envs, args, host, child_disabled_modules())
+
+//! `child_cmd_root` leaving out the modules of the comma list `disabled`, each `--disable-module` right after the binary.
+//! Non-private: the runner's tests read it
+def child_cmd_root_leaving(root : string; envs : array<tuple<name : string; value : string>>;
+                           args, host, disabled : string) : string {
+    let host_flags = empty(host) ? "" : " {host}"
     let tail = empty(args) ? "" : " -- {args}"
-    return shell_line(envs, "\"{das_exe()}\"{flags} -dasroot \"{get_das_root()}\" \"{root}\"{tail}")
+    let exe = "\"{das_exe()}\"{disable_module_flags(disabled)}"
+    return shell_line(envs, "{exe}{host_flags} -dasroot \"{get_das_root()}\" \"{root}\"{tail}")
 }
 
 //! the shell line that runs `core` - a command opening with a quoted program - under `envs`, stderr folded into stdout
@@ -88,7 +97,8 @@ let private CHILD_BUILD_SECONDS = 1800l   //! the two builds' cap: an engine com
 let private CHILD_SOURCE_DIRS = fixed_array("daslib", "dastest", "modules/dasLLAMA/dasllama", "modules/dasLLAMA/tests",
     "modules/dasLLVM/daslib", "modules/dasMetal/metal", "modules/dasVulkan/daslib", "modules/dasCUDA/daslib")
 //! the environment a build bakes into the exe: the tune and JIT settings macros read at compile time
-let private CHILD_BUILD_ENVS = fixed_array("DAS_TUNE_MANIFEST", "DAS_TUNE_FORCE", "DAS_TUNE_POLICY", "DAS_TUNE_MODE", "DAS_JIT_BASELINE")
+let private CHILD_BUILD_ENVS = fixed_array("DAS_TUNE_MANIFEST", "DAS_TUNE_FORCE", "DAS_TUNE_POLICY", "DAS_TUNE_MODE", "DAS_JIT_BASELINE",
+    "DASLLAMA_DISABLE_MODULES")
 
 //! the compiler and runtime libraries under the das root's `lib/`, sorted - the binary by what it is built of, whatever
 //! launcher names it. The folder's own `.` and `..` are no library: their times move with every file made in the tree's
@@ -222,9 +232,13 @@ def child_exe_ensure() : string {
     var exe = ChildBuild()
     var parse = ChildBuild()
     let noenv : array<string>
+    var inscope exe_argv <- daslang_argv(das_exe(), ["-dasroot", root, "-exe", "-output", path,
+        "{root}/{CHILD_ROOT}", "--", "--jit-split-modules=-1"])
+    var inscope parse_argv <- daslang_argv(das_exe(), ["-dasroot", root, "-module-cache", cache,
+        "-compile-only", entries])
     unsafe {
-        exe.proc = spawn_process([das_exe(), "-dasroot", root, "-exe", "-output", path, "{root}/{CHILD_ROOT}", "--", "--jit-split-modules=-1"], "", noenv)
-        parse.proc = spawn_process([das_exe(), "-dasroot", root, "-module-cache", cache, "-compile-only", entries], "", noenv)
+        exe.proc = spawn_process(exe_argv, "", noenv)
+        parse.proc = spawn_process(parse_argv, "", noenv)
     }
     let t0 = ref_time_ticks()
     var late = false

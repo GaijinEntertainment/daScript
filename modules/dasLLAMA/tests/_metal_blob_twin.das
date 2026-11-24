@@ -1,9 +1,13 @@
 options gen2
 options _dasllama_internal = true
 
+module _metal_blob_twin shared public
+
 require dastest/testing_boost public
 require dasllama/dasllama   // load_model_ - the engine load (a tokenizer rides it; load_gguf has none)
 require dasllama/dasllama_layout   // convert_model_to_metal_blob - the blob-flavor transform
+require dasllama/dasllama_common   // get_metal_mode / set_metal_mode: the home's mode a Metal form puts back
+require dasllama/dasllama_math   // kernel_backend_seat: the backend pin a Metal mode leaves
 require ?das_metal dasllama/dasllama_metal_common   // metal_kernel_coverage_of - the dispatch census
 require ?das_metal dasllama/dasllama_metal_decode   // the fused attention's knob
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_segment_windows, metal_prefill_stats - the segmented window's witnesses
@@ -123,6 +127,24 @@ def restore_metal_overrides(seat : MetalOverridesSeat) {
     }
     select_decode_override(seat.decode)
     select_prefill_override(seat.prefill)
+}
+
+//! the Metal home as a block's Metal form found it: the mode, the overrides and the prefill floor a mode or a cell selects, and
+//! the kernel backend with its pin - a Metal mode pins "portable", and the mode going back off leaves that pin standing
+struct MetalHomeSeat {
+    mode : MetalMode
+    overrides : MetalOverridesSeat
+    backend : KernelBackendSeat
+}
+
+def metal_home_seat() : MetalHomeSeat =>
+    MetalHomeSeat(mode = get_metal_mode(), overrides = metal_overrides_seat(), backend = kernel_backend_seat())
+
+//! the Metal home put back as `seat` recorded it: the mode first (it writes the overrides), then the overrides, then the backend
+def restore_metal_home(seat : MetalHomeSeat) {
+    set_metal_mode(seat.mode)
+    restore_metal_overrides(seat.overrides)
+    restore_kernel_backend(seat.backend)
 }
 
 //! the blob-flavor twin of a model file, its context capped: what every Metal parity and serving

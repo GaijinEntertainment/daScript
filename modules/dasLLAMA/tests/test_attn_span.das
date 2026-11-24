@@ -422,6 +422,8 @@ def private test_attn_span_guards(tt : T?; var tr : Model) {   // nolint:STYLE03
         delete s7
         delete s8
         select_prefill_override(prior_override)
+        unregister_prefill_override("test-split")
+        unregister_prefill_override("test-fused")
         // the mrope refusals: inverted span bounds, and a config with no rope sections
         var tripped6 = false
         var s9 <- make_run_state(tr.config)

@@ -727,6 +727,16 @@ def gguf_file_str(path, key : string) : string {
     return read ? v : ""
 }
 
+//! The integer key `key` of the GGUF at `path`, any width widened, read off its header alone: `dflt` where the file
+//! carries no such key, the key is not an integer, or ``gguf_header_read`` cannot read it.
+def gguf_file_int(path, key : string; dflt : int64) : int64 {
+    var v = dflt
+    let read = gguf_header_read(path) $(m; bytes) {
+        v = gguf_int_or(m, bytes, key, dflt)
+    }
+    return read ? v : dflt
+}
+
 //! `general.architecture` of the GGUF at `path` ("" when ``gguf_header_read`` cannot read it)
 def gguf_file_arch(path : string) : string => gguf_file_str(path, "general.architecture")
 

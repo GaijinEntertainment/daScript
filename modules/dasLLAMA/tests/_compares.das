@@ -20,6 +20,7 @@ require dasllama/dasllama_convert   // cvt_f32_to_f16_sat_array: check_halves' e
 require daslib/fio
 require daslib/command_line
 require dasllama/dasllama_env   // parity_full_mode: the full suite's flag
+require _daslang_argv   // daslang_argv: a spawned compile leaves out the modules its parent leaves out
 
 let POISON = 7.5   //! the slots a kernel must never read or write: a large finite value, so a stray read lands in the sum
 let SLAB_GAP = 3   //! the poisoned slots `put_run` leaves before a run of a slab plane
@@ -714,11 +715,28 @@ def spawn_compile_only(src, tag : string; timeout : float) : tuple<rc : int; out
 //! its root file's, by path, so the path is the one the record was written from
 def spawn_compile_file(path : string; timeout : float; cache : string) : tuple<rc : int; out : string> {
     var out : string
-    //! this run's root, not the binary's own: under `-dasroot` the fixture compiles the tree the test runs in
-    let rc = run_and_capture(empty(cache) ? [get_das_exe(), "-dasroot", get_das_root(), "-compile-only", path]
-        : [get_das_exe(), "-dasroot", get_das_root(), "-module-cache", cache, "-compile-only", path], out, timeout)
+    var inscope argv <- compile_argv(path, cache)
+    let rc = run_and_capture(argv, out, timeout)
     return (rc = rc, out = out)
 }
+
+//! the argv of `spawn_compile_file`'s child: this binary leaving out the modules of the comma list `disabled` (the run's
+//! DASLLAMA_DISABLE_MODULES - the module set the program's compile record was written under) on this run's root (under
+//! `-dasroot` the fixture compiles the tree the test runs in), against the record `cache` where one is named.
+//! Non-private: test_compares.das reads it
+def compile_argv_leaving(path, cache, disabled : string) : array<string> {
+    var rest <- ["-dasroot", get_das_root()]
+    if (!empty(cache)) {
+        rest |> push_from(["-module-cache", cache])
+    }
+    rest |> push_from(["-compile-only", path])
+    return <- daslang_argv_leaving(get_das_exe(), disabled, rest)
+}
+
+//! the argv `spawn_compile_file` starts: `compile_argv_leaving` the modules the run's
+//! DASLLAMA_DISABLE_MODULES names. Non-private: the test child's `disable-flags` verb prints it
+def compile_argv(path, cache : string) : array<string>
+    => <- compile_argv_leaving(path, cache, child_disabled_modules())
 
 //! the signed bytes of the packed quant word `g` outside +-tol of `w`'s (act chains carry transcendental ulp noise)
 def qword_off(g, w : uint; tol : int) : int {

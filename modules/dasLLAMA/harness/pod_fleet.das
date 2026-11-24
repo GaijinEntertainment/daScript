@@ -15,7 +15,8 @@ options _dasllama_internal = true
 // and back once its runs end, the files not modified for 14 days
 // pruned; a home's first run starts cold.
 // The first pod runs the whole run.das command on the Vulkan home,
-// the second the same on the CUDA home, the command kept to the CUDA
+// on a two-pod fleet less the CUDA-only files (`--exclude`
+// CUDA_ONLY_EXCLUDE), the second the same on the CUDA home, the command kept to the CUDA
 // pass's files (`--only` CUDA_PASS_ONLY), each thirty files a child
 // unless the caller's `--args` name a `--batch`. The model-free suite runs
 // once a fleet: on the CUDA home's pod, or on a one-pod fleet's lone
@@ -28,7 +29,7 @@ options _dasllama_internal = true
 //
 //   daslang modules/dasLLAMA/harness/pod_fleet.das -- up
 //   daslang modules/dasLLAMA/harness/pod_fleet.das -- run  # per PR
-//   daslang modules/dasLLAMA/harness/pod_fleet.das -- run --full               # an arc's final run: the large tier too
+//   daslang modules/dasLLAMA/harness/pod_fleet.das -- run --full               # an arc's final run: no size tier for files no category holds
 //   daslang modules/dasLLAMA/harness/pod_fleet.das -- run --args "--suite model-free" --env "DASLLAMA_GPU=1"
 //   daslang modules/dasLLAMA/harness/pod_fleet.das -- status
 //   daslang modules/dasLLAMA/harness/pod_fleet.das -- times                    # where the last run's test time went: the files and the cells
@@ -41,7 +42,8 @@ require daslib/strings_boost
 require daslib/strings_convert
 require strings
 require dasllama/dasllama_env
-require ../tests/_model_categories.das   // CUDA_PASS_ONLY: the CUDA home's pass
+require ../tests/_model_categories.das   // CUDA_PASS_ONLY, CUDA_ONLY_EXCLUDE: what each home's run keeps
+require ../tests/_daslang_argv.das   // disable_module_flags: the prewarm's flags for the modules a home leaves out
 require ../../../utils/common/text_lines.das   // non_empty_lines: a remote read's own line
 require math   // min: the times report's top cut
 
@@ -70,7 +72,7 @@ struct FleetArgs {
     key : string = "~/.ssh/runpod"
     @clarg_doc = "run: the children's environment - KEY=VALUE tokens separated by spaces; the models directory is the pod's own folder of links to the volume's models, each model the run opens copied in place of its link, the whisper packs sit in that folder and the ASR clips in its asr_corpus subfolder, the children's scratch is on the pod's own disk (the run's TMPDIR is the volume's, which reads a fresh file back slower than the pod's own disk), the image rail is off (DASLLAMA_IMAGE=0), allocations take no huge-page hint (DAS_NO_HUGEPAGE_HINT=1: a pod's host stalls on them) and so is the large tier off; an image suite's run passes its own --env with the rail on"
     env : string = "DASLLAMA_MODELS_DIR=/root/models DASLLAMA_WHISPER_DIR=/root/models DASLLAMA_CORPUS_DIR=/root/models/asr_corpus DASLLAMA_SCRATCH_DIR=/root/scratch DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DAS_NO_HUGEPAGE_HINT=1 DASLLAMA_ALLOW_UNTUNED=1"
-    @clarg_doc = "run: the full suite - the children also take DASLLAMA_PARITY_FULL=1, so the models past the size tier run and no test wall stands; an arc's final run"
+    @clarg_doc = "run: the full suite - the children also take DASLLAMA_PARITY_FULL=1, which lifts the size tier for the files no category holds and every test wall; a model past the tier is a category's and runs only under run.das --category; an arc's final run"
     full : bool
     @clarg_doc = "run: the run.das arguments, no --only; the CUDA pod adds the CUDA pass's, both pods `--batch 30` where they name no --batch"
     args : string = "--changed --base origin/master"
@@ -382,6 +384,22 @@ def batched_args(args : string) : string {
     return "{args} --batch {FLEET_BATCH}"
 }
 
+//! the run.das arguments `args` with the `--exclude` tokens `tokens` added: one `--exclude`, the tokens comma-joined to
+//! the caller's where `args` carry one. Non-private: the pod-fleet tests read it
+def excluded_args(args, tokens : string) : string {
+    var inscope words <- split(args, " ")
+    for (word, at in words, count()) {
+        if (word == "--exclude" && at + 1 < length(words)) {
+            words[at + 1] = "{words[at + 1]},{tokens}"
+            return join(words, " ")
+        } elif (word |> starts_with("--exclude=")) {
+            words[at] = "{word},{tokens}"
+            return join(words, " ")
+        }
+    }
+    return "{args} --exclude {tokens}"
+}
+
 //! the runner's `-module-cache` record under the tree's cache: an explicit path, keyed by nothing
 let UNKEYED_RECORD = "module_cache/dastest.dascache"
 
@@ -412,9 +430,22 @@ def cache_out_command(home : string) : string {
         + " && echo \"CACHE-OUT $(du -sh {at} | cut -f1)\" || echo \"CACHE-OUT failed: exit $?\"")
 }
 
+//! the dynamic modules `home`'s run leaves out (DASLLAMA_DISABLE_MODULES): the value the caller's `env` sets, else on a
+//! two-pod fleet (`paired`) the other home's module - dasVulkan on the CUDA home, dasCUDA on the Vulkan home - and none
+//! on a lone pod. Non-private: the pod-fleet tests read it
+def home_disabled_modules(env, home : string; paired : bool) : string {
+    for (word in split(env, " ")) {
+        let key = "DASLLAMA_DISABLE_MODULES="
+        return slice(word, length(key)) if (word |> starts_with(key))
+    }
+    return paired ? (home == "cuda" ? "dasVulkan" : "dasCUDA") : ""
+}
+
 //! the remote command that starts the run on `home`, the CUDA home's
 //! run of the given command under DASLLAMA_CUDA=1 and kept to its
-//! pass's files (`--only` CUDA_PASS_ONLY), on both homes FLEET_BATCH
+//! pass's files (`--only` CUDA_PASS_ONLY), a two-pod fleet's Vulkan
+//! home's leaving out the CUDA-only files (`--exclude`
+//! CUDA_ONLY_EXCLUDE, its model-free slice too), on both homes FLEET_BATCH
 //! files a child (`batched_args`): the children's logs in the
 //! home's folder of the run on the volume (TMPDIR), the runner's own
 //! log `<home>.log` beside it, RUN-EXIT=<rc> as its last line. First
@@ -426,17 +457,21 @@ def cache_out_command(home : string) : string {
 //! the background, its log and markers in the home's `copy/` folder;
 //! then the CUDA kernel prewarm (`cuda_prewarm.das`, its PREWARM line
 //! in the log) fills the tree's cubin cache, which the children read,
-//! so no test pays a fresh cache's compile inside its wall - on both
-//! homes, as a build with the CUDA module arms the card under either;
-//! where `model_free` holds (`home_plan`'s one home a fleet) the
-//! model-free suite runs next while the copy runs, then the given
+//! so no test pays a fresh cache's compile inside its wall - on every
+//! home whose run keeps the CUDA module (`PREWARM none` where it does
+//! not); where `model_free` holds (`home_plan`'s one home a fleet) the
+//! model-free suite runs next while the copy runs - on a two-pod
+//! fleet's Vulkan home its Vulkan files (`--only` VULKAN_FREE_ONLY),
+//! which the CUDA home runs without their module -, then the given
 //! command, both under `--await-models`: a child starts once its
 //! models are copies on the pod's disk. The model-free suite runs
 //! without the CUDA ask - it is the per-PR gate a bare box runs, and
 //! under the ask its device files would run the Vulkan home's tests on
 //! the CUDA home - and without the stop file, whose stop is the given
-//! command's wall; the other home's log reads `MODEL-FREE-EXIT=none
-//! (the cuda home runs it)`, its RUN-EXIT not reddened by the absent run. RUN-EXIT is red where either run
+//! command's wall. On a two-pod fleet each home leaves out the other
+//! home's dynamic module (`home_disabled_modules`, the environment's
+//! DASLLAMA_DISABLE_MODULES, which the caller's `--env` overrides): its
+//! children and its prewarm compile only their own GPU module. RUN-EXIT is red where either run
 //! is, the copy failed or the prewarm did (PREWARM-EXIT, which stops
 //! no suite: a kernel left out compiles at its load). The runner reaps the images its children
 //! mint where the environment names the pod's own models directory
@@ -454,6 +489,10 @@ def cache_out_command(home : string) : string {
 //! a failed copy does not redden. Non-private: the pod-fleet tests
 //! read it
 def run_command(cfg : FleetArgs; run, home : string; model_free : bool) : string {
+    let paired = home == "cuda" || !model_free
+    let disabled = home_disabled_modules(cfg.env, home, paired)
+    let disable_env = empty(disabled) ? "" : " DASLLAMA_DISABLE_MODULES={disabled}"
+    let prewarm_flags = disable_module_flags(disabled)
     let log = "{FLEET_LOGS}/{run}/{home}.log"
     let tmp = "{FLEET_LOGS}/{run}/{home}"
     let state = "{tmp}/copy"
@@ -462,21 +501,24 @@ def run_command(cfg : FleetArgs; run, home : string; model_free : bool) : string
     let only = home == "cuda" ? " --only {CUDA_PASS_ONLY}" : ""
     let full = cfg.full ? " DASLLAMA_PARITY_FULL=1" : ""
     let runner = "./bin/daslang -jit -module-cache .cache/daslang/module_cache/dastest.dascache {RUNNER}"
-    let given = batched_args("{cfg.args}{only}")
+    let paired_vulkan = paired && home == "vulkan"   //! leaves out the CUDA-only files, whose module it leaves out
+    let batched = batched_args("{cfg.args}{only}")
+    let given = paired_vulkan ? excluded_args(batched, CUDA_ONLY_EXCLUDE) : batched
     let given_is_it = runs_model_free(cfg.args)
     let skip = (split(cfg.args, " ") |> has_value("--rerun")) ? " --rerun" : ""   //! the caller's `--rerun` is the fleet's model-free suite's too
-    let mf_run = (given_is_it || !model_free ? " mf=0;"
-        : " {runner} --suite model-free{skip} --await-models {state}; mf=$?;")
-    let mf_exit = (given_is_it || model_free ? "echo MODEL-FREE-EXIT=$\{mf:-none\}"
-        : "echo \"MODEL-FREE-EXIT=none (the cuda home runs it)\"")
+    let paired_vulkan_only = (model_free ? ""   //! the paired Vulkan home's slice
+        : " --only {VULKAN_FREE_ONLY} --exclude {CUDA_ONLY_EXCLUDE}")
+    let mf_run = (given_is_it ? " mf=0;"
+        : " {runner} --suite model-free{paired_vulkan_only}{skip} --await-models {state}; mf=$?;")
+    let mf_exit = "echo MODEL-FREE-EXIT=$\{mf:-none\}"
     let inner = ("cd {POD_TREE} && export LD_LIBRARY_PATH={POD_TREE}/lib TMPDIR={tmp}"
-        + " {cfg.env}{full}"
+        + "{disable_env} {cfg.env}{full}"
         + " && \{ {cache_in_command(home)}; \}"
         + " && (sh {MEM_TRACK} {tmp}/mem_peak.txt {POD_MODELS} & echo $! > {tmp}/mem_track.pid)"
         + " && mkdir -p {state}"
         + " && \{ {cuda}./bin/daslang -jit {RUNNER} {given} --list-models > {state}/models.txt || echo \"the model list: exit $?\" > {state}/failed; \}"
         + " && \{ [ -f {state}/failed ] || ({copy_command(state)}) > {state}/copy.log 2>&1 & cp=$!; \}"
-        + " && \{ ./bin/daslang -jit {PREWARM}; pw=$?; \}"
+        + " && \{ ./bin/daslang{prewarm_flags} -jit {PREWARM}; pw=$?; \}"
         + " && \{{mf_run}"
         + " {cuda}{runner} {given}{reap} --await-models {state} --stop-file {FLEET_LOGS}/{run}/STOP; rc=$?; \};"
         + " rc=$\{rc:-$?\}; kill $cp 2>/dev/null; kill $(cat {tmp}/mem_track.pid);"

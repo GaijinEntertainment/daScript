@@ -34,8 +34,9 @@ fire it and are ruled acceptable, each with its reason.
   picks by the voices' declared languages - and they run under the suite child's identity - on the tuned arm the box's
   own, with no policy override - so the image they mint is the one the image suite's `kitten` arm and the serving rig read.
 - **The Metal MTP rails** - the fixtures of `tests/test_metal_mtp_parity.das` that load their served twin through
-  `load_model_cached`, and every served arm of `tests/test_mtp_gemma_drafter.das` on the Metal home, each loading its
-  target through `gdraft_target` (the Q4_K_M target and, for `mtp-gdraft-iq3`, the UD-IQ3_XXS one) - mint the target's
+  `load_model_cached`, and the Metal form of each 26B trunk's block in `tests/test_mtp_gemma_drafter.das`
+  (`metal_form(image = true)`: the Q4_K_M target for the served arms and the regular DFlash drafter's Metal arm, the
+  UD-IQ3_XXS one for `mtp-gdraft-iq3`), loaded once a block - mint the target's
   metal-blob `.dlim`. The reason: the metal-blob flavor is what the Metal MTP rail and the drafter's attach serve. They pin
   no lane, and `--no-tune` runs them with `DASLLAMA_IMAGE=0`, so the image they mint is the box's own.
 - **The translation facade cells** - `test_nmt_llm_translator`, `test_nmt_chat_translator` and

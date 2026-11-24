@@ -78,9 +78,10 @@ def mint_steps(source_present, imatrix_present : bool) : MintSteps {
 }
 
 //! A format-ladder row (the models dir's fmt-ladder/): `stem`'s f16 row with every plane in `fmt`, its token table and
-//! output in `token_type` (`fmt`'s own by default)
-def private ladder_row(stem, fmt : string; token_type : string = "") : ModelSpec {
-    var row = ModelSpec(file = "fmt-ladder/{stem}-{fmt}-pure-local.gguf",
+//! output in `token_type` (`fmt`'s own where ""), published in the format repo's `stem` folder at `bytes` and `sha256`
+def private ladder_row(stem, fmt, token_type : string; bytes : int64; sha256 : string) : ModelSpec {
+    var row = ModelSpec(file = "fmt-ladder/{stem}-{fmt}-pure-local.gguf", bytes = bytes, sha256 = sha256,
+        url = "{FORMATS_HF}/{stem}/{stem}-{fmt}-pure-local.gguf",
         quantize = QuantizeRecipe(source = "{stem}-f16.gguf", imatrix = "fmt-ladder/{stem}.imatrix", fmt = fmt,
             token_type = empty(token_type) ? to_lower(fmt) : token_type))
     let steps = quantize_commands(row.quantize, row.file, "", "calib.txt", "llama-imatrix", "llama-quantize")
@@ -438,11 +439,18 @@ let GIGAAM_RECIPE = "fetched: cstr/gigaam-v3-GGUF, converted by CrispASR's model
 let GIGAAM_Q4K_RECIPE = "fetched: cstr/gigaam-v3-GGUF's q4_k file, CrispASR's crispasr-quantize over the f16 carrier (the attention and FF GEMMs Q4_K, the conv pointwise GEMMs Q8_0, the rest as the f16 file); serves on the kq lane as its own planes; THIRD_PARTY_NOTICES.md (module root) carries the attribution"
 //! the Parakeet-TDT v3 GGUF set's pinned revision and recipe: the files the GGUF route and the kq lane's cells load
 let PARAKEET_GGUF_AT = "{HF}/handy-computer/parakeet-tdt-0.6b-v3-gguf/resolve/d8d8c32cb2017c57e5307767343e97870f8a7f53"
+let PARAKEET_BIN_AT = "{HF}/ggml-org/parakeet-GGUF/resolve/35156454d1a39de06863303dd209fd2bed6ee079"
+let WHISPER_BIN_AT = "{HF}/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1"
+let GIGAAM_AT = "{HF}/cstr/gigaam-v3-GGUF/resolve/5df03d88f87f66ab6afc17c615370d20cda93669"
+//! pinned: the repo's `main` holds another Q8_0 file and no bf16 mmproj
+let QWEN3_ASR_AT = "{HF}/ggml-org/Qwen3-ASR-0.6B-GGUF/resolve/928ab958557df9aa2ef1c93e0e83c7ad0933fae2"
+let QWEN3_OMNI_AT = "{HF}/ggml-org/Qwen3-Omni-30B-A3B-Instruct-GGUF/resolve/6e35a28f4a19b18730f8949b0c579c6429649ab8"
 let PARAKEET_GGUF_RECIPE = "fetched: handy-computer/parakeet-tdt-0.6b-v3-gguf, the transcribe.cpp project's conversion of nvidia/parakeet-tdt-0.6b-v3 (the attention and FF GEMMs K-quant in the Q4_K_M file, the attention outputs Q8_0, the conv pointwise GEMMs f16); the quantized file serves on the kq lane - its K-quant and Q8_0 tensors as its own planes, its f16 GEMMs quantized to Q8_0; THIRD_PARTY_NOTICES.md (module root) carries the attribution"
 let CANARY_ENC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv; encoder is a repack - sha canonical everywhere)"
 let CANARY_DEC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv), then llama-quantize Q8_0 (a Q8_0 disk embedding lets the tied classifier serve cls_q8 on the Metal rail); bytes are per-arch (fp16 LoRA merge) - gate via asr_bench --text over jfk/jfk3/gb1 vs benchmarks/asr/canary_transcripts.expected"
+let CANARY_DEC_F16_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv) --decoder-outtype f16 - the decoder the Q8_0 quantize reads (fetch_models --convert writes it on the way)"
 let TTS_HF = "{HF}/borisbat/dasllama-tts/resolve/a62130a44d6f8fef8a5113825c5f15b01e1c8f80"   //! the published set, commit-pinned
-let FORMATS_HF = "{HF}/borisbat/dasllama-formats/resolve/eff177a6d0456c5d269672ccc80c68a0a4a7b122"   //! the format matrix, commit-pinned
+let FORMATS_HF = "{HF}/borisbat/dasllama-formats/resolve/49d44cd688b8f0aea4b075c1923ebb713e549e52"   //! the format matrix, commit-pinned
 let TTS_KITTEN_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kitten.py over KittenML/kitten-tts-nano-0.8 @ 7a1db645b1f3ab9420761d87428e042b9cec3f26 and kitten-tts-mini-0.8 @ c02725660cea441db4c383af69f1f26f5cd00947 (the ONNX weights into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 let TTS_KOKORO_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kokoro.py at 807f0164c3 (a later converter also writes kokoro.voice_langs; the pinned file carries none, its voices named in the pipeline's shape) over hexgrad/Kokoro-82M @ f3ff3571791e39611d31c381e3a41a3af07b4987 (kokoro-v1_0.pth + the voice packs into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 let TTS_KOKORO_RU_RECIPE = "convert: harness/convert_kokoro.py --checkpoint <pth> --config config.json --voices <dir of .bin packs> --name <stem> --lang ru --source 'zaakirio/kokoro-ru @ d649c57b239b18c4c384378127cbf01dba039bc1' (kokoro-ru-v2-base.pth with sveta and masha into kokoro-ru.gguf, kokoro-ru-v2-dima.pth with dima into kokoro-ru-dima.gguf, f32); THIRD_PARTY_NOTICES.md carries the attribution"
@@ -552,22 +560,37 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "Qwen3-Embedding-0.6B-f16.gguf",
             url = "{HF}/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/370f27d7550e0def9b39c1f16d3fbaa13aa67728/Qwen3-Embedding-0.6B-f16.gguf",
             bytes = 1197629632l, sha256 = "421a27e58d165478cc7acb984a688c2aa41404968b0203e7cd743ece44c54340"),
-        ladder_row("Qwen3-Embedding-0.6B", "Q4_0"),
-        ladder_row("Qwen3-Embedding-0.6B", "Q5_1"),
-        ladder_row("Qwen3-Embedding-0.6B", "Q2_K"),
-        ladder_row("Qwen3-Embedding-0.6B", "Q3_K"),
-        ladder_row("Qwen3-Embedding-0.6B", "Q4_K"),
-        ladder_row("Qwen3-Embedding-0.6B", "Q5_K"),
-        ladder_row("Qwen3-Embedding-0.6B", "Q6_K"),
-        ladder_row("Qwen3-Embedding-0.6B", "IQ4_NL"),
-        ladder_row("Qwen3-Embedding-0.6B", "IQ4_XS"),
-        ladder_row("Qwen3-Embedding-0.6B", "IQ3_S"),
-        ladder_row("Qwen3-Embedding-0.6B", "IQ3_XXS"),
-        ladder_row("Qwen3-Embedding-0.6B", "IQ2_S"),
+        ladder_row("Qwen3-Embedding-0.6B", "Q4_0", "", 341295424l,
+            "9e9db98ae53e0d4ebb6e4cea19666d0212271c79c978fa52ba723775411163e7"),
+        ladder_row("Qwen3-Embedding-0.6B", "Q5_1", "", 452991232l,
+            "debc27650ea6907234047ff19878e6481b1e23e9bbaab98fee1f5558f284dd49"),
+        ladder_row("Qwen3-Embedding-0.6B", "Q2_K", "", 201675680l,
+            "1ce90201255f93fdf0adbbbbc82cc24b51352a38179939c0e995a5f8f1545323"),
+        ladder_row("Qwen3-Embedding-0.6B", "Q3_K", "", 262177568l,
+            "e8524928a43c588197a53f4bfefadc168596253fa81d4498bd8f5b534d78a195"),
+        ladder_row("Qwen3-Embedding-0.6B", "Q4_K", "", 341295424l,
+            "99695d8990ff0e39f69d2ddf828d828314972fb00d6c72eecaf9303c73a36f29"),
+        ladder_row("Qwen3-Embedding-0.6B", "Q5_K", "", 415759296l,
+            "8d50d061ead32de029af0332d0cdaf93c15c0692e7a25bd8c5d53b20f42ad4b8"),
+        ladder_row("Qwen3-Embedding-0.6B", "Q6_K", "", 494877184l,
+            "26abdc7d3f5d218229be48d23e9a79e030e66b486d7f657f4d4edf1991d4f0de"),
+        ladder_row("Qwen3-Embedding-0.6B", "IQ4_NL", "", 341295424l,
+            "c682f108d9b5c88423a378ed46fa5f2e568861d9f93fbc230e8c9860855224c2"),
+        ladder_row("Qwen3-Embedding-0.6B", "IQ4_XS", "", 322679456l,
+            "c415430f6c44b851bbfc51783defb81b405bef9738fccd0c15a28ddd072ca08f"),
+        ladder_row("Qwen3-Embedding-0.6B", "IQ3_S", "", 262177568l,
+            "4a7f72783ee6db6122a9936c73e799c00805fd17484e8f418404b79e9e1e153a"),
+        ladder_row("Qwen3-Embedding-0.6B", "IQ3_XXS", "", 234253632l,
+            "60aed26b44e4087b9a7466781934bc1b3949e7a51223fc383a8c8045a5c3e0b7"),
+        ladder_row("Qwen3-Embedding-0.6B", "IQ2_S", "", 183259136l,
+            "ba9f0c683cb8b450c45eb05fcaf35064aaf55a7aeb88bb9ecfaa31366a3eaae0"),
         // the IQ2 token tables stay q4_k: the imatrix covers GEMM inputs only, and these types refuse a plane without one
-        ladder_row("Qwen3-Embedding-0.6B", "IQ2_XS", "q4_k"),
-        ladder_row("Qwen3-Embedding-0.6B", "IQ2_XXS", "q4_k"),
-        ladder_row("Qwen3-Embedding-0.6B", "BF16"),
+        ladder_row("Qwen3-Embedding-0.6B", "IQ2_XS", "q4_k", 220872992l,
+            "0d54d55b376f94fdf3359cb082c540a3d0948c2475b3f9b1b4add905e9b5a9fa"),
+        ladder_row("Qwen3-Embedding-0.6B", "IQ2_XXS", "q4_k", 207110432l,
+            "37ae210b403dc0ce048455615457cc27a8610fb33be35bedcba1dfb76a6af1e5"),
+        ladder_row("Qwen3-Embedding-0.6B", "BF16", "", 1197629952l,
+            "c4ddd022bcfe01d530adfe388ae691943169257da8e7251c1e155c2cb88d9c26"),
         // the K-quant twin of the hybrid for the resident driver's native-plane cells
         // (tests/test_gpu_resident_hybrid.das): qkv q6_K, z q4_K, beta/alpha q4_K, the deltanet
         // out plane q4_K - the step leaves the o row f32 for the superblock out plane's requant
@@ -753,7 +776,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // MatFormer sub-model); dense, so the full 40 hold
             parity <- ev_gemma4_dense()),
         // the resident gates' large-tier carriers (tests/test_gpu_resident_gemma4_dense / _moe): provenance rows,
-        // not board rows - resolve/main floats, so the bytes and sha256 pin the file
+        // not board rows; their resolve/main urls float, the bytes and sha256 refuse a moved file (UNPINNED_MAIN)
         ModelSpec(file = "gemma-4-12B-it-Q8_0.gguf",
             url = "{HF}/ggml-org/gemma-4-12B-it-GGUF/resolve/main/gemma-4-12B-it-Q8_0.gguf",
             bytes = 12669646976l, sha256 = "abfc3044b93795f6a446fc1a04468ac2d5fc5e9c92e237f09a5b3384c5a433e4",
@@ -833,8 +856,39 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
                 ProvEntry(name = "mmproj-Qwen2.5-Omni-3B-f16.gguf", root = "llm",
                     url = "{HF}/ggml-org/Qwen2.5-Omni-3B-GGUF/resolve/75f1b73b657a50f5092502799457ccb4a4a1f9df/mmproj-Qwen2.5-Omni-3B-f16.gguf",
                     bytes = 2623983328l, sha256 = "f6d9276e9fa4f060c7abdbe886786cf31a8911b62770f8a54b7581b7b99fa27e")]),
+        // the audio area's standalone projectors: each loads alone as a tower, as the decoder rows among them load alone
+        ModelSpec(file = "mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf",
+            url = "{HF}/ggml-org/ultravox-v0_5-llama-3_2-1b-GGUF/resolve/5390c7c41cbd6f261f7f205fc0c5ae61bbdca650/mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf",
+            bytes = 1371123616l, sha256 = "b34dde1835752949d6b960528269af93c92fec91c61ea0534fcc73f96c1ed8b2"),
+        ModelSpec(file = "mmproj-Voxtral-Mini-3B-2507-Q8_0.gguf",
+            url = "{HF}/ggml-org/Voxtral-Mini-3B-2507-GGUF/resolve/20616573013f28229fff61de74359d3eeff61f6a/mmproj-Voxtral-Mini-3B-2507-Q8_0.gguf",
+            bytes = 715714080l, sha256 = "4f24c4ef3ce929d02ed9d1cfb050ae9a7365f057c0ddec0d489580982ebe0d02"),
+        ModelSpec(file = "qwen2audio-mmproj-f32.gguf",
+            url = "{FORMATS_HF}/Qwen2-Audio-7B-Instruct/qwen2audio-mmproj-f32.gguf", bytes = 2558078592l,
+            sha256 = "14a72759f99945ac1d445717ca47879c80ac8ee9553c3d437259a945fb8a0ace",
+            recipe = "convert: llama.cpp's convert_hf_to_gguf.py --mmproj --outtype f32 over Qwen/Qwen2-Audio-7B-Instruct (snapshot 0a095220c30b7b31434169c3086508ef3ea5bf0a); bytes are per-converter"),
+        ModelSpec(file = "voxtral-mini-mmproj-f32.gguf",
+            url = "{FORMATS_HF}/Voxtral-Mini-3B-2507/voxtral-mini-mmproj-f32.gguf", bytes = 2637754016l,
+            sha256 = "99fcb0c514e622b664eda06e41802f3ab03066b992faa04da877c83b79945815",
+            recipe = "convert: llama.cpp's convert_hf_to_gguf.py --mmproj --outtype f32 over mistralai/Voxtral-Mini-3B-2507 (snapshot 3060fe34b35ba5d44202ce9ff3c097642914f8f3), with mistral-common and the converter's missing-return fixed locally"),
+        ModelSpec(file = "voxtral-mini-3b-q8_0.gguf",
+            url = "{FORMATS_HF}/Voxtral-Mini-3B-2507/voxtral-mini-3b-q8_0.gguf", bytes = 4273970624l,
+            sha256 = "84857e11dc85b985be1e9951546f0622b869ce5a7613c04ae5abf9be5ef961f4",
+            recipe = "convert: llama.cpp's convert_hf_to_gguf.py over mistralai/Voxtral-Mini-3B-2507 (mistral-common, the same converter fix), then Q8_0 - the decoder the chat tests' audio-marker and inline-span cells and the image suite's 64-bit-plane round trip load alone"),
+        ModelSpec(file = "qwen2audio-7b-q8_0.gguf",
+            url = "{FORMATS_HF}/Qwen2-Audio-7B-Instruct/qwen2audio-7b-q8_0.gguf", bytes = 8247536480l,
+            sha256 = "c40d2c38d648d52f710cbc65b17aafcfeb81754d9de50c2378e94166059ef64e",
+            recipe = "convert: llama.cpp's convert_hf_to_gguf.py over Qwen/Qwen2-Audio-7B-Instruct (snapshot 0a095220c30b7b31434169c3086508ef3ea5bf0a) to F16, then llama-quantize Q8_0 - the decoder the chat tests' audio-marker cell loads alone"),
+        ModelSpec(file = "mmproj-omni-3b-f32.gguf",
+            url = "{FORMATS_HF}/Qwen2.5-Omni-3B/mmproj-omni-3b-f32.gguf", bytes = 5222352608l,
+            sha256 = "c5f3ec34eaa63af2a8e4bcbe3e1a01c87a04c81e874b89d6b78f995b45a41ec9",
+            recipe = "re-encode: mmproj-Qwen2.5-Omni-3B-f16.gguf (ggml-org/Qwen2.5-Omni-3B-GGUF at 75f1b73b657a50f5092502799457ccb4a4a1f9df) widened f16 to f32"),
+        ModelSpec(file = "mmproj-ultravox-1b-f32.gguf",
+            url = "{FORMATS_HF}/ultravox-v0_5-llama-3_2-1b/mmproj-ultravox-1b-f32.gguf", bytes = 2721689504l,
+            sha256 = "c0ea3a5a1d259021476f15bb65e0f258f979fb106b95fa8814fbe6d4029bdb19",
+            recipe = "re-encode: mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf (ggml-org at 5390c7c41cbd6f261f7f205fc0c5ae61bbdca650) widened f16 to f32"),
         // parity-less provenance carrier: the gemma3 vision 12B pair (the same SigLIP tower at
-        // projection 3840; test_vision_chat's PARITY_FULL leg is its coverage)
+        // projection 3840; test_vision_chat's gemma3-12b category leg is its coverage)
         ModelSpec(file = "gemma-3-12b-it-Q4_K_M.gguf",
             url = "{HF}/ggml-org/gemma-3-12b-it-GGUF/resolve/main/gemma-3-12b-it-Q4_K_M.gguf",
             bytes = 7300574976l, sha256 = "7bb69bff3f48a7b642355d64a90e481182a7794707b3133890646b1efa778ff5",
@@ -850,7 +904,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             parity <- ev_gemma4_dense(),
             companions <- [
                 ProvEntry(name = "mmproj-gemma-4-12B-it-BF16.gguf", root = "llm",
-                    url = "{HF}/ggml-org/gemma-4-12B-it-GGUF/resolve/main/mmproj-gemma-4-12B-it-BF16.gguf",
+                    url = "{HF}/ggml-org/gemma-4-12B-it-GGUF/resolve/a29b2a6b584a5bdcb672ccdcda99ea9faeacc51a/mmproj-gemma-4-12B-it-BF16.gguf",
                     bytes = 175115616l, sha256 = "9b1edfa05b634728ca4bfd60b4e6b278e95166c078fa54ae4fa83e680112fd1d")]),
         ModelSpec(file = "gemma-4-E4B-it-Q8_0.gguf", display = "gemma-4-E4B", official = true,
             mlx_repo = "mlx-community/gemma-4-e4b-it-8bit", mlx_fmt = "8bit",
@@ -1211,12 +1265,16 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "Meta-Llama-3.1-8B-Instruct-NVFP4-local.gguf", display = "Llama-3.1-8B-nv4", quant_label = "nv4",
             recipe = "llama-quantize --allow-requantize Meta-Llama-3.1-8B-Instruct-Q8_0.gguf Meta-Llama-3.1-8B-Instruct-NVFP4-local.gguf NVFP4"),
         ModelSpec(file = "Meta-Llama-3.1-8B-Instruct-Q4_0-local.gguf", display = "Llama-3.1-8B-q40", quant_label = "q4_0",
+            url = "{FORMATS_HF}/Meta-Llama-3.1-8B-Instruct/Meta-Llama-3.1-8B-Instruct-Q4_0-local.gguf", bytes = 4661216672l,
+            sha256 = "ccded575923b0f3d95482568e97d423d59a11b5ad8380281d9eff39431d9556f",
             recipe = "llama-quantize --allow-requantize Meta-Llama-3.1-8B-Instruct-Q8_0.gguf Meta-Llama-3.1-8B-Instruct-Q4_0-local.gguf Q4_0"),
         // the dense q51 carrier: every dense plane on the per-32 Q5_1 planes
         ModelSpec(file = "Llama-3.2-1B-Instruct-Q5_1-local.gguf",
             url = "{FORMATS_HF}/Llama-3.2-1B-Instruct/Llama-3.2-1B-Instruct-Q5_1-local.gguf", bytes = 953380992l, sha256 = "22b8a3554b495a82a5f4d4444cb7bbe17d5b115f13ad3476720935750f37eabf",
             recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-Q5_1-local.gguf Q5_1"),
         ModelSpec(file = "Llama-3.2-1B-Instruct-Q5_0-local.gguf",
+            url = "{FORMATS_HF}/Llama-3.2-1B-Instruct/Llama-3.2-1B-Instruct-Q5_0-local.gguf", bytes = 892563584l,
+            sha256 = "ed604779a9a327f51e25093e0685cc6685cc21f129af37358a337388d50e5755",
             recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-Q5_0-local.gguf Q5_0"),
         ModelSpec(file = "Llama-3.2-1B-Instruct-IQ3_M.gguf",
             url = "{FORMATS_HF}/Llama-3.2-1B-Instruct/Llama-3.2-1B-Instruct-IQ3_M.gguf", bytes = 657289344l, sha256 = "c80cc062a721c267ec50fee83fe6b55d36fc7abe708392dbe22e16fbd42687e8", display = "Llama-3.2-1B-iq3m", quant_label = "iq3_m",
@@ -1522,7 +1580,7 @@ def serve_tts_set() : array<tuple<entry : ProvEntry; pack : bool>> {
 //! downloads. profile_common's asr_catalog provenance consumes this same row (single source).
 def serve_asr_tower() : ProvEntry {
     return ProvEntry(name = "ggml-parakeet-tdt-0.6b-v3-f32.bin", root = "whisper",
-        url = "{HF}/ggml-org/parakeet-GGUF/resolve/35156454d1a39de06863303dd209fd2bed6ee079/ggml-parakeet-tdt-0.6b-v3-f32.bin",
+        url = "{PARAKEET_BIN_AT}/ggml-parakeet-tdt-0.6b-v3-f32.bin",
         bytes = 2508463079l, sha256 = "b17956ca991a7f084c978a8a9d4c9785864260b6dd9b72f884344759d913ae7f")
 }
 

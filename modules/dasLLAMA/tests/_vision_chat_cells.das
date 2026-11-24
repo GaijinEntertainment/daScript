@@ -66,14 +66,17 @@ def vision_chat_gate(t : T?; family, decoder : string; need_gb : int) : bool {
 }
 
 //! a cell of an image chat turn: `cell` on the decoder's form `m` and the tower `emb` with the cats photo, as the subtest
-//! `name`, where the form is the CPU load asked alone (`form.alone`) and `uncached` says which loader's
+//! `name` under the CPU-prefill intent, where the form is the CPU load asked alone (`form.alone`) and `uncached` says
+//! which loader's
 def vision_chat_cell(t : T?; name : string; var m : Model; form : ModelForm; uncached : bool; var emb : VisionEmbedder;
                      cell : function<(t : T?; var m : Model; var emb : VisionEmbedder; img : VisionImage) : void>) {
     return if (!form.alone || form.uncached != uncached)
     unsafe {
         t |> run(name) @capture(& m, & emb)(t : T ?) {
             let img <- load_image_rgb(path_join(models_dir(), CATS))
-            invoke(cell, t, m, emb, img)
+            with_cpu_prefill(true) {
+                invoke(cell, t, m, emb, img)
+            }
         }
     }
 }
@@ -83,7 +86,6 @@ def vision_chat_cell(t : T?; name : string; var m : Model; form : ModelForm; unc
 def test_vision_chat(t : T?; var m : Model; var emb : VisionEmbedder; img : VisionImage) {
     t |> equal(img.width, 640, "cats fixture width")
     t |> equal(img.height, 480, "cats fixture height")
-    allow_cpu_prefill()
     let knobs = gpu_knobs()
     static_if (typeinfo builtin_module_exists(das_metal)) {
         set_metal_tower(true)
@@ -162,7 +164,6 @@ def test_vision_chat(t : T?; var m : Model; var emb : VisionEmbedder; img : Visi
 // splice and the span are the shared rail, so tier 2 is the same shape and tier 3 the same floor.
 [cold_path]
 def test_vision_chat_e2b(t : T?; var m : Model; var emb : VisionEmbedder; img : VisionImage) {
-    allow_cpu_prefill()
     // a carrier with no vision arm is refused at create, by name
     var no_arm_tripped = false
     try {
@@ -204,7 +205,6 @@ def test_vision_chat_e2b(t : T?; var m : Model; var emb : VisionEmbedder; img : 
 // the assert is the answer, since the first draw follows the box's tower lane.
 [cold_path]
 def test_vision_chat_e2b_nothink(t : T?; var m : Model; var emb : VisionEmbedder; img : VisionImage) {
-    allow_cpu_prefill()
     var chat <- create_chat_(m, emb, "", 640l)
     set_thinking_(chat, false)
     set_seed_(chat.session, 1234)
@@ -234,7 +234,6 @@ def test_vision_chat_e2b_nothink(t : T?; var m : Model; var emb : VisionEmbedder
 // its markers come from the gemma3 arch and its span is the fixed 256 (896² canvas).
 [cold_path]
 def test_vision_chat_gemma3(t : T?; var m : Model; var emb : VisionEmbedder; img : VisionImage) {
-    allow_cpu_prefill()
     t |> equal(vision_family(emb), "gemma3v", "the gemma-3 mmproj sniffs as gemma3v")
     t |> equal(vision_align(emb), 56l, "56 px per soft token (patch 14 x merge 4)")
     var chat <- create_chat_(m, emb, "", 96l)
@@ -260,10 +259,9 @@ def test_vision_chat_gemma3(t : T?; var m : Model; var emb : VisionEmbedder; img
 }
 
 // The 12B gemma3 pair: the SAME SigLIP tower at projection width 3840 — the one dimension the
-// family varies per decoder; large tier, so DASLLAMA_PARITY_FULL gates it.
+// family varies per decoder; the gemma3-12b category's, so a `--category gemma3-12b` run opens it.
 [cold_path]
 def test_vision_chat_gemma3_12b(t : T?; var m : Model; var emb : VisionEmbedder; img : VisionImage) {
-    allow_cpu_prefill()
     t |> equal(vision_family(emb), "gemma3v", "the 12B mmproj sniffs as gemma3v")
     t |> equal(vision_proj_dim(emb), 3840l, "projection width matches the 12B decoder")
     var chat <- create_chat_(m, emb, "", 96l)
@@ -289,7 +287,6 @@ def test_vision_chat_gemma3_12b(t : T?; var m : Model; var emb : VisionEmbedder;
 def test_vision_chat_omni(t : T?; var m : Model; var emb : VisionEmbedder; img : VisionImage) {
     t |> success(m.config.rope_sections.x + m.config.rope_sections.y + m.config.rope_sections.z > 0,
         "the decoder carries rope.dimension_sections ({m.config.rope_sections})")
-    allow_cpu_prefill()
     t |> equal(vision_family(emb), "qwen3v", "the Omni mmproj sniffs as qwen3v")
     t |> equal(vision_proj_dim(emb), 2048l, "projection width matches the Omni decoder")
     var chat <- create_chat_(m, emb, "", 96l)
@@ -322,7 +319,6 @@ def test_vision_chat_omni(t : T?; var m : Model; var emb : VisionEmbedder; img :
 [cold_path]
 def test_vision_chat_deepstack(t : T?; var m : Model; var emb : VisionEmbedder; img : VisionImage) {
     t |> equal(m.config.n_deepstack, 3l, "the decoder carries n_deepstack_layers")
-    allow_cpu_prefill()
     t |> equal(vision_family(emb), "qwen3v", "the dense mmproj sniffs as qwen3v")
     t |> equal(vision_proj_dim(emb), 2560l, "projection width matches the 4B decoder")
     t |> equal(vision_deepstack(emb), 3l, "the tower carries three deepstack taps")
@@ -388,7 +384,6 @@ def test_vision_chat_deepstack(t : T?; var m : Model; var emb : VisionEmbedder; 
 // here once fed deepstack decoders a narrow scrambled span that still captioned the cats.
 [cold_path]
 def test_vision_chat_rows_seam(t : T?; var m : Model; var emb : VisionEmbedder; img : VisionImage) {
-    allow_cpu_prefill()
     var params = SamplingParams()
     params.temp = 0.0
     var chat1 <- create_chat_(m, emb, "", 24l)
@@ -449,7 +444,6 @@ def test_vision_chat_rows_seam(t : T?; var m : Model; var emb : VisionEmbedder; 
 def test_vision_chat_qwen25o(t : T?; var m : Model; var emb : VisionEmbedder; img : VisionImage) {
     t |> equal(m.config.rope_sections, int4(16, 24, 24, 0), "the qwen2vl decoder's sections")
     t |> success(!m.config.mrope_interleaved, "qwen2vl ropes the sections as contiguous ranges")
-    allow_cpu_prefill()
     t |> equal(vision_family(emb), "qwen25v", "the dual-tower Omni mmproj sniffs as qwen25v")
     t |> equal(vision_proj_dim(emb), 2048l, "projection width matches the 3B decoder")
     var chat <- create_chat_(m, emb, "", 96l)
@@ -494,7 +488,6 @@ def test_render_image_span_qwen25o(t : T?; var m : Model; var emb : VisionEmbedd
 // families only) — the full three-modality showcase lands with that slice.
 [cold_path]
 def test_omni_showcase(t : T?; var m : Model; var emb : VisionEmbedder; img : VisionImage) {
-    allow_cpu_prefill()
     var chat <- create_chat_(m, emb, "", 96l)
     var params = SamplingParams()
     params.temp = 0.0
