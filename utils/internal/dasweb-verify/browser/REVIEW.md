@@ -17,8 +17,8 @@ manifest (or the reverse) stays a WARN, and the manifest-coverage case keeps rea
 repo manifest `web/examples/ui/samples/data.json` (repo root).
 
 **Never make the verifier change a build's hash to force a rebuild - report the cached result
-instead.** A cached FAILED build for identical content and toolchain is a correct verdict, so
-a fresh hash only hides the bug.
+instead.** A cached failure the sample caused is a correct verdict, and the server rebuilds
+a build-service fault on its own, so a fresh hash only hides the bug.
 
 **Never probe the wasm build's artifact page - the HTML page a graphics or audio build
 returns - through the frame the playground embeds it in; open the artifact URL as a top-level

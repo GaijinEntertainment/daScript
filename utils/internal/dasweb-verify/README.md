@@ -46,7 +46,7 @@ A node + playwright runner that drives the LIVE playground in headless
 Chromium and reports, per sample and per engine, whether the program actually
 runs. It targets production deliberately: this arc's worst bugs (page
 artifacts truncated behind caddy, wasm archives missing on one build box, a
-failed build cached under its content hash) were production state no local
+build-service fault stored as a sample's verdict) were production state no local
 rebuild can see. Sources and toolchain id are content-addressed, so a night
 with no sample edit and no toolchain bump is mostly cache hits.
 

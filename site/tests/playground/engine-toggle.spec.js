@@ -318,3 +318,32 @@ test('a failed build shows the compiler error', async ({ playground }) => {
 
     await expect(playground.locator('#output')).toContainText('error[30101]', { timeout: 15_000 });
 });
+
+test('a build that failed on a service fault says so instead of blaming the program', async ({ playground }) => {
+    await stubBuildInfo(playground, true);
+    await stubStore(playground);
+    await stubBuild(playground, [
+        { state: 'building' },
+        { state: 'failed', fault: true, error: 'the builder could not publish this build’s artifact' },
+    ]);
+    await reloadWithStubs(playground);
+
+    await playground.locator(wasmSel).check();
+    await playground.locator('#run').click();
+
+    await expect(playground.locator('#output')).toContainText(
+        'build service fault, try again in a few minutes: the builder could not publish', { timeout: 15_000 });
+});
+
+test('a service fault with no stored text still reads as a fault', async ({ playground }) => {
+    await stubBuildInfo(playground, true);
+    await stubStore(playground);
+    await stubBuild(playground, [{ state: 'failed', fault: true }]);
+    await reloadWithStubs(playground);
+
+    await playground.locator(wasmSel).check();
+    await playground.locator('#run').click();
+
+    await expect(playground.locator('#output')).toContainText(
+        'build service fault, try again in a few minutes: no detail', { timeout: 15_000 });
+});

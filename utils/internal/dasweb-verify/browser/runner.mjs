@@ -5,7 +5,7 @@
 //
 // It targets production on purpose. This arc's worst bugs were production state
 // no local rebuild could see — artifacts truncated behind caddy, wasm archives
-// missing on one box, a build failure cached under its content hash. Artifacts
+// missing on one box, a build-service fault stored as a sample's verdict. Artifacts
 // are content-addressed (source hash x toolchain id), so a night with no
 // toolchain bump and no sample edit is mostly cache hits.
 //
@@ -416,8 +416,9 @@ async function verifyWasm(pg, artifacts, row, index) {
 
     // A fresh build takes minutes (the toolchain embeds declared assets and
     // relinks); an unchanged source is a cache hit and resolves in seconds.
-    // Both are correct outcomes — a cached FAILED build is a correct verdict
-    // too, so the verifier never cache-busts.
+    // Both are correct outcomes — a cached failure the sample caused is a
+    // correct verdict too, and the server rebuilds a build-service fault on its
+    // own, so the verifier never cache-busts.
     let artifactUrl = '';
     const buildDeadline = Date.now() + spec.build_budget_ms;
     while (Date.now() < buildDeadline) {
