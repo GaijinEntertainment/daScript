@@ -259,6 +259,17 @@ def register_qwen3v_gpu(fn : Qwen3vGpuChainFn; serves : function<() : bool>; f32
 //! The deepstack tap index of block `l`, -1 off the taps.
 def qwen3v_tap_of(t : Qwen3vTower; l : int64) : int64 => l == t.ds_l0 ? 0l : (l == t.ds_l1 ? 1l : (l == t.ds_l2 ? 2l : -1l))
 
+//! The block deepstack tap `k` (0..2) reads, `qwen3v_tap_of`'s inverse.
+def qwen3v_tap_layer(t : Qwen3vTower; k : int64) : int64 => k == 0l ? t.ds_l0 : (k == 1l ? t.ds_l1 : t.ds_l2)
+
+//! whether a deepstack tap of `t` sits at or past its block count, a tap the block loop never writes
+def qwen3v_tap_unreached(t : Qwen3vTower) : bool {
+    for (k in range64(t.n_deepstack)) {
+        return true if (qwen3v_tap_layer(t, k) >= t.n_layer)
+    }
+    return false
+}
+
 //! the GPU tower would serve this encode on the file's planes - the lane policy's clause: with it false the policy's default is the q8 image
 def qwen3v_gpu_exact_serves() : bool => gpu_exact_serves(g_q3v_seat)
 
@@ -303,7 +314,7 @@ def private q3v_verify_tensors(m : GGUFMeta; t : Qwen3vTower; gemm_sizes : array
     gguf_expect_elems(m, "mm.2.weight", 4l * d * t.proj_dim, "dasLLAMA qwen3v")
     gguf_expect_elems(m, "mm.2.bias", t.proj_dim, "dasLLAMA qwen3v")
     for (k in range64(t.n_deepstack)) {
-        let dl = k == 0l ? t.ds_l0 : k == 1l ? t.ds_l1 : t.ds_l2
+        let dl = qwen3v_tap_layer(t, k)
         let p = "v.deepstack.{dl}"
         gguf_expect_elems(m, "{p}.norm.weight", 4l * d, "dasLLAMA qwen3v")
         gguf_expect_elems(m, "{p}.norm.bias", 4l * d, "dasLLAMA qwen3v")
@@ -384,7 +395,7 @@ def private q3v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Qwe
     gguf_read_tensor_f32(m, bytes, "mm.2.weight", st.blob, st.t.mm2_w, 4l * d * st.t.proj_dim)
     gguf_read_tensor_f32(m, bytes, "mm.2.bias", st.blob, st.t.mm2_b, st.t.proj_dim)
     for (k in range64(st.t.n_deepstack)) {
-        let dl = k == 0l ? st.t.ds_l0 : k == 1l ? st.t.ds_l1 : st.t.ds_l2
+        let dl = qwen3v_tap_layer(st.t, k)
         let p = "v.deepstack.{dl}"
         var dfo = st.t.ds_f + k * st.t.ds_f_stride
         gguf_read_tensor_f32(m, bytes, "{p}.norm.weight", st.blob, dfo, 4l * d); dfo += 4l * d
@@ -551,7 +562,7 @@ def private q3v_gemm_types_uniform(m : GGUFMeta; t : Qwen3vTower; gt : int) : bo
         return false
     }
     for (k in range64(t.n_deepstack)) {
-        let p = "v.deepstack.{k == 0l ? t.ds_l0 : k == 1l ? t.ds_l1 : t.ds_l2}"
+        let p = "v.deepstack.{qwen3v_tap_layer(t, k)}"
         if (gguf_tensor_type(m, "{p}.fc1.weight") != gt || gguf_tensor_type(m, "{p}.fc2.weight") != gt) {
             return false
         }
