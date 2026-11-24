@@ -10,7 +10,8 @@ options _dasllama_internal = true
 //   bin/daslang modules/dasLLAMA/harness/model_bench_run.das -- [--model <entry> ...] [--server-tree <daslang tree>]
 //       [--llama-server <llama-server binary>] [--server-arg <argument> ... [--server-engine <name>]] [--gpu vulkan]
 //       [--models-dir <dir>] [--out-dir <dir>] [--port 8911] [--config <json>] [--quick]
-//       [--max-length N] [--cell-seconds S] [--reps N] [--wide] [--boot-seconds 900]
+//       [--max-length N] [--cell-seconds S] [--reps N] [--wide] [--boot-seconds 900] [--report]
+//       [--behind] [--slot-dir <dir>]
 //
 // The server runs from `--server-tree` (default: this tree) with that tree's own binary, so the bench of one tree can
 // read the server of another. A model's server flags are its config entry's `server` object; the environment the
@@ -18,7 +19,9 @@ options _dasllama_internal = true
 // server's output in a log, and a server that never answers or does not stop is killed with everything it started.
 // Per model, under `--out-dir` (default `logs/model_bench` of this tree): `<entry>.card.json` (the record),
 // `<entry>.bench.json` (the bench's own file: every row's fields, its flags, what it refused, how it ran),
-// `<entry>.requests.jsonl` (every timed request) and `<entry>.server.log`.
+// `<entry>.requests.jsonl` (every timed request), `<entry>.server.log`, and `<entry>.md` - the page a reader opens: every
+// row the folder holds for the model, ours and the reference's side by side. `--report` writes the pages from the files a
+// folder already holds and starts nothing.
 // `--llama-server` runs the reference in ours' place: llama.cpp's server on the same file, every layer on the GPU, the
 // slots and the context a slot of the config, greedy (`--temp 0`: the bench's client cannot send a zero temperature).
 // Its files carry `.ref` in their names and its card is an engine `llama.cpp` run, so the two cards of a model sit
@@ -42,6 +45,7 @@ require daslib/strings_boost   // join, replace, find
 require strings
 require math
 require _model_bench  // the config's shape and the run file the bench writes
+require _model_bench_report  // the model's page over both sides' run files
 
 [CommandLineArgs]
 struct RunnerArgs {
@@ -97,8 +101,27 @@ struct RunnerArgs {
     @clarg_doc = "Pass --reps to the bench"
     reps : int
 
+    @clarg_doc = "What to run of a model, comma-separated: the bench's kinds of the plain start (pp, tg, width), long (the plain start's long-reply rows the arms are read against), arms by name, and eyeball (every start's eyeball; alone, no timed cell anywhere). A start nothing names is not made. Default: everything the entry lists"
+    only : string
+
+    @clarg_doc = "Pass --lengths to the bench: the prompt lengths in place of the config's"
+    lengths : string
+
     @clarg_doc = "Add the wide pass: a server start under the entry's wide_server, and the bench's wide widths"
     wide : bool
+
+    @clarg_doc = "Add the ultralong pass: a server start under the entry's ultralong_server - the model's whole context, one stream - and the bench's rows at 65536, 131072 and that context less 512 tokens. --only ultralong runs that pass alone"
+    ultralong : bool
+
+    @clarg_doc = "Add the behind pass: a server start under the entry's ultralong_server with a slot directory (--slot-save-path, ours and llama-server's alike), and the bench's --behind rows - a long base restored off its slot file or recorded once, then turns timed after it. --only behind runs it alone"
+    behind : bool
+
+    @clarg_name = "slot-dir"
+    @clarg_doc = "Where the behind pass keeps its slot files from run to run (default: slots under --out-dir)"
+    slot_dir : string
+
+    @clarg_doc = "Start nothing: write each model's page (<entry>.md) from the run files and cards --out-dir already holds"
+    report : bool
 
     @clarg_name = "boot-seconds"
     @clarg_doc = "Seconds a server may take to answer after its start (default 900)"
@@ -240,16 +263,60 @@ def write_card(path, gguf, gpu : string; server : CardServer; hardware : Hardwar
     return wrote
 }
 
+//! the bench's row kinds among `only`'s words, comma-joined: the plain start's main run under --only
+def bench_kinds_of(only : string) : string {
+    var words <- split(only, ",")
+    var kinds <- [for (w in words); w; where is_bench_kind(w)]
+    let text = join(kinds, ",")
+    delete words
+    delete kinds
+    return text
+}
+
+def only_names(only, word : string) : bool {
+    var words <- split(only, ",")
+    let named = find_index(words, word) >= 0
+    delete words
+    return named
+}
+
+//! whether a model's `arm` gets its server start under `only`: every arm where it names nothing or the eyeball, the plain one
+//! for a kind or its long-reply rows, another by its name
+def arm_runs(only, arm : string) : bool
+    => (empty(only) || only_names(only, "eyeball")
+        || (arm == "off" ? !empty(bench_kinds_of(only)) || only_names(only, "long") : only_names(only, arm)))
+
+//! `only`'s first word that names no row kind, no pass and no arm of `arms`; "" when every word names something
+def only_unknown(only : string; arms : array<string>) : string {
+    var inscope words <- split(only, ",")
+    for (w in words) {
+        return w if (!is_bench_kind(w) && w != "long" && w != "ultralong" && w != "behind" && (w == "off" || find_index(arms, w) < 0))
+    }
+    return ""
+}
+
 //! the bench child's command line against the server at `port`, the runner's own bench flags passed on
-def bench_argv(args : RunnerArgs; entry, stem, arm : string; port, streams : int; long_plain : bool = false) : array<string> {
+def bench_argv(args : RunnerArgs; entry, stem, arm : string; port, streams : int; long_plain : bool = false; ctx : int = 0) : array<string> {
     var a <- [get_das_exe(), path_join(get_das_root(), "modules/dasLLAMA/harness/model_bench.das"), "-dasroot", get_das_root(), "--",
         "--url", "http://127.0.0.1:{port}", "--model", entry, "--out", "{stem}.bench.json", "--raw", "{stem}.requests.jsonl"]
     if (long_plain) {
         a |> push_from(["--arm", "off"])
     } elif (arm == "wide") {
         a |> push("--wide")
+    } elif (arm == "ultralong") {
+        a |> push_from(["--ultralong", "{ctx}"])
+    } elif (arm == "behind") {
+        a |> push_from(["--behind", "{ctx}", "--slot-tag", base_name(stem)])
     } elif (arm != "off") {
         a |> push_from(["--arm", arm])
+        if (!empty(args.only) && !only_names(args.only, arm)) {   // started for its eyeball alone
+            a |> push_from(["--only", "eyeball"])
+        }
+    } elif (!empty(args.only)) {
+        a |> push_from(["--only", bench_kinds_of(args.only)])
+    }
+    if (!empty(args.lengths)) {
+        a |> push_from(["--lengths", args.lengths])
     }
     if (args.quick) {
         a |> push("--quick")
@@ -296,9 +363,66 @@ def take_run(path : string; var into : RunOut) : bool {
         into.tests |> insert(name, row)
     }
     into.refused |> push_from(res.refused)
-    into.bench.cmd = empty(into.bench.cmd) ? res.bench.cmd : "{into.bench.cmd} ; {res.bench.cmd}"
+    into.eyeball |> push_from(res.eyeball)
+    let cmd = empty(into.bench.cmd) ? res.bench.cmd : "{into.bench.cmd} ; {res.bench.cmd}"
+    if (empty(into.bench.cmd)) {
+        into.bench = res.bench   // the first file's run stands for the side: its reps and its cell time
+    }
+    into.bench.cmd = cmd
     delete res
     return true
+}
+
+//! the parts of a model's file names past its side: the plain run, its long-reply rows, the wide, ultralong and behind passes, an arm each
+def run_file_suffixes(s : Settings) : array<string> {
+    var parts <- ["", ".long", ".wide", ".ultralong", ".behind"]
+    for (arm in s.arms) {
+        if (arm != "off") {
+            parts |> push(".{arm}")
+        }
+    }
+    return <- parts
+}
+
+//! one side of `entry`'s page from the files under `dir`: `side` is "" for ours and ".ref" for the reference's. The card
+//! says who ran; the rows are every run file's of the side, joined.
+def report_side(dir, entry, side : string; s : Settings) : ReportSide {
+    var page : ReportSide
+    var models : array<BenchModel>
+    if (read_bench_records(path_join(dir, "{entry}{side}.card.json"), models) && !empty(models) && !empty(models[0].runs)) {
+        let run & = unsafe(models[0].runs[0])
+        page.engine = run.engine
+        page.backend = run.backend
+        page.box = run.box
+        page.date = run.date
+        page.commit = run.sha
+        page.cpu = run.hardware.cpu
+        page.gpu = run.hardware.gpu
+    }
+    delete models
+    var parts <- run_file_suffixes(s)
+    for (part in parts) {
+        let path = path_join(dir, "{entry}{side}{part}.bench.json")
+        if (fexist(path)) {
+            take_run(path, page.run)
+        }
+    }
+    delete parts
+    return <- page
+}
+
+//! `entry`'s page written under `dir` from both sides' files; false when neither side holds a row or the page does not write
+def write_report(dir, entry : string; s : Settings) : bool {
+    var ours <- report_side(dir, entry, "", s)
+    var theirs <- report_side(dir, entry, ".ref", s)
+    let path = path_join(dir, "{entry}.md")
+    let wrote = (!empty(ours.run.tests) || !empty(theirs.run.tests)) && fwrite(path, model_report(entry, ours, theirs))
+    if (wrote) {
+        print("model_bench_run: {entry}: page {path}\n")
+    }
+    delete ours
+    delete theirs
+    return wrote
 }
 
 //! how a server's run ended: `why` names what kept it from serving ("" when it served), `rc` the bench children's exit
@@ -392,14 +516,29 @@ def run_server(server : Server; port, boot_secs : int; log, model : string; benc
     return run
 }
 
-//! One arm of one model: its server up, the bench against it, the server down. The arm's rows join `into`; false when
-//! the server did not serve or stop, or the bench refused a cell. `card` takes the arm's server and command line.
+//! `--mtp=false` stays one argument: our server reads the flag alone as on
+[arch(at = "../ARCHITECTURE_MEASUREMENT_SERVED.md#model-bench")]
+def pass_flags(args : RunnerArgs; arm, out_dir : string; var extra : array<string>) {
+    if ((arm == "behind" || arm == "ultralong") && empty(args.llama_server) && empty(args.server_arg)) {
+        extra |> push("--mtp=false")
+    }
+    if (arm == "behind") {
+        let slots = empty(args.slot_dir) ? path_join(out_dir, "slots") : args.slot_dir
+        mkdir_rec(slots)
+        extra |> push_from(["--slot-save-path", slots])
+    }
+}
+
+//! One arm or pass of one model: its server up, the bench against it, the server down - or no start at all, and true, where
+//! `--only` leaves this start no row. The rows join `into`; false when the server did not serve or stop, or the bench
+//! refused a cell. `card` takes the server and command line.
 def run_arm(args : RunnerArgs; var config : BenchConfig; entry, arm, gguf, out_dir : string; s : Settings; var card : CardServer&; var into : RunOut) : bool {
     let port = args.port > 0 ? args.port : DEFAULT_PORT
     let named = drafter_of(s, arm)
     let drafter = empty(named) ? "" : path_join(empty(args.models_dir) ? models_dir() : args.models_dir, named)
-    let drafting = arm != "off" && arm != "wide"
+    let drafting = arm != "off" && arm != "wide" && arm != "ultralong" && arm != "behind"
     var inscope extra <- arm_flags(config, arm, drafter, reference_side(args))
+    pass_flags(args, arm, out_dir, extra)
     if (drafting && empty(extra)) {
         print("model_bench_run: {entry} arm {arm} SKIPPED - the config's arm_flags name no flags for it on this server\n")
         return false
@@ -419,15 +558,22 @@ def run_arm(args : RunnerArgs; var config : BenchConfig; entry, arm, gguf, out_d
     card = CardServer(engine = server.engine, flavor = server.flavor, sha = server.sha, versioned = server.versioned,
         line = empty(card.line) ? line : "{card.line} ; {line}")
     print("model_bench_run: {entry} [{arm}]: {line}\n")
-    let long_plain = arm == "off" && length(s.arms) > 1
+    let long_plain = arm == "off" && length(s.arms) > 1 && (empty(args.only) || only_names(args.only, "long"))
+    let main_run = arm != "off" || empty(args.only) || !empty(bench_kinds_of(args.only))
     var inscope benches : array<array<string>>
-    benches |> emplace(bench_argv(args, entry, stem, arm, port, s.server.streams))
     remove("{stem}.requests.jsonl")
     remove("{stem}.bench.json")
+    if (main_run) {
+        benches |> emplace(bench_argv(args, entry, stem, arm, port, s.server.streams, false, s.server.ctx))
+    }
     if (long_plain) {
         remove("{stem}.long.bench.json")
         remove("{stem}.long.requests.jsonl")
         benches |> emplace(bench_argv(args, entry, "{stem}.long", arm, port, s.server.streams, true))
+    }
+    if (empty(benches)) {   // --only long at a model with one arm: no long-reply rows to read
+        print("model_bench_run: {entry} [{arm}] SKIPPED - nothing of --only {args.only} runs at this start\n")
+        return true
     }
     let run = run_server(server, port, args.boot_seconds > 0 ? args.boot_seconds : DEFAULT_BOOT_SECONDS, "{stem}.server.log", base_name(gguf), benches)
     if (!empty(run.why)) {
@@ -437,7 +583,7 @@ def run_arm(args : RunnerArgs; var config : BenchConfig; entry, arm, gguf, out_d
     if (!run.stopped) {
         print("model_bench_run: {entry} [{arm}]: the server ran {STOP_SECONDS} s past its stop and was killed\n")
     }
-    var took = take_run("{stem}.bench.json", into)
+    var took = !main_run || take_run("{stem}.bench.json", into)
     if (long_plain) {
         took = take_run("{stem}.long.bench.json", into) && took
     }
@@ -447,11 +593,13 @@ def run_arm(args : RunnerArgs; var config : BenchConfig; entry, arm, gguf, out_d
     return took && run.rc == 0 && run.stopped
 }
 
-//! One model: every arm of its entry, then its card over all of them; false when an arm failed or no card was written
+//! One model: the arms of its entry and the passes that `--only` and the flags start, then its card and page over their
+//! rows; `--report` writes the page alone. False when a start failed, or a run that times rows wrote no card
 [arch(at = "../ARCHITECTURE_MEASUREMENT_SERVED.md#model-bench-runner")]
 def run_model(args : RunnerArgs; var config : BenchConfig; entry : string; s : Settings; hardware : HardwareInfo) : bool {
     let gguf = path_join(empty(args.models_dir) ? models_dir() : args.models_dir, "{entry}.gguf")
     let out_dir = empty(args.out_dir) ? path_join(get_das_root(), "logs/model_bench") : args.out_dir
+    return write_report(out_dir, entry, s) if (args.report)
     if (!fexist(gguf)) {
         print("model_bench_run: {entry} SKIPPED - {gguf} is not there\n")
         return false
@@ -460,7 +608,13 @@ def run_model(args : RunnerArgs; var config : BenchConfig; entry : string; s : S
     var all : RunOut
     var card : CardServer
     var ok = true
+    let unknown = only_unknown(args.only, s.arms)
+    if (!empty(unknown)) {
+        print("model_bench_run: {entry} REFUSED - --only names '{unknown}', which is no kind (pp, tg, width, eyeball), not long, not ultralong, not behind and no arm of the entry ({join(s.arms, ", ")})\n")
+        return false
+    }
     for (arm in s.arms) {
+        continue if (!arm_runs(args.only, arm))
         ok = run_arm(args, config, entry, arm, gguf, out_dir, s, card, all) && ok
     }
     if (args.wide && s.wide_server.streams > 0) {
@@ -469,12 +623,28 @@ def run_model(args : RunnerArgs; var config : BenchConfig; entry : string; s : S
         ok = run_arm(args, config, entry, "wide", gguf, out_dir, wide, card, all) && ok
         delete wide
     }
+    if ((args.ultralong || only_names(args.only, "ultralong")) && s.ultralong_server.ctx > 0) {
+        var whole := s
+        whole.server := s.ultralong_server
+        ok = run_arm(args, config, entry, "ultralong", gguf, out_dir, whole, card, all) && ok
+        delete whole
+    }
+    if ((args.behind || only_names(args.only, "behind")) && s.ultralong_server.ctx > 0) {
+        var whole := s
+        whole.server := s.ultralong_server
+        ok = run_arm(args, config, entry, "behind", gguf, out_dir, whole, card, all) && ok
+        delete whole
+    }
     let stem = path_join(out_dir, reference_side(args) ? "{entry}.ref" : entry)
     let carded = !empty(all.tests) && write_card("{stem}.card.json", gguf, empty(args.gpu) ? "vulkan" : args.gpu, card, hardware, all)
-    let card_note = carded ? "card {stem}.card.json" : "NO card written"
-    print("model_bench_run: {entry}: {length(all.tests)} row(s) over {length(s.arms)} arm(s), {length(all.refused)} refused, {card_note}\n")
+    let eyes_alone = args.only == "eyeball"   // no timed row to card: the eyeball's verdicts are the run
+    let card_note = carded ? "card {stem}.card.json" : (eyes_alone ? "no card - the eyeball alone" : "NO card written")
+    print("model_bench_run: {entry}: {length(all.eyeball)} eyeball replies, {length(all.tests)} row(s) over {length(s.arms)} arm(s), {length(all.refused)} refused, {card_note}\n")
     delete all
-    return ok && carded
+    if (carded) {
+        write_report(out_dir, entry, s)
+    }
+    return ok && (carded || eyes_alone)
 }
 
 //! every entry the flags name, each through `run_model`; the models that failed

@@ -916,8 +916,9 @@ mirror passes to the CPU rails, is refused by name; and under the host-planes as
 the same load counts no live load, keeps its planes and serves the same tokens (the control); the live load's token
 rows gather on the device where the lane's do. `test_vulkan_mint_family_lane_<family>` (and `test_cuda_mint_family_lane_<family>`, one
 shared cell, `family_lane_cell`, a test a family) holds the trimmed lane of the families the driver serves beside the dense q8 one -
-gpt-oss-4L (biased routed experts over an untied q8 token table), gemma-4-E2B (per-layer embeddings) and gemma-4-26B-A4B-6L
-(the routed block with its dense shared expert), the large files' cuts: a staged load with its planes on the host says whether the
+gpt-oss-4L (biased routed experts over an untied q8 token table), gemma-4-E2B (per-layer embeddings), gemma-4-26B-A4B-6L
+(the routed block with its dense shared expert), the large files' cuts, and Qwen3-30B-A3B Q4_K_M (K-quant routed stacks under
+an untied K-quant token table, which the lane packs in the model's row interleave), large tier: a staged load with its planes on the host says whether the
 token rows gather on the device, the gguf streamed live gives the reference tokens through the lane's own gather, and
 the trimmed lane - minted cold, mapped warm, dropped and re-armed - holds no planar family on the host, serves those
 tokens token for token and gathers its token rows wherever the staged load does (an untied table placed off the lane's
@@ -3373,6 +3374,11 @@ cells, by the names the file entries use:
   end as their stable opening - the device-home stream's region keeps its recurrent state there (a checkpoint row), the
   second request adopts it off the parked claim (100 tokens cached, 160 computed across the run, the same as the
   host-cached run's), and both requests' tokens are the host-cached run's;
+- the context file cell (`regions_context_file_cell`, `../ARCHITECTURE_ENGINE_SERVING.md#context-file`; the dense qwen2 and
+  the recurrent hybrid file call it after their pool cell): a device-home scheduler's finished turn saved to a file - the
+  rows its region alone holds brought down first - restored into a second device-home scheduler, whose next turn attaches
+  past the system prompt, token for token the scheduler that kept the rows; a scheduler that restored nothing prefills
+  whole (the control); under `DASLLAMA_DEVICE_POOL=0` the save refuses by the knob's name;
 - the pool cell (`regions_pool_cell`, `../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool`): five requests one after another on
   a two-stream scheduler over three 100-token system prompts - more openings than the two regions hold - the fourth on the
   first's system prompt after two other streams took both regions, the fifth the second conversation's next turn after its
@@ -4433,13 +4439,21 @@ reps that read different texts or a text other than the one asked, and the loade
 the fake chat turn outlasts two fast reps and is refused when the reps outlive the turn, when the
 turn carries no reply text, and when the loaded text differs from the idle one. The model bench's cells
 (`../harness/model_bench.das` and its runner `model_bench_run.das`, the fake `_fake_chat_server.das`, which
-`_fake_chat_root.das` serves as a child process): `test_model_bench_rules` (the prompt's id line, a turn's refusals,
+`_fake_chat_root.das` serves as a child process): `test_model_bench_rules` (the prompt's id line, a turn's refusals and
+the behind pass's own, a wave's task a stream, the eyeball's rules, the ultralong and behind ladders, the corpus
+repeated behind its seam, the behind pass's base and timed message,
 an entry's settings over the defaults, the row flags), `test_model_bench_against_a_fake_server` (a turn, a cell, a
-wave of eight and its control of one), `test_model_bench_driver` (a whole run: the ladder's and the widths' row
-names, the `--max-length` stop, an arm's rows and `--arm off`, the wide pass's stream cap, the runs that exit 1),
+wave of eight with its end and its control of one), `test_model_bench_driver` (a whole run: the eyeball's replies and
+the run a wrong one stops, the ladder's and the widths' row
+names, `--only` and `--lengths`, the ultralong pass, the `--max-length` stop, an arm's rows and `--arm off`, the wide
+pass's stream cap, the runs that exit 1), `test_model_bench_behind` (the behind pass against the fake's slot routes: a
+base prefilled cold and saved, restored on the next run, a server whose routes refuse, a base that never comes off the
+cache, a cold base that is not served, the pass a run of its own), `test_model_bench_runner_passes` (against the fake
+as a child: the ultralong and behind passes each a start `--only` picks alone, `--report` with no start),
 `test_model_bench_cell_reads` (`cache_prompt` on the wire, a cell's draft sums, a stall, llama.cpp's timing names,
-an unfair wave, the shipped config), `test_model_bench_runner` (the command lines, the joined run files),
-`test_model_bench_runner_card` (a model run end to end against the fake as a child on port 18171: one card) and
+an unfair wave, the shipped config), `test_model_bench_runner` (the command lines, the joined run files, a model's page over two sides' rows and over a
+folder's run files), `test_model_bench_runner_card` (a model run end to end against the fake as a child on port 18171:
+one card and the page beside it) and
 `test_model_bench_runner_failures` (the runs a model fails). The runner's fake child pauses 20 ms a word.
 `test_prompt_files_id_list`:
 `../harness/_prompt_files.das`'s `id_list` keeping a comma list's numbers in order (an empty part and a word dropped, every
@@ -4550,7 +4564,10 @@ decide what lands on the public board, which no model suite reaches.
 `grow_resize` geometric reuse and its re-added tail reading zero, `ensure_length` grow-only with
 the grown tail zeroed, `overwrite_resize` grow-only no-init) fed directly, including grows past
 the `max_unreserved_size` guard that must not panic.
-`uncategorized__dasllama_internal_persistent_heap_stack_524288.das` - model-free: the SPIR-V dump differ, the parity
+`uncategorized__dasllama_internal_persistent_heap_stack_524288.das` - model-free: the prefix cache's context file
+(`test_prefix_context_file`, over `_kv_prefix_cells.das`'s cells on a synthetic Config: a dense context saved off one
+pool and restored into a pool of another page size, a recurrent request's two checkpoints with their state, a file cut
+inside a checkpoint or holding another model's, and every refusal by name with no page held), the SPIR-V dump differ, the parity
 reference cache's load (`test_parity_cache_roundtrip`, `test_parity_cache_rejects_corruption`), the `.dlim` wipe
 (`test_dlim_wipe`), the `[from_template]` stamp, the load-once forms' knobs (`test_model_form_knobs`) and account
 (`test_model_form_account`), and the Silero
@@ -4724,7 +4741,8 @@ pool, its pages fragmented, matching their flat references in logits over 40 dec
 three paged sessions of ragged depth, one crossing a page mid-decode, matching flat sessions for six steps and in the
 deepest cache rows. Each skips off the JIT or without its file; `kv_paged_q8_cell` is `_kv_paged_cells.das`'s, on
 SmolLM2's block.
-`_kv_paged_cells.das` - the flat-vs-paged compares (`logits_equal`, `cache_rows_equal`, `paged_vs_flat_cell` a codec, dispatch
+`_kv_prefix_cells.das` - the synthetic Config and recurrent session the prefix cache's tests share (`mk_config`,
+`mk_recurrent`) and the context file's four cells; no model. `_kv_paged_cells.das` - the flat-vs-paged compares (`logits_equal`, `cache_rows_equal`, `paged_vs_flat_cell` a codec, dispatch
 forced threaded through `with_threaded_jobque` of `_model_tier.das`) and `kv_paged_q8_cell`: on
 SmolLM2-135M, the context cut to 64, two paged q8_0 sessions interleaved on one pool fragment its pages yet match flat
 q8_0 references bit for bit in logits over 40 decode steps and in every cache row - on SmolLM2's q8 CPU form (`test_gpu_resident_smollm2`, `test_gpu_resident_llama.das`).
