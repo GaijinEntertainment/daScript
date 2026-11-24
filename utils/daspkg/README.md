@@ -134,6 +134,7 @@ def release() {
     release_include_tool("watchdog")             // a built tool from bin/, shipped beside the exe
     release_launcher("watchdog")                 // macOS: the .app opens this tool, which starts the exe
     release_program("my-bench", "tools/bench.das")   // a companion exe baked beside the main one, same class, shared runtime
+    release_disable_module("dasVulkan")          // every build of the release runs without this module
 }
 ```
 
@@ -143,8 +144,13 @@ use relative segments made of letters, digits, `_`, `-`, and `.`. The source can
 use `..` to reach a neighboring tree; destination paths reject `..` segments.
 A missing source or failed copy fails the release.
 
-`release_wasm_disable_module(name)` keeps a host module out of the `release wasm` cross-compile,
-so its guarded `require ?name` resolves as absent, as the wasm build sees it.
+`release_disable_module(name)` keeps a module out of every build of a release: the main exe, each
+`release_program` companion, the tuner and the `release wasm` cross-compile all run with
+`--disable-module <name>`. `name` is the module's folder under `modules/`, in any letter case. The
+module's guarded `require ?name` resolves as absent and its shared module does not ship. Only the
+released package's own call counts.
+
+`release_wasm_disable_module(name)` does the same for the `release wasm` cross-compile alone.
 `release_wasm_disable_host_gpu_modules()` does that for dasVulkan, dasCUDA, dasMetal and
 dasAccelerate in one call: none has a wasm build.
 

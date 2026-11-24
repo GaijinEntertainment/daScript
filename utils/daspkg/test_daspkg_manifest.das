@@ -264,8 +264,11 @@ def test_run_das_package_release(t : T?) {
         tt |> equal(2, length(info.wasm_archives))
         tt |> equal("_wasm/liblibDasModuleTest.a", info.wasm_archives[0])
         tt |> equal("_wasm/liblibTestApp.a", info.wasm_archives[1])
-        // the two wasm-only knobs cross the same hand-written marshaller: a dropped copy would
-        // cross-compile with the module mounted and the flag missing, silently
+        // the module lists and the emcc flags cross the same
+        // hand-written marshaller: a dropped copy would build with the
+        // module mounted and the flag missing, silently
+        tt |> equal(1, length(info.disabled_modules))
+        tt |> equal("dasCUDA", info.disabled_modules[0])
         tt |> equal(1, length(info.wasm_disabled_modules))
         tt |> equal("dasvulkan", info.wasm_disabled_modules[0])
         tt |> equal(1, length(info.emcc_args))

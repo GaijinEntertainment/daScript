@@ -36,13 +36,11 @@ def bundle_artifacts_dir(out_dir, name : string) : string {
     return path_join(out_dir, name)
 }
 
-def bundle_exe_path(out_dir, name : string) : string {
-    let dir = bundle_artifacts_dir(out_dir, name)
-    if (get_platform_name() == "darwin") {
-        return path_join(dir, name)
-    }
-    return path_join(dir, "{name}.exe")
-}
+def bundle_exe_name(name : string) : string =>
+    get_platform_name() == "darwin" ? name : "{name}.exe"
+
+def bundle_exe_path(out_dir, name : string) : string =>
+    path_join(bundle_artifacts_dir(out_dir, name), bundle_exe_name(name))
 
 // Path of the exe AFTER the bundle root has been moved/renamed to `moved_root`.
 // On Darwin the moved directory IS the .app — the exe still lives at
@@ -267,7 +265,7 @@ def test_cmd_release_program(t : T?) {
         }
         tt |> equal(0, cmd_release(tmp_root, out_dir), "cmd_release returns 0 with a companion")
         let artifacts = bundle_artifacts_dir(out_dir, "withtool")
-        let companion_rel = get_platform_name() == "darwin" ? "side-tool" : "side-tool.exe"
+        let companion_rel = bundle_exe_name("side-tool")
         tt |> success(fexist(bundle_exe_path(out_dir, "withtool")), "the main exe ships")
         tt |> success(fexist(path_join(artifacts, companion_rel)), "the companion exe sits beside it as {companion_rel}")
         tt |> success(!fexist(path_join(artifacts, "side-tool.exe.o")),
@@ -406,28 +404,35 @@ def test_cmd_release_refuses_unsafe_bundle_name(t : T?) {
     }
 }
 
+def private stub_tune_payload(kernel : string) : string =>
+    "\{\"kernels\":\{\"{kernel}\":\{\"suffix\":\"stub\"\}\},\"provenance\":\{\"mode\":\"stub\"\}\}"
+
+//! Writes `stub_tuner.das` into `root`: it runs `tuner_body`, then
+//! copies the file the das expression `payload_expr` names into
+//! DAS_TUNE_MANIFEST. Returns the lines a main program declares the
+//! tuned scope with.
+def private write_stub_tuner(root, scope, tuner_requires, tuner_body,
+                             payload_expr : string) : string {
+    fwrite(path_join(root, "stub_tuner.das"),
+        "options gen2\nrequire daslib/fio\n{tuner_requires}" +
+        "[export]\ndef main() \{\n{tuner_body}" +
+        "    fwrite(get_env_variable(\"DAS_TUNE_MANIFEST\"), fread({payload_expr}))\n\}\n")
+    return ("require daslib/tune\nrequire llvm/daslib/llvm_tune\n" +
+        "[tune_scope(name=\"{scope}\", tuner=\"stub_tuner.das\")]\n" +
+        "struct StubScope \{\n    unused : int\n\}\n")
+}
+
 // a tune-scope release fixture whose tuner is a STUB: a real tuner
 // races candidates for minutes under the noise gate; the stub copies
 // a canned sidecar into DAS_TUNE_MANIFEST, so the mint and ship paths
 // test at unit speed
 def private write_tunestub_fixture(tmp_root : string) {
     mkdir(tmp_root)
-    let payload = ("\{\"kernels\":\{\"stub_kernel\":\{\"suffix\":\"stub\"\}\}," +
-        "\"provenance\":\{\"mode\":\"stub\"\}\}")
-    fopen("{tmp_root}/stub_payload.json", "wb") $(f) {
-        fwrite(f, payload)
-    }
-    fopen("{tmp_root}/main.das", "wb") $(f) {
-        fwrite(f, "options gen2\nrequire daslib/tune\nrequire llvm/daslib/llvm_tune\n" +
-            "[tune_scope(name=\"stubscope\", tuner=\"stub_tuner.das\")]\n" +
-            "struct StubScope \{\n    unused : int\n\}\n" +
-            "[export]\ndef main() \{\n    print(\"hi\\n\")\n\}\n")
-    }
-    fopen("{tmp_root}/stub_tuner.das", "wb") $(f) {
-        fwrite(f, "options gen2\nrequire daslib/fio\n[export]\ndef main() \{\n" +
-            "    fopen(get_env_variable(\"DAS_TUNE_MANIFEST\"), \"wb\") $(mf) \{\n" +
-            "        fwrite(mf, fread(\"{tmp_root}/stub_payload.json\"))\n    \}\n\}\n")
-    }
+    fwrite("{tmp_root}/stub_payload.json", stub_tune_payload("stub_kernel"))
+    let payload_path = "\"{tmp_root}/stub_payload.json\""
+    let scope_lines = write_stub_tuner(tmp_root, "stubscope", "", "", payload_path)
+    fwrite("{tmp_root}/main.das",
+        "options gen2\n{scope_lines}[export]\ndef main() \{\n    print(\"hi\\n\")\n\}\n")
     fopen("{tmp_root}/.das_package", "wb") $(f) {
         fwrite(f, "options gen2\nrequire daslib/daspkg\n" +
             "[export]\ndef package() \{\n    package_name(\"tunestub\")\n\}\n" +
@@ -1055,6 +1060,9 @@ def test_wasm_archive_staging(t : T?) {
     }
 }
 
+def private configure_for(daslang, cache_text : string) : string =>
+    wasm_configure_command("/sdk", "/sdk/web/build64", "/sdk/web/output64", daslang, cache_text)
+
 [test(description = "build --wasm configures a new build directory in full, points an existing one at the running daslang, and leaves one that already names it")]
 def test_wasm_configure_command(t : T?) {
     let daslang = "C:\\sdk\\bin\\daslang.exe"
@@ -1064,9 +1072,6 @@ def test_wasm_configure_command(t : T?) {
         "no cache is a full configure: {full}")
     t |> success(find(full, host_flag) >= 0, "the full configure names the host: {full}")
     let host_only = "cmake -S \"/sdk/web\" -B \"/sdk/web/build64\" {host_flag}"
-def private configure_for(daslang, cache_text : string) : string =>
-    wasm_configure_command("/sdk", "/sdk/web/build64", "/sdk/web/output64", daslang, cache_text)
-
     let no_host = "CMAKE_BUILD_TYPE:STRING=Release\nDAS_WASM_MEMORY64:BOOL=ON\n"
     t |> equal(configure_for(daslang, no_host), host_only,
         "a cache without a host daslang gets the override alone")
@@ -1206,10 +1211,14 @@ def test_release_external_module_arguments(t : T?) {
     fwrite(path_join(root, "companion.das"), "options gen2\nrequire release_fixture/value\n[export]\ndef main()\{print(\"companion: \{RELEASE_FIXTURE_VALUE}\\n\")\}\n")
     fwrite(path_join(root, ".das_package"), "options gen2\nrequire daslib/daspkg\n[export]\ndef package()\{package_name(\"mounted_app\")}\n[export]\ndef release()\{release_main(\"main.das\"); release_program(\"mounted_companion\", \"companion.das\")}\n")
     let mounted = release_module_args([exe, "-load_module", module_dir])
-    let payload = "\{\"kernels\":\{\"mounted_stub\":\{\"suffix\":\"stub\"\}\},\"provenance\":\{\"mode\":\"stub\"\}\}"
+    let payload = stub_tune_payload("mounted_stub")
     fwrite(path_join(root, "stub_payload.json"), payload)
-    fwrite(path_join(root, "stub_tuner.das"), "options gen2\nrequire daslib/fio\nrequire release_fixture/value\n[export]\ndef main()\{\n    assert(RELEASE_FIXTURE_VALUE == 42)\n    fwrite(get_env_variable(\"DAS_TUNE_MANIFEST\"), fread(get_env_variable(\"DASPKG_MOUNT_PAYLOAD\")))\n    print(\"mounted tuner: \{RELEASE_FIXTURE_VALUE}\\n\")\n\}\n")
-    fwrite(script, "options gen2\nrequire release_fixture/value\nrequire daslib/tune\nrequire llvm/daslib/llvm_tune\n[tune_scope(name=\"mounted_scope\", tuner=\"stub_tuner.das\")]\nstruct MountedScope\{unused : int\}\n[export]\ndef main()\{print(\"mounted: \{RELEASE_FIXTURE_VALUE}\\n\")\}\n")
+    let scope_lines = write_stub_tuner(root, "mounted_scope", "require release_fixture/value\n",
+        "    assert(RELEASE_FIXTURE_VALUE == 42)\n" +
+        "    print(\"mounted tuner: \{RELEASE_FIXTURE_VALUE}\\n\")\n",
+        "get_env_variable(\"DASPKG_MOUNT_PAYLOAD\")")
+    fwrite(script, "options gen2\nrequire release_fixture/value\n{scope_lines}" +
+        "[export]\ndef main()\{print(\"mounted: \{RELEASE_FIXTURE_VALUE}\\n\")\}\n")
     let old_payload = get_env_variable("DASPKG_MOUNT_PAYLOAD")
     set_env_variable("DASPKG_MOUNT_PAYLOAD", path_join(root, "stub_payload.json"))
     defer(){set_env_variable("DASPKG_MOUNT_PAYLOAD", old_payload)}
@@ -1223,7 +1232,8 @@ def test_release_external_module_arguments(t : T?) {
         t |> equal(fread(minted), payload)
         let shipped = path_join(bundle_artifacts_dir(out_dir, "mounted_app"), "mounted_app.tune.json")
         t |> equal(fread(shipped), payload, "the tuner payload ships with the main executable")
-        let companion = path_join(bundle_artifacts_dir(out_dir, "mounted_app"), get_platform_name() == "darwin" ? "mounted_companion" : "mounted_companion.exe")
+        let companion = path_join(bundle_artifacts_dir(out_dir, "mounted_app"),
+            bundle_exe_name("mounted_companion"))
         let companion_rc = run_cmd("\"{companion}\"", output)
         t |> equal(companion_rc, 0, output)
         t |> success(find(output, "companion: 42") >= 0, output)
@@ -1240,6 +1250,121 @@ def test_release_external_module_arguments(t : T?) {
         t |> equal(wasm_rc, 0, output)
         t |> success(fexist(path_join(wasm_out, "mounted_app/mounted_app.wasm")), "wasm cross-compiler resolves the mounted namespace")
     }
+}
+
+//! a release whose main program, companion and tuner each report
+//! whether the build they ran in has sqlite: the two exes print it,
+//! the tuner mints the sidecar that names it
+def private write_disable_module_fixture(src, release_line : string) {
+    for (state in ["on", "off"]) {
+        fwrite(path_join(src, "{state}.json"), stub_tune_payload("tuner_sqlite_{state}"))
+    }
+    let sqlite = "require ?sqlite sqlite/sqlite_boost\n"
+    let has_sqlite = "typeinfo builtin_module_exists(sqlite)"
+    let scope_lines = write_stub_tuner(src, "disable_scope", sqlite,
+        "    let state = {has_sqlite} ? \"on\" : \"off\"\n",
+        "\"{to_generic_path(src)}/\{state\}.json\"")
+    for (program in ["main", "companion"]) {
+        let scope = program == "main" ? scope_lines : ""
+        fwrite(path_join(src, "{program}.das"),
+            "options gen2\n{sqlite}{scope}[export]\ndef main() \{\n" +
+            "    print({has_sqlite} ? \"{program}: sqlite on\\n\" : " +
+            "\"{program}: sqlite off\\n\")\n\}\n")
+    }
+    fwrite(path_join(src, ".das_package"),
+        "options gen2\nrequire daslib/daspkg\n" +
+        "[export]\ndef package() \{\n    package_name(\"disableapp\")\n\}\n" +
+        "[export]\ndef release() \{\n    release_main(\"main.das\")\n" +
+        "    release_program(\"disable-companion\", \"companion.das\")\n{release_line}\}\n")
+}
+
+def private with_disable_module_fixture(t : T?; release_line : string;
+                                        blk : block<(src, out_dir : string) : void>) {
+    let tmp = create_temp_directory_result("daspkg disable ")
+    if (!(tmp is value)) {
+        t |> failure("could not create temp directory: {tmp as error}")
+        return
+    }
+    let root = tmp as value
+    let src = path_join(root, "src")
+    mkdir(src)
+    write_disable_module_fixture(src, release_line)
+    invoke(blk, src, path_join(root, "out"))
+    force_rmdir(root)
+}
+
+def private check_disable_module_release(t : T?; release_line, state : string) {
+    with_disable_module_fixture(t, release_line) $(src, out_dir) {
+        t |> equal(0, cmd_release(src, out_dir), "cmd_release returns 0")
+        let artifacts = bundle_artifacts_dir(out_dir, "disableapp")
+        var output : string
+        let main_rc = run_cmd("\"{bundle_exe_path(out_dir, "disableapp")}\"", output)
+        t |> equal(0, main_rc, output)
+        t |> success(find(output, "main: sqlite {state}") >= 0,
+            "the main exe was built with sqlite {state}: {output}")
+        let companion = path_join(artifacts, bundle_exe_name("disable-companion"))
+        let companion_rc = run_cmd("\"{companion}\"", output)
+        t |> equal(0, companion_rc, output)
+        t |> success(find(output, "companion: sqlite {state}") >= 0,
+            "the companion was built with sqlite {state}: {output}")
+        let sidecar = fread(path_join(artifacts, "disableapp.tune.json"))
+        t |> success(find(sidecar, "tuner_sqlite_{state}") >= 0,
+            "the tuner ran with sqlite {state}: {sidecar}")
+        let shipped = path_join(artifacts, "modules/dasSQLITE/dasModuleSQLITE.shared_module")
+        t |> equal(state == "on", fexist(shipped),
+            "the sqlite shared module ships exactly when sqlite is on")
+    }
+}
+
+[test(description = "release_disable_module keeps a module out of the main exe, a companion and the tuner and out of the bundle", timeout = 1200)]
+def test_cmd_release_disable_module(t : T?) {
+    if (!typeinfo builtin_module_exists(sqlite)) {
+        t |> skip("needs a build with dasSQLITE")
+        return
+    }
+    t |> run("without the call all three have the module, and it ships") @(t : T?) {
+        check_disable_module_release(t, "", "on")
+    }
+    t |> run("the call takes the module from all three and from the bundle") @(t : T?) {
+        check_disable_module_release(t, "    release_disable_module(\"dassqlite\")\n", "off")
+    }
+}
+
+let private UNSAFE_DISABLE_LINE = "    release_disable_module(\"dasSQLITE main.das\")\n"
+
+[test(description = "a release_disable_module name that is not one bare word is refused by release and by release wasm before either builds", timeout = 1200)]
+def test_release_disable_module_unsafe_name(t : T?) {
+    t |> run("release refuses the name before anything builds") @(t : T?) {
+        with_disable_module_fixture(t, UNSAFE_DISABLE_LINE) $(src, out_dir) {
+            t |> success(cmd_release(src, out_dir) != 0, "the release is refused")
+            t |> success(!fexist(bundle_exe_path(out_dir, "disableapp")), "no exe was built")
+        }
+    }
+    t |> run("release wasm refuses the name before it cross-compiles") @(t : T?) {
+        with_disable_module_fixture(t, UNSAFE_DISABLE_LINE) $(src, out_dir) {
+            let wasm_lib = path_join(src, "wasm_lib")
+            mkdir(wasm_lib)
+            fwrite(path_join(wasm_lib, "liblibDaScript_runtime.a"), "never read")
+            t |> equal(1, cmd_release_wasm(src, out_dir, wasm_lib), "the release is refused")
+            t |> success(!fexist(path_join(out_dir, "disableapp")),
+                "the app's output directory was never made")
+        }
+    }
+}
+
+[test(description = "the disable list becomes one --disable-module flag a name, an unsafe name is found, and release wasm adds dashv and the wasm-only names")]
+def test_release_disable_args(t : T?) {
+    let none : array<string>
+    t |> equal(release_disable_args(none), "")
+    t |> equal(release_disable_args(["dasVulkan", "dasCUDA"]),
+        " --disable-module dasVulkan --disable-module dasCUDA")
+    t |> equal(first_unsafe_module_name(["dasVulkan", "dasCUDA"]), "")
+    t |> equal(first_unsafe_module_name(["dasVulkan", "das CUDA", "../x"]), "das CUDA")
+    var info : PackageReleaseInfo
+    info.disabled_modules |> push("dasCUDA")
+    info.wasm_disabled_modules |> push("dasvulkan")
+    t |> equal(release_disable_args(wasm_release_disabled_modules(info)),
+        " --disable-module dashv --disable-module dasCUDA --disable-module dasvulkan")
 }
 
 [test(description = "release_module_args rejects a missing directory and unsafe shell characters and keeps repeated -load_module flags in order")]

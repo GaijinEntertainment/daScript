@@ -215,6 +215,7 @@ def release() {
     release_program("my-bench", "tools/bench.das")   // a companion exe baked beside the main one under the same class, sharing the bundle's runtime libraries and modules
     release_exclude("data/secret/**")
     release_shared_module("dasSQLITE")  // force-include a dylib not auto-detected
+    release_disable_module("dasVulkan") // every build of the release runs without this module
     release_include_symbols()           // ship debug symbols into <bundle>/symbols/
 }
 ```
@@ -229,6 +230,18 @@ For a **dep package** (e.g. `dasCards`), only the asset-glob calls matter - its 
 2. **Walks transitive deps**: for every program module whose .das source file lives under a `<root>/modules/<DepName>/` package (i.e. has a `.das_package` ancestor distinct from the project's own root), runs that dep's `release()` and copies its `release_include` files to `<bundle>/modules/<DepName>/<rel>`.
 
 If a module is loaded only at runtime (e.g. data files read while the .das is never `require`d), use `release_shared_module(name)` to force-include it. Argument can be the daslang-side module name (`"sqlite"`) OR the package directory name (`"dasSQLITE"`).
+
+### Leaving a module out - `release_disable_module()`
+
+`release_disable_module(name)` builds the release as if the module were not installed. `name` is the
+module's folder under `modules/` (`dasVulkan`, `dasCUDA`), in any letter case. Every build of the
+release gets `--disable-module <name>`: the main exe, each `release_program` companion, the tuner
+and the `release wasm` cross-compile. A guarded `require ?vulkan ...` then resolves as absent in
+all of them, and the module's `.shared_module` does not ship. An unguarded `require` of the module
+fails the build. `release()` is a script, so the call can sit under a condition - the platform, an
+environment variable - and one package releases with or without the module. Only the released
+project's own call counts; a dependency's is not read. The same flag works on a plain run:
+`daslang --disable-module dasVulkan main.das`.
 
 ### Output layout
 
@@ -366,7 +379,7 @@ def release() {
 | `release_emcc_arg("-sUSE_GLFW=3")` | Append an emcc link flag (dasGlfw declares this) |
 | `release_embed_file(src, dst)` | `--embed-file src@dst` into MEMFS (dasStbImage embeds its HUD font) |
 | `release_web_shell("path.html")` | Override the default canvas shell (`web/templates/wasm_canvas_shell.html`). A shell that carries `<!-- @wasm-gate -->` gets the browser gate (`window.dasWasmGate`) inlined there at release. Put emcc's `{{{ SCRIPT }}}` in `<template id="loader">` and call `dasWasmGate.reason()`: an empty string means start the program with `dasWasmGate.loadProgram()`; `"wasm"` (a missing WebAssembly feature), `"32bit"` (a 32-bit browser) or `"isolation"` (the page lacks cross-origin isolation - the COOP/COEP headers a threaded build needs) means show the `title` and `text` of `dasWasmGate.refusal(reason)` instead - plain text, set through `textContent`. The default shell does all of this. The link exports `FS` and `ENV`, so a shell's `Module.preRun` can stage files into MEMFS (`Module.FS.writeFile`) and set environment knobs (`Module.ENV.X = ...` - the C environment is built from it at startup, later writes never reach `getenv`); hold the run with `addRunDependency` while fetching |
-| `release_wasm_disable_module("dasvulkan")` | Keep a host module (its folder name, case-insensitive) out of the cross-compile so its guarded `require ?name` resolves as absent, as the wasm build sees it (the rail disables dashv itself; the GPU modules go through `release_wasm_disable_host_gpu_modules()`) |
+| `release_wasm_disable_module("dasvulkan")` | Keep a host module (its folder name, case-insensitive) out of the cross-compile alone so its guarded `require ?name` resolves as absent, as the wasm build sees it (the rail disables dashv itself; the GPU modules go through `release_wasm_disable_host_gpu_modules()`; `release_disable_module` leaves a module out of the native release too) |
 | `release_wasm_disable_host_gpu_modules()` | Disable dasVulkan, dasCUDA, dasMetal and dasAccelerate for the wasm build in one call - none has a wasm archive |
 
 ### Game source contract (cross-compiles UNCHANGED)
