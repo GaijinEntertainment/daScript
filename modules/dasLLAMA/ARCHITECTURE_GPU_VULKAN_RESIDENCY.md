@@ -177,7 +177,7 @@ a per-layer-embedding model whose side table stays on the host, a hyper-connecti
 window reads the pre-step's rows). A model with no planar plane still places an untied table's plane: a gguf streamed live
 gathers it off the mapping like every other plane, and a trimmed lane - which bakes no entry for it, the plan charging
 it only where it fits - places it at the map off the packed emb region the lane keeps for the CPU embed
-(`trim_emb_gather`), so a table that does not fit one run's card leaves the lane and its baked plan as they are. The window binds its ids plane (`pf_ids`); every token command but the in-order rows
+(`trim_emb_gather`; the region holds a K-quant table in the model's row interleave, and the gather reads it at that interleave as the CPU embed does), so a table that does not fit one run's card leaves the lane and its baked plan as they are. The window binds its ids plane (`pf_ids`); every token command but the in-order rows
 command (the recurrent peel) records the gather in place of the x upload, each row's id read from `tok_ids_host` and, for a row
 with none (`EMB_ID_HOST`: a non-text row, the split command's caller), the host's row staged in `tok_xh_host` (`nb` of each).
 A step that brings no id writes `EMB_ID_HOST` into the id word itself, the split command's entry (`vk_rdec_token_split`)
