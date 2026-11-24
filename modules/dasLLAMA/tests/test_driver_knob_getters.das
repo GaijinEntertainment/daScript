@@ -14,15 +14,18 @@ require dasllama/dasllama_gpu_resident   // the lane_read and gpu_kv_want levers
 require _override_probes   // decode_declines: the fake override's step
 require dasllama/dasllama_kv_codec   // cvt_q8kv_to_f32: a poisoned q8_0 row read back
 require daslib/linq   // all
+require daslib/rtti   // this_context: the panic a lever's with re-raised
+require strings
 require ?das_metal dasllama/dasllama_metal_decode   // get_metal_decode_fuse, metal_mtp_carry_pre
 require ?das_metal dasllama/dasllama_metal_prefill   // get_metal_prefill_lastrow
 require ?das_metal dasllama/dasllama_metal_mtp_gemma   // gemma_trace, gemma_carry_pre_norm
 
-// The driver knobs' getters and the registry's removal verb, model-free and device-free: each setter's value read back through
+// The driver knobs' getters and the registries' removal verbs, model-free and device-free: each setter's value read back through
 // its getter, then the value found put back and read back as found - the form every cell that pins a knob restores through.
 // The Metal knobs' cells skip on a build without das_metal.
 
 let private PROBE = "knob-getters-probe"   //! a decode override name no backend registers
+let private PROBE_OTHER = "knob-getters-probe-other"   //! a second override name no backend registers
 
 [unused_argument(t, ws, sessions, nrows)]
 def private probe_batch(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool => false
@@ -245,6 +248,21 @@ def test_lever_macro(t : T?) {
         t |> equal(seen, 111, "with pins for its block, a nested with for its own, the outer pin back between them")
         t |> success(!probe_flag() && !probe_flag_pin().pinned, "... and the state it found after it")
         g_probe_knob = true
+    }
+    t |> run("a block that panics leaves with's pin put back, and the panic reaches the caller") @(t : T?) {
+        set_probe_flag(false)
+        var caught = ""
+        try {
+            with_probe_flag(true) {
+                panic("lever probe panic")
+            }
+        } recover {
+            caught = this_context().last_exception
+        }
+        t |> success(find(caught, "lever probe panic") >= 0, "the block's panic is re-raised: '{caught}'")
+        let back = probe_flag_pin()
+        t |> success(back.pinned && !back.value, "the pin found (false) is back after the panic")
+        reset_probe_flag()
     }
     t |> run("a lever over an enum, named apart from its getter") @(t : T?) {
         let r0 = g_probe_reads

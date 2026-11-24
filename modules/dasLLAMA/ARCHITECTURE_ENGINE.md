@@ -224,14 +224,16 @@ module gains five functions, each as visible as the getter:
 
 - `set_X(v : T)` pins `v`; `reset_X()` lifts the pin and leaves `T`'s default behind it.
 - `X_pin() : tuple<pinned : bool; value : T>` reads the pin; `restore_X(pin)` puts one back, pinned or not.
-- `with_X(v : T) { ... }` pins `v` for its block and puts back the pin it found.
+- `with_X(v : T) { ... }` pins `v` for its block and puts back the pin it found however the block leaves: a panic
+  is re-raised once the pin is back (`with_put_back`, the restore the test cells' own pins return through too).
 
 The engine's levers: `source_release` (`dasllama_gguf.das`), `image_save` and `host_planes`
 (`dasllama_image.das`), `vulkan_trim` (`dasllama_gpu_tier.das`), `lane_read` and `gpu_kv_want`
-(`dasllama_gpu_resident.das`), `kv_init` (`dasllama_common.das`). `gpu_kv_want`'s body is a constant: the codec's knob
-has spellings that name none, so `resident_mirror_ask` reads the pin and, unpinned, the knob itself; the facade's
-`set_gpu_kv_dtype`, `reset_gpu_kv_dtype` and `gpu_kv_dtype_pin` wrap it. A generated function has no `def` line of
-its own: a search for `set_X` finds its callers, and the declaration is the `[lever]` getter.
+(`dasllama_gpu_resident.das`), `kv_init` and `cpu_prefill` (`dasllama_common.das`; `allow_cpu_prefill` sets
+it). `gpu_kv_want`'s body is a constant: the codec's knob has spellings that name none, so `resident_mirror_ask`
+reads the pin and, unpinned, the knob itself; the facade's `set_gpu_kv_dtype`, `reset_gpu_kv_dtype` and
+`gpu_kv_dtype_pin` wrap it. A generated function has no `def` line of its own: a search for `set_X` finds its
+callers, and the declaration is the `[lever]` getter.
 
 ### The test folder's documents track its files {#test-folder-gates}
 
