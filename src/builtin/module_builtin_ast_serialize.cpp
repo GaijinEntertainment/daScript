@@ -3474,8 +3474,12 @@ namespace das {
         // hosts take the program module as the library's last one: plain builtins first, then dependency order
         TopSort ts(library.modules);
         auto order = ts.getDependecyOrderedEndingWith(thisModule.get());
-        stable_partition(order.begin(), order.end(), [](Module * m) { return m->builtIn && !m->promoted; });
-        library.modules = das::move(order);
+        auto isPlainBuiltin = [](Module * m) { return m->builtIn && !m->promoted; };
+        vector<Module *> plainBuiltinsFirst;
+        plainBuiltinsFirst.reserve(order.size());
+        for ( auto m : order ) if ( isPlainBuiltin(m) ) plainBuiltinsFirst.push_back(m);
+        for ( auto m : order ) if ( !isPlainBuiltin(m) ) plainBuiltinsFirst.push_back(m);
+        library.modules = das::move(plainBuiltinsFirst);
         for ( auto m : library.modules ) {
             if ( !m->builtIn && !m->promotedRequire.empty() ) m->promoteToBuiltin(nullptr, m->promotedRequire);
         }
