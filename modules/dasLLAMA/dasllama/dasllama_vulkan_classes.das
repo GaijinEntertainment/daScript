@@ -2956,12 +2956,20 @@ class KqBatchIq4nl : KqBatchIq4xs {
     }
 }
 
-//! NVFP4 tile: the k4 staging over signed e2m1 lanes (no block-sum term), each block's low and high half under its own UE4M3 sub-block scale at half
-//! nv4 (NVFP4 as a nibble codebook plane): iq4xs's tiling and codebook staging under the doubled e2m1 magnitudes, two
-//! UE4M3 half scales a block in place of the one sub-scale
+//! NVFP4 tile: the device unit's nine quads - a block's quad its two sub-blocks' eight bytes each in the file's pairing, the
+//! ninth quad the sixteen scales - staged as signed e2m1 lanes (no block-sum term), each block's low and high half under its
+//! own UE4M3 sub-block scale at half and the plane's factor (the scale plane's word a superblock)
 [vk_dispatch(name = "kq_batch_nv4_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
 class KqBatchNv4 : KqBatchIq4xs {
     def override cb_word(n : uint) : uint => mx4_word(n)
+
+    [unused_argument(k)]
+    def override w_quad(wsb, bu, hh, k : uint) : uint4 {
+        let rb4 = (wsb * NV4_UNIT_QUADS + bu) * 4u + hh * 2u   // half hh is sub-block hh: its two words, low nibbles its elements 0-7, high ones 8-15
+        let a = wq[rb4]
+        let b = wq[rb4 + 1u]
+        return uint4(cb_word(a & 0x0F0F0F0F), cb_word(b & 0x0F0F0F0F), cb_word((a >> 4u) & 0x0F0F0F0F), cb_word((b >> 4u) & 0x0F0F0F0F))
+    }
 
     def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
         let slane = tid % 32u
@@ -2970,8 +2978,8 @@ class KqBatchNv4 : KqBatchIq4xs {
         var shi = 0.0
         if (wt * 32u + slane < pa.d) {
             let wsb = wsb0 + (wt * 32u + slane) * nsb + s
-            let sw = wsu[wsb * 5u + sblk / 2u] >> ((sblk & 1u) * 16u)
-            let site_scale = uint_bits_to_float(wsu[wsb * 5u + 4u])
+            let sw = wq[(wsb * NV4_UNIT_QUADS + NV4_SCALE_QUAD) * 4u + sblk / 2u] >> ((sblk & 1u) * 16u)
+            let site_scale = uint_bits_to_float(wsu[wsb])
             slo = ue4m3_half_f32(sw & 0xFFu) * site_scale
             shi = ue4m3_half_f32((sw >> 8u) & 0xFFu) * site_scale
         }

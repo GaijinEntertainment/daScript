@@ -2344,7 +2344,7 @@
     scale at half (`ue4m3_half_f32`), the per-tensor `.scale` as the matmul epilogue
     (`ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale`) - with the CPU dot, grp repack and reference GEMV / tile bodies,
     the shared `Nv4GemvT` and `Nv4Cm2T` templates stamped on Vulkan (the per-op `KqBatchNv4` beside them) and CUDA, and
-    the kernel cells of both homes, the per-tensor factor riding each device scale row's pad word so the whole-model
+    the kernel cells of both homes, the per-tensor factor riding the device scale plane's word a superblock so the whole-model
     drivers serve it (the nv4 cm2 tiles race at Q4_0's time on both homes, `harness/gemm_cuda_vs_vulkan --only nv4,q40`).
     Not yet served: (1) the pp512 / tg128 rows on the 5060 Ti - the ModelOpt files keep BF16 k/v planes beside an nv4 q,
     which the whole-model drivers decline as mixed feeds, so a dense carrier with every plane nv4 is still to mint (the

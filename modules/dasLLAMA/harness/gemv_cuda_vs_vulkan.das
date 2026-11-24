@@ -142,12 +142,12 @@ def race_q8(p : GemvFix; n, d : int) : RaceRow {
 def kq_planes(fmt, d, n : int) : GemvFix {
     let nsb = n / 256
     var wsh <- kq_ws_plane(fmt, d * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 13u)
-    return <- gemv_fix(1, d, nsb, int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l), uint(fmt) * 77777u, wsh, nsb, 64, 31u, 5u, 0.5, 0.25, 7)
+    return <- kq_gemv_fix(fmt, 1, d, nsb, uint(fmt) * 77777u, wsh, nsb, 64, 31u, 5u, 0.5, 0.25, 7)
 }
 
 //! the weight and activation bytes a K-quant dispatch reads
 def kq_bytes(fmt, n, d : int) : double =>
-    double(d) * double(n / 256) * double(kq_qsb(kq_fmt_of_slot(fmt)) + kq_dev_ssb_i(fmt)) + double(n) * (1.0lf + 4.0lf / 256.0lf)
+    double(d) * double(n / 256) * double(kq_dev_qsb(kq_fmt_of_slot(fmt)) + kq_dev_ssb_i(fmt)) + double(n) * (1.0lf + 4.0lf / 256.0lf)
 
 //! a per-32 plane pair of `d` rows of `n` elements (the format's quant words a block, a scale word a block or a half of one),
 //! hashed, with its Q8_0 activation row

@@ -1618,7 +1618,8 @@ handed in, the activation plane and the device buffers built once - with the arm
 format's oracle passed in), which dispatches two workgroups past its schedule over sentinel map
 words (`SCHED_NONE`), the device-written schedules' upper-bound shape, and every arm's rows still
 match; each per-format cell is one row of `fmt_tile_rows` (its K, quant words a unit, scale-row form, seeds,
-arms, oracle and the sibling codebook's control) through `fmt_tile_cell`, and the q8 fmt-0 cells
+arms, oracle and its control - the sibling codebook's, nv4's the k4-tiled read of its own unit,
+`nv4f16_k4_control_oracle`) through `fmt_tile_cell`, and the q8 fmt-0 cells
 (`q8_tile_cell`, `q8_planes` for their planes) run the same loop at one arm each;
 `test_vkd_dec_combine_pair` holds the decode span's two combine classes - the routed sum, and the routed
 sum with the shared expert's row gated and ungated - to the CPU sum at a width off the workgroup
@@ -1663,7 +1664,8 @@ row at its gate, ungated, and no shared expert; the in-place residual moved off 
 f32 normed row and the f16 twin against one oracle) - every output under a sentinel fill before
 its dispatch, every bar with its own poison. `test_vkd_emb_gather_family` holds the token-table gather's
 `KqEmb<Fmt>` leaves (every `kq_sb` format) at four rows - three ids off a five-row table past a one-row lead, one
-`EMB_ID_HOST` row copying the host's staged row - against the class's own `blk_decode` lanes under the `blk_fold` terms,
+`EMB_ID_HOST` row copying the host's staged row - against the class's own `blk_decode` lanes under the `blk_fold` terms
+and the plane's site scale (`plane_site_scale`: nv4's scale-plane word, 1.0 elsewhere),
 and on the formats with a float witness each gathered row dotted with a Q8_K row against `kq_gemv_float_oracle` over the
 same table row; `test_vkd_emb_gather_q8_f32` holds the q8 stamp (`EmbGather`) against the CPU dequant and the f32 stamp
 (`EmbGatherF32`) against the table's rows, an `EMB_ID_HOST` row on both, each compare with its poisoned row. `test_vkd_gemv_lane_rule` pins the decode GEMV
@@ -2841,9 +2843,9 @@ and the deltanet family's chunked form where its stamp does not compile, which t
 allocation past any card's memory returning no plane and counting one failure (`test_cud_dev_zeroed_counts_a_failure`), the q8 GEMV and its rate, the MMQ int8 GEMM's leaves against their references - the Q8_0 one and
 the superblock ones without a min term (IQ4_XS and IQ4_NL through the codebook, Q4_0's nibbles less eight) per element
 against the block-scaled fold, the Q4_K one (its min terms f16-staged and folded sixteen blocks at a time over four
-superblocks) at the f16 tiles' bar, the NVFP4 one on the FP4 tensor rung (`test_cud_nv4_mmq`: the k4-tiled nv4 plane
+superblocks) at the f16 tiles' bar, the NVFP4 one on the FP4 tensor rung (`test_cud_nv4_mmq`: the nv4 device plane, its units in the file's pairing,
 against an FP4 feed in the (k, k + 8) pairing, every element e2m1 x UE4M3 on both sides, the token's row scale and the
-plane's factor over the sum) with its feed kernels (`test_cud_fp4_feeds`: a float plane's rows bit for bit the CPU feed
+plane's factor over the sum, at four superblocks a row and at one) with its feed kernels (`test_cud_fp4_feeds`: a float plane's rows bit for bit the CPU feed
 of `_fp4_feed.das`, the gate / up pair through the activation and the fused residual step within a count of strips
 that round the other way), and the per-32 ones (Q5_1, Q4_0, Q5_0, IQ4_NL off the 256 lattice) against the
 engine's own per-32 dequant dotted with the activation quants, Q5_1 at the f16 tiles' bar for its m - the cm2 l tile
@@ -2872,7 +2874,7 @@ piece; three m columns, the last partial, its tile running past the window into 
 row guard - the pieces' row counts asserted, and the m dispatch ahead of the s one, so an s tile's overrun lands on m rows), 2880-wide rows on the k tail, a 320-wide plane under the
 store's column guard, the m dispatch two sentinel workgroups past its bound, every bucket row against the e2m1 x UE8M0 reference
 on both sides (`mx4_fp4_mmq_ref`); its nv4 twin `test_cud_nv4_fp4_mmq_moe`: the same buckets over 768-wide superblock rows (no k
-tail), three expert planes each under its own site scale in its scale rows' fifth word, every row against the e2m1 x UE4M3 reference
+tail), three expert planes each under its own site scale in its scale plane's words, every row against the e2m1 x UE4M3 reference
 under its expert's factor (`nv4_mmq_ref` at the expert's row offset) - a tile reading another plane's factor, or storing a row past
 its bucket, reds a bucket; the MXFP4 feed kernels
 (`test_cud_mx4_feeds`: `mx4_rows` bit for bit the CPU feed, `mx4_actrows` under the clamped swiglu and its biased twin with each

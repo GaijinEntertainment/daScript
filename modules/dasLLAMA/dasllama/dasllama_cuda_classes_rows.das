@@ -119,6 +119,7 @@ class CuRowsMmaRelayQ8 : RowsMmaRelayT {
 //! one, never stored; a row's width is whole superblocks, or on the Q8_0 member whole 32-blocks
 [ |> template_struct_instance]
 class template RowsMmaT {
+    @template_constant SITE_SCALE : bool = false   //!< the plane has a scale its blocks' own leave out: the store multiplies a row by `plane_site_scale`
     @ssbo @binding = 2 @readonly regions : array<uint>                //! (rel_wblock, xblock) pairs per region; the feed is the whole dispatch's
     @ssbo @binding = 3 @readonly xq4 : array<uint4>                   //! the feed's quants: a 32-block's lane L at blk * 32 + L
     @ssbo @binding = 4 @readonly cs4 : array<float4>                  //! the feed's scales, lane t's four columns at `x_scale_at`
@@ -145,6 +146,10 @@ class template RowsMmaT {
     def turn_scales : bool => false
 
     def w_turn_scales(wrow, b0, b1, b2, b3, t : uint) : float4 => float4(0.0)
+
+    //! the scale a plane's blocks share and their own leave out (nv4's per-tensor one), of the plane whose first unit is
+    //! `wrow0`: a region is one plane, so its rows read one word; a `SITE_SCALE` stamp's store multiplies it in
+    def plane_site_scale(wrow0 : uint) : float => 1.0
 
     [spirv_inline, arch(at="../ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-rows-leaf")]
     def rows_mma_body {   // nolint:STYLE038 - one register-coupled product loop: the fragments, their scales and the accumulators ride the same lanes
@@ -266,7 +271,11 @@ class template RowsMmaT {
                 let row = m0 + mma_acc_row(lane, k)
                 let col = mma_acc_col(lane, k)
                 if (row < total && col < pa.ncols) {
-                    y[pa.ybase + col * pa.ystride + row] = v
+                    static_if (SITE_SCALE) {
+                        y[pa.ybase + col * pa.ystride + row] = v * plane_site_scale(regions[(row / max(1u, pa.d)) * 2u])
+                    } else {
+                        y[pa.ybase + col * pa.ystride + row] = v
+                    }
                 }
             }
         }
@@ -376,10 +385,12 @@ class template K6RowsMmaT : Sb16RowsMmaT {
 
 //! NVFP4 on the rows tensor leaf: the e2m1 nibbles as signed bytes of their doubled magnitudes through the byte permute
 //! (`nv4_prmt_split`), each of the block's two 16-element halves under its own UE4M3 scale - read off a table of the 256
-//! codes the block stages once - and the plane's factor (the scale row's fifth word): two products a block, no min term.
-//! A pair's raw words: its scale word and the plane's factor
+//! codes the block stages once - and the plane's factor (the scale plane's word a superblock): two products a block, no min
+//! term. The device unit is nine quads: a block's quad in the file's pairing (word 0 and 1 the first sub-block's elements,
+//! low nibbles 0-7 and high 8-15; word 2 and 3 the second's), then the scale quad. A pair's raw word: its scale word
 [ |> template_struct_instance]
 class template Nv4RowsMmaT : Sb16RowsMmaT {
+    override SITE_SCALE = true
     @workgroup ue4 : float[256]   //! the UE4M3 codes at half their value (`ue4m3_half_f32`)
 
     def override tile_begin : void {
@@ -387,21 +398,27 @@ class template Nv4RowsMmaT : Sb16RowsMmaT {
         barrier()
     }
 
-    def override w_pair_raw(wrow, blk, t : uint) : uint4 {
-        let h = (wrow + blk / 8u) * 5u
-        return uint4(wsu[h + (blk & 7u) / 2u], wsu[h + 4u], 0u, 0u)
-    }
+    def override sb_words : uint => NV4_UNIT_QUADS * 4u
+
+    def override w_pair_raw(wrow, blk, t : uint) : uint4
+        => uint4(wq4[(wrow + blk / 8u) * NV4_UNIT_QUADS + NV4_SCALE_QUAD][int((blk & 7u) >> 1u)], 0u, 0u, 0u)
 
     def override w_scale_min(raw : uint4; wrow, blk : uint) : float2 {
         let sw = raw.x >> ((blk & 1u) * 16u)
-        let site = uint_bits_to_float(raw.y)
-        return float2(ue4[sw & 0xFFu] * site, ue4[(sw >> 8u) & 0xFFu] * site)
+        return float2(ue4[sw & 0xFFu], ue4[(sw >> 8u) & 0xFFu])
     }
+
+    [arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
+    def override plane_site_scale(wrow0 : uint) : float => uint_bits_to_float(wsu[wrow0])
 
     def override w_quants(raw : uint4; wrow, blk, t : uint) : uint2 {
         var lo = 0u
         var hi = 0u
-        nv4_prmt_split(blk_word(wrow, blk, t), lo, hi)
+        // the lane's k 4t.. sit in the first sub-block's word t % 2 and its k 16 + 4t.. in the second's, low nibbles for t < 2 and high past it: the two runs paired into one word for the split
+        let q = wq4[(wrow + blk / 8u) * NV4_UNIT_QUADS + (blk & 7u)]
+        let sh = (t >> 1u) * 4u
+        let w = ((q[int(t & 1u)] >> sh) & 0x0F0F0F0Fu) | (((q[int(2u + (t & 1u))] >> sh) & 0x0F0F0F0Fu) << 4u)
+        nv4_prmt_split(w, lo, hi)
         return uint2(lo, hi)
     }
 

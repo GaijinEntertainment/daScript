@@ -36,8 +36,8 @@ prefill, the MXFP4 expert pieces on the FP4 tensor rung, the nv4 nibble decode, 
   a Q6_K leaf on it read 37 to 39 TFLOP/s against the Q6_K cm2 tile's 38 to 51 on the same shapes - MMQ is a
   per-32-scale property. NVFP4 takes the same slot on the FP4 tensor rung instead (`CuNv4Mmq` over `MmqFp4T`, the
   arch-specific `sm_120a` target the emitter marks): raw e2m1 nibbles on both sides under the block-scaled mma, whose
-  UE4M3 scale a k16 strip is the format's own, so the weight stage re-pairs the k4-tiled 32-blocks into the feed's
-  (k, k + 8) order and stages no int8 at all - the sixteen-wide scale that keeps Q6_K off the int8 leaf is what the
+  UE4M3 scale a k16 strip is the format's own, so the weight stage copies the device unit whole - its nibbles sit in the
+  feed's (k, k + 8) order, the file's own - and stages no int8 at all - the sixteen-wide scale that keeps Q6_K off the int8 leaf is what the
   instruction consumes. Its feed is W4A4: the activations quantized to e2m1 per token (`fp4_rows`, `fp4_actrows`, the
   residual step's `cls_ar_fp4_b`; a row scale of amax / (6 x 448), a UE4M3 code a strip - the nearest to its largest over
   6, stepped up once where that code would saturate the largest value (`fp4_strip_code`: the nearest alone saturates on
@@ -46,7 +46,7 @@ prefill, the MXFP4 expert pieces on the FP4 tensor rung, the nv4 nibble decode, 
   arc's W4A4 entry) - the nibbles in the same
   pairing; a feed reads its row twice, once for the row scale and once for the strips - a row kept in registers between the
   two passes measured no faster at 14336 wide and slower at 4096), the row scale and the plane's per-tensor factor applied to the accumulator's columns in
-  the epilogue - the factor read once a tile off the tile's first row's fifth scale word, the device row's
+  the epilogue - the factor read once a tile off the scale plane's word of the tile's first row
   (`ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale`), so a deltanet site and a merged K/V pair carry their planes' own factors
   with no argument; a layer whose sites split across the three feeds produces each from the one residual step, and a recurrent layer's
   out site feeds the leaf through `fp4_rows` over the scan's o rows. A plane the tile cannot take (the deltanet beta and alpha rows, 16
@@ -64,8 +64,8 @@ prefill, the MXFP4 expert pieces on the FP4 tensor rung, the nv4 nibble decode, 
 - **The CUDA window's MXFP4 and NVFP4 expert pieces ride the FP4 tensor rung fed from the expert schedule; the Vulkan window
   keeps the f16 cm2 tiles.** The routed block's gate, up and down pieces take `MmqFp4T` under its `MOE` arm (`CudLayer.moe_mmq`, on
   a card at `FP4_RUNG_SM` under `DASLLAMA_CUDA_MMQ`, the three stacks in one format with a stamp on the rung - `crd_moe_mmq_fits`):
-  nv4 stacks on the dense nv4 stamp's weight stage (`CuNv4Fp4MmqMoe` / `CuNv4Fp4MmqMoeS`: the superblock rows, the sixteen UE4M3
-  strip codes, each expert plane's per-tensor factor off its own scale rows' pad word - the schedule's block base is the expert's
+  nv4 stacks on the dense nv4 stamp's weight stage (`CuNv4Fp4MmqMoe` / `CuNv4Fp4MmqMoeS`: the device units, their sixteen UE4M3
+  strip codes, each expert plane's per-tensor factor off its own scale plane's words - the schedule's block base is the expert's
   superblock base - both reduction widths on the 256 lattice, the gathered rows and the hidden rows through the dense site's feeds
   `CuFp4Rows` / `CuFp4ActRows`, whose act form adds no bias rows, so a biased nv4 stack keeps the tiles); mx4 stacks under the `MX`
   arm (`CuMx4Fp4MmqMoe` / `CuMx4Fp4MmqMoeS`, both reduction widths on the 64 lattice: the last step's tail runs whole k64s and the
@@ -97,7 +97,7 @@ prefill, the MXFP4 expert pieces on the FP4 tensor rung, the nv4 nibble decode, 
   Vulkan has no byte permute, so it keeps the formula. Metal does not stamp the shared leaf at all: nv4 rides the iq4
   family's templates under `NV4`, the doubled e2m1 table staged in threadgroup memory as iq4nl's codebook is and the UE4M3
   byte pair read off the compact 16-byte row (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane`); the per-tensor
-  `.scale` the Vulkan and CUDA rows carry in their pad word has no Metal carrier, so a plane under one declines there.
+  `.scale` the Vulkan and CUDA rows carry in their scale plane has no Metal carrier, so a plane under one declines there.
 - **The CUDA window's chunked deltanet scan is its own class on the intrinsics tier** (`DnScanChunkCuT` /
   `dn_scan_chunk_cu_body` in `dasllama_cuda_classes`; the Vulkan home stamps the shared `DnScanChunkT`,
   `ARCHITECTURE_GPU_SHARED_KERNELS.md#dn-discrete-kernels`). The algorithm is the shared body's; what the shared surface
@@ -230,7 +230,7 @@ for a superblock format), sixteen regions at the most, inside the feed's width; 
 of a block through the word decode its GEMV reads (`nib_word`, `k5_word`, `k6_word`, a codebook's word map), and the block's scales. Q3_K,
 Q2_K, the grid formats (a codebook plane the leaf does not bind) and the per-32 formats have no leaf. The walk loads a plane word once: a
 turn's four blocks are two pairs of neighbours, and the words a pair shares - a K format's d | dmin, sc and mn, Q6_K's sub-scale word, d and
-qh words, NVFP4's scale word and factor, an f16-d format's d word, IQ4_XS's two scale words, the pair's feed scale - load once a pair
+qh words, NVFP4's scale word, an f16-d format's d word, IQ4_XS's two scale words, the pair's feed scale - load once a pair
 (`w_pair_raw`), a second load of one being a second wait on its plane's stream. An offset format keeps its nibbles unsigned and takes the
 offset as a min term against the feed's block sums (Q4_0's 8 d). The
 Q8_0 member has a second stamp for a plane of wide rows that waits on memory (`enc_q8_rows_mma`: 4096 wide and 16 MB at the least): a turn's

@@ -462,18 +462,16 @@ def private nv4_test_scale_word(i : int) : uint {
     return w
 }
 
-//! `experts` nv4 expert planes' scale rows of `sbs` superblocks each: four test strip words a superblock, the plane's own factor in the fifth
-def private nv4_expert_scale_words(experts, sbs : int; scales : float[3]) : array<uint> {
-    var ws : array<uint>
-    ws |> resize(experts * sbs * 5)
-    for (sb in range(experts * sbs)) {
-        for (j in range(4)) {
-            ws[sb * 5 + j] = nv4_test_scale_word(sb * 4 + j)
-        }
-        ws[sb * 5 + 4] = float_bits_to_uint(scales[sb / sbs])
-    }
-    return <- ws
+//! `units` hashed nv4 device units of 36 words: the scale quads four test strip words a unit
+def private nv4_test_units(units : int; mul, add : uint) : array<uint> {
+    var wq <- hashed_words(units * 36, mul, add)
+    nv4_scale_quads(wq, units) $(i) => nv4_test_scale_word(i)
+    return <- wq
 }
+
+//! `experts` nv4 expert planes' scale plane of `sbs` superblocks each: the plane's own factor a superblock
+def private nv4_expert_site_words(experts, sbs : int; scales : float[3]) : array<uint>
+    => <- [for (sb in range(experts * sbs)); float_bits_to_uint(scales[sb / sbs])]
 
 //! the expert cells' slot rows: the buckets' rows interleaved until each count is spent
 def private fp4_moe_bucket_idx(counts : int[3]) : array<uint> {
@@ -492,39 +490,40 @@ def private fp4_moe_bucket_idx(counts : int[3]) : array<uint> {
     return <- idx
 }
 
-//! the NVFP4 leaf on the FP4 tensor rung: the k4-tiled nv4 plane (sixteen UE4M3 strip codes a superblock as four words) against an FP4 feed in the (k, k + 8) pairing, the reference each element's e2m1 x UE4M3 on both sides under the row scale and the site scale
-[test(description = "The NVFP4 MMQ leaf on the FP4 tensor rung over the k4-tiled nv4 plane matches the e2m1 x UE4M3 CPU reference under each token's row scale and the site scale, within 1e-3 of the larger magnitude.")]
+//! the NVFP4 leaf on the FP4 tensor rung: the nv4 device units (eight nibble quads in the file's pairing, then the sixteen UE4M3 strip codes as four words; the factor a word a unit in the scale plane) against an FP4 feed in the same (k, k + 8) pairing, the reference each element's e2m1 x UE4M3 on both sides under the row scale and the site scale
+[test(description = "The NVFP4 MMQ leaf on the FP4 tensor rung over the nv4 device units matches the e2m1 x UE4M3 CPU reference under each token's row scale and the site scale, within 1e-3 of the larger magnitude, at four superblocks a row and at one.")]
 def test_cud_nv4_mmq(t0 : T?) {
     t0 |> run("CUDA NVFP4 GEMM on the FP4 tensor rung == the e2m1 x UE4M3 CPU reference under the row scales and the site scale") <| @(t : T?) {
         if (!ensure_nv4_mmq()) {
             t |> skip("no CUDA device with NVRTC")
             return
         }
-        let k = 768   // three superblocks: six k128 steps, the two-deep ring wraps
-        let d = 256
-        let rows = 256
-        let nsb = k / 256
-        let site_scale_v = 0.75
-        var wq <- hashed_words(d * nsb * 32, 1u, 23u)
-        var ws <- nv4_expert_scale_words(1, d * nsb, fixed_array(site_scale_v, 0.0, 0.0))
-        var xq <- hashed_words(rows * k / 8, 5u, 7u)
-        var xs : array<uint>
-        xs |> resize(rows * k / 64)
-        for (i in range(rows * k / 64)) {
-            xs[i] = nv4_test_scale_word(i + 3)
+        for (k in fixed_array(1024, 256)) {   // four superblocks (four steps, the two-deep ring wraps twice), then one: a step with none to read ahead
+            let d = 256
+            let rows = 256
+            let nsb = k / 256
+            let site_scale_v = 0.75
+            var inscope wq <- nv4_test_units(d * nsb, 1u, 23u)
+            var inscope ws <- nv4_expert_site_words(1, d * nsb, fixed_array(site_scale_v, 0.0, 0.0))
+            var xq <- hashed_words(rows * k / 8, 5u, 7u)
+            var xs : array<uint>
+            xs |> resize(rows * k / 64)
+            for (i in range(rows * k / 64)) {
+                xs[i] = nv4_test_scale_word(i + 3)
+            }
+            var xr <- [for (tok in range(rows)); 0.5 + 0.125 * float(tok % 7)]
+            let s = g_cud.stream
+            var bufs = fixed_array(buf_upload(wq, s), buf_upload(ws, s), buf_upload(xq, s), buf_upload(xs, s), buf_upload(xr, s), buf_fill(rows * d, Y_SENTINEL, s))
+            var pc = MmqFp4Args(n = uint(k), d = uint(d), rows = uint(rows), wblk = 0u)
+            enc_nv4_mmq(g_cud.stream, bufs, pc, mmq_wgs(int64(d), int64(rows)))
+            t |> success(cud_sync(), "nv4 mmq k {k}: the launch completes ({cuda_last_error()})")
+            var inscope y <- buf_download(bufs[5], rows * d, type<float>)
+            cuda_mem_free(bufs)
+            var feed <- Fp4Feed(xq <- xq, xsw <- xs, xrs <- xr)
+            var inscope want <- [for (i in range(rows * d)); nv4_mmq_ref(wq, feed, k, i / d, i % d, site_scale_v)]
+            check_rows(t, "nv4 MMQ on the FP4 rung, k {k}, vs the e2m1 x UE4M3 reference", y, want, Q8_GEMV_BAR, d)
+            delete feed
         }
-        var xr <- [for (tok in range(rows)); 0.5 + 0.125 * float(tok % 7)]
-        let s = g_cud.stream
-        var bufs = fixed_array(buf_upload(wq, s), buf_upload(ws, s), buf_upload(xq, s), buf_upload(xs, s), buf_upload(xr, s), buf_fill(rows * d, Y_SENTINEL, s))
-        var pc = MmqFp4Args(n = uint(k), d = uint(d), rows = uint(rows), wblk = 0u)
-        enc_nv4_mmq(g_cud.stream, bufs, pc, mmq_wgs(int64(d), int64(rows)))
-        t |> success(cud_sync(), "nv4 mmq: the launch completes ({cuda_last_error()})")
-        let y <- buf_download(bufs[5], rows * d, type<float>)
-        cuda_mem_free(bufs)
-        var feed <- Fp4Feed(xq <- xq, xsw <- xs, xrs <- xr)
-        let want <- [for (i in range(rows * d)); nv4_mmq_ref(wq, ws, feed, k, i / d, i % d, site_scale_v)]
-        check_rows(t, "nv4 MMQ on the FP4 rung vs the e2m1 x UE4M3 reference", y, want, Q8_GEMV_BAR, d)
-        delete feed
     }
 }
 
@@ -698,8 +697,8 @@ def private fp4_moe_ladder_cell(t : T?; nv4 : bool) {
         s1 |> push(SCHED_NONE)   // the m map is the plane's last: two workgroups past its bound
         s1 |> push(SCHED_NONE)
         let site_scales = fixed_array(0.75, 1.5, 1.0)
-        var wq <- nv4 ? hashed_words(ne * d * nsb * 32, 1u, 23u) : hashed_words(ne * d * nb * 4, 53u, 977u)
-        var ws <- nv4 ? nv4_expert_scale_words(ne, d * nsb, site_scales) : mx4_scale_words(ne * d * nb)
+        var wq <- nv4 ? nv4_test_units(ne * d * nsb, 1u, 23u) : hashed_words(ne * d * nb * 4, 53u, 977u)
+        var ws <- nv4 ? nv4_expert_site_words(ne, d * nsb, site_scales) : mx4_scale_words(ne * d * nb)
         let xrows = nk + int(TILE_READ_SLACK)
         var inscope src <- row_fill(xrows * n, 37, 0, 0.09, 4.2, 101)
         var inscope feed <- nv4 ? fp4_feed_rows(src, xrows, n) : mx4_feed_rows(src, xrows, n)
@@ -729,7 +728,7 @@ def private fp4_moe_ladder_cell(t : T?; nv4 : bool) {
                 e--
             }
             for (col in range(d)) {
-                want |> push(nv4 ? nv4_mmq_ref(wq, ws, feed, n, b, e * d + col, site_scales[e]) : mx4_fp4_mmq_ref(wq, ws, feed, e * int(expert_blocks), n, b, col))
+                want |> push(nv4 ? nv4_mmq_ref(wq, feed, n, b, e * d + col, site_scales[e]) : mx4_fp4_mmq_ref(wq, ws, feed, e * int(expert_blocks), n, b, col))
             }
         }
         check_rows(t, "{tag} FP4 leaf over the schedule vs the e2m1 x {nv4 ? "UE4M3" : "UE8M0"} reference (every bucket row of the three buckets)", y, want, Q8_GEMV_BAR, d)
@@ -835,10 +834,9 @@ def test_cud_kq_gemv_family(t0 : T?) {
             for (fmt in kq_leaf_fmts()) {
                 t |> success(cud_gemv_ensure(fmt), "fmt {fmt}: the leaf compiles")
                 for (nsb in fixed_array(1, 2, 20)) {
-                    let sb_words = int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l)
                     let ws_words_n = rows * nsb * int(kq_dev_ssb_i(fmt) / 4l)
-                    var inscope wsh <- kq_ws_plane(fmt, ws_words_n, 1u, uint(fmt) * 13u)
-                    var f <- gemv_fix(nreg, rows_per_region, nsb, sb_words, uint(fmt) * 77777u, wsh, nsb, 64, 31u, 5u, 0.5, 0.25, 7)
+                    var inscope wsh <- kq_ws_plane(fmt, ws_words_n, 1u, uint(fmt) * 13u, rows_per_region * nsb)   //! a region a plane: its own site scale
+                    var f <- kq_gemv_fix(fmt, nreg, rows_per_region, nsb, uint(fmt) * 77777u, wsh, nsb, 64, 31u, 5u, 0.5, 0.25, 7)
                     var inscope y_ref <- kq_gemv_oracle(fmt, f.wqh, f.wsh, f.xqh, f.xsh, f.regs, nsb * 256, rows_per_region, nreg)
                     var s = g_cud.stream
                     var bufs = fixed_array(buf_upload(f.wqh, s), buf_upload(f.wsh, s), buf_upload(f.regs, s), buf_upload(f.xqh, s), buf_upload(f.xsh, s), buf_fill(rows, Y_SENTINEL, s))
@@ -980,8 +978,7 @@ def private leaf_weight_planes(fmt : KqFmt; n, rows : int; salt : uint) : tuple<
     let q8 = fmt == KqFmt.q8
     let nb = n / 32
     let nsb = n / 256
-    let wq_words = q8 ? 8 : int(kq_qsb(fmt) / 4l)
-    var wq <- hashed_words(rows * (q8 ? nb : nsb) * wq_words, 1u, uint(fmt) * salt + 3u)
+    var wq <- (q8 ? hashed_words(rows * nb * 8, 1u, uint(fmt) * salt + 3u) : kq_dev_wq_plane(int(fmt), rows * nsb, 1u, uint(fmt) * salt + 3u))
     var ws <- (q8 ? [for (i in range((rows * nb + 1) / 2)); 0x10001u * (0x2C00u + (uint(i) * 37u) % 0x3FFu)]
         : kq_ws_plane(int(fmt), rows * nsb * int(kq_dev_ssb_i(int(fmt)) / 4l), 1u, uint(fmt) * 13u))
     return (wq <- wq, ws <- ws)
@@ -1410,8 +1407,7 @@ def test_cud_emb_family(t0 : T?) {   // nolint:STYLE038 - one flat arm per gathe
             var inscope xh <- row_fill(rows * n, 7, 3, 0.01, -0.5)
             for (fmt in kq_leaf_fmts()) {
                 t |> success(cud_emb_ensure(fmt), "{kq_fmt_of_slot(fmt)}: the gather leaf compiles")
-                let sb_words = int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l)
-                var inscope wq <- hashed_words((vocab + lead) * nsb * sb_words, 1u, uint(fmt) * 9973u)
+                var inscope wq <- kq_dev_wq_plane(fmt, (vocab + lead) * nsb, 1u, uint(fmt) * 9973u)
                 var inscope ws <- kq_ws_plane(fmt, (vocab + lead) * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 17u)
                 var inscope y_ref <- emb_gather_oracle(fmt, wq, ws, ids, xh, n, uint(lead * nsb), escale)
                 var inscope y <- cud_gather_rows(t, fmt, wq, ws, ids, xh, n, lead * nsb, escale)

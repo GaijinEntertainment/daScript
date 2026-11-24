@@ -2185,9 +2185,9 @@ def test_kq_gpu_gather_grp(t : T?) {
     }
 }
 
-let private NV4_ROW_LENGTH_OFF = 1000000   //! `nv4_gather_row_misses` when the gathered scale row is not the twenty bytes a superblock
+let private NV4_ROW_LENGTH_OFF = 1000000   //! `nv4_gather_row_misses` when the gathered planes are not 144 quant bytes and one scale word a superblock
 
-//! the count of bytes and words off the nv4 device scale row the gather writes under a slice's site scale: the sixteen UE4M3 codes verbatim in sub-block order, then that scale's f32 bits in the fifth word
+//! the count of codes, bytes and words off the nv4 device unit the gather writes under a slice's site scale: the plane's 256 codes in the file's pairing (a sub-block's byte j its element j low and j + 8 high), the sixteen UE4M3 codes verbatim in sub-block order after them, and that scale's f32 bits the scale plane's word
 //! a two-expert stack of two row groups each gathered as two slices, the first expert under `scale0`, the second under `scale1`;
 //! `repacked` gathers off the grp planes (an expert's rows are whole groups, as a model's are)
 def private nv4_gather_row_misses(scale0, scale1 : float; repacked : bool = false) : int {
@@ -2210,26 +2210,31 @@ def private nv4_gather_row_misses(scale0, scale1 : float; repacked : bool = fals
     m.site_scale[site_scale_key(KqFmt.nv4, slice * n)] = scale1
     var inscope wq, ws : array<uint8>
     moe_gpu_gather_stack_kq(m, KqFmt.nv4, 0l, n, rows, slice, repacked, mr, wq, ws)
-    if (long_length(ws) != rows * (n / 256l) * 20l) {
+    if (long_length(ws) != rows * (n / 256l) * 4l || long_length(wq) != rows * (n / 256l) * 144l) {
         delete m
         return NV4_ROW_LENGTH_OFF
     }
     var miss = 0
     for (sb in range64(rows * n / 256l)) {
-        for (si in range64(16l)) {
-            miss += ws[sb * 20l + si] != ks[sb * 16l + si] ? 1 : 0
+        for (e in range64(256l)) {   // element e: the plane's k4 byte holds it low (e % 32 < 16) or high, the unit's byte by the file's pairing
+            let plane = (uint(kq[sb * 128l + (e / 32l) * 16l + e % 16l]) >> uint(((e % 32l) / 16l) * 4l)) & 15u
+            let unit = (uint(wq[sb * 144l + (e / 32l) * 16l + ((e % 32l) / 16l) * 8l + e % 8l]) >> uint(((e % 16l) / 8l) * 4l)) & 15u
+            miss += plane != unit ? 1 : 0
         }
-        let w = uint(ws[sb * 20l + 16l]) | (uint(ws[sb * 20l + 17l]) << 8u) | (uint(ws[sb * 20l + 18l]) << 16u) | (uint(ws[sb * 20l + 19l]) << 24u)
+        for (si in range64(16l)) {
+            miss += wq[sb * 144l + 128l + si] != ks[sb * 16l + si] ? 1 : 0
+        }
+        let w = uint(ws[sb * 4l]) | (uint(ws[sb * 4l + 1l]) << 8u) | (uint(ws[sb * 4l + 2l]) << 16u) | (uint(ws[sb * 4l + 3l]) << 24u)
         miss += w != float_bits_to_uint(sb < slice * (n / 256l) ? scale0 : scale1) ? 1 : 0
     }
     delete m
     return miss
 }
 
-[test(description = "The nv4 GPU gather writes each 20-byte device scale row as the sixteen UE4M3 codes verbatim, then its slice's site-scale f32 word, per expert and off disk or grp planes alike")]
+[test(description = "The nv4 GPU gather writes each 144-byte device unit as the superblock's codes in the file's pairing, then its sixteen UE4M3 codes verbatim, and its slice's site-scale f32 word in the scale plane, per expert and off disk or grp planes alike")]
 def test_kq_gpu_gather_nv4_row(t : T?) {
-    t |> run("moe_gpu_gather_stack_kq nv4: the device scale row is the UE4M3 codes, then the slice's scale word") @(t : T?) {
-        t |> equal(nv4_gather_row_misses(1.0299681e-4, 1.0299681e-4), 0, "every row carries its codes verbatim and the 0.8B's scale word")
+    t |> run("moe_gpu_gather_stack_kq nv4: the device unit is the codes in the file's pairing and the UE4M3 codes, the scale plane the slice's scale word") @(t : T?) {
+        t |> equal(nv4_gather_row_misses(1.0299681e-4, 1.0299681e-4), 0, "every unit carries its codes and scales and the 0.8B's scale word")
         t |> equal(nv4_gather_row_misses(1.0, 1.0), 0, "a plane with no `.scale` carries 1.0")
         t |> equal(nv4_gather_row_misses(1.0299681e-4, 7.5e-3), 0, "a stack whose experts carry their own scales lands each expert's word on its slice")
         t |> equal(nv4_gather_row_misses(1.0299681e-4, 7.5e-3, true), 0, "the grp-plane gather lands the same codes and words")
@@ -2243,17 +2248,18 @@ def private nv4_ue4m3_code_misses() : int {
     let n = 256l
     let rows = 128l
     let ssb = kq_dev_ssb(KqFmt.nv4)
+    let qsb = kq_dev_qsb(KqFmt.nv4)
     var dq, ds : array<uint8>
-    dq |> resize(rows * NV4_QSB)
-    for (b in dq) {
-        b = uint8(0x77)
-    }
+    dq |> resize(rows * qsb)
     ds |> resize(rows * ssb)
     let one = float_bits_to_uint(1.0)
     for (r in range64(rows)) {
-        ds[r * ssb] = uint8(r)
+        for (i in range64(NV4_QSB)) {
+            dq[r * qsb + i] = uint8(0x77)
+        }
+        dq[r * qsb + NV4_QSB] = uint8(r)   // the unit's scale bytes follow its nibbles: the first strip's code, the rest zero
         for (i in range64(4l)) {
-            ds[r * ssb + NV4_SSB + i] = uint8((one >> uint(8l * i)) & 0xFFu)
+            ds[r * ssb + i] = uint8((one >> uint(8l * i)) & 0xFFu)
         }
     }
     var x : array<float>

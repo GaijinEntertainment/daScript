@@ -3176,27 +3176,23 @@ struct MmqFp4Args {
 }
 
 //! a k4-tiled 32-block re-paired into the FP4 feed's (k, k + 8) byte order: the scaled mma needs only both operands under one permutation a strip
-def nv4_fp4_pairs(w : uint4) : uint4 {
+def k4_fp4_pairs(w : uint4) : uint4 {
     let m = KQC_NIBBLE_MASK
     return uint4((w.x & m) | ((w.z & m) << 4u), (w.y & m) | ((w.w & m) << 4u),
         ((w.x >> 4u) & m) | (w.z & 0xF0F0F0F0u), ((w.y >> 4u) & m) | (w.w & 0xF0F0F0F0u))
 }
 
-//! NVFP4 on the FP4 tensor rung (`cuda_intrinsics`' block-scaled mma, sm_120a): the MMQ tile - a block of sixteen warps a
-//! 128 x 128 tile of weight rows x tokens, k 128 a step - over raw e2m1 nibbles on both sides: the weights' k4-tiled 32-blocks
-//! re-paired through registers into the feed's (k, k + 8) order, the activations' FP4 feed staged by cp.async, each side's
-//! UE4M3 strip scales a word a k64 beside its row; no decode, no per-32 fold - the per-token row scale and the plane's
-//! factor (the fifth word of its scale rows, read once a tile off the tile's first row: a tile never straddles two planes, since
-//! every plane is whole 128-row tiles) land in the epilogue. A two-deep ring at 80-byte rows (four uint4 and a pad: eight rows
-//! on eight bank groups)
+def quad_word(q : uint4; i : uint) : uint => i == 0u ? q.x : (i == 1u ? q.y : (i == 2u ? q.z : q.w))
+
+//! NVFP4 and MXFP4 on the FP4 tensor rung (sm_120a block-scaled mma): the 128 x 128 MMQ tile over raw e2m1 nibbles on both sides through a two-deep ring; an nv4 stamp stages its device unit whole by cp.async, a superblock a step, the scale quad the ring row's last
 [ |> template_struct_instance]
 class template MmqFp4T {
     @template_constant MX : bool = false      //!< the MXFP4 form: the plane by 32-block (no superblock lattice), its UE8M0 byte a block read as the k64's pair, the feed's codes a UE8M0 a k32 block, the product through `mma_block_scaled_mx`; no per-tensor factor
     @template_constant MOE : bool = false     //!< the expert schedule's form (`MmqT`'s): the workgroup's record names the plane's block base, the bucket's row base and count and the tile among the bucket's `ceil(cnt / TN)` row tiles; a tile's columns past `d` and its token rows past the bucket's count stay unstored
     @template_constant TN : uint = 128u       //!< the token tile: 128 on the dense stamps and the schedule's m column (sixteen warps, four a side), 32 on its s column (four warps down the weight rows, one across) - the block is `4 x TN` threads
     @template_constant KSTEP : uint = 128u    //!< the reduction one pipeline step stages, a multiple of 128: a row's `KSTEP / 32` quads and a pad quad a stage (the odd stride keeps ldmatrix off the banks), `KSTEP / 64` scale words; a width off the step's lattice (any multiple of 64) runs its last step's missing k64s under zero scales on both sides (the weight stage zero codes, the feed stage the next row's codes the zero scale annuls)
-    @ssbo @binding = 0 @readonly @role = "weight" wq4 : array<uint4>    //! the nv4 quant plane: superblock sb's 32-block g at sb * 8 + g; an `MX` stamp's mx4 plane: 32-block b at b
-    @ssbo @binding = 1 @readonly @role = "weight" wsu : array<uint>     //! the nv4 scale rows: five words a superblock, word j < 4 the k64 strip j's four UE4M3 codes, word 4 the plane's per-tensor factor as f32 bits; an `MX` stamp's mx4 scale plane: a UE8M0 byte a block, four a word
+    @ssbo @binding = 0 @readonly @role = "weight" wq4 : array<uint4>    //! the nv4 device units: nine quads a superblock - 32-block g's nibbles at sb * 9 + g, the four k64 scale words at sb * 9 + 8; an `MX` stamp's mx4 plane: 32-block b at b
+    @ssbo @binding = 1 @readonly @role = "weight" wsu : array<uint>     //! the nv4 scale plane: a word a superblock, the plane's per-tensor factor as f32 bits; an `MX` stamp's mx4 scale plane: a UE8M0 byte a block, four a word
     @ssbo @binding = 2 @readonly xq4 : array<uint4>    //! the FP4 feed: a token's k / 2 nibble bytes, (k, k + 8) pairs inside each 16
     @ssbo @binding = 3 @readonly xsw : array<uint>     //! ... its k / 64 scale words, four UE4M3 codes each (an `MX` stamp: two UE8M0 codes in the low bytes)
     @ssbo @binding = 4 @readonly xrs : array<float>    //! ... its row scale
@@ -3205,7 +3201,7 @@ class template MmqFp4T {
     @kargs pa : MmqFp4Args
     @workgroup sa : uint4[int(2u * 128u * (KSTEP / 32u + 1u))]   //! two stages x 128 rows x (a step's 32-blocks and a pad)
     @workgroup sb : uint4[int(2u * TN * (KSTEP / 32u + 1u))]     //! two stages x TN rows x the same
-    @workgroup swa : uint[int(2u * 128u * (KSTEP / 64u))]        //! two stages x 128 rows x the step's k64 scale words
+    @workgroup @template_gate = MX swa : uint[int(2u * 128u * (KSTEP / 64u))]   //! two stages x 128 rows x the step's k64 scale words
     @workgroup swb : uint[int(2u * TN * (KSTEP / 64u))]          //! ... the tokens'
     @workgroup @template_gate = MOE ystage : float[2048]   //! two warps' 32 x 32 tiles at a time, [token][d], the guarded store's stage
 
@@ -3250,25 +3246,20 @@ class template MmqFp4T {
         static_if (MX) {
             return ksrc + kb * 4u
         } else {
-            return ksrc + (kb >> 1u) * 8u + (kb & 1u) * 4u
+            return ksrc + (kb >> 1u) * NV4_UNIT_QUADS + (kb & 1u) * 4u
         }
     }
 
     //! the lane's staged quad of step `kb`: the block's nibbles re-paired, zero past the row's blocks and past the plane's rows
-    def w_stage(ksrc, kb, kblk, nb : uint; row_ok : bool) : uint4 => (!row_ok || is_past_row_blocks(kb, kblk >> 1u, nb)) ? uint4(0u) : nv4_fp4_pairs(wq4[wq_block_index(ksrc, kb)])
+    def w_stage(ksrc, kb, kblk, nb : uint; row_ok : bool) : uint4 => (!row_ok || is_past_row_blocks(kb, kblk >> 1u, nb)) ? uint4(0u) : k4_fp4_pairs(wq4[wq_block_index(ksrc, kb)])
 
-    //! the weight row's scale word of step `kb`'s k64 half `h`: an `MX` stamp's two UE8M0 bytes off the byte plane (the pair sits in one
-    //! word: a row's first block is even), else the nv4 scale row's word; zero past the row's blocks and past the plane's rows
-    def w_scale_word(wblk, row, wsrow, kb, h, nb : uint; row_ok : bool) : uint {
+    //! the row scale word of step `kb`'s k64 half `h`: its two UE8M0 bytes, one word (a row's first block is even); zero past the row's blocks and the plane's rows
+    def mx_w_scale_word(wblk, row, kb, h, nb : uint; row_ok : bool) : uint {
         if (!row_ok || is_past_row_blocks(kb, h, nb)) {
             return 0u
         }
-        static_if (MX) {
-            let bi = wblk + row * nb + kb * 4u + h * 2u
-            return (wsu[bi >> 2u] >> ((bi & 3u) * 8u)) & 0xFFFFu
-        } else {
-            return wsu[wsrow + (kb >> 1u) * 5u + (kb & 1u) * 2u + h]
-        }
+        let bi = wblk + row * nb + kb * 4u + h * 2u
+        return (wsu[bi >> 2u] >> ((bi & 3u) * 8u)) & 0xFFFFu
     }
 
     //! the token row's scale word of step `kb`'s k64 half `h`, zero past the row's blocks
@@ -3294,6 +3285,9 @@ class template MmqFp4T {
         let THREADS = WARPS * 32u
         let KROWS = THREADS / 4u     // weight rows one stage pass covers: a lane a block, four blocks a k128
         let WI = 128u / KROWS        // stage passes a k128 over the 128 weight rows
+        static_if (!MX && KSTEP != uint(KQ_SB_ELEMS)) {
+            concept_assert(false, "MmqFp4T: an nv4 stamp steps a superblock (KSTEP 256) - its scale quad is the step's last")
+        }
         let KQ = KSTEP / 128u        // k128s a step
         let RS = KSTEP / 32u + 1u    // a row's stride in quads a stage: the step's blocks and the pad
         let SW = KSTEP / 64u         // a row's scale words a stage
@@ -3328,23 +3322,37 @@ class template MmqFp4T {
         var krow_ok : bool[int(WI)]   // a `MOE` stamp's last column tile reaches past the plane's rows: those stage zero
         for [unroll] (i in range(int(WI))) {
             let row = m0 + krow + uint(i) * KROWS
-            ksrc[i] = MX ? wblk + row * nb + kblk : (wblk + row * nsb) * 8u + kblk
+            static_if (MX) {
+                ksrc[i] = wblk + row * nb + kblk
+            } else {
+                ksrc[i] = (wblk + min(row, pa.d - 1u) * nsb) * NV4_UNIT_QUADS + kblk   // a row past the plane's (a `MOE` stamp's last column tile) stages its last row's unit: the copy stays inside the plane, the store's guard drops the column
+            }
             krow_ok[i] = row < pa.d
         }
         let wi = tid & 127u
         let wstage = tid < 128u
         let xi = tid - XS0
         let xstage = tid >= XS0 && tid < XS0 + TN
-        let wsrow = (wblk + (m0 + wi) * nsb) * 5u   // the nv4 scale row (unread on an `MX` stamp: `w_scale_word` reads the byte plane)
         let wrow_ok = m0 + wi < pa.d
         let xsrow = (t0 + xi) * (pa.n / 64u)
         var f00, f01, f10, f11 : coopmatAcc_f32_16x16
         var wnext : uint4[int(WI * KQ)]
-        for [unroll] (i in range(int(WI))) {
-            for [unroll] (q in range(int(KQ))) {
-                sa[kdst + uint(i) * KROWS * RS + uint(q) * 4u] = w_stage(ksrc[i], uint(q), kblk, nb, krow_ok[i])
-                if (nbs > 1u) {
-                    wnext[i * int(KQ) + q] = w_stage(ksrc[i], KQ + uint(q), kblk, nb, krow_ok[i])
+        static_if (!MX) {
+            for [unroll] (i in range(int(WI))) {
+                for [unroll] (q in range(int(KQ))) {
+                    cp_async_16(unsafe(addr(sa[kdst + uint(i) * KROWS * RS + uint(q) * 4u])), unsafe(addr(wq4[wq_block_index(ksrc[i], uint(q))])))
+                }
+                if (kblk == 0u) {
+                    cp_async_16(unsafe(addr(sa[kdst + uint(i) * KROWS * RS + RS - 1u])), unsafe(addr(wq4[ksrc[i] + NV4_SCALE_QUAD])))
+                }
+            }
+        } else {
+            for [unroll] (i in range(int(WI))) {
+                for [unroll] (q in range(int(KQ))) {
+                    sa[kdst + uint(i) * KROWS * RS + uint(q) * 4u] = w_stage(ksrc[i], uint(q), kblk, nb, krow_ok[i])
+                    if (nbs > 1u) {
+                        wnext[i * int(KQ) + q] = w_stage(ksrc[i], KQ + uint(q), kblk, nb, krow_ok[i])
+                    }
                 }
             }
         }
@@ -3352,13 +3360,22 @@ class template MmqFp4T {
             cp_async_16(unsafe(addr(sb[kdst + uint(q) * 4u])), unsafe(addr(xq4[xsrc + uint(q) * 4u])))
         }
         cp_async_commit()
+        var wsnext, xsnext : uint[int(2u * KQ)]   // the next step's scale words, read a step ahead as `wnext` is: a word read and stored in one step holds its warp, and the block's barrier, for the read
         for [unroll] (hh in range(int(2u * KQ))) {
             let h = uint(hh)
-            if (wstage) {
-                swa[wi * SW + h] = w_scale_word(wblk, m0 + wi, wsrow, h >> 1u, h & 1u, nb, wrow_ok)
+            static_if (MX) {
+                if (wstage) {
+                    swa[wi * SW + h] = mx_w_scale_word(wblk, m0 + wi, h >> 1u, h & 1u, nb, wrow_ok)
+                    if (nbs > 1u) {
+                        wsnext[hh] = mx_w_scale_word(wblk, m0 + wi, KQ + (h >> 1u), h & 1u, nb, wrow_ok)
+                    }
+                }
             }
             if (xstage) {
                 swb[xi * SW + h] = x_scale_word(xsrow, h >> 1u, h & 1u, nb)
+                if (nbs > 1u) {
+                    xsnext[hh] = x_scale_word(xsrow, KQ + (h >> 1u), h & 1u, nb)
+                }
             }
         }
         var kb = 0u
@@ -3370,11 +3387,22 @@ class template MmqFp4T {
             if (nk < nbs) {
                 let st2 = nk & 1u
                 let k0 = nk * KQ   // the next step's first k128
-                for [unroll] (i in range(int(WI))) {
-                    for [unroll] (q in range(int(KQ))) {
-                        sa[st2 * SAS + kdst + uint(i) * KROWS * RS + uint(q) * 4u] = wnext[i * int(KQ) + q]
-                        if (nk + 1u < nbs) {
-                            wnext[i * int(KQ) + q] = w_stage(ksrc[i], k0 + KQ + uint(q), kblk, nb, krow_ok[i])
+                static_if (!MX) {
+                    for [unroll] (i in range(int(WI))) {
+                        for [unroll] (q in range(int(KQ))) {
+                            cp_async_16(unsafe(addr(sa[st2 * SAS + kdst + uint(i) * KROWS * RS + uint(q) * 4u])), unsafe(addr(wq4[wq_block_index(ksrc[i], k0 + uint(q))])))
+                        }
+                        if (kblk == 0u) {
+                            cp_async_16(unsafe(addr(sa[st2 * SAS + kdst + uint(i) * KROWS * RS + RS - 1u])), unsafe(addr(wq4[ksrc[i] + nk * NV4_UNIT_QUADS + NV4_SCALE_QUAD])))
+                        }
+                    }
+                } else {
+                    for [unroll] (i in range(int(WI))) {
+                        for [unroll] (q in range(int(KQ))) {
+                            sa[st2 * SAS + kdst + uint(i) * KROWS * RS + uint(q) * 4u] = wnext[i * int(KQ) + q]
+                            if (nk + 1u < nbs) {
+                                wnext[i * int(KQ) + q] = w_stage(ksrc[i], k0 + KQ + uint(q), kblk, nb, krow_ok[i])
+                            }
                         }
                     }
                 }
@@ -3383,15 +3411,30 @@ class template MmqFp4T {
                 }
                 for [unroll] (hh in range(int(2u * KQ))) {
                     let h = uint(hh)
-                    if (wstage) {
-                        swa[st2 * SWAS + wi * SW + h] = w_scale_word(wblk, m0 + wi, wsrow, k0 + (h >> 1u), h & 1u, nb, wrow_ok)
+                    static_if (MX) {
+                        if (wstage) {
+                            swa[st2 * SWAS + wi * SW + h] = wsnext[hh]
+                            if (nk + 1u < nbs) {
+                                wsnext[hh] = mx_w_scale_word(wblk, m0 + wi, k0 + KQ + (h >> 1u), h & 1u, nb, wrow_ok)
+                            }
+                        }
                     }
                     if (xstage) {
-                        swb[st2 * SWBS + xi * SW + h] = x_scale_word(xsrow, k0 + (h >> 1u), h & 1u, nb)
+                        swb[st2 * SWBS + xi * SW + h] = xsnext[hh]
+                        if (nk + 1u < nbs) {
+                            xsnext[hh] = x_scale_word(xsrow, k0 + KQ + (h >> 1u), h & 1u, nb)
+                        }
                     }
                 }
             }
             cp_async_commit()
+            var a_scale_quad0 = uint4(0u)   // nv4 alone: the ring rows' last quads
+            var a_scale_quad1 = uint4(0u)
+            static_if (!MX) {
+                let sq = st * SAS + (wm * 32u + g + 8u * (lane & 1u)) * RS + RS - 1u
+                a_scale_quad0 = sa[sq]
+                a_scale_quad1 = sa[sq + 16u * RS]
+            }
             for [unroll] (k64h in range(int(2u * KQ))) {
                 let k64hu = uint(k64h)
                 let abase = st * SAS + (wm * 32u + mr + 8u * (mt & 1u)) * RS + k64hu * 2u + (mt >> 1u)   // the lane's A row: (rows lo, k lo), (rows hi, k lo), (rows lo, k hi), (rows hi, k hi)
@@ -3404,8 +3447,15 @@ class template MmqFp4T {
                 ldmatrix(b1, unsafe(addr(sb[bbase + 16u * RS])))
                 let sw = st * SWAS + (wm * 32u + g + 8u * (lane & 1u)) * SW + k64hu   // the lane's A rows' words: row g from lane % 4 == 0, row g + 8 from lane % 4 == 1
                 let sx = st * SWBS + (wn * 32u + g) * SW + k64hu                   // column g of each n-half, from lane % 4 == 0
-                let sa0 = swa[sw]
-                let sa1 = swa[sw + 16u * SW]
+                var sa0 = 0u
+                var sa1 = 0u
+                static_if (!MX) {
+                    sa0 = quad_word(a_scale_quad0, k64hu)
+                    sa1 = quad_word(a_scale_quad1, k64hu)
+                } else {
+                    sa0 = swa[sw]
+                    sa1 = swa[sw + 16u * SW]
+                }
                 let sb00 = swb[sx]
                 let sb01 = swb[sx + 8u * SW]
                 let sb10 = swb[sx + 16u * SW]
@@ -3425,7 +3475,12 @@ class template MmqFp4T {
             kb++
         }
         // the store is column-major over [token][d]: a token's row is the fragment's column
-        let site_scale = MX ? 1.0 : uint_bits_to_float(wsu[(wblk + m0 * nsb) * 5u + 4u])
+        var site_scale : float
+        static_if (MX) {
+            site_scale = 1.0
+        } else {
+            site_scale = uint_bits_to_float(wsu[wblk + m0 * nsb])
+        }
         let c0 = t0 + wn * 32u + 2u * t
         let cs0 = float4(xrs[c0], xrs[c0 + 1u], xrs[c0 + 8u], xrs[c0 + 9u]) * site_scale
         let cs1 = float4(xrs[c0 + 16u], xrs[c0 + 17u], xrs[c0 + 24u], xrs[c0 + 25u]) * site_scale
@@ -3498,6 +3553,7 @@ class CuMx4Fp4MmqMoeS : MmqFp4T {
 //! the NVFP4 leaf on the FP4 tensor rung: the window chain's GEMM for nv4 planes under DASLLAMA_CUDA_MMQ
 [cuda_dispatch(name = "nv4_mmq", grid = "wgs", params = "wgs : int64")]
 class CuNv4Mmq : MmqFp4T {
+    override KSTEP = 256u
 
     [cuda_kernel(local_size_x = 512, name = "nv4_mmq_cuda")]
     def run {
@@ -3511,6 +3567,7 @@ class CuNv4Mmq : MmqFp4T {
 [cuda_dispatch(name = "nv4_fp4_mmq_moe", grid = "wgs", params = "wgs : int64")]
 class CuNv4Fp4MmqMoe : MmqFp4T {
     override MOE = true
+    override KSTEP = 256u
 
     [cuda_kernel(local_size_x = 512, name = "nv4_fp4_mmq_moe_cuda")]
     def run {
@@ -3523,6 +3580,7 @@ class CuNv4Fp4MmqMoe : MmqFp4T {
 class CuNv4Fp4MmqMoeS : MmqFp4T {
     override MOE = true
     override TN = 32u
+    override KSTEP = 256u
 
     [cuda_kernel(local_size_x = 128, name = "nv4_fp4_mmq_moe_s_cuda")]
     def run {

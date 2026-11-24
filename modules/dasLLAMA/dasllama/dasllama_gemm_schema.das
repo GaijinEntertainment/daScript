@@ -72,8 +72,11 @@ let KQ_DEV_SSB = 20l
 //! native high bits above it, word 1 = eight 4-bit fields.
 def kq_two_word_row(f : KqFmt) : bool => f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2xxs || f == KqFmt.iq3s4
 
-//! The device scale-row stride of a kq format: 8 B for the two-word-row formats, KQ_DEV_SSB for the rest.
-def kq_dev_ssb(f : KqFmt) : int64 => kq_two_word_row(f) ? 8l : KQ_DEV_SSB
+//! The device scale-row stride of a kq format: 8 B for the two-word-row formats, nv4's one site-scale word, KQ_DEV_SSB for the rest.
+def kq_dev_ssb(f : KqFmt) : int64 => f == KqFmt.nv4 ? NV4_DEV_SSB : (kq_two_word_row(f) ? 8l : KQ_DEV_SSB)
+
+//! The device quant stride of a kq format a superblock: the plane's own, but nv4's, whose device unit carries its scale quad.
+def kq_dev_qsb(f : KqFmt) : int64 => f == KqFmt.nv4 ? NV4_DEV_QSB : kq_qsb(f)
 
 //! kq_dev_ssb over the tier's int(KqFmt) stack-format space.
 def kq_dev_ssb_i(fmt : int) : int64 {
@@ -88,7 +91,7 @@ def kq_dev_ssb_i(fmt : int) : int64 {
 //! under the device's scale row
 def dev_block_bytes(f : KqFmt) : tuple<qsb : int64; ssb : int64; belems : int64> {
     return (qsb = 32l, ssb = 2l, belems = 32l) if (f == KqFmt.q8)
-    return (qsb = kq_qsb(f), ssb = kq_dev_ssb(f), belems = 256l) if (kq_sb(f))
+    return (qsb = kq_dev_qsb(f), ssb = kq_dev_ssb(f), belems = 256l) if (kq_sb(f))
     return (qsb = kq_qsb(f), ssb = kq_ssb(f), belems = 32l)
 }
 

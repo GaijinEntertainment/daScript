@@ -4,7 +4,7 @@ Companion to `ARCHITECTURE_ENGINE_FORMATS.md`; a section is cited by its anchor.
 the nv4 superblock member: how its planes hold NVFP4's disk bytes, and the per-tensor scale that rides
 beside them.
 
-### The nv4 planes are NVFP4's disk bytes in the k4 tiling {#nv4-planes}
+### The nv4 planes are NVFP4's disk bytes in the k4 tiling, the device unit in the file's pairing {#nv4-planes}
 
 An NVFP4 disk block holds 64 weights in 36 bytes: four UE4M3 scales, one a 16-weight sub-block, then 32
 nibble bytes in which sub-block s's byte j pairs element j (low nibble) with element j + 8 (high). A
@@ -30,10 +30,19 @@ UE4M3 scales (decoded in IR as `ue4m3_half_f32`'s bit form) into one float parti
 token's Q8_K scale multiplies that partial once at the superblock's end - the disk-order dot's fold order,
 no superblock d.
 
-The row-major kernels (`nv4q8_rm_gemv_gen`, `nv4q8_rm_tile4_gen`) read the device row the gather lays
-out - the k4 nibbles verbatim, the sixteen UE4M3 bytes, then the per-tensor factor as the row's fifth
-word - and fold as the generated tile does, each strip's scale multiplied by that word; the one-copy
-rare rail serves a streamed nv4 expert stack through them (`rm_dev_serves`).
+The discrete homes' device row is a layout of its own, the one the gather writes for Vulkan and CUDA
+alike (`nv4_dev_unit`): a superblock of a row is nine 16-byte quads of the quant plane - the eight
+32-blocks' nibbles back in the file's pairing, a sub-block's byte j its element j low and j + 8 high,
+then the sixteen UE4M3 bytes - and one word of the scale plane, the per-tensor factor. That pairing is
+the block-scaled FP4 instruction's operand order and the scales sit beside their nibbles, so the CUDA
+window matmul copies a unit whole into its stage: no reorder, and no second gather for the scales. A
+decode kernel pays nothing for the pairing - a sub-block's sixteen weights are two words under one
+scale.
+
+The row-major kernels (`nv4q8_rm_gemv_gen`, `nv4q8_rm_tile4_gen`) read that row - a block's codes
+shuffled from the pairing to k order, the sixteen scales off the unit's last quad, the factor off the
+scale plane's word - and fold as the generated tile does, each strip's scale multiplied by that word;
+the one-copy rare rail serves a streamed nv4 expert stack through them (`rm_dev_serves`).
 
 ### A per-tensor weight scale rides beside the nv4 planes {#nv4-site-scale}
 
@@ -51,10 +60,13 @@ is a dense plane's. A `.scale` beside a plane served as any member but nv4 refus
 PLE table - also refuses the load by name (`refuse_site_scale`). The CPU epilogues multiply their output rows by
 `site_scale(t, fmt, woff)` - `mm_at_kq_pre`, `mm_b_kq_pre`, the region-list routers (`mm_at_kq_groupn`, `mm_b_kq_groupn`:
 a region is one expert's plane) and the fused decode chains, which scale each 32-row slice ahead of any bias or activation.
-The device rows carry it: `moe_gpu_gather_stack_kq` writes the slice's f32 bits - a slice is one expert's plane - into the
-fifth word of each nv4 superblock's 20-byte scale row (the pad past the sixteen UE4M3 bytes; halves cost tg128 5%).
-`Nv4GemvT` and `KqBatchNv4` multiply it into each sub-block scale;
-`Nv4Cm2T` stages the 128 UE4M3 codes at half under it once a workgroup (`UE4LUT`, off the region's first row) and decodes
+The device rows carry it: `moe_gpu_gather_stack_kq` writes the slice's f32 bits - a slice is one expert's plane - as the
+scale plane's word of each nv4 superblock (a full word: halves cost tg128 5%).
+`KqBatchNv4` multiplies it into each sub-block scale; the decode leaves (`Nv4GemvT`, the CUDA rows leaf `Nv4RowsMmaT`) leave
+it out of a block's scales and multiply a row's stored value by it once (`plane_site_scale`), read off the region's first
+superblock: a region is one plane, so every row of it reads the same word, and a read off each row's own superblock is a
+memory sector a row;
+`Nv4Cm2T` stages the 128 UE4M3 codes at half under it once a workgroup (`UE4LUT`, off the region's first unit) and decodes
 through that table and the e2m1 table - iq4nl's shape; the CUDA home's FP4 leaf `MmqFp4T` reads it once a tile off the tile's
 first row into its epilogue (a plane is whole 128-row tiles, so a tile never straddles two factors). No kernel takes the factor
 as an argument: the plane carries it, so a site the driver never named (a deltanet projection, a merged K/V pair) scales the same.

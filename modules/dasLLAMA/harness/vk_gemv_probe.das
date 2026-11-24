@@ -172,7 +172,7 @@ def private probe_fmt(fmt : KqFmt; n, d : int; lanes_per_row : uint; ncols : int
     let bk = q8 ? 32 : 256
     let nb = n / bk
     let nblk = d * nb
-    let wq_words = q8 ? 8 : int(kq_qsb(fmt) / 4l)
+    let wq_words = q8 ? 8 : int(kq_dev_qsb(fmt) / 4l)
     let ws_words = q8 ? 0 : int(kq_dev_ssb(fmt) / 4l)
     let plane_bytes = q8 ? nblk * 34 : nblk * (wq_words + ws_words) * 4   //! under 2^31 for every served shape (the 27B's largest plane is 89 MB)
     let xrows = max(ncols, 1)

@@ -15,6 +15,7 @@ require dasllama/dasllama_cuda_classes
 require dasllama/dasllama_cuda_classes_rows   // the rows tensor leaf's family
 require dasllama/dasllama_gpu_kernels_discrete   // GemvArgs
 require dasllama/dasllama_kqformat
+require dasllama/dasllama_gemm_schema   // kq_dev_qsb
 require daslib/f16_cvt
 require daslib/math_bits
 require dasllama/dasllama_math   // reserve_resize
@@ -97,9 +98,17 @@ def main : int {   // nolint:STYLE037,STYLE038 — one linear measurement sweep,
     let d16 = kf == KqFmt.q40 || kf == KqFmt.iq4nl      // an f16 d a block, two a word
     let two = kf == KqFmt.iq4xs || kf == KqFmt.iq3s4    // a two-word scale row: d | the sub-scales' high bits, their nibbles
     var wq : array<uint>
-    wq |> reserve_resize(int64(d) * int64(nsb) * (q8 ? 64l : kq_qsb(kf) / 4l))   // a superblock: 256 quant bytes, or the format's quant bytes
+    wq |> reserve_resize(int64(d) * int64(nsb) * (q8 ? 64l : kq_dev_qsb(kf) / 4l))   // a superblock: 256 quant bytes, or the format's device quant bytes
     for (i in range64(long_length(wq))) {
         wq[i] = hash32(uint(i))
+    }
+    if (nv4) {   // a unit's scale quad: sixteen UE4M3 strip scales in a narrow band of exponents, so the rows' sums stay comparable
+        let unit = int64(NV4_UNIT_QUADS) * 4l
+        for (u in range64(int64(d) * int64(nsb))) {
+            for (j in range64(4l)) {
+                wq[u * unit + int64(NV4_SCALE_QUAD) * 4l + j] = (hash32(uint(u * 4l + j)) & 0x0F0F0F0Fu) | 0x30303030u
+            }
+        }
     }
     var ws : array<uint>
     if (q8) {   // an f16 scale a 32-block, two a word
@@ -124,13 +133,10 @@ def main : int {   // nolint:STYLE037,STYLE038 — one linear measurement sweep,
             let lo = f32_to_f16(0.002 + float(h & 255u) * 0.00002)
             ws[r] = two ? ((r & 1l) == 0l ? lo | (h & 0xFFFF0000u) : h) : lo | (f32_to_f16(0.002 + float((h >> 8u) & 255u) * 0.00002) << 16u)
         }
-    } elif (nv4) {   // sixteen UE4M3 strip scales a superblock, then the plane's factor
-        ws |> reserve_resize(int64(d) * int64(nsb) * 5l)
-        for (r in range64(int64(d) * int64(nsb))) {
-            for (j in range64(4l)) {
-                ws[r * 5l + j] = (hash32(uint(r * 5l + j)) & 0x0F0F0F0Fu) | 0x30303030u   // a narrow band of exponents: the rows' sums stay comparable
-            }
-            ws[r * 5l + 4l] = float_bits_to_uint(0.01)
+    } elif (nv4) {   // the plane's site-scale word a superblock
+        ws |> reserve_resize(int64(d) * int64(nsb))
+        for (w in ws) {
+            w = float_bits_to_uint(0.01)
         }
     } else {
         ws |> reserve_resize(int64(d) * int64(nsb) * 5l)

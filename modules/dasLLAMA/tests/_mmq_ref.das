@@ -10,6 +10,7 @@ require dasllama/dasllama_gpu_math   // ue4m3_half_f32
 require dasllama/dasllama_convert   // dequant_b32_plane_block
 require daslib/shader_lingua_franca   // unpackHalf2x16
 require _fp4_feed   // Fp4Feed, fp4_feed_value
+require _vk_kq_fixtures   // nv4_dev_code, nv4_dev_scale: the nv4 device unit's readers
 
 //! byte `i` of a word plane as a signed int8
 def word_i8_at(words : array<uint>; i : int) : int {
@@ -105,15 +106,10 @@ def b32_mmq_ref(f : KqFmt; wq_bytes, ws_bytes : array<uint8>; xq : array<uint>; 
     return acc
 }
 
-//! element `kk` of row `row` of a k4-tiled nv4 plane of `nsb` superblocks a row: the doubled e2m1 magnitude x its strip's UE4M3 code at half
-def nv4_weight_at(wq, ws : array<uint>; nsb, row, kk : int) : float {
-    let sb = kk / 256
-    let g = (kk % 256) / 32
-    let e = kk % 32
-    let nib = (wq[((row * nsb + sb) * 8 + g) * 4 + (e % 16) / 4] >> uint(((e % 16) % 4) * 8 + (e / 16) * 4)) & 15u
-    let strip = g * 2 + e / 16
-    let code = (ws[(row * nsb + sb) * 5 + strip / 4] >> uint((strip % 4) * 8)) & 0xFFu
-    return float(MX4_LUT[int(nib)]) * ue4m3_half_f32(code)
+//! element `kk` of row `row` of an nv4 device plane of `nsb` units a row: the doubled e2m1 magnitude x its strip's UE4M3 code at half
+def nv4_weight_at(wq : array<uint>; nsb, row, kk : int) : float {
+    let u = row * nsb + kk / 256
+    return float(MX4_LUT[int(nv4_dev_code(wq, u, kk % 256))]) * ue4m3_half_f32(nv4_dev_scale(wq, u, (kk % 256) / 16))
 }
 
 //! an mx4 plane's weight at element `kk` of row `row` (`nb` blocks a row, block `wb0` the plane's first): e2m1 x the block's UE8M0, the k4-tiled nibbles read as the FP4 leaf does (element j low in byte j, j + 16 high)
@@ -136,11 +132,11 @@ def mx4_fp4_mmq_ref(wq, ws : array<uint>; feed : Fp4Feed; wb0, k, tok, row : int
 }
 
 //! the FP4 leaf's reference: the plane's row against the feed's row, under the plane's site scale
-def nv4_mmq_ref(wq, ws : array<uint>; feed : Fp4Feed; k, tok, row : int; site_scale : float) : float {
+def nv4_mmq_ref(wq : array<uint>; feed : Fp4Feed; k, tok, row : int; site_scale : float) : float {
     let nsb = k / 256
     var acc = 0.0
     for (kk in range(k)) {
-        acc += nv4_weight_at(wq, ws, nsb, row, kk) * fp4_feed_value(feed, k, tok, kk, false)
+        acc += nv4_weight_at(wq, nsb, row, kk) * fp4_feed_value(feed, k, tok, kk, false)
     }
     return acc * site_scale
 }

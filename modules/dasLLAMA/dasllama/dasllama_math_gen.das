@@ -2005,10 +2005,10 @@ def mlx6bq8_rm_gemv_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; x
 }
 
 //! the row-major K-quant kernels' reference: a row's dot over the DEVICE planes decoded a weight at a time - the k / k+16
-//! nibble pairing a block, the fifth and high bits off the block's qh bytes, the 2-bit lanes off their byte fields, the
-//! decoded scale row (d, dmin, the sub-scales and mins; the two words of a codebook row) - under the Q8_K activation
+//! nibble pairing a block (nv4: the file's k / k+8, its sub-scales the unit's last quad), the fifth and high bits off the qh bytes, the 2-bit
+//! lanes off their byte fields, the decoded scale row (d, dmin, the sub-scales and mins; a codebook row's two words) - under the Q8_K activation
 def private rm_kq_dev_row(f : KqFmt; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n : int64) : float { // nolint:STYLE037 - one decode ladder a format family
-    let qsb = kq_qsb(f)
+    let qsb = kq_dev_qsb(f)
     let ssb = kq_dev_ssb(f)
     let nv4 = f == KqFmt.nv4
     let lutv = f == KqFmt.q40 ? q40_lut() : (f == KqFmt.iq3s4 ? iq3s4_lut() : (nv4 ? mx4_lut() : iq4nl_lut()))
@@ -2028,7 +2028,7 @@ def private rm_kq_dev_row(f : KqFmt; q : uint8 const?; s : uint8 const?; xq : in
             var dmin = 0.0
             var site = 1.0
             if (nv4) {
-                site = uint_bits_to_float(uint(sp[16]) | (uint(sp[17]) << 8u) | (uint(sp[18]) << 16u) | (uint(sp[19]) << 24u))
+                site = uint_bits_to_float(uint(sp[0]) | (uint(sp[1]) << 8u) | (uint(sp[2]) << 16u) | (uint(sp[3]) << 24u))
             } elif (two_word) {
                 w0 = uint(sp[0]) | (uint(sp[1]) << 8u) | (uint(sp[2]) << 16u) | (uint(sp[3]) << 24u)
                 w1 = uint(sp[4]) | (uint(sp[5]) << 8u) | (uint(sp[6]) << 16u) | (uint(sp[7]) << 24u)
@@ -2050,8 +2050,8 @@ def private rm_kq_dev_row(f : KqFmt; q : uint8 const?; s : uint8 const?; xq : in
                 var bd = 0.0
                 var bd_hi = 0.0
                 if (nv4) {
-                    bd = ue4m3_half_f32(uint(sp[2l * j])) * site
-                    bd_hi = ue4m3_half_f32(uint(sp[2l * j + 1l])) * site
+                    bd = ue4m3_half_f32(uint(qp[NV4_QSB + 2l * j])) * site
+                    bd_hi = ue4m3_half_f32(uint(qp[NV4_QSB + 2l * j + 1l])) * site
                 } elif (f == KqFmt.k4 || f == KqFmt.k5) {
                     sc_lo = int(sp[4l + j])
                     sc_hi = sc_lo
@@ -2087,6 +2087,9 @@ def private rm_kq_dev_row(f : KqFmt; q : uint8 const?; s : uint8 const?; xq : in
                         code = ((int(qp[(j / 4l) * 32l + i]) >> int(2l * (j % 4l))) & 3) | (((int(qp[64l + i]) >> int(j)) & 1) << 2)
                     } elif (f == KqFmt.k2) {
                         code = (int(qp[(j / 4l) * 32l + i]) >> int(2l * (j % 4l))) & 3
+                    } elif (nv4) {
+                        let nb = int(qp[16l * j + (i / 16l) * 8l + i % 8l])
+                        code = i % 16l < 8l ? nb & 15 : nb >> 4
                     } else {
                         let nb = int(qp[16l * j + i % 16l])
                         code = i < 16l ? nb & 15 : nb >> 4
@@ -2140,7 +2143,7 @@ def private rm_copy_words(src : auto; var grid : uint[2048]) {
 //! grid indices, its magnitudes off the format's grid, its signs off its own sign bytes or the ksigns rows of its 7-bit
 //! codes, the sub-scales 1 + 2 x the two-word row's fields or the per-16 strips after d - under the Q8_K activation
 def private rm_grid_dev_row(f : KqFmt; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float {
-    let qsb = kq_qsb(f)
+    let qsb = kq_dev_qsb(f)
     let ssb = kq_dev_ssb(f)
     let iq3 = f == KqFmt.iq3s || f == KqFmt.iq3xxs
     let two_word = kq_two_word_row(f)
@@ -2221,7 +2224,7 @@ def private rm_grid_dev_row(f : KqFmt; q : uint8 const?; s : uint8 const?; xq : 
 //! the stubs' body: every row of the range through the device-plane reference
 def private rm_kq_rows_ref(f : KqFmt; var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
     let nsb = n / 256l
-    let qsb = kq_qsb(f)
+    let qsb = kq_dev_qsb(f)
     let ssb = kq_dev_ssb(f)
     let grid = f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
     for (r in range64(rb, re)) {
