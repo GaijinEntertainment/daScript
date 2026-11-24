@@ -342,6 +342,10 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
      -
      - *0*
      - Drafts per speculative round, process-wide (the verify runs depth+1 rows); 0 = the box profile's depth for the round kind (``runtime.mtp_depth_nextn`` / ``mtp_depth_assistant``, 1 when unminted).
+   * - ``--slot-save-path``
+     -
+     - ---
+     - Directory the slot routes save a context into and restore one from (``POST /slots/{id}?action=save|restore``); unset, they answer 501.
    * - ``--rope-scaling``
      -
      - *file*
@@ -704,6 +708,9 @@ Endpoints
    * - ``POST``
      - ``/cache/drop``
      - Loopback-only: drop every slot's prompt cache (donated pages and checkpoints) while the model stays loaded, so the next request prefills cold; 409 while streams are live
+   * - ``POST``
+     - ``/slots/{id}?action=save|restore|erase``
+     - Loopback-only; a slot is a served model by its index in ``GET /v1/models``. ``save`` with ``{"filename": "<name>"}`` writes the context the slot's last finished request left under ``--slot-save-path``; ``restore`` reads one back into the slot's prompt cache, so the next request opening with those tokens prefills only what follows; ``erase`` drops the slot's prompt cache. 501 with no ``--slot-save-path``, 409 while a stream, an upload or an embedding request is in flight or a bench holds the engine, 400 with the reason for anything the route does not take
    * - ``POST``
      - ``/restart``
      - Drain, then exit 4 --- the watchdog relaunches with the saved config

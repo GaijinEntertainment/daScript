@@ -228,6 +228,7 @@ struct Scheduler {
     chunk_tail : array<int64>               // a media body's text past its span
     @exact_size body : array<float>         // a media body's rows
     donate_toks : array<int64>              // reap-time scratch: tail eval + the insert token list
+    last_toks : array<int64>                //! the token list the last finished stream's rows hold: the context `context_save` writes
     // counters (/v1/stats and server_bench read these)
     n_admitted : int64
     mrope_streams : int64                   // admitted streams whose media rode the mrope grid walk
@@ -736,6 +737,44 @@ def private reap_finished(m : Model; var sch : Scheduler) {
     }
 }
 
+//! why the scheduler cannot save or restore a context now; "" where it can
+def private context_file_why(m : Model; sch : Scheduler) : string {
+    return "the scheduler keeps no prefix cache: paged serving is off" if (!sch.paged)
+    return "a request is in flight ({length(sch.streams)} active, {length(sch.queue)} queued)" if (!empty(sch.streams) || !empty(sch.queue))
+    if (sch.device_kv && !device_pool_on(m, sch, sch.pool_host)) {
+        return "the streams are device-home and keep no host pool (DASLLAMA_DEVICE_POOL=0, or a scheduler whose streams cannot use one): their rows live on the GPU alone"
+    }
+    return ""
+}
+
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#context-file")]
+def context_save(m : Model; var sch : Scheduler; path : string) : ContextFile {
+    var why = context_file_why(m, sch)
+    if (empty(why) && empty(sch.last_toks)) {
+        why = "no request has finished here: there is no context to save"
+    }
+    if (!empty(why)) {
+        return <- ContextFile(why = why)
+    }
+    for (i in range(length(sch.parked))) {
+        flush_parked(m, sch, i, 0l)
+    }
+    return <- prefix_file_save(m, sch.prefix, sch.pool, sch.last_toks, path)
+}
+
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#context-file")]
+def context_restore(m : Model; var sch : Scheduler; path : string) : ContextFile {
+    let why = context_file_why(m, sch)
+    if (!empty(why)) {
+        return <- ContextFile(why = why)
+    }
+    var out <- prefix_file_restore(m, sch.prefix, sch.pool, path)
+    if (empty(out.why)) {
+        sch.last_toks := out.ids
+    }
+    return <- out
+}
+
 //! One scheduler tick: events append to `events` (the caller drains it); true while any stream or queued request remains
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#scheduler-step")]
 def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent>) : bool {  // nolint:STYLE037,STYLE038 - linger/reap/admit/decode/prefill, one linear pass
@@ -1209,6 +1248,8 @@ def private donate_stream(m : Model; var sch : Scheduler; var st : Stream) {
     close_turn(m, sch, st)
     moe_gpu_hydrate_session(m, st.session)   //! rows a GPU driver stepped live on its copy alone until they come down into the pages
     let why = prefix_insert(sch.prefix, sch.pool, st.session, sch.donate_toks, st.prompt_head)
+    sch.last_toks := sch.donate_toks
+    sch.last_toks |> resize(min(long_length(sch.last_toks), st.session.n_past))
     if (!empty(st.session.dn_state_prefix)) {
         let kept = empty(why) ? "this conversation's next turn attaches here" : "not kept - " + why
         to_log(LOG_INFO, "[stream {st.id}] finished turn checkpoint at {st.session.n_past} tok: {kept} ({length(sch.prefix.states)} checkpoints, {sch.prefix.state_bytes / 1048576l} MB)\n")
@@ -1222,6 +1263,7 @@ def private park_stream(m : Model; var sch : Scheduler; var st : Stream) {
     }
     close_turn(m, sch, st)
     sch.donate_toks |> resize(min(long_length(sch.donate_toks), st.session.n_past))
+    sch.last_toks := sch.donate_toks
     let pooled = device_pool_on(m, sch, st.session)
     var tails : array<int64>
     if (pooled) {   //! the shared openings go to the pool now; the conversation's own tails stay the region's until it is lost (`flush_parked`)
@@ -1364,6 +1406,7 @@ def private pool_keep(m : Model; var sch : Scheduler; claim : int64; tokens : ar
     }
     pool_carrier(m, sch)   //! made before the seed reads its id window: the first opening a fresh scheduler pools has no carrier yet
     if (recurrent && !empty(sch.pool_host.ple_prev)) {
+        snap.ple_prev |> reserve(long_length(sch.pool_host.ple_prev))
         snap.ple_prev |> resize(long_length(sch.pool_host.ple_prev))
         ple_window_seed(snap.ple_prev, tokens, n)
     }

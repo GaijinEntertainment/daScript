@@ -7,6 +7,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 //   bin/daslang -jit utils/dasllama-server/main.das -- --model <model.gguf> [--port 8080] [--quant q8]
 //                                                       [--kv-dtype f16] [--asr <asr.bin>] [--mmproj <mmproj.gguf>] [--tts <tts.gguf>]
 //                                                       [--image-mmproj <mmproj.gguf>] [--config server.toml] [--tune]
+//                                                       [--slot-save-path <dir>]
 //
 // --config points at a TOML file whose keys mirror the long flag names (model = "...", port = 8080,
 // kv_dtype = "tq4", ...); explicit CLI flags override it. A config carrying `authoritative = true`
@@ -194,6 +195,10 @@ struct ServerArgs {
 
     @clarg_doc = "Directory the model catalog downloads into (default ~/.dasllama/models; DASLLAMA_MODELS_DIR overrides)"
     models_dir : string
+
+    @clarg_name = "slot-save-path"
+    @clarg_doc = "Directory the slot routes save a context into and restore one from (POST /slots/<id>?action=save|restore); unset, they answer 501"
+    slot_save_path : string
 
     @clarg_doc = "Re-tune this box's dasLLAMA kernels, then relaunch (handled before arg parsing; a fat build carries no tuner and ignores it)"
     tune : bool
@@ -1411,6 +1416,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     set_config_surface(build_config_surface(g_cfg, save_path), save_path, picker_model)
     let catalog_dir = catalog_models_dir(g_cfg.models_dir)
     set_catalog_dir(catalog_dir)
+    set_slot_save_path(g_cfg.slot_save_path)
     if (!empty(catalog_env_override())) {
         // override-announce rule: the env wins the catalog resolution over the config key
         to_log(LOG_INFO, "dasllama-server: models dir {catalog_dir} (DASLLAMA_MODELS_DIR overrides the models_dir config key)\n")

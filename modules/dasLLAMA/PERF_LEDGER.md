@@ -9719,3 +9719,11 @@ above, measured at commit 74a7060033 with tuned kernels.
   `GkDflashAttnMerge` on all three homes, sized by `gk_dflash_attn_partials`): `rows x n_heads x 9 x (hs + 2) x 4` bytes,
   one plane a process, 9 the tiles of the 2304-key cap - 898,560 bytes for the E2B drafter on a discrete home (16 rows,
   12 heads of 128), 449,280 on Metal (its block's 8 rows).
+
+### What a scheduler's last finished context holds (the sizes are arithmetic, no run)
+
+- **The token list of the last finished request** (`Scheduler.last_toks`; read by `context_save`, and by the server's slot
+  erase for its count, on every home - the list is host memory whatever serves the model): `8 x tokens` bytes, the tokens
+  never past the context - 32,768 bytes at a context of 4096, 2,097,152 at 262144.
+- **A context file's restore** adds no lasting allocation of its own: its checkpoints and pages enter the prefix cache
+  through `prefix_insert_`, under the cache's own page and checkpoint budgets.

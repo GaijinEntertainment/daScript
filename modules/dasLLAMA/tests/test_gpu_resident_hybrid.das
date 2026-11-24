@@ -391,6 +391,7 @@ def private hybrid_q8_rows(t : T?; var r : HybridQ8Rows; var m : Model; form : M
         regions_scheduler_paged_cell(t, m)
         regions_checkpoint_adopt_cell(t, m)
         regions_pool_cell(t, m)
+        regions_context_file_cell(t, m)
     } elif (form.on_gpu && form.kv_asked) {
         hybrid_codec_rows(r.codec, m, form)
     } elif (!form.on_gpu && form.uncached) {

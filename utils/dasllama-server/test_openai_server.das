@@ -78,7 +78,7 @@ def private vecs_equal(a, b : array<float>) : bool => vecs_close(a, b, 0.0)
 // run the block, then POST /shutdown (flips the server context's stop flag) and join. `mode`
 // arms the Metal pipeline in the server thread's context BEFORE the load (the --metal flag's
 // engine effect — the != off backend pin must precede load_model).
-def private with_llama_server(model_path : string; port : int; mode : MetalMode = MetalMode.off; page_rows : int64 = 64l; prefix_states : int64 = -1l; prefix_state_mb : int64 = 0l; blk : block<(base_url : string) : void>) {
+def private with_llama_server(model_path : string; port : int; mode : MetalMode = MetalMode.off; page_rows : int64 = 64l; prefix_states : int64 = -1l; prefix_state_mb : int64 = 0l; slot_dir : string = ""; blk : block<(base_url : string) : void>) {
     with_job_status(1) $(finished) {
         new_thread() @() {
             set_metal_mode(mode)
@@ -91,6 +91,7 @@ def private with_llama_server(model_path : string; port : int; mode : MetalMode 
             set_model(m, "test-llm")
             set_default_max_tokens(4l)   // per-context global — exercised by the default-budget completion test
             set_stream_keepalive_ms(0l)   // every tick an empty delta on a streaming wire - the keep-alive cell counts them
+            set_slot_save_path(slot_dir)   // per-context global, as main.das registers --slot-save-path
             // the /config surface as main.das registers it (per-context globals — set in-thread)
             var surf <- {
                 "config" => JV((port = port, model = model_path, streams = 4)),
@@ -790,6 +791,9 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
             POST("{base_url}/v1/chat/completions", "\{\"messages\":[\{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":4}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK), "the server serves on after the drop")
             }
+            POST("{base_url}/slots/0?action=save", "\{\"filename\":\"a.bin\"}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.NOT_IMPLEMENTED), "a slot route with no --slot-save-path answers 501: {resp.body}")
+            }
             POST("{base_url}/v1/models/unload", "\{\"model\":\"test-llm\"}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "unloading the default is refused")
             }
@@ -1004,37 +1008,26 @@ def private chat_status(base_url, body : string) : int {
 }
 
 //! a buffered completion's text
-def private compl_text(base_url, body : string) : string {
-    var text = ""
-    POST("{base_url}/v1/completions", body) $(resp) {
-        var err : string
-        var js = read_json(string(resp.body), err)
-        if (js != null) {
-            text = js?["choices"]?[0]?["text"] ?? ""
-            unsafe {
-                delete js
-            }
-        }
-    }
-    return text
-}
+def private compl_text(base_url, body : string) : string => compl_usage(base_url, body).text
 
-//! a buffered completion's usage counts: prompt tokens and the prefix-cache hit
-def private compl_usage(base_url, body : string) : tuple<prompt : int; cached : int> {
+//! a buffered completion's usage counts - prompt tokens and the prefix-cache hit - and its text
+def private compl_usage(base_url, body : string) : tuple<prompt : int; cached : int; text : string> {
     var prompt = -1
     var cached = -1
+    var text = ""
     POST("{base_url}/v1/completions", body) $(resp) {
         var err : string
         var js = read_json(string(resp.body), err)
         if (js != null) {
             prompt = int(js?["usage"]?["prompt_tokens"] ?? -1l)
             cached = int(js?["usage"]?["prompt_tokens_details"]?["cached_tokens"] ?? -1l)
+            text = clone_string(js?["choices"]?[0]?["text"] ?? "")
             unsafe {
                 delete js
             }
         }
     }
-    return (prompt = prompt, cached = cached)
+    return (prompt = prompt, cached = cached, text = text)
 }
 
 let TEST_PORT_CKPT = 18191   // beside 18190, the preserve_thinking boot
@@ -1147,6 +1140,98 @@ def test_openai_server_recurrent_checkpoints(t : T?) {   // nolint:STYLE038 - on
     }
 }
 
+//! a slot route's answer: its status, its body, and the counts the body carries (-1 where it names none)
+struct private SlotAnswer {
+    status : int
+    text : string
+    tokens : int64 = -1l
+    bytes : int64 = -1l
+}
+
+def private slot_post(base_url, tail, body : string) : SlotAnswer {
+    var a = SlotAnswer()
+    POST("{base_url}/slots/{tail}", body) $(resp) {
+        a.status = int(resp.status_code)
+        a.text = string(resp.body)
+        var err : string
+        var js = read_json(a.text, err)
+        if (js != null) {
+            a.tokens = max(max(js?["n_saved"] ?? -1l, js?["n_restored"] ?? -1l), js?["n_erased"] ?? -1l)
+            a.bytes = max(js?["n_written"] ?? -1l, js?["n_read"] ?? -1l)
+            unsafe {
+                delete js
+            }
+        }
+    }
+    return a
+}
+
+[test(description = "The slot routes carry a recurrent model's context through a file: with no finished request a save refuses, as do an unknown action, an unknown slot, a file name with a folder part, a body that is not JSON and a restore of a file that is not there; after a completion a save writes its tokens and the file's bytes, an erase empties the prompt cache so the same prompt prefills cold, and a restore of the file into the emptied cache makes that prompt attach everything but its last token", timeout = 1200)]
+def test_openai_server_slot_files(t : T?) {
+    t |> run("the slot routes on a recurrent model: save, erase, restore, and the refusals (needs Qwen3.5-0.8B q8)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA server test is JIT-only)")
+            return
+        }
+        if (!stat(QWEN35_PATH).is_valid) {
+            t |> skip("{base_name(QWEN35_PATH)} not present (set DASLLAMA_MODELS_DIR)")
+            return
+        }
+        let dir = path_join(test_temp_dir(), "dasllama_slot_files")
+        mkdir(dir)
+        with_llama_server(QWEN35_PATH, TEST_PORT_SLOT, MetalMode.off, 8l, -1l, 0l, dir) $(base_url) {
+            let named = "\{\"filename\":\"a.bin\"}"
+            with_http_request() $(var req) {
+                req.method = http_method.POST
+                req.url := "{base_url}/slots/0?action=erase"
+                set_header(req, "Origin", "http://evil.example")
+                request(req) $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.FORBIDDEN), "a cross-site slot route is refused")
+                }
+            }
+            let early = slot_post(base_url, "0?action=save", named)
+            t |> success(early.status == int(http_status.BAD_REQUEST) && find(early.text, "no request has finished") >= 0, "a save before any request refuses: {early.text}")
+            for (k in [(tail = "0?action=keep", body = named, want = "is not save, restore or erase"),
+                       (tail = "7?action=save", body = named, want = "is not one of the 1 this server holds"),
+                       (tail = "x?action=save", body = named, want = "is not one of the 1 this server holds"),
+                       (tail = "0?action=save", body = "\{\"filename\":\"../a.bin\"}", want = "is not one file name"),
+                       (tail = "0?action=save", body = "\{\"filename\":\"..\\\\a.bin\"}", want = "is not one file name"),
+                       (tail = "0?action=save", body = "\{\"filename\":\"C:a.bin\"}", want = "is not one file name"),
+                       (tail = "0?action=restore", body = "\{\"filename\":\"..\"}", want = "is not one file name"),
+                       (tail = "0?action=restore", body = "\{\"filename\":\".\"}", want = "is not one file name"),
+                       (tail = "0?action=save", body = "nope", want = "invalid JSON"),
+                       (tail = "0?action=restore", body = "\{\"filename\":\"absent.bin\"}", want = "does not open")]) {
+                let a = slot_post(base_url, k.tail, k.body)
+                t |> success(a.status == int(http_status.BAD_REQUEST) && find(a.text, k.want) >= 0, "POST /slots/{k.tail} refuses naming '{k.want}': {a.text}")
+            }
+            let raw = "\{\"prompt\":\"The house has a kitchen, a bedroom and a garden. The kitchen light is on, the bedroom lights are off, the sprinkler runs at seven. Name the device that runs on a schedule:\",\"max_tokens\":4}"
+            let first = compl_usage(base_url, raw)
+            t |> success(first.prompt > 16 && first.cached == 0, "the first completion prefills cold ({first.prompt} prompt, {first.cached} cached)")
+            let saved = slot_post(base_url, "0?action=save", named)
+            t |> equal(saved.status, int(http_status.OK), "the save answers: {saved.text}")
+            t |> success(saved.tokens >= int64(first.prompt), "it holds the prompt and what the turn added ({saved.tokens} tokens of a {first.prompt}-token prompt)")
+            t |> equal(saved.bytes, int64(stat(path_join(dir, "a.bin")).size), "its n_written is the file's size")
+            t |> success(find(saved.text, "\"filename\":\"a.bin\"") >= 0 && find(saved.text, "\"save_ms\":") >= 0, "it names the file and the time: {saved.text}")
+            let erased = slot_post(base_url, "0?action=erase", "")
+            t |> success(erased.status == int(http_status.OK) && erased.tokens == saved.tokens, "the erase answers the tokens the slot held: {erased.text}")
+            let gone = slot_post(base_url, "0?action=save", named)
+            t |> success(gone.status == int(http_status.BAD_REQUEST) && find(gone.text, "no request has finished") >= 0, "an erased slot has no context to save: {gone.text}")
+            let cold = compl_usage(base_url, raw)
+            t |> equal(cold.cached, 0, "the erased cache prefills the same prompt cold")
+            slot_post(base_url, "0?action=erase", "")
+            let back = slot_post(base_url, "0?action=restore", named)
+            t |> equal(back.status, int(http_status.OK), "the restore answers: {back.text}")
+            t |> success(back.tokens == saved.tokens && back.bytes == saved.bytes, "it took the tokens and bytes the save wrote ({back.tokens}, {back.bytes})")
+            let again = slot_post(base_url, "0?action=save", "\{\"filename\":\"b.bin\"}")
+            t |> success(again.status == int(http_status.OK) && again.tokens == saved.tokens && again.bytes == saved.bytes, "a save after the restore writes the same context back: {again.text}")
+            let warm = compl_usage(base_url, raw)
+            t |> equal(warm.cached, first.prompt - 1, "the restored context serves the prompt's stop: the same prompt attaches everything but its last token")
+            t |> success(!empty(cold.text) && warm.text == cold.text, "the reply over the restored rows is the cold prefill's: '{warm.text}' against '{cold.text}'")
+        }
+    }
+}
+
+let TEST_PORT_SLOT = 18194
 let TEST_PORT_CKPT_BUDGET = 18192   // beside 18191, the recurrent-checkpoints boot
 let TEST_PORT_CKPT_BYTES = 18193    // the byte-budget boot
 
@@ -1200,7 +1285,9 @@ def test_bench_inprocess(t : T?) {   // nolint:STYLE038 — one live server sess
             t |> skip("{base_name(MODEL_PATH)} not present (set DASLLAMA_MODELS_DIR)")
             return
         }
-        with_llama_server(MODEL_PATH, TEST_PORT_BENCH) $(base_url) {
+        let slot_dir = path_join(test_temp_dir(), "dasllama_slot_bench")
+        mkdir(slot_dir)
+        with_llama_server(MODEL_PATH, TEST_PORT_BENCH, MetalMode.off, 64l, -1l, 0l, slot_dir) $(base_url) {
             GET("{base_url}/bench") $(resp) {   // no daslang and no lcpp_bin registered: the in-process mode
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 var err : string
@@ -1234,6 +1321,9 @@ def test_bench_inprocess(t : T?) {   // nolint:STYLE038 — one live server sess
                 }
                 POST("{base_url}/cache/drop", "") $(resp) {
                     t |> equal(int(resp.status_code), int(http_status.CONFLICT), "a cache drop during the run is refused")
+                }
+                POST("{base_url}/slots/0?action=erase", "") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.CONFLICT), "a slot route during the run is refused")
                 }
             }
             let started = ref_time_ticks()

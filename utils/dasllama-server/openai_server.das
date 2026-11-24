@@ -25,6 +25,7 @@ require daslib/utf8_utils       // utf8_length: the TTS input cap counts charact
 require daslib/fio              // sleep(), path_join, base_name, remove, get_env_variable
 require daslib/module_path      // get_this_module_dir: control.html ships beside the server sources
 require strings
+require daslib/strings_convert   // try_to_int: a slot route's id
 require math
 require daslib/base64                // base64_decode: the data: URI payload
 require uriparser                    // unescape_uri: a urlencoded /translate form
@@ -85,6 +86,7 @@ enum private Route {
     shutdown
     gc
     cache_drop
+    slot_action
 }
 
 enum private FrontKind {
@@ -112,6 +114,8 @@ struct FrontReq {
     form_language : string  //! the upload's `language` field
     form_model : string     //! the upload's `model` field
     form_target : string    //! the upload's `target` field: /v1/audio/translations translates the transcript into it
+    slot : string           //! a slot route's id, as the path wrote it
+    action : string         //! a slot route's `action` query parameter
     status : int
     port : int
 }
@@ -2904,6 +2908,72 @@ def private handle_cache_drop(var resp : Reply) : http_status {
     }
     to_log(LOG_INFO, "dasllama-server: prompt cache dropped via POST /cache/drop - {pages} pages, {states} checkpoints over {length(g_slots)} slot(s)\n")
     return resp |> JSON("\{\"ok\":true,\"pages_dropped\":{pages},\"checkpoints_dropped\":{states}}", http_status.OK)
+}
+
+var private g_slot_save_path = ""
+
+//! Register the directory the slot routes save into and restore from (call before run_server); "" leaves them answering 501.
+def set_slot_save_path(dir : string) {
+    g_slot_save_path = dir
+}
+
+//! a slot route's file name: one name with no folder part, no drive and no climb
+def private is_bare_file_name(name : string) : bool
+    => !empty(name) && find(name, "/") < 0 && find(name, "\\") < 0 && find(name, ":") < 0 && name != "." && name != ".."
+
+//! the slot id of a slot route's path (`/slots/<id>`, any query cut off); "" for any other path
+def private slot_path_id(path : string) : string {
+    let q = find(path, "?")
+    let bare = q >= 0 ? slice(path, 0, q) : path
+    return bare |> starts_with(SLOTS_PREFIX) ? slice(bare, length(SLOTS_PREFIX)) : ""
+}
+
+[arch(at = "README.md#endpoints")]
+def private handle_slot_action(req : FrontReq; var resp : Reply) : http_status {
+    if (empty(g_slot_save_path)) {
+        return resp |> JSON(error_body("this server keeps no slot files - start it with --slot-save-path <dir>", "not_supported"), http_status.NOT_IMPLEMENTED)
+    }
+    if (req.action != "save" && req.action != "restore" && req.action != "erase") {
+        return resp_error(resp, http_status.BAD_REQUEST, "action '{req.action}' is not save, restore or erase")
+    }
+    let parsed = try_to_int(req.slot)
+    let id = (parsed |> is_ok) ? (parsed ?? -1) : -1
+    if (id < 0 || id >= length(g_slots)) {
+        return resp_error(resp, http_status.BAD_REQUEST, "slot '{req.slot}' is not one of the {length(g_slots)} this server holds (GET /v1/models lists them in order, from 0)")
+    }
+    if (streams_busy() || bench_hold_active()) {
+        return resp |> JSON(error_body(bench_hold_active() ? ibench_hold_text() : "streams are live (active {total_active()}, queued {total_queued()}) — retry when idle", "busy"), http_status.CONFLICT)
+    }
+    if (req.action == "erase") {
+        let erased = long_length(g_slots[id].sched.last_toks)
+        prefix_release(g_slots[id].sched.prefix, g_slots[id].sched.pool)
+        g_slots[id].sched.last_toks |> clear()
+        return resp |> JSON("\{\"id_slot\":{id},\"n_erased\":{erased}}", http_status.OK)
+    }
+    var perr = ""
+    var js = read_json(req.body, perr)
+    if (js == null) {
+        return resp_error(resp, http_status.BAD_REQUEST, "invalid JSON: {perr}")
+    }
+    let filename = js?["filename"] ?? ""
+    unsafe {
+        delete js
+    }
+    if (!is_bare_file_name(filename)) {
+        return resp_error(resp, http_status.BAD_REQUEST, "filename '{filename}' is not one file name under --slot-save-path")
+    }
+    let path = path_join(g_slot_save_path, filename)
+    let save = req.action == "save"
+    let t0 = ref_time_ticks()
+    var inscope done <- save ? context_save(g_slots[id].model, g_slots[id].sched, path) : context_restore(g_slots[id].model, g_slots[id].sched, path)
+    let ms = float(get_time_usec(t0)) / 1000.0
+    if (!empty(done.why)) {
+        return resp_error(resp, http_status.BAD_REQUEST, "slot {id} did not {req.action}: {done.why}")
+    }
+    to_log(LOG_INFO, "dasllama-server: slot {id} {save ? "saved to" : "restored from"} '{path}' via POST /slots - {done.tokens} tokens, {done.bytes / 1048576l} MB in {ms} ms\n")
+    return resp |> JSON(save
+        ? "\{\"id_slot\":{id},\"filename\":{json_str(filename)},\"n_saved\":{done.tokens},\"n_written\":{done.bytes},\"timings\":\{\"save_ms\":{ms}}}"
+        : "\{\"id_slot\":{id},\"filename\":{json_str(filename)},\"n_restored\":{done.tokens},\"n_read\":{done.bytes},\"timings\":\{\"restore_ms\":{ms}}}", http_status.OK)
 }
 
 // Free the tier for a runtime load and recreate the boot precondition (nothing installed, the
@@ -7094,6 +7164,8 @@ def private drain_media_events(srv : FrontLink) {
 
 // ===== Server =====
 
+let private SLOTS_PREFIX = "/slots/"   //! the slot routes' path ahead of the slot id (`handle_slot_action`)
+
 // The front's route table: path and method to the engine's route. STREAM takes every method, so the method is
 // checked here and a mismatch reads as the unknown route, as a GET / POST registration answered it.
 struct private RouteRow {
@@ -7238,9 +7310,13 @@ def private front_forward(var req : HttpRequest?; var writer : HttpResponseWrite
     g_fwires[wid] = writer
     let method = "{req.method}"
     let path = "{req.path}"
-    let row = route_row(path, method)
+    let slot = method == "POST" ? slot_path_id(path) : ""
+    let row = empty(slot) ? route_row(path, method) : RouteRow(route = Route.slot_action)
     var fr = FrontReq(kind = FrontKind.request, wid = wid, route = row.route,
-        method = method, path = path, loopback = front_is_loopback(req))
+        method = method, path = path, loopback = front_is_loopback(req), slot = slot)
+    if (!empty(slot)) {
+        fr.action = get_param(req, "action")
+    }
     if (status_route(row.route)) {
         g_fstatus[wid] <- StatusWait(path = path, since = ref_time_ticks())
     }
@@ -7442,7 +7518,7 @@ def private reply_on(wid : int64; resp : Reply) {
 def private operator_route(route : Route) : bool
     => (route == Route.config_save || route == Route.bench_start || route == Route.bake_start
         || route == Route.catalog_download || route == Route.restart || route == Route.shutdown || route == Route.gc
-        || route == Route.cache_drop)
+        || route == Route.cache_drop || route == Route.slot_action)
 
 def private note_drain_request(what : string) {
     if (!g_shutdown_requested) {
@@ -7502,6 +7578,7 @@ def private buffered_route(req : FrontReq; var resp : Reply) : http_status {   /
             http_status.ACCEPTED)
     }
     if (req.route == Route.cache_drop) return handle_cache_drop(resp)
+    if (req.route == Route.slot_action) return handle_slot_action(req, resp)
     return handle_unknown(req, resp)
 }
 
