@@ -208,6 +208,7 @@ def private qwen2_rows(t : T?; var r : Qwen2Rows; var m : Model; form : ModelFor
         if (!form.host) {
             regions_scheduler_paged_cell(t, m)   //! the paged and pooled schedulers after the rig's: their streams leave parked claims
             regions_pool_cell(t, m)
+            regions_context_file_cell(t, m)
         }
     } elif (form.on_gpu && form.kv_asked) {
         qwen2_codec_rows(t, r.codec, m, form)

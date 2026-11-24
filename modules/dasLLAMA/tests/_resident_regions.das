@@ -13,6 +13,8 @@ require dasllama/dasllama   // create_session, create_batch_workspace, eval_batc
 require _scheduler_rig   // the device-mode scheduler cell: make_req, drain, toks_of, finished_of
 require math
 require daslib/defer
+require daslib/fio   // the context file cell's temp file
+require strings   // find: a refusal by its words
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed; gpu_cpu_passes_
 require dasllama/dasllama_gpu_resident   // set_gpu_resident_regions_, moe_gpu_resident_active
 require dasllama/dasllama_gpu_math   // nolint:STYLE030,LINT019 — the grid helpers, read under the vulkan static_if, unused in the darwin world
@@ -1379,6 +1381,75 @@ def regions_pool_cell(t : T?; tr : Model) {
             delete pooled
             delete flat
             delete capped
+        }
+    }
+}
+
+//! A device-home scheduler's finished turn through a context file (`../ARCHITECTURE_ENGINE_SERVING.md#context-file`): the save
+//! brings down the rows its region alone holds, another scheduler restores the file, and the conversation's next turn
+//! attaches there, token for token the turn of the scheduler that kept the rows. With DASLLAMA_DEVICE_POOL=0 the save
+//! refuses by the knob's name.
+//! the cell's run on a load the caller made
+def regions_context_file_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("a device-home scheduler's finished turn saves to a file; another scheduler restores it and the next turn attaches there, token for token the scheduler that kept the rows") @capture(& tr)(t : T ?) {
+            let path = path_join(test_temp_dir(), "dasllama_ctx_device_home.bin")
+            var first, kept, back, cold : array<SchedEvent>
+            var turn1 <- prose_ids(100l, 3l)
+            turn1 |> push_from(prose_ids(30l, 41l))
+            var flat <- create_scheduler(tr, 2l, 8l, PF_WINDOW_ROWS, 0l, 0l, mirror_kv_dtype())
+            var unpaged <- context_save(tr, flat, path)
+            t |> success(find(unpaged.why, "paged serving is off") >= 0, "a scheduler with no pages keeps no context to save: '{unpaged.why}'")
+            delete unpaged
+            delete flat
+            var a <- create_scheduler(tr, 2l, 8l, PF_WINDOW_ROWS, 64l, 0l, mirror_kv_dtype(), false, -1l, 256l)
+            set_device_kv(a, true)
+            submit(tr, a, make_req(1l, turn1, 8l))
+            var busy <- context_save(tr, a, path)
+            t |> success(find(busy.why, "a request is in flight") >= 0, "a save while a request is in flight refuses: '{busy.why}'")
+            delete busy
+            drain(tr, a, first)
+            var saved <- context_save(tr, a, path)
+            if (!gpu_device_kv_pool_armed()) {
+                t |> success(find(saved.why, "DASLLAMA_DEVICE_POOL") >= 0, "DASLLAMA_DEVICE_POOL=0: the save refuses by the knob's name: '{saved.why}'")
+            } else {
+                t |> equal(saved.why, "", "the save ran")
+                t |> success(saved.tokens >= long_length(turn1), "it holds the prompt and what the turn added ({saved.tokens} tokens of a {length(turn1)}-token prompt)")
+                var turn2 := turn1
+                turn2 |> push_from(toks_of(first, 1l), prose_ids(30l, 53l))
+                submit(tr, a, make_req(2l, turn2, 8l))
+                drain(tr, a, kept)
+                var b <- create_scheduler(tr, 2l, 8l, PF_WINDOW_ROWS, 64l, 0l, mirror_kv_dtype(), false, -1l, 256l)
+                set_device_kv(b, true)
+                var got <- context_restore(tr, b, path)
+                t |> equal(got.why, "", "the restore ran")
+                t |> equal(got.tokens, saved.tokens, "it took the tokens the save wrote")
+                submit(tr, b, make_req(2l, turn2, 8l))
+                drain(tr, b, back)
+                var c <- create_scheduler(tr, 2l, 8l, PF_WINDOW_ROWS, 64l, 0l, mirror_kv_dtype(), false, -1l, 256l)
+                set_device_kv(c, true)
+                submit(tr, c, make_req(2l, turn2, 8l))
+                drain(tr, c, cold)
+                t |> success(cached_of(back, 2l) > 100l, "the next turn attached past its system prompt off the restored file ({cached_of(back, 2l)} tokens)")
+                t |> equal(cached_of(cold, 2l), 0l, "control: a scheduler that restored nothing prefills the turn whole")
+                hold_streams_equal(t, tr, kept, back, 2l, 3l, 3l, "the scheduler that kept the rows", "the scheduler that restored the file")
+                served_every_call(t)
+                set_device_kv(b, false)
+                set_device_kv(c, false)
+                delete c
+                delete got
+                delete b
+                delete turn2
+            }
+            set_device_kv(a, false)
+            remove(path)
+            delete saved
+            delete a
+            delete turn1
+            delete first
+            delete kept
+            delete back
+            delete cold
         }
     }
 }
