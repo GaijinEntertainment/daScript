@@ -140,6 +140,7 @@ namespace das {
             if ( func ) func->sideEffectFlags |= uint32_t(SideEffects::mayRaise);
         }
     public:
+        Program *               program = nullptr;
         virtual void preVisitExpression ( Expression * expr ) override {
             Visitor::preVisitExpression(expr);
             if ( nodeRaises(expr) ) markRaise();
@@ -798,6 +799,14 @@ namespace das {
                 func->sideEffectFlags |= uint32_t(SideEffects::modifyExternal);
             }
             if ( expr->initializer ) {
+                if ( !expr->func ) {
+                    program->error("internal compilation error, new reached side-effect analysis with unresolved func",
+                        "this typically means the AST was modified after type inference "
+                        "without signalling that infer needs to run again - check the "
+                        "annotation patch() / pass apply() / substitution macro that produced this node",
+                        "", expr->at, CompilationError::internal_function_not_resolved_yet);
+                    return;
+                }
                 markPassMutableArguments(expr->func, expr->arguments);
                 // if modified, modify CALL
                 auto sef = getSideEffects(expr->func);
@@ -1108,6 +1117,7 @@ namespace das {
         markSymbolUse(true,false,true,nullptr);
         // determine function side-effects
         TrackFieldAndAtFlags faf;
+        faf.program = this;
         faf.MarkSideEffects(*thisModule);
         accessFlagsValid = true;
     }

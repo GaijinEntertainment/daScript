@@ -1788,6 +1788,7 @@ namespace das {
     ExpressionPtr ExprNew::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprNew>(expr);
         ExprLooksLikeCall::clone(cexpr);
+        cexpr->func = func;
         cexpr->typeexpr = new TypeDecl(*typeexpr);
         cexpr->initializer = initializer;
         cexpr->allocate_on_stack = allocate_on_stack;
