@@ -918,10 +918,54 @@ def public rdec_seg_ending_at(segs : array<RdecPfSeg>; w0, row : int64) : int64 
     return -1l
 }
 
+//! The Vulkan home's decode tile knobs in `env` said at its driver's load, each by its env spelling and only where it moves a
+//! layer's form: `tile_layers` the layers of the tile's shape, `far_layers` the flat ones among them, `cm2_flash` the device's
+//! prefill flash on the cm2 arm, where the unset tile knob leaves the tile form off
+def public vk_attn_knobs_say(env : VulkanEnv; tile_layers, far_layers : int64; cm2_flash : bool) {
+    let tile = env.vk_attn_tile
+    if (tile_layers > 0l && tile >= 0l && (tile == 0l) != cm2_flash) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: DASLLAMA_VK_ATTN_TILE={tile} - the rows of one session attend on the {tile == 0l ? "row form" : "decode tile form"} on {tile_layers} layers (unset it, or set it to -1, for the tile form where the device's prefill flash is the KHR arm)\n")
+    }
+    if (far_layers > 0l && env.vk_attn_tile_far == 0l) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: DASLLAMA_VK_ATTN_TILE_FAR=0 - the one-row step past the wide position attends on the row form's wide pieces on {far_layers} flat layers (unset it, or set it to 1, for the decode tile form)\n")
+    }
+}
+
 //! DASLLAMA_VK_FA_WIDE=0 in `env` said at the Vulkan window's setup on a model with a head-256 layer on the cm2 flash tiles (`h256`)
 def public vk_fa_wide_say(env : VulkanEnv; h256 : bool) {
     if (h256 && env.vk_fa_wide == 0l) {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: DASLLAMA_VK_FA_WIDE=0 - the prefill flash pass at a head of 256 runs the 64-row stamps (unset it, or set it to 1, for the wide cm2 stamps)\n")
+    }
+}
+
+//! The CUDA home's attention knobs in `env` said at its driver's load, each by its env spelling and only where it moves a
+//! layer's form: `tile_layers` the layers the decode tile's stamps serve, `far_layers` the flat ones among them, `wide_layers`
+//! the flat layers at a head of 512 or 256, `pieces_cap` the most key pieces the far row takes
+def public cuda_attn_knobs_say(env : VulkanEnv; tile_layers, far_layers, wide_layers, pieces_cap : int64) {
+    let tile_on = env.cuda_attn_tile != 0l
+    if (tile_layers > 0l && !tile_on) {
+        to_log(LOG_INFO, "dasLLAMA cuda tier: DASLLAMA_CUDA_ATTN_TILE=0 - the rows of one session and the far row attend on the row form on {tile_layers} layers (unset it, or set it to 1, for the decode tile form)\n")
+    }
+    let far = env.cuda_attn_tile_far
+    if (far_layers > 0l && tile_on && far >= 0l) {
+        let reach = far == 0l ? "at no position" : "from {far} keys"
+        to_log(LOG_INFO, "dasLLAMA cuda tier: DASLLAMA_CUDA_ATTN_TILE_FAR={far} - the one-row step attends on the decode tile form {reach} on {far_layers} flat layers (unset it, or set it to -1, for the driver's count by the device)\n")
+    }
+    let pieces = env.cuda_attn_tile_pieces
+    if (far_layers > 0l && tile_on && far != 0l && pieces > 0l) {
+        to_log(LOG_INFO, "dasLLAMA cuda tier: DASLLAMA_CUDA_ATTN_TILE_PIECES={pieces} - the far row splits a K/V head's q tile into {min(pieces, pieces_cap)} key pieces, held to {pieces_cap} at most (unset it, or set it to 0, for the driver's pick by the keys an SM serves)\n")
+    }
+    if (wide_layers > 0l && env.cuda_fa_wide == 0l) {
+        to_log(LOG_INFO, "dasLLAMA cuda tier: DASLLAMA_CUDA_FA_WIDE=0 - the prefill flash pass at a head of 512 or 256 runs the narrower tiles every home shares on {wide_layers} layers (unset it, or set it to 1, for the wide tile)\n")
+    }
+}
+
+//! DASLLAMA_CUDA_MOE_FP4_ROWS in `env` said at the CUDA driver's load on a model with `fp4_layers` routed layers on the FP4 expert chain
+def public cuda_moe_fp4_rows_say(env : VulkanEnv; fp4_layers : int64) {
+    let rows = env.cuda_moe_fp4_rows
+    if (fp4_layers > 0l && rows >= 0l) {
+        let reach = rows == 0l ? "at no row count" : "from {rows} rows"
+        to_log(LOG_INFO, "dasLLAMA cuda tier: DASLLAMA_CUDA_MOE_FP4_ROWS={rows} - the N-row step feeds the FP4 expert chain {reach} on {fp4_layers} routed layers (unset it, or set it to -1, for the driver's rule over the experts the rows touch)\n")
     }
 }
 
