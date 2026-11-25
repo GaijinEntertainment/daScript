@@ -65,6 +65,16 @@ struct ModelForm {
     //! (`set_cuda_window_fault_`): the driver arms without the window
     //! chain's planes; no knob off the CUDA home
     cuda_window_fault : bool
+    //! the CUDA home's head-warm fault seat pinned through the form
+    //! (`set_cuda_head_warm_fault_`): the NextN head's prompt warm, whose
+    //! planes are taken at its first window, declines; no knob off the
+    //! CUDA home
+    cuda_head_warm_fault : bool
+    //! the CUDA home's FP4-chain fault seat pinned through the form
+    //! (`set_cuda_mmq_fault_`): the FP4 expert chain's planes, taken
+    //! where the routed block's stacks are sized, read as having found
+    //! no room; no knob off the CUDA home
+    cuda_mmq_fault : bool
     //! a CPU form whose cells assert on its load alone: it loads on
     //! every box, where no device form runs too; on a load the body
     //! sees once a codec, true on the first codec's pass alone
@@ -101,14 +111,16 @@ def device_form(ring : bool = true; gather : bool = true; regions : int64 = 0l; 
                 mmq_off : bool = false; host_ctx : int64 = 0l; fuse_bisect : int64 = -1l;
                 perop : bool = false; pool_slots : int64 = 0l; strict_ctx : bool = false;
                 cuda_window_fault : bool = false; mtp_head : string = "";
-                drops_device : bool = false; block_rounds : bool = false) : ModelForm =>
+                drops_device : bool = false; cuda_head_warm_fault : bool = false;
+                block_rounds : bool = false; cuda_mmq_fault : bool = false) : ModelForm =>
     ModelForm(on_gpu = true, kv = KVDtype.f16, kv_asked = false, ring = ring, gather = gather,
         quant = QuantMode.q8, regions = regions, host = host, split_forms = split_forms, ctx = ctx,
         host_layers = host_layers, pf_stream = pf_stream, pf_window_rows = pf_window_rows,
         mtp_depth = mtp_depth, head_off = head_off, mmq_off = mmq_off, host_ctx = host_ctx,
         fuse_bisect = fuse_bisect, perop = perop, pool_slots = pool_slots, strict_ctx = strict_ctx,
         cuda_window_fault = cuda_window_fault, mtp_head = mtp_head, drops_device = drops_device,
-        block_rounds = block_rounds)
+        cuda_head_warm_fault = cuda_head_warm_fault, block_rounds = block_rounds,
+        cuda_mmq_fault = cuda_mmq_fault)
 
 //! a form on the Metal home: the file's blob twin (`blob_twin`: the q8 load turned into the blob the Metal drivers serve)
 //! under `MetalMode.when_available` - `required` where asked - or, `image`, its served image (`load_model_cached` under
@@ -198,7 +210,8 @@ def on_device_home(f : ModelForm) : bool => f.on_gpu && !f.on_metal
 //! context and planes
 def device_default(f : ModelForm) : bool => (on_device_home(f) && !f.kv_asked && f.ring && f.gather && f.regions == 0l && !f.host && !f.split_forms
     && f.ctx == 0l && f.mtp_depth == 0l && !f.head_off && !f.mmq_off && f.host_ctx == 0l && f.fuse_bisect < 0l
-    && !f.perop && f.pool_slots == 0l && !f.strict_ctx && !f.cuda_window_fault && empty(f.mtp_head) && !f.block_rounds)
+    && !f.perop && f.pool_slots == 0l && !f.strict_ctx && !f.cuda_window_fault && !f.cuda_head_warm_fault && empty(f.mtp_head)
+    && !f.block_rounds && !f.cuda_mmq_fault)
 
 //! which side of a block's default pair a form is (`main_side`)
 enum MainSide {
@@ -298,7 +311,9 @@ def private device_form_name(f : ModelForm) : string {
     let bisect = f.fuse_bisect >= 0l ? ", fuse bisect {f.fuse_bisect}" : ""
     let heat = f.pool_slots > 0l ? ", {f.pool_slots} pool slots" : ""
     let whole = f.strict_ctx ? ", the context asked whole" : ""
-    let fault = f.cuda_window_fault ? ", the window-fault seat" : ""
+    let window_fault = f.cuda_window_fault ? ", the window-fault seat" : ""
+    let head_fault = f.cuda_head_warm_fault ? "{window_fault}, the head-warm fault seat" : window_fault
+    let fault = f.cuda_mmq_fault ? "{head_fault}, the FP4-chain fault seat" : head_fault
     let pinned = empty(f.mtp_head) ? fault : "{fault}, the NextN head {base_name(f.mtp_head)}"
     let shape = "{f.ring ? "rings" : "flat"}, {f.gather ? "device gather" : "host embed"}"
     return "the per-op form ({f.kv} asked, the whole-model route off)" if (f.perop)

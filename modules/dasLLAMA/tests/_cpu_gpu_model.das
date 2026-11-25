@@ -110,6 +110,22 @@ def private device_form_run(t : T?; path : string; ctx : int64; form : ModelForm
         } else {
             skip_cell(t, "{form_name(form)}: no CUDA module on this build - the window-fault seat is the CUDA driver's")
         }
+    } elif (form.cuda_head_warm_fault) {
+        static_if (typeinfo builtin_module_exists(cuda)) {
+            let was = set_cuda_head_warm_fault_(true)   // the head's planes are taken at its first prompt warm: the seat holds through the form's cells
+            out = device_form_pinned(t, path, ctx, form, lane, body)
+            set_cuda_head_warm_fault_(was)
+        } else {
+            skip_cell(t, "{form_name(form)}: no CUDA module on this build - the head-warm fault seat is the CUDA driver's")
+        }
+    } elif (form.cuda_mmq_fault) {
+        static_if (typeinfo builtin_module_exists(cuda)) {
+            let was = set_cuda_mmq_fault_(true)   // the chain's planes are taken where the routed stacks are sized, at the arm or after it: the seat holds through the form's cells
+            out = device_form_pinned(t, path, ctx, form, lane, body)
+            set_cuda_mmq_fault_(was)
+        } else {
+            skip_cell(t, "{form_name(form)}: no CUDA module on this build - the FP4-chain fault seat is the CUDA driver's")
+        }
     } else {
         out = device_form_pinned(t, path, ctx, form, lane, body)
     }
