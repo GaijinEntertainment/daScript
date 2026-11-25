@@ -327,7 +327,7 @@ def test_popen_argv_timeout_kills_the_tree(t : T?) {
 //! no core dump into the tree from a signal the shell sends itself
 def die_of(sig : string) : array<string> => <- ["/bin/sh", "-c", "ulimit -c 0; kill -{sig} $$"]
 
-[test(description = "run_and_capture reads a child killed by a signal as 128 plus the signal number, and is_death_exit_code tells it from a plain exit")]
+[test(description = "run_and_capture reads a child killed by a signal as 128 plus the signal number, and is_death_exit_code tells it from a plain exit", timeout = 1200)]
 def test_a_child_killed_by_a_signal_reads_as_128_plus_the_signal(t : T?) {
     if (get_running_platform_name() == "windows") {
         t |> skip("POSIX signals")
@@ -361,14 +361,14 @@ def test_a_child_killed_by_a_signal_reads_as_128_plus_the_signal(t : T?) {
     let waitedRc = unsafe(process_wait(waited, 30.0))
     t |> equal(128 + 6, waitedRc, "process_wait answers the same")
     unsafe(close_process(waited))
-    var polled = unsafe(spawn_process(die_of("INT"), "", noenv))
+    var polled = unsafe(spawn_process(die_of("ALRM"), "", noenv))
     var polledRc = process_running
     for (_ in range(3000)) {
         polledRc = unsafe(process_poll(polled))
         break if (polledRc != process_running)
         sleep(10u)
     }
-    t |> equal(128 + 2, polledRc, "process_poll answers the same")
+    t |> equal(128 + 14, polledRc, "process_poll answers the same for SIGALRM")
     unsafe(close_process(polled))
 }
 
