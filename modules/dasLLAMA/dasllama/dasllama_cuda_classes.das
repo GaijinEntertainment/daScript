@@ -10,6 +10,7 @@ require cuda/cuda_intrinsics
 require spirv/spirv_markers
 require dasllama/dasllama_cuda_common public
 require dasllama/dasllama_cuda_dispatch
+require dasllama/dasllama_env   // the wide flash tile's knob
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gemm_schema   // the q8 block geometry the knee race's synthetic planes take
 require dasllama/dasllama_gpu_math
@@ -4409,11 +4410,341 @@ class CuPleBf16Cvt : GkClampRows {
     }
 }
 
+//! `FaMmaCuT` serves heads 512 and 256 on one block shape, these constants: another tile makes them its template constants and
+//! stamps it (`REVIEW_GPU_KERNEL_CLASSES.md`)
+let FMC_KEYS = 32u      //! the keys a step
+let FMC_NT = 384u       //! its threads: twelve subgroups
+let FMC_PART = 128u     //! the head's columns a subgroup owns: eight fragments of sixteen
+let FMC_QROWS = 192u    //! the query rows the twelve subgroups would cover at one part a head: a head of `p` parts covers 192 / p
+let FMC_KST = 65u       //! the widest staged row in 16-byte quads: head 512's 64 and a pad
+let FMC_PST = 5u        //! a P row's quads: a step's 16 pairs and a pad
+
+//! the wide tile's query rows a block at head size `hs`: 48 at 512 (three groups of sixteen, a group four subgroups), 96 at 256
+def fa_mma_rows(hs : uint) : uint => FMC_QROWS * FMC_PART / hs
+
+//! the CUDA home's wide flash tile: a head's 48 query rows a block at head 512 and 96 at head 256, the keys walked once for
+//! all of them; a subgroup owns `FMC_PART` columns of the head
+[ |> template_struct_instance]
+class template FaMmaCuT {
+    @ssbo @binding = 0 @readonly qpanel4 : array<float4>   //! the prepped q rows, four floats a word
+    @ssbo @binding = 1 @readonly kh4 : array<uint4>        //! the f16 K mirror, eight halves a word
+    @ssbo @binding = 2 @readonly vh4 : array<uint4>        //! ... and the V mirror
+    @ssbo @binding = 3 outp : array<OT>
+    @push_constant pa : FaArgs
+    @template_constant HS : uint = 512u          //! the head: 512, or 256
+    @template_constant OUT16 : bool = false
+    @template_constant GATED : bool = false      //! o times the sigmoid of the [q | gate] head's gate half (head 256, as `FaT`'s)
+    @workgroup stg : uint4[int(2u * FMC_KEYS * FMC_KST)]         //! the step's K rows, then its V rows, [key][dim] as f16 pairs; the q rows before the first step
+    @workgroup ps : float[int(FMC_QROWS * FMC_KEYS)]             //! the partial scores, [part][row][key]
+    @workgroup fp : uint4[int(FMC_QROWS / 2u * FMC_PST)]         //! P as f16 pairs, [row][key], sized for head 256's 96 rows
+    @workgroup fa : float[int(FMC_QROWS / 2u)]                   //! a row's rescale of the step; its 1 / L at the end
+
+    //! the 32 rows from `j` of the K mirror or the V mirror into their stage, a thread its own 16-byte chunks; a row past `kvlen` lands as zeros
+    [spirv_inline]
+    def stage_keys(v : bool; j, kvlen, kq0, krq : uint) {
+        let tid = gl_LocalInvocationID.x
+        for [unroll] (i in range(int((FMC_KEYS * (HS / 8u) + FMC_NT - 1u) / FMC_NT))) {
+            let e = tid + uint(i) * FMC_NT
+            if (e < FMC_KEYS * (HS / 8u)) {
+                let key = e / (HS / 8u)
+                let quad = e % (HS / 8u)
+                let dst = (v ? FMC_KEYS + key : key) * (HS / 8u + 1u) + quad
+                if (j + key >= kvlen) {
+                    stg[dst] = uint4(0u, 0u, 0u, 0u)
+                } elif (v) {
+                    cp_async_16(unsafe(addr(stg[dst])), unsafe(addr(vh4[kq0 + (j + key) * krq + quad])))
+                } else {
+                    cp_async_16(unsafe(addr(stg[dst])), unsafe(addr(kh4[kq0 + (j + key) * krq + quad])))
+                }
+            }
+        }
+        cp_async_commit()
+    }
+
+    [spirv_inline, arch(at="../ARCHITECTURE_GPU_SHARED_ATTN.md#cuda-fa-wide")]
+    def fa_mma_body {   // nolint:STYLE037,STYLE038 - one flash pass, its phases coupled by the block's barriers
+        let PARTS = HS / FMC_PART
+        let ROWS = FMC_QROWS / PARTS
+        let kst = int(HS / 8u + 1u)   // a staged row's quads and a pad: ldmatrix's eight rows land on eight bank groups
+        let qtiles = (pa.rows + ROWS - 1u) / ROWS
+        let h = gl_WorkGroupID.x / qtiles
+        let q0 = (gl_WorkGroupID.x % qtiles) * ROWS
+        let tid = gl_LocalInvocationID.x
+        let lane = tid & 31u
+        let w = tid >> 5u
+        let g = w / PARTS
+        let c = w % PARTS
+        let mt = int(lane >> 3u)
+        let mr = int(lane & 7u)
+        let kvlen = pa.w0 + pa.rows
+        let kend = pa.w0 + min(q0 + ROWS, pa.rows)
+        let kq0 = (pa.kvbase + (h / pa.kv_mul) * HS) / 8u
+        let krq = pa.kvd / 8u
+        let qstride = pa.qstride == 0u ? (GATED ? 2u * pa.qd : pa.qd) : pa.qstride   // a gated panel is [q | gate] a head
+        let qhs = pa.qhs == 0u ? (GATED ? 2u * HS : HS) : pa.qhs
+        for [unroll] (i in range(8)) {
+            let e = tid + uint(i) * FMC_NT
+            let qr = q0 + e / (HS / 8u)
+            let quad = e % (HS / 8u)
+            var lo = float4(0.0)
+            var hi = float4(0.0)
+            if (qr < pa.rows) {
+                let src = ((pa.row0 + qr) * qstride + h * qhs) / 4u + quad * 2u
+                lo = qpanel4[src] * pa.scale
+                hi = qpanel4[src + 1u] * pa.scale
+            }
+            stg[int(e / (HS / 8u)) * kst + int(quad)] = uint4(packHalf2x16(lo.xy), packHalf2x16(lo.zw), packHalf2x16(hi.xy), packHalf2x16(hi.zw))
+        }
+        barrier()
+        var qa : coopmatA_f16_16x16[8]
+        let qat = (int(g) * 16 + mr + 8 * (mt & 1)) * kst + int(c) * 16 + (mt >> 1)
+        for [unroll] (f in range(8)) {
+            ldmatrix(qa[f], unsafe(addr(stg[qat + f * 2])))
+        }
+        barrier()
+        var o : coopmatAcc_f16_16x16[8]   // the warp's part of O in f16: the biased row max keeps every P at an eighth or under
+        var m : float[2]   // a softmax round's running max: a subgroup runs `4 / PARTS` rounds of four rows
+        var l : float[2]
+        for [unroll] (sp in range(2)) {
+            m[sp] = -3.0e38
+            l[sp] = 0.0
+        }
+        let srow0 = g * 16u + c * (16u / PARTS) + (lane >> 3u)   // the lane's softmax row of the first round
+        let sk0 = (lane & 7u) * 4u                                // ... and the first of its four keys
+        let arow = g * 16u + (lane >> 2u)            // the first of the two rows the lane's accumulator elements sit in
+        var j = 0u
+        stage_keys(false, j, kvlen, kq0, krq)
+        while [dont_unroll] (j < kend) {
+            cp_async_wait(0)
+            barrier()   // the step's K rows are in; the last step's products are done with its V rows, its P and its rescales
+            stage_keys(true, j, kvlen, kq0, krq)
+            for [unroll] (kq in range(2)) {
+                var s : coopmatAcc_f32_16x16
+                let kat = (kq * 16 + mr + 8 * (mt >> 1)) * kst + int(c) * 16 + (mt & 1)
+                for [unroll] (f in range(8)) {
+                    var kb : coopmatB_f16_16x16
+                    ldmatrix(kb, unsafe(addr(stg[kat + f * 2])))
+                    s = coopmatMulAdd(qa[f], kb, s)
+                }
+                for [unroll] (e in range(8)) {
+                    ps[(c * ROWS + g * 16u + mma_acc_row(lane, e)) * FMC_KEYS + uint(kq) * 16u + mma_acc_col(lane, e)] = mma_acc_get(s, e)
+                }
+            }
+            barrier()   // the partial scores are in; the K stage is free
+            if (j + FMC_KEYS < kend) {
+                stage_keys(false, j + FMC_KEYS, kvlen, kq0, krq)
+            } else {
+                cp_async_commit()
+            }
+            for [unroll] (sp in range(int(4u / PARTS))) {
+                let srow = srow0 + uint(sp) * 4u
+                let gq = pa.w0 + q0 + srow
+                var sv : float[4]
+                var mloc = -3.0e38
+                for [unroll] (i in range(4)) {
+                    let at = srow * FMC_KEYS + sk0 + uint(i)
+                    var v = ps[at]
+                    for [unroll] (part in range(1, int(PARTS))) {
+                        v += ps[uint(part) * ROWS * FMC_KEYS + at]
+                    }
+                    let gk = j + sk0 + uint(i)
+                    sv[i] = (gk > gq || gk >= kvlen) ? -3.0e38 : v
+                    mloc = max(mloc, sv[i])
+                }
+                mloc = max(mloc, subgroupShuffleXor(mloc, 1u))
+                mloc = max(mloc, subgroupShuffleXor(mloc, 2u))
+                mloc = max(mloc, subgroupShuffleXor(mloc, 4u))
+                let mtop = max(m[sp], mloc + FA_MAX_BIAS)
+                let e0 = exp(sv[0] - mtop)
+                let e1 = exp(sv[1] - mtop)
+                let e2 = exp(sv[2] - mtop)
+                let e3 = exp(sv[3] - mtop)
+                var lloc = e0 + e1 + e2 + e3
+                lloc += subgroupShuffleXor(lloc, 1u)
+                lloc += subgroupShuffleXor(lloc, 2u)
+                lloc += subgroupShuffleXor(lloc, 4u)
+                let alpha = exp(m[sp] - mtop)
+                l[sp] = l[sp] * alpha + lloc
+                m[sp] = mtop
+                let pw = int((sk0 >> 1u) & 3u)
+                fp[srow * FMC_PST + (sk0 >> 3u)][pw] = packHalf2x16(float2(e0, e1))
+                fp[srow * FMC_PST + (sk0 >> 3u)][pw + 1] = packHalf2x16(float2(e2, e3))
+                if ((lane & 7u) == 0u) {
+                    fa[srow] = alpha
+                }
+            }
+            cp_async_wait(1)
+            barrier()   // P, the rescales and the step's V rows are in
+            let a_lo = packHalf2x16(float2(fa[arow]))
+            let a_hi = packHalf2x16(float2(fa[arow + 8u]))
+            for [unroll] (f in range(8)) {
+                mma_acc_scale_rows(o[f], a_lo, a_hi)
+            }
+            for [unroll] (kq in range(2)) {
+                var pf : coopmatA_f16_16x16
+                ldmatrix(pf, unsafe(addr(fp[(int(g) * 16 + mr + 8 * (mt & 1)) * int(FMC_PST) + kq * 2 + (mt >> 1)])))
+                let vat = (int(FMC_KEYS) + kq * 16 + mr + 8 * (mt & 1)) * kst + int(c) * 16 + (mt >> 1)
+                for [unroll] (f in range(8)) {
+                    var vb : coopmatB_f16_16x16
+                    ldmatrix_trans(vb, unsafe(addr(stg[vat + f * 2])))
+                    o[f] = coopmatMulAdd(pf, vb, o[f])
+                }
+            }
+            j += FMC_KEYS
+        }
+        cp_async_wait(0)
+        barrier()   // every lane has read its last rescales
+        if ((lane & 7u) == 0u) {
+            for [unroll] (sp in range(int(4u / PARTS))) {
+                fa[srow0 + uint(sp) * 4u] = 1.0 / l[sp]
+            }
+        }
+        barrier()
+        let i_lo = fa[arow]
+        let i_hi = fa[arow + 8u]
+        for [unroll] (f in range(8)) {
+            for [unroll] (e in range(8)) {
+                let row = q0 + g * 16u + mma_acc_row(lane, e)
+                if (row < pa.rows) {
+                    var ov = mma_acc_get(o[f], e) * ((e & 2) != 0 ? i_hi : i_lo)
+                    let col = c * FMC_PART + uint(f) * 16u + mma_acc_col(lane, e)
+                    static_if (GATED) {   // the gate half is read unscaled, one float of its word
+                        let gat = (pa.row0 + row) * qstride + h * qhs + HS + col
+                        let gw = qpanel4[gat / 4u]
+                        let gi = gat & 3u
+                        ov *= sigmoid_f32(gi == 0u ? gw.x : (gi == 1u ? gw.y : (gi == 2u ? gw.z : gw.w)))
+                    }
+                    let at = (pa.row0 + row) * pa.qd + h * HS + col
+                    static_if (OUT16) {
+                        outp[at] = float16(ov)
+                    } else {
+                        outp[at] = ov
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! the wide flash tile at head 512, the f32 O store
+[cuda_dispatch(name = "fa_mma_h512_cls", kernel = "run", family = "fa_mma_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaMmaH512 : FaMmaCuT {
+    typedef OT = float
+
+    [cuda_kernel(local_size_x = 384, name = "fa_mma_h512_cls_cuda")]
+    def run {
+        fa_mma_body()
+    }
+}
+
+//! ... and the f16 O store
+[cuda_dispatch(name = "fa_mma_h512_f16_cls", kernel = "run", family = "fa_mma_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaMmaH512F16 : FaMmaCuT {
+    typedef OT = float16
+    override OUT16 = true
+
+    [cuda_kernel(local_size_x = 384, name = "fa_mma_h512_f16_cls_cuda")]
+    def run {
+        fa_mma_body()
+    }
+}
+
+//! the wide flash tile at head 256, the f32 O store: the deltanet hybrids' head
+[cuda_dispatch(name = "fa_mma_h256_cls", kernel = "run", family = "fa_mma_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaMmaH256 : FaMmaCuT {
+    typedef OT = float
+    override HS = 256u
+
+    [cuda_kernel(local_size_x = 384, name = "fa_mma_h256_cls_cuda")]
+    def run {
+        fa_mma_body()
+    }
+}
+
+//! ... and the f16 O store
+[cuda_dispatch(name = "fa_mma_h256_f16_cls", kernel = "run", family = "fa_mma_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaMmaH256F16 : FaMmaCuT {
+    typedef OT = float16
+    override HS = 256u
+    override OUT16 = true
+
+    [cuda_kernel(local_size_x = 384, name = "fa_mma_h256_f16_cls_cuda")]
+    def run {
+        fa_mma_body()
+    }
+}
+
+//! the wide flash tile at head 256 under the head's gate, the f32 O store
+[cuda_dispatch(name = "fa_mma_h256_g_cls", kernel = "run", family = "fa_mma_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaMmaH256G : FaMmaCuT {
+    typedef OT = float
+    override HS = 256u
+    override GATED = true
+
+    [cuda_kernel(local_size_x = 384, name = "fa_mma_h256_g_cls_cuda")]
+    def run {
+        fa_mma_body()
+    }
+}
+
+//! ... and the f16 O store
+[cuda_dispatch(name = "fa_mma_h256_g_f16_cls", kernel = "run", family = "fa_mma_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaMmaH256GF16 : FaMmaCuT {
+    typedef OT = float16
+    override HS = 256u
+    override OUT16 = true
+    override GATED = true
+
+    [cuda_kernel(local_size_x = 384, name = "fa_mma_h256_g_f16_cls_cuda")]
+    def run {
+        fa_mma_body()
+    }
+}
+
+//! the flash pass of `pc` at head 512 or 256 takes the wide tile: every position attended off the flat rows, the planes' bases
+//! on the tile's 16-byte words
+[arch(at="../ARCHITECTURE_GPU_SHARED_ATTN.md#cuda-fa-wide")]
+def cud_fa_wide(pc : FaArgs) : bool
+    => (g_env_vulkan.cuda_fa_wide != 0l && pc.window == 0u && pc.ring == 0u && (pc.kvbase & 7u) == 0u && (pc.kvd & 7u) == 0u
+        && (pc.qd & 3u) == 0u && (pc.qstride & 3u) == 0u && (pc.qhs & 3u) == 0u)
+
+//! the wide tile's grid at head size `hs`: a head's tiles of `fa_mma_rows`
+def cud_fa_wide_wgs(pc : FaArgs; hs : int64 = 512l) : int64 => int64(pc.qd) / hs * int64((pc.rows + fa_mma_rows(uint(hs)) - 1u) / fa_mma_rows(uint(hs)))
+
+//! the head-256 flash pass on the wide tile, plain or under the head's gate
+def private cud_fa_enc_h256_wide(var s : void?; gated, f16out : bool; bufs : uint64 const[4]; var pc : FaArgs) {
+    let wgs = cud_fa_wide_wgs(pc, 256l)
+    if (gated && f16out) {
+        enc_fa_mma_h256_g_f16_cls(s, bufs, pc, wgs)
+    } elif (gated) {
+        enc_fa_mma_h256_g_cls(s, bufs, pc, wgs)
+    } elif (f16out) {
+        enc_fa_mma_h256_f16_cls(s, bufs, pc, wgs)
+    } else {
+        enc_fa_mma_h256_cls(s, bufs, pc, wgs)
+    }
+}
+
 //! the flash tile of head size `hs` takes the KHR arm's 16-row workgroups (`fa_stamp_wgs`): the 512 stamps alone
 def cud_fa_khr(hs : int64) : bool => hs == 512l
 
 //! the flash tile of head size `hs` serves a scored softcap: the h256 stamps alone carry the `CAP` arm (gemma-2's shape)
 def cud_fa_cap_ok(hs : int64; cap : float) : bool => cap == 0.0 || hs == 256l
+
+//! the head-512 flash pass: the wide tile where `cud_fa_wide` holds, else the KHR arm over its `wgs` 16-row workgroups
+def private cud_fa_enc_h512(var s : void?; f16out : bool; bufs : uint64 const[4]; var pc : FaArgs; wgs : int64) {
+    if (cud_fa_wide(pc)) {
+        if (f16out) {
+            enc_fa_mma_h512_f16_cls(s, bufs, pc, cud_fa_wide_wgs(pc))
+        } else {
+            enc_fa_mma_h512_cls(s, bufs, pc, cud_fa_wide_wgs(pc))
+        }
+    } elif (f16out) {
+        enc_fa_khr_h512_f16_cls(s, bufs, pc, wgs)
+    } else {
+        enc_fa_khr_h512_cls(s, bufs, pc, wgs)
+    }
+}
 
 //! the flash stamp of head size `hs` (64, 96, 128, 256 or 512) with the f32 or the f16 O store; the gate arm and the softcap arm
 //! (`pc.cap` past zero) are the h256 stamps' alone, and `sink` takes the h64 sink stamps over the per-head sink plane `sinks` (the
@@ -4455,11 +4786,9 @@ def cud_fa_enc(var s : void?; hs : int64; gated, f16out, sink : bool; bufs : uin
             enc_fa_cm2_h128_cls(s, bufs, pc, wgs)
         }
     } elif (hs == 512l) {
-        if (f16out) {
-            enc_fa_khr_h512_f16_cls(s, bufs, pc, wgs)
-        } else {
-            enc_fa_khr_h512_cls(s, bufs, pc, wgs)
-        }
+        cud_fa_enc_h512(s, f16out, bufs, pc, wgs)
+    } elif (pc.cap == 0.0 && cud_fa_wide(pc)) {   // head 256, whole and uncapped: the wide tile
+        cud_fa_enc_h256_wide(s, gated, f16out, bufs, pc)
     } elif (gated) {
         if (f16out) {
             enc_fa_cm2_h256_g_f16_cls(s, bufs, pc, wgs)

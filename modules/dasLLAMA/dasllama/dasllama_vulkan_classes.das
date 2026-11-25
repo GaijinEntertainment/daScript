@@ -1884,6 +1884,70 @@ class FaCm2H256GF16 : FaH256T {
     }
 }
 
+//! h256 at 128 query rows a workgroup: a head's keys walked once for twice the rows
+[ |> template_struct_instance]
+class template FaH256WT : FaT {
+    override HS = 256u
+    override BC = 32u
+    override QROWS = 128u
+    typedef QACC = coopmatWgAcc_f32_128x256
+    typedef QA = coopmatWgA_f16_128x256
+    typedef SACC = coopmatWgAcc_f32_128x32
+    typedef PA = coopmatWgA_f16_128x32
+    typedef KB = coopmatWgB_f16_256x32
+    typedef VB = coopmatWgB_f16_32x256
+    typedef ONE = coopmatWgB_f16_32x32
+    typedef OF = coopmatWgAcc_f16_128x256
+}
+
+//! the h256 flash pass at 128 query rows a workgroup (`FaH256WT` off `FaT`), plain and gated, f32 and f16 out: a whole pass's stamps
+[vk_dispatch(name = "fa_cm2_h256w_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H256W : FaH256WT {
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaCm2H256W` off `FaT` (through `FaH256WT`) with f16 out
+[vk_dispatch(name = "fa_cm2_h256w_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H256WF16 : FaH256WT {
+    typedef OT = float16
+    override OUT16 = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaCm2H256W` off `FaT` (through `FaH256WT`) with the gated query
+[vk_dispatch(name = "fa_cm2_h256w_g_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H256WG : FaH256WT {
+    typedef OT = float
+    override GATED = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaCm2H256WG` off `FaT` (through `FaH256WT`) with f16 out
+[vk_dispatch(name = "fa_cm2_h256w_g_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H256WGF16 : FaH256WT {
+    typedef OT = float16
+    override OUT16 = true
+    override GATED = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        fa_body()
+    }
+}
+
 //! the softcap leaves (gemma-2's 256-wide heads): the h256 pass with every scaled score capped before the mask
 [vk_dispatch(name = "fa_cm2_h256_cap_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class FaCm2H256Cap : FaH256T {
@@ -2610,19 +2674,24 @@ def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink, f16, bidir
 }
 
 //! every flash stamp's stem, four a form - cm2 f32, KHR f32, cm2 f16, KHR f16 - over the forms h64, h128, h256, h512, gated h256,
-//! capped h256, the h64 sink, the h64 and h128 bidirectional twins and h96 (cm2 alone); `-` where a form has no such stamp
-let private FA_STAMPS = "fa_cm2_h64 fa_khr_h64 fa_cm2_h64_f16 fa_khr_h64_f16 fa_cm2_h128 fa_khr_h128 fa_cm2_h128_f16 fa_khr_h128_f16 fa_cm2_h256 fa_khr_h256 fa_cm2_h256_f16 fa_khr_h256_f16 fa_cm2_h512 fa_khr_h512 fa_cm2_h512_f16 fa_khr_h512_f16 fa_cm2_h256_g fa_khr_h256_g fa_cm2_h256_g_f16 fa_khr_h256_g_f16 fa_cm2_h256_cap fa_khr_h256_cap fa_cm2_h256_cap_f16 fa_khr_h256_cap_f16 fa_cm2_h64_sink fa_khr_h64_sink fa_cm2_h64_sink_f16 fa_khr_h64_sink_f16 fa_cm2_h64_bidir fa_khr_h64_bidir - - fa_cm2_h128_bidir fa_khr_h128_bidir - - fa_cm2_h96 - fa_cm2_h96_f16 -"
+//! capped h256, the h64 sink, the h64 and h128 bidirectional twins, h96 (cm2 alone) and the wide h256 pair, plain and gated (cm2
+//! alone); `-` where a form has no such stamp
+let private FA_STAMPS = "fa_cm2_h64 fa_khr_h64 fa_cm2_h64_f16 fa_khr_h64_f16 fa_cm2_h128 fa_khr_h128 fa_cm2_h128_f16 fa_khr_h128_f16 fa_cm2_h256 fa_khr_h256 fa_cm2_h256_f16 fa_khr_h256_f16 fa_cm2_h512 fa_khr_h512 fa_cm2_h512_f16 fa_khr_h512_f16 fa_cm2_h256_g fa_khr_h256_g fa_cm2_h256_g_f16 fa_khr_h256_g_f16 fa_cm2_h256_cap fa_khr_h256_cap fa_cm2_h256_cap_f16 fa_khr_h256_cap_f16 fa_cm2_h64_sink fa_khr_h64_sink fa_cm2_h64_sink_f16 fa_khr_h64_sink_f16 fa_cm2_h64_bidir fa_khr_h64_bidir - - fa_cm2_h128_bidir fa_khr_h128_bidir - - fa_cm2_h96 - fa_cm2_h96_f16 - fa_cm2_h256w - fa_cm2_h256w_f16 - fa_cm2_h256w_g - fa_cm2_h256w_g_f16 -"
 
 //! the flash stamp's ordinal in FA_STAMPS, once the refusals passed
-def private fa_stamp_key(khr : bool; hs : int64; gated, cap, sink, f16, bidir : bool) : int {
+def private fa_stamp_key(khr : bool; hs : int64; gated, cap, sink, f16, bidir : bool; wide : bool = false) : int {
     fa_stamp_refuse(khr, hs, gated, cap, sink, f16, bidir)
+    if (wide && (khr || hs != 256l || cap || sink || bidir)) {
+        panic("vk flash: the wide stamps serve the cm2 tile at head size 256 alone, plain or gated")
+    }
+    return (gated ? 11 : 10) * 4 + (f16 ? 2 : 0) if (wide)
     let form = bidir ? (hs == 64l ? 7 : 8) : (sink ? 6 : (hs == 64l ? 0 : (hs == 128l ? 1 : (hs == 96l ? 9 : (hs == 512l ? 3 : (gated ? 4 : (cap ? 5 : 2)))))))
     return form * 4 + (f16 ? 2 : 0) + (khr ? 1 : 0)
 }
 
 //! `bidir` picks the vision towers' bidirectional twins (h64 and h128, f32 output, no gate, cap or sink)
-def fa_stamp_ensure(khr : bool; hs : int64; gated, cap, sink, f16 : bool; bidir : bool = false) : bool {   // nolint:STYLE037 — stamp_ladder's generated arms, one a flash stamp
-    let key = fa_stamp_key(khr, hs, gated, cap, sink, f16, bidir)
+def fa_stamp_ensure(khr : bool; hs : int64; gated, cap, sink, f16 : bool; bidir : bool = false; wide : bool = false) : bool {   // nolint:STYLE037 — stamp_ladder's generated arms, one a flash stamp
+    let key = fa_stamp_key(khr, hs, gated, cap, sink, f16, bidir, wide)
     var r = false
     stamp_ladder(key, FA_STAMPS) <| $() {
         r = stamp_ensure_cls()
@@ -2633,6 +2702,15 @@ def fa_stamp_ensure(khr : bool; hs : int64; gated, cap, sink, f16 : bool; bidir 
 def fa_stamp_pair_ensure(khr : bool; hs : int64; gated, cap, sink, with_f16 : bool) : bool
     => fa_stamp_ensure(khr, hs, gated, cap, sink, false) && (!with_f16 || fa_stamp_ensure(khr, hs, gated, cap, sink, true))
 
+//! the wide h256 stamps, plain or gated: a whole pass's twice-as-tall cm2 tile
+def fa_stamp_wide_ensure(gated, with_f16 : bool) : bool
+    => (fa_stamp_ensure(false, 256l, gated, false, false, false, false, true)
+        && (!with_f16 || fa_stamp_ensure(false, 256l, gated, false, false, true, false, true)))
+
+//! the head-256 cm2 flash pass of `pc` is one the wide stamps serve: every position attended off the flat rows, no softcap
+def fa_stamp_wide(khr : bool; hs : int64; sink : bool; pc : FaArgs) : bool
+    => !khr && hs == 256l && !sink && pc.cap == 0.0 && pc.window == 0u && pc.ring == 0u
+
 def fa_stamp_set(khr : bool; bufs : uint64 const[4]; sizes : int64 const[4]; gbits : uint const[4]) : VkDescriptorSet
     => khr ? set_fa_khr_cls(bufs, sizes, gbits) : set_fa_cm2_cls(bufs, sizes, gbits)
 
@@ -2640,12 +2718,13 @@ def fa_stamp_set(khr : bool; bufs : uint64 const[4]; sizes : int64 const[4]; gbi
 def fa_stamp_sink_set(khr : bool; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet
     => khr ? set_fa_khr_sink_cls(bufs, sizes, gbits) : set_fa_cm2_sink_cls(bufs, sizes, gbits)
 
-def fa_stamp_enc(khr : bool; hs : int64; gated, cap, sink, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaArgs; wgs : int64; bidir : bool = false) {   // nolint:STYLE037 — stamp_ladder's generated arms, one a flash stamp
-    let key = fa_stamp_key(khr, hs, gated, cap, sink, f16, bidir)
+def fa_stamp_enc(khr : bool; hs : int64; gated, cap, sink, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaArgs; wgs : int64; bidir : bool = false; wide : bool = false) {   // nolint:STYLE037 — stamp_ladder's generated arms, one a flash stamp
+    let key = fa_stamp_key(khr, hs, gated, cap, sink, f16, bidir, wide)
     stamp_ladder(key, FA_STAMPS) <| $() {
         stamp_enc_cls(raw, h, s, pc, wgs)
     }
 }
+
 
 [vk_dispatch(name = "da_attn_bw_cls", grid = "wgs", params = "wgs : int64")]
 class DaAttnBW : DaAttnBWT {
