@@ -4800,6 +4800,8 @@ class template MoeSchedT : WgScanT {
     @ssbo @binding = 5 bex : array<uint>       //! [nk] bucket row -> its expert (the biased act's row map)
     @push_constant pa : SchedArgs
     @workgroup cnt : uint[int(WG)]    //! the experts' slot counts, then their bucket cursors
+    @workgroup @template_gate = STABLE pk : uint[int(WG)]   //! a round's picks, a thread each
+    @template_constant STABLE : bool = false   //!< a bucket's rows in slot-row order, whatever order the threads arrive in
 
     //! one piece's record and per-wg map on the three planes: expert `tid`'s `rows` from `row0`,
     //! record `ri`, its `rt` column tiles from workgroup `wg_gu` / `wg_dn` of the dispatch whose
@@ -4894,12 +4896,52 @@ class template MoeSchedT : WgScanT {
         barrier()   //! every thread has read its count
         cnt[tid] = st
         barrier()
-        i = tid
-        while (i < pa.nk) {
-            let b = atomicAdd(cnt[idx[i]], 1u)
-            inv[i] = b
-            bex[b] = idx[i]
-            i += WG
+        static_if (STABLE) {
+            place_in_order()
+        } else {
+            i = tid
+            while (i < pa.nk) {
+                let b = atomicAdd(cnt[idx[i]], 1u)
+                inv[i] = b
+                bex[b] = idx[i]
+                i += WG
+            }
+        }
+    }
+
+    //! every slot row's bucket row in slot-row order, `WG` slot rows a round
+    [arch(at="../ARCHITECTURE_GPU_SHARED_KERNELS.md#moe-routing-kernels")]
+    def place_in_order {
+        static_if (STABLE) {
+            let tid = gl_LocalInvocationID.x
+            var r0 = 0u
+            while (r0 < pa.nk) {
+                let i = r0 + tid
+                let live = i < pa.nk
+                var e = SCHED_NONE
+                if (live) {
+                    e = idx[i]
+                }
+                pk[tid] = e
+                barrier()
+                if (live) {
+                    var before = 0u
+                    var j = 0u
+                    while (j < tid) {
+                        before += pk[j] == e ? 1u : 0u
+                        j++
+                    }
+                    let b = cnt[e] + before
+                    inv[i] = b
+                    bex[b] = e
+                }
+                barrier()
+                if (live) {
+                    let _c = atomicAdd(cnt[e], 1u)
+                }
+                barrier()
+                r0 += WG
+            }
         }
     }
 }

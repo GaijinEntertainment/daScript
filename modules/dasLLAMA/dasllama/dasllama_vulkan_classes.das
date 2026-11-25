@@ -821,11 +821,45 @@ class MoeSched2 : MoeSchedT {
     }
 }
 
-//! the window's bucket schedule over `ne` experts on the stamp that reaches them (`moe_sched_cls`' one set serves both)
-def moe_sched_ensure(ne : int64) : bool => ne > 256l ? ensure_moe_sched2_cls() : ensure_moe_sched_cls()
+//! the bucket schedule (`MoeSchedT`) with every bucket's rows in slot-row order: the stamp a layer takes where a bucket's m and s
+//! pieces ride tiles of two families, so a row's tile is the same on every pass
+[vk_dispatch(name = "moe_sched_ord_cls", kernel = "run", family = "moe_sched_cls", grid = "one", params = "one : int64")]
+class MoeSchedOrd : MoeSchedT {
+    override STABLE = true
 
-def moe_sched_enc(ne : int64; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : SchedArgs) {
-    if (ne > 256l) {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        sched_body()
+    }
+}
+
+//! ... and its 512-thread stamp past 256 experts (`MoeSchedT`)
+[vk_dispatch(name = "moe_sched2_ord_cls", kernel = "run", family = "moe_sched_cls", grid = "one", params = "one : int64")]
+class MoeSched2Ord : MoeSchedT {
+    override WG = 512u
+    override STABLE = true
+
+    [spirv_kernel(local_size_x = 512)]
+    def run {
+        sched_body()
+    }
+}
+
+//! the window's bucket schedule over `ne` experts on the stamp that reaches them (`moe_sched_cls`' one set serves every
+//! stamp); `ordered` the stamps that place a bucket's rows in slot-row order
+def moe_sched_ensure(ne : int64; ordered : bool = false) : bool {
+    if (ordered) return ne > 256l ? ensure_moe_sched2_ord_cls() : ensure_moe_sched_ord_cls()
+    return ne > 256l ? ensure_moe_sched2_cls() : ensure_moe_sched_cls()
+}
+
+def moe_sched_enc(ne : int64; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : SchedArgs; ordered : bool = false) {
+    if (ordered) {
+        if (ne > 256l) {
+            enc_moe_sched2_ord_cls(raw, h, set_, pc, 1l)
+        } else {
+            enc_moe_sched_ord_cls(raw, h, set_, pc, 1l)
+        }
+    } elif (ne > 256l) {
         enc_moe_sched2_cls(raw, h, set_, pc, 1l)
     } else {
         enc_moe_sched_cls(raw, h, set_, pc, 1l)
@@ -4316,9 +4350,683 @@ class CmI8Batch : MoeCmBase {
 }
 
 
+struct MmqFeedArgs {
+    n : uint      //! the row width, whole 32-blocks
+    rows : uint
+}
+
+//! Rows quantized for the int8 tiles, one lane a (row, 32-block): the block's 32 int8 and, beside its scale, the scale
+//! times the quants' sum (a min term's factor). `SRC16` reads the rows as halves.
+[ |> template_struct_instance]
+class template MmqFeedT {
+    @ssbo @binding = 0 @readonly @template_gate = "!SRC16" x4 : array<float4>   //! the rows as f32, [rows x n]
+    @ssbo @binding = 0 @readonly @template_gate = SRC16 xh4 : array<uint4>      //! the rows as f16, eight halves a word
+    @ssbo @binding = 1 xq4 : array<uint4>             //! (row, block)'s 32 int8 at (row * nb + block) * 2
+    @ssbo @binding = 2 xsc : array<float2>            //! (row, block): the scale, the scale times the quants' sum
+    @push_constant pa : MmqFeedArgs
+    @template_constant SRC16 : bool = false
+
+    //! the block's floats 4i .. 4i + 3 of the eight quads
+    [spirv_inline]
+    def quad(src, i : uint) : float4 {
+        static_if (SRC16) {
+            let w = xh4[src + (i >> 1u)]
+            let lo = unpackHalf2x16(w[int((i & 1u) * 2u)])
+            let hi = unpackHalf2x16(w[int((i & 1u) * 2u + 1u)])
+            return float4(lo.x, lo.y, hi.x, hi.y)
+        } else {
+            return x4[src + i]
+        }
+    }
+
+    [spirv_inline]
+    def feed_body {
+        let nb = pa.n / 32u
+        let li = gl_WorkGroupID.x * 256u + gl_LocalInvocationID.x
+        if (li < pa.rows * nb) {
+            let row = li / nb
+            let blk = li - row * nb
+            var src : uint
+            static_if (SRC16) {
+                src = (row * pa.n + blk * 32u) / 8u
+            } else {
+                src = (row * pa.n + blk * 32u) / 4u
+            }
+            var amax = 0.0
+            for [unroll_full] (i in range(8)) {
+                let a = abs(quad(src, uint(i)))
+                amax = max(amax, max(max(a.x, a.y), max(a.z, a.w)))
+            }
+            let inv = amax > 0.0 ? 127.0 / amax : 0.0
+            var sum = 0
+            for [unroll_full] (h in range(2)) {
+                var w = uint4(0u)
+                for [unroll_full] (c in range(4)) {
+                    let f = quad(src, uint(h * 4 + c)) * inv
+                    let qx = int(floor(f.x + 0.5))
+                    let qy = int(floor(f.y + 0.5))
+                    let qz = int(floor(f.z + 0.5))
+                    let qw = int(floor(f.w + 0.5))
+                    sum += qx + qy + qz + qw
+                    w[c] = uint(qx & 255) | (uint(qy & 255) << 8u) | (uint(qz & 255) << 16u) | (uint(qw & 255) << 24u)
+                }
+                xq4[(row * nb + blk) * 2u + uint(h)] = w
+            }
+            let sc = amax / 127.0
+            xsc[row * nb + blk] = float2(sc, sc * float(sum))
+        }
+    }
+}
+
+[vk_dispatch(name = "mmq_feed_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class MmqFeed : MmqFeedT {
+    [spirv_kernel(local_size_x = 256, name = "mmq_feed_cls_spv")]
+    def run {
+        feed_body()
+    }
+}
+
+//! the feed over f16 rows (the routed block's hidden rows)
+[vk_dispatch(name = "mmq_feed16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class MmqFeed16 : MmqFeedT {
+    override SRC16 = true
+
+    [spirv_kernel(local_size_x = 256, name = "mmq_feed16_cls_spv")]
+    def run {
+        feed_body()
+    }
+}
+
 struct MmqInvArgs {
     nk : uint   //! the window's bucket rows
     k : uint    //! slots a position
+}
+
+//! every bucket row's token row: the schedule's slot map inverted
+[vk_dispatch(name = "mmq_inv_cls", grid = "wgs", params = "wgs : int64")]
+class MmqInv {
+    @ssbo @binding = 0 @readonly slot_idx : array<uint>   //! grid entry (position * k + slot) -> its bucket row
+    @ssbo @binding = 1 tok : array<uint>                   //! bucket row -> its token row
+    @push_constant pa : MmqInvArgs
+
+    [spirv_kernel(local_size_x = 256, name = "mmq_inv_cls_spv")]
+    def run {
+        let r = gl_WorkGroupID.x * 256u + gl_LocalInvocationID.x
+        if (r < pa.nk) {
+            let b = slot_idx[r]
+            if (b < pa.nk) {
+                tok[b] = r / pa.k
+            }
+        }
+    }
+}
+
+let MMQ_QP = 20u   //! the int8 stage's row stride in words: two 32-blocks and four of pad (banks)
+
+//! The window tile on the s8 cooperative matrices, the body every format stamps: 128 weight rows by `TOKS` rows a
+//! workgroup of `LANES`, the weight codes by the feed's int8 rows, the scales applied after the product.
+[ |> template_struct_instance, arch(at = "../ARCHITECTURE_GPU_VULKAN_KHR.md#khr-int8-tiles")]
+class template KqMmqKhrT : MoeCmBase {
+    @ssbo @binding = 0 @role = "weight" @readonly @template_gate = "!W32" wq4 : array<uint4>    //! the quant plane as 16-byte words
+    @ssbo @binding = 0 @role = "weight" @readonly @template_gate = W32 wqw : array<uint>        //! ... as words, a format whose blocks are no whole 16-byte words
+    @ssbo @binding = 1 @role = "weight" @readonly ws : array<uint>      //! the scale plane as words
+    @ssbo @binding = 3 @readonly xq4 : array<uint4>    //! the rows' int8 (`MmqFeedT`)
+    @ssbo @binding = 4 @readonly xsc : array<float2>
+    @ssbo @binding = 6 @readonly tok : array<uint>     //! the region's row -> its feed row
+    @workgroup mq_a : uint[2560]      //! 128 weight rows x MMQ_QP
+    @workgroup mq_b : uint[2560]      //! up to 128 rows x MMQ_QP
+    @workgroup mq_as : float2[256]    //! [block of the step][weight row]: the scale, the min term
+    @workgroup mq_bs : float2[256]    //! [block of the step][row]: the scale, the scale times the quants' sum
+    @template_constant TOKS : uint = 128u    //!< the rows a tile
+    @template_constant LANES : uint = 512u   //!< the workgroup: 128 x TOKS / 32 lanes
+    @template_constant MIN : bool = true     //!< the format's blocks carry a min term
+    @template_constant HALF2 : bool = false  //!< a block's two 16-deep halves carry a scale each (`w_scale`'s pair), no min term
+    @template_constant W32 : bool = false    //!< the quant plane bound as words (`wqw`)
+
+    //! the format: block `b` of weight row `wrow` of the plane at `pb` (the region's base, in the format's own blocks) -
+    //! its plane words (`w_load1` where one 16-byte word does not hold the block), its scale and min term, and its 32
+    //! int8 codes into the stage's eight words at `base`
+    def abstract w_load0(pb, wrow, b : uint) : uint4
+    def w_load1(pb, wrow, b : uint) : uint4 => uint4(0u)
+    def abstract w_scale(pb, wrow, b : uint) : float2
+    def abstract w_put(base : uint; q0, q1 : uint4) : void
+
+    [spirv_inline]
+    def mmq_body {
+        let reg = region_rec()
+        if (reg.z != 0u) {
+            tile(reg)
+        }
+    }
+
+    //! weight job `j` of the step at block `wk` - row j >> 1, the step's block j & 1: its loads, zero past the plane
+    def job_q0(j, wk, wblk0, m0, nb : uint) : uint4 {
+        let b = wk + (j & 1u)
+        let wrow = m0 + (j >> 1u)
+        if (wrow < pa.d && b < nb) {
+            return w_load0(wblk0, wrow, b)
+        }
+        return uint4(0u)
+    }
+
+    def job_q1(j, wk, wblk0, m0, nb : uint) : uint4 {
+        let b = wk + (j & 1u)
+        let wrow = m0 + (j >> 1u)
+        if (wrow < pa.d && b < nb) {
+            return w_load1(wblk0, wrow, b)
+        }
+        return uint4(0u)
+    }
+
+    def job_sc(j, wk, wblk0, m0, nb : uint) : float2 {
+        let b = wk + (j & 1u)
+        let wrow = m0 + (j >> 1u)
+        if (wrow < pa.d && b < nb) {
+            return w_scale(wblk0, wrow, b)
+        }
+        return float2(0.0, 0.0)
+    }
+
+    def job_put(j : uint; q0, q1 : uint4; sm : float2) {
+        let row = j >> 1u
+        w_put(row * MMQ_QP + (j & 1u) * 8u, q0, q1)
+        mq_as[(j & 1u) * 128u + row] = sm
+    }
+
+    def tile(reg : uint4) {   // nolint:STYLE037,STYLE038 — one register-coupled stage / product / scale loop: the loads, the fragments and the sums ride the same lanes
+        let wblk0 = reg.x
+        let row0 = reg.y
+        let cnt = reg.z
+        let ttiles = max(1u, (cnt + TOKS - 1u) / TOKS)
+        let t0 = (reg.w % ttiles) * TOKS
+        let m0 = (reg.w / ttiles) * 128u
+        let tid = gl_LocalInvocationID.x
+        let sg = gl_SubgroupID
+        let lane = gl_SubgroupInvocationID
+        let nb = pa.n / 32u
+        let wrow0 = (sg & 3u) * 32u
+        let trow0 = (sg >> 2u) * 32u
+        let live = t0 + trow0 < cnt
+        let ecol = lane & 15u
+        let erow = lane >> 4u
+        let wjob = tid < 256u   // the lanes with a weight job: every lane of the s tile takes two
+        // the walk's first block: two a weight tile, counted across the plane (`wblk0` over a tile's blocks, the format's unit folded by `w_tile_of`)
+        let rot = (((m0 >> 7u) + plane_tile(wblk0)) * 2u) % max(1u, nb)
+        // the lane's row job: row tid >> 1 of the tile, the step's block tid & 1
+        let xjob = tid < TOKS * 2u
+        let xr = tid >> 1u
+        let xsb = tid & 1u
+        let xbase = xr * MMQ_QP + xsb * 8u
+        let x_in = xjob && t0 + xr < cnt
+        var xrow = 0u
+        if (x_in) {
+            xrow = tok[row0 + t0 + xr]
+        }
+        var sums : float[32]
+        for [unroll_full] (i in range(32)) {
+            sums[i] = 0.0
+        }
+        var pw0 = uint4(0u)
+        var pw1 = uint4(0u)
+        var pv0 = uint4(0u)
+        var pv1 = uint4(0u)
+        var ps0 = float2(0.0, 0.0)
+        var ps1 = float2(0.0, 0.0)
+        var px0 = uint4(0u)
+        var px1 = uint4(0u)
+        var pxs = float2(0.0, 0.0)
+        if (wjob) {
+            pw0 = job_q0(tid, rot, wblk0, m0, nb)
+            pv0 = job_q1(tid, rot, wblk0, m0, nb)
+            ps0 = job_sc(tid, rot, wblk0, m0, nb)
+            static_if (LANES == 128u) {
+                pw1 = job_q0(tid + 128u, rot, wblk0, m0, nb)
+                pv1 = job_q1(tid + 128u, rot, wblk0, m0, nb)
+                ps1 = job_sc(tid + 128u, rot, wblk0, m0, nb)
+            }
+        }
+        if (x_in && rot + xsb < nb) {
+            px0 = xq4[(xrow * nb + rot + xsb) * 2u]
+            px1 = xq4[(xrow * nb + rot + xsb) * 2u + 1u]
+            pxs = xsc[xrow * nb + rot + xsb]
+        }
+        var blk = 0u
+        while (blk < nb) {
+            if (wjob) {
+                job_put(tid, pw0, pv0, ps0)
+                static_if (LANES == 128u) {
+                    job_put(tid + 128u, pw1, pv1, ps1)
+                }
+            }
+            if (xjob) {
+                for [unroll_full] (c in range(4)) {
+                    mq_b[xbase + uint(c)] = px0[c]
+                    mq_b[xbase + 4u + uint(c)] = px1[c]
+                }
+                mq_bs[xsb * 128u + xr] = pxs
+            }
+            barrier()
+            let nx = blk + 2u
+            if (nx < nb) {
+                let wk = nx + rot < nb ? nx + rot : nx + rot - nb   // the walked step: nb and rot are even, a step stays whole
+                if (wjob) {
+                    pw0 = job_q0(tid, wk, wblk0, m0, nb)
+                    pv0 = job_q1(tid, wk, wblk0, m0, nb)
+                    ps0 = job_sc(tid, wk, wblk0, m0, nb)
+                    static_if (LANES == 128u) {
+                        pw1 = job_q0(tid + 128u, wk, wblk0, m0, nb)
+                        pv1 = job_q1(tid + 128u, wk, wblk0, m0, nb)
+                        ps1 = job_sc(tid + 128u, wk, wblk0, m0, nb)
+                    }
+                }
+                if (x_in) {
+                    let b = wk + xsb
+                    if (b < nb) {
+                        px0 = xq4[(xrow * nb + b) * 2u]
+                        px1 = xq4[(xrow * nb + b) * 2u + 1u]
+                        pxs = xsc[xrow * nb + b]
+                    } else {
+                        px0 = uint4(0u)
+                        px1 = uint4(0u)
+                        pxs = float2(0.0, 0.0)
+                    }
+                }
+            }
+            if (live) {
+                for [unroll_full] (s in range(2)) {
+                    let so = uint(s) * 8u
+                    var a : coopmatA_s8_16x16[4]   // [r * 2 + h]: weight fragment r, the block's low or high sixteen k
+                    for [unroll_full] (r in range(2)) {
+                        for [unroll_full] (hk in range(2)) {
+                            coopmatLoad(a[r * 2 + hk], mq_a, int((wrow0 + uint(r) * 16u) * MMQ_QP + so + uint(hk) * 4u), int(MMQ_QP), 0)
+                        }
+                    }
+                    for [unroll_full] (c in range(2)) {
+                        var bl, bh : coopmatB_s8_16x16
+                        coopmatLoad(bl, mq_b, int((trow0 + uint(c) * 16u) * MMQ_QP + so), int(MMQ_QP), 1)
+                        coopmatLoad(bh, mq_b, int((trow0 + uint(c) * 16u) * MMQ_QP + so + 4u), int(MMQ_QP), 1)
+                        let sbv = mq_bs[uint(s) * 128u + trow0 + uint(c) * 16u + ecol]
+                        for [unroll_full] (r in range(2)) {
+                            var p : coopmatAcc_s32_16x16
+                            p = coopmatMulAdd(a[r * 2], bl, p)   // nolint:STYLE011 — MulAdd seeds from its own zero-init tile
+                            static_if (HALF2) {
+                                for [unroll_full] (e in range(8)) {
+                                    let sav = mq_as[uint(s) * 128u + wrow0 + uint(r) * 16u + erow + uint(e) * 2u]
+                                    sums[(r * 2 + c) * 8 + e] += float(coopmatElem(p, uint(e))) * sav.x * sbv.x
+                                }
+                                var ph : coopmatAcc_s32_16x16
+                                ph = coopmatMulAdd(a[r * 2 + 1], bh, ph)   // nolint:STYLE011 — MulAdd seeds from its own zero-init tile
+                                for [unroll_full] (e in range(8)) {
+                                    let sav = mq_as[uint(s) * 128u + wrow0 + uint(r) * 16u + erow + uint(e) * 2u]
+                                    sums[(r * 2 + c) * 8 + e] += float(coopmatElem(ph, uint(e))) * sav.y * sbv.x
+                                }
+                            } else {
+                                p = coopmatMulAdd(a[r * 2 + 1], bh, p)
+                                for [unroll_full] (e in range(8)) {
+                                    let sav = mq_as[uint(s) * 128u + wrow0 + uint(r) * 16u + erow + uint(e) * 2u]
+                                    static_if (MIN) {
+                                        sums[(r * 2 + c) * 8 + e] += float(coopmatElem(p, uint(e))) * sav.x * sbv.x + sav.y * sbv.y
+                                    } else {
+                                        sums[(r * 2 + c) * 8 + e] += float(coopmatElem(p, uint(e))) * sav.x * sbv.x
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            barrier()
+            blk = nx
+        }
+        if (live) {
+            for [unroll_full] (r in range(2)) {
+                for [unroll_full] (c in range(2)) {
+                    let tc = t0 + trow0 + uint(c) * 16u + ecol
+                    for [unroll_full] (e in range(8)) {
+                        let mr = m0 + wrow0 + uint(r) * 16u + erow + uint(e) * 2u
+                        if (mr < pa.d && tc < cnt) {
+                            y[(row0 + tc) * pa.d + mr] = sums[(r * 2 + c) * 8 + e]
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    //! the weight tile of the plane the region at `pb` starts on: the format's blocks a row, 128 rows a tile
+    def abstract plane_tile(pb : uint) : uint
+}
+
+//! Q4_K: a superblock's eight sub-blocks of 16 nibble bytes, five scale words (d | dmin, eight sc, eight mn)
+[ |> template_struct_instance]
+class template K4MmqT : KqMmqKhrT {
+    def override plane_tile(pb : uint) : uint => pb / ((pa.n / 256u) * 128u)
+
+    def override w_load0(pb, wrow, b : uint) : uint4 => wq4[(pb + wrow * (pa.n / 256u) + (b >> 3u)) * 8u + (b & 7u)]
+
+    def override w_scale(pb, wrow, b : uint) : float2 {
+        let sr = (pb + wrow * (pa.n / 256u) + (b >> 3u)) * 5u
+        let g = b & 7u
+        let sm = k4_scale_min(unpackHalf2x16(ws[sr]), ws[sr + 1u + (g >> 2u)], ws[sr + 3u + (g >> 2u)], g)
+        return float2(sm.x, -sm.y)
+    }
+
+    def override w_put(base : uint; q0, q1 : uint4) : void {
+        for [unroll_full] (c in range(4)) {
+            mq_a[base + uint(c)] = nib_word(q0[c], 0u)
+            mq_a[base + 4u + uint(c)] = nib_word(q0[c], 4u)
+        }
+    }
+}
+
+//! Q5_K: Q4_K's nibbles and scale words, a superblock ten 16-byte words - the last two its fifth bits, a word a sub-block
+[ |> template_struct_instance]
+class template K5MmqT : KqMmqKhrT {
+    def override plane_tile(pb : uint) : uint => pb / ((pa.n / 256u) * 128u)
+
+    def override w_load0(pb, wrow, b : uint) : uint4 => wq4[(pb + wrow * (pa.n / 256u) + (b >> 3u)) * 10u + (b & 7u)]
+
+    def override w_load1(pb, wrow, b : uint) : uint4 {
+        let g = b & 7u
+        return uint4(wq4[(pb + wrow * (pa.n / 256u) + (b >> 3u)) * 10u + 8u + (g >> 2u)][int(g & 3u)], 0u, 0u, 0u)
+    }
+
+    def override w_scale(pb, wrow, b : uint) : float2 {
+        let sr = (pb + wrow * (pa.n / 256u) + (b >> 3u)) * 5u
+        let g = b & 7u
+        let sm = k4_scale_min(unpackHalf2x16(ws[sr]), ws[sr + 1u + (g >> 2u)], ws[sr + 3u + (g >> 2u)], g)
+        return float2(sm.x, -sm.y)
+    }
+
+    def override w_put(base : uint; q0, q1 : uint4) : void {
+        for [unroll_full] (c in range(4)) {
+            let hb = q1.x >> (uint(c) * 8u)   // byte c: elements 4c .. 4c + 3, the low half's bits 0 .. 3, the high half's 4 .. 7
+            mq_a[base + uint(c)] = k5_word(q0[c], hb, 0u)
+            mq_a[base + 4u + uint(c)] = k5_word(q0[c], hb >> 4u, 4u)
+        }
+    }
+}
+
+//! four 6-bit codes a word as int8 less 32: a code under 32 keeps its low five bits under three sign bits
+def mmq_k6_s8(w : uint) : uint {
+    let neg = ~w & 0x20202020u
+    return (w & 0x1F1F1F1Fu) | neg | (neg << 1u) | (neg << 2u)
+}
+
+//! four elements' high bit pairs of the low half (`h0`) and the high half (`h1`) at `hs`, a byte an element pair
+def mmq_k6_hi(h0, h1, hs : uint) : uint => ((h0 >> hs) & 0x03030303u) | (((h1 >> hs) & 0x03030303u) << 2u)
+
+//! Q6_K: a superblock twelve 16-byte words - eight of nibbles, a word a 32-block, and four of high bit pairs, two words a
+//! four-block group - and five scale words (sixteen int8 scales, the f16 d): a code less 32 is the int8, a 16-deep half
+//! its own scale
+[ |> template_struct_instance]
+class template K6MmqT : KqMmqKhrT {
+    override MIN = false
+    override HALF2 = true
+
+    def override plane_tile(pb : uint) : uint => pb / ((pa.n / 256u) * 128u)
+
+    def override w_load0(pb, wrow, b : uint) : uint4 => wq4[(pb + wrow * (pa.n / 256u) + (b >> 3u)) * 12u + (b & 7u)]
+
+    //! the block's high bit pairs, a byte an element pair: bits 0 .. 1 the low half's element, bits 2 .. 3 the high half's
+    def override w_load1(pb, wrow, b : uint) : uint4 {
+        let g = b & 7u
+        let hbase = (pb + wrow * (pa.n / 256u) + (b >> 3u)) * 12u + 8u + (g >> 2u) * 2u
+        let hs = (g & 3u) * 2u
+        let h0 = wq4[hbase]
+        let h1 = wq4[hbase + 1u]
+        return uint4(mmq_k6_hi(h0.x, h1.x, hs), mmq_k6_hi(h0.y, h1.y, hs), mmq_k6_hi(h0.z, h1.z, hs), mmq_k6_hi(h0.w, h1.w, hs))
+    }
+
+    def override w_scale(pb, wrow, b : uint) : float2 {
+        let sr = (pb + wrow * (pa.n / 256u) + (b >> 3u)) * 5u
+        let si = (b & 7u) * 2u
+        let scw = ws[sr + (si >> 2u)]
+        let d = unpackHalf2x16(ws[sr + 4u]).x
+        return float2(d * float(k6_sc(scw, si)), d * float(k6_sc(scw, si + 1u)))
+    }
+
+    def override w_put(base : uint; q0, q1 : uint4) : void {
+        for [unroll_full] (c in range(4)) {
+            mq_a[base + uint(c)] = mmq_k6_s8(k6_word(nib_word(q0[c], 0u), q1[c], 0u))
+            mq_a[base + 4u + uint(c)] = mmq_k6_s8(k6_word(nib_word(q0[c], 4u), q1[c], 2u))
+        }
+    }
+}
+
+//! Q5_1 and, under `Q50`, the per-32 Q5_0: a 20-byte block - four nibble words (element j low, j + 16 high), then the word
+//! of fifth bits, bit e element e's - read off the word view. Q5_1's weight is d x code + m off a scale word a block;
+//! Q5_0's is d x (code - 16), its d a half of a scale word two blocks share
+[ |> template_struct_instance]
+class template Q51MmqT : KqMmqKhrT {
+    override W32 = true
+    @template_constant Q50 : bool = false   //!< the per-32 Q5_0: no m, the code less 16
+
+    def override plane_tile(pb : uint) : uint => pb / ((pa.n / 32u) * 128u)
+
+    def override w_load0(pb, wrow, b : uint) : uint4 {
+        let at = (pb + wrow * (pa.n / 32u) + b) * KQ_Q51_QWORDS
+        return uint4(wqw[at], wqw[at + 1u], wqw[at + 2u], wqw[at + 3u])
+    }
+
+    def override w_load1(pb, wrow, b : uint) : uint4 => uint4(wqw[(pb + wrow * (pa.n / 32u) + b) * KQ_Q51_QWORDS + KQ_B32_QWORDS], 0u, 0u, 0u)
+
+    def override w_scale(pb, wrow, b : uint) : float2 {
+        let blk = pb + wrow * (pa.n / 32u) + b
+        static_if (Q50) {
+            return float2(q40_d_of(ws[blk >> 1u], blk), 0.0)
+        } else {
+            return unpackHalf2x16(ws[blk])
+        }
+    }
+
+    def override w_put(base : uint; q0, q1 : uint4) : void {
+        for [unroll_full] (c in range(4)) {
+            let lo = k5_word(q0[c], q1.x >> (uint(c) * 4u), 0u)
+            let hi = k5_word(q0[c], q1.x >> (16u + uint(c) * 4u), 4u)
+            static_if (Q50) {
+                mq_a[base + uint(c)] = q50_signed_word(lo)
+                mq_a[base + 4u + uint(c)] = q50_signed_word(hi)
+            } else {
+                mq_a[base + uint(c)] = lo
+                mq_a[base + 4u + uint(c)] = hi
+            }
+        }
+    }
+}
+
+//! Q8_0: a block's 32 int8 as two 16-byte words, an f16 scale a block, no min term
+[ |> template_struct_instance]
+class template Q8MmqT : KqMmqKhrT {
+    override MIN = false
+
+    def override plane_tile(pb : uint) : uint => pb / ((pa.n / 32u) * 128u)
+
+    def override w_load0(pb, wrow, b : uint) : uint4 => wq4[(pb + wrow * (pa.n / 32u) + b) * 2u]
+
+    def override w_load1(pb, wrow, b : uint) : uint4 => wq4[(pb + wrow * (pa.n / 32u) + b) * 2u + 1u]
+
+    def override w_scale(pb, wrow, b : uint) : float2 {
+        let blk = pb + wrow * (pa.n / 32u) + b
+        return float2(q40_d_of(ws[blk >> 1u], blk), 0.0)
+    }
+
+    def override w_put(base : uint; q0, q1 : uint4) : void {
+        for [unroll_full] (c in range(4)) {
+            mq_a[base + uint(c)] = q0[c]
+            mq_a[base + 4u + uint(c)] = q1[c]
+        }
+    }
+}
+
+//! Q4_K on the int8 tile: 128 rows a tile, sixteen subgroups
+[vk_dispatch(name = "kq_batch_k4_mmq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K4Mmq : K4MmqT {
+    [spirv_kernel(local_size_x = 512, name = "kq_batch_k4_mmq_cls_spv")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! ... and its short tile: 32 rows, four subgroups, every one live on a short piece
+[vk_dispatch(name = "kq_batch_k4_mmqs_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K4MmqS : K4MmqT {
+    override TOKS = 32u
+    override LANES = 128u
+
+    [spirv_kernel(local_size_x = 128, name = "kq_batch_k4_mmqs_cls_spv")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! Q5_K on the int8 tile: 128 rows a tile, sixteen subgroups
+[vk_dispatch(name = "kq_batch_k5_mmq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K5Mmq : K5MmqT {
+    [spirv_kernel(local_size_x = 512, name = "kq_batch_k5_mmq_cls_spv")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! ... and its short tile: 32 rows, four subgroups, every one live on a short piece
+[vk_dispatch(name = "kq_batch_k5_mmqs_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K5MmqS : K5MmqT {
+    override TOKS = 32u
+    override LANES = 128u
+
+    [spirv_kernel(local_size_x = 128, name = "kq_batch_k5_mmqs_cls_spv")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! Q6_K on the int8 tile: 128 rows a tile, sixteen subgroups
+[vk_dispatch(name = "kq_batch_k6_mmq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K6Mmq : K6MmqT {
+    [spirv_kernel(local_size_x = 512, name = "kq_batch_k6_mmq_cls_spv")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! ... and its short tile: 32 rows, four subgroups, every one live on a short piece
+[vk_dispatch(name = "kq_batch_k6_mmqs_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K6MmqS : K6MmqT {
+    override TOKS = 32u
+    override LANES = 128u
+
+    [spirv_kernel(local_size_x = 128, name = "kq_batch_k6_mmqs_cls_spv")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! Q5_1 on the int8 tile: 128 rows a tile, sixteen subgroups
+[vk_dispatch(name = "q51_batch_mmq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q51Mmq : Q51MmqT {
+    [spirv_kernel(local_size_x = 512, name = "q51_batch_mmq_cls_spv")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! ... and its short tile: 32 rows, four subgroups, every one live on a short piece
+[vk_dispatch(name = "q51_batch_mmqs_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q51MmqS : Q51MmqT {
+    override TOKS = 32u
+    override LANES = 128u
+
+    [spirv_kernel(local_size_x = 128, name = "q51_batch_mmqs_cls_spv")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! the per-32 Q5_0 on the int8 tile: 128 rows a tile, sixteen subgroups
+[vk_dispatch(name = "q5032_batch_mmq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q5032Mmq : Q51MmqT {
+    override Q50 = true
+    override MIN = false
+
+    [spirv_kernel(local_size_x = 512, name = "q5032_batch_mmq_cls_spv")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! ... and its short tile: 32 rows, four subgroups, every one live on a short piece
+[vk_dispatch(name = "q5032_batch_mmqs_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q5032MmqS : Q51MmqT {
+    override Q50 = true
+    override MIN = false
+    override TOKS = 32u
+    override LANES = 128u
+
+    [spirv_kernel(local_size_x = 128, name = "q5032_batch_mmqs_cls_spv")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! Q8_0 on the int8 tile: 128 rows a tile, sixteen subgroups
+[vk_dispatch(name = "q8_batch_mmq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q8Mmq : Q8MmqT {
+    [spirv_kernel(local_size_x = 512, name = "q8_batch_mmq_cls_spv")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! ... and its short tile: 32 rows, four subgroups, every one live on a short piece
+[vk_dispatch(name = "q8_batch_mmqs_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q8MmqS : Q8MmqT {
+    override TOKS = 32u
+    override LANES = 128u
+
+    [spirv_kernel(local_size_x = 128, name = "q8_batch_mmqs_cls_spv")]
+    def run {
+        mmq_body()
+    }
+}
+
+let private MMQ_TILE_TAILS = "mmq_cls mmqs_cls"   //! the int8 tiles: the 128-row tile, the 32-row one
+//! the formats with no int8 tile
+let private MMQ_SKIP = "q40 iq4xs k3 iq3s iq3xxs iq4nl k2 iq2s iq2xs iq2xxs mx4 iq4nl32 iq3s4 q4032 nv4"
+
+//! whether a plane of format `fmt` has int8 tiles: a format the tiles' ladder stamps
+def mmq_cls_has(fmt : int) : bool {
+    let tile = 0
+    return kq_tile_stamped(fmt, MMQ_SKIP, tile, MMQ_TILE_TAILS)
+}
+
+//! whether a plane of format `fmt` and width `n` has int8 tiles: the format's hooks, and K whole steps of the tile -
+//! superblocks of a superblock format, pairs of 32-blocks of any other
+def mmq_cls_fits(fmt : int; n : int64) : bool => mmq_cls_has(fmt) && (n % (kq_sb(fmt) ? KQ_SB_ELEMS : 2l * KQ_B32_ELEMS)) == 0l
+
+def mmq_cls_ensure(fmt : int; short : bool) : bool {
+    let tail = short ? 1 : 0
+    var r = false
+    kq_tile_stamp(fmt, MMQ_SKIP, "batch", tail, MMQ_TILE_TAILS) <| $() {
+        r = tile_ensure()
+    }
+    return r
+}
+
+def mmq_cls_set(fmt : int; short : bool; bufs : uint64 const[7]; sizes : int64 const[7]; gbits : uint const[7]) : VkDescriptorSet {
+    let tail = short ? 1 : 0
+    var r : VkDescriptorSet
+    kq_tile_stamp(fmt, MMQ_SKIP, "batch", tail, MMQ_TILE_TAILS) <| $() {
+        r = tile_set(bufs, sizes, gbits)
+    }
+    return r
+}
+
+def mmq_cls_enc(fmt : int; short : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
+    let tail = short ? 1 : 0
+    kq_tile_stamp(fmt, MMQ_SKIP, "batch", tail, MMQ_TILE_TAILS) <| $() {
+        tile_enc(raw, h, s, pc, groups)
+    }
 }
 
 // the L tile with edge tiles
