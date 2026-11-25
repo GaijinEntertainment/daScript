@@ -121,6 +121,7 @@ def tower_ln_chain(var rl : auto(R); offs : array<LayerOffs>; k_bias : bool; fc1
     let nd = npos * d
     let nff = npos * ff
     for (l in range64(nl)) {
+        _::rail_block_cut(rl) if (l > 0l)
         let o = offs[l]
         let rb = l * LN_BLOCK_GEMMS
         if (l == 0l) {
@@ -337,6 +338,7 @@ def tower_gemma4v_chain(var rl : auto(R); t : Gemma4vTower; vis : TowerVisTail; 
     var pc_rope = GkRope2dArgs(nheads = uint(nh), hs = uint(hs), rows = uint(npos))
     var pc_cvt = gk_f16_rows_args(uint(nd))
     for (l in range64(t.n_layer)) {
+        _::rail_block_cut(rl) if (l > 0l)
         let o = gemma4v_block_offs(t, l)
         let cq = gemma4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_Q])
         let ck = gemma4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_K])
@@ -393,7 +395,7 @@ def tower_qwen3v_tap(var rl : auto(R); t : Qwen3vTower; k, nout : int64) {
 
 //! qwen3v's encode: the patch conv and positions (`pos_resized` under `pos_rs`) into `x`, the fused-qkv pre-LN blocks, each deepstack tap's merger, the tail merger
 [arch(at = "../ARCHITECTURE_GPU_TOWER_RAIL.md#tower-rail")]
-def tower_qwen3v_chain(var rl : auto(R); t : Qwen3vTower; w, hsp, npos : int64; pos_rs : bool) {
+def tower_qwen3v_chain(var rl : auto(R); t : Qwen3vTower; w, hsp, npos : int64; pos_rs : bool) {   // nolint:STYLE038 — one flat dispatch a site: the chain is the shape
     let nb = rl.norms_base
     let f16 = rl.lane != RailLane.f32 && !_::rail_mulmm(rl)
     let d = t.n_embd
@@ -417,6 +419,7 @@ def tower_qwen3v_chain(var rl : auto(R); t : Qwen3vTower; w, hsp, npos : int64; 
     var pc_bqkv = GkBiasActArgs(d = uint(3l * d), nelem = uint(3l * nd), boff = 0u, act = BIAS_ACT_NONE)
     var pc_gelu = GkBiasActArgs(d = uint(ff), nelem = uint(nff), boff = 0u, act = BIAS_ACT_GELU_TANH)
     for (l in range64(t.n_layer)) {
+        _::rail_block_cut(rl) if (l > 0l)
         let o = qwen3v_block_offs(t, l)
         let rb = l * QWEN3V_GEMMS
         if (l == 0l) {
@@ -496,6 +499,7 @@ def tower_qwen25v_chain(var rl : auto(R); t : Qwen25vTower; w, hsp, npos, nwin :
     var pc_glu = GkBiasGateArgs(d = uint(ff), nelem = uint(nff), goff = 0u, uoff = 0u)
     var pc_win = GkWinAttnArgs(nheads = uint(nh), hs = uint(hs), scale = 1.0 / sqrt(float(hs)))
     for (l in range64(t.n_layer)) {
+        _::rail_block_cut(rl) if (l > 0l)
         let o = qwen25v_block_offs(t, l)
         if (l == 0l) {
             var pc = gk_rms_args(uint(d), uint(npos), t.eps, uint(o.ln1_w - nb))

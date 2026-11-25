@@ -20,6 +20,15 @@ def rail_pt(rl : VtRail; role : RailProfRole) {
     vt_pt(rl.raw, role)
 }
 
+//! the cut between two blocks of a tower chain: on an integrated GPU the blocks recorded so far are submitted and waited
+//! and the recording goes on, a job a block - a deep tower's whole chain as one job runs past the driver's watchdog there
+//! and the device is reset under it (the prefill window's one layer a submit, `pf_chunk_cap`)
+def rail_block_cut(var rl : VtRail) {
+    if (g_gpu.integrated) {
+        rl.h = cmd_flush(rl.raw)
+    }
+}
+
 [unused_argument(rl), arch(at = "../ARCHITECTURE_GPU_TOWER_RAIL.md#rail-primitives")]
 def rail_fork(var rl : VtRail) {}
 
