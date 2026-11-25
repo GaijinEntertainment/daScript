@@ -187,7 +187,7 @@ TEST_CASE("compile DAG: a structure of a frozen module reads its aliases without
     CHECK(checked > 0);
 }
 
-TEST_CASE("compile DAG: a module that writes a global of a frozen module leaves that global's flags alone, so jobs share it") {
+TEST_CASE("compile DAG: a module that writes or folds a global of a frozen module leaves that global's flags alone, so jobs share it") {
     auto fAccess = make_smart<FsFileAccess>();
     TextWriter logs;
     ModuleGroup libGroup;
@@ -202,4 +202,7 @@ TEST_CASE("compile DAG: a module that writes a global of a frozen module leaves 
     REQUIRE(counter);
     CHECK_FALSE(bool(counter->access_ref));
     CHECK_FALSE(bool(counter->access_info_pass_mutable));
+    auto limit = base->findVariable("compile_dag_limit");
+    REQUIRE(limit);
+    CHECK_FALSE(bool(limit->access_fold));
 }

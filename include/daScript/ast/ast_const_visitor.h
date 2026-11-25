@@ -137,6 +137,43 @@ namespace das {
         virtual bool canVisitLooksLikeCall ( const ExprLooksLikeCall * expr ) { return true; }
         virtual bool canVisitLabel ( const ExprLabel * ) { return true; }
         virtual bool canVisitReader ( const ExprReader * ) { return true; }
+        virtual bool canVisitStructure ( const Structure * ) { return true; }
+        virtual bool canVisitGlobalVariable ( const Variable * ) { return true; }
+        virtual bool canVisitFunction ( const Function * ) { return true; }
+        virtual bool canVisitEnumeration ( const Enumeration * ) { return true; }
+        virtual bool canVisitStructureFieldInit ( const Structure * ) { return true; }
+        virtual bool canVisitArgumentInit ( const Function *, const Variable *, const Expression * ) { return true; }
+        virtual void preVisitProgram ( const Program * ) {}
+        virtual void visitProgram ( const Program * ) {}
+        virtual void preVisitModule ( const Module * ) {}
+        virtual void visitModule ( const Module * ) {}
+        virtual void preVisitProgramBody ( const Program *, const Module * ) {}
+        virtual void preVisitGlobalLetBody ( const Program * ) {}
+        virtual void visitGlobalLetBody ( const Program * ) {}
+        virtual void preVisitAlias ( const TypeDecl *, const string & ) {}
+        virtual void visitAlias ( const TypeDecl *, const string & ) {}
+        virtual void preVisit ( const Enumeration * ) {}
+        virtual void preVisitEnumerationValue ( const Enumeration *, const string &, const Expression *, bool ) {}
+        virtual void visitEnumerationValue ( const Enumeration *, const string &, const Expression *, bool ) {}
+        virtual void visit ( const Enumeration * ) {}
+        virtual void preVisit ( const Structure * ) {}
+        virtual void preVisitStructureAlias ( const Structure *, const string &, const TypeDecl * ) {}
+        virtual void visitStructureAlias ( const Structure *, const string &, const TypeDecl * ) {}
+        virtual void preVisitStructureField ( const Structure *, const Structure::FieldDeclaration &, bool ) {}
+        virtual void visitStructureField ( const Structure *, const Structure::FieldDeclaration &, bool ) {}
+        virtual void visit ( const Structure * ) {}
+        virtual void preVisit ( const Function * ) {}
+        virtual void preVisitArgument ( const Function *, const Variable *, bool ) {}
+        virtual void visitArgument ( const Function *, const Variable *, bool ) {}
+        virtual void preVisitArgumentInit ( const Function *, const Variable *, const Expression * ) {}
+        virtual void visitArgumentInit ( const Function *, const Variable *, const Expression * ) {}
+        virtual void preVisitFunctionBody ( const Function *, const Expression * ) {}
+        virtual void visitFunctionBody ( const Function *, const Expression * ) {}
+        virtual void visit ( const Function * ) {}
+        virtual void preVisitGlobalLet ( const Variable * ) {}
+        virtual void visitGlobalLet ( const Variable * ) {}
+        virtual void preVisitGlobalLetInit ( const Variable *, const Expression * ) {}
+        virtual void visitGlobalLetInit ( const Variable *, const Expression * ) {}
         virtual void preVisit ( const TypeDecl * td ) {}
         virtual void visit ( const TypeDecl * td ) {}
         virtual void preVisitExpression ( const Expression * expr ) {}
@@ -223,6 +260,9 @@ namespace das {
 #elif defined(__clang__)
 #pragma clang diagnostic pop
 #endif
+
+    DAS_API void constVisitFunction ( ConstVisitor & vis, const Function * fn );
+    DAS_API void constVisitProgram ( ConstVisitor & vis, const Program * prog, bool visitGenerics );
 
     template <typename TT>
     void ExprLikeCall<TT>::visit ( ConstVisitor & vis ) const {

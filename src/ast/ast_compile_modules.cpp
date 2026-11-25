@@ -498,7 +498,11 @@ namespace das {
         // src/ast/ARCHITECTURE_COMPILE_MODULES.md#cache-prefix
         auto prefix = compileModulesInOrder(modules, 0, access, logs, libGroup, policies, promoteShared, stream, true, usec);
         if ( prefix.failed ) return prefix.failed->errors;
+#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
+        int32_t threads = 1;
+#else
         auto threads = policies.compile_threads == 0 ? JobQue::get_num_threads() : policies.compile_threads;
+#endif
         bool parallel = threads > 1 && modules.size() - prefix.next > 1 && !loadedModuleNests(libGroup);
         ModuleDag dag;
         if ( parallel || logDag ) dag = ModuleDag(modules, access);

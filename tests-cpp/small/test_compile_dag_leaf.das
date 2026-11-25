@@ -2,7 +2,7 @@ options gen2
 
 module test_compile_dag_leaf public
 
-// a comment the reader of a compile that starts with it loaded must see
+// a comment a reader loaded before the compile must see
 
 require daslib/ast_boost
 require daslib/cross_context
@@ -12,7 +12,7 @@ require test_compile_dag_base
 class DeadlockLeafProbe : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
                        var args : AnnotationArgumentList; var errors : das_string) : bool =>
-                           length(args) <= 1000 + compile_dag_base()
+                           length(args) <= compile_dag_limit + compile_dag_base()
 }
 
 def compile_dag_leaf_write() {

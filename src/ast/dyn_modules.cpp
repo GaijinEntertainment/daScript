@@ -663,6 +663,11 @@ static bool load_deferred_module_for_require(const string & name) {
             m->gc_collect(&loadRoot);
             return true;
         });
+        // src/ast/ARCHITECTURE_COMPILE_MODULES.md#compile-workers
+        Module::foreach([&](Module * m) {
+            if ( !m->frozen ) m->freeze();
+            return true;
+        });
     }
     loadRoot.gc_sweep();
     move_all_nodes(parked, threadRoot);

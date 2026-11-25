@@ -327,27 +327,24 @@ namespace das {
 
         // ----- cloned-body fixup: rename locals, substitute parameter reads -----
 
-        class CloneShape : public Visitor {
+        // src/ast/ARCHITECTURE_COMPILE_MODULES.md#compile-workers
+        class CloneShape : public ConstVisitor {
         public:
             vector<Expression *> nodes;
             vector<Variable *> vars;
         protected:
-            virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
-            virtual void preVisitExpression ( Expression * expr ) override {
-                Visitor::preVisitExpression(expr);
-                nodes.push_back(expr);
+            virtual void preVisitExpression ( const Expression * expr ) override {
+                nodes.push_back(const_cast<Expression *>(expr));
             }
-            virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
-                Visitor::preVisitLet(let, var, last);
-                vars.push_back(var);
+            virtual void preVisitLet ( const ExprLet *, const Variable * var, bool ) override {
+                vars.push_back(const_cast<Variable *>(var));
             }
-            virtual void preVisit ( ExprFor * expr ) override {
-                Visitor::preVisit(expr);
+            virtual void preVisit ( const ExprFor * expr ) override {
+                ConstVisitor::preVisit(expr);
                 for ( auto & var : expr->iteratorVariables ) vars.push_back(var);
             }
-            virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
-                Visitor::preVisitBlockArgument(block, var, lastArg);
-                vars.push_back(var);
+            virtual void preVisitBlockArgument ( const ExprBlock *, const Variable * var, bool ) override {
+                vars.push_back(const_cast<Variable *>(var));
             }
         };
 

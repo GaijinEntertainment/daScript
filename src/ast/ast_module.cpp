@@ -433,8 +433,16 @@ namespace das {
         isPublic = true;
     }
 
+    // src/ast/ARCHITECTURE_COMPILE_MODULES.md#compile-workers
+    static void fillAliasCaches ( Module * mod ) {
+        for ( auto node = mod->module_gc_root->gc_first; node; node = node->gc_next ) {
+            if ( node->gc_magic == GC_MAGIC_TYPEDECL ) static_cast<TypeDecl *>(node)->computeAliasCache();
+        }
+    }
+
     void Module::freeze() {
         fillGcFlags(this);
+        fillAliasCaches(this);
         frozen = true;
         aliasTypes.freeze();
         for ( auto & st : structures.each() ) st->aliases.freeze();

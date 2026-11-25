@@ -2609,12 +2609,14 @@ namespace das {
     void addModuleCommentReader ( Module * module, CommentReaderPtr newM, Context * context, LineInfoArg * at ) {
         // src/ast/ARCHITECTURE_COMPILE_MODULES.md#comment-readers
         if ( !module->visibleEverywhere ) {
+            delete newM;
             context->throw_error_at(at, "module %s installs a comment reader, so it has to be declared `module %s !inscope`: "
                 "every module after it in the require order waits for it and reads its comments through it",
                 module->name.c_str(), module->name.c_str());
         }
         module->noteRegistrationAtCompile();
         if ( !module->addCommentReader(newM, true) ) {
+            delete newM;
             context->throw_error_at(at, "can't add comment reader to module %s", module->name.c_str());
         }
     }
@@ -2635,10 +2637,10 @@ namespace das {
     void addModuleCallMacro ( Module * module, CallMacroPtr newM, Context * context, LineInfoArg * at ) {
         module->noteRegistrationAtCompile();
         module->ownedCallMacros.push_back(unique_ptr<CallMacro>(newM));
+        newM->module = module;
         if ( ! module->addCallMacro(newM->name, [=](const LineInfo & at) -> ExprLooksLikeCall * {
             auto ecm = new ExprCallMacro(at, newM->name);
             ecm->macro = newM;
-            newM->module = module;
             return ecm;
         }) ) {
             if ( daScriptEnvironment::getBound() && daScriptEnvironment::getBound()->g_Program ) {

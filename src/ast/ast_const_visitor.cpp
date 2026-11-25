@@ -649,4 +649,98 @@ namespace das {
         }
         vis.visit(this);
     }
+
+    void constVisitFunction ( ConstVisitor & vis, const Function * fn ) {
+        vis.preVisit(fn);
+        for ( auto arg : fn->arguments ) {
+            vis.preVisitArgument(fn, arg, arg==fn->arguments.back());
+            if ( arg->type ) constVisitTypeFull(vis, arg->type);
+            if ( arg->init && vis.canVisitArgumentInit(fn, arg, arg->init) ) {
+                vis.preVisitArgumentInit(fn, arg, arg->init);
+                arg->init->visit(vis);
+                vis.visitArgumentInit(fn, arg, arg->init);
+            }
+            vis.visitArgument(fn, arg, arg==fn->arguments.back());
+        }
+        if ( fn->result ) constVisitTypeFull(vis, fn->result);
+        if ( fn->body ) {
+            vis.preVisitFunctionBody(fn, fn->body);
+            fn->body->visit(vis);
+            vis.visitFunctionBody(fn, fn->body);
+        }
+        vis.visit(fn);
+    }
+
+    static void constVisitStructure ( ConstVisitor & vis, const Structure * st ) {
+        vis.preVisit(st);
+        st->aliases.foreach([&](auto & alias){
+            vis.preVisitStructureAlias(st, alias->alias, alias);
+            constVisitTypeFull(vis, alias);
+            vis.visitStructureAlias(st, alias->alias, alias);
+        });
+        for ( auto & fi : st->fields ) {
+            vis.preVisitStructureField(st, fi, &fi==&st->fields.back());
+            if ( fi.type ) constVisitTypeFull(vis, fi.type);
+            if ( fi.init && vis.canVisitStructureFieldInit(st) ) fi.init->visit(vis);
+            vis.visitStructureField(st, fi, &fi==&st->fields.back());
+        }
+        vis.visit(st);
+    }
+
+    static void constVisitEnumeration ( ConstVisitor & vis, const Enumeration * en ) {
+        vis.preVisit(en);
+        size_t count = 0;
+        size_t total = en->list.size();
+        for ( auto & itf : en->list ) {
+            vis.preVisitEnumerationValue(en, itf.name, itf.value, count==total);
+            if ( itf.value ) itf.value->visit(vis);
+            vis.visitEnumerationValue(en, itf.name, itf.value, count==total);
+            count ++;
+        }
+        vis.visit(en);
+    }
+
+    static void constVisitGlobal ( ConstVisitor & vis, const Variable * var ) {
+        vis.preVisitGlobalLet(var);
+        if ( var->type ) constVisitTypeFull(vis, var->type);
+        if ( var->init ) {
+            vis.preVisitGlobalLetInit(var, var->init);
+            var->init->visit(vis);
+            vis.visitGlobalLetInit(var, var->init);
+        }
+        vis.visitGlobalLet(var);
+    }
+
+    void constVisitProgram ( ConstVisitor & vis, const Program * prog, bool visitGenerics ) {
+        vis.preVisitProgram(prog);
+        auto mod = prog->thisModule.get();
+        vis.preVisitModule(mod);
+        mod->enumerations.foreach([&](auto & en){
+            if ( vis.canVisitEnumeration(en) ) constVisitEnumeration(vis, en);
+        });
+        mod->structures.foreach([&](auto & st){
+            if ( vis.canVisitStructure(st) ) constVisitStructure(vis, st);
+        });
+        mod->aliasTypes.foreach([&](auto & alias){
+            vis.preVisitAlias(alias, alias->alias);
+            constVisitTypeFull(vis, alias);
+            vis.visitAlias(alias, alias->alias);
+        });
+        vis.preVisitProgramBody(prog, mod);
+        vis.preVisitGlobalLetBody(prog);
+        mod->globals.foreach([&](auto & var){
+            if ( vis.canVisitGlobalVariable(var) ) constVisitGlobal(vis, var);
+        });
+        vis.visitGlobalLetBody(prog);
+        if ( visitGenerics ) {
+            mod->generics.foreach([&](auto & fn){
+                if ( !fn->builtIn || prog->visitBuiltinFunctions ) constVisitFunction(vis, fn);
+            });
+        }
+        mod->functions.foreach([&](auto & fn){
+            if ( (!fn->builtIn || prog->visitBuiltinFunctions) && vis.canVisitFunction(fn) ) constVisitFunction(vis, fn);
+        });
+        vis.visitModule(mod);
+        vis.visitProgram(prog);
+    }
 }
