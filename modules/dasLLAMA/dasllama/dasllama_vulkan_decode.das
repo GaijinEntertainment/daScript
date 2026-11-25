@@ -70,8 +70,9 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     // the residual-stream kernels stage a whole row in ar_row, and the per-head ones a whole head
     // in their row slabs — over either slab they would write past the workgroup array with no diagnostic;
     // the mirror slack covers a flash fragment at a KV row up to RDEC_AR_MAX_DIM wide
-    if (dim > RDEC_AR_MAX_DIM || head_size > 512l || kv_dim > RDEC_AR_MAX_DIM) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: dim {dim} or kv_dim {kv_dim} > {RDEC_AR_MAX_DIM}, or head_size {head_size} > 512, exceeds the workgroup row slabs and the mirror slack\n")
+    let slab_dim = g_gpu.dry && !g_gpu.holds_device ? RDEC_AR_MAX_DIM : row_slab_dim(g_gpu.max_wg_bytes)   // the offline bake's tier carries no cap
+    if (dim > slab_dim || head_size > 512l || kv_dim > slab_dim) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: dim {dim} or kv_dim {kv_dim} > {slab_dim}, or head_size {head_size} > 512, exceeds the workgroup row slabs and the mirror slack\n")
         return false
     }
     let hybrid = dn.cd > 0l
@@ -770,7 +771,7 @@ def private rd_moe_sets(var L : RLayer) {
     //! gemma-4's MXFP4 stacks) carries both, under its own set layout
     let gu_b32 = !kq_sb(L.fe1)
     L.egu = (L.fe1 == L.fe3 && gemv_shell_fmt(L.fe1, GEMV_SHELL_GU) && !kq_sb(L.fe2) && nfe % Q8_BLOCK_ELEMS == 0l && pe1.wq == pe3.wq
-        && (gu_b32 || !g_rd.exps_bias && !g_rd.act_oai) && vk_fuse_on() && gemv_shell_ensure(L.fe1, GEMV_SHELL_GU))
+        && (gu_b32 || !g_rd.exps_bias && !g_rd.act_oai) && vk_fuse_on() && !vk_egu_split() && gemv_shell_ensure(L.fe1, GEMV_SHELL_GU))
     if (L.egu && gu_b32) {
         L.s_egu = set_mx4_gemv_gu_cls(fixed_array(pe1.wq, pe1.ws, g_rd.moe_meta1_dev, xqb, xsb, g_rd.egate_dev, g_rd.moe_meta3_dev, g_rd.moe_gb_dev, g_rd.moe_ub_dev, g_rd.moe_eidx_dev, g_gpu.hq_dev, g_gpu.hs_dev),
             fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / Q8_BLOCK_ELEMS) * 4l, k * nfe * 4l, META_BYTES, g_rd.moe_gub_bytes, g_rd.moe_gub_bytes, MAX_ROUTED_SLOTS * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
@@ -2395,6 +2396,15 @@ def private rd_ensure_fused_sets {
     rd_ensure_comb_sets()
     g_rd.fused_sets_made = true
     rd_announce_fuse_bisect()
+}
+
+//! PROBE SEAM: the routed layers whose one-row step takes the fused gate-up leaf
+def rd_egu_layers_ : int64 {
+    var n = 0l
+    for (L in g_rd.layers) {
+        n += L.egu ? 1l : 0l
+    }
+    return n
 }
 
 //! the fused sites' announce: every site fused, or the bits DASLLAMA_VK_FUSE_BISECT keeps split, each named as taken or inert here

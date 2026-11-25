@@ -49,6 +49,18 @@ class ClsArAddRms : ArBase {
     }
 }
 
+//! `ClsArAddRms` off `ArBase` on the small slab: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "cls_ar_s", wg_twin_of = "cls_ar", kernel = "run", grid = "nrows", params = "nrows : int64")]
+class ClsArAddRmsS : ArBase {
+    override OUT_F32 = true
+    override ROW_CAP = 8064u
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        ar_body()
+    }
+}
+
 [vk_dispatch(name = "cls_ar_rq_b", grid = "nrows", params = "nrows : int64")]
 class ClsArAddRmsRqB : ArRqBase {
     [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_b_spv")]
@@ -57,6 +69,16 @@ class ClsArAddRmsRqB : ArRqBase {
     }
 }
 
+//! `ClsArAddRmsRqB` off `ArRqBase` on the small slab: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "cls_ar_rq_b_s", wg_twin_of = "cls_ar_rq_b", grid = "nrows", params = "nrows : int64")]
+class ClsArAddRmsRqBS : ArRqBase {
+    override ROW_CAP = 8064u
+
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_b_s_spv")]
+    def run {
+        rq_b_body()
+    }
+}
 [vk_dispatch(name = "cls_ar_rqx", grid = "wgs", params = "wgs : int64")]
 class ArAddRmsRqX : ArRqT {
     override STOREX = true
@@ -67,8 +89,32 @@ class ArAddRmsRqX : ArRqT {
     }
 }
 
+//! `ArAddRmsRqX` off `ArRqT` on the small slab: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "cls_ar_rqx_s", wg_twin_of = "cls_ar_rqx", grid = "wgs", params = "wgs : int64")]
+class ArAddRmsRqXS : ArRqT {
+    override ROW_CAP = 8064u
+    override STOREX = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        ar_rq_body()
+    }
+}
+
 [vk_dispatch(name = "cls_ar_rqk", grid = "wgs", params = "wgs : int64")]
 class ArAddRmsRqK : ArRqT {
+    override KBLK = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        ar_rq_body()
+    }
+}
+
+//! `ArAddRmsRqK` off `ArRqT` on the small slab: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "cls_ar_rqk_s", wg_twin_of = "cls_ar_rqk", grid = "wgs", params = "wgs : int64")]
+class ArAddRmsRqKS : ArRqT {
+    override ROW_CAP = 8064u
     override KBLK = true
 
     [spirv_kernel(local_size_x = 256)]
@@ -88,8 +134,32 @@ class ArAddRmsRqKX : ArRqT {
     }
 }
 
+//! `ArAddRmsRqKX` off `ArRqT` on the small slab: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "cls_ar_rqkx_s", wg_twin_of = "cls_ar_rqkx", grid = "wgs", params = "wgs : int64")]
+class ArAddRmsRqKXS : ArRqT {
+    override ROW_CAP = 8064u
+    override KBLK = true
+    override STOREX = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        ar_rq_body()
+    }
+}
 [vk_dispatch(name = "cls_ar_comb", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class ClsArComb : ArCombBase {
+    override OUT_F32 = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        ar_body()
+    }
+}
+
+//! `ClsArComb` off `ArCombBase` on the small slab: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "cls_ar_comb_s", wg_twin_of = "cls_ar_comb", kernel = "run", grid = "nrows", params = "nrows : int64")]
+class ClsArCombS : ArCombBase {
+    override ROW_CAP = 8064u
     override OUT_F32 = true
 
     [spirv_kernel(local_size_x = 256)]
@@ -109,6 +179,18 @@ class ClsArCombRq : ArCombBase {
     }
 }
 
+//! `ClsArCombRq` off `ArCombBase` on the small slab: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "cls_ar_comb_rq_s", wg_twin_of = "cls_ar_comb_rq", kernel = "run", grid = "nrows", params = "nrows : int64")]
+class ClsArCombRqS : ArCombBase {
+    override ROW_CAP = 8064u
+    override OUT_Q8 = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        ar_body()
+    }
+}
+
 [vk_dispatch(name = "cls_ar_comb_f16_b", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class ClsArCombF16B : ArCombBase {
     override OUT_F16 = true
@@ -119,9 +201,32 @@ class ClsArCombF16B : ArCombBase {
     }
 }
 
+//! `ClsArCombF16B` off `ArCombBase` on the small slab: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "cls_ar_comb_f16_b_s", wg_twin_of = "cls_ar_comb_f16_b", kernel = "run", grid = "nrows", params = "nrows : int64")]
+class ClsArCombF16BS : ArCombBase {
+    override ROW_CAP = 8064u
+    override OUT_F16 = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        ar_body()
+    }
+}
 //! off `ArBase`, the `cls_ar_comb*` siblings' shell: the four-reduce step over the slot map's routed rows and the dense row, its next norm as floats
 [vk_dispatch(name = "cls_ar_comb_g4", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class ClsArCombG4 : ArCombG4T {
+    override OUT_F32 = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        comb_g4_body()
+    }
+}
+
+//! `ClsArCombG4` off `ArCombG4T` on the small slab: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "cls_ar_comb_g4_s", wg_twin_of = "cls_ar_comb_g4", kernel = "run", grid = "nrows", params = "nrows : int64")]
+class ClsArCombG4S : ArCombG4T {
+    override ROW_CAP = 8064u
     override OUT_F32 = true
 
     [spirv_kernel(local_size_x = 256)]
@@ -141,9 +246,33 @@ class ClsArCombG4F16B : ArCombG4T {
     }
 }
 
+//! `ClsArCombG4F16B` off `ArCombG4T` on the small slab: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "cls_ar_comb_g4_f16_b_s", wg_twin_of = "cls_ar_comb_g4_f16_b", kernel = "run", grid = "nrows", params = "nrows : int64")]
+class ClsArCombG4F16BS : ArCombG4T {
+    override ROW_CAP = 8064u
+    override OUT_F16 = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        comb_g4_body()
+    }
+}
+
 //! off `ArBase`, the `cls_ar_comb*` siblings' shell: the four-reduce step over the slot map's routed rows and the dense row, its next norm in Q8_0 blocks
 [vk_dispatch(name = "cls_ar_comb_g4_rq", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class ClsArCombG4Rq : ArCombG4T {
+    override OUT_Q8 = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        comb_g4_body()
+    }
+}
+
+//! `ClsArCombG4Rq` off `ArCombG4T` on the small slab: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "cls_ar_comb_g4_rq_s", wg_twin_of = "cls_ar_comb_g4_rq", kernel = "run", grid = "nrows", params = "nrows : int64")]
+class ClsArCombG4RqS : ArCombG4T {
+    override ROW_CAP = 8064u
     override OUT_Q8 = true
 
     [spirv_kernel(local_size_x = 256)]
@@ -162,6 +291,17 @@ class ClsArAddRmsF16B : ArBase {
     }
 }
 
+//! `ClsArAddRmsF16B` off `ArBase` on the small slab: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "cls_ar_f16_b_s", wg_twin_of = "cls_ar_f16_b", kernel = "run", grid = "nrows", params = "nrows : int64")]
+class ClsArAddRmsF16BS : ArBase {
+    override ROW_CAP = 8064u
+    override OUT_F16 = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        ar_body()
+    }
+}
 [vk_dispatch(name = "cls_dn_rq", kernel = "run", family = "rq_cls", grid = "wgs", params = "wgs : int64")]
 class DnRequant : RqPlainT {
     [spirv_kernel(local_size_x = 256)]
@@ -1371,8 +1511,17 @@ class template AtPrepT {
     @ssbo @binding = 3 smalls : array<float>   //! cos/sin rows + norm weights (push offsets)
     @ssbo @binding = 4 bias : array<float>     //! per-layer [q | k | v] projection biases (hasb), else a placeholder
     @push_constant pa : AtPrepArgs
-    @workgroup row : float[8192]               //! one position's projection row (d <= 8192)
+    @workgroup row : float[int(ROW_CAP)]       //! one position's projection row (d <= ROW_CAP)
     @workgroup hsinv : float[64]               //! per-head inverse rms (heads <= 64)
+    @template_constant ROW_CAP : uint = 8192u  //!< the row's floats: RDEC_AR_SMALL_DIM on the small-slab twin - a pass wider than its stamp's is not that stamp's to serve
+
+    [spirv_inline]
+    def row_at(i : uint) : float => row[i]
+
+    [spirv_inline]
+    def row_put(i : uint; v : float) {
+        row[i] = v
+    }
 
     [spirv_inline]
     def at_prep_body {
@@ -1387,10 +1536,10 @@ class template AtPrepT {
             let h = i / hs
             let j = i % hs
             if (gated != 0u) {
-                row[i] = src[p * 2u * pa.d + h * 2u * hs + j] + (pa.hasb != 0u ? bias[pa.boff + i] : 0.0)
+                row_put(i, src[p * 2u * pa.d + h * 2u * hs + j] + (pa.hasb != 0u ? bias[pa.boff + i] : 0.0))
                 gates[p * pa.d + i] = src[p * 2u * pa.d + h * 2u * hs + hs + j]
             } else {
-                row[i] = src[p * pa.d + i] + (pa.hasb != 0u ? bias[pa.boff + i] : 0.0)
+                row_put(i, src[p * pa.d + i] + (pa.hasb != 0u ? bias[pa.boff + i] : 0.0))
             }
             i += 256u
         }
@@ -1399,7 +1548,7 @@ class template AtPrepT {
             var ss = 0.0
             var j = 0u
             while (j < hs) {
-                let v = row[tid * hs + j]
+                let v = row_at(tid * hs + j)
                 ss += v * v
                 j++
             }
@@ -1410,20 +1559,20 @@ class template AtPrepT {
         while (i < pa.d) {
             let h = i / hs
             let j = i % hs
-            var v = row[i]
+            var v = row_at(i)
             if (qknorm != 0u) {
                 v = smalls[pa.rms_off + j] * (v * hsinv[h])
             }
             var outv = v
             if (j < half) {
-                var v1 = row[h * hs + j + half]
+                var v1 = row_at(h * hs + j + half)
                 if (qknorm != 0u) {
                     v1 = smalls[pa.rms_off + j + half] * (v1 * hsinv[h])
                 }
                 outv = v * smalls[pa.cos_off + p * half + j] - v1 * smalls[pa.sin_off + p * half + j]
             } elif (j < 2u * half) {
                 let jj = j - half
-                var v0 = row[h * hs + jj]
+                var v0 = row_at(h * hs + jj)
                 if (qknorm != 0u) {
                     v0 = smalls[pa.rms_off + jj] * (v0 * hsinv[h])
                 }
@@ -1443,6 +1592,16 @@ class AtPrep : AtPrepT {
     }
 }
 
+//! `AtPrep` off `AtPrepT` on the small slab: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "at_prep_cls_s", wg_twin_of = "at_prep_cls", grid = "npos", params = "npos : int64")]
+class AtPrepS : AtPrepT {
+    override ROW_CAP = 8064u
+
+    [spirv_kernel(local_size_x = 256, name = "at_prep_cls_s_spv")]
+    def run {
+        at_prep_body()
+    }
+}
 //! prefill attention Q tile: a workgroup a (head, 8-query tile)
 [vk_dispatch(name = "at_attn_cls", grid = "wgs", params = "wgs : int64")]
 class AtAttn : AtAttnTileT {
@@ -1747,8 +1906,64 @@ class FaKhrH64 : FaH64T {
     }
 }
 
+//! `FaKhrH64` off `FaH64T` with the q tile and the P x V stash at the 256 head's size: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_h64_cls_s", wg_twin_of = "fa_khr_h64_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrH64S : FaH64T {
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH64S` off `FaH64T` with the workgroups tile-first: the alternate `fa_khr_h64_cls`'s slot builds under `VK_ALT_FA_TFIRST`
+[vk_dispatch(name = "fa_khr_h64_tf_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "fa_khr_h64_cls", alt_bit = 8)]
+class FaKhrH64Tf : FaH64T {
+    override TFIRST = true
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
 [vk_dispatch(name = "fa_khr_h64_bidir_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
 class FaKhrH64Bidir : FaH64T {
+    override KHR = true
+    override CAUSAL = false
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH64Bidir` off `FaH64T` with the q tile and the P x V stash at the 256 head's size: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_h64_bidir_cls_s", wg_twin_of = "fa_khr_h64_bidir_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrH64BidirS : FaH64T {
+    override QPV_WORDS = 2048u
+    override KHR = true
+    override CAUSAL = false
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH64BidirS` off `FaH64T` with the workgroups tile-first: the alternate `fa_khr_h64_bidir_cls`'s slot builds under `VK_ALT_FA_TFIRST`
+[vk_dispatch(name = "fa_khr_h64_bidir_tf_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "fa_khr_h64_bidir_cls", alt_bit = 8)]
+class FaKhrH64BidirTf : FaH64T {
+    override TFIRST = true
+    override QPV_WORDS = 2048u
     override KHR = true
     override CAUSAL = false
     typedef OT = float
@@ -1771,8 +1986,66 @@ class FaKhrH64F16 : FaH64T {
     }
 }
 
+//! `FaKhrH64F16` off `FaH64T` with the q tile and the P x V stash at the 256 head's size: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_h64_f16_cls_s", wg_twin_of = "fa_khr_h64_f16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrH64F16S : FaH64T {
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float16
+    override OUT16 = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH64F16S` off `FaH64T` with the workgroups tile-first: the alternate `fa_khr_h64_f16_cls`'s slot builds under `VK_ALT_FA_TFIRST`
+[vk_dispatch(name = "fa_khr_h64_f16_tf_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "fa_khr_h64_f16_cls", alt_bit = 8)]
+class FaKhrH64F16Tf : FaH64T {
+    override TFIRST = true
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float16
+    override OUT16 = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
 [vk_dispatch(name = "fa_khr_h64_sink_cls", kernel = "run", family = "fa_khr_sink_cls", grid = "wgs", params = "wgs : int64")]
 class FaKhrH64Sink : FaH64T {
+    override KHR = true
+    typedef OT = float
+    override SINK = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH64Sink` off `FaH64T` with the q tile and the P x V stash at the 256 head's size: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_h64_sink_cls_s", wg_twin_of = "fa_khr_h64_sink_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrH64SinkS : FaH64T {
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float
+    override SINK = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH64SinkS` off `FaH64T` with the workgroups tile-first: the alternate `fa_khr_h64_sink_cls`'s slot builds under `VK_ALT_FA_TFIRST`
+[vk_dispatch(name = "fa_khr_h64_sink_tf_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "fa_khr_h64_sink_cls", alt_bit = 8)]
+class FaKhrH64SinkTf : FaH64T {
+    override TFIRST = true
+    override QPV_WORDS = 2048u
     override KHR = true
     typedef OT = float
     override SINK = true
@@ -1796,6 +2069,37 @@ class FaKhrH64SinkF16 : FaH64T {
     }
 }
 
+//! `FaKhrH64SinkF16` off `FaH64T` with the q tile and the P x V stash at the 256 head's size: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_h64_sink_f16_cls_s", wg_twin_of = "fa_khr_h64_sink_f16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrH64SinkF16S : FaH64T {
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float16
+    override OUT16 = true
+    override SINK = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH64SinkF16S` off `FaH64T` with the workgroups tile-first: the alternate `fa_khr_h64_sink_f16_cls`'s slot builds under `VK_ALT_FA_TFIRST`
+[vk_dispatch(name = "fa_khr_h64_sink_f16_tf_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "fa_khr_h64_sink_f16_cls", alt_bit = 8)]
+class FaKhrH64SinkF16Tf : FaH64T {
+    override TFIRST = true
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float16
+    override OUT16 = true
+    override SINK = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
 [vk_dispatch(name = "fa_khr_h128_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
 class FaKhrH128 : FaH128T {
     override KHR = true
@@ -1807,8 +2111,64 @@ class FaKhrH128 : FaH128T {
     }
 }
 
+//! `FaKhrH128` off `FaH128T` with the q tile and the P x V stash at the 256 head's size: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_h128_cls_s", wg_twin_of = "fa_khr_h128_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrH128S : FaH128T {
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH128S` off `FaH128T` with the workgroups tile-first: the alternate `fa_khr_h128_cls`'s slot builds under `VK_ALT_FA_TFIRST`
+[vk_dispatch(name = "fa_khr_h128_tf_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "fa_khr_h128_cls", alt_bit = 8)]
+class FaKhrH128Tf : FaH128T {
+    override TFIRST = true
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
 [vk_dispatch(name = "fa_khr_h128_bidir_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
 class FaKhrH128Bidir : FaH128T {
+    override KHR = true
+    override CAUSAL = false
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH128Bidir` off `FaH128T` with the q tile and the P x V stash at the 256 head's size: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_h128_bidir_cls_s", wg_twin_of = "fa_khr_h128_bidir_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrH128BidirS : FaH128T {
+    override QPV_WORDS = 2048u
+    override KHR = true
+    override CAUSAL = false
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH128BidirS` off `FaH128T` with the workgroups tile-first: the alternate `fa_khr_h128_bidir_cls`'s slot builds under `VK_ALT_FA_TFIRST`
+[vk_dispatch(name = "fa_khr_h128_bidir_tf_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "fa_khr_h128_bidir_cls", alt_bit = 8)]
+class FaKhrH128BidirTf : FaH128T {
+    override TFIRST = true
+    override QPV_WORDS = 2048u
     override KHR = true
     override CAUSAL = false
     typedef OT = float
@@ -1831,8 +2191,64 @@ class FaKhrH128F16 : FaH128T {
     }
 }
 
+//! `FaKhrH128F16` off `FaH128T` with the q tile and the P x V stash at the 256 head's size: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_h128_f16_cls_s", wg_twin_of = "fa_khr_h128_f16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrH128F16S : FaH128T {
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float16
+    override OUT16 = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH128F16S` off `FaH128T` with the workgroups tile-first: the alternate `fa_khr_h128_f16_cls`'s slot builds under `VK_ALT_FA_TFIRST`
+[vk_dispatch(name = "fa_khr_h128_f16_tf_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "fa_khr_h128_f16_cls", alt_bit = 8)]
+class FaKhrH128F16Tf : FaH128T {
+    override TFIRST = true
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float16
+    override OUT16 = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
 [vk_dispatch(name = "fa_khr_h256_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
 class FaKhrH256 : FaH256T {
+    override KHR = true
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH256` off `FaH256T` with the q tile and the P x V stash at the 256 head's size: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_h256_cls_s", wg_twin_of = "fa_khr_h256_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrH256S : FaH256T {
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH256S` off `FaH256T` with the workgroups tile-first: the alternate `fa_khr_h256_cls`'s slot builds under `VK_ALT_FA_TFIRST`
+[vk_dispatch(name = "fa_khr_h256_tf_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "fa_khr_h256_cls", alt_bit = 8)]
+class FaKhrH256Tf : FaH256T {
+    override TFIRST = true
+    override QPV_WORDS = 2048u
     override KHR = true
     typedef OT = float
 
@@ -1854,9 +2270,67 @@ class FaKhrH256F16 : FaH256T {
     }
 }
 
+//! `FaKhrH256F16` off `FaH256T` with the q tile and the P x V stash at the 256 head's size: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_h256_f16_cls_s", wg_twin_of = "fa_khr_h256_f16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrH256F16S : FaH256T {
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float16
+    override OUT16 = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH256F16S` off `FaH256T` with the workgroups tile-first: the alternate `fa_khr_h256_f16_cls`'s slot builds under `VK_ALT_FA_TFIRST`
+[vk_dispatch(name = "fa_khr_h256_f16_tf_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "fa_khr_h256_f16_cls", alt_bit = 8)]
+class FaKhrH256F16Tf : FaH256T {
+    override TFIRST = true
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float16
+    override OUT16 = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
 //! the gated flash tile at head 256 (`FaH256T` under `GATED`, the template the CUDA home stamps too), the KHR arm: the Qwen3.5 / Qwen3.6 attention shape off cm2
 [vk_dispatch(name = "fa_khr_h256_g_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
 class FaKhrH256G : FaH256T {
+    override KHR = true
+    typedef OT = float
+    override GATED = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH256G` off `FaH256T` with the q tile and the P x V stash at the 256 head's size: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_h256_g_cls_s", wg_twin_of = "fa_khr_h256_g_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrH256GS : FaH256T {
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float
+    override GATED = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH256GS` off `FaH256T` with the workgroups tile-first: the alternate `fa_khr_h256_g_cls`'s slot builds under `VK_ALT_FA_TFIRST`
+[vk_dispatch(name = "fa_khr_h256_g_tf_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "fa_khr_h256_g_cls", alt_bit = 8)]
+class FaKhrH256GTf : FaH256T {
+    override TFIRST = true
+    override QPV_WORDS = 2048u
     override KHR = true
     typedef OT = float
     override GATED = true
@@ -1881,6 +2355,37 @@ class FaKhrH256GF16 : FaH256T {
     }
 }
 
+//! `FaKhrH256GF16` off `FaH256T` with the q tile and the P x V stash at the 256 head's size: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_h256_g_f16_cls_s", wg_twin_of = "fa_khr_h256_g_f16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrH256GF16S : FaH256T {
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float16
+    override OUT16 = true
+    override GATED = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH256GF16S` off `FaH256T` with the workgroups tile-first: the alternate `fa_khr_h256_g_f16_cls`'s slot builds under `VK_ALT_FA_TFIRST`
+[vk_dispatch(name = "fa_khr_h256_g_f16_tf_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "fa_khr_h256_g_f16_cls", alt_bit = 8)]
+class FaKhrH256GF16Tf : FaH256T {
+    override TFIRST = true
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float16
+    override OUT16 = true
+    override GATED = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
 [vk_dispatch(name = "fa_khr_h256_cap_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
 class FaKhrH256Cap : FaH256T {
     override KHR = true
@@ -1893,8 +2398,68 @@ class FaKhrH256Cap : FaH256T {
     }
 }
 
+//! `FaKhrH256Cap` off `FaH256T` with the q tile and the P x V stash at the 256 head's size: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_h256_cap_cls_s", wg_twin_of = "fa_khr_h256_cap_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrH256CapS : FaH256T {
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float
+    override CAP = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH256CapS` off `FaH256T` with the workgroups tile-first: the alternate `fa_khr_h256_cap_cls`'s slot builds under `VK_ALT_FA_TFIRST`
+[vk_dispatch(name = "fa_khr_h256_cap_tf_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "fa_khr_h256_cap_cls", alt_bit = 8)]
+class FaKhrH256CapTf : FaH256T {
+    override TFIRST = true
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float
+    override CAP = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
 [vk_dispatch(name = "fa_khr_h256_cap_f16_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
 class FaKhrH256CapF16 : FaH256T {
+    override KHR = true
+    typedef OT = float16
+    override OUT16 = true
+    override CAP = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH256CapF16` off `FaH256T` with the q tile and the P x V stash at the 256 head's size: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_h256_cap_f16_cls_s", wg_twin_of = "fa_khr_h256_cap_f16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrH256CapF16S : FaH256T {
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float16
+    override OUT16 = true
+    override CAP = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH256CapF16S` off `FaH256T` with the workgroups tile-first: the alternate `fa_khr_h256_cap_f16_cls`'s slot builds under `VK_ALT_FA_TFIRST`
+[vk_dispatch(name = "fa_khr_h256_cap_f16_tf_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "fa_khr_h256_cap_f16_cls", alt_bit = 8)]
+class FaKhrH256CapF16Tf : FaH256T {
+    override TFIRST = true
+    override QPV_WORDS = 2048u
     override KHR = true
     typedef OT = float16
     override OUT16 = true
@@ -1919,6 +2484,62 @@ class FaKhrH512 : FaH512T {
 
 [vk_dispatch(name = "fa_khr_h512_f16_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
 class FaKhrH512F16 : FaH512T {
+    override KHR = true
+    typedef OT = float16
+    override OUT16 = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH512` off `FaH512T` with the P x V stash at half the 512 head, a step's P x V in two passes: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_h512_cls_s", wg_twin_of = "fa_khr_h512_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrH512S : FaH512T {
+    override PVHALF = true
+    override KHR = true
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH512S` off `FaH512T` with the workgroups tile-first: the alternate `fa_khr_h512_cls`'s slot builds under `VK_ALT_FA_TFIRST`
+[vk_dispatch(name = "fa_khr_h512_tf_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "fa_khr_h512_cls", alt_bit = 8)]
+class FaKhrH512Tf : FaH512T {
+    override TFIRST = true
+    override PVHALF = true
+    override KHR = true
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH512F16` off `FaH512T` with the P x V stash at half the 512 head, a step's P x V in two passes: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_h512_f16_cls_s", wg_twin_of = "fa_khr_h512_f16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrH512F16S : FaH512T {
+    override PVHALF = true
+    override KHR = true
+    typedef OT = float16
+    override OUT16 = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrH512F16S` off `FaH512T` with the workgroups tile-first: the alternate `fa_khr_h512_f16_cls`'s slot builds under `VK_ALT_FA_TFIRST`
+[vk_dispatch(name = "fa_khr_h512_f16_tf_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "fa_khr_h512_f16_cls", alt_bit = 8)]
+class FaKhrH512F16Tf : FaH512T {
+    override TFIRST = true
+    override PVHALF = true
     override KHR = true
     typedef OT = float16
     override OUT16 = true
@@ -2036,6 +2657,7 @@ class DaAttnBF16 : DaAttnBT {
         at_attn_body()
     }
 }
+
 
 //! DaAttnB's hs=128 twin on f16 MMAs; hs unread, baked to 128
 [ |> template_struct_instance]
@@ -2267,6 +2889,7 @@ def da_attn_b_stamp_enc(h128, wide, f16 : bool; raw : VkCommandBuffer; var h : V
 
 // ===== decode attention =====
 
+
 [vk_dispatch(name = "da_attn_cls", grid = "wgs", params = "wgs : int64")]
 class DaAttn : DaAttnT {
     typedef KT = float
@@ -2467,6 +3090,7 @@ def da_attn_stamp_enc(dt : KVDtype; slab : DaSlab; raw : VkCommandBuffer; var h 
 }
 
 // ===== the Q8_0 batch GEMM tile (the sdot4 prefill workhorse) =====
+
 
 //! a fork of the per-256 `KqBatchBase` shell kept apart on purpose: its per-32 f16 scale pass runs over 8-block steps
 //! (32x32 tiles through shared, K advancing 8 blocks per barrier pair), so only the 32x32 store (`MoeCmBase.store_y`) is shared
@@ -3566,6 +4190,7 @@ class template MmBatchT : MoeCmBase {
     }
 }
 
+
 //! the Q8_0 leaf: eight 32-blocks a step, a staged uint a block word
 [vk_dispatch(name = "q8_batch_cmf16_cls", grid = "wgs", params = "wgs : int64")]
 class CmF16Batch : CmF16Base {
@@ -3688,6 +4313,12 @@ class CmI8Batch : MoeCmBase {
             }
         }
     }
+}
+
+
+struct MmqInvArgs {
+    nk : uint   //! the window's bucket rows
+    k : uint    //! slots a position
 }
 
 // the L tile with edge tiles
@@ -4802,6 +5433,24 @@ class K4KhrBatch : K4Cm2T {
     }
 }
 
+//! `kq_batch_k4_khr_cls`'s alternate off `K4Cm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_k4_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_k4_khr_cls", alt_bit = 1)]
+class K4KhrBatchRot : K4Cm2T {
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 [vk_dispatch(name = "q8_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q8KhrBatch : Q8Cm2T {
     override KHR = true
@@ -4817,6 +5466,25 @@ class Q8KhrBatch : Q8Cm2T {
         cm2_body()
     }
 }
+
+//! `q8_batch_khr_cls`'s alternate off `Q8Cm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "q8_batch_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "q8_batch_khr_cls", alt_bit = 1)]
+class Q8KhrBatchRot : Q8Cm2T {
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 
 //! a file's f32 rows under the template: a block is one 16-byte word of four f32 bit patterns; only the KHR stamp exists, so the
 //! decode serves the template's uncalled cm2 body alone
@@ -4860,9 +5528,45 @@ class F32KhrBatch : F32RowsKhrT {
     }
 }
 
+//! `f32_batch_khr_cls`'s alternate off `KqCm2BatchT`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "f32_batch_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "f32_batch_khr_cls", alt_bit = 1), arch(at = "../ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile")]
+class F32KhrBatchRot : F32RowsKhrT {
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 [vk_dispatch(name = "q51_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q51KhrBatch : Q51Cm2T {
     override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `q51_batch_khr_cls`'s alternate off `Q51Cm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "q51_batch_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "q51_batch_khr_cls", alt_bit = 1)]
+class Q51KhrBatchRot : Q51Cm2T {
+    override KHR = true
+    override KROT = 2u
     override BN = 128u
     override STILE = true
     typedef AT = coopmatWgA_f16_128x64
@@ -4892,9 +5596,45 @@ class Iq4nl32KhrBatch : Iq4nl32Cm2T {
     }
 }
 
+//! `iq4nl32_batch_khr_cls`'s alternate off `Iq4nl32Cm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "iq4nl32_batch_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "iq4nl32_batch_khr_cls", alt_bit = 1)]
+class Iq4nl32KhrBatchRot : Iq4nl32Cm2T {
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 [vk_dispatch(name = "q4032_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q4032KhrBatch : Q4032Cm2T {
     override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `q4032_batch_khr_cls`'s alternate off `Q4032Cm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "q4032_batch_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "q4032_batch_khr_cls", alt_bit = 1)]
+class Q4032KhrBatchRot : Q4032Cm2T {
+    override KHR = true
+    override KROT = 2u
     override BN = 128u
     override STILE = true
     typedef AT = coopmatWgA_f16_128x64
@@ -4924,9 +5664,45 @@ class Q5032KhrBatch : Q5032Cm2T {
     }
 }
 
+//! `q5032_batch_khr_cls`'s alternate off `Q5032Cm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "q5032_batch_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "q5032_batch_khr_cls", alt_bit = 1)]
+class Q5032KhrBatchRot : Q5032Cm2T {
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 [vk_dispatch(name = "mx4_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Mx4KhrBatch : Mx4Cm2T {
     override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `mx4_batch_khr_cls`'s alternate off `Mx4Cm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "mx4_batch_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "mx4_batch_khr_cls", alt_bit = 1)]
+class Mx4KhrBatchRot : Mx4Cm2T {
+    override KHR = true
+    override KROT = 2u
     override BN = 128u
     override STILE = true
     typedef AT = coopmatWgA_f16_128x64
@@ -4956,9 +5732,45 @@ class K5KhrBatch : K5Cm2T {
     }
 }
 
+//! `kq_batch_k5_khr_cls`'s alternate off `K5Cm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_k5_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_k5_khr_cls", alt_bit = 1)]
+class K5KhrBatchRot : K5Cm2T {
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 [vk_dispatch(name = "kq_batch_k6_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K6KhrBatch : K6Cm2T {
     override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `kq_batch_k6_khr_cls`'s alternate off `K6Cm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_k6_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_k6_khr_cls", alt_bit = 1)]
+class K6KhrBatchRot : K6Cm2T {
+    override KHR = true
+    override KROT = 2u
     override BN = 128u
     override STILE = true
     typedef AT = coopmatWgA_f16_128x64
@@ -4988,9 +5800,45 @@ class Q40KhrBatch : Q40Cm2T {
     }
 }
 
+//! `kq_batch_q40_khr_cls`'s alternate off `Q40Cm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_q40_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_q40_khr_cls", alt_bit = 1)]
+class Q40KhrBatchRot : Q40Cm2T {
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 [vk_dispatch(name = "kq_batch_iq4xs_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq4xsKhrBatch : Iq4xsCm2T {
     override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `kq_batch_iq4xs_khr_cls`'s alternate off `Iq4xsCm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_iq4xs_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_iq4xs_khr_cls", alt_bit = 1)]
+class Iq4xsKhrBatchRot : Iq4xsCm2T {
+    override KHR = true
+    override KROT = 2u
     override BN = 128u
     override STILE = true
     typedef AT = coopmatWgA_f16_128x64
@@ -5020,9 +5868,45 @@ class Iq3s4KhrBatch : Iq3s4Cm2T {
     }
 }
 
+//! `kq_batch_iq3s4_khr_cls`'s alternate off `Iq3s4Cm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_iq3s4_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_iq3s4_khr_cls", alt_bit = 1)]
+class Iq3s4KhrBatchRot : Iq3s4Cm2T {
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 [vk_dispatch(name = "kq_batch_k3_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K3KhrBatch : K3Cm2T {
     override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `kq_batch_k3_khr_cls`'s alternate off `K3Cm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_k3_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_k3_khr_cls", alt_bit = 1)]
+class K3KhrBatchRot : K3Cm2T {
+    override KHR = true
+    override KROT = 2u
     override BN = 128u
     override STILE = true
     typedef AT = coopmatWgA_f16_128x64
@@ -5052,6 +5936,24 @@ class Iq3sKhrBatch : Iq3sCm2T {
     }
 }
 
+//! `kq_batch_iq3s_khr_cls`'s alternate off `Iq3sCm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_iq3s_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_iq3s_khr_cls", alt_bit = 1)]
+class Iq3sKhrBatchRot : Iq3sCm2T {
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 [vk_dispatch(name = "kq_batch_iq3xxs_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq3xxsKhrBatch : Iq3xxsCm2T {
     override KHR = true
@@ -5068,9 +5970,45 @@ class Iq3xxsKhrBatch : Iq3xxsCm2T {
     }
 }
 
+//! `kq_batch_iq3xxs_khr_cls`'s alternate off `Iq3xxsCm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_iq3xxs_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_iq3xxs_khr_cls", alt_bit = 1)]
+class Iq3xxsKhrBatchRot : Iq3xxsCm2T {
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 [vk_dispatch(name = "kq_batch_iq4nl_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq4nlKhrBatch : Iq4nlCm2T {
     override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `kq_batch_iq4nl_khr_cls`'s alternate off `Iq4nlCm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_iq4nl_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_iq4nl_khr_cls", alt_bit = 1)]
+class Iq4nlKhrBatchRot : Iq4nlCm2T {
+    override KHR = true
+    override KROT = 2u
     override BN = 128u
     override STILE = true
     typedef AT = coopmatWgA_f16_128x64
@@ -5101,9 +6039,45 @@ class Nv4KhrBatch : Nv4Cm2T {
     }
 }
 
+//! `kq_batch_nv4_khr_cls`'s alternate off `Nv4Cm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_nv4_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_nv4_khr_cls", alt_bit = 1)]
+class Nv4KhrBatchRot : Nv4Cm2T {
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 [vk_dispatch(name = "kq_batch_k2_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K2KhrBatch : K2Cm2T {
     override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `kq_batch_k2_khr_cls`'s alternate off `K2Cm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_k2_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_k2_khr_cls", alt_bit = 1)]
+class K2KhrBatchRot : K2Cm2T {
+    override KHR = true
+    override KROT = 2u
     override BN = 128u
     override STILE = true
     typedef AT = coopmatWgA_f16_128x64
@@ -5133,6 +6107,24 @@ class Iq2sKhrBatch : Iq2sCm2T {
     }
 }
 
+//! `kq_batch_iq2s_khr_cls`'s alternate off `Iq2sCm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_iq2s_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_iq2s_khr_cls", alt_bit = 1)]
+class Iq2sKhrBatchRot : Iq2sCm2T {
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 [vk_dispatch(name = "kq_batch_iq2xs_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq2xsKhrBatch : Iq2xsCm2T {
     override KHR = true
@@ -5149,9 +6141,45 @@ class Iq2xsKhrBatch : Iq2xsCm2T {
     }
 }
 
+//! `kq_batch_iq2xs_khr_cls`'s alternate off `Iq2xsCm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_iq2xs_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_iq2xs_khr_cls", alt_bit = 1)]
+class Iq2xsKhrBatchRot : Iq2xsCm2T {
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 [vk_dispatch(name = "kq_batch_iq2xxs_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq2xxsKhrBatch : Iq2xxsCm2T {
     override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `kq_batch_iq2xxs_khr_cls`'s alternate off `Iq2xxsCm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_iq2xxs_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_iq2xxs_khr_cls", alt_bit = 1)]
+class Iq2xxsKhrBatchRot : Iq2xxsCm2T {
+    override KHR = true
+    override KROT = 2u
     override BN = 128u
     override STILE = true
     typedef AT = coopmatWgA_f16_128x64
@@ -6365,6 +7393,87 @@ class Q8Gemv : Q8GemvT {
     }
 }
 
+//! the q8 decode GEMV's load-ahead form (`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps`): the loads of four whole passes,
+//! then of two, issue ahead of their dots, so a wave waits on its loads once a step where `Q8GemvT` waits a pass; the row's
+//! last passes are `Q8GemvT`'s guarded ones, and each row's sum is `Q8GemvT`'s, term for term
+[ |> template_struct_instance]
+class template Q8GemvAheadT : Q8GemvT {
+    [spirv_inline, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#gemv-region-walk")]
+    def gemv_ahead_body {
+        let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
+        if (rg < pa.nreg * pa.d) {
+            let r = rg % pa.nreg
+            let row = rg / pa.nreg
+            let nb = pa.n / 32u
+            let wb0 = regions[r * 2u] + row * nb
+            let xb0 = regions[r * 2u + 1u]
+            let lane = gl_SubgroupInvocationID
+            let bpp = gl_SubgroupSize / 2u
+            var acc = 0.0
+            var bi0 = 0u
+            while (bi0 + 4u * bpp <= nb) {
+                let b = bi0 + lane / 2u
+                var w, x : uint4[4]
+                var ws, xs : float[4]
+                for [unroll_full] (u in range(4)) {
+                    w[u] = wq4[(wb0 + bi0 + uint(u) * bpp) * 2u + lane]
+                    x[u] = xq4[(xb0 + bi0 + uint(u) * bpp) * 2u + lane]
+                    ws[u] = float(wsh[wb0 + b + uint(u) * bpp])
+                    xs[u] = axs[xb0 + b + uint(u) * bpp]
+                }
+                for [unroll_full] (u in range(4)) {
+                    let idot = q8_pair_dot(w[u], x[u])
+                    if (lane % 2u == 0u) {
+                        acc = mad(float(idot) * ws[u], xs[u], acc)
+                    }
+                }
+                bi0 += 4u * bpp
+            }
+            if (bi0 + 2u * bpp <= nb) {
+                let b = bi0 + lane / 2u
+                var w, x : uint4[2]
+                var ws, xs : float[2]
+                for [unroll_full] (u in range(2)) {
+                    w[u] = wq4[(wb0 + bi0 + uint(u) * bpp) * 2u + lane]
+                    x[u] = xq4[(xb0 + bi0 + uint(u) * bpp) * 2u + lane]
+                    ws[u] = float(wsh[wb0 + b + uint(u) * bpp])
+                    xs[u] = axs[xb0 + b + uint(u) * bpp]
+                }
+                for [unroll_full] (u in range(2)) {
+                    let idot = q8_pair_dot(w[u], x[u])
+                    if (lane % 2u == 0u) {
+                        acc = mad(float(idot) * ws[u], xs[u], acc)
+                    }
+                }
+                bi0 += 2u * bpp
+            }
+            while (bi0 < nb) {
+                let b = bi0 + lane / 2u
+                if (b < nb) {
+                    let idot = q8_pair_dot(wq4[(wb0 + bi0) * 2u + lane], xq4[(xb0 + bi0) * 2u + lane])
+                    if (lane % 2u == 0u) {
+                        acc = mad(float(idot) * float(wsh[wb0 + b]), axs[xb0 + b], acc)
+                    }
+                }
+                bi0 += bpp
+            }
+            let total = subgroupAdd(acc)
+            if (subgroupElect()) {
+                y[pa.ybase + r * pa.d + row] = total
+            }
+        }
+    }
+}
+
+//! `q8_gemv_cls`'s alternate off `Q8GemvT`: the load-ahead form at the device's own subgroup width
+[vk_dispatch(name = "q8_gemv_ahead_cls", grid = "wgs", params = "wgs : int64", subgroup = "own", alt_of = "q8_gemv_cls", alt_bit = 0)]
+class Q8GemvAhead : Q8GemvAheadT {
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q8_gemv_ahead_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps")]
+    def run {
+        gemv_ahead_body()
+    }
+}
+
 [vk_dispatch(name = "q8_gemv_n2_cls", grid = "wgs", params = "wgs : int64")]
 class Q8GemvN2 : Q8GemvNT {
     override NC = 2
@@ -6428,6 +7537,78 @@ class Q8GemvN8P : Q8GemvNT {
     }
 }
 
+//! `q8_gemv_n2_cls` off `Q8GemvNT` on the rotated walk (`KROT`): a plane whose rows sit a power of two apart, on a device that asks
+[vk_dispatch(name = "q8_gemv_n2r_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvN2R : Q8GemvNT {
+    override NC = 2
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
+    def run {
+        gemv_n_body()
+    }
+}
+
+//! `q8_gemv_n4_cls` off `Q8GemvNT` on the rotated walk (`KROT`): a plane whose rows sit a power of two apart, on a device that asks
+[vk_dispatch(name = "q8_gemv_n4r_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvN4R : Q8GemvNT {
+    override NC = 4
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
+    def run {
+        gemv_n_body()
+    }
+}
+
+//! `q8_gemv_n8_cls` off `Q8GemvNT` on the rotated walk (`KROT`): a plane whose rows sit a power of two apart, on a device that asks
+[vk_dispatch(name = "q8_gemv_n8r_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvN8R : Q8GemvNT {
+    override NC = 8
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
+    def run {
+        gemv_n_body()
+    }
+}
+
+//! `q8_gemv_n2r_cls` off `Q8GemvNT` at the device's own subgroup width: a row that is one pass of it
+[vk_dispatch(name = "q8_gemv_n2o_cls", grid = "wgs", params = "wgs : int64", subgroup = "own")]
+class Q8GemvN2O : Q8GemvNT {
+    override NC = 2
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
+    def run {
+        gemv_n_body()
+    }
+}
+
+//! `q8_gemv_n4r_cls` off `Q8GemvNT` at the device's own subgroup width: a row that is one pass of it
+[vk_dispatch(name = "q8_gemv_n4o_cls", grid = "wgs", params = "wgs : int64", subgroup = "own")]
+class Q8GemvN4O : Q8GemvNT {
+    override NC = 4
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
+    def run {
+        gemv_n_body()
+    }
+}
+
+//! `q8_gemv_n8r_cls` off `Q8GemvNT` at the device's own subgroup width: a row that is one pass of it
+[vk_dispatch(name = "q8_gemv_n8o_cls", grid = "wgs", params = "wgs : int64", subgroup = "own")]
+class Q8GemvN8O : Q8GemvNT {
+    override NC = 8
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
+    def run {
+        gemv_n_body()
+    }
+}
+
 //! the q8 decode GEMV carrying the residual step as its last workgroup's epilogue (`Q8GemvArT`)
 [vk_dispatch(name = "q8_gemv_ar_cls", grid = "wgs", params = "wgs : int64")]
 class Q8GemvAr : Q8GemvArT {
@@ -6437,6 +7618,16 @@ class Q8GemvAr : Q8GemvArT {
     }
 }
 
+//! `q8_gemv_ar_cls`'s alternate off `Q8GemvArT`: every row's walk of K rotated by the row's index
+[vk_dispatch(name = "q8_gemv_ar_rot_cls", grid = "wgs", params = "wgs : int64", alt_of = "q8_gemv_ar_cls", alt_bit = 3)]
+class Q8GemvArRot : Q8GemvArT {
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 256, name = "q8_gemv_ar_rot_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps")]
+    def run {
+        gemv_ar_body()
+    }
+}
 [vk_dispatch(name = "q8_gemv_gu_n1_cls", grid = "wgs", params = "wgs : int64")]
 class Q8GemvGuN1 : Q8GemvGuNT {
     override NC = 1
@@ -7127,6 +8318,35 @@ def gemv_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescr
 //! and mx4 stamp another template), and the per-32 and mx4 one
 let private GEMV_N_KQ = "q8 q51 mx4 iq4nl32 q4032 q5032"
 let private GEMV_N_B32 = "q8 k4 q40 iq4xs iq3s4 iq3s iq3xxs iq4nl nv4 k3 k2 k5 k6 iq2s iq2xs iq2xxs"
+//! the rotated twins' ladder: the superblock formats with none (their quant rows never sit a power of two apart) join the skips
+let private GEMV_N_ROT = "q8 q51 mx4 iq4nl32 q4032 q5032 iq3s iq3xxs k3 k5 k6 iq2s"
+
+let private GEMV_N_ROT_LEAVES = "nr_cls n4r_cls"   //! the rotated twins a format on the ladder stamps: the eight-column leaf, the four-column one
+
+//! a format whose N-column leaves have rotated twins: one the rotated ladder stamps
+def gemv_n_rot_fmt(fmt : int) : bool {
+    let leaf = 0
+    return kq_tile_stamped(fmt, GEMV_N_ROT, leaf, GEMV_N_ROT_LEAVES)
+}
+
+var g_gemv_n_rot_any = false   //! PROBE SEAM: every format with rotated twins takes them at any stride, whatever the served set - a kernel cell's lever
+
+//! the least quant-row stride the rotated walk serves: under it the rows of a workgroup share lines whatever their spacing
+let GEMV_N_ROT_MIN_ROW = 1024l
+//! the stride step the rows of a workgroup collide at: rows a multiple of it apart read one column into the same lines
+let GEMV_N_ROT_ROW_STEP = 512l
+
+//! whether the N-column leaves over a plane of `fmt`, `n` wide, take their rotated twins: the served set asks
+//! (`VK_ALT_N_ROT`, an AMD device's own rule), the format has them, and its quant rows sit a multiple of
+//! `GEMV_N_ROT_ROW_STEP` apart - the IQ4_XS walk at any stride from the least
+[arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#ncol-rotated-walk")]
+def gemv_n_rot_wanted(fmt : int; n : uint) : bool {
+    return gemv_n_rot_fmt(fmt) if (g_gemv_n_rot_any)
+    return false if (!vk_gemv_n_rot() || !gemv_n_rot_fmt(fmt))
+    let f = kq_fmt_of_slot(fmt)
+    let row = dev_rows_bytes(f, int64(n), 1l).q
+    return row >= GEMV_N_ROT_MIN_ROW && (f == KqFmt.iq4xs || row % GEMV_N_ROT_ROW_STEP == 0l)
+}
 
 //! the superblock decode GEMV family's roster - q8 and every kq leaf, in enum order: what the probe's ruler walks (the
 //! per-32 expert GEMVs carry another plane shape, so the kernel cells walk every member themselves)
@@ -7172,14 +8392,58 @@ def gemv_cls_set_n(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gb
     return gemv_cls_set(fmt, bufs, sizes, gbits)
 }
 
+let Q8_N_ROT_OWN_UNDER = 2048u   //! under this row width the q8 rotated twin runs at the device's own subgroup width
+
+//! whether the q8 N-column GEMV over rows `n` wide takes its rotated twin: the served set asks, and the rows (`n` quant
+//! bytes each) sit a multiple of `GEMV_N_ROT_ROW_STEP` apart - under `Q8_N_ROT_OWN_UNDER` a power of two alone, the one
+//! pass of the device's own subgroup
+[arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#ncol-rotated-walk")]
+def q8_gemv_n_rot_wanted(n : uint) : bool {
+    return true if (g_gemv_n_rot_any)
+    return false if (!vk_gemv_n_rot() || int64(n) < GEMV_N_ROT_MIN_ROW || int64(n) % GEMV_N_ROT_ROW_STEP != 0l)
+    return n >= Q8_N_ROT_OWN_UNDER || (n & (n - 1u)) == 0u
+}
+
 //! the q8 N-column GEMV takes its row-pair twin: the lever armed, the reduction at least its width, an even output count
 def q8_gemv_pair_wanted(pc : GemvArgs) : bool => q8_pair_armed() && pc.n >= g_q8_n2_min_n && pc.d % 2u == 0u
+
+//! the q8 rotated twin for `pc.ncols` columns, false where its pipeline declines: at the device's own subgroup width where
+//! the row is short of two steps of the pinned one (`Q8_N_ROT_OWN_UNDER`), else at the pinned width
+def private q8_gemv_n_rot_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) : bool {
+    let own = pc.n < Q8_N_ROT_OWN_UNDER
+    if (pc.ncols <= 2u) {
+        return false if (!(own ? ensure_q8_gemv_n2o_cls() : ensure_q8_gemv_n2r_cls()))
+        if (own) {
+            enc_q8_gemv_n2o_cls(raw, h, set_, pc, wgs)
+        } else {
+            enc_q8_gemv_n2r_cls(raw, h, set_, pc, wgs)
+        }
+    } elif (pc.ncols <= 4u) {
+        return false if (!(own ? ensure_q8_gemv_n4o_cls() : ensure_q8_gemv_n4r_cls()))
+        if (own) {
+            enc_q8_gemv_n4o_cls(raw, h, set_, pc, wgs)
+        } else {
+            enc_q8_gemv_n4r_cls(raw, h, set_, pc, wgs)
+        }
+    } else {
+        return false if (!(own ? ensure_q8_gemv_n8o_cls() : ensure_q8_gemv_n8r_cls()))
+        if (own) {
+            enc_q8_gemv_n8o_cls(raw, h, set_, pc, wgs)
+        } else {
+            enc_q8_gemv_n8r_cls(raw, h, set_, pc, wgs)
+        }
+    }
+    return true
+}
 
 //! the q8 stamp for `pc.ncols` columns: the narrowest that holds them, the row-pair form past `g_q8_n2_min_n` on an even row count
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private q8_gemv_n_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
     let pair_wanted = q8_gemv_pair_wanted(pc)
     let g2 = (wgs + 1l) / 2l   //! a subgroup a row pair: half the row grid
+    if (!pair_wanted && q8_gemv_n_rot_wanted(pc.n)) {   // a q8 quant row is `n` bytes; each twin builds on first use
+        return if (q8_gemv_n_rot_enc(raw, h, set_, pc, wgs))
+    }
     if (pc.ncols <= 2u) {   //! each pair twin builds on first use, since the lever can move after the family's ensure ran
         if (pair_wanted && ensure_q8_gemv_n2p_cls()) {
             enc_q8_gemv_n2p_cls(raw, h, set_, pc, g2)
@@ -7206,6 +8470,19 @@ def gemv_cls_enc_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : V
     }
     if (kq_sb(fmt)) {   // a region's rows in groups of KQ_N_RR; the four-column stamps hold half the accumulators
         let gwgs = gemv_wgs(int64(pc.nreg) * ((int64(pc.d) + int64(KQ_N_RR) - 1l) / int64(KQ_N_RR)), pc.lanes_per_row)
+        if (gemv_n_rot_wanted(fmt, pc.n)) {   // each twin builds on first use: the served set can move after the family's ensure ran
+            let four = pc.ncols <= 4u
+            var built = false
+            kq_tile_stamp(fmt, GEMV_N_ROT, "gemv") <| $() {
+                built = four ? tile_ensure_n4r_cls() : tile_ensure_nr_cls()
+                if (built && four) {
+                    tile_enc_n4r_cls(raw, h, set_, pc, gwgs)
+                } elif (built) {
+                    tile_enc_nr_cls(raw, h, set_, pc, gwgs)
+                }
+            }
+            return if (built)
+        }
         if (pc.ncols <= 4u) {
             kq_tile_stamp(fmt, GEMV_N_KQ, "gemv") <| $() {
                 tile_enc_n4_cls(raw, h, set_, pc, gwgs)
@@ -7548,6 +8825,7 @@ class KqGemvK3N4 : K3GemvT {
     }
 }
 
+
 [vk_dispatch(name = "kq_gemv_k2_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK2 : K2GemvT {
     [spirv_kernel(local_size_x = 64)]
@@ -7579,6 +8857,7 @@ class KqGemvK2N4 : K2GemvT {
         leaf_body()
     }
 }
+
 
 [vk_dispatch(name = "kq_gemv_k5_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK5 : K5GemvT {
@@ -7612,6 +8891,7 @@ class KqGemvK5N4 : K5GemvT {
     }
 }
 
+
 [vk_dispatch(name = "kq_gemv_k6_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK6 : K6GemvT {
     [spirv_kernel(local_size_x = 64)]
@@ -7643,6 +8923,7 @@ class KqGemvK6N4 : K6GemvT {
         leaf_body()
     }
 }
+
 
 [vk_dispatch(name = "kq_gemv_iq2s_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq2s : Iq2sGemvT {
@@ -7686,6 +8967,7 @@ class KqGemvIq2sGu : Iq2sGemvT {
     }
 }
 
+
 [vk_dispatch(name = "kq_gemv_iq2xs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq2xs : Iq2xsGemvT {
     [spirv_kernel(local_size_x = 64)]
@@ -7718,6 +9000,7 @@ class KqGemvIq2xsN4 : Iq2xsGemvT {
     }
 }
 
+
 [vk_dispatch(name = "kq_gemv_iq2xxs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq2xxs : Iq2xxsGemvT {
     [spirv_kernel(local_size_x = 64)]
@@ -7743,6 +9026,251 @@ class KqGemvIq2xxsN4 : Iq2xxsGemvT {
     override NCOL = true
     override RR = 2
     override NCMAX = 4
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K4GemvT`'s N leaves on the rotated walk (`KROT`): eight columns, then four
+[vk_dispatch(name = "kq_gemv_k4_nr_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK4NR : K4GemvT {
+    override NCOL = true
+    override RR = 2
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `KqGemvK4NR` off `K4GemvT` at four columns
+[vk_dispatch(name = "kq_gemv_k4_n4r_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK4N4R : K4GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Q40GemvT`'s N leaves on the rotated walk (`KROT`): eight columns, then four
+[vk_dispatch(name = "kq_gemv_q40_nr_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvQ40NR : Q40GemvT {
+    override NCOL = true
+    override RR = 2
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `KqGemvQ40NR` off `Q40GemvT` at four columns
+[vk_dispatch(name = "kq_gemv_q40_n4r_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvQ40N4R : Q40GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq4xsGemvT`'s N leaves on the rotated walk (`KROT`): eight columns, then four
+[vk_dispatch(name = "kq_gemv_iq4xs_nr_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq4xsNR : Iq4xsGemvT {
+    override NCOL = true
+    override RR = 2
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `KqGemvIq4xsNR` off `Iq4xsGemvT` at four columns
+[vk_dispatch(name = "kq_gemv_iq4xs_n4r_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq4xsN4R : Iq4xsGemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq4xsGemvT`'s N leaves on the rotated walk (`KROT`): eight columns, then four
+[vk_dispatch(name = "kq_gemv_iq3s4_nr_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq3s4NR : Iq4xsGemvT {
+    override IQODD = true
+    override NCOL = true
+    override RR = 2
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `KqGemvIq3s4NR` off `Iq4xsGemvT` at four columns
+[vk_dispatch(name = "kq_gemv_iq3s4_n4r_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq3s4N4R : Iq4xsGemvT {
+    override IQODD = true
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq4nlGemvT`'s N leaves on the rotated walk (`KROT`): eight columns, then four
+[vk_dispatch(name = "kq_gemv_iq4nl_nr_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq4nlNR : Iq4nlGemvT {
+    override NCOL = true
+    override RR = 2
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `KqGemvIq4nlNR` off `Iq4nlGemvT` at four columns
+[vk_dispatch(name = "kq_gemv_iq4nl_n4r_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq4nlN4R : Iq4nlGemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Nv4GemvT`'s N leaves on the rotated walk (`KROT`): eight columns, then four
+[vk_dispatch(name = "kq_gemv_nv4_nr_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvNv4NR : Nv4GemvT {
+    override NCOL = true
+    override RR = 2
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `KqGemvNv4NR` off `Nv4GemvT` at four columns
+[vk_dispatch(name = "kq_gemv_nv4_n4r_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvNv4N4R : Nv4GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K2GemvT`'s N leaves on the rotated walk (`KROT`): eight columns, then four
+[vk_dispatch(name = "kq_gemv_k2_nr_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK2NR : K2GemvT {
+    override NCOL = true
+    override RR = 2
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `KqGemvK2NR` off `K2GemvT` at four columns
+[vk_dispatch(name = "kq_gemv_k2_n4r_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK2N4R : K2GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq2xsGemvT`'s N leaves on the rotated walk (`KROT`): eight columns, then four
+[vk_dispatch(name = "kq_gemv_iq2xs_nr_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq2xsNR : Iq2xsGemvT {
+    override NCOL = true
+    override RR = 2
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `KqGemvIq2xsNR` off `Iq2xsGemvT` at four columns
+[vk_dispatch(name = "kq_gemv_iq2xs_n4r_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq2xsN4R : Iq2xsGemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq2xxsGemvT`'s N leaves on the rotated walk (`KROT`): eight columns, then four
+[vk_dispatch(name = "kq_gemv_iq2xxs_nr_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq2xxsNR : Iq2xxsGemvT {
+    override NCOL = true
+    override RR = 2
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `KqGemvIq2xxsNR` off `Iq2xxsGemvT` at four columns
+[vk_dispatch(name = "kq_gemv_iq2xxs_n4r_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq2xxsN4R : Iq2xxsGemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+    override KROT = true
 
     [spirv_kernel(local_size_x = 64)]
     def run {
@@ -8939,4 +10467,459 @@ def vk_split_knee_race : int64 {
     }
     set_vk_split_k_tgs(tgs)
     return tgs
+}
+
+//! a shape's synthetic planes: a ring of hashed q8 weight copies past the card's last-level cache, the one activation row and
+//! region pair they share, and two outputs the dispatches alternate
+struct private AltGemvSite {
+    wq, ws : array<uint64>
+    regs, xq, xs : uint64
+    ys : uint64[2]
+    wq_bytes, ws_bytes, xq_bytes, xs_bytes, y_bytes : int64
+}
+
+def private alt_gemv_site(n, d : int64) : AltGemvSite {
+    let rb = dev_rows_bytes(KqFmt.q8, n, d)
+    var st = AltGemvSite(wq_bytes = rb.q, ws_bytes = rb.s, xq_bytes = n, xs_bytes = n / 32l * 4l, y_bytes = d * 4l)
+    let copies = int(max(2l, KNEE_DISCRETE_RING_BYTES / (rb.q + rb.s) + 1l))
+    st.wq |> reserve(copies)
+    st.ws |> reserve(copies)
+    for (c in range(copies)) {
+        st.wq |> push(make_staged_buf(st.wq_bytes) $(var words) {
+            for (i in range64(st.wq_bytes / 4l)) {
+                unsafe(words[i]) = knee_q8_word(uint(i), uint(c))
+            }
+        })
+        st.ws |> push(make_staged_buf(st.ws_bytes) $(var words) {
+            for (i in range64(st.ws_bytes / 4l)) {
+                unsafe(words[i]) = KNEE_Q8_SCALE_WORD
+            }
+        })
+    }
+    st.regs = make_staged_buf(8l) $(var words) {
+        unsafe(words[0]) = 0u
+        unsafe(words[1]) = 0u
+    }
+    st.xq = make_staged_buf(st.xq_bytes) $(var words) {
+        for (i in range64(st.xq_bytes / 4l)) {
+            unsafe(words[i]) = knee_q8_word(uint(i), 0x7Fu)
+        }
+    }
+    st.xs = make_staged_buf(st.xs_bytes) $(var words) {
+        for (i in range64(st.xs_bytes / 4l)) {
+            unsafe(words[i]) = float_bits_to_uint(0.25)
+        }
+    }
+    for (i in range(2)) {
+        st.ys[i] = make_device_buf(st.y_bytes)
+    }
+    return <- st
+}
+
+def private alt_gemv_site_release(var st : AltGemvSite) {
+    for (b in st.wq) {
+        destroy_device_buf(b)
+    }
+    for (b in st.ws) {
+        destroy_device_buf(b)
+    }
+    for (b in st.ys) {
+        destroy_device_buf(b)
+    }
+    destroy_device_buf(st.regs)
+    destroy_device_buf(st.xq)
+    destroy_device_buf(st.xs)
+    delete st
+}
+
+//! one arm's `KNEE_STEPS` dispatches back to back, the weights a copy of the ring a dispatch, the output the other of the two
+def private alt_gemv_arm(st : AltGemvSite; n, d : int64; ahead : bool) : VkCommandBuffer {
+    let sizes = fixed_array(st.wq_bytes, st.ws_bytes, 8l, st.xq_bytes, st.xs_bytes, st.y_bytes)
+    var sets : array<VkDescriptorSet>
+    sets |> reserve(KNEE_STEPS)
+    for (i in range(KNEE_STEPS)) {
+        let c = i % length(st.wq)
+        let bufs = fixed_array(st.wq[c], st.ws[c], st.regs, st.xq, st.xs, st.ys[i & 1])
+        let bits = fixed_array(0u, 0u, 0u, 0u, 0u, 1u << uint(i & 1))
+        sets |> push(ahead ? set_q8_gemv_ahead_cls(bufs, sizes, bits) : set_q8_gemv_cls(bufs, sizes, bits))
+    }
+    let wgs = gemv_wgs(d, 0u)
+    var arm = knee_arm_cmd() $(raw) {
+        var h : VkHaz
+        var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u)
+        for (i in range(KNEE_STEPS)) {
+            var set = sets[i]
+            if (ahead) {
+                enc_q8_gemv_ahead_cls(raw, h, set, pc, wgs)
+            } else {
+                enc_q8_gemv_cls(raw, h, set, pc, wgs)
+            }
+        }
+    }
+    sets |> clear()
+    return arm
+}
+
+//! the q8 decode GEMV's arm: whether the load-ahead stamp's summed time over `ALT_Q8_GEMV_N` by `ALT_Q8_GEMV_D` is under 0.97 of the class's
+def private alt_q8_gemv_wins : bool {
+    if (!ensure_q8_gemv_cls() || !ensure_q8_gemv_ahead_cls()) {
+        to_log(LOG_INFO, "dasLLAMA vulkan: alternate-stamp race - the q8 GEMV classes did not arm, the class stamp serves\n")
+        return false
+    }
+    var own = 0.0lf
+    var ahead = 0.0lf
+    for (n, d in ALT_Q8_GEMV_N, ALT_Q8_GEMV_D) {
+        var st <- alt_gemv_site(n, d)
+        var raw_own = alt_gemv_arm(st, n, d, false)
+        var raw_ahead = alt_gemv_arm(st, n, d, true)
+        let us = knee_arms_us($ {
+            submit_wait(raw_own)
+        }) $ {
+            submit_wait(raw_ahead)
+        }
+        to_log(LOG_INFO, "vk alt q8_gemv n {n} d {d}: own {us.b} us, ahead {us.t} us  timing-only\n")
+        own += us.b
+        ahead += us.t
+        alt_gemv_site_release(st)
+    }
+    return ahead < own * 0.97lf
+}
+
+//! a window shape's synthetic planes for the KHR tile: a ring of hashed q8 weight copies past the card's last-level cache, the
+//! f16 activation rows with the tile's read slack, the one-region schedule, and two outputs the dispatches alternate
+struct private AltGemmSite {
+    wq, ws : array<uint64>
+    xf, sched : uint64
+    ys : uint64[2]
+    wq_bytes, ws_bytes, xf_bytes, sched_bytes, y_bytes, tiles : int64
+}
+
+def private alt_gemm_site(n, d : int64) : AltGemmSite {
+    let rb = dev_rows_bytes(KqFmt.q8, n, d)
+    let tiles = cm2_tiles_at(d, ALT_KHR_ROWS, 128l)
+    var st = AltGemmSite(wq_bytes = rb.q, ws_bytes = rb.s, xf_bytes = (ALT_KHR_ROWS + TILE_READ_SLACK) * n * 2l,
+        sched_bytes = (4l + tiles) * 4l, y_bytes = ALT_KHR_ROWS * d * 4l, tiles = tiles)
+    let copies = int(max(2l, KNEE_DISCRETE_RING_BYTES / (rb.q + rb.s) + 1l))
+    st.wq |> reserve(copies)
+    st.ws |> reserve(copies)
+    for (c in range(copies)) {
+        st.wq |> push(make_staged_buf(st.wq_bytes) $(var words) {
+            for (i in range64(st.wq_bytes / 4l)) {
+                unsafe(words[i]) = knee_q8_word(uint(i), uint(c))
+            }
+        })
+        st.ws |> push(make_staged_buf(st.ws_bytes) $(var words) {
+            for (i in range64(st.ws_bytes / 4l)) {
+                unsafe(words[i]) = KNEE_Q8_SCALE_WORD
+            }
+        })
+    }
+    st.xf = make_staged_buf(st.xf_bytes) $(var words) {
+        for (i in range64(st.xf_bytes / 4l)) {
+            unsafe(words[i]) = knee_xf_word(uint(i))
+        }
+    }
+    st.sched = make_staged_buf(st.sched_bytes) $(var words) {
+        var cur = 4l
+        batch_sched_map(words, cur, 0l, 0l, ALT_KHR_ROWS, tiles)
+    }
+    for (i in range(2)) {
+        st.ys[i] = make_device_buf(st.y_bytes)
+    }
+    return <- st
+}
+
+def private alt_gemm_site_release(var st : AltGemmSite) {
+    for (b in st.wq) {
+        destroy_device_buf(b)
+    }
+    for (b in st.ws) {
+        destroy_device_buf(b)
+    }
+    for (b in st.ys) {
+        destroy_device_buf(b)
+    }
+    destroy_device_buf(st.xf)
+    destroy_device_buf(st.sched)
+    delete st
+}
+
+//! one arm's `KNEE_STEPS` window GEMMs back to back, the weights a copy of the ring a dispatch, the output the other of the two
+def private alt_gemm_arm(st : AltGemmSite; n, d : int64; rotated : bool) : VkCommandBuffer {
+    let sizes = fixed_array(st.wq_bytes, st.ws_bytes, st.sched_bytes, st.xf_bytes, st.y_bytes)
+    var sets : array<VkDescriptorSet>
+    sets |> reserve(KNEE_STEPS)
+    for (i in range(KNEE_STEPS)) {
+        let c = i % length(st.wq)
+        let bufs = fixed_array(st.wq[c], st.ws[c], st.sched, st.xf, st.ys[i & 1])
+        let bits = fixed_array(0u, 0u, 0u, 0u, 1u << uint(i & 1))
+        sets |> push(rotated ? set_q8_batch_khr_rot_cls(bufs, sizes, bits) : set_q8_batch_khr_cls(bufs, sizes, bits))
+    }
+    var arm = knee_arm_cmd() $(raw) {
+        var h : VkHaz
+        var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = 0u)
+        for (i in range(KNEE_STEPS)) {
+            var set = sets[i]
+            if (rotated) {
+                enc_q8_batch_khr_rot_cls(raw, h, set, pc, st.tiles)
+            } else {
+                enc_q8_batch_khr_cls(raw, h, set, pc, st.tiles)
+            }
+        }
+    }
+    sets |> clear()
+    return arm
+}
+
+//! the KHR window tile's arm, on the q8 stamp: whether the rotated walk's summed time over `ALT_KHR_N` by `ALT_KHR_D` at
+//! `ALT_KHR_ROWS` rows is under 0.97 of the class's; the device serves no KHR tile, the class stamp stands
+def private alt_khr_rot_wins : bool {
+    if (g_gpu.coopmat_mode != COOPMAT_MM || !khr_kq_tile_on() || !ensure_q8_batch_khr_cls() || !ensure_q8_batch_khr_rot_cls()) {
+        to_log(LOG_INFO, "dasLLAMA vulkan: alternate-stamp race - no KHR window tile on this device, the class stamps serve\n")
+        return false
+    }
+    var own = 0.0lf
+    var rot = 0.0lf
+    for (n, d in ALT_KHR_N, ALT_KHR_D) {
+        var st <- alt_gemm_site(n, d)
+        var raw_own = alt_gemm_arm(st, n, d, false)
+        var raw_rot = alt_gemm_arm(st, n, d, true)
+        let us = knee_arms_us($ {
+            submit_wait(raw_own)
+        }) $ {
+            submit_wait(raw_rot)
+        }
+        to_log(LOG_INFO, "vk alt khr_rot n {n} d {d}: own {us.b} us, rotated {us.t} us  timing-only\n")
+        own += us.b
+        rot += us.t
+        alt_gemm_site_release(st)
+    }
+    return rot < own * 0.97lf
+}
+
+//! The device check the int8 tiles stand on, one subgroup: the product of A[r] = (r + 1, 1, 0 ..) by B[c] = (17, c, 0 ..)
+//! reads 17 (r + 1) + c at element (r, c), every lane writing its eight elements in its own order - the lane layout -
+//! and two 16-deep products of A = -1 by B[k] = k + 1 into one accumulator read -528, the whole depth with signed bytes
+[vk_dispatch(name = "mmq_probe_cls", grid = "wgs", params = "wgs : int64")]
+class MmqProbe {
+    @ssbo @binding = 0 elems : array<uint>   //! [lane][e], then a lane's depth sum
+    @push_constant pa : MmqInvArgs
+    @workgroup la : uint[128]   //! 16 rows x 8 words
+    @workgroup lb : uint[128]   //! 16 columns x 8 words
+
+    [spirv_kernel(local_size_x = 32, name = "mmq_probe_cls_spv")]
+    def run {
+        let tid = gl_LocalInvocationID.x
+        if (tid < 16u) {
+            la[tid * 8u] = (tid + 1u) | (1u << 8u)
+            lb[tid * 8u] = 17u | (tid << 8u)
+            for [unroll_full] (i in range(7)) {
+                la[tid * 8u + 1u + uint(i)] = 0u
+                lb[tid * 8u + 1u + uint(i)] = 0u
+            }
+        }
+        barrier()
+        var a : coopmatA_s8_16x16
+        var b : coopmatB_s8_16x16
+        coopmatLoad(a, la, 0, 8, 0)
+        coopmatLoad(b, lb, 0, 8, 1)
+        var p : coopmatAcc_s32_16x16
+        p = coopmatMulAdd(a, b, p)   // nolint:STYLE011 — MulAdd seeds from its own zero-init tile
+        for [unroll_full] (e in range(8)) {
+            elems[gl_SubgroupInvocationID * 8u + uint(e)] = uint(coopmatElem(p, uint(e))) + pa.nk
+        }
+        barrier()
+        if (tid < 16u) {
+            for [unroll_full] (i in range(8)) {
+                la[tid * 8u + uint(i)] = 0xFFFFFFFFu
+                lb[tid * 8u + uint(i)] = 0x04030201u + uint(i) * 0x04040404u
+            }
+        }
+        barrier()
+        var al, ah : coopmatA_s8_16x16
+        var bl, bh : coopmatB_s8_16x16
+        coopmatLoad(al, la, 0, 8, 0)
+        coopmatLoad(ah, la, 4, 8, 0)
+        coopmatLoad(bl, lb, 0, 8, 1)
+        coopmatLoad(bh, lb, 4, 8, 1)
+        var q : coopmatAcc_s32_16x16
+        q = coopmatMulAdd(al, bl, q)   // nolint:STYLE011 — MulAdd seeds from its own zero-init tile
+        q = coopmatMulAdd(ah, bh, q)
+        elems[256u + gl_SubgroupInvocationID] = uint(coopmatElem(q, 0u))
+    }
+}
+
+let private MMQ_PROBE_BYTES = 1152l   //! 32 lanes x 8 elements, then 32 depth sums
+
+//! whether the device's s8 products read as `KqMmqKhrT` assumes: lane L's element e is (L / 16 + 2e, L % 16), and the two
+//! 16-deep products sum the whole depth, signed
+def private mmq_device_probe : bool {
+    return false if (!khr_kq_tile_on() || !ensure_mmq_probe_cls())
+    let dev = make_device_buf(MMQ_PROBE_BYTES)
+    var set = set_mmq_probe_cls(fixed_array(dev), fixed_array(MMQ_PROBE_BYTES), fixed_array(1u))
+    var raw = knee_arm_cmd() $(r) {
+        var h : VkHaz
+        var pc = MmqInvArgs(nk = 0u, k = 0u)
+        enc_mmq_probe_cls(r, h, set, pc, 1l)
+    }
+    submit_wait(raw)
+    var words : array<float>
+    words |> resize(MMQ_PROBE_BYTES / 4l)
+    var host = make_host_buf(MMQ_PROBE_BYTES, true, [cached = true])
+    readback_range(dev, 0u, host, unsafe(addr(words[0])), MMQ_PROBE_BYTES)
+    destroy_host_buf(host)
+    destroy_device_buf(dev)
+    var off = 0
+    for (lane in range(32)) {
+        for (e in range(8)) {
+            off += float_bits_to_uint(words[lane * 8 + e]) == uint(17 * (lane / 16 + 2 * e + 1) + lane % 16) ? 0 : 1
+        }
+        off += int(float_bits_to_uint(words[256 + lane])) == -528 ? 0 : 1
+    }
+    delete words
+    if (off != 0) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan: the device's s8 cooperative-matrix products do not read as the int8 tiles assume ({off} of 288 checks off) - the f16 tiles serve\n")
+    }
+    return off == 0
+}
+
+var private g_mmq_device = 0   //! 0 unasked; 1 the device's s8 products read as the int8 tiles assume; -1 they do not
+
+[init]
+def private seat_mmq_device_check {
+    register_vk_mmq_device_check(@@vk_mmq_device_ok)
+}
+
+//! whether the int8 tiles may serve on this device (`mmq_device_probe`, asked once)
+[arch(at = "../ARCHITECTURE_GPU_VULKAN_KHR.md#khr-int8-tiles")]
+def vk_mmq_device_ok : bool {
+    if (g_mmq_device == 0) {
+        g_mmq_device = mmq_device_probe() ? 1 : -1
+    }
+    return g_mmq_device > 0
+}
+
+//! the window's scan site at the race's shape: unit-scale conv rows, gates inside the rule's stable range, and the state both
+//! arms advance in place - a layer's scan reads the state the window before left
+struct private AltDnSite {
+    conv, state, smalls, o, caps, snap : uint64
+    conv_bytes, state_bytes, smalls_bytes, o_bytes : int64
+    cd, kd, di : int64
+}
+
+let private ALT_DN_CAP_BYTES = 16l   //! the capture records' plane: the race captures nothing
+
+def private alt_dn_site : AltDnSite {
+    let kd = ALT_DN_KEY_HEADS * ALT_DN_HEAD
+    let di = ALT_DN_VALUE_HEADS * ALT_DN_HEAD
+    let gates = ALT_DN_ROWS * ALT_DN_VALUE_HEADS
+    var st = AltDnSite(cd = 2l * kd + di, kd = kd, di = di, o_bytes = ALT_DN_ROWS * di * 4l,
+        state_bytes = ALT_DN_VALUE_HEADS * ALT_DN_HEAD * ALT_DN_HEAD * 4l, smalls_bytes = (2l * gates + 2l * ALT_DN_VALUE_HEADS) * 4l)
+    st.conv_bytes = ALT_DN_ROWS * st.cd * 4l
+    st.conv = make_staged_buf(st.conv_bytes) $(var words) {
+        for (i in range64(st.conv_bytes / 4l)) {
+            unsafe(words[i]) = float_bits_to_uint((float((i * 19l) % 79l) * 0.025 - 0.9) * 0.15)
+        }
+    }
+    st.state = make_staged_buf(st.state_bytes) $(var words) {
+        for (i in range64(st.state_bytes / 4l)) {
+            unsafe(words[i]) = 0u
+        }
+    }
+    st.smalls = make_staged_buf(st.smalls_bytes) $(var words) {
+        for (i in range64(gates)) {
+            unsafe {
+                words[i] = float_bits_to_uint(0.5)            // raw beta
+                words[gates + i] = float_bits_to_uint(0.3)    // raw g
+            }
+        }
+        for (i in range64(ALT_DN_VALUE_HEADS)) {
+            unsafe {
+                words[2l * gates + i] = float_bits_to_uint(-0.4 - float(i) * 0.02)
+                words[2l * gates + ALT_DN_VALUE_HEADS + i] = float_bits_to_uint(0.01 * float(i))
+            }
+        }
+    }
+    st.caps = make_staged_buf(ALT_DN_CAP_BYTES) $(var words) {
+        for (i in range64(ALT_DN_CAP_BYTES / 4l)) {
+            unsafe(words[i]) = 0u
+        }
+    }
+    st.o = make_device_buf(st.o_bytes)
+    st.snap = make_device_buf(st.state_bytes)
+    return st
+}
+
+//! one arm's `KNEE_STEPS` scans of the site, each advancing the state the one before left
+def private alt_dn_arm(st : AltDnSite; token : bool) : VkCommandBuffer {
+    let bufs = fixed_array(st.conv, st.state, st.smalls, st.o, st.caps, st.snap)
+    let sizes = fixed_array(st.conv_bytes, st.state_bytes, st.smalls_bytes, st.o_bytes, ALT_DN_CAP_BYTES, st.state_bytes)
+    let bits = fixed_array(0u, 1u, 0u, 2u, 0u, 0u)
+    var set = token ? set_dn_scan_cls(bufs, sizes, bits) : set_dn_scan_chunk_cls(bufs, sizes, bits)
+    let gates = ALT_DN_ROWS * ALT_DN_VALUE_HEADS
+    return knee_arm_cmd() $(raw) {
+        var h : VkHaz
+        var pc = DnScanArgs(npos = uint(ALT_DN_ROWS), cd = uint(st.cd), kd = uint(st.kd), nvh = uint(ALT_DN_VALUE_HEADS),
+            nkh = uint(ALT_DN_KEY_HEADS), ds = uint(ALT_DN_HEAD), beta_off = 0u, g_off = uint(gates), a_off = uint(2l * gates),
+            dt_off = uint(2l * gates + ALT_DN_VALUE_HEADS), o_off = 0u, di = uint(st.di))
+        for (_i in range(KNEE_STEPS)) {
+            if (token) {
+                enc_dn_scan_cls(raw, h, set, pc, dn_scan_wgs(ALT_DN_VALUE_HEADS, ALT_DN_HEAD))
+            } else {
+                enc_dn_scan_chunk_cls(raw, h, set, pc, dn_scan_chunk_wgs(ALT_DN_VALUE_HEADS, ALT_DN_HEAD, DN_CHUNK_VS))
+            }
+        }
+    }
+}
+
+//! the window's deltanet scan: whether the per-token stamp's time at the race's site is under 0.97 of the chunked stamp's.
+//! A device with no chunked scan serves the per-token stamp under either answer.
+def private alt_dn_token_wins : bool {
+    if (!khr_kq_tile_on() || !ensure_dn_scan_cls() || !ensure_dn_scan_chunk_cls()) {
+        to_log(LOG_INFO, "dasLLAMA vulkan: alternate-stamp race - no chunked deltanet scan on this device, nothing to race\n")
+        return false
+    }
+    let st = alt_dn_site()
+    var raw_chunk = alt_dn_arm(st, false)
+    var raw_token = alt_dn_arm(st, true)
+    let us = knee_arms_us($ {
+        submit_wait(raw_chunk)
+    }) $ {
+        submit_wait(raw_token)
+    }
+    to_log(LOG_INFO, "vk alt dn_scan {ALT_DN_ROWS} rows, {ALT_DN_VALUE_HEADS} heads of {ALT_DN_HEAD}: chunked {us.b} us, a token at a time {us.t} us  timing-only\n")
+    for (b in fixed_array(st.conv, st.state, st.smalls, st.o, st.caps, st.snap)) {
+        destroy_device_buf(b)
+    }
+    return us.t < us.b * 0.97lf
+}
+
+//! The box's alternate stamps (`vk_alt_stamps`): each alternate against the class stamp whose slot it would serve, an
+//! alternate serving where its summed time is under 0.97 of the class's; an AMD device serves the load-ahead GEMV with no
+//! race (`vk_alt_gemv_by_vendor`), and in mm mode, its s8 products checked (`vk_mmq_device_ok`), the int8 columns
+//! (`vk_alt_mmq_by_vendor`). Every slot serves its own stamp while the arms run; the pin (`DASLLAMA_VK_ALT_STAMPS`)
+//! leaves nothing to race. Leaves the knob set.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps")]
+def vk_alt_stamp_race : int64 {
+    if (g_gpu == null || vk_alt_pinned()) {
+        to_log(LOG_INFO, "dasLLAMA vulkan: alternate-stamp race skipped - {g_gpu == null ? "no device" : "DASLLAMA_VK_ALT_STAMPS pins the set"}\n")
+        return vk_alt_stamps()
+    }
+    set_vk_alt_stamps(0l)
+    let by_vendor = vk_alt_gemv_by_vendor(g_gpu.vendor)
+    if (by_vendor) {
+        to_log(LOG_INFO, "dasLLAMA vulkan: an AMD device - the load-ahead q8 GEMV, the rotated residual GEMV, the tile-first flash stamps and the split routed gate-up serve, no race\n")
+    }
+    let gemv = ((by_vendor || alt_q8_gemv_wins()) ? 1l << int64(VK_ALT_Q8_GEMV) : 0l) | (by_vendor ? 1l << int64(VK_ALT_Q8_AR_ROT) : 0l)
+    let khr = alt_khr_rot_wins() ? 1l << int64(VK_ALT_KHR_ROT) : 0l
+    let dn = alt_dn_token_wins() ? 1l << int64(VK_ALT_DN_TOKEN) : 0l
+    let fa = ((vk_alt_fa_by_vendor(g_gpu.vendor) ? 1l << int64(VK_ALT_FA_TFIRST) : 0l) | (vk_alt_egu_by_vendor(g_gpu.vendor) ? 1l << int64(VK_ALT_EGU_SPLIT) : 0l)
+        | (vk_alt_nrot_by_vendor(g_gpu.vendor) ? 1l << int64(VK_ALT_N_ROT) : 0l))
+    var mmq = 0l
+    if (g_gpu.coopmat_mode == COOPMAT_MM && vk_alt_mmq_by_vendor(g_gpu.vendor) != 0l && vk_mmq_device_ok()) {
+        mmq = vk_alt_mmq_by_vendor(g_gpu.vendor)
+        to_log(LOG_INFO, "dasLLAMA vulkan: an AMD device whose s8 products check out - the routed block's gate and up pieces and its down's s pieces ride the int8 tiles, no race\n")
+    }
+    set_vk_alt_stamps(gemv | khr | dn | fa | mmq)
+    return gemv | khr | dn | fa | mmq
 }

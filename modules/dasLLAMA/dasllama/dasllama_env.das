@@ -615,8 +615,14 @@ struct public VulkanEnv {
     @clarg_doc = "The subgroup width every class pipeline pins where the device's own differs and its compute stage may pin it (Vulkan 1.3 subgroupSizeControl; RDNA runs 32 or 64 lanes and defaults to 64): the coopmat tiles, the h128 attention twin and the tower tiles own four 32-lane fragments a workgroup, so a device left at 64 serves the sdot4 tiles and the scalar attention instead. 0 = the device's own width."
     vk_subgroup : int64 = 32l
 
+    @clarg_doc = "The compute shared-memory cap, in bytes, the tier holds its kernel classes to where it is below the device's own maxComputeSharedMemorySize: a class whose workgroup arrays pass the cap declines by name, and a family with a small-slab twin serves from the twin - 32768 runs any device as a driver that reports 32 KiB does. 0, or a value at or above the device's limit, leaves the device's limit."
+    vk_wg_cap : int64 = 0l
+
     @clarg_doc = "The workgroups the decode attention counts as one wave of the device, in place of the device's own count (0 = the device's: its SM count, or an AMD device's active compute units, or 16 on a device that reports neither): the token command splits a head's keys into pieces to fill two waves, and the N-row command into the pieces its rows leave of one"
     vk_attn_wave : int64 = 0l
+
+    @clarg_doc = "The alternate stamps the class slots serve, a bit a slot, in place of the box's raced set (the sidecar's vk_alt_stamps): bit 0 the q8 decode GEMV's load-ahead stamp at the device's own subgroup width, bit 1 every format's KHR window tile with its K walk rotated a weight tile, bit 2 the window's deltanet scan on the per-token stamp in place of the chunked one, bit 3 the q8 decode GEMV that carries the residual step with every row's K walk rotated, bits 4 to 7 the routed block's columns on the int8 tiles (the gate and up m pieces, their s pieces, the down's m pieces, its s pieces), bit 8 every KHR flash-attention stamp with its workgroups tile-first, bit 9 the one-row step's routed gate and up on their own dispatches in place of the fused gate-up leaf, bit 10 the N-column GEMV leaves' rotated twins over a plane whose quant rows sit a power of two apart. 0 serves every class its own stamp; -1 leaves the box's set."
+    vk_alt_stamps : int64 = -1l
 
     @clarg_doc = "Place the planes in the ReBAR device-local host-visible memory type (one larger than 1 GB present) and write uploads straight into them. Off by default: on the NVIDIA WDDM driver a mapped plane is a host-side shadow the manager parks in system memory under pressure, and a host-experts plan then decodes at PCIe speed (gemma-4 26B Q8_0 8.1 tok/s mapped against 32.7 staged, the 35B-A3B 38 against 71: debug-jit readings, the ReBAR entry in modules/dasLLAMA/PERF_LEDGER.md) - the default stages every upload into unmapped device-local planes."
     vk_rebar : bool = false
@@ -645,7 +651,7 @@ struct public VulkanEnv {
     @clarg_doc = "The CUDA home's launches under programmatic dependent launch: a kernel is launched while the one before it in the stream still runs, and its entry wait (`griddepcontrol.wait`, in every emitted kernel on sm_90 and up) holds its reads until that one completes, so the launch latency rides under the predecessor's tail. 1 = on where the card is sm_90 or newer, 0 = plain stream order (A/B instrument). The TTS seats' shots launch in plain stream order under every value (`rail_tts_shot`). The device-ready log line names the state."
     cuda_pdl : int64 = 1l
 
-    @clarg_doc = "The window chain's deltanet scan on the discrete homes: 1 = the chunked form on the 16 x 16 cooperative tiles (`dn_scan_chunk_cls`: sixteen tokens a chunk, the state advanced once a chunk) wherever the device has them - CUDA, and Vulkan with KHR cooperative matrices at subgroup 32 - the per-token scan elsewhere; 0 = the per-token scan everywhere (A/B instrument). The token step's fused scan is not this knob's."
+    @clarg_doc = "The window chain's deltanet scan on the discrete homes: 1 = the chunked form on the 16 x 16 cooperative tiles (`dn_scan_chunk_cls`: sixteen tokens a chunk, the state advanced once a chunk) wherever the device has them - CUDA, and Vulkan with KHR cooperative matrices at subgroup 32 where the box's served set (vk_alt_stamps, bit 2) leaves the scan there - the per-token scan elsewhere; 0 = the per-token scan everywhere (A/B instrument). The token step's fused scan is not this knob's."
     dn_chunk : int64 = 1l
 
     @clarg_doc = "The CUDA home's greedy chain: the next one-row step launched behind the running one on the device's own pick; 0 off, 1 every greedy step, -1 adaptive (backs off after a miss). A sampled session never chains."

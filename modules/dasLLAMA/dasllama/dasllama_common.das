@@ -2782,6 +2782,7 @@ def apply_box_profile_runtime_at(ppath : string) {   // nolint:STYLE038 — a fl
     apply_i64_knob(rt, "metal_devw_min_tgs") $(v) { set_metal_devw_min_tgs(v) }
     apply_i64_knob(rt, "metal_split_k_tgs_hmm") $(v) { set_metal_split_k_tgs_hmm(v) }
     apply_i64_knob(rt, "vk_split_k_tgs") $(v) { set_vk_split_k_tgs(v) }
+    apply_i64_knob(rt, "vk_alt_stamps") $(v) { set_vk_alt_stamps(v) }
     apply_i64_knob(rt, "cud_split_k_tgs") $(v) { set_cud_split_k_tgs(v) }
     apply_i64_knob(rt, "metal_split_k_tgs_kq_base") $(v) { set_metal_split_k_tgs_kq_base(v) }
     apply_i64_knob(rt, "mtp_depth_nextn") $(v) { set_mtp_depth_nextn(v) }
