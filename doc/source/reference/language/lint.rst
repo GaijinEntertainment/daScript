@@ -2421,8 +2421,9 @@ every call site:
     }
 
     // a helper that sizes a caller's buffer marks the PARAMETER, since the
-    // destination arrives by reference and the call site cannot see the field
-    def scratch_resize(@scratch var a : array<numT>; need : int64) { ... }
+    // destination arrives by reference and the call site cannot see the field;
+    // the helper's body is still scanned, and only the sizing of `a` is exempt in it
+    def overwrite_resize(@scratch var a : array<numT>; need : int64) { ... }
     
     // a clear()-recycled module global is declared the same way (annotation after `var`)
     var @scratch g_stage : array<MemRange>
@@ -2441,7 +2442,10 @@ cannot be resolved statically — annotate the implementations they reach.
 Escape hatches, in order of preference: ``[cold_path]`` on the callee when the
 leg genuinely runs once; ``@scratch`` on a reused destination, or ``@pool``
 on one that owns what it holds (field, by-ref parameter, or module global —
-sizing calls, table indexing, and reference bindings to it all count);
+sizing calls, ``delete`` (every finalizer it reaches is still scanned, and
+only what each one frees of its own object is exempt), table indexing, and
+reference bindings to it all count, a ternary binding only when every branch
+carries ``@scratch`` or ``@pool``, while ``@exact_size`` follows either branch);
 ``// nolint``
 with a reason (honored at either end of a chain, so a suppression written where
 the code lives works even when the report anchors elsewhere); and

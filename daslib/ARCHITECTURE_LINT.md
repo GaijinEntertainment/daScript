@@ -31,21 +31,42 @@ style_lint is `ARCHITECTURE_STYLE_LINT.md`.
   every `$e(...)` tag in `add_ptr_ref(...)`; matching the name suffices because the
   templates_boost wrapper is its only producer post-expansion. Its depth tracking fires
   before the `in_closure` gate - the rules block is itself a closure.
-- **Hot-path walk (PERF026-028).** `HotCache` keeps per-function scan results sliced into
-  two flat arrays; `sinks_span_by_fn` doubles as the presence key and the two tables are
-  strictly co-populated (one insert site each, adjacent). The visited set keys on
-  (callee hash, `nearest_root_file_site` pointer): reaching one callee from two root-file
-  call sites must report twice, so a function is re-walked once per distinct anchor -
-  a cost taken for per-call-site diagnostics. Generated/generic frames re-anchor to the
-  caller side because their own `at` points into the template. A call to any function
-  with a `@scratch` or `@pool` parameter prunes that callee's whole subtree from the walk - the
-  prune is deliberately TRANSITIVE, removing the callee's whole subtree and not just the sink,
-  because narrowing the prune to the sink buries scratch-heavy callers in deep-resize
-  findings on buffers the helper family sizes correctly.
+- **Hot-path walk (PERF026-028).** `HotCache` keeps per-function scan results sliced into two flat
+  arrays; `sinks_span_by_fn` doubles as the presence key and the two tables are strictly
+  co-populated (one insert site each, adjacent). The visited set keys on (callee hash,
+  `nearest_root_file_site` pointer): reaching one callee from two root-file call sites must report
+  twice, so a function is re-walked once per distinct anchor - a cost taken for per-call-site
+  diagnostics. Generated/generic frames re-anchor to the caller side because their own `at` points
+  into the template. Each function body is scanned once for its sinks - the sites it reports (an
+  allocation, a getenv, an I/O call) - and its edges - the callees the walk enters next. The walk
+  enters every callee with a body except a `[cold_path]` one, a template or a stub; a `@scratch`
+  or `@pool` parameter does not stop it, because the exemption belongs to a call, not to a callee.
+  A sizing call on a reused destination (`is_container_sizing`) adds neither a sink nor an edge. A
+  `delete` of one (`is_delete_lowering`) starts a reused free: the walk follows every finalizer it
+  reaches - generated or written, through fields, elements and pointees - and in each one a free
+  rooted at that finalizer's own parameter (`dest_matches` with a root: fields, indexing, casts,
+  dereference, reference locals, loop variables) is part of the freeing, not a sink, while
+  everything else there is held to the root's contract. The context is part of the visited key, so
+  a recursive type terminates. The block and `with (self)` the compiler wraps a class method's
+  statements in hide none of them; any other generated subtree, a macro's expansion inside a
+  method included, stays hidden. An invoke of a declared class method `c.method` - the class
+  finalizer's dispatch included - enters only the stored functions that implement it; a
+  function-valued data field is followed like a structure's. Inside a helper its own marked
+  parameter is such a destination, so a pure sizing helper reads clean while a working function
+  that takes a reused buffer is held to the contract for everything else it does. A reference
+  local follows its initializer. Through a ternary a reuse mark needs every branch to carry one
+  (`@scratch` and `@pool` mix), since it grants an exemption, while `@exact_size` needs one
+  branch, since it imposes an obligation.
+- **`delete` lowers to a call, and two sites agree on its names**: `InferTypes::visit(ExprDelete)`
+  (src/ast/ast_infer_type.cpp) rewrites it to `_::finalize`, which resolves to a structure's
+  `finalize` or to an instance of daslib's generic `finalize` / `finalize_dim`, named
+  ``builtin`finalize`<hash>`` / ``builtin`finalize_dim`<hash>`` (a container, a fixed array).
+  `is_delete_lowering` in perf_lint.das matches those names for PERF026's exemption and for
+  PERF030 alike; `perf026_hot_path_alloc.das` case 19 and the PERF030 fixture fail when the
+  two drift.
 - **PERF030 release credits are consume-once**: a `delete x` licenses exactly one
-  subsequent `x <- ...`, then the warning re-arms; the lowered delete family is matched
-  by name in its four spellings (`_::finalize`, `finalize`, ``builtin`finalize``,
-  ``builtin`finalize_dim``).
+  subsequent `x <- ...`, then the warning re-arms; the lowered delete is recognized by
+  `is_delete_lowering`.
 - **`"$"` in module allowlists is the builtin module's name** - `Module_BuiltIn` registers
   as `Module("$")` (`src/builtin/module_builtin.cpp`), so macro-time reflection reports
   core builtins under `"$"` beside `"builtin"` and `"strings"`.

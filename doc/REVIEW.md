@@ -22,10 +22,11 @@ and smoke-tests it; or, for a name that exists only after a package-manager inst
 test (repo root) that asserts the name in the package manifest that ships it.** The build proves
 the page renders, never that what it points a reader at is there.
 
-**A diff that adds to an `.rst` under `source` that no `reflections/` generator writes a name,
-syntax, option, or command the tree ships, shown for a reader to use, names in the PR body the
-test or CI step that runs it - a test anywhere in the tree that calls the shown name counts.** The
-build proves the page renders, never that what it shows works.
+**A diff that adds to an `.rst` under `source` that no `reflections/` generator writes either a
+name, syntax, option, or command the tree ships, shown for a reader to use, or a sentence stating
+what such a name does - whether the name is new to the page or already on it - names in the PR
+body, for each, a test or CI step anywhere in the tree that runs the shown use or asserts the
+stated behavior.** The build proves the page renders, never that what it shows works.
 
 **A diff that changes a file under `reflections/` states, in the PR body, that every name the
 change newly places on a page resolves in the tree, and where that was checked** - a name the
