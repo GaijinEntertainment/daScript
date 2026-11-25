@@ -1022,7 +1022,26 @@ def private any_prefilling_before_a_shared_checkpoint(sch : Scheduler) : bool {
 //! whether a media span's K/V is still to stand for the stream: its body, and the text around it, eval as one call of their own
 def private stream_has_span_ahead(st : Stream) : bool => next_span(st.spans) >= 0
 
-def private chunk_take(st : Stream; chunk, prompt_end : int64) : int64 => min(chunk, prompt_end - st.n_prefilled)
+def private chunk_take(st : Stream; chunk, prompt_end : int64) : int64 => take_within_rows(st, min(chunk, prompt_end - st.n_prefilled))
+
+//! `take` rows of a window from row `lo`, cut where it would hold more of `stops` strictly inside it than `rows`: the window
+//! ends at the stop past that count
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#prefix-recurrent-checkpoints")]
+def take_within_stops(stops : int64[4]; lo, take, rows : int64) : int64 {
+    var inside <- [for (at in stops); at; where at > lo && at < lo + take]   // a stream's stops are distinct rows
+    sort(inside)
+    let cut = long_length(inside) > rows ? inside[rows] - lo : take
+    delete inside
+    return cut
+}
+
+//! `take` rows of a recurrent stream's next window, cut where it would hold more checkpoint stops than a region keeps rows: the
+//! window ends at the stop past that count, which the window's end files
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#prefix-recurrent-checkpoints")]
+def private take_within_rows(st : Stream; take : int64) : int64 {
+    return take if (empty(st.session.dn_state_prefix))
+    return take_within_stops(ckpt_stops(st), st.n_prefilled, take, gpu_device_kv_checkpoint_rows())
+}
 
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#prefix-recurrent-checkpoints")]
 def private window_stops(var st : Stream; take : int64) {
@@ -1493,26 +1512,41 @@ def private parked_state_at(p : ParkedKv; n : int64) : int64 {
     return best
 }
 
-//! a device-home recurrent stream's checkpoint stops: the request's openings, its last message's start and end, each past the
-//! adopted rows and short of the prompt's end, in order - its region keeps the state at each for a later request that shares it
-def private device_checkpoints_plan(var st : Stream; req : PendingReq; matched : int64) {
-    return if (empty(st.session.dn_state_prefix))
-    let n = long_length(st.prompt)
-    var stops <- [for (at in fixed_array(req.system_head_at, req.system_at, req.stable_at, req.messages_end_at)); at; where at > matched && at < n]
+//! the stops a region of `rows` checkpoint rows keeps out of a request's markers `marks`, given in the order later requests take
+//! them up: each past the `matched` rows and short of the prompt's `n`, `rows` of them at most, ascending, 0 past the last
+def checkpoint_stops_plan(marks : int64[4]; matched, n, rows : int64) : int64[4] {
+    var stops : array<int64>   // nolint:STYLE027 - the rows left and the stops already taken bound each push
+    for (at in marks) {
+        if (at > matched && at < n && long_length(stops) < rows && find_index(stops, at) < 0) {
+            stops |> push(at)
+        }
+    }
+    sort(stops)
     var fields : int64[4]
     var k = 0
-    for (at in stops) {   //! in order, each past the one before: a marker at or under the last kept one adds no stop
+    for (at in stops) {   // in order, each past the one before: a marker at or under the last kept one adds no stop
         if (k == 0 || at > fields[k - 1]) {
             fields[k] = at
             k++
         }
     }
+    delete stops
+    return fields
+}
+
+//! a device-home recurrent stream's checkpoint stops: the request's openings, its last message's start and end, each past the
+//! adopted rows and short of the prompt's end, in order - its region keeps the state at each for a later request that shares it
+def private device_checkpoints_plan(var st : Stream; req : PendingReq; matched : int64) {
+    return if (empty(st.session.dn_state_prefix))
+    //! the region keeps so many states at once: the stops go in the order later requests take them up - the opening every
+    //! request on this system prompt shares, the history a retried last turn keeps, the prompt's messages whole, the opening's head
+    let fields = checkpoint_stops_plan(fixed_array(req.system_at, req.stable_at, req.messages_end_at, req.system_head_at),
+        matched, long_length(st.prompt), gpu_device_kv_checkpoint_rows())
     st.ckpt_head_at = fields[0]
     st.ckpt_sys_at = fields[1]
     st.ckpt_at = fields[2]
     st.ckpt_end_at = fields[3]
     st.ckpt_shared_to = max(req.system_head_at, req.system_at)
-    delete stops
 }
 
 //! `erase` moves the entries after it down and finalizes nothing, so the entry's lists go first

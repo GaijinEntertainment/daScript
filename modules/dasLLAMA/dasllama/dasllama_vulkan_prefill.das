@@ -145,7 +145,7 @@ def private pf_window_caps(w0 : int64) {
         for (cap in g_pf_caps) {
             continue if (cap.seg != ws.seg || cap.row <= part_row0_in_seg || cap.row >= part_row0_in_seg + ws.npos)
             g_pf_cap_words |> push(uint(cap.row - part_row0_in_seg))
-            g_pf_cap_words |> push(uint(((ws.region * int64(RDEC_DN_SNAPS) + cap.slot) * g_rd.snap_row_bytes) / 4l))
+            g_pf_cap_words |> push(uint(((ws.region * int64(rdec_dn_snaps()) + cap.slot) * g_rd.snap_row_bytes) / 4l))
             n++
         }
         g_pf_wcaps |> push((n = n, rec = rec))
@@ -161,7 +161,7 @@ def private pf_window_caps(w0 : int64) {
 def private pf_caps_done {
     for (cap in g_pf_caps) {
         let sg = g_pf_segs[cap.seg]
-        g_rd.snap_par[sg.region * int64(RDEC_DN_SNAPS) + cap.slot] = 0
+        g_rd.snap_par[sg.region * int64(rdec_dn_snaps()) + cap.slot] = 0
     }
     g_pf_caps |> clear()
 }
@@ -428,9 +428,9 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
         fixed_array(VHZ_DNP, VHZ_DNC, VHZ_DNSM))
     let snap_dev = g_rd.snap_dev != 0ul ? g_rd.snap_dev : smalls_dev
     g_rd.pf_snap_bound = g_rd.snap_dev
-    let snap_bytes = g_rd.snap_dev != 0ul ? g_rd.snap_row_bytes * g_rd.regions * int64(RDEC_DN_SNAPS) : smalls_bytes
+    let snap_bytes = g_rd.snap_dev != 0ul ? g_rd.snap_row_bytes * g_rd.regions * int64(rdec_dn_snaps()) : smalls_bytes
     if (!vk_range_ok(snap_bytes)) {   //! the scan and the cap tail bind the checkpoint rows whole
-        panic("dasLLAMA vulkan prefill: the checkpoint rows ({snap_bytes} bytes: {g_rd.regions} regions x {RDEC_DN_SNAPS} rows of {g_rd.snap_row_bytes}) pass the device's storage range {vk_max_storage_range()}")
+        panic("dasLLAMA vulkan prefill: the checkpoint rows ({snap_bytes} bytes: {g_rd.regions} regions x {rdec_dn_snaps()} rows of {g_rd.snap_row_bytes}) pass the device's storage range {vk_max_storage_range()}")
     }
     L.pf_dn_scan_set = set_dn_scan_cls(
         fixed_array(g_rd.pf_dnconv, dn0.state_dev, smalls_dev, g_gpu.dn_ws_dev, g_rd.pf_cap_dev, snap_dev),

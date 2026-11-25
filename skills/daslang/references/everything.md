@@ -3225,6 +3225,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 ### Device-home streams and the host pool
 
 - `gpu_device_kv_checkpoint` - Keep a device-home recurrent `session`'s state at its position beside its rows, so a later request that opens with exactly those tokens adopts it from the parked claim.
+- `gpu_device_kv_checkpoint_rows` - The positions a device-home recurrent stream's region keeps its state at, at once: a stream's checkpoint stops past that count would evict one another.
 - `gpu_device_kv_checkpoints` - The positions a parked `claim`'s checkpoints hold its recurrent state at (empty where it is dead).
 - `gpu_device_kv_claim` - The claim a live device-home `session` holds its region under (0 = none).
 - `gpu_device_kv_export` - Copy the rows `[lo, hi)` the region of a live or parked `claim` holds down into the paged `host` session's pages (grown to `hi`), so a prefix cache keeps them past the region.

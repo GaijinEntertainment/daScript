@@ -1024,6 +1024,12 @@ def gpu_device_kv_checkpoint(session : Session) : bool {
     return gpu_device_kv_checkpoint_(session)
 }
 
+def gpu_device_kv_checkpoint_rows() : int64 {
+    //! The positions a device-home recurrent stream's region keeps its state at, at once: a stream's
+    //! checkpoint stops past that count would evict one another.
+    return gpu_device_kv_checkpoint_rows_()
+}
+
 def gpu_device_kv_checkpoints(claim : int64) : array<int64> {
     //! The positions a parked ``claim``'s checkpoints hold its recurrent state at (empty where it is dead).
     return <- gpu_device_kv_checkpoints_(claim)
