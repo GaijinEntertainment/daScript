@@ -22,6 +22,7 @@ require dasllama/dasllama_styletts2
 require dasllama/dasllama_kitten
 require dasllama/dasllama_kokoro
 require dasllama/dasllama_pocket
+require dasllama/dasllama_tts_blocks   // tts_dev_release: the GPU home's device state
 require dasllama/dasllama_gguf   // gguf_file_arch: the family sniff before a load
 require dasllama/dasllama_image  // image_source_beside: the GGUF a prepared image answers for
 require dasllama/dasllama_math   // with_dasllama_jobque_: the stress-context pass of a caller outside any job queue
@@ -56,7 +57,11 @@ struct TtsModel {
 // Stated rather than inferred: the shared carrier holds borrowed planes, and a generated
 // teardown would force every module that deletes a TtsModel to see the plane finalizers too.
 def finalize(var m : TtsModel) {
-    //! Free the model's planes, the carrier and both packs; ``delete m`` runs it.
+    //! Free the model's planes, the carrier and both packs - a GPU image's device state with them;
+    //! ``delete m`` runs it.
+    if (m.model.devplan.n > 0l || m.pocket.devplan.n > 0l) {
+        tts_dev_release(true)
+    }
     delete m.model
     delete m.scratch
     delete m.g2p
@@ -70,14 +75,15 @@ def finalize(var m : TtsModel) {
 
 [arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-idle-release")]
 def tts_release_scratch(var m : TtsModel) {
-    //! Free the activation scratch a synthesis or a clone left behind - the carrier of either family (a
-    //! StyleTTS2 carrier whose noise the parity rail captured stays) and the block home's scratch globals;
-    //! the next run grows them back for a few milliseconds. For a platform where idle memory matters, called when nothing is queued.
+    //! Free what a synthesis or a clone left behind - either family's carrier (a captured-noise
+    //! StyleTTS2 carrier stays), the block home's globals, the GPU home's activation rows; the next
+    //! run regrows them. For a platform where idle memory matters, called when nothing is queued.
     if (!m.scratch.noise.captured) {
         delete m.scratch
     }
     delete m.ru_stress_scratch
     pocket_release_scratch(m.pocket_scratch)   // the block home's scratch globals go with it, whichever family grew them
+    tts_dev_release(false)
 }
 
 [arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-idle-release")]

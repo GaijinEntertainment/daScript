@@ -67,7 +67,7 @@ def load_translator(path : string; exact : bool = false) : Translator {
     if (is_llm_model_path(path)) {
         var tr = Translator(kind = TranslatorKind.llm, trg = "en")
         tr.lm <- load_model_cached(path, exact ? QuantMode.fp32 : QuantMode.q8)
-        tr.ls <- create_session_(tr.lm, KVDtype.f16, KVDtype.f16)
+        tr.ls <- create_session_(tr.lm, KVDtype.automatic, KVDtype.automatic)
         return <- tr
     }
     var tr = Translator(kind = TranslatorKind.marian)

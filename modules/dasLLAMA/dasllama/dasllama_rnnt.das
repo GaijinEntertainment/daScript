@@ -70,7 +70,8 @@ struct RnntState {
     gates : array<float>      //!< scratch [4 × pred_dim]: the ih and hh dots summed
     xin : array<float>        //!< scratch [pred_dim]: layer input
     bias : array<float>       //!< [n_layers][4 pred_dim] each layer's gate bias, packed i, f, o, g
-    wh : array<uint16>        //!< the stack's weights as halves: a layer's ih then hh [4 pred_dim][pred_dim], then joint.pred [joint_dim][pred_dim]
+    rows_f32 : bool           //!< `wh` and `joint_wt` hold floats, two halfwords an element: the target converts halves in software
+    wh : array<uint16>        //!< the stack's weights as halves, or floats under `rows_f32`: a layer's ih then hh [4 pred_dim][pred_dim], then joint.pred [joint_dim][pred_dim]
     wh_key : uint64           //!< the weight plane `wh` was converted from (0 = none)
     joint_wt : array<uint16>  //!< the joint net's weight as input columns in logit blocks, halves
     joint_wt_key : uint64     //!< the weight plane `joint_wt` was laid from (0 = none)
@@ -90,36 +91,53 @@ def rnnt_n_logits(net : RnntNet) : int64 => net.n_tokens + length(net.durations)
 //! The `RNNT_JOINT_BLOCK`-logit blocks a row of `n_logits` takes, the last zero-padded.
 def rnnt_joint_blocks(n_logits : int64) : int64 => (n_logits + RNNT_JOINT_BLOCK - 1l) / RNNT_JOINT_BLOCK
 
-//! Lays `s`'s halves and summed biases off `net`'s planes once a weight plane (`dasllama_repack`'s layouts).
-def private rnnt_pred_halves(net : RnntNet; var s : RnntState) {
+[arch(at="../ARCHITECTURE_CPU_KERNELS_TILES.md#half-rows-by-target")]
+def private rnnt_rows_f32() : bool => active_rows_f32() && tower_staging_dev() == TowerDev.none
+
+//! `s`'s weight rows (halves, or floats under `rows_f32`) and summed biases laid off `net`'s planes, once a weight plane
+def private rnnt_pred_rows(net : RnntNet; var s : RnntState; rows_f32 : bool) {
     let pd = net.pred_dim
     let key = intptr(plane_at(net.blob, net.lstm_ih[0]))
     let per_layer = 8l * pd * pd
-    let need = net.n_layers * per_layer + net.joint_dim * pd
-    return if (s.wh_key == key && long_length(s.wh) >= need)
+    let need = (net.n_layers * per_layer + net.joint_dim * pd) * (rows_f32 ? 2l : 1l)
+    return if (s.wh_key == key && s.rows_f32 == rows_f32 && long_length(s.wh) >= need)
     ensure_length(s.wh, need)
     ensure_length(s.bias, net.n_layers * 4l * pd)
     unsafe {
         var hp = addr(s.wh[0])
+        var fp = reinterpret<float?>(hp)
         var bp = addr(s.bias[0])
         for (l in range64(net.n_layers)) {
             let b2 = net.two_biases ? plane_at(net.blob, net.lstm_b2[l]) : null
-            repack_lstm_gates_f16(hp + l * per_layer, bp + l * 4l * pd, plane_at(net.blob, net.lstm_ih[l]), plane_at(net.blob, net.lstm_hh[l]),
-                plane_at(net.blob, net.lstm_b[l]), b2, pd, net.torch_gates)
+            let ih = plane_at(net.blob, net.lstm_ih[l])
+            let hh = plane_at(net.blob, net.lstm_hh[l])
+            if (rows_f32) {
+                repack_lstm_gates(fp + l * per_layer, bp + l * 4l * pd, ih, hh, plane_at(net.blob, net.lstm_b[l]), b2, pd, net.torch_gates)
+            } else {
+                repack_lstm_gates(hp + l * per_layer, bp + l * 4l * pd, ih, hh, plane_at(net.blob, net.lstm_b[l]), b2, pd, net.torch_gates)
+            }
         }
-        cvt_f32_to_f16_sat(hp + net.n_layers * per_layer, plane_at(net.blob, net.joint_pred_w), net.joint_dim * pd)
+        if (rows_f32) {
+            copy_floats(fp + net.n_layers * per_layer, plane_at(net.blob, net.joint_pred_w), net.joint_dim * pd)
+        } else {
+            cvt_f32_to_f16_sat(hp + net.n_layers * per_layer, plane_at(net.blob, net.joint_pred_w), net.joint_dim * pd)
+        }
     }
     s.wh_key = key
 }
 
-//! The joint net's weight as halves [block][joint_dim][RNNT_JOINT_BLOCK], once a weight plane a session; `col` is the caller's scratch of a block of floats.
-def private rnnt_joint_cols(net : RnntNet; var s : RnntState; var col : array<float>; jd, n_logits : int64) {
+//! the joint net's weight as [block][joint_dim][RNNT_JOINT_BLOCK] rows in `rows_f32`'s form, once a weight plane; `col` a block of scratch
+def private rnnt_joint_cols(net : RnntNet; var s : RnntState; var col : array<float>; jd, n_logits : int64; rows_f32 : bool) {
     let key = intptr(plane_at(net.blob, net.joint_net_w))
-    let nblk = rnnt_joint_blocks(n_logits)
-    return if (s.joint_wt_key == key && long_length(s.joint_wt) >= nblk * jd * RNNT_JOINT_BLOCK)
-    ensure_length(s.joint_wt, nblk * jd * RNNT_JOINT_BLOCK)
+    let need = rnnt_joint_blocks(n_logits) * jd * RNNT_JOINT_BLOCK * (rows_f32 ? 2l : 1l)
+    return if (s.joint_wt_key == key && s.rows_f32 == rows_f32 && long_length(s.joint_wt) >= need)
+    ensure_length(s.joint_wt, need)
     unsafe {
-        repack_joint_cols_f16(addr(s.joint_wt[0]), addr(col[0]), plane_at(net.blob, net.joint_net_w), jd, n_logits, RNNT_JOINT_BLOCK)
+        if (rows_f32) {
+            repack_joint_cols(addr<float?>(s.joint_wt[0]), addr(col[0]), plane_at(net.blob, net.joint_net_w), jd, n_logits, RNNT_JOINT_BLOCK)
+        } else {
+            repack_joint_cols(addr(s.joint_wt[0]), addr(col[0]), plane_at(net.blob, net.joint_net_w), jd, n_logits, RNNT_JOINT_BLOCK)
+        }
     }
     s.joint_wt_key = key
 }
@@ -143,12 +161,14 @@ def private rnnt_reset(net : RnntNet; var s : RnntState) {
     return if (net.dev_only)   // a GPU-flavored net never decodes on the CPU: the device seat binds its planes
     ensure_length(s.logits, rnnt_joint_blocks(n_logits) * RNNT_JOINT_BLOCK)   // whole blocks: the joint writes zeros past the last logit
     return if (net.baked)
-    rnnt_pred_halves(net, s)
-    rnnt_joint_cols(net, s, s.logits, net.joint_dim, n_logits)
+    let rows_f32 = rnnt_rows_f32()
+    rnnt_pred_rows(net, s, rows_f32)
+    rnnt_joint_cols(net, s, s.logits, net.joint_dim, n_logits, rows_f32)
+    s.rows_f32 = rows_f32
 }
 
 //! One block of the joint's logits from its columns `wt`: y = b + W . relu(enc + pred) over the block's `live` logits, zeros past them.
-def private rnnt_joint_block(var yp : float?; bp : float const?; wt : uint16 const?; ep, pp : float const?; jd, live : int64) {
+def private rnnt_joint_block(var yp : float?; bp : float const?; wt : uint16 const?; ep, pp : float const?; jd, live : int64; rows_f32 : bool) {
     unsafe {
         copy_floats(yp, bp, live)
         for (i in range64(live, RNNT_JOINT_BLOCK)) {
@@ -156,7 +176,10 @@ def private rnnt_joint_block(var yp : float?; bp : float const?; wt : uint16 con
         }
         for (j in range64(jd)) {
             let v = ep[j] + pp[j]
-            if (v > 0.0) {
+            continue if (v <= 0.0)
+            if (rows_f32) {
+                axpy(yp, reinterpret<float const?>(wt) + j * RNNT_JOINT_BLOCK, v, RNNT_JOINT_BLOCK)
+            } else {
                 axpy_f16(yp, wt + j * RNNT_JOINT_BLOCK, v, RNNT_JOINT_BLOCK)
             }
         }
@@ -209,8 +232,9 @@ struct private RnntStepArgs {
     cp : float?             //!< [layers][pd]
     pp : float?             //!< [jd] joint.pred's output
     yp : float?             //!< [n_logits]
-    whp : uint16 const?     //!< the stack's halves, joint.pred's behind the layers'
-    wtp : uint16 const?     //!< the joint net's columns
+    whp : uint16 const?     //!< the stack's rows, joint.pred's behind the layers': halves, or floats under `rows_f32`
+    wtp : uint16 const?     //!< the joint net's columns, in the same form
+    rows_f32 : bool
     bjp : float const?
     lbp : float const?      //!< [layers][4 pd] the gate biases
     ep : float const?       //!< [jd] the frame's encoder projection
@@ -230,33 +254,53 @@ def private rnnt_step_stage(var a : RnntStepArgs; sg, jb, je : int) {
         if (sg < 2 * a.nl) {
             let l = int64(sg / 2)
             if (sg % 2 == 0) {
-                let wih = a.whp + l * 8l * pd * pd
-                let whh = wih + 4l * pd * pd
                 let hl = a.hp + l * pd
                 let xip = a.xip
                 var gp = a.gp
-                for (i in range(jb, je)) {
-                    gp[i] = dot_f16(xip, wih + int64(i) * pd, pd) + dot_f16(hl, whh + int64(i) * pd, pd)
+                if (a.rows_f32) {
+                    let wih = reinterpret<float const?>(a.whp) + l * 8l * pd * pd
+                    let whh = wih + 4l * pd * pd
+                    for (i in range(jb, je)) {
+                        gp[i] = dot(xip, wih + int64(i) * pd, pd) + dot(hl, whh + int64(i) * pd, pd)
+                    }
+                } else {
+                    let wih = a.whp + l * 8l * pd * pd
+                    let whh = wih + 4l * pd * pd
+                    for (i in range(jb, je)) {
+                        gp[i] = dot_f16(xip, wih + int64(i) * pd, pd) + dot_f16(hl, whh + int64(i) * pd, pd)
+                    }
                 }
             } else {
                 rnnt_lstm_gates(a.gp, a.lbp + l * 4l * pd, a.cp + l * pd, a.hp + l * pd, a.xip, pd, int64(jb) * 4l, je == a.ngate ? pd : int64(je) * 4l)
             }
         } elif (sg == 2 * a.nl) {
-            let wjp = a.whp + int64(a.nl) * 8l * pd * pd
             let xip = a.xip
             let bjp = a.bjp
             var pp = a.pp
-            for (i in range(jb, je)) {
-                pp[i] = dot_f16(xip, wjp + int64(i) * pd, pd) + bjp[i]
+            if (a.rows_f32) {
+                let wjp = reinterpret<float const?>(a.whp) + int64(a.nl) * 8l * pd * pd
+                for (i in range(jb, je)) {
+                    pp[i] = dot(xip, wjp + int64(i) * pd, pd) + bjp[i]
+                }
+            } else {
+                let wjp = a.whp + int64(a.nl) * 8l * pd * pd
+                for (i in range(jb, je)) {
+                    pp[i] = dot_f16(xip, wjp + int64(i) * pd, pd) + bjp[i]
+                }
             }
         } else {
             for (b in range64(int64(jb), int64(je))) {
                 let i0 = b * RNNT_JOINT_BLOCK
-                rnnt_joint_block(a.yp + i0, a.ybp + i0, a.wtp + b * a.jd * RNNT_JOINT_BLOCK, a.ep, a.pp, a.jd, min(RNNT_JOINT_BLOCK, a.n_logits - i0))
+                rnnt_joint_block(a.yp + i0, a.ybp + i0, a.wtp + b * a.jd * RNNT_JOINT_BLOCK * (a.rows_f32 ? 2l : 1l), a.ep, a.pp, a.jd,
+                    min(RNNT_JOINT_BLOCK, a.n_logits - i0), a.rows_f32)
             }
         }
     }
 }
+
+//! a baked net's rows are floats: its planes hold two halfwords an element
+def rnnt_baked_rows_f32(net : RnntNet) : bool =>
+    net.wh.n == 2l * (net.n_layers * 8l * net.pred_dim * net.pred_dim + net.joint_dim * net.pred_dim)
 
 [arch(at="../ARCHITECTURE_MEDIA_ASR.md#rnnt-decode-step")]
 def private rnnt_step(net : RnntNet; var s : RnntState; encp : array<float>; token : int; t : int64) {
@@ -279,6 +323,7 @@ def private rnnt_step(net : RnntNet; var s : RnntState; encp : array<float>; tok
             bjp = plane_at(net.blob, net.joint_pred_b),
             lbp = net.baked ? plane_at(net.blob, net.lstm_b[0]) : addr<float const?>(s.bias[0]),
             ep = addr<float const?>(encp[t * jd]), ybp = plane_at(net.blob, net.joint_net_b),
+            rows_f32 = net.baked ? rnnt_baked_rows_f32(net) : s.rows_f32,
             pd = pd, jd = jd, n_logits = n_logits, nl = nl, ngate = ngate)
         if (token >= 0) {
             copy_floats(a.xip, plane_at(net.blob, net.embed + int64(token) * pd), pd)
@@ -657,7 +702,8 @@ def rnnt_dev_layout(n_layers, pd, jd, n_tokens, n_logits : int64) : RnntDevLayou
         wh_halves = n_layers * 8l * pd * pd + jd * pd, jw_halves = rnnt_joint_blocks(n_logits) * jd * RNNT_JOINT_BLOCK)
 }
 
-//! A decoder as an image stores it: the stack's and the joint net's halves, and the f32 slab
+//! A decoder as an image stores it: the stack's and the joint net's rows - halves, or floats as two halfwords each where
+//! the image's target converts halves in software - and the f32 slab
 struct RnntBaked {
     @exact_size wh : array<uint16>
     @exact_size jw : array<uint16>
@@ -674,11 +720,12 @@ def rnnt_bake(net : RnntNet; enc_b : int64) : RnntBaked {
     let lay = rnnt_dev_layout(net)
     var r : RnntBaked
     r.wf <- rnnt_dev_slab(net, s, RnntEnc(b = enc_b, q8 = enc_b < 0l), lay)   // no bias row named: the slot stays zero
-    r.wh |> reserve_resize(lay.wh_halves)
-    r.jw |> reserve_resize(lay.jw_halves)
+    let width = s.rows_f32 ? 2l : 1l
+    r.wh |> reserve_resize(lay.wh_halves * width)
+    r.jw |> reserve_resize(lay.jw_halves * width)
     unsafe {
-        memcpy(addr(r.wh[0]), addr(s.wh[0]), lay.wh_halves * 2l)
-        memcpy(addr(r.jw[0]), addr(s.joint_wt[0]), lay.jw_halves * 2l)
+        memcpy(addr(r.wh[0]), addr(s.wh[0]), lay.wh_halves * width * 2l)
+        memcpy(addr(r.jw[0]), addr(s.joint_wt[0]), lay.jw_halves * width * 2l)
     }
     delete s
     return <- r

@@ -23,6 +23,8 @@ require dasllama/dasllama_image
 require dasllama/dasllama_load          // kq_fmt_of: a stored tensor's format, tagged from its disk type
 require dasllama/dasllama_layout        // q8_region_to_metal_blob: the Q8_0 block writer a stored file's capture shares
 require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS / Q8_BLOCK_BYTES: the Q8_0 block's size
+require dasllama/dasllama_tower_flavor   // [tower_flavor]: the family's GPU flavor seat
+require dasllama/dasllama_tower_image    // tower_dev_flavor
 require dasllama/dasllama_tower   // asr_prof_add: the encode-stage profiling rail; add_inplace_rows: the residual add
 require dasllama/dasllama_gpu_math   // sigmoid_f32
 require dasllama/dasllama_tts_types
@@ -261,10 +263,15 @@ struct StyleTts2Model {
     source : SineSourceCfg = SineSourceCfg()
     q8 : bool               // the lane this image was minted on: the rows GEMMs serve Q8_0 quants
     kq : bool               //! ... on the recipe lane: each weight group in the format `st2_recipe_default` names
+    dev_backend : TowerDev  //! the GPU home this image was staged for: its K-quant planes sit in disk order, which that home's seats stage as stored; `none` on a CPU image
+    host_weights : bool     //! a cell's mint (`set_tts_host_weights_`): the weights its device block replaces are held too
+    dev_layout : uint64     //! the layout of the device block this image carries (`set_styletts2_block_layout`); 0 on a CPU image
     kitten : KittenFamily
     kokoro : KokoroFamily
     blob : PlaneF = PlaneF()
     qblob : PlaneI8 = PlaneI8()
+    dev : PlaneU8 = PlaneU8()         //! a GPU image's device block (`#tower-dev-block`): the pieces its home's seats bind ...
+    devplan : PlaneI64 = PlaneI64()   //! ... and the plan naming them; empty on a CPU image
     image_map : void?
     image_bytes : uint64
 }
@@ -283,7 +290,7 @@ def weights_walk(var io : TtsBlobIo; var m : StyleTts2Model) {
 
 // serialize_image_meta covers 19 fields; the three voice tables (views bound from their spans), image_map and
 // image_bytes are the deliberate skips
-let private ST2_META_FIELDS = 19 + 5
+let private ST2_META_FIELDS = 21 + 6
 let ST2_IMAGE_PREFIX = "tts-"   //!< every lane tag of the family starts with it
 let ST2_IMAGE_TAG = "tts-f32"
 let ST2_IMAGE_TAG_Q8 = "tts-q8"
@@ -327,6 +334,9 @@ def st2_group(name : string) : string {
     return "decoder"
 }
 
+//! a recipe group of the decoder, whose convs the GPU seats run on their f16 tiles; the front end's stay exact
+def private st2_decoder_group(g : string) : bool => g == "decoder" || g == "generator" || g == "ups" || g == "noise" || g == "post"
+
 def private st2_kq(f : St2Fmt) : KqFmt => f == St2Fmt.k4 ? KqFmt.k4 : (f == St2Fmt.k5 ? KqFmt.k5 : KqFmt.k6)
 def private st2_is_kq(f : St2Fmt) : bool => f == St2Fmt.k4 || f == St2Fmt.k5 || f == St2Fmt.k6
 
@@ -349,6 +359,9 @@ def private serialize_image_meta(var arch : Archive; var m : StyleTts2Model) {
     arch |> serialize(m.source)
     arch |> serialize_raw(m.q8)
     arch |> serialize_raw(m.kq)
+    arch |> serialize_raw(m.dev_backend)
+    arch |> serialize_raw(m.host_weights)
+    arch |> serialize_raw(m.dev_layout)
     // the family records are hand-listed too, so each pins its count - an unwritten field reads back zero
     verify(count_meta_fields(m.kitten) == 2)   // grew KittenFamily? extend this list
     verify(count_meta_fields(m.kokoro) == 2)   // grew KokoroFamily? extend this list
@@ -393,6 +406,9 @@ def reset_styletts2_q8() {
 //! Would the next load serve the rows GEMMs as q8 - the pin when set, the policy otherwise.
 def styletts2_serves_q8() : bool => st2_serve_q8()
 
+//! Whether ``set_styletts2_q8`` holds a pin ``reset_styletts2_q8`` has not dropped.
+def styletts2_q8_pinned() : bool => g_st2_q8_pin != GemmLane.unset
+
 //! Would the next load serve the recipe lane - true while ``set_styletts2_recipe`` is in force.
 def styletts2_serves_recipe() : bool => st2_serve_kq()
 
@@ -400,6 +416,21 @@ def styletts2_serves_recipe() : bool => st2_serve_kq()
 def styletts2_recipe() : string => g_st2_recipe_spec
 
 def private st2_tag_of(q8, kq : bool) : string => kq ? ST2_IMAGE_TAG_KQ : (q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG)
+
+//! The family's GPU flavor seat (`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block`): the registered driver's backend, whether
+//! its seats serve the recipe lane (`serves`, the lane's kq flag), and its bake
+[tower_flavor(family = "styletts2", model = "StyleTts2Model")]
+struct St2Flavor {}
+
+//! the flavor a load takes on the lane (`kq`: the recipe lane): the driver's where its seats serve it, else `none`, the CPU image
+def styletts2_dev_flavor(kq : bool) : TowerDev => tower_dev_flavor(g_styletts2_flavor, kq)
+
+//! `stage_styletts2` under the GPU flavor this lane's load takes (`styletts2_dev_flavor`): the seats find the K-quant planes as stored
+def stage_styletts2_served(path : string; q8 : bool = false; kq : bool = false) : St2Staging {
+    return <- tower_dev_staged(styletts2_dev_flavor(kq)) {
+        return <- stage_styletts2(path, q8, kq)
+    }
+}
 
 // the lane changes what a load mints and serves, so the load says which and why - and names a pin it does not apply:
 // a prepared image serves the lane it was baked on, a file that stores its weights the lane it names, and the recipe
@@ -615,6 +646,8 @@ struct St2Staging {
     e : StyleTts2Model = StyleTts2Model()
     blob : array<float>
     qblob : array<int8>
+    @exact_size dev : array<uint8>
+    @exact_size devplan : array<int64>
 }
 
 def private serialize_image_meta(var arch : Archive; var st : St2Staging) {
@@ -635,11 +668,26 @@ def private styletts2_layout_fingerprint() : uint64 {
     return layout
 }
 
+var private g_st2_block_layout = 0ul
+
+//! the registered driver's block layout: a GPU image records it (`dev_layout`), and a load re-mints an image another layout
+//! baked; answers the layout it replaced
+def set_styletts2_block_layout(layout : uint64) : uint64 {
+    let was = g_st2_block_layout
+    g_st2_block_layout = layout
+    return was
+}
+
 [init]
 def private register_styletts2_image_tags {
     register_image_family_tag(ST2_IMAGE_TAG, true, @@styletts2_layout_fingerprint)   // no box property shapes the f32 blob
     register_image_family_tag(ST2_IMAGE_TAG_Q8, false, @@styletts2_layout_fingerprint)   // the q8 quants follow the backend's repack
     register_image_family_tag(ST2_IMAGE_TAG_KQ, false, @@styletts2_layout_fingerprint)   // and so do the K-quant planes
+    for (dev in [TowerDev.metal, TowerDev.vulkan, TowerDev.cuda]) {   // a flavor's Q8_0 planes are staged in the CPU backend's layout: config-bound
+        register_image_flavor_tag(tower_dev_tag(ST2_IMAGE_TAG, dev), ST2_IMAGE_TAG)
+        register_image_flavor_tag(tower_dev_tag(ST2_IMAGE_TAG_Q8, dev), ST2_IMAGE_TAG_Q8, false)
+        register_image_flavor_tag(tower_dev_tag(ST2_IMAGE_TAG_KQ, dev), ST2_IMAGE_TAG_KQ, false)
+    }
 }
 
 let ST2_ADAIN_EPS = 1e-5   //!< the instance norms' eps, the generator driver's twin reads it
@@ -699,7 +747,10 @@ def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : str
     if (st2_is_kq(fmt) && (rows || quant_cm) && conv1d_kq_eligible(c)) {
         conv1d_prepare_kq(c, st2_kq(fmt), g_stage_repack)
     } else {
-        conv1d_prepare(c, g_stage_q8 && fmt != St2Fmt.f32, g_stage_repack, quant_cm)
+        let quant = g_stage_q8 && fmt != St2Fmt.f32
+        // a GPU home's image holds an unquantized decoder rows conv as the halves its f16 tiles read
+        let halves = rows && !quant && !g_stage_capture && tower_dev_halfword(tower_staging_dev()) && st2_decoder_group(st2_group(wname))
+        conv1d_prepare(c, quant, g_stage_repack, quant_cm, halves)
     }
     stage_note(wname, fmt, st2_is_kq(fmt) ? c.kq_fmt != 0 : (c.q8 == (fmt == St2Fmt.q8)))
     capture_conv(wname, c, cc.cin)
@@ -998,6 +1049,21 @@ def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) :
 def stage_styletts2(path : string; q8 : bool = false; kq : bool = false) : St2Staging =>
     <- stage_styletts2_(path, q8, kq, false)
 
+//! every weight into the staging's planes, a GPU flavor's block baked first so the walk drops the arrays it replaces
+def private st2_stage_planes(var st : St2Staging) {
+    var io = TtsBlobIo(staging = true, blob = unsafe(addr(st.blob)), qblob = unsafe(addr(st.qblob)))
+    var inscope spent : table<uint64>
+    if (st.e.dev_backend != TowerDev.none) {
+        tower_bake_block(g_styletts2_flavor, st, spent, "styletts2")
+        st.e.dev_layout = g_st2_block_layout
+        st.e.host_weights = tts_host_weights_()
+        if (!st.e.host_weights) {
+            io.spent = unsafe(addr(spent))
+        }
+    }
+    weights_walk(io, st.e)
+}
+
 // `for_writer` is the writer's stage: the planes stay in disk order and every minted weight is recorded as its blocks
 def private stage_styletts2_(path : string; q8, kq, for_writer : bool) : St2Staging {
     if (kq && !q8) {
@@ -1006,6 +1072,7 @@ def private stage_styletts2_(path : string; q8, kq, for_writer : bool) : St2Stag
     var inscope st = St2Staging()
     st.e.q8 = q8
     st.e.kq = kq
+    st.e.dev_backend = for_writer ? TowerDev.none : tower_staging_dev()
     delete g_stage_minted   // a stage a panic cut short left its counts behind
     delete g_captured
     delete g_captured_at
@@ -1072,8 +1139,7 @@ def private stage_styletts2_(path : string; q8, kq, for_writer : bool) : St2Stag
     stage_report()
     g_stage_kq = false
     g_stage_stored = false
-    var io = TtsBlobIo(staging = true, blob = unsafe(addr(st.blob)), qblob = unsafe(addr(st.qblob)))
-    weights_walk(io, st.e)
+    st2_stage_planes(st)
     return <- st
 }
 
@@ -1141,7 +1207,7 @@ def private stage_family_data(m : GGUFMeta; bytes : array<uint8>#; var e : Style
 //! Mint a served model from a staged read without touching disk - the in-memory image rail,
 //! the off-rail control for suites. The staged read's lane picks the tag.
 def mint_styletts2(var st : St2Staging; var out : StyleTts2Model) {
-    cache_via_image_staged(st, out, "", st2_tag_of(st.e.q8, st.e.kq))
+    cache_via_image_staged(st, out, "", tower_dev_tag(st2_tag_of(st.e.q8, st.e.kq), st.e.dev_backend))
     st2_bind(out)
 }
 
@@ -1245,6 +1311,7 @@ def write_styletts2_gguf(src, dst : string; kq : bool) : bool {
 //! file names its lane, and the gguf is not needed.
 [arch(at = "../ARCHITECTURE_TTS.md#tts-image-rail"), arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order")]
 def load_styletts2(path : string) : StyleTts2Model {
+    tts_host_weights_refuse_load("dasLLAMA styletts2")
     bump_weights_epoch()   //! the previous model's GPU slabs drop before this one's weights can land at their addresses
     let dlim = path |> ends_with(".dlim")
     let stored = dlim ? "" : styletts2_stored_lane(path)   // a file that stores its weights as minted serves the lane it names
@@ -1253,13 +1320,21 @@ def load_styletts2(path : string) : StyleTts2Model {
     st2_announce_lane(dlim, stored)
     if (kq && !empty(g_st2_recipe_pin) && !dlim && empty(stored)) {   // pinned groups: minted in memory, no image read or written
         var inscope pinned = StyleTts2Model()
-        var inscope st <- stage_styletts2(path, q8, kq)
+        var inscope st <- stage_styletts2_served(path, q8, kq)
         mint_styletts2(st, pinned)
         return <- pinned
     }
-    let tag = image_path_lane(path, st2_tag_of(q8, kq), ST2_IMAGE_PREFIX)
-    var inscope m <- load_staged_image(path, tag, "styletts2", "source gguf", type<StyleTts2Model>) {
-        return <- stage_styletts2(path, q8, kq)
+    let lane = image_path_lane(path, st2_tag_of(q8, kq), ST2_IMAGE_PREFIX)
+    let tag = dlim ? named_image_tag(path, lane) : tower_dev_tag(lane, styletts2_dev_flavor(kq))
+    var inscope m <- load_staged_image(path, tag, "styletts2", "source gguf", type<StyleTts2Model>, $ {
+        return <- stage_styletts2_served(path, q8, kq)
+    }, $(t : StyleTts2Model) => tower_block_current(t, g_st2_block_layout), $(t : StyleTts2Model; src : string) {
+        if (!tower_block_current(t, g_st2_block_layout)) {
+            panic("dasLLAMA styletts2: '{src}' carries a {t.dev_backend} device block another build laid out - regenerate it from the source gguf")
+        }
+    })
+    if (m.dev_backend != TowerDev.none) {
+        to_log(LOG_INFO, "dasLLAMA styletts2: the load serves the {m.dev_backend} image - its seats' weights are the device block's\n")
     }
     st2_bind(m)
     return <- m
@@ -1316,6 +1391,7 @@ struct StyleTts2Trace {
 //! `wave` is the last synthesis's waveform; `noise` the source noise it drew.
 struct St2Scratch {
     cpu_only : bool   //! the trace rail: every seat declines for the synthesis that set it
+    blk : TtsDevBlock = TtsDevBlock()   //! the served model's device block, a view the synthesis sets: the seats attach its pieces
     @scratch @exact_size s_ref : array<float>
     @scratch @exact_size s_pro : array<float>
     @scratch @exact_size bert : array<float>
@@ -1397,6 +1473,13 @@ def private trace_rows_strided(var dst : array<float>; rows : array<float>; t, c
     transpose_tc_strided(rows, t, c, stride, dst)
 }
 
+//! a GPU image's stage reaching its CPU body (a declined seat, the knob off after load, a trace) refuses: the device block alone holds it
+def private st2_cpu_refuse(sc : St2Scratch; stage : string) {
+    if (sc.blk.plan_n > 0l && !sc.blk.host) {
+        panic("dasLLAMA styletts2: the {stage} did not run on the device - a GPU image never runs on the CPU (the seat's log line names the reason; with the tower knob off or a stage trace asked, load the source model: it maps the CPU image)")
+    }
+}
+
 //! The PL-BERT encoder: embeddings, then one ALBERT layer applied n_layers times; out [T][hidden].
 def styletts2_albert(a : St2Albert; ids : array<int>; @scratch @exact_size var out : array<float>; var sc : St2Scratch) {
     let t = long_length(ids)
@@ -1410,6 +1493,7 @@ def styletts2_albert(a : St2Albert; ids : array<int>; @scratch @exact_size var o
             return
         }
     }
+    st2_cpu_refuse(sc, "PL-BERT")
     bert_embed_rows(ids, a.word_emb.a, a.pos_emb.a, a.type_emb.a, a.emb_ln, ALBERT_EPS, a.emb_dim, sc.al_e)
     linear_rows(a.map_in, sc.al_e, t, out)
     for (_layer in range64(a.n_layers)) {
@@ -1426,6 +1510,7 @@ def styletts2_text_encoder(te : St2TextEncoder; ids : array<int>; @scratch @exac
             return
         }
     }
+    st2_cpu_refuse(sc, "text encoder")
     let t = long_length(ids)
     let c = te.c
     unsafe(scratch_resize(sc.te_xtm, t * c))
@@ -1456,7 +1541,7 @@ def styletts2_text_encoder(te : St2TextEncoder; ids : array<int>; @scratch @exac
 
 def private append_style_rows(x : array<float>; t, c : int64; s : array<float>; @scratch @exact_size var out : array<float>) {
     let sd = long_length(s)
-    out |> reserve_resize(t * (c + sd))
+    unsafe(scratch_resize(out, t * (c + sd)))
     for (i in range64(t)) {
         for (d in range64(c)) {
             out[i * (c + sd) + d] = x[i * c + d]
@@ -1478,6 +1563,7 @@ def styletts2_duration_encoder(p : St2Predictor; bert : array<float>; t : int64;
             return
         }
     }
+    st2_cpu_refuse(sc, "duration encoder")
     let c = p.bert_encoder.nout
     var d_en & = unsafe(sc.d_en)
     linear_rows(p.bert_encoder, bert, t, d_en)
@@ -1489,7 +1575,7 @@ def styletts2_duration_encoder(p : St2Predictor; bert : array<float>; t : int64;
         ada_layernorm_rows(p.lns[i], y, t, c, s, LN_EPS)
         append_style_rows(y, t, c, s, x)
     }
-    out |> reserve_resize(t * (c + long_length(s)))
+    unsafe(scratch_resize(out, t * (c + long_length(s))))
     copy_floats(x, 0l, out, 0l, t * (c + long_length(s)))
 }
 
@@ -1505,12 +1591,13 @@ def styletts2_durations(p : St2Predictor; d : array<float>; t : int64; speed : f
         }
     }
     if (!served) {
+        st2_cpu_refuse(sc, "duration head")
         var x & = unsafe(sc.du_x)
         var logits & = unsafe(sc.du_logits)
         bilstm(p.lstm, d, t, x)
         linear_rows(p.duration_proj, x, t, logits)
         let nb = p.duration_proj.nout
-        raw |> reserve_resize(t)
+        unsafe(scratch_resize(raw, t))
         for (i in range64(t)) {
             var acc = 0.0
             for (j in range64(nb)) {
@@ -1519,7 +1606,7 @@ def styletts2_durations(p : St2Predictor; d : array<float>; t : int64; speed : f
             raw[i] = acc / speed
         }
     }
-    dur |> reserve_resize(t)
+    unsafe(scratch_resize(dur, t))
     var frames = 0l
     for (i in range64(t)) {
         let r = max(1.0, round_half_even(raw[i]))
@@ -1537,6 +1624,9 @@ def private residual_join(var out : array<float>; shortcut : array<float>; n : i
     }
 }
 
+//! the rows an AdaIN residual block returns over `t` rows: its upsampling pool's, or `t`
+def st2_blk_rows(b : St2AdainResBlk; t : int64) : int64 => b.upsample ? conv1d_out_len(b.pool, t) : t
+
 // The AdaIN residual block on token-major rows x [t][dim_in] -> out [t1][dim_out]: the first
 // norm copies as it normalizes, the identity shortcut reads x in place, the upsampling pool is
 // the rows depthwise transposed conv and the nearest copy of the shortcut.
@@ -1551,7 +1641,7 @@ def private adain_res_blk(b : St2AdainResBlk; x : array<float>; t : int64; s : a
     var t1 = t
     if (b.upsample) {
         conv1d_rows_transposed_depthwise(b.pool, r, t, pooled)
-        t1 = conv1d_out_len(b.pool, t)
+        t1 = st2_blk_rows(b, t)
         conv1d_rows(b.conv1, pooled, t1, c1)
     } else {
         conv1d_rows(b.conv1, r, t1, c1)
@@ -1617,6 +1707,7 @@ def styletts2_prosody(p : St2Predictor; en : array<float>; c, frames : int64; s 
             return f2g
         }
     }
+    st2_cpu_refuse(sc, "prosody stage")
     var en_tm & = unsafe(sc.pr_en_tm)
     var x_tm & = unsafe(sc.pr_x_tm)
     transpose_ct(en, c, frames, en_tm)
@@ -1705,7 +1796,7 @@ def styletts2_source(d : St2Decoder; cfg : SineSourceCfg; f0 : array<float>; f0_
     var nwin & = unsafe(sc.so_noise)
     var hwin & = unsafe(sc.so_har)
     sine_carry_reset(sc.so_carry, nh, win)
-    har |> reserve_resize(n)
+    unsafe(scratch_resize(har, n))
     var fa = 0l
     while (fa < nlow) {
         let fb = min(fa + win, nlow)
@@ -1715,7 +1806,7 @@ def styletts2_source(d : St2Decoder; cfg : SineSourceCfg; f0 : array<float>; f0_
             rows = sine_source(cfg, f0, f0_frames, noise.uniform, fa, fb, sc.so_carry, noise.normal, sa * nh, sines)
         } else {
             let draw = ((fb == nlow ? n : fb * up) - sa) * nh
-            nwin |> reserve_resize(draw)
+            unsafe(scratch_resize(nwin, draw))
             for (i in range64(draw)) {
                 nwin[i] = rng_normal(rng)
             }
@@ -1754,6 +1845,9 @@ def styletts2_har_spectrum(d : St2Decoder; har : array<float>; n : int64; var tr
     return frames
 }
 
+//! the rows generator stage `i` reflects onto the left of its upsampled frames: one on the last stage
+def st2_stage_pad(d : St2Decoder; i : int64) : int64 => i == long_length(d.ups) - 1l ? 1l : 0l
+
 // One generator stage: x [tt][cc] rows in, `out` the next stage's rows; the upsampled stream
 // carries the noise branch and the averaged Snake residual blocks.
 [arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-generator-buffers")]
@@ -1790,9 +1884,10 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; @sc
             trace_rows(tr.ups1, y, tt, cc)
         }
     }
-    if (i == long_length(d.ups) - 1l) {
-        pad_reflect_left_rows_inplace(y, tt, cc, 1l)
-        tt++
+    let pad = st2_stage_pad(d, i)
+    if (pad > 0l) {
+        pad_reflect_left_rows_inplace(y, tt, cc, pad)
+        tt += pad
     }
     if (src_t != tt) {
         panic("dasLLAMA styletts2: source branch {src_t} frames against {tt} at stage {i}")
@@ -1848,10 +1943,6 @@ typedef St2ProsodyGpuFn = function<(p : St2Predictor; en : array<float>; c, fram
 //! The decoder from the aligned text features, F0 and N through the source and the generator to the samples.
 typedef St2DecodeGpuFn = function<(d : St2Decoder; text_c : int64; source : SineSourceCfg; asr : array<float>; frames : int64; f0, nrg : array<float>; f2 : int64;
                                     s_ref : array<float>; noise : TtsNoise; seed : uint64; @scratch @exact_size var wave : array<float>; var sc : St2Scratch) : bool>
-//! The generator alone - the rows form of its input, the style, the source spectrum as rows
-//! [har_frames][2 * bins] - writing exactly the waveform's samples into `wave`.
-typedef St2GeneratorGpuFn = function<(d : St2Decoder; x_rows : array<float>; c, t : int64; s : array<float>;
-                                       har_spec : array<float>; har_frames : int64; @scratch @exact_size var wave : array<float>; var sc : St2Scratch) : bool>
 
 //! A driver's seats, one per stage; a seat left empty keeps the CPU form for that stage.
 struct St2GpuDriver {
@@ -1861,20 +1952,18 @@ struct St2GpuDriver {
     durations : St2DurationsGpuFn
     prosody : St2ProsodyGpuFn
     decode : St2DecodeGpuFn
-    gen : St2GeneratorGpuFn
 }
 
 var private g_st2_drv : St2GpuDriver
 var private g_st2_drv_prev : St2GpuDriver   //! the registration a caller's seat displaced
 
-var private g_st2_seats <- tts_seats(["albert", "text", "dur_enc", "durations", "prosody", "decode", "generator"])
+var private g_st2_seats <- tts_seats(["albert", "text", "dur_enc", "durations", "prosody", "decode"])
 let private ST2_SEAT_ALBERT = 0   //!< the seats' indices in the record's order
 let private ST2_SEAT_TEXT = 1
 let private ST2_SEAT_DUR_ENC = 2
 let private ST2_SEAT_DURATIONS = 3
 let private ST2_SEAT_PROSODY = 4
 let private ST2_SEAT_DECODE = 5
-let private ST2_SEAT_GENERATOR = 6
 
 [arch(at = "../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
 def register_styletts2_gpu(drv : St2GpuDriver) {
@@ -1900,10 +1989,7 @@ def private st2_seat_served(seat : int) {
 [cold_path]
 def styletts2_gpu_stats(stage : string) : tuple<calls : int; served : int> => tts_seat_stats(g_st2_seats, stage, "styletts2")
 
-[cold_path]
-def styletts2_generator_gpu_stats() : tuple<calls : int; served : int> => styletts2_gpu_stats("generator")
-
-//! The seat names of the hook record, in dispatch order; the generator seat last.
+//! The seat names of the hook record, in dispatch order.
 [cold_path]
 def styletts2_gpu_seats() : array<string> => tts_seat_names(g_st2_seats)
 
@@ -1922,27 +2008,19 @@ def styletts2_gpu_seat_present(stage : string) : bool {
         return g_st2_drv.prosody != null
     } elif (stage == "decode") {
         return g_st2_drv.decode != null
-    } elif (stage == "generator") {
-        return g_st2_drv.gen != null
     }
     panic("dasLLAMA styletts2: no seat named '{stage}'")
 }
 
 //! The iSTFTNet generator on token-major rows x [t][c]: two upsampling stages, each adding the
 //! source spectrum through its noise branch and refining through Snake residual blocks, then the
-//! inverse STFT into `wave`; a registered driver gets the first refusal, except on the trace rail.
+//! inverse STFT into `wave`: the CPU form, which a device image refuses (its generator runs inside the decode seat).
 def styletts2_generator_rows(d : St2Decoder; var x : array<float>; c, t : int64; s : array<float>;
                              har_spec : array<float>; har_frames : int64; var tr : StyleTts2Trace?;
                              @scratch @exact_size var wave : array<float>; var sc : St2Scratch) : int64 {
     var a & = unsafe(sc.gen_a)
     var b & = unsafe(sc.gen_b)
-    if (g_st2_drv.gen != null && tr == null && !sc.cpu_only) {
-        st2_seat_call(ST2_SEAT_GENERATOR)
-        if (invoke(g_st2_drv.gen, d, x, c, t, s, har_spec, har_frames, wave, sc)) {
-            st2_seat_served(ST2_SEAT_GENERATOR)
-            return long_length(wave)
-        }
-    }
+    st2_cpu_refuse(sc, "generator")
     var cc = c
     var tt = t
     let nst = long_length(d.ups)
@@ -1989,6 +2067,9 @@ def private generator_tail(d : St2Decoder; var x : array<float>; cc, tt : int64;
     return styletts2_istft(d, y, d.conv_post.cout_s, tt, wave, sc)
 }
 
+//! the samples the inverse STFT returns over `tt` frames, the centre pad trimmed
+def st2_wave_samples(d : St2Decoder; tt : int64) : int64 => conv1d_out_len(d.stft_bwd_re, tt) - 2l * ST2_STFT_PAD
+
 //! The inverse STFT from conv_post's rows y [tt][stride] (a bin's log magnitude, then its phase):
 //! the polar-to-rectangular pair, the two transposed convs, the envelope; the sample count.
 def styletts2_istft(d : St2Decoder; y : array<float>; stride, tt : int64;
@@ -2002,9 +2083,8 @@ def styletts2_istft(d : St2Decoder; y : array<float>; stride, tt : int64;
     asr_prof_add("tts.gen.post", tc)
     conv1d(d.stft_bwd_re, re, tt, wr)
     conv1d(d.stft_bwd_im, im, tt, wi)
-    let full = conv1d_out_len(d.stft_bwd_re, tt)
-    let n = full - 2l * STFT_PAD
-    wave |> reserve_resize(n)
+    let n = st2_wave_samples(d, tt)
+    unsafe(scratch_resize(wave, n))
     for (i in range64(n)) {
         wave[i] = wr[STFT_PAD + i] - wi[STFT_PAD + i]
     }
@@ -2031,7 +2111,7 @@ def styletts2_draw_noise(cfg : SineSourceCfg; seed : uint64; var noise : TtsNois
 def private concat_rows(x : array<float>; c : int64; res : array<float>; rc, rs : int64; f0d, nd : array<float>; with_res : bool; t, width : int64; @scratch @exact_size var out : array<float>) {
     let r = with_res ? rc : 0l
     let total = c + r + 2l
-    out |> reserve_resize(width * t)
+    unsafe(scratch_resize(out, width * t))
     var op = unsafe(addr(out[0]))
     let xp = unsafe(addr<float const?>(x[0]))
     let rp = with_res ? unsafe(addr<float const?>(res[0])) : null
@@ -2078,7 +2158,7 @@ def styletts2_decode(d : St2Decoder; text_c : int64; source : SineSourceCfg; asr
                      f0, nrg : array<float>; f2 : int64; s_ref : array<float>; var noise : TtsNoise; seed : uint64;
                      var tr : StyleTts2Trace?; var tm : TtsTimings; var sc : St2Scratch) : int64 {
     var clock = ref_time_ticks()
-    if (g_st2_drv.decode != null && tr == null && !sc.cpu_only) {
+    if (g_st2_drv.decode != null && !sc.cpu_only) {
         //! A served decode is one command buffer: the decoder clock carries it, the source and generator clocks read zero.
         st2_seat_call(ST2_SEAT_DECODE)
         styletts2_draw_noise(source, seed, noise)
@@ -2091,6 +2171,7 @@ def styletts2_decode(d : St2Decoder; text_c : int64; source : SineSourceCfg; asr
             return tm.samples
         }
     }
+    st2_cpu_refuse(sc, "decoder")
     var f0d & = unsafe(sc.dec_f0d)
     var nd & = unsafe(sc.dec_nd)
     var res & = unsafe(sc.dec_res)
@@ -2158,18 +2239,22 @@ def private warn_truncated(n, cap : int64) {
     to_log(LOG_WARNING, "dasLLAMA styletts2: {n} tokens exceed the encoder's {cap} positions - the chunk is truncated to {cap}\n")
 }
 
-//! Synthesize from token ids: the full StyleTTS2 pass into `sc.wave` (the facade trims the
-//! tail), the sample count back. `noise` supplies the source noise (empty = drawn from `seed`),
-//! `tr` collects the stage tensors when not null, `tm` the stage walls, `sc` every buffer.
-[hot_path, arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-scratch-carrier")]
-def styletts2_synthesize(m : StyleTts2Model; ids : array<int>; style : array<float>; speed : float;
-                         var noise : TtsNoise; seed : uint64; var tr : StyleTts2Trace?; var tm : TtsTimings; var sc : St2Scratch) : int64 {
-    let start = ref_time_ticks()
-    var clock = start
-    sc.cpu_only = tr != null
-    defer() {
-        sc.cpu_only = false
-    }
+//! the carrier set to serve a pass of `m`: the trace rail (`traced`) keeps every seat off
+def private st2_carrier_arm(var sc : St2Scratch; m : StyleTts2Model; traced : bool) {
+    sc.cpu_only = traced
+    sc.blk = tts_dev_block(m.dev, m.devplan, m.host_weights, image_backing_mapped(m.image_map))
+}
+
+def private st2_carrier_disarm(var sc : St2Scratch) {
+    sc.cpu_only = false
+    sc.blk = TtsDevBlock()
+}
+
+//! a synthesis through its durations stage on a served carrier, ids clipped to the encoder's positions, stage rows left in `sc`; the frames
+def private st2_duration_pass(m : StyleTts2Model; ids : array<int>; style : array<float>;
+                              speed : float; var tr : StyleTts2Trace?; var tm : TtsTimings;
+                              var sc : St2Scratch) : int64 {
+    var clock = ref_time_ticks()
     let n_in = long_length(ids)
     let t = min(n_in, m.albert.max_pos)
     if (n_in > t) {
@@ -2202,23 +2287,67 @@ def styletts2_synthesize(m : StyleTts2Model; ids : array<int>; style : array<flo
     if (tr != null) {
         trace_take(tr.bert, sc.d_en)
     }
-    let dc = m.predictor.bert_encoder.nout + hs
     let frames = styletts2_durations(m.predictor, sc.d, t, speed, sc.dur, sc.raw, sc)
     if (tr != null) {
         trace_take(tr.dur_raw, sc.raw)
         tr.frames = frames
     }
+    tm.duration_us = int64(get_time_usec(clock))
+    return frames
+}
+
+[cold_path, arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-scratch-carrier")]
+def styletts2_frames(m : StyleTts2Model; ids : array<int>; style : array<float>; speed : float;
+                     var tr : StyleTts2Trace?; var tm : TtsTimings;
+                     var sc : St2Scratch) : int64 {
+    st2_carrier_arm(sc, m, tr != null)
+    defer() {
+        st2_carrier_disarm(sc)
+    }
+    return st2_duration_pass(m, ids, style, speed, tr, tm, sc)
+}
+
+//! the samples a synthesis of `frames` frames returns, through the length steps the decoder and the generator take
+[cold_path]
+def styletts2_samples_of(d : St2Decoder; frames : int64) : int64 {
+    var t = st2_blk_rows(d.encode, frames)
+    for (b in d.decode) {
+        t = st2_blk_rows(b, t)
+    }
+    for (i in range64(long_length(d.ups))) {
+        t = conv1d_out_len(d.ups[i], t) + st2_stage_pad(d, i)
+    }
+    return st2_wave_samples(d, t)
+}
+
+//! Synthesize from token ids: the full StyleTTS2 pass into `sc.wave` (the facade trims the
+//! tail), the sample count back. `noise` supplies the source noise (empty = drawn from `seed`),
+//! `tr` collects the stage tensors when not null, `tm` the stage walls, `sc` every buffer.
+[hot_path, arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-scratch-carrier")]
+def styletts2_synthesize(m : StyleTts2Model; ids : array<int>; style : array<float>; speed : float;
+                         var noise : TtsNoise; seed : uint64; var tr : StyleTts2Trace?; var tm : TtsTimings; var sc : St2Scratch) : int64 {
+    let start = ref_time_ticks()
+    st2_carrier_arm(sc, m, tr != null)
+    defer() {
+        st2_carrier_disarm(sc)
+    }
+    let frames = st2_duration_pass(m, ids, style, speed, tr, tm, sc)
+    var clock = ref_time_ticks()
+    let t = long_length(sc.ids)
+    let hs = m.style_dim / 2l
+    let dc = m.predictor.bert_encoder.nout + hs
     align_expand_rows(sc.d, t, dc, sc.dur, sc.en)
     align_expand_channels(sc.t_en, m.text_encoder.c, t, sc.dur, sc.asr)
-    tm.duration_us = int64(get_time_usec(clock))
+    tm.duration_us += int64(get_time_usec(clock))
     clock = ref_time_ticks()
-    let f2 = styletts2_prosody(m.predictor, sc.en, dc, frames, s_pro, sc.f0, sc.nrg, sc)
+    let f2 = styletts2_prosody(m.predictor, sc.en, dc, frames, sc.s_pro, sc.f0, sc.nrg, sc)
     if (tr != null) {
         trace_take(tr.f0, sc.f0)
         trace_take(tr.n, sc.nrg)
     }
     tm.prosody_us = int64(get_time_usec(clock))
-    let samples = styletts2_decode(m.decoder, m.text_encoder.c, m.source, sc.asr, frames, sc.f0, sc.nrg, f2, s_ref, noise, seed, tr, tm, sc)
+    let samples = styletts2_decode(m.decoder, m.text_encoder.c, m.source, sc.asr, frames, sc.f0,
+                                   sc.nrg, f2, sc.s_ref, noise, seed, tr, tm, sc)
     tm.total_us = tm.front_end_us + int64(get_time_usec(start))
     return samples
 }

@@ -16,6 +16,7 @@ require strings
 require daslib/strings_boost   // split: the pricing rail's fragments
 require daslib/enum_trait
 require dasllama/dasllama_kqformat
+require dasllama/dasllama_env   // g_env_gpu: the profile ledger's knob
 
 //! the device planes a tower chain names by role, grouped by what the plane holds: the block rows and their feeds, the attention
 //! panels, the FFN rows, the stems' and tails' rows, the weight planes and the schedule; the fronts' stages; the rel-position
@@ -139,6 +140,141 @@ struct RailBuf {
 
 //! the seat of the plane at `role` on a rail of either home
 def rail_buf(rl : auto(R); role : TowerBuf) : RailBuf => rl.bufs[int(role)]
+
+//! One conv dispatch as a home's own conv tile takes it (`rail_tts_conv`): the layer's geometry, the rows of its call, where
+//! its weight rows and bias row sit in the slab (elements), and - a stored leaf - its format and its place in the home's planes
+struct TtsConvSite {
+    cin : int64
+    k : int64
+    stride : int64
+    pad_l : int64      //! the left pad of this call (a stream's first window carries its own)
+    dilation : int64
+    transposed : bool
+    half : bool        //! the chain takes f16-staged operands at this site
+    tin : int64
+    tout : int64
+    cout : int64
+    cout_p : int64     //! the outputs on the tile's lattice
+    kdim_p : int64     //! a weight row's stride
+    woff : int64       //! the weight rows' element in the slab (a leaf has none)
+    boff : int64       //! the bias row's element in the slab
+    stored : bool      //! the weights are a stored leaf of the home's planes ...
+    native : bool      //! ... a quant leaf in the home's own layout: only the home's own tile reads it
+    halves : bool      //! ... half floats ...
+    fmt : KqFmt        //! ... or this quant format ...
+    qoff : int64       //! ... at this place of its quant plane, its scale rows at `soff` and a split format's d tail at `doff` of the scale plane: the home's own units
+    soff : int64
+    doff : int64
+}
+
+//! One dense GEMM as a home's own tile takes it (`rail_tts_mm`): y [rows][nout] at element `yoff` = x [rows][nin] at
+//! element `xoff` against the layer's weights - the slab's rows, or a stored leaf in the home's planes - its bias row added under `biased`
+struct TtsMmSite {
+    nin : int64
+    nout : int64
+    rows : int64
+    xoff : int64
+    yoff : int64
+    biased : bool
+    cout_p : int64     //! the outputs on the tile's lattice: the weight rows the slab or the leaf holds
+    kdim_p : int64     //! a weight row's stride
+    woff : int64       //! the weight rows' element in the slab (a leaf has none)
+    boff : int64       //! the bias row's element in the slab
+    stored : bool
+    native : bool      //! a quant leaf in the home's own layout: only the home's own tile reads it
+    halves : bool
+    fmt : KqFmt
+    qoff : int64
+    soff : int64
+    doff : int64
+}
+
+let TTS_PK_GEMV_DOT = 0          //! the Pocket frame's row GEMV by its stamp's kind: the plain dot ...
+let TTS_PK_GEMV_LN_SILU = 1
+let TTS_PK_GEMV_GATE = 2
+let TTS_PK_GEMV_ADD_SILU = 3
+let TTS_PK_GEMV_TAIL = 4
+let TTS_PK_GEMV_LN_GELU = 5      //! the frame loop's ffn up: the normed input, the GELU out
+let TTS_PK_GEMV_ADD_SCALE = 6    //! ... and its residual joins: y += d times the slab's scale row at aoff
+let TTS_PK_GEMV_ADD = 7          //! ... or y += d alone
+let TTS_PK_GEMV_LN_QKV = 8       //! ... and its qkv row: normed, the q span roped into y, the k and v spans into the caches' row
+let TTS_PK_ST_HALVES = -1        //! `TtsPkStSite.fmt` of a leaf held as half floats
+
+//! One stored row GEMV (`TtsPkGemvStoredT`): its stamp's kind (a `TTS_PK_GEMV_*`), the leaf's format - a `KqFmt` slot, or
+//! `TTS_PK_ST_HALVES` - and the planes a kind's stamp seats: the slab's rows, x and y, then the kind's own, then the leaf's plane pair
+struct TtsPkStSite {
+    kind : int
+    fmt : int
+    rows : RailBuf
+    x : RailBuf
+    y : RailBuf
+    mod : RailBuf    //! the modulation rows: the normed-modulated input, the gate, the tail
+    x0 : RailBuf     //! the tail's noise row ...
+    lat : RailBuf    //! ... and latent row
+    tabs : RailBuf   //! the qkv row's rope tables ...
+    kc : RailBuf     //! ... and the caches' rows
+    vc : RailBuf
+    wq : RailBuf
+    ws : RailBuf
+}
+
+//! the site hooks as a home with no tile of its own answers them, none taken; a home's own overloads outrank these
+[unused_argument(rl, rows, wq, ws, site, x, y)]
+def rail_tts_conv(var rl : auto(R); rows, wq, ws : RailBuf; site : TtsConvSite; x, y : RailBuf) : bool => false
+
+[unused_argument(rl, rows, wq, ws, site, x, y)]
+def rail_tts_mm(var rl : auto(R); rows, wq, ws : RailBuf; site : TtsMmSite; x, y : RailBuf) : bool => false
+
+//! ... a stored row GEMV over a leaf in a home's own layout (`args` the kernel's argument record)
+[unused_argument(rl, s, args, nout)]
+def rail_tts_pk_own(var rl : auto(R); s : TtsPkStSite; args; nout : int64) : bool => false
+
+[unused_argument(rl, x, stats, t, c)]
+def rail_tts_colstats(var rl : auto(R); x, stats : RailBuf; t, c : int64) : bool => false
+
+[unused_argument(rl, g, wq, y, qoff, t, hidden, backward)]
+def rail_tts_lstm_q8(var rl : auto(R); g, wq, y : RailBuf; qoff, t, hidden : int64; backward : bool) : bool => false
+
+//! ... and the classes its site hooks dispatch: none
+[unused_argument(rl)]
+def rail_tts_sites_ensure(rl : auto(R)) : bool => true
+
+//! The device hooks of a home with no class-build wall, whole-buffer binds and no readback buffer
+[unused_argument(rl)]
+def rail_tts_build_us(rl : auto(R)) : int => 0
+
+[unused_argument(rl, bytes)]
+def rail_tts_bind_ok(rl : auto(R); bytes : int64) : bool => true
+
+[unused_argument(rl)]
+def rail_tts_bind_cap(rl : auto(R)) : int64 => LONG_MAX
+
+[unused_argument(rl, bytes)]
+def rail_tts_take_ready(rl : auto(R); bytes : int64) : bool => true
+
+[unused_argument(rl)]
+def rail_tts_take_bytes(rl : auto(R)) : int64 => LONG_MAX
+
+[unused_argument(rl)]
+def rail_tts_take_drop(rl : auto(R)) {}
+
+//! a small plane the host writes in place and the device reads at once: a chain's schedule records, written as its dispatches are recorded
+struct RailMapped {
+    host : void?
+    dev : uint64
+    mem : uint64    //! the home's own handle behind `dev`, where it keeps one
+    bytes : int64
+}
+
+//! `bufs` seated at the rail's first roles, in order, and those roles: the planes of one dispatch, for a chain whose planes are the call's own rows
+def rail_seats(var rl : auto(R); bufs) {
+    var roles : TowerBuf[typeinfo dim(bufs)]
+    for (i in range(typeinfo dim(bufs))) {
+        rl.bufs[i] = bufs[i]
+        roles[i] = unsafe(reinterpret<TowerBuf>(i))
+    }
+    return roles
+}
 
 //! the plane at `role` seated on a rail of either home: its handle, the bytes a binding covers, its hazard bit (0 on CUDA)
 def rail_seat(var rl : auto(R); role : TowerBuf; dev : uint64; bytes : int64; bit : uint) {
@@ -294,7 +430,8 @@ def rail_kq_map(rl : auto(R); site : RailSite; rid : int64) : uint {
 let RAIL_GEMV_META_BYTES = 64l   //! a q8 GEMV record's region pairs: eight regions
 let RAIL_META_ALIGN = 256l       //! a GEMV record's start in the schedule: the largest storage-offset alignment a Vulkan device may ask
 
-//! the DASLLAMA_GPU_PROF=1 ledger of an encode chain: the role of every GPU timestamp the chain wrote (stamp 0 is the baseline)
+//! the profile ledger's roles (`rail_prof_on`): the role of every GPU stamp a chain marks (stamp 0
+//! is the baseline)
 enum RailProfRole {
     ln
     rq
@@ -343,6 +480,82 @@ enum RailProfRole {
     tts_pk_res  //! ... the residual joins
     tts_pk_ffn  //! ... the normed ffn up with its GELU
     tts_pk_head //! ... the flow head's modulated stamps: the LN-SiLU, the gate, the add-SiLU, the tail
+}
+
+let RAIL_PROF_ROLES = 64   //! the ledger's role width: past `RailProfRole`'s count
+
+//! a shot's profile ledger: the device microseconds and the stamps a role took, a stamp the span
+//! since the one before it
+struct RailProfSums {
+    us : double[RAIL_PROF_ROLES]
+    n : int[RAIL_PROF_ROLES]
+    tot : double
+    stamps : int
+}
+
+var private g_rail_prof_pin = false
+var private g_rail_prof_last : RailProfSums
+
+//! the profile ledger is on: `DASLLAMA_GPU_PROF`, or a program's pin
+def rail_prof_on : bool => g_env_gpu.gpu_prof || g_rail_prof_pin
+
+//! Test seat: the ledger on (`on`) whatever the knob says; answers the pin it replaced
+def set_rail_prof_pin(on : bool) : bool {
+    let was = g_rail_prof_pin
+    g_rail_prof_pin = on
+    return was
+}
+
+[cold_path]
+def rail_prof_add(var s : RailProfSums; role : RailProfRole; us : double) {
+    s.us[int(role)] += us
+    s.n[int(role)]++
+    s.tot += us
+    s.stamps++
+}
+
+[cold_path]
+def rail_prof_lines(s : RailProfSums; tag, chain : string; nl, npos : int64;
+                    wall_us : int) : array<string> {
+    //! the ledger's report: the chain's line under the home's `tag`, then a line a role that took a
+    //! stamp, in role order
+    let head = "{tag} tower {chain} gpu: {nl} blocks x {npos} rows, {s.stamps} stamps"
+    var lines <- ["{head}, {int(s.tot)} us on the device, {wall_us} us host wall"]
+    for (r in type<RailProfRole>) {
+        let i = int(r)
+        continue if (s.n[i] == 0)
+        let pct = int(s.us[i] * 100.0lf / max(s.tot, 1.0lf))
+        lines |> push("  {r}: {int(s.us[i])} us over {s.n[i]} stamps ({pct}%)")
+    }
+    return <- lines
+}
+
+//! the report logged, the ledger kept as the last one (`rail_prof_last`)
+[cold_path]
+def rail_prof_report(s : RailProfSums; tag, chain : string; nl, npos : int64;
+                     wall_us : int) {
+    g_rail_prof_last = s
+    var lines <- rail_prof_lines(s, tag, chain, nl, npos, wall_us)
+    for (l in lines) {
+        to_log(LOG_INFO, "{l}\n")
+    }
+    delete lines
+}
+
+//! the ledger the last report logged, on any home
+def rail_prof_last : RailProfSums => g_rail_prof_last
+
+//! the last report's ledger dropped: a home's model discharge runs it, so a swap reads no other model's ledger
+def rail_prof_forget {
+    g_rail_prof_last = RailProfSums()
+}
+
+//! the ledger's reach on a home's speech shots, said once a process at the home's first profiled shot
+[cold_path]
+def rail_prof_say(var said : bool&; tag, how : string) {
+    return if (said)
+    said = true
+    to_log(LOG_INFO, "dasLLAMA {tag} tier: the profile ledger is on (DASLLAMA_GPU_PROF, or a test's pin) - a speech seat's shot {how}\n")
 }
 
 //! The audio families whose GPU seats move between the discrete homes as one (`ARCHITECTURE_GPU_TOWER_RAIL.md#rail-audio-installs`)

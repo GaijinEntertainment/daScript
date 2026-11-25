@@ -556,7 +556,25 @@ struct TowerDevBuild {
     @exact_size blob : array<uint8>
     @exact_size plan : array<int64>
     kept : array<string>   //! the family's consumed planes this bake left in their CPU form: the image stores them beside the block
+    spent : array<uint64>  //! a span carrier's bake (the TTS families'): the data address of every weight array the block replaces - its staging drops them
 }
+
+def private tower_dev_scan(plan; words : int64; name : string) : tuple<off : int64; bytes : int64> {
+    let key = tower_dev_key(name)
+    for (i in range64(words / TOWER_DEV_PIECE_WORDS)) {
+        if (plan[i * TOWER_DEV_PIECE_WORDS] == key) {
+            return (off = plan[i * TOWER_DEV_PIECE_WORDS + 1l], bytes = plan[i * TOWER_DEV_PIECE_WORDS + 2l])
+        }
+    }
+    return (off = -1l, bytes = 0l)
+}
+
+//! The piece `name` of a model's device block (`devplan`): its byte offset in ``dev`` and its bytes - (-1, 0) where the block
+//! holds none
+def tower_dev_find(plan : PlaneI64; name : string) : tuple<off : int64; bytes : int64> => tower_dev_scan(plan, plan.n, name)
+
+//! ... of a block still in its build
+def tower_dev_find(b : TowerDevBuild; name : string) : tuple<off : int64; bytes : int64> => tower_dev_scan(b.plan, long_length(b.plan), name)
 
 //! `arr`'s bytes appended to `b` as the piece `name` - an empty array an empty piece
 def tower_dev_put(var b : TowerDevBuild; name : string; arr : array<auto(T)>) {
@@ -566,12 +584,10 @@ def tower_dev_put(var b : TowerDevBuild; name : string; arr : array<auto(T)>) {
 //! Append the `n` bytes at `src` to `b` as the piece `name`, at the next aligned offset; a name the block already holds panics
 [arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
 def tower_dev_put(var b : TowerDevBuild; name : string; src : uint8 const?; n : int64) {
-    let key = tower_dev_key(name)
-    for (i in range64(long_length(b.plan) / TOWER_DEV_PIECE_WORDS)) {
-        if (b.plan[i * TOWER_DEV_PIECE_WORDS] == key) {
-            panic("dasLLAMA tower: the device block already holds a piece named '{name}'")
-        }
+    if (tower_dev_find(b, name).off >= 0) {
+        panic("dasLLAMA tower: the device block already holds a piece named '{name}'")
     }
+    let key = tower_dev_key(name)
     let off = (long_length(b.blob) + TOWER_DEV_ALIGN - 1l) / TOWER_DEV_ALIGN * TOWER_DEV_ALIGN
     b.blob |> reserve(off + n)
     b.blob |> resize(off + n)
@@ -590,18 +606,6 @@ def tower_dev_word(dev : PlaneU8; plan : PlaneI64; name : string; none : int64) 
     unsafe {
         return *reinterpret<int64 const?>(plane_at(dev, p.off))
     }
-}
-
-//! The piece `name` of a model's device block (`devplan`): its byte offset in ``dev`` and its bytes - (-1, 0) where the block
-//! holds none
-def tower_dev_find(plan : PlaneI64; name : string) : tuple<off : int64; bytes : int64> {
-    let key = tower_dev_key(name)
-    for (i in range64(plan.n / TOWER_DEV_PIECE_WORDS)) {
-        if (plan[i * TOWER_DEV_PIECE_WORDS] == key) {
-            return (off = plan[i * TOWER_DEV_PIECE_WORDS + 1l], bytes = plan[i * TOWER_DEV_PIECE_WORDS + 2l])
-        }
-    }
-    return (off = -1l, bytes = 0l)
 }
 
 //! the kq-lane seat of the GEMM at `woff`: a virtual element offset on a model carrying ``gemm_stride``, else the seat's number

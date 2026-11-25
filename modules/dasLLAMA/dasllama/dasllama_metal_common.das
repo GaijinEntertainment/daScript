@@ -16,6 +16,7 @@ require dasllama/dasllama_gpu_tier   // set_moe_gpu_dn_room_hook: the scheduler'
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_math   // kv_ring_row / kv_ring_runs: a mirror position's row, a span's runs
 require dasllama/dasllama_kv_codec  // tq4_fill_signs — GPU and CPU must share the exact sign vector
+require dasllama/dasllama_layout   // METAL_KQ_SCALE_ROW, kq_scale_d_tail: a K-quant scale plane's Metal form
 require dasllama/dasllama_metal_shapes public   // the extracted portable shape gates — re-exported so the driver family keeps its names
 
 // Shared infrastructure for the dasMetal resident drivers (the format-matrix arc's W1 split):
@@ -433,35 +434,34 @@ var g_pso_st2_conv_tr_mm : MetalComputePipeline?
 var g_pso_f32_exact_mm : MetalComputePipeline?
 var g_pso_st2_conv_exact_mm : MetalComputePipeline?
 var g_pso_st2_conv_tr_exact_mm : MetalComputePipeline?
+var g_pso_st2_q8_exact_mm : MetalComputePipeline?
+var g_pso_st2_q8_conv_mm : MetalComputePipeline?
+var g_pso_st2_q8_conv_exact_mm : MetalComputePipeline?
+var g_pso_st2_q8_conv_tr_mm : MetalComputePipeline?
+var g_pso_st2_q8_conv_tr_exact_mm : MetalComputePipeline?
+var g_pso_st2_k4_exact_mm : MetalComputePipeline?
+var g_pso_st2_k4_conv_mm : MetalComputePipeline?
+var g_pso_st2_k4_conv_exact_mm : MetalComputePipeline?
+var g_pso_st2_k4_conv_tr_mm : MetalComputePipeline?
+var g_pso_st2_k4_conv_tr_exact_mm : MetalComputePipeline?
+var g_pso_st2_k5_exact_mm : MetalComputePipeline?
+var g_pso_st2_k5_conv_mm : MetalComputePipeline?
+var g_pso_st2_k5_conv_exact_mm : MetalComputePipeline?
+var g_pso_st2_k5_conv_tr_mm : MetalComputePipeline?
+var g_pso_st2_k5_conv_tr_exact_mm : MetalComputePipeline?
+var g_pso_st2_k6_exact_mm : MetalComputePipeline?
+var g_pso_st2_k6_conv_mm : MetalComputePipeline?
+var g_pso_st2_k6_conv_exact_mm : MetalComputePipeline?
+var g_pso_st2_k6_conv_tr_mm : MetalComputePipeline?
+var g_pso_st2_k6_conv_tr_exact_mm : MetalComputePipeline?
+var g_pso_st2_f16_exact_mm : MetalComputePipeline?
+var g_pso_st2_f16_conv_mm : MetalComputePipeline?
+var g_pso_st2_f16_conv_exact_mm : MetalComputePipeline?
+var g_pso_st2_f16_conv_tr_mm : MetalComputePipeline?
+var g_pso_st2_f16_conv_tr_exact_mm : MetalComputePipeline?
 var g_pso_st2_colstats : MetalComputePipeline?
-var g_pso_st2_adain_snake : MetalComputePipeline?
-var g_pso_st2_leaky : MetalComputePipeline?
-var g_pso_st2_axpy : MetalComputePipeline?
-var g_pso_st2_add : MetalComputePipeline?
-var g_pso_st2_reflect1 : MetalComputePipeline?
-var g_pso_st2_adain_leaky : MetalComputePipeline?
 var g_pso_row_gather : MetalComputePipeline?
-var g_pso_st2_concat : MetalComputePipeline?
-var g_pso_st2_pool_dw : MetalComputePipeline?
-var g_pso_st2_lstm : MetalComputePipeline?
-var g_pso_st2_sigsum : MetalComputePipeline?
-var g_pso_st2_gelu_tanh : MetalComputePipeline?
-var g_pso_st2_attn : MetalComputePipeline?
-var g_pso_st2_src_low_torch : MetalComputePipeline?
-var g_pso_st2_src_low_onnx : MetalComputePipeline?
-var g_pso_st2_src_cumsum_torch : MetalComputePipeline?
-var g_pso_st2_src_cumsum_onnx : MetalComputePipeline?
-var g_pso_st2_src_noise : MetalComputePipeline?
-var g_pso_st2_src_sines_torch : MetalComputePipeline?
-var g_pso_st2_src_sines_onnx : MetalComputePipeline?
-var g_pso_st2_stft_reflect : MetalComputePipeline?
-var g_pso_st2_stft_edge : MetalComputePipeline?
-var g_pso_st2_istft : MetalComputePipeline?
-var g_pso_pk_rows : MetalComputePipeline?
-var g_pso_pk_rows_elu : MetalComputePipeline?
-var g_pso_pk_row_scale : MetalComputePipeline?
-var g_pso_pk_attn : MetalComputePipeline?
-var g_pso_pk_rope_tab : MetalComputePipeline?
+var g_pso_st2_lstm_q8 : MetalComputePipeline?   //!< the recurrence over its stored Q8_0 blocks
 var g_pso_pk_add_ln : MetalComputePipeline?
 var g_pso_tw_rms : MetalComputePipeline?        //!< the towers' rms rows on the layernorm template's RMS arm
 var g_pso_tw_patch_im2col : MetalComputePipeline?   //!< the vision stems' patch im2col over the uploaded planes
@@ -470,15 +470,6 @@ var g_pso_tw_add_rms : MetalComputePipeline?    //!< ... with its next rms (qwen
 var g_pso_tw_add_post_rms : MetalComputePipeline?   //!< the post-normed seam with its next rms (gemma4v)
 var g_pso_tw_rope_tab : MetalComputePipeline?   //!< the vision towers' NEOX table rope
 var g_pso_tw_bias_gate : MetalComputePipeline?  //!< a gated hidden with its bias rows (qwen25v)
-var g_pso_pk_gemv_f32 : MetalComputePipeline?
-var g_pso_pk_gemv_f32_ln_silu : MetalComputePipeline?
-var g_pso_pk_gemv_f32_gate : MetalComputePipeline?
-var g_pso_pk_gemv_f32_add_silu : MetalComputePipeline?
-var g_pso_pk_gemv_f32_tail : MetalComputePipeline?
-var g_pso_pk_gemv_q8_ln_silu : MetalComputePipeline?
-var g_pso_pk_gemv_q8_gate : MetalComputePipeline?
-var g_pso_pk_gemv_q8_add_silu : MetalComputePipeline?
-var g_pso_pk_gemv_q8_tail : MetalComputePipeline?
 var g_pso_dn_l2 : MetalComputePipeline?        // q/k per-head L2 norm + q pre-scale
 var g_pso_dn_l2_hx : MetalComputePipeline?     //! the same storing the normed rows' f16 twin
 var g_pso_dn_scan : MetalComputePipeline?      // the fused sequential delta rule
@@ -1436,14 +1427,6 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
     }
 }
 
-//! A kq tensor's bind offsets at element offset `off` of a plane pair of `plane_sb` superblocks in the device form: its quants,
-//! its scale strips, and its packed d row (0 for the compact formats) - the binds `kq_quants_of` / `kq_scales_of` hand back
-[arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
-def kq_bind_offs(fmt : KqFmt; plane_sb, off : int64) : tuple<qoff : uint64; soff : uint64; doff : uint64> {
-    let sb0 = off / 256l
-    return (qoff = uint64(sb0 * kq_qsb(fmt)), soff = uint64(sb0 * 16l), doff = uint64(kq_scale_doff(fmt, plane_sb, sb0)))
-}
-
 //! One kq tensor's GPU-form scale bind (the gemv lab's layouts, pre-baked by the blob transform):
 //! k4/k5/q40/iq4nl/nv4 = 16B compact blocks at soff, doff 0; every other format is the split plane -
 //! sub-scale strips at soff, the packed f16 d plane at doff, the kernels binding the buffer twice.
@@ -1452,24 +1435,10 @@ def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
     assert(t.metal_blob)
     var kq, ks : array<uint8> const?
     kq_planes_of(t, fmt, kq, ks)
-    let at = kq_bind_offs(fmt, long_length(*ks) / (16l + kq_scale_d_tail(fmt)), off)
+    let at = kq_bind_offs(fmt, long_length(*ks) / (METAL_KQ_SCALE_ROW + kq_scale_d_tail(fmt)), off)
     return (buf = plane_buffer(dev, unsafe(addr<void?>((*ks)[0])), uint64(long_length(*ks)), t.image_map != null),
             soff = at.soff,
             doff = at.doff)
-}
-
-//! A superblock's packed d-tail bytes in a kq format's split scale plane: 0 for the compact formats (k4/k5/q40/iq4nl/nv4 -
-//! one 16B block, no tail), 4 for k2 (d and dmin), 2 for every other format.
-def kq_scale_d_tail(fmt : KqFmt) : int64 {
-    let compact = fmt == KqFmt.k4 || fmt == KqFmt.k5 || fmt == KqFmt.q40 || fmt == KqFmt.iq4nl || fmt == KqFmt.nv4
-    return compact ? 0l : (fmt == KqFmt.k2 ? 4l : 2l)
-}
-
-//! The d-tail bind offset of superblock `sb0` in a split scale plane of `nsb_total` superblocks - 0 for the compact formats.
-[arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
-def kq_scale_doff(fmt : KqFmt; nsb_total, sb0 : int64) : int64 {
-    let tail = kq_scale_d_tail(fmt)
-    return tail == 0l ? 0l : nsb_total * 16l + sb0 * tail
 }
 
 //! a per-32 plane pair's binds: quant buffer and offset, then scale's
@@ -3732,9 +3701,10 @@ struct public RacePsoPair {
 }
 
 //! `pipeline_from_source` for every pipeline this backend builds: the kernel's generated source goes to the dump
-//! directory first, where `DASLLAMA_METAL_MSL_DUMP` names one.
-def pso_from_source(dev : MetalDevice?; source, entry : string; fastmath : bool; var err : string&) : MetalComputePipeline? {
-    kernel_dump_save(g_env_metal.msl_dump, "{entry}.metal", "DASLLAMA_METAL_MSL_DUMP", source)
+//! directory first, where `DASLLAMA_METAL_MSL_DUMP` names one - under the entry's name, or `dump` where a caller's entries
+//! share one.
+def pso_from_source(dev : MetalDevice?; source, entry : string; fastmath : bool; var err : string&; dump : string = "") : MetalComputePipeline? {
+    kernel_dump_save(g_env_metal.msl_dump, "{empty(dump) ? entry : dump}.metal", "DASLLAMA_METAL_MSL_DUMP", source)
     return pipeline_from_source(dev, source, entry, fastmath, err)
 }
 

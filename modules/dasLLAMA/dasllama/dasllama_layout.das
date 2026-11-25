@@ -254,6 +254,42 @@ def metal_kq_scale_form(f : KqFmt; var ks : array<uint8>) {
     }
 }
 
+let METAL_KQ_SCALE_ROW = 16l   //! a superblock's scale row in a K-quant scale plane's Metal form, the d tails behind every row
+
+def kq_scale_d_tail(fmt : KqFmt) : int64 {
+    //! A superblock's packed d-tail bytes in a kq format's split scale plane: 0 for the compact formats (k4/k5/q40/iq4nl/nv4 -
+    //! one 16B block, no tail), 4 for k2 (d and dmin), 2 for every other format.
+    let compact = fmt == KqFmt.k4 || fmt == KqFmt.k5 || fmt == KqFmt.q40 || fmt == KqFmt.iq4nl || fmt == KqFmt.nv4
+    return compact ? 0l : (fmt == KqFmt.k2 ? 4l : 2l)
+}
+
+//! The d-tail bind offset of superblock `sb0` in a split scale plane of `nsb_total` superblocks - 0 for the compact formats.
+[arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
+def kq_scale_doff(fmt : KqFmt; nsb_total, sb0 : int64) : int64 {
+    let tail = kq_scale_d_tail(fmt)
+    return tail == 0l ? 0l : nsb_total * METAL_KQ_SCALE_ROW + sb0 * tail
+}
+
+def kq_region_to_metal_planes(f : KqFmt; qp, sp : uint8 const?; live, sb : int64; var wq, ws : array<uint8>) {
+    //! `live` superblocks of a K-quant plane in disk order - `qp` its quants, `sp` its scale rows - laid at superblock `sb` of a
+    //! Metal plane pair: the quants as they lie, the scale rows ahead of the pair's Metal form (`metal_kq_scale_form`, once every
+    //! leaf is in)
+    let qsb = kq_qsb(f)
+    let ssb = kq_ssb(f)
+    unsafe {
+        memcpy(addr(wq[sb * qsb]), qp, uint64(live * qsb))
+        memcpy(addr(ws[sb * ssb]), sp, uint64(live * ssb))
+    }
+}
+
+[arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
+def kq_bind_offs(fmt : KqFmt; plane_sb, off : int64) : tuple<qoff : uint64; soff : uint64; doff : uint64> {
+    //! A kq tensor's bind offsets at element offset `off` of a plane pair of `plane_sb` superblocks in the device form: its quants,
+    //! its scale strips, and its packed d row (0 for the compact formats) - the binds `kq_quants_of` / `kq_scales_of` hand back
+    let sb0 = off / KQ_SB_ELEMS
+    return (qoff = uint64(sb0 * kq_qsb(fmt)), soff = uint64(sb0 * METAL_KQ_SCALE_ROW), doff = uint64(kq_scale_doff(fmt, plane_sb, sb0)))
+}
+
 //! Commit `t` to the metal blob flavor WITHOUT building the big plane: the kq scale strips take
 //! their device form and the flag flips, but mblob stays empty and qblob/qscales16 stay put. A
 //! committed model serves NOTHING — write its image and drop it, or finish the transform.

@@ -18,6 +18,7 @@ require dasllama/dasllama_convert
 require dasllama/dasllama_tower
 require dasllama/dasllama_gpu_math   // sigmoid_f32 and the STFT scalars: the one form the CPU chain and the kernel homes share
 require dasllama/dasllama_common
+require dasllama/dasllama_kv_codec   // dot_f16: a vector layer's rows served as the halves its file stores
 require dasllama/dasllama_gguf
 require dasllama/dasllama_gemm_schema   // Q8K_SUM_ELEMS - the Q8_K activation form's sum block
 require dasllama/dasllama_image   // count_meta_fields - the leaf serializers' field tripwire
@@ -38,6 +39,11 @@ struct TtsSpan {
     off : int64 = -1l
     n : int64
 }
+
+let TTS_SPAN_ON_DEVICE = -2l   //! a span's `off` for a weight a device image's block replaced: `n` elements the host does not hold
+
+//! the elements of a weight the model carries: the array's, or - on a device image, the array dropped - its span's
+def tts_held(a : array<auto(ET)>; span : TtsSpan) : int64 => empty(a) && span.off == TTS_SPAN_ON_DEVICE ? span.n : long_length(a)
 
 let BLOB_ALIGN_FLOATS = 64l   // every span starts on a 256-byte boundary, a legal GPU buffer offset
 
@@ -60,7 +66,7 @@ def blob_push(var blob : array<auto(BT)>; src : array<auto(ST)>) : TtsSpan {
 
 //! bind `a` as a borrowed view over `span` of a served plane: the float plane, or the int8 plane a quant or byte array rides
 def bind_span(blob : auto(PT); span : TtsSpan; var a : array<auto(ET)>) {
-    return if (span.n == 0l)
+    return if (span.n == 0l || span.off == TTS_SPAN_ON_DEVICE)
     if (span.off < 0l || span.n > blob.n || span.off > blob.n - span.n) {
         panic("dasLLAMA tts: {typeinfo stripped_typename(a[0])} span {span.off}+{span.n} lies outside the {blob.n}-element blob")
     }
@@ -75,13 +81,54 @@ struct TtsBlobIo {
     staging : bool
     blob : array<float>?
     qblob : array<int8>?
+    spent : table<uint64>?   //! a device image's staging: the data addresses of the arrays its block replaces - each is dropped, its span left empty
     plane : PlaneF = PlaneF()
     qplane : PlaneI8 = PlaneI8()
 }
 
+//! A served model's device block as a seat reads it (`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block`): the pieces' bytes and
+//! the plan naming them; empty on a CPU image
+struct TtsDevBlock {
+    dev : uint64     //! the pieces' bytes, by address: a synthesis carrier holds the block and owns none of it
+    dev_n : int64
+    plan : uint64    //! the plan's words
+    plan_n : int64
+    host : bool      //! the model kept the weights the block replaces (`set_tts_host_weights_`): its CPU chain still runs
+    mapped : bool    //! the bytes are a file mapping the model owns (`image_backing_mapped`): a piece's pages go once its upload ends, and read back off the file on a re-arm
+}
+
+def tts_dev_block(dev : PlaneU8; plan : PlaneI64; host : bool = false; mapped : bool = false) : TtsDevBlock
+    => TtsDevBlock(dev = intptr(dev.p), dev_n = dev.n, plan = intptr(plan.p), plan_n = plan.n, host = host, mapped = mapped)
+
+var private g_tts_host_weights = false
+
+//! a cell's seat, the old pin back: a GPU image minted under it keeps the weights its block replaces (compare legs); a load under it panics
+[cold_path]
+def set_tts_host_weights_(on : bool) : bool {
+    let was = g_tts_host_weights
+    g_tts_host_weights = on
+    return was
+}
+
+def tts_host_weights_() : bool => g_tts_host_weights
+
+//! panics where `set_tts_host_weights_` stands: a load would write a GPU image that carries its weights twice
+def tts_host_weights_refuse_load(who : string) {
+    if (g_tts_host_weights) {
+        panic("{who}: a load under set_tts_host_weights_ - the pin is an in-memory mint's, a cell's two legs on one model")
+    }
+}
+
+//! the block's bytes and its plan as planes
+def tts_block_dev(b : TtsDevBlock) : PlaneU8 => PlaneU8(p = unsafe(reinterpret<uint8 const?>(b.dev)), n = b.dev_n)
+def tts_block_plan(b : TtsDevBlock) : PlaneI64 => PlaneI64(p = unsafe(reinterpret<int64 const?>(b.plan)), n = b.plan_n)
+
 //! one weight through the walk: a float array on the float blob and plane, an int8 or byte (K-quant) array on the int8 ones
 def weight_slot(var io : TtsBlobIo; var a : array<auto(ET)>; var span : TtsSpan) {
-    if (io.staging) {
+    if (io.staging && io.spent != null && !empty(a) && key_exists(*io.spent, intptr(unsafe(addr(a[0]))))) {
+        span = TtsSpan(off = TTS_SPAN_ON_DEVICE, n = long_length(a))
+        delete a
+    } elif (io.staging) {
         static_if (typeinfo stripped_typename(a[0]) == "float") {
             span = blob_push(*io.blob, a)
         } else {
@@ -115,8 +162,8 @@ struct TtsWeight {
 // Every field a TTS leaf struct carries into the image meta is hand-listed in its serialize
 // overload; the counts below are the tripwires that catch a field added without a line.
 let private TTS_WEIGHT_META_FIELDS = 1
-let private TTS_CONV1D_META_FIELDS = 26
-let private TTS_LINEAR_META_FIELDS = 12
+let private TTS_CONV1D_META_FIELDS = 28
+let private TTS_LINEAR_META_FIELDS = 13
 let private TTS_NORM_META_FIELDS = 2
 let private TTS_LSTM_META_FIELDS = 10
 
@@ -141,6 +188,8 @@ struct TtsConv1d {
     wt : array<float>    // [cout*k][cin] - the channel-major transposed conv's GEMM form
     wk : array<float>    // [k][cin][cout_s] - the rows form's per-tap B operand, cout_s on the 16-column tile
     wtr : array<float>   // [cin][k*cout] - the rows form's transposed-conv B operand
+    @exact_size wkh : array<uint8>    //! `wk` as the half floats a file stores, two bytes a value: the rows form's B operand of a conv served as stored
+    @exact_size wtrh : array<uint8>   //! `wtr` the same way
     wq : array<int8>     // [cout][k*cin] Q8_0 quants, the taps stacked along K, repacked for the backend - the q8 rows form's W
     wqs : array<float>   // the Q8_0 scales of wq, one per 32
     @exact_size kq : array<uint8>    //! [cout][kq_k] as a K-quant plane pair, the taps stacked along K and K zero-padded to the format's 256, repacked for a backend that carries kq
@@ -150,6 +199,8 @@ struct TtsConv1d {
     wt_span : TtsSpan = TtsSpan()
     wk_span : TtsSpan = TtsSpan()
     wtr_span : TtsSpan = TtsSpan()
+    wkh_span : TtsSpan = TtsSpan()
+    wtrh_span : TtsSpan = TtsSpan()
     wq_span : TtsSpan = TtsSpan()
     wqs_span : TtsSpan = TtsSpan()
     kq_span : TtsSpan = TtsSpan()
@@ -180,6 +231,8 @@ def serialize(var arch : Archive; var c : TtsConv1d) {
     arch |> serialize(c.wt_span)
     arch |> serialize(c.wk_span)
     arch |> serialize(c.wtr_span)
+    arch |> serialize(c.wkh_span)
+    arch |> serialize(c.wtrh_span)
     arch |> serialize(c.wq_span)
     arch |> serialize(c.wqs_span)
     arch |> serialize(c.kq_span)
@@ -209,6 +262,8 @@ def finalize(var c : TtsConv1d) {
     release_plane(c.wt)
     release_plane(c.wk)
     release_plane(c.wtr)
+    release_plane(c.wkh)
+    release_plane(c.wtrh)
     release_plane(c.wq)
     release_plane(c.wqs)
     release_plane(c.kq)
@@ -221,6 +276,8 @@ def weights_walk(var io : TtsBlobIo; var c : TtsConv1d) {
     weight_slot(io, c.wt, c.wt_span)
     weight_slot(io, c.wk, c.wk_span)
     weight_slot(io, c.wtr, c.wtr_span)
+    weight_slot(io, c.wkh, c.wkh_span)
+    weight_slot(io, c.wtrh, c.wtrh_span)
     weight_slot(io, c.wq, c.wq_span)
     weight_slot(io, c.wqs, c.wqs_span)
     weight_slot(io, c.kq, c.kq_span)
@@ -233,6 +290,7 @@ def weights_walk(var io : TtsBlobIo; var c : TtsConv1d) {
 struct TtsLinear {
     w : array<float>
     wt : array<float>
+    @exact_size wh : array<uint8>   //! `w` as the half floats a file stores, two bytes a value: a vector layer served as stored
     wq : array<int8>     // [nout][nin] Q8_0 quants, repacked for the backend - the q8 rows form's W
     wqs : array<float>
     kq : array<uint8>    // [nout][nin] as a K-quant plane pair (the file's own format), repacked for a backend that carries kq
@@ -240,6 +298,7 @@ struct TtsLinear {
     b : array<float>
     w_span : TtsSpan = TtsSpan()
     wt_span : TtsSpan = TtsSpan()
+    wh_span : TtsSpan = TtsSpan()
     wq_span : TtsSpan = TtsSpan()
     wqs_span : TtsSpan = TtsSpan()
     kq_span : TtsSpan = TtsSpan()
@@ -256,6 +315,7 @@ def serialize(var arch : Archive; var l : TtsLinear) {
     verify(count_meta_fields(l) == TTS_LINEAR_META_FIELDS)   // grew TtsLinear? extend this list
     arch |> serialize(l.w_span)
     arch |> serialize(l.wt_span)
+    arch |> serialize(l.wh_span)
     arch |> serialize(l.wq_span)
     arch |> serialize(l.wqs_span)
     arch |> serialize(l.kq_span)
@@ -271,6 +331,7 @@ def serialize(var arch : Archive; var l : TtsLinear) {
 def finalize(var l : TtsLinear) {
     release_plane(l.w)
     release_plane(l.wt)
+    release_plane(l.wh)
     release_plane(l.wq)
     release_plane(l.wqs)
     release_plane(l.kq)
@@ -281,6 +342,7 @@ def finalize(var l : TtsLinear) {
 def weights_walk(var io : TtsBlobIo; var l : TtsLinear) {
     weight_slot(io, l.w, l.w_span)
     weight_slot(io, l.wt, l.wt_span)
+    weight_slot(io, l.wh, l.wh_span)
     weight_slot(io, l.wq, l.wq_span)
     weight_slot(io, l.wqs, l.wqs_span)
     weight_slot(io, l.kq, l.kq_span)
@@ -373,6 +435,9 @@ def weights_walk(var io : TtsBlobIo; var l : TtsLstm) {
 def q8_matrix_mint(var w : array<float>; nin, nout : int64; @exact_size var wq : array<int8>; @exact_size var wqs : array<float>; repack : bool) {
     q8_matrix_seat(nin, nout, wq, wqs, repack) $(var q : array<int8>; var qs : array<float>) {
         quantize_q8_0_into(w, nout * nin, q, qs, 0l, 0l)
+        for (d in qs) {
+            d = f16_to_f32(f32_to_f16(clamp(d, -65504.0, 65504.0)))
+        }
     }
     release_plane(w)
 }
@@ -442,6 +507,22 @@ def weights_walk(var io : TtsBlobIo; var a : TtsAdaLayerNorm) {
     weights_walk(io, a.fc)
 }
 
+//! How a TTS carrier came by its image (`tts_image_origin`).
+struct TtsImageOrigin {
+    mapped : bool   //! a `.dlim` the image rail mapped; false for an image built in memory - a mint's, or a load's with the rail off
+    tag : string    //! the tag the image was baked under, off its own header: the lane, a GPU flavor's suffix after it
+}
+
+//! the origin of the image carrier `m` (a `StyleTts2Model`, a `PocketModel`) serves from, off it and the image's header; empty for none
+[cold_path]
+def tts_image_origin(m) : TtsImageOrigin {
+    return TtsImageOrigin() if (m.image_map == null)
+    let mapped = image_backing_mapped(m.image_map)
+    let tag = (mapped ? image_family_tag_mapped(m.image_map, m.image_bytes)
+        : image_family_tag_memory(m.image_map, m.image_bytes))
+    return TtsImageOrigin(mapped = mapped, tag = tag)
+}
+
 // ===== sizing =====
 
 //! Output length of `c` over `t_in` positions.
@@ -450,6 +531,13 @@ def conv1d_out_len(c : TtsConv1d; t_in : int64) : int64 {
         return (t_in - 1l) * c.stride - c.pad_l - c.pad_r + c.dilation * (c.k - 1l) + c.output_padding + 1l
     }
     return (t_in + c.pad_l + c.pad_r - c.dilation * (c.k - 1l) - 1l) / c.stride + 1l
+}
+
+def conv1d_carry_rows(c : TtsConv1d) : int64 {
+    //! the rows a conv sees again ahead of a window: a forward conv its last `k - stride` inputs
+    //! (the causal pad's width, zeros before the first window), a transposed one the inputs whose
+    //! taps reach past the rows it emitted
+    return c.transposed ? (c.k + c.stride - 1l) / c.stride - 1l : c.k - c.stride
 }
 
 //! Pad a forward conv's input channels to `cin_s` with zero weights, the ONNX layout kept (a
@@ -579,6 +667,53 @@ def private conv1d_quant_matrix_row(c : TtsConv1d; r, n : int64; var dst : array
 
 var @scratch @exact_size g_quant_row : array<float>   //! one row of a quant matrix read back as floats
 
+//! the host holds the conv's rows-form B operand as a plane of halves (`wkh`, or `wtrh` on a transposed conv)
+def conv1d_host_halves(c : TtsConv1d) : bool => !empty(c.transposed ? c.wtrh : c.wkh)
+
+def conv1d_held_halves(c : TtsConv1d) : bool => (c.transposed ? tts_held(c.wtrh, c.wtrh_span) : tts_held(c.wkh, c.wkh_span)) > 0l
+
+//! the conv carries its weight in the form its lane names, on the host or in a device block
+def conv1d_held(c : TtsConv1d) : bool {
+    return tts_held(c.wq, c.wq_span) > 0l if (c.q8)
+    return tts_held(c.kq, c.kq_span) > 0l if (c.kq_fmt != 0)
+    return (tts_held(c.w, c.w_span) > 0l || tts_held(c.wt, c.wt_span) > 0l || conv1d_held_halves(c)
+        || (c.transposed ? tts_held(c.wtr, c.wtr_span) : tts_held(c.wk, c.wk_span)) > 0l)
+}
+
+//! element `i` of the half plane, widened
+def private conv1d_half_at(c : TtsConv1d; i : int64) : float {
+    unsafe {
+        let hp = addr<uint16 const?>(c.transposed ? c.wtrh[0] : c.wkh[0])
+        return f16_to_f32(uint(hp[i]))
+    }
+}
+
+//! the conv's half plane, null where it holds none
+def private conv1d_halves(c : TtsConv1d) : uint16 const? {
+    return null if (!conv1d_host_halves(c))
+    return unsafe(addr<uint16 const?>(c.transposed ? c.wtrh[0] : c.wkh[0]))
+}
+
+//! The rows form's GEMM over a conv's B operand from element `woff`: the f32 plane `wf`, or the half plane `wh` where it is null
+def private conv1d_rows_mm(var cp : float?; ap, wf : float const?; wh : uint16 const?; woff, rows, kdim, ndim : int64) {
+    unsafe {
+        if (wf != null) {
+            gemm_f32_jo(cp, ap, wf + woff, rows, kdim, ndim)
+        } else {
+            gemm_f16w_jo(cp, ap, wh + woff, rows, kdim, ndim)
+        }
+    }
+}
+
+//! the minted rows plane `src` as the halves its file stores, the floats dropped: exact, each float being a half widened
+def private rows_narrow(var src : array<float>; var dst : array<uint8>) {
+    dst |> reserve_resize(2l * long_length(src))
+    unsafe {
+        cvt_f32_to_f16(addr<uint16?>(dst[0]), addr<float const?>(src[0]), long_length(src))
+    }
+    delete src
+}
+
 //! row `co` of a dense conv's weight as floats, tap-major at dst[doff + tap * cin + ci], from whichever form the conv holds: `wtr` / `wt`
 //! (transposed), `wk` / `w`, or its quant matrix - a forward conv's row `co`, a transposed conv's k lift rows tap * cout + co
 def conv1d_weight_row(c : TtsConv1d; co : int64; var dst : array<float>; doff : int64) {
@@ -594,14 +729,37 @@ def conv1d_weight_row(c : TtsConv1d; co : int64; var dst : array<float>; doff : 
     }
     for (ci in range64(c.cin)) {
         for (tap in range64(c.k)) {
+            if (conv1d_host_halves(c)) {
+                dst[doff + tap * c.cin + ci] = conv1d_half_at(c, c.transposed ? (ci * c.k + tap) * c.cout + co : (tap * c.cin + ci) * c.cout_s + co)
+                continue
+            }
             dst[doff + tap * c.cin + ci] = (c.transposed ? (!empty(c.wtr) ? c.wtr[(ci * c.k + tap) * c.cout + co] : c.wt[(co * c.k + tap) * c.cin + ci])
                 : (!empty(c.wk) ? c.wk[(tap * c.cin + ci) * c.cout_s + co] : c.w[(co * c.cin + ci) * c.k + tap]))
         }
     }
 }
 
-//! Row `o` of a dense layer's weight, dst[doff + i] for the nin inputs, from the f32 layout it serves: `w`, else the transposed `wt`.
+//! the layer's rows are a plane of halves (`wh`)
+def linear_host_halves(l : TtsLinear) : bool => !empty(l.wh)
+
+//! the layer carries its weight in the form its lane names, on the host or in a device block
+def linear_held(l : TtsLinear) : bool {
+    return tts_held(l.wq, l.wq_span) > 0l if (l.q8)
+    return tts_held(l.kq, l.kq_span) > 0l if (l.kq_fmt != 0)
+    return tts_held(l.w, l.w_span) > 0l || tts_held(l.wt, l.wt_span) > 0l || tts_held(l.wh, l.wh_span) > 0l
+}
+
+//! Row `o` of a dense layer's weight, dst[doff + i] for the nin inputs, from the layout it serves: `w`, its halves `wh` widened, else the transposed `wt`.
 def linear_weight_row(l : TtsLinear; o : int64; var dst : array<float>; doff : int64) {
+    if (linear_host_halves(l)) {
+        unsafe {
+            let hp = addr<uint16 const?>(l.wh[0]) + o * l.nin
+            for (i in range64(l.nin)) {
+                dst[doff + i] = f16_to_f32(uint(hp[i]))
+            }
+        }
+        return
+    }
     for (i in range64(l.nin)) {
         dst[doff + i] = !empty(l.w) ? l.w[o * l.nin + i] : l.wt[i * l.nout + o]
     }
@@ -615,9 +773,9 @@ def conv1d_q8_eligible(c : TtsConv1d) : bool {
 
 // A dense conv's quant matrix, the Q8_0 and K-quant forms' one layout. A forward conv's is [cout][k*cin], a row an output
 // channel's taps stacked along K; a transposed conv's is its lift [k*cout][cin], row tap * cout + co over the inputs.
-def private conv1d_quant_rows(c : TtsConv1d) : int64 => c.transposed ? c.k * c.cout : c.cout
+def conv1d_quant_rows(c : TtsConv1d) : int64 => c.transposed ? c.k * c.cout : c.cout
 
-def private conv1d_quant_k(c : TtsConv1d) : int64 => c.transposed ? c.cin : c.k * c.cin
+def conv1d_quant_k(c : TtsConv1d) : int64 => c.transposed ? c.cin : c.k * c.cin
 
 def private conv1d_quant_row(c : TtsConv1d; j : int64; var dst : array<float>; doff : int64) {
     if (!c.transposed) {
@@ -672,7 +830,7 @@ def conv1d_prepare_kq(var c : TtsConv1d; fmt : KqFmt; repack : bool) {
 def private kq_planes_seat(var leaf; fmt_id : int; k, rows : int64; repack : bool) {
     leaf.kq_fmt = fmt_id
     leaf.kq_repacked = false
-    if (repack && kernel_backend_has_kq()) {
+    if (repack && kernel_backend_has_kq() && tower_staging_dev() == TowerDev.none) {
         repack_kq_weight(fmt_id, leaf.kq, leaf.ks, 0l, k, rows)
         leaf.kq_repacked = true
     }
@@ -716,7 +874,7 @@ def conv1d_read_quant(var c : TtsConv1d; m : GGUFMeta; bytes : array<uint8> | #;
 //! Mint the one served layout of a dense conv and drop what the consumer never reads: the rows
 //! form takes `wk` (forward) or `wtr` (transposed) - or, with `q8`, the quant matrix - and loses `w`;
 //! the channel-major form keeps `w`, a transposed one minting `wt` in its place, and takes the quant matrix under `q8_channel_major`.
-def conv1d_prepare(var c : TtsConv1d; q8 : bool = false; repack : bool = false; q8_channel_major : bool = false) {
+def conv1d_prepare(var c : TtsConv1d; q8 : bool = false; repack : bool = false; q8_channel_major : bool = false; halves : bool = false) {
     c.cout_s = c.cout
     return if (c.groups != 1l)
     if (q8 && (c.served_rows || q8_channel_major) && conv1d_q8_eligible(c)) {
@@ -757,6 +915,13 @@ def conv1d_prepare(var c : TtsConv1d; q8 : bool = false; repack : bool = false; 
         }
         delete c.w
     }
+    if (halves && c.served_rows) {
+        if (c.transposed) {
+            rows_narrow(c.wtr, c.wtrh)
+        } else {
+            rows_narrow(c.wk, c.wkh)
+        }
+    }
 }
 
 // ===== layout =====
@@ -768,7 +933,7 @@ def transpose_tc(x : array<float>; t, c : int64; @scratch var y : array<float>) 
 
 //! [T][C] rows of stride `row_stride` (>= c; the served width's padding columns dropped) -> [C][T]
 def transpose_tc_strided(x : array<float>; t, c, row_stride : int64; @scratch var y : array<float>) {
-    y |> reserve_resize(c * t)
+    unsafe(scratch_resize(y, c * t))
     for (ti in range64(t)) {
         let row = ti * row_stride
         for (ci in range64(c)) {
@@ -819,8 +984,8 @@ def private conv1d_dense(c : TtsConv1d; x : array<float>; t_in : int64; var y : 
     let kw = c.cin * c.k
     var col & = g_conv_col
     var ytm & = g_conv_ytm
-    col |> reserve_resize(CONV_IM2COL_ROWS * kw)
-    ytm |> reserve_resize(CONV_IM2COL_ROWS * c.cout)
+    unsafe(scratch_resize(col, CONV_IM2COL_ROWS * kw))
+    unsafe(scratch_resize(ytm, CONV_IM2COL_ROWS * c.cout))
     var t0 = 0l
     while (t0 < t_out) {
         let rows = min(CONV_IM2COL_ROWS, t_out - t0)
@@ -879,7 +1044,7 @@ def private conv1d_transposed_dense(c : TtsConv1d; x : array<float>; t_in : int6
     var xtm & = g_convt_xtm
     var v & = g_convt_v
     transpose_ct(x, c.cin, t_in, xtm)
-    v |> reserve_resize(t_in * d)
+    unsafe(scratch_resize(v, t_in * d))
     matmul_batch(v, c.wt, xtm, c.cin, d, t_in)
     for (t in range64(t_in)) {
         let vrow = t * d
@@ -941,7 +1106,7 @@ def private conv1d_dense_quant(c : TtsConv1d; x : array<float>; t_in, t_out : in
 //! y [cout][t_out] = conv(x [cin][t_in]); grouped convs are the depthwise case only.
 def conv1d(c : TtsConv1d; x : array<float>; t_in : int64; @scratch @exact_size var y : array<float>) {
     let t_out = conv1d_out_len(c, t_in)
-    y |> reserve_resize(c.cout * t_out)
+    unsafe(scratch_resize(y, c.cout * t_out))
     if (c.groups == 1l && (c.q8 || c.kq_fmt != 0)) {
         conv1d_dense_quant(c, x, t_in, t_out, y)
     } elif (c.groups == 1l) {
@@ -999,7 +1164,8 @@ def private conv1d_rows_dense(c : TtsConv1d; x : array<float>; t_in : int64; var
     let pad_l = c.pad_l
     var yp = unsafe(addr(y[0]))
     let xp = unsafe(addr<float const?>(x[0]))
-    let wp = unsafe(addr<float const?>(c.wk[0]))
+    let wp = empty(c.wk) ? null : unsafe(addr<float const?>(c.wk[0]))
+    let hp = conv1d_halves(c)
     let bp = nbias > 0l ? unsafe(addr<float const?>(c.b[0])) : null
     let chunks = matmul_chunks(int(t_out), ROWS_OVERSPLIT, t_out * cin * cout * k)
     maybe_parallel_for(0, int(t_out), chunks) $(rb, re) {
@@ -1014,10 +1180,10 @@ def private conv1d_rows_dense(c : TtsConv1d; x : array<float>; t_in : int64; var
                 continue if (r1 <= r0)
                 let ra = min(r1, round_up(r0, 4l))
                 if (ra > r0) {
-                    gemm_f32_jo(yp + r0 * cout, xp + (r0 + shift) * cin, wp + kk * cin * cout, ra - r0, cin, cout)
+                    conv1d_rows_mm(yp + r0 * cout, xp + (r0 + shift) * cin, wp, hp, kk * cin * cout, ra - r0, cin, cout)
                 }
                 if (r1 > ra) {
-                    gemm_f32_jo(yp + ra * cout, xp + (ra + shift) * cin, wp + kk * cin * cout, r1 - ra, cin, cout)
+                    conv1d_rows_mm(yp + ra * cout, xp + (ra + shift) * cin, wp, hp, kk * cin * cout, r1 - ra, cin, cout)
                 }
             }
         }
@@ -1029,11 +1195,11 @@ def private conv1d_rows_dense(c : TtsConv1d; x : array<float>; t_in : int64; var
 def private transposed_lift_quant(c : TtsConv1d; xp : float const?; q0, rows : int64; var vp : float?) {
     let cin = c.cin
     let d = c.k * c.cout
-    var xq & = c.q8 ? g_q8_xq : g_kq_xq
     if (c.q8) {
+        var xq & = g_q8_xq
         var xs & = g_q8_xs
-        xq |> reserve_resize(rows * cin)
-        xs |> reserve_resize(rows * cin / 32l)
+        unsafe(scratch_resize(xq, rows * cin))
+        unsafe(scratch_resize(xs, rows * cin / 32l))
         unsafe {
             quantize_q8_0_into_ptr(xp + q0 * cin, rows * cin, addr(xq[0]), addr(xs[0]), 0l, 0l)
             invoke(g_mm_q8q8_batch, vp, addr<int8 const?>(c.wq[0]), addr<float const?>(c.wqs[0]), addr<int8 const?>(xq[0]),
@@ -1042,6 +1208,7 @@ def private transposed_lift_quant(c : TtsConv1d; xp : float const?; q0, rows : i
         return
     }
     let kk = c.kq_k
+    var xq & = g_kq_xq
     var xst & = g_kq_xst
     var xs & = g_kq_xs
     var xbs & = g_kq_xbs
@@ -1074,10 +1241,11 @@ def private conv1d_rows_transposed(c : TtsConv1d; x : array<float>; t_in : int64
     // blocks of input rows from the last down: an output row still takes its taps in kk order
     let lift_rows = clamp(ROWS_STACK_BYTES / (d * 4l) / 4l * 4l, 64l, max(t_in, 64l))
     var v & = g_rows_v
-    v |> reserve_resize(lift_rows * d)
+    unsafe(scratch_resize(v, lift_rows * d))
     var vp = unsafe(addr(v[0]))
     let xp = unsafe(addr<float const?>(x[0]))
-    let wp = quant ? null : unsafe(addr<float const?>(c.wtr[0]))
+    let wp = quant || empty(c.wtr) ? null : unsafe(addr<float const?>(c.wtr[0]))
+    let hp = conv1d_halves(c)
     var yp = unsafe(addr(y[0]))
     let vcp = unsafe(addr<float const?>(v[0]))
     let b4p = has_bias ? unsafe(addr<float4 const?>(c.b[0])) : null
@@ -1108,7 +1276,7 @@ def private conv1d_rows_transposed(c : TtsConv1d; x : array<float>; t_in : int64
                         vp[i] = 0.0
                     }
                     if (re4 > rb4) {
-                        gemm_f32_jo(vp + rb4 * d, xp + (q0 + rb4) * cin, wp, re4 - rb4, cin, d)
+                        conv1d_rows_mm(vp + rb4 * d, xp + (q0 + rb4) * cin, wp, hp, 0l, re4 - rb4, cin, d)
                     }
                 }
             }
@@ -1179,10 +1347,11 @@ def private conv1d_rows_dense_strided(c : TtsConv1d; x : array<float>; t_in : in
     let pad = c.pad_l
     var xst & = g_rows_xst
     let chunk = clamp(ROWS_STACK_BYTES / (kc * 4l) / 4l * 4l, 64l, t_out)
-    xst |> reserve_resize(chunk * kc)
+    unsafe(scratch_resize(xst, chunk * kc))
     var yp = unsafe(addr(y[0]))
     let xp = unsafe(addr<float const?>(x[0]))
-    let wp = unsafe(addr<float const?>(c.wk[0]))
+    let wp = empty(c.wk) ? null : unsafe(addr<float const?>(c.wk[0]))
+    let hp = conv1d_halves(c)
     let bp = nbias > 0l ? unsafe(addr<float const?>(c.b[0])) : null
     var xstp = unsafe(addr(xst[0]))
     var r0 = 0l
@@ -1198,7 +1367,7 @@ def private conv1d_rows_dense_strided(c : TtsConv1d; x : array<float>; t_in : in
                 let re4 = tile_edge(int64(re), rows)
                 rows_bias_init(yp, r0 + rb4, r0 + re4, cout, nbias, bp)
                 if (re4 > rb4) {
-                    gemm_f32_jo(yp + (r0 + rb4) * cout, xstp + rb4 * kc, wp, re4 - rb4, kc, cout)
+                    conv1d_rows_mm(yp + (r0 + rb4) * cout, xstp + rb4 * kc, wp, hp, 0l, re4 - rb4, kc, cout)
                 }
             }
         }
@@ -1219,12 +1388,12 @@ def private conv1d_rows_dense_q8(c : TtsConv1d; x : array<float>; t_in : int64; 
     var xs & = g_q8_xs
     var xst & = g_q8_xst
     var xss & = g_q8_xss
-    xq |> reserve_resize(t_in * cin)
-    xs |> reserve_resize(t_in * nb)
+    unsafe(scratch_resize(xq, t_in * cin))
+    unsafe(scratch_resize(xs, t_in * nb))
     quantize_q8_0_into(x, t_in * cin, xq, xs, 0l, 0l)
     let chunk = clamp(ROWS_STACK_BYTES / kc / 4l * 4l, 64l, t_out)
-    xst |> reserve_resize(chunk * kc)
-    xss |> reserve_resize(chunk * knb)
+    unsafe(scratch_resize(xst, chunk * kc))
+    unsafe(scratch_resize(xss, chunk * knb))
     var yp = unsafe(addr(y[0]))
     let bp = nbias > 0l ? unsafe(addr<float const?>(c.b[0])) : null
     let wqp = unsafe(addr<int8 const?>(c.wq[0]))
@@ -1305,11 +1474,11 @@ def conv1d_rows(c : TtsConv1d; x : array<float>; t_in : int64; @scratch @exact_s
     if (c.q8 && !c.transposed && c.stride != 1l) {
         panic("dasLLAMA tts: the q8 rows form of a forward conv is stride 1; got stride={c.stride}")
     }
-    if (!c.q8 && c.kq_fmt == 0 && empty(c.transposed ? c.wtr : c.wk)) {
+    if (!c.q8 && c.kq_fmt == 0 && empty(c.transposed ? c.wtr : c.wk) && !conv1d_host_halves(c)) {
         panic("dasLLAMA tts: a rows conv with no rows layout - a prepared image older than this build's served layouts; delete the .dlim beside the GGUF")
     }
     let t_out = conv1d_out_len(c, t_in)
-    y |> reserve_resize(t_out * c.cout_s)
+    unsafe(scratch_resize(y, t_out * c.cout_s))
     if (c.transposed) {
         rows_width_check(c.cout, "conv1d_rows (transposed)")
         conv1d_rows_transposed(c, x, t_in, y)
@@ -1338,7 +1507,7 @@ def conv1d_rows_transposed_depthwise(c : TtsConv1d; x : array<float>; t_in : int
     let dil = c.dilation
     let pad_l = c.pad_l
     let nbias = empty(c.b) ? 0l : ch
-    y |> reserve_resize(t_out * ch)
+    unsafe(scratch_resize(y, t_out * ch))
     var yp = unsafe(addr(y[0]))
     let xp = unsafe(addr<float const?>(x[0]))
     let wp = unsafe(addr<float const?>(c.w[0]))
@@ -1378,12 +1547,15 @@ def linear_vec_prepare_q8(var l : TtsLinear; repack : bool) : bool {
     return true
 }
 
-//! Mint the tiled GEMM's B operand `wt` [nin][nout] when the width sits on the 16-column tile;
-//! a layer only `linear_rows` reads (`rows_only`) drops `w`, one with `q8` and per-32 widths takes
-//! the Q8_0 form (`repack` for the backend), and `vec_only` mints none (`linear_vec` reads `w`, or the quant planes a reader or `linear_vec_prepare_q8` gave it).
+//! tiled GEMM B `wt` [nin][nout], 16-column tile; `rows_only` drops `w`, `q8` the Q8_0 form, `vec_only` none, `halves` narrows `w` to `wh`
 def linear_prepare(var l : TtsLinear; rows_only : bool = false; q8 : bool = false; repack : bool = false;
-                   vec_only : bool = false) {
-    return if (vec_only)
+                   vec_only : bool = false; halves : bool = false) {
+    if (vec_only) {
+        if (halves) {
+            rows_narrow(l.w, l.wh)
+        }
+        return
+    }
     if (q8 && rows_only && l.nin % 32l == 0l && l.nout % 32l == 0l) {
         linear_mint_q8(l, repack)
         return
@@ -1407,8 +1579,8 @@ def private linear_rows_q8(l : TtsLinear; x : array<float>; t : int64; var y : a
     let nout = l.nout
     var xq & = g_q8_xq
     var xs & = g_q8_xs
-    xq |> reserve_resize(t * nin)
-    xs |> reserve_resize(t * nin / 32l)
+    unsafe(scratch_resize(xq, t * nin))
+    unsafe(scratch_resize(xs, t * nin / 32l))
     quantize_q8_0_into(x, t * nin, xq, xs, 0l, 0l)
     unsafe {
         invoke(g_mm_q8q8_batch, addr(y[0]), addr<int8 const?>(l.wq[0]), addr<float const?>(l.wqs[0]),
@@ -1428,6 +1600,23 @@ var @scratch @exact_size g_kq_xst : array<float>   //! the K-quant rows conv's s
 var @scratch g_kq_xq : array<int8>
 var @scratch g_kq_xs : array<float>
 var @scratch g_kq_xbs : array<int>
+
+var private g_tts_dev_release : function<(weights : bool) : void>
+
+//! the GPU TTS driver's release of the device state its owning home holds, set as a home registers
+[arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-device-release")]
+def tts_dev_release_register(release : function<(weights : bool) : void>) {
+    g_tts_dev_release = release
+}
+
+//! the owning home's device activations given back, with `weights` its slabs and voice slots too;
+//! none in a build with no home
+[arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-device-release")]
+def tts_dev_release(weights : bool) {
+    if (g_tts_dev_release != null) {
+        invoke(g_tts_dev_release, weights)
+    }
+}
 
 def tts_blocks_release_scratch() {
     //! Free the block home's scratch globals - the tap lift, the requant images, the attention head
@@ -1506,9 +1695,9 @@ def private kq_gemv_row(l : TtsLinear; x : array<float>; xoff : int64; var y : a
     var xq & = g_kq_xq
     var xs & = g_kq_xs
     var xbs & = g_kq_xbs
-    xq |> reserve_resize(nin)
-    xs |> reserve_resize(nin / 256l)
-    xbs |> reserve_resize(nin / 16l)
+    unsafe(scratch_resize(xq, nin))
+    unsafe(scratch_resize(xs, nin / 256l))
+    unsafe(scratch_resize(xbs, nin / 16l))
     unsafe {
         quantize_q8_k_into_ptr(addr<float const?>(x[xoff]), nin, addr(xq[0]), addr(xs[0]), addr(xbs[0]), 0l, 0l, 0l)
     }
@@ -1527,9 +1716,9 @@ def private linear_rows_kq(l : TtsLinear; x : array<float>; t : int64; var y : a
     var xq & = g_kq_xq
     var xs & = g_kq_xs
     var xbs & = g_kq_xbs
-    xq |> reserve_resize(t * nin)
-    xs |> reserve_resize(t * nin / KQ_SB_ELEMS)
-    xbs |> reserve_resize(t * nin / Q8K_SUM_ELEMS)
+    unsafe(scratch_resize(xq, t * nin))
+    unsafe(scratch_resize(xs, t * nin / KQ_SB_ELEMS))
+    unsafe(scratch_resize(xbs, t * nin / Q8K_SUM_ELEMS))
     requant_rows_q8k_bs(x, nin, t, xq, xs, xbs, t * nin >= g_requant_par_threshold)
     unsafe {
         matmul_kq_rows_at(l.kq_fmt, l.kq_repacked, addr(y[0]), addr<uint8 const?>(l.kq[0]), addr<uint8 const?>(l.ks[0]),
@@ -1543,7 +1732,7 @@ def private linear_rows_kq(l : TtsLinear; x : array<float>; t : int64; var y : a
 //! The continuous-audio family's frame loop calls this; the phoneme families' rows GEMMs never take it.
 def linear_rows_decode(l : TtsLinear; x : array<float>; @scratch @exact_size var y : array<float>) {
     if (l.kq_fmt != 0) {
-        y |> reserve_resize(l.nout)
+        unsafe(scratch_resize(y, l.nout))
         kq_gemv_row(l, x, 0l, y, 0l)
         linear_rows_add_bias(l, 1l, y)
         return
@@ -1555,10 +1744,10 @@ def linear_rows_decode(l : TtsLinear; x : array<float>; @scratch @exact_size var
     let nin = l.nin
     var xq & = g_q8_xq
     var xs & = g_q8_xs
-    xq |> reserve_resize(nin)
-    xs |> reserve_resize(nin / 32l)
+    unsafe(scratch_resize(xq, nin))
+    unsafe(scratch_resize(xs, nin / 32l))
     quantize_q8_0_into(x, nin, xq, xs, 0l, 0l)
-    y |> reserve_resize(l.nout)
+    unsafe(scratch_resize(y, l.nout))
     matmul_q8q8(y, l.wq, l.wqs, xq, xs, nin, l.nout)
     linear_rows_add_bias(l, 1l, y)
 }
@@ -1567,7 +1756,7 @@ def linear_rows_decode(l : TtsLinear; x : array<float>; @scratch @exact_size var
 //! the batched dot form otherwise; a layer minted q8 runs the q8 lane, a layer holding the
 //! file's K-quant planes the kq lane.
 def linear_rows(l : TtsLinear; x : array<float>; t : int64; @scratch @exact_size var y : array<float>) {
-    y |> reserve_resize(t * l.nout)
+    unsafe(scratch_resize(y, t * l.nout))
     if (l.kq_fmt != 0) {
         linear_rows_kq(l, x, t, y)
         return
@@ -1601,14 +1790,35 @@ def linear_rows(l : TtsLinear; x : array<float>; t : int64; @scratch @exact_size
     }
 }
 
+//! `matmul` over the layer's half rows: a row's dot converts as it reads, with no float copy of the plane
+def private linear_vec_halves(l : TtsLinear; x : array<float>; var y : array<float>) {
+    let nin = l.nin
+    unsafe {
+        var yp = addr(y[0])
+        let xp = addr<float const?>(x[0])
+        let wp = addr<uint16 const?>(l.wh[0])
+        maybe_parallel_for(0, int(l.nout), matmul_chunks_gemv(int(l.nout), 1, nin * l.nout)) $(rb, re) {
+            unsafe {
+                for (o in range64(int64(rb), int64(re))) {
+                    yp[o] = dot_f16(xp, wp + o * nin, nin)
+                }
+            }
+        }
+    }
+}
+
 //! y [nout] = w . x + b
 def linear_vec(l : TtsLinear; x : array<float>; @scratch @exact_size var y : array<float>) {
     if (l.q8 || l.kq_fmt != 0) {   // a vector layer the file stores quantized takes the decode entry's GEMV
         linear_rows_decode(l, x, y)
         return
     }
-    y |> reserve_resize(l.nout)
-    matmul(y, l.w, x, l.nin, l.nout)
+    unsafe(scratch_resize(y, l.nout))
+    if (linear_host_halves(l)) {
+        linear_vec_halves(l, x, y)
+    } else {
+        matmul(y, l.w, x, l.nin, l.nout)
+    }
     return if (empty(l.b))
     for (o in range64(l.nout)) {
         y[o] += l.b[o]
@@ -1626,9 +1836,9 @@ def attention_rows(q, k, v : array<float>; t, hidden, heads : int64; @scratch @e
     let dh = hidden / heads
     let tp = round_up(t, 16l)
     let per_head = t * dh + dh * tp + tp * dh + t * tp + t * dh   // qh, kT, vh, s, oh
-    ctx |> reserve_resize(t * hidden)
+    unsafe(scratch_resize(ctx, t * hidden))
     var head_scratch & = g_att_heads
-    head_scratch |> reserve_resize(heads * per_head)
+    unsafe(scratch_resize(head_scratch, heads * per_head))
     let scale = 1.0 / sqrt(float(dh))
     let qp = unsafe(addr<float const?>(q[0]))
     let kp = unsafe(addr<float const?>(k[0]))
@@ -1822,9 +2032,9 @@ def attention_causal_rows(q : array<float>; t, hidden : int64; context : int64; 
     let bq = min(t, CATT_QUERY_BLOCK)
     let wmax = context > 0l ? min(n, bq + context - 1l) : n   // the widest key range one block sees
     let per_head = bq * dh + bq * wmax + bq * dh + dh * wmax   // qh, s, oh, the key slice
-    ctx |> reserve_resize(t * hidden)
+    unsafe(scratch_resize(ctx, t * hidden))
     var head_scratch & = g_catt_heads
-    head_scratch |> reserve_resize(hq * per_head)
+    unsafe(scratch_resize(head_scratch, hq * per_head))
     let scale = 1.0 / sqrt(float(dh))
     let qp = unsafe(addr<float const?>(q[0]))
     let kp = unsafe(addr<float const?>(kc.k[0]))
@@ -1965,7 +2175,7 @@ def layernorm_rows(var x : array<float>; t, c : int64; n : TtsNorm; eps : float)
 
 //! `layernorm_rows` of src [t][c] written into dst, sized here.
 def layernorm_rows_into(src : array<float>; @scratch @exact_size var dst : array<float>; t, c : int64; n : TtsNorm; eps : float) {
-    dst |> reserve_resize(t * c)
+    unsafe(scratch_resize(dst, t * c))
     unsafe {
         layernorm_batch_at(dst, src, addr<float const?>(n.w[0]), addr<float const?>(n.b[0]), c, t, eps)
     }
@@ -2130,11 +2340,12 @@ def adain(a : TtsAdaIn; var x : array<float>; c, t : int64; style : array<float>
 let private STAT_BLOCK = 256l
 
 [arch(at = "../ARCHITECTURE_TTS.md#tts-two-layouts")]
-def private column_stats(x : array<float>; t, c : int64; var mean : array<float>; var ssq : array<float>) {
+def private column_stats(x : array<float>; t, c : int64; @scratch var mean : array<float>;
+                         @scratch var ssq : array<float>) {
     let sb = STAT_BLOCK
     let nblk = (t + sb - 1l) / sb
     var part & = g_colsum_part
-    part |> reserve_resize(2l * nblk * c)
+    unsafe(scratch_resize(part, 2l * nblk * c))
     for (i in range64(2l * nblk * c)) {
         part[i] = 0.0
     }
@@ -2175,8 +2386,8 @@ def private column_stats(x : array<float>; t, c : int64; var mean : array<float>
             }
         }
     }
-    mean |> reserve_resize(c)
-    ssq |> reserve_resize(c)
+    unsafe(scratch_resize(mean, c))
+    unsafe(scratch_resize(ssq, c))
     for (ci in range64(c)) {
         var n = 0.0lf
         var m = 0.0lf
@@ -2201,15 +2412,15 @@ def private column_stats(x : array<float>; t, c : int64; var mean : array<float>
 // The per-channel affine AdaIN folds to: the instance-norm statistics of `x` over the rows,
 // the norm's own scale and shift, then (1 + gamma) and beta.
 def private adain_affine(a : TtsAdaIn; x : array<float>; t, c : int64; style : array<float>; eps : float;
-                         var scale : array<float>; var shift : array<float>) {
+                         @scratch var scale : array<float>; @scratch var shift : array<float>) {
     var h & = g_adain_h
     var mean & = g_adain_mean
     var ssq & = g_adain_ssq
     linear_vec(a.fc, style, h)
     column_stats(x, t, c, mean, ssq)
     let inv_t = 1.0 / float(t)
-    scale |> reserve_resize(c)
-    shift |> reserve_resize(c)
+    unsafe(scratch_resize(scale, c))
+    unsafe(scratch_resize(shift, c))
     for (ci in range64(c)) {
         let rs = 1.0 / sqrt(ssq[ci] * inv_t + eps)
         let g = empty(a.norm.w) ? 1.0 : a.norm.w[ci]
@@ -2230,7 +2441,7 @@ def adain_rows(a : TtsAdaIn; var x : array<float>; t, c : int64; style : array<f
 //! of its input, folded into the normalize pass.
 def adain_rows_into(a : TtsAdaIn; src : array<float>; @scratch @exact_size var dst : array<float>; t, c : int64; style : array<float>; eps : float) {
     adain_affine(a, src, t, c, style, eps, g_adain_scale, g_adain_shift)
-    dst |> reserve_resize(t * c)
+    unsafe(scratch_resize(dst, t * c))
     adain_rows_at(unsafe(addr<float const?>(src[0])), unsafe(addr(dst[0])), t, c)
 }
 
@@ -2268,7 +2479,7 @@ def private adain_rows_at(xp : float const?; var dp : float?; t, c : int64) {
 //! y = a + b over n floats (n % 4 == 0); `y` sized here.
 def sum_rows_into(@scratch @exact_size var y : array<float>; a, b : array<float>; n : int64) {
     rows_width_check(n, "sum_rows_into")
-    y |> reserve_resize(n)
+    unsafe(scratch_resize(y, n))
     var yp = unsafe(addr(y[0]))
     let ap = unsafe(addr<float const?>(a[0]))
     let bp = unsafe(addr<float const?>(b[0]))
@@ -2315,7 +2526,7 @@ def gather_rows(var dst : array<float>; emb : array<float>; ids : array<auto(TT)
 //! dst = src over n floats (n % 4 == 0); `dst` sized here.
 def copy_rows(@scratch @exact_size var dst : array<float>; src : array<float>; n : int64) {
     rows_width_check(n, "copy_rows")
-    dst |> reserve_resize(n)
+    unsafe(scratch_resize(dst, n))
     var dp = unsafe(addr(dst[0]))
     let sp = unsafe(addr<float const?>(src[0]))
     let n4 = int(n / 4l)
@@ -2376,11 +2587,11 @@ def private lstm_direction(l : TtsLstm; x : array<float>; t : int64; reverse : b
     var xin & = g_lstm_xin
     var gates & = g_lstm_gates
     var gates2 & = g_lstm_gates2
-    h |> reserve_resize(hd)
-    cst |> reserve_resize(hd)
-    xin |> reserve_resize(l.nin)
-    gates |> reserve_resize(4l * hd)
-    gates2 |> reserve_resize(4l * hd)
+    unsafe(scratch_resize(h, hd))
+    unsafe(scratch_resize(cst, hd))
+    unsafe(scratch_resize(xin, l.nin))
+    unsafe(scratch_resize(gates, 4l * hd))
+    unsafe(scratch_resize(gates2, 4l * hd))
     var xq & = g_lstm_xq
     var xqs & = g_lstm_xqs
     var hq & = g_lstm_hq
@@ -2425,7 +2636,7 @@ def private lstm_direction(l : TtsLstm; x : array<float>; t : int64; reverse : b
 //! Bidirectional LSTM over token-major x [T][nin] -> y [T][2H], forward half first.
 def bilstm(l : TtsBiLstm; x : array<float>; t : int64; @scratch @exact_size var y : array<float>) {
     let hd = l.fwd.hidden
-    y |> reserve_resize(t * 2l * hd)
+    unsafe(scratch_resize(y, t * 2l * hd))
     lstm_direction(l.fwd, x, t, false, y, 2l * hd, 0l)
     lstm_direction(l.bwd, x, t, true, y, 2l * hd, hd)
 }
@@ -2456,7 +2667,7 @@ def snake(var x : array<float>; c, t : int64; alpha : array<float>) {
 def snake_rows(var x : array<float>; t, c : int64; alpha : array<float>) {
     rows_width_check(c, "snake_rows")
     var inv & = g_snake_inv
-    inv |> reserve_resize(c)
+    unsafe(scratch_resize(inv, c))
     for (ci in range64(c)) {
         inv[ci] = 1.0 / alpha[ci]
     }
@@ -2633,7 +2844,7 @@ def resize_nearest(x : array<float>; c, t, factor : int64; @scratch @exact_size 
 //! source row.
 def resize_nearest_rows(x : array<float>; t, c, factor : int64; @scratch @exact_size var y : array<float>) {
     let t_out = t * factor
-    y |> reserve_resize(t_out * c)
+    unsafe(scratch_resize(y, t_out * c))
     var yp = unsafe(addr(y[0]))
     let xp = unsafe(addr<float const?>(x[0]))
     unsafe {
@@ -2772,7 +2983,7 @@ def align_expand_rows(x : array<float>; t, c : int64; dur : array<int>; @scratch
     for (d in dur) {
         frames += int64(d)
     }
-    y |> reserve_resize(c * frames)
+    unsafe(scratch_resize(y, c * frames))
     var f = 0l
     for (ti in range64(t)) {
         for (_r in range(dur[ti])) {
@@ -2791,7 +3002,7 @@ def align_expand_channels(x : array<float>; c, t : int64; dur : array<int>; @scr
     for (d in dur) {
         frames += int64(d)
     }
-    y |> reserve_resize(c * frames)
+    unsafe(scratch_resize(y, c * frames))
     for (ci in range64(c)) {
         var f = 0l
         for (ti in range64(t)) {
@@ -2901,14 +3112,14 @@ struct SineSourceCarry {
 //! Start a run: the sums at zero, no frame computed, room for `window` frames plus the two the
 //! taps reach back and forward to.
 def sine_carry_reset(var cr : SineSourceCarry; nh, window : int64) {
-    cr.acc |> reserve_resize(nh)
-    cr.acc64 |> reserve_resize(nh)
+    unsafe(scratch_resize(cr.acc, nh))
+    unsafe(scratch_resize(cr.acc64, nh))
     for (h in range64(nh)) {
         cr.acc[h] = 0.0
         cr.acc64[h] = 0.0lf
     }
     cr.stride = window + 2l
-    cr.lowc |> reserve_resize(nh * cr.stride)
+    unsafe(scratch_resize(cr.lowc, nh * cr.stride))
     cr.base = 0l
     cr.next = 0l
 }
@@ -2923,7 +3134,7 @@ def private sine_phase_frames(cfg : SineSourceCfg; f0 : array<float>; n : int64;
     let span = resize_span(cfg.torch_math, n, down, cr.next, want)
     let width = span.hi - span.lo
     var rad & = g_sine_rad
-    rad |> reserve_resize(nh * width)
+    unsafe(scratch_resize(rad, nh * width))
     for (h in range64(nh)) {
         let mult = float(h + 1l)
         for (i in range64(span.lo, span.hi)) {
@@ -2936,7 +3147,7 @@ def private sine_phase_frames(cfg : SineSourceCfg; f0 : array<float>; n : int64;
     }
     let count = want - cr.next
     var low & = g_sine_low
-    low |> reserve_resize(nh * count)
+    unsafe(scratch_resize(low, nh * count))
     resize_linear_window(cfg.torch_math, rad, span.lo, width, nh, n, down, cr.next, want, low, count)
     let held = cr.next - keep
     if (held + count > cr.stride) {
@@ -2984,7 +3195,8 @@ def sine_source_geometry(cfg : SineSourceCfg; frames : int64) : SineSourceGeomet
 //! count. Windows come in order from a reset carry; `noise_n` holds the window's rows from `noise_base` on.
 [arch(at = "../ARCHITECTURE_TTS.md#tts-phase-law")]
 def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u : array<float>; fa, fb : int64;
-                var cr : SineSourceCarry; noise_n : array<float>; noise_base : int64; @exact_size var out : array<float>) : int64 {
+                var cr : SineSourceCarry; noise_n : array<float>; noise_base : int64;
+                @scratch @exact_size var out : array<float>) : int64 {
     let up = cfg.upsample
     let nh = cfg.n_harm
     let geo = sine_source_geometry(cfg, frames)
@@ -3001,9 +3213,9 @@ def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u 
         sine_phase_frames(cfg, f0, n, noise_u, max(fa - 1l, 0l), want, cr)
     }
     var phase & = g_sine_phase
-    phase |> reserve_resize(nh * rows)
+    unsafe(scratch_resize(phase, nh * rows))
     resize_linear_window(cfg.torch_math, cr.lowc, cr.base, cr.stride, nh, nlow, float(up), sa, sb, phase, rows)
-    out |> reserve_resize(rows * nh)
+    unsafe(scratch_resize(out, rows * nh))
     for (r in range64(rows)) {
         let i = sa + r
         let uv = f0[i / up] > cfg.voiced_thr ? 1.0 : 0.0
@@ -3022,7 +3234,7 @@ def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u 
 //! (magnitude rows first). A zero imaginary part reads as +0, so a negative real axis is +pi:
 //! torch.angle's branch, which a conv's -0 sum would otherwise flip to -pi.
 def magnitude_phase(re, im : array<float>; bins, frames : int64; eps : float; @scratch @exact_size var out : array<float>) {
-    out |> reserve_resize(2l * bins * frames)
+    unsafe(scratch_resize(out, 2l * bins * frames))
     for (i in range64(bins * frames)) {
         out[i] = tts_stft_mag(re[i], im[i], eps)
         out[bins * frames + i] = tts_stft_phase(re[i], im[i])
@@ -3045,8 +3257,8 @@ def polar_to_rect(x : array<float>; bins, frames : int64; @scratch @exact_size v
 //! `polar_to_rect` from token-major rows x [frames][stride] (magnitude columns then phase
 //! columns, `stride` >= 2*bins) into the channel-major pair the inverse conv consumes.
 def polar_to_rect_rows(x : array<float>; stride, bins, frames : int64; @scratch @exact_size var re : array<float>; @scratch @exact_size var im : array<float>) {
-    re |> reserve_resize(bins * frames)
-    im |> reserve_resize(bins * frames)
+    unsafe(scratch_resize(re, bins * frames))
+    unsafe(scratch_resize(im, bins * frames))
     for (f in range64(frames)) {
         let row = f * stride
         for (b in range64(bins)) {
@@ -3060,7 +3272,7 @@ def polar_to_rect_rows(x : array<float>; stride, bins, frames : int64; @scratch 
 
 //! Edge-pad a mono signal by `pad` samples on both sides.
 def pad_edge(x : array<float>; n, pad : int64; @scratch @exact_size var y : array<float>) {
-    y |> reserve_resize(n + 2l * pad)
+    unsafe(scratch_resize(y, n + 2l * pad))
     for (i in range64(n + 2l * pad)) {
         y[i] = x[clamp(i - pad, 0l, n - 1l)]
     }
@@ -3068,7 +3280,7 @@ def pad_edge(x : array<float>; n, pad : int64; @scratch @exact_size var y : arra
 
 //! Reflection-pad a mono signal by `pad` samples on both sides (torch.stft's center pad).
 def pad_reflect(x : array<float>; n, pad : int64; @scratch @exact_size var y : array<float>) {
-    y |> reserve_resize(n + 2l * pad)
+    unsafe(scratch_resize(y, n + 2l * pad))
     for (i in range64(n + 2l * pad)) {
         y[i] = x[tts_pad_reflect(int(i - pad), int(n))]
     }
@@ -3114,7 +3326,7 @@ def pad_reflect_left(x : array<float>; c, t, left : int64; @scratch @exact_size 
 //! [t + left][c], its rows shifted down by `left` and the new leading rows reflecting the ones that follow.
 def pad_reflect_left_rows_inplace(@scratch @exact_size var x : array<float>; t, c, left : int64) {
     let t_out = t + left
-    x |> reserve_resize(t_out * c)
+    unsafe(scratch_resize(x, t_out * c))
     var to = t_out - 1l
     while (to >= left) {
         let src = (to - left) * c

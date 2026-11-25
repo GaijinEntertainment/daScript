@@ -14,11 +14,12 @@ require daslib/jobque_boost public  // matmul's threaded path expands parallel_f
 require daslib/jobque_profile  // named trace categories + unit markers (set_trace_tags registers them)
 require dasllama/dasllama_par  // maybe_parallel_for: thread-or-inline a kernel body on a runtime size flag
 require dasllama/dasllama_tune  // [tuned]: reconstitute dot from dot_template with per-box loop hints
-require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_scope] must be on the AST before this module's [tuned] kernels pick their perms
+require dasllama/dasllama_tune_scope  // nolint:STYLE029 — an ORDER dependency: the dasllama [tune_scope] must be on the AST before this module's [tune] and [tuned] kernels pick their perms
 require dasllama/dasllama_gemm_schema  // kq_qsb/kq_ssb — the fmt-id kq plane strides
 require dasllama/dasllama_gpu_tier public  // the device-cooperation seam (split out 2026-07-29) — re-exported for the 112 requirers
 require dasllama/dasllama_gpu_math  // silu_f32: the one SiLU form the CPU and the kernel homes share
 require daslib/cmp
+require daslib/f16_cvt  // f16_to_f32: the half-weight GEMM reference widens B as it reads
 
 // dasLLAMA numeric primitives — naive fp32 baseline (curriculum step 1).
 // Correctness first; optimization (blocking, float4, threading) comes later.
@@ -721,7 +722,7 @@ def private matmul_at(var y : array<float>; wp : float const?; x : array<float>;
 
 //! [C][T] -> [T][C]
 def transpose_ct(x : array<float>; c, t : int64; @scratch var y : array<float>) {
-    y |> reserve_resize(c * t)
+    unsafe(scratch_resize(y, c * t))
     for (ci in range64(c)) {
         let row = ci * t
         for (ti in range64(t)) {
@@ -818,7 +819,7 @@ def private row_dot(wrow : uint16 const?; xrow : float const?; n : int64) : floa
 
 //! The tile walk over rows [r0, r1) by tokens [t0, t1) in token blocks of `x_block_tok`, over an f32 or a
 //! bf16 weight plane
-[hint(noalias = yp, noalias = wp, noalias = xp), arch(at = "../ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice")]
+[hint(noalias = yp, noalias = wp, noalias = xp), arch(at = "../ARCHITECTURE_CPU_KERNELS_TILES.md#f32-batch-tile-lattice")]
 def batch_tile_block(var yp : float?; wp : auto const?; xp : float const?; n, d, r0, r1, t0, t1, x_block_tok : int64) {
     let ra = min(r1, ((r0 + 3l) / 4l) * 4l)
     let r4 = ra + ((r1 - ra) / 4l) * 4l
@@ -1098,7 +1099,7 @@ def private gemm_f32_region(var cp : float?; ap, bp : float const?; i0, i1, j0, 
                 let a = ap[i * K + kk]
                 let brow = kk * N
                 for (j in range64(j0, j1)) {
-                    cp[crow + j] += a * bp[brow + j]
+                    cp[crow + j] = mad(bp[brow + j], a, cp[crow + j])
                 }
             }
         }
@@ -1148,11 +1149,177 @@ def template gemm_f32_uk_4x16_template(var cp : float ?; ap, bp : float const ?;
 [hint(noalias = cp, noalias = ap, noalias = bp), tuned(fallback = "u2")]
 def private gemm_f32_uk_4x16(var cp : float?; ap, bp : float const?; i0, j0, K, N : int64) {}
 
+//! the family's reference values: no stamped tile, so the hand-written tile serves; a full tile is sixteen columns
+def gemm_f32_mr_gen() : int => 0
+def gemm_f32_cols_gen() : int => 16
+
+[never_fast_math, hint(unsafe_range_check, noalias = cp, noalias = ap, noalias = bp)]
+def gemm_f32_row_gen(var cp : float?; ap, bp : float const?; i0, j0, nc, kn, cs, astride, bs : int64) : void {
+    //! one row of the reference: C[i0][j0 .. j0 + nc) += A[i0] x B over `kn` k positions, the planes' row strides `cs`,
+    //! `astride` and `bs`. Fast math never reaches the family: a regrouped sum would land a tile shape's own bits
+    unsafe {
+        for (j in range64(j0, j0 + nc)) {
+            var acc = cp[i0 * cs + j]
+            for (kk in range64(kn)) {
+                acc = mad(bp[kk * bs + j], ap[i0 * astride + kk], acc)
+            }
+            cp[i0 * cs + j] = acc
+        }
+    }
+}
+
+//! 1 where the target converts halves in hardware (the JIT's own answer), 0 from the reference body
+def target_half_converts_gen() : int => 0
+
+[never_fast_math,
+ tune_perm(width = 128, mr = 4, nv = 4, kstep = 2),
+ tune_perm(width = 128, mr = 4, nv = 4, kstep = 1),
+ tune_perm(width = 128, mr = 6, nv = 4, kstep = 1),
+ tune_perm(width = 128, mr = 8, nv = 3, kstep = 1),
+ tune_perm(width = 128, mr = 8, nv = 2, kstep = 1),
+ tune_perm(width = 128, mr = 6, nv = 2, kstep = 1),
+ tune_perm(width = 128, mr = 4, nv = 2, kstep = 1),
+ tune_perm(width = 256, mr = 6, nv = 2, kstep = 1, requires = "avx2"),
+ tune_perm(width = 256, mr = 4, nv = 2, kstep = 1, requires = "avx2"),
+ tune_perm(width = 256, mr = 4, nv = 3, kstep = 1, requires = "avx2"),
+ tune_perm(width = 256, mr = 2, nv = 4, kstep = 1, requires = "avx2"),
+ tune_perm(width = 256, mr = 6, nv = 2, kstep = 2, requires = "avx2"),
+ tune_perm(width = 512, mr = 6, nv = 4, kstep = 1, requires = "avx512bw"),
+ tune_perm(width = 512, mr = 8, nv = 3, kstep = 1, requires = "avx512bw"),
+ tune_perm(width = 512, mr = 4, nv = 4, kstep = 1, requires = "avx512bw"),
+ tune_perm(width = 512, mr = 8, nv = 2, kstep = 1, requires = "avx512bw"),
+ tune_perm(width = 512, mr = 6, nv = 2, kstep = 1, requires = "avx512bw"),
+ tune_perm(width = 512, mr = 4, nv = 2, kstep = 1, requires = "avx512bw"),
+ tune_companion(fn = "gemm_f32_row_gen", gen = "dasllama_gemm_gen::f32_row"),
+ tune_companion(fn = "gemm_f32_mr_gen", gen = "dasllama_gemm_gen::f32_mr"),
+ tune_companion(fn = "gemm_f32_cols_gen", gen = "dasllama_gemm_gen::f32_cols"),
+ tune_companion(fn = "target_half_converts_gen", gen = "dasllama_gemm_gen::half_converts"),
+ tune(gen = "dasllama_gemm_gen::f32_tile", fallback = "width512_mr6_nv4_kstep1;width256_mr6_nv2_kstep1;width128_mr4_nv4_kstep2"),
+ hint(unsafe_range_check, noalias = cp, noalias = ap, noalias = bp)]
+def gemm_f32_tile_gen(var cp : float?; ap, bp : float const?; i0, j0, nc, kn, cs, astride, bs : int64) : void {
+    for (r in range64(4l)) {
+        gemm_f32_row_gen(cp, ap, bp, i0 + r, j0, nc, kn, cs, astride, bs)
+    }
+}
+
+def gemm_f32_walk(M, N, mr, tc : int64; cols_outer : bool; tile : block<(i0, j0, nc : int64) : void>; row : block<(i0 : int64) : void>) {
+    //! the tile family's walk over M rows by N columns: whole row blocks of `mr` rows through `tile` - the column blocks of
+    //! `tc` outermost where `cols_outer` asks (B's strip stays hot across the row blocks), else one call a row block over
+    //! every column - then each row past the last block through `row`
+    let mt = M - M % mr
+    if (cols_outer) {
+        var jj = 0l
+        while (jj < N) {
+            let nc = min(tc, N - jj)
+            var ii = 0l
+            while (ii < mt) {
+                invoke(tile, ii, jj, nc)
+                ii += mr
+            }
+            jj += tc
+        }
+    } else {
+        var ii = 0l
+        while (ii < mt) {
+            invoke(tile, ii, 0l, N)
+            ii += mr
+        }
+    }
+    for (i in range64(mt, M)) {
+        invoke(row, i)
+    }
+}
+
+let private GEMM_F32_STRIP = 2048l   //! the floats of B one column block's k block spans: 8 KB
+
+//! One row past the walk's row blocks, C[i0][0 .. nc) += A[i0] x B over `kn` k positions with the k positions outermost: B is
+//! read along its rows, as it is stored, where the stamped row walks it down a column a block - a call of fewer rows than a
+//! row block (a decode step) is all such rows. Every output is the same sum in k order from C's own value
+[never_fast_math, hint(unsafe_range_check, noalias = cp, noalias = ap, noalias = bp)]
+def private gemm_f32_row_k(var cp : float?; ap, bp : float const?; i0, nc, kn, cs, astride, bs : int64) {
+    unsafe {
+        for (kk in range64(kn)) {
+            let a = ap[i0 * astride + kk]
+            for (j in range64(nc)) {
+                cp[i0 * cs + j] = mad(bp[kk * bs + j], a, cp[i0 * cs + j])
+            }
+        }
+    }
+}
+
+//! the stamped family over C[M x N] += A[M x K] x B[K x N]; false where no tile is stamped
+[arch(at = "../ARCHITECTURE_CPU_KERNELS_TILES.md#f32-gemm-tile-family"), hint(noalias = cp, noalias = ap, noalias = bp)]
+def private gemm_f32_family(var cp : float?; ap, bp : float const?; M, K, N : int64; cols_outer : bool) : bool {
+    let mr = int64(gemm_f32_mr_gen())
+    return false if (mr <= 0l)
+    let tc = int64(gemm_f32_cols_gen())
+    let kc = cols_outer ? max(GEMM_F32_STRIP / tc, 16l) : K
+    var k0 = 0l
+    unsafe {
+        while (k0 < K) {
+            let kn = min(kc, K - k0)
+            gemm_f32_walk(M, N, mr, tc, cols_outer, $(i0, j0, nc : int64) {
+                gemm_f32_tile_gen(cp, ap + k0, bp + k0 * N, i0, j0, nc, kn, N, K, N)
+            }) $(i0 : int64) {
+                gemm_f32_row_k(cp, ap + k0, bp + k0 * N, i0, N, kn, N, K, N)
+            }
+            k0 += kc
+        }
+    }
+    return true
+}
+
+//! the target converts halves in hardware and the JIT is the tier: a loader asks before it keeps a weight plane as halves
+def target_half_converts() : bool => target_half_converts_gen() != 0
+
+let private GEMM_F16W_PACK = 2048l   //! the half-weight GEMM's widened strip in floats: 8 KB, resident in the first-level cache
+
+[arch(at = "../ARCHITECTURE_CPU_KERNELS_TILES.md#f32-gemm-tile-family"), hint(noalias = cp, noalias = ap, noalias = bp)]
+def gemm_f16w_jo(var cp : float?; ap : float const?; bp : uint16 const?; M, K, N : int64) {
+    var pack : float[2048]
+    let stamped = int64(gemm_f32_mr_gen())
+    let mr = stamped > 0l ? stamped : 4l
+    let tc = min(int64(gemm_f32_cols_gen()), 64l)
+    let kc = GEMM_F16W_PACK / tc
+    unsafe {
+        var pp = addr(pack[0])
+        var jj = 0l
+        while (jj < N) {
+            let nc = min(tc, N - jj)
+            var k0 = 0l
+            while (k0 < K) {
+                let kn = min(kc, K - k0)
+                for (kk in range64(kn)) {
+                    let src = bp + (k0 + kk) * N + jj
+                    for (j in range64(nc)) {
+                        pp[kk * nc + j] = f16_to_f32(uint(src[j]))
+                    }
+                }
+                gemm_f32_walk(M, nc, mr, nc, false, $(i0, j0, n : int64) {
+                    gemm_f32_tile_gen(cp + jj, ap + k0, pp, i0, j0, n, kn, N, K, nc)
+                }) $(i0 : int64) {
+                    gemm_f32_row_gen(cp + jj, ap + k0, pp, i0, 0l, nc, kn, N, K, nc)
+                }
+                k0 += kc
+            }
+            jj += tc
+        }
+    }
+}
+
+[cold_path]
+def gemm_f32_sum_bar(K : int64) : float {
+    //! How far a fused k-ordered f32 sum of `K` products of operands within 1 can sit from the same sum in double: a rounding a
+    //! step on a running sum of at most K + 2, and an ulp of slack - the bar the family's cell and its race hold a tile to.
+    return 6.0e-8 * float(K) * (float(K) + 2.0) + 1.0e-6
+}
+
 //! Register-tiled fp32 GEMM, C[M x N] += A[M x K] · B[K x N]. 4×16 tile over the bulk; the
 //! L-shaped remainder (cols N%16, rows M%4) falls back to scalar. General over M/K/N. C must be
 //! pre-initialized (the kernel accumulates). 2-3.5× the scalar form on the attention tile shapes.
 [hint(noalias = cp, noalias = ap, noalias = bp)]
 def gemm_f32(var cp : float?; ap, bp : float const?; M, K, N : int64) {
+    return if (gemm_f32_family(cp, ap, bp, M, K, N, false))
     let m4 = M - M % 4l
     let n16 = N - N % 16l
     var ii = 0l
@@ -1177,6 +1344,7 @@ def gemm_f32(var cp : float?; ap, bp : float const?; M, K, N : int64) {
 //! to gemm_f32. Wins on big-B multi-thread shapes (parakeet attn −20%); small/reused B keeps gemm_f32.
 [hint(noalias = cp, noalias = ap, noalias = bp)]
 def gemm_f32_jo(var cp : float?; ap, bp : float const?; M, K, N : int64) {
+    return if (gemm_f32_family(cp, ap, bp, M, K, N, true))
     let m4 = M - M % 4l
     let n16 = N - N % 16l
     var jj = 0l
@@ -1699,6 +1867,28 @@ def active_kq_layout_mr(fmt : int) : int64 {
 //! expand biases its LUT writes to match.
 def active_q8_wbias() : int64 => g_bake_cpu_override ? g_bake_cpu.q8_wbias : g_active_q8_wbias
 
+var private g_rows_f32_pin = 0   //! 1 floats, -1 halves, 0 the target's answer
+
+def set_rows_f32(on : bool) {
+    //! Pin how later loads serve a weight row held as half floats: as floats (`on`), or as the halves on any target;
+    //! `reset_rows_f32` returns to the target's own answer.
+    g_rows_f32_pin = on ? 1 : -1
+}
+
+def reset_rows_f32() {
+    g_rows_f32_pin = 0
+}
+
+//! whether ``set_rows_f32`` holds a pin ``reset_rows_f32`` has not dropped
+def rows_f32_pinned() : bool => g_rows_f32_pin != 0
+
+def active_rows_f32() : bool {
+    //! a weight row held as half floats is served as floats: the bake target's answer where one is armed, then the pin, else
+    //! this target's - true where it converts halves in software
+    return g_bake_cpu.rows_f32 if (g_bake_cpu_override)
+    return g_rows_f32_pin != 0 ? g_rows_f32_pin > 0 : !target_half_converts()
+}
+
 //! The plane kgroup of the ACTIVE backend's Q8 layout — cached at activation from
 //! KernelBackend.q8_kgroup (4 for every hand tier; 8 on an smmla gen stamp). The mx4->Q8
 //! expand's positional map and the batch token-tail generic read it.
@@ -1734,6 +1924,12 @@ def active_repack_kq() : RepackKqFn => g_bake_cpu_override ? g_bake_kq_repack : 
 //! True while a cross-box bake override is armed (converter main thread only — the streaming
 //! bake repacks inline, never on lanes).
 def bake_cpu_override_active() : bool => g_bake_cpu_override
+
+def bake_cpu_override_config() : DlimCpuConfig {
+    //! The target `pin_backend_for_bake` armed last: what a caller that arms another re-arms where `bake_cpu_override_active`
+    //! read true before it
+    return <- clone_to_move(g_bake_cpu)
+}
 [unused_argument(yp, wp, sp, xqp, xsp, n, d)]
 def private q8q8_unset_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) { no_backend() }
 [unused_argument(yp, wp, sp, xqp, xsp, n, d, ntok)]

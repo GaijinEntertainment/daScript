@@ -37,6 +37,7 @@ struct public DlimCpuConfig {
     kq_q51_native : bool
     iq3s_lut : bool   //! the IQ3_S weights serve as iq3s4 planes (DASLLAMA_IQ3S_SERVE resolved at the load)
     rope_override : string   //! the rope-scaling override baked into the rope tables ("" = the file's keys; rope_override_spelling)
+    rows_f32 : bool   //! a weight row a file or a mint holds as half floats is served as floats: the target converts halves in software
 }
 
 //! a per-32 format's repack interleave in `c` (1 off the per-32 rail)
@@ -165,7 +166,7 @@ def private kq_mr_identity(c : DlimCpuConfig) : string {
 }
 
 //! the pipe-separated fields `dlim_identity` writes BEFORE the tag - the tag parsers skip exactly this many;
-//! a conditional element (the rope override, the dev-W lever) rides
+//! a conditional element (the rope override, the f32 rows, the dev-W lever) rides
 //! INSIDE the last field, so an unset one leaves every identity as is
 let public DLIM_IDENTITY_FIELDS = 9
 
@@ -181,6 +182,7 @@ def public dlim_identity(c : DlimConfiguration; image_version : int; tag : strin
         + "|q51 mr{c.cpu.q51_mr}|iq4nl32 mr{c.cpu.iq4nl32_mr} q4032 mr{c.cpu.q4032_mr} q5032 mr{c.cpu.q5032_mr}"
         + "|nat {c.cpu.kquant_native ? 1 : 0}{c.cpu.kq_q40_native ? 1 : 0}{c.cpu.kq_q51_native ? 1 : 0}{c.cpu.iq3s_lut ? 1 : 0}"
         + (c.cpu.rope_override != "" ? " rope {c.cpu.rope_override}" : "")
+        + (c.cpu.rows_f32 ? " f32rows" : "")
         + (blob_devw ? " devw" : "")
         + (tag != "" ? "|{tag}" : ""))
 }

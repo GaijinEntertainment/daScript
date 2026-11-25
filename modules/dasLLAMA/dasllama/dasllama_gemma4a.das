@@ -1120,7 +1120,7 @@ def gemma4a_asr_caps() : AsrCaps {
 }
 
 //! The facade's session arm: a fresh decoder session (no language conditioning).
-def create_gemma4a_asr_session(dec : Model; kv : KVDtype = KVDtype.f16) : Gemma4aAsrSession =>
+def create_gemma4a_asr_session(dec : Model; kv : KVDtype = KVDtype.automatic) : Gemma4aAsrSession =>
     <- Gemma4aAsrSession(qctx <- create_session_(dec, kv, kv))
 
 // Gemma-4 E-series audio transcription: gemma4a Conformer encode + mm embedder, soft tokens spliced

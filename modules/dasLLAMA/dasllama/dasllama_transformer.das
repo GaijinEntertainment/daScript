@@ -44,6 +44,7 @@ require dasllama/dasllama_fat_start   // nolint:STYLE030,LINT019 — [init]-only
 require ?vulkan dasllama/dasllama_math_vulkan  // [init]-only: registers "vulkan" (the GPU tier). STRICT guard: the C++ vulkan module is linked only where dasVulkan is installed. LAST on purpose: the vulkan drivers are the hot-edit modules, and require order is the jit obj-cache layout — a late position keeps the fat module prefix cached across driver edits
 require ?vulkan dasllama/dasllama_vulkan_asr_dec  // [init]-only: registers the whisper cross-KV and decode-step hooks (the ?das_metal dasllama_metal_asr_dec line's twin on a build without das_metal)
 require ?das_metal dasllama/dasllama_metal_nmt  // [init]-only: registers the Bergamot translation driver (`register_nmt_gpu`)
+require ?das_metal dasllama/dasllama_metal_tts  // [init]-only: the StyleTTS2 and Pocket seats on the shared TTS driver over the Metal rail, after the Metal tower's own registration
 require ?vulkan dasllama/dasllama_vulkan_nmt  // [init]-only: the same seat on a build without das_metal
 require ?vulkan dasllama/dasllama_vulkan_tts  // [init]-only: registers the StyleTTS2 and Pocket seats on the Vulkan tower (the ?das_metal dasllama_metal_tower line's TTS half on a build without das_metal)
 require ?vulkan dasllama/dasllama_vulkan_tower  // [init]-only: registers the vision and audio tower encodes (the ?das_metal dasllama_metal_tower line's twin on a build without das_metal); after the tier for the same cache-layout reason
@@ -54,3 +55,4 @@ require ?cuda dasllama/dasllama_cuda_mtp_gemma  // [init]-only: the same seams u
 require ?cuda dasllama/dasllama_cuda_dflash  // [init]-only: the block drafter's device arm on the CUDA home's resident driver
 require ?cuda dasllama/dasllama_cuda_tower  // [init]-only: the CUDA home's vision tower seats
 require ?cuda dasllama/dasllama_cuda_tower_audio  // [init]-only: the CUDA home's audio seats, each family from the home its row names
+require ?cuda dasllama/dasllama_cuda_tts  // [init]-only: the CUDA home's StyleTTS2 and Pocket seats

@@ -203,3 +203,42 @@ def test_mathcalls_shape(t : T?) {
         t |> equal(mathcalls_msl, GOLDEN_MATHCALLS)
     }
 }
+
+// shader_lingua_franca's packed-word views (text layer): a word's
+// two halves and an integer's four bytes lower to as_type
+let GOLDEN_UNPACKWORDS = ("#include <metal_stdlib>
+using namespace metal;
+kernel void unpackwords(device const uint* w [[buffer(0)]],
+        device float* o [[buffer(1)]],
+        device int* oi [[buffer(2)]],
+        uint3 gl_GlobalInvocationID [[thread_position_in_grid]]) \{
+    uint i = gl_GlobalInvocationID.x;
+    float2 h = float2(as_type<half2>(uint(w[i])));
+    o[i] = (h.x + h.y);
+    int4 b = int4(as_type<char4>(int(w[i])));
+    uint4 ub = uint4(as_type<uchar4>(w[i]));
+    int2 sb = int2(as_type<char2>(short(w[i])));
+    uint2 usb = uint2(as_type<uchar2>(ushort(w[i])));
+    oi[i] = (((((b.x + b.y) + (b.z + b.w)) + int(((ub.x + ub.y) + (ub.z + ub.w))))" +
+    " + (sb.x + sb.y)) + int((usb.x + usb.y)));
+\}
+")
+
+[test(description = "unpackHalf2x16 lowers to a half2 bit view widened to float2 and unpack8 to the bit view its overload names - char4, uchar4, char2, uchar2 - and the kernel matches the golden snapshot.")]
+def test_unpackwords_shape(t : T?) {
+    t |> run("unpackwords: the packed-word views lower to as_type") <| @(t : T?) {
+        t |> success(contains(unpackwords_msl, "float2(as_type<half2>(uint(w[i])))"),
+            "unpackHalf2x16 -> float2(as_type<half2>(uint))")
+        t |> success(contains(unpackwords_msl, "int4(as_type<char4>(int(w[i])))"),
+            "unpack8(int) -> as_type<char4>, widened by the int4 convert")
+        t |> success(contains(unpackwords_msl, "uint4(as_type<uchar4>(w[i]))"),
+            "unpack8(uint) -> as_type<uchar4>")
+        t |> success(contains(unpackwords_msl, "int2(as_type<char2>(short(w[i])))"),
+            "unpack8(int16) -> as_type<char2>")
+        t |> success(contains(unpackwords_msl, "uint2(as_type<uchar2>(ushort(w[i])))"),
+            "unpack8(uint16) -> as_type<uchar2>")
+    }
+    t |> run("unpackwords: golden snapshot") <| @(t : T?) {
+        t |> equal(unpackwords_msl, GOLDEN_UNPACKWORDS)
+    }
+}

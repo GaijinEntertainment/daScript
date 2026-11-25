@@ -67,12 +67,14 @@ def image_identity(tag : string = ""; quant : string = "q8"; version : int = IMA
 def image_version_accepted(version : int) : bool
     => version == IMAGE_VERSION || (g_env_engine.image_accept_version > 0 && version == g_env_engine.image_accept_version)
 
-//! The configuration an image under `tag` is keyed and stored by: the box's current one, or the
-//! default one for a family registered config-free (no CPU knob shapes its bytes, so its image
-//! is one file per box rather than one per tune state).
 def image_config_for(tag : string; quant : string = "q8") : DlimConfiguration {
+    //! The configuration an image under `tag` is keyed and stored by: the box's current one, or the default one for a family
+    //! registered config-free (no CPU knob shapes its bytes: one image a box, not one a tune state) - with the row form the
+    //! target serves, which is no knob: a transducer's baked rows are floats where the target converts halves in software.
     if (tag != "" && has_value(g_config_free_tags, tag)) {
-        return <- DlimConfiguration(quant = quant)
+        var c <- DlimConfiguration(quant = quant)
+        c.cpu.rows_f32 = active_rows_f32()
+        return <- c
     }
     return <- dlim_config_current(quant)
 }
@@ -408,6 +410,11 @@ def image_path_lane(path, asked, prefix : string) : string {
     let lane = image_tag_lane(image_family_tag(path))
     return lane |> starts_with(prefix) ? lane : asked
 }
+
+//! `image_family_tag` of an image the image rail mapped from its file, read where the map
+//! lands: the OS's page, which on a 4 KB-page box sits off the image's own
+def image_family_tag_mapped(base : void?; bytes : uint64) : string
+    => peeked_family_tag(image_peek_memory(base, bytes), IMAGE_IN_MEMORY)
 
 //! `image_family_tag` of an image held in memory.
 def image_family_tag_memory(base : void?; bytes : uint64) : string {

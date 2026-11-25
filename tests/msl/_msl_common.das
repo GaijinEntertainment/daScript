@@ -566,6 +566,28 @@ class MathCalls {
     }
 }
 
+// shader_lingua_franca's packed-word views: a word's two halves
+// widened to floats, an integer's bytes as its lanes on each of the
+// four overloads
+class UnpackWords {
+    @ssbo @binding = 0 w : array<uint>
+    @ssbo @binding = 1 o : array<float>
+    @ssbo @binding = 2 oi : array<int>
+
+    [metal_kernel(name="unpackwords_msl"), marker(no_coverage)]
+    def unpackwords {
+        let i = gl_GlobalInvocationID.x
+        let h = unpackHalf2x16(w[i])
+        o[i] = h.x + h.y
+        let b = int4(unpack8(int(w[i])))
+        let ub = uint4(unpack8(w[i]))
+        let sb = int2(unpack8(int16(w[i])))
+        let usb = uint2(unpack8(uint16(w[i])))
+        oi[i] = ((b.x + b.y) + (b.z + b.w) + int((ub.x + ub.y) + (ub.z + ub.w)) + (sb.x + sb.y)
+            + int(usb.x + usb.y))
+    }
+}
+
 // ===== Phase 0: user-function lowering (free functions lower 1:1 as MSL functions) =====
 
 def private ufx_sky(d : float) : float => 0.5 * d + 0.5
@@ -1365,6 +1387,9 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         "cvt.i8.i32",
         "cvt.i32.f32",
         "cvt.i32.u32",
+        "cvt.u32.i32",
+        "cvt.u32.i16",
+        "cvt.u32.u16",
         "cvt_sat.i32v.i8v",
         "cvt_sat.u32v.u16v",
         // comparisons
@@ -1469,6 +1494,11 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         "call.tmm2d_rx_left_count",
         "call.tmm2d_rx_dest_count",
         "call.ushort_bits_to_half",
+        "call.unpackHalf2x16",
+        "call.unpack8.char4",
+        "call.unpack8.uchar4",
+        "call.unpack8.char2",
+        "call.unpack8.uchar2",
         "call.tmm2d_tile_tg",
         "call.tmm2d_tg_rowscale",
         "call.tmm2d_tg_store",
@@ -1595,7 +1625,8 @@ def public all_msl_censuses : array<string> {
         farith_msl_census,
         vecarith_msl_census, control_msl_census, loops_msl_census, reduce_msl_census, simd_msl_census,
         halfarith_msl_census, latconv_msl_census, packed3_msl_census, sgmat_msl_census,
-        sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census, userfns_msl_census,
+        sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census,
+        unpackwords_msl_census, userfns_msl_census,
         ufxcls_msl_census, ukargs_msl_census, ukstride_msl_census, tmpl_call_msl_census,
         consttab_msl_census,
         statearr_msl_census, pvkid_msl_census, pbkid_msl_census,

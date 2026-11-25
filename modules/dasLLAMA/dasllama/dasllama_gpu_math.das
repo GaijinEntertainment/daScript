@@ -5,6 +5,7 @@ module dasllama_gpu_math shared public
 require dasllama/dasllama_lint public
 require math
 require daslib/math_bits
+require daslib/shader_lingua_franca   // unpackHalf2x16: a stored block's scale half
 
 //! the bindings a Vulkan class set's hazard record tracks (`SetBits`): the `[vk_dispatch]` lens holds a class's binding numbers under it
 let VKD_SET_BINDINGS = 16
@@ -734,3 +735,50 @@ def gk_dflash_cb_val(fmt, rank, row, i : uint; b : uint4; s2 : uint; h : float4)
     let dq = dj * float(qv)
     return dq - mj
 }
+
+//! Q8_0 / Q4_0 / IQ4_NL: block `blk`'s f16 d, off the word that packs it beside its neighbour's
+def q40_d_of(w, blk : uint) : float {
+    let dp = unpackHalf2x16(w)
+    return (blk & 1u) == 0u ? dp.x : dp.y
+}
+
+//! Q4_K / Q5_K: sub-block `blk`'s d x scale and dmin x min, off the row's unpacked (d, dmin) and the words that hold its scale and its min byte
+def k4_scale_min(dm : float2; scw, mnw, blk : uint) : float2 {
+    let sh = (blk & 3u) * 8u
+    return float2(dm.x * float((scw >> sh) & 0xFFu), dm.y * float((mnw >> sh) & 0xFFu))
+}
+
+//! hb's four low bits to bit 4 of each byte lane: the multiply's shifted copies never overlap, so no carry crosses a lane
+def k5_dep(hb : uint) : uint => ((hb & 0xFu) * 0x02040810u) & 0x10101010u
+
+//! the four nibble lanes of word `w` at `sh` (0: the low nibbles, 4: the high), a byte each
+def nib_word(w, sh : uint) : uint => (w >> sh) & 0x0F0F0F0Fu   // KQC_NIBBLE_MASK spelled out: the MSL emitter reads no module constant inside a kernel body
+
+//! Q5_K / Q5_1 - word `w`'s nibble lanes at `sh` with the 5th bits deposited from `hb`'s low four
+def k5_word(w, hb, sh : uint) : uint => nib_word(w, sh) | k5_dep(hb)
+
+//! Q6_K - four nibble lanes with the 2-bit high lanes of `qh` at `shift` composed above them
+def k6_word(nib, qh, shift : uint) : uint => nib | (((qh >> shift) & 0x03030303u) << 4u)
+
+//! Q5_K - the nibble half at `sh` (0 or 4) of four packed words with the 5th bits deposited from the block's qh byte lanes
+def k5_quad(r : uint4; qh, sh : uint) : uint4 =>
+    uint4(k5_word(r.x, qh >> sh, sh), k5_word(r.y, qh >> (8u + sh), sh), k5_word(r.z, qh >> (16u + sh), sh), k5_word(r.w, qh >> (24u + sh), sh))
+
+//! Q6_K - the nibble lanes with the 2-bit high lanes of `qh` at `shift` composed above them
+def k6_quad(nib, qh : uint4; shift : uint) : uint4 =>
+    uint4(k6_word(nib.x, qh.x, shift), k6_word(nib.y, qh.y, shift), k6_word(nib.z, qh.z, shift), k6_word(nib.w, qh.w, shift))
+
+//! Byte `k` of `w` as a q8_0 quant.
+def kv_q8_quant(w : uint; k : int) : float => float(int(w << uint(24 - 8 * k)) >> 24)
+
+//! byte `i` of the quant pair (`q0`, `q1`) as a signed value
+def gk_w8_quant(q0, q1, i : uint) : float => kv_q8_quant(i < 4u ? q0 : q1, int(i & 3u))
+
+//! the half of a decoded sub-block's quads `part` names (0, 1: the low sixteen; 2, 3: the high), as its two words
+def gk_w8_pick(lo, hi : uint4; part : uint) : uint2 {
+    let quad = part < 2u ? lo : hi
+    return (part & 1u) == 0u ? uint2(quad.x, quad.y) : uint2(quad.z, quad.w)
+}
+
+//! word `part` (0 .. 3) of a decoded sub-block's quad: four of its sixteen quants
+def gk_quad_word(q : uint4; part : uint) : uint => part < 2u ? (part == 0u ? q.x : q.y) : (part == 2u ? q.z : q.w)

@@ -678,16 +678,23 @@ def repack_conv_in_tap_out(src : array<float>; var dst : array<float>; cout, cin
     transpose_ct(src, cout, cin * k, dst)
 }
 
-//! One LSTM layer's gate planes as halves at `wl` - the ih plane's four [pd][pd] gate blocks, then the hh plane's - in
-//! gate order i, f, o, g, and its gate bias at `bl` in that order, `b2` (null for none) summed in; `torch_gates` reads
-//! source rows packed i, f, g, o.
-def repack_lstm_gates_f16(var wl : uint16?; var bl : float?; ih, hh, b, b2 : float const?; pd : int64; torch_gates : bool) {
+//! `n` floats of `s` stored at `d` in the row's element form: saturated halves, or the floats
+def private rows_store(var d : uint16?; s : float const?; n : int64) {
+    cvt_f32_to_f16_sat(d, s, n)
+}
+
+def private rows_store(var d : float?; s : float const?; n : int64) {
+    copy_floats(d, s, n)
+}
+
+//! `ih`/`hh` ([4 pd][pd], i f g o under `torch_gates`) at `wl` in element form as i f o g, ih, hh; biases summed at `bl` (`b2` null: one)
+def repack_lstm_gates(var wl : auto(WT)?; var bl : float?; ih, hh, b, b2 : float const?; pd : int64; torch_gates : bool) {
     let gate_src = torch_gates ? int4(0, 1, 3, 2) : int4(0, 1, 2, 3)
     unsafe {
         for (k in range(4)) {
             let src = int64(gate_src[k]) * pd
-            cvt_f32_to_f16_sat(wl + int64(k) * pd * pd, ih + src * pd, pd * pd)
-            cvt_f32_to_f16_sat(wl + 4l * pd * pd + int64(k) * pd * pd, hh + src * pd, pd * pd)
+            rows_store(wl + int64(k) * pd * pd, ih + src * pd, pd * pd)
+            rows_store(wl + 4l * pd * pd + int64(k) * pd * pd, hh + src * pd, pd * pd)
             for (j in range64(pd)) {
                 bl[int64(k) * pd + j] = b[src + j]
             }
@@ -700,9 +707,8 @@ def repack_lstm_gates_f16(var wl : uint16?; var bl : float?; ih, hh, b, b2 : flo
     }
 }
 
-//! A joint net's weight `wp` [n_logits][jd] as halves at `tp`, [block][jd][blk]: a block of `blk` logits holds its input
-//! columns back to back, zeros past the last logit; `cp` is the caller's scratch of `blk` floats.
-def repack_joint_cols_f16(var tp : uint16?; var cp : float?; wp : float const?; jd, n_logits, blk : int64) {
+//! `wp` [n_logits][jd] at `tp` in element form as [block][jd][blk], a block's columns back to back, zero past the last logit; `cp` scratch
+def repack_joint_cols(var tp : auto(WT)?; var cp : float?; wp : float const?; jd, n_logits, blk : int64) {
     let nblk = (n_logits + blk - 1l) / blk
     unsafe {
         for (b in range64(nblk)) {
@@ -714,7 +720,7 @@ def repack_joint_cols_f16(var tp : uint16?; var cp : float?; wp : float const?; 
                 for (i in range64(live, blk)) {
                     cp[i] = 0.0
                 }
-                cvt_f32_to_f16_sat(tp + (b * jd + j) * blk, cp, blk)
+                rows_store(tp + (b * jd + j) * blk, cp, blk)
             }
         }
     }

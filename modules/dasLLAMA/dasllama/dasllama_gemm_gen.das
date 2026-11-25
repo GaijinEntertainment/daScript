@@ -2997,7 +2997,7 @@ def private tile_gen_impl(var gc : LlvmCodeCtx; f16s : bool) : bool {
 }
 
 //! an amx perm's tile4: four blocks a K-step (a superblock family's step is its superblock), one accumulator slice, the weight stream prefetched - `harness/tile4_race.das` races the shape
-[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#amx-bf16-tile")]
+[arch(at = "../ARCHITECTURE_CPU_KERNELS_TILES.md#amx-bf16-tile")]
 def private tile4_perm(p : TilePerm) : TilePerm {
     var cp = companion_perm(p)
     if (is_amx_kind(dot_kind(p.dotPrim))) {
@@ -3110,7 +3110,7 @@ def private tileform_gen(var gc : LlvmCodeCtx) : bool =>
 //! The bf16-weight tile family: a native bf16 plane packed as the AMX B layout (k-pair rows of
 //! sixteen rows, `bf16w_panel_build`) against a bf16 activation plane; the amx_bf16 perm is the
 //! TMUL tile over them - the same emitter as the quant families' bf16 leg, the panel already bf16
-[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#amx-bf16-tile")]
+[arch(at = "../ARCHITECTURE_CPU_KERNELS_TILES.md#amx-bf16-tile")]
 def private bf16w_tile_gen(var gc : LlvmCodeCtx) : bool {
     if (!is_tile_signature(gc.fn)) return false
     let p = parse_perm(gc)
@@ -4900,7 +4900,7 @@ def private b32_gemv_gen_impl(var gc : LlvmCodeCtx; iq4nl32 : bool; q40 : bool =
     return emit_rows_gemv(gc, te, 1, 32, "nb", true, gc.jit.types.t_int8, "sg") $(_n, nb) => plane_row_strides(gc, nb, qbytes, sbytes)
 }
 
-[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#amx-bf16-tile")]
+[arch(at = "../ARCHITECTURE_CPU_KERNELS_TILES.md#amx-bf16-tile")]
 def private emit_amx_bf16_tile(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint:STYLE038 — the tile body is one register-coupled loop; its phases share tile registers
     var te : TileEmit
     if (!setup_amx_emit(te, gc, p)) return false
@@ -5092,7 +5092,7 @@ def private panel_scales(var te : TileEmit; fmt : int; var sb : LLVMOpaqueValue?
     }
 }
 
-[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#amx-bf16-tile")]
+[arch(at = "../ARCHITECTURE_CPU_KERNELS_TILES.md#amx-bf16-tile")]
 def private panel_quads(var te : TileEmit; fmt : int; var qb, wbP : LLVMOpaqueValue?; blk : int; var quads : LLVMOpaqueValue? [8]) {
     let b = te.builder
     if (kq_is_grid(fmt)) {
@@ -5222,7 +5222,7 @@ def private q8_panel_s16_gen(var gc : LlvmCodeCtx) : bool => panel_gen_impl(gc, 
 //! The bf16 panel companion: each row group's weights dequantized to bf16, one unit at a time - a
 //! superblock of `fmt` through the format arms, or (q8ScaleBytes != 0) one 32-weight Q8 block over
 //! its f32 (4) or binary16 (2) scale plane.
-[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#amx-bf16-tile")]
+[arch(at = "../ARCHITECTURE_CPU_KERNELS_TILES.md#amx-bf16-tile")]
 def private panel_gen_impl(var gc : LlvmCodeCtx; fmt, q8ScaleBytes : int) : bool { // nolint:STYLE038 — the panel body is one group x unit loop nest around the format arms
     let q8 = q8ScaleBytes != 0
     if (!is_panel_signature(gc.fn)) return false

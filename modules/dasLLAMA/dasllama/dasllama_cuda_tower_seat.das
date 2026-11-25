@@ -188,7 +188,7 @@ struct CutResident {
 }
 
 [cold_path]
-def private cut_decline_words(why : TowerDecline) : string
+def cut_decline_words(why : TowerDecline) : string
     => tower_decline_words(why, "CUDA", CUT_DECLINE_WORDS_TOWER_KNOB, CUT_DECLINE_WORDS_DEVICE, CUT_DECLINE_WORDS_MEMORY)
 
 [cold_path]

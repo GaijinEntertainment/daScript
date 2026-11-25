@@ -209,7 +209,7 @@ struct Scheduler {
     paged : bool
     pool : KVPool
     prefix : PrefixCache
-    kv_dtype : KVDtype = KVDtype.f16        // KV codec for every stream (pool-wide when paged)
+    kv_dtype : KVDtype = KVDtype.automatic       // KV codec for every stream (pool-wide when paged)
     device_kv : bool                        //! admitted sessions are DEVICE-HOME: their K/V lives only in the GPU driver's regions (`set_device_kv`)
     parked : array<ParkedKv>
     pool_host : Session                     //! device mode's carrier between the regions and the prefix cache: a paged session of `pool` whose pages hold the rows a device-home stream's opening brings down or a pooled opening takes up, released after each move (`pool_carrier`)
@@ -263,7 +263,7 @@ struct Scheduler {
 //! `unsafe(delete sch)` — live sessions, the pool, and the workspace go with it.
 def create_scheduler(model : Model; max_streams : int64 = 4l; max_queue : int64 = 32l;
                      chunk_tokens : int64 = 0l; page_rows : int64 = 0l;
-                     prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
+                     prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.automatic;
                      mtp : bool = false; idle_chunk_tokens : int64 = -1l;
                      prefix_states : int64 = DEFAULT_PREFIX_STATES; prefix_state_bytes : int64 = 0l) : Scheduler {
     let dflt = chunk_defaults(model)

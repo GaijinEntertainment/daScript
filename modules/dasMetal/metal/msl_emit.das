@@ -501,7 +501,7 @@ let private MSL_LADDER_OWNED : table<string> <- {
     "tmm2d_rx_begin", "tmm2d_rx_begin_i8", "tmm2d_rx_left", "tmm2d_rx_left2", "tmm2d_rx_left4",
     "tmm2d_rx_run", "tmm2d_rx_dest", "tmm2d_rx_dest_valid", "tmm2d_rx_left_count",
     "tmm2d_rx_dest_count",
-    "ushort_bits_to_half",
+    "ushort_bits_to_half", "unpackHalf2x16", "unpack8",
     "uint_bits_to_float", "int_bits_to_float", "float_bits_to_uint", "float_bits_to_int",
     "atomicAdd"
 }
@@ -1214,6 +1214,19 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         }
         let v = emit_value(ctx, ec.arguments[0])
         note(ctx, "call.bitcast.{census_class(ec.arguments[0]._type)}.{census_class(ec._type)}")
+        return "as_type<{shader_type_name(ec._type)}>({v})"
+    }
+    if (cname == "unpackHalf2x16" || cname == "unpack8") {
+        if (na != 1) {
+            shader_error(ctx, ec.at, "{cname} takes exactly one argument")
+            return "/*call {cname}*/"
+        }
+        let v = emit_value(ctx, ec.arguments[0])
+        if (cname == "unpackHalf2x16") {
+            note(ctx, "call.unpackHalf2x16")
+            return "float2(as_type<half2>(uint({v})))"
+        }
+        note(ctx, "call.unpack8.{shader_type_name(ec._type)}")
         return "as_type<{shader_type_name(ec._type)}>({v})"
     }
     if (cname == "ushort_bits_to_half") {
