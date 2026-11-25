@@ -1166,7 +1166,7 @@ def private slot_post(base_url, tail, body : string) : SlotAnswer {
     return a
 }
 
-[test(description = "The slot routes carry a recurrent model's context through a file: with no finished request a save refuses, as do an unknown action, an unknown slot, a file name with a folder part, a body that is not JSON and a restore of a file that is not there; after a completion a save writes its tokens and the file's bytes, an erase empties the prompt cache so the same prompt prefills cold, and a restore of the file into the emptied cache makes that prompt attach everything but its last token", timeout = 1200)]
+[test(description = "The slot routes carry a recurrent model's context through a file: with no finished request a save refuses, as do an unknown action, an unknown slot, a file name with a folder part, a body that is not JSON and a restore of a file that is not there; after a completion a save writes its tokens and the file's bytes, an erase empties the prompt cache so the same prompt prefills cold, and a restore of the file into the emptied cache makes that prompt attach everything but its last token and answer as it did over the rows the save took", timeout = 1200)]
 def test_openai_server_slot_files(t : T?) {
     t |> run("the slot routes on a recurrent model: save, erase, restore, and the refusals (needs Qwen3.5-0.8B q8)") @(t : T?) {
         if (!jit_enabled()) {
@@ -1207,6 +1207,9 @@ def test_openai_server_slot_files(t : T?) {
             let raw = "\{\"prompt\":\"The house has a kitchen, a bedroom and a garden. The kitchen light is on, the bedroom lights are off, the sprinkler runs at seven. Name the device that runs on a schedule:\",\"max_tokens\":4}"
             let first = compl_usage(base_url, raw)
             t |> success(first.prompt > 16 && first.cached == 0, "the first completion prefills cold ({first.prompt} prompt, {first.cached} cached)")
+            let before_save = compl_usage(base_url, raw)
+            t |> equal(before_save.cached, first.prompt - 1,
+                "the same prompt again attaches everything but its last token")
             let saved = slot_post(base_url, "0?action=save", named)
             t |> equal(saved.status, int(http_status.OK), "the save answers: {saved.text}")
             t |> success(saved.tokens >= int64(first.prompt), "it holds the prompt and what the turn added ({saved.tokens} tokens of a {first.prompt}-token prompt)")
@@ -1226,7 +1229,8 @@ def test_openai_server_slot_files(t : T?) {
             t |> success(again.status == int(http_status.OK) && again.tokens == saved.tokens && again.bytes == saved.bytes, "a save after the restore writes the same context back: {again.text}")
             let warm = compl_usage(base_url, raw)
             t |> equal(warm.cached, first.prompt - 1, "the restored context serves the prompt's stop: the same prompt attaches everything but its last token")
-            t |> success(!empty(cold.text) && warm.text == cold.text, "the reply over the restored rows is the cold prefill's: '{warm.text}' against '{cold.text}'")
+            t |> success(!empty(before_save.text) && warm.text == before_save.text,
+                "the reply over the restored rows is the one over the saved rows: '{warm.text}' against '{before_save.text}'")
         }
     }
 }

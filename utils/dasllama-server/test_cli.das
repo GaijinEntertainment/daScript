@@ -713,7 +713,11 @@ def test_doc_scenarios(t : T?) {
         let argv <- cli_argv(["complete", "-m", llm, "-n", "4", "--quiet", "--gpu", "off", "--verbose", "hi"])
         let quoted <- [for (a in argv); "'{a}'"]
         var err_only = ""
-        let rc_e = run_and_capture(["/bin/sh", "-c", "{join(quoted, " ")} 2>&1 >/dev/null"], test_temp_dir(), NO_IMAGE_ENV, err_only, CELL_TIMEOUT_SEC)
+        // a stale sidecar stamps nothing; the record is the shipped profile's on every box
+        let no_box_sidecar_env = "env -u DAS_TUNE_MANIFEST -u DAS_TUNE_FORCE"
+        let stderr_cmd = "{no_box_sidecar_env} {join(quoted, " ")} 2>&1 >/dev/null"
+        let rc_e = run_and_capture(["/bin/sh", "-c", stderr_cmd], test_temp_dir(), NO_IMAGE_ENV,
+                                   err_only, CELL_TIMEOUT_SEC)
         t |> equal(rc_e, 0, "exit 0: {tail_of(err_only)}")
         t |> success(find(err_only, "[info] dasllama-cli: tune status") >= 0, "the tune status record is echoed as a plain [info] line: {tail_of(err_only)}")
         t |> success(find(err_only, "\"level\":\"info\"") < 0, "the console gets the plain line, not the file's JSON")
