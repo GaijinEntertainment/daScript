@@ -119,8 +119,9 @@ never what is compiled.
 `NO_COLOR` and `TERM` gate ANSI output (`daslib/ansi_colors`). `TMPDIR`, `HOME`,
 `XDG_CONFIG_HOME`, `APPDATA` and `LOCALAPPDATA` are used for scratch and config paths in the usual
 platform way. On Windows, `OS`, `PROCESSOR_ARCHITECTURE` and `NUMBER_OF_PROCESSORS` are read for
-platform detection. Setting any of these changes daslang's behaviour only as far as the platform
-convention implies.
+platform detection. `MAKEFLAGS` (and `CARGO_MAKEFLAGS`, `MFLAGS`) carry a GNU make jobserver's
+`--jobserver-auth`, whose pool a parallel compile joins (`src/misc/ARCHITECTURE_JOBSERVER.md`).
+Setting any of these changes daslang's behaviour only as far as the platform convention implies.
 
 ## Adding one
 

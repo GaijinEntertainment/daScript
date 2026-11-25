@@ -340,6 +340,9 @@ namespace das {
     DAS_API bool channelTryPop ( Channel * ch, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at );
     DAS_API bool channelPopWithTimeout ( Channel * ch, int32_t timeoutMs, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at );
     DAS_API int jobAppend ( JobStatus * ch, int size, Context * context, LineInfoArg * at );
+    class Jobserver;
+    DAS_API void withJobserver ( int32_t limit, const TBlock<void,Jobserver *> & blk, Context * context, LineInfoArg * lineinfo );
+    DAS_API void withJobserverToken ( Jobserver * jobserver, const TBlock<void> & blk, Context * context, LineInfoArg * lineinfo );
     DAS_API void withChannel ( const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
     DAS_API void withChannelEx ( int32_t count, const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
     DAS_API Channel* channelCreate( Context * context, LineInfoArg * at);

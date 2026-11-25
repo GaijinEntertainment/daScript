@@ -6,6 +6,7 @@
 #include "daScript/ast/ast_handle.h"
 
 #include "daScript/misc/job_que.h"
+#include "daScript/misc/jobserver.h"
 #include "daScript/simulate/debug_agent.h"
 
 #include <cstdio>
@@ -21,6 +22,7 @@ MAKE_TYPE_FACTORY(Channel, Channel)
 MAKE_TYPE_FACTORY(LockBox, LockBox)
 MAKE_TYPE_FACTORY(Stream, Stream)
 MAKE_TYPE_FACTORY(SeqBox, SeqBox)
+MAKE_TYPE_FACTORY(Jobserver, das::Jobserver)
 
 MAKE_TYPE_FACTORY(Atomic32, AtomicTT<int32_t>)
 MAKE_TYPE_FACTORY(Atomic64, AtomicTT<int64_t>)
@@ -259,6 +261,16 @@ namespace das {
         if ( !ch ) context->throw_error_at(at, "jobAppend: job is null");
         return ch->append(size);
     }
+    struct JobserverAnnotation : ManagedStructureAnnotation<Jobserver,false> {
+        JobserverAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Jobserver", ml) {}
+    };
+
+    void withJobserverToken ( Jobserver * jobserver, const TBlock<void> & blk, Context * context, LineInfoArg * at ) {
+        if ( !jobserver ) context->throw_error_at(at, "with_jobserver_token: jobserver is null");
+        auto token = jobserver->acquire();
+        das_invoke<void>::invoke(context, at, blk);
+    }
+
     void withChannel ( const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * at ) {
         Channel ch(context);
         AddReleaseGuard<Channel> guard(&ch, context, at);
@@ -1449,7 +1461,7 @@ namespace das {
         }).detach();
     }
 
-    void withJobQue ( const TBlock<void> & block, Context * context, LineInfoArg * lineInfo ) {
+    static void runInJobQue ( Context * context, LineInfoArg * lineInfo, const callable<void()> & body ) {
         bool ok;    // src/builtin/ARCHITECTURE_JOBQUE.md#jobque-block-panic
         {
             shared_ptr<JobQue> jq;
@@ -1458,9 +1470,7 @@ namespace das {
                 if ( !g_jobQue ) g_jobQue = make_shared<JobQue>();  // check under the lock: create_job_que can also init g_jobQue concurrently
                 jq = g_jobQue;
             }
-            ok = context->runWithCatch([&]() {
-                context->invoke(block, nullptr, nullptr, lineInfo);
-            });
+            ok = context->runWithCatch(body);
         }
         // Batch dispatch is a thread-local, block-scoped contract: flush any stragglers and reset the
         // flag so it cannot leak into unrelated jobque users later on this thread (e.g. the next test
@@ -1499,6 +1509,20 @@ namespace das {
                 "with_job_que: jobs did not complete within %d ms; queue torn down with work outstanding",
                 g_jobQueDrainTimeoutMs);
         }
+    }
+
+    void withJobQue ( const TBlock<void> & block, Context * context, LineInfoArg * lineInfo ) {
+        runInJobQue(context, lineInfo, [&]() {
+            context->invoke(block, nullptr, nullptr, lineInfo);
+        });
+    }
+
+    // src/misc/ARCHITECTURE_JOBSERVER.md#jobserver-client
+    void withJobserver ( int32_t limit, const TBlock<void,Jobserver *> & blk, Context * context, LineInfoArg * at ) {
+        Jobserver jobserver(limit);
+        runInJobQue(context, at, [&]() {
+            das_invoke<void>::invoke<Jobserver *>(context, at, blk, &jobserver);
+        });
     }
 
     // Persistent job-que lifecycle. Unlike with_job_que (block-scoped), the pool created here lives
@@ -1725,6 +1749,7 @@ namespace das {
             auto sqb = new SeqBoxAnnotation(lib);
             sqb->from("JobStatus");
             addAnnotation(sqb);
+            addAnnotation(new JobserverAnnotation(lib));
             auto a32 = new AtomicAnnotation<int32_t>("Atomic32",lib);
             addAnnotation(a32);
             auto a64 = new AtomicAnnotation<int64_t>("Atomic64",lib);
@@ -1856,6 +1881,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(jobAppend)>(*this, lib, "append",
                 SideEffects::modifyArgument, "jobAppend")
                     ->args({"channel","size","context","line"});
+            addExtern<DAS_BIND_FUN(withJobserver)>(*this, lib,  "with_jobserver",
+                SideEffects::invoke, "withJobserver")
+                    ->args({"limit","block","context","line"});
+            addExtern<DAS_BIND_FUN(withJobserverToken)>(*this, lib,  "with_jobserver_token",
+                SideEffects::invoke, "withJobserverToken")
+                    ->args({"jobserver","block","context","line"});
             addExtern<DAS_BIND_FUN(withChannel)>(*this, lib,  "with_channel",
                 SideEffects::invoke, "withChannel")
                     ->args({"block","context","line"});

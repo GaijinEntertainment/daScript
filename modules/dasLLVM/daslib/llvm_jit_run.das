@@ -511,8 +511,9 @@ def private report_split_emit(res : SplitEmitResult implicit; log_jit_time : boo
     return true
 }
 
-//! optimize+emit every job on up to `threads` jobque jobs (<= 0 = the hardware job count), each partition
-//! owning its LLVMContext; jobs travel through channels so no string crosses a context; false on any failure
+//! optimize+emit each job on its own jobque job, at most `threads`
+//! at once (<= 0: the job queue decides); results come back through
+//! a channel; false on any failure
 def private run_split_emit(jobs : array<SplitEmitJob>; threads : int; log_jit_time : bool) : bool {
     return true if (empty(jobs))
     var ok = true
@@ -522,26 +523,18 @@ def private run_split_emit(jobs : array<SplitEmitJob>; threads : int; log_jit_ti
         }
         return ok
     }
-    with_job_que() {
-        let workers = clamp(threads > 0 ? threads : get_total_hw_jobs(), 1, length(jobs))
-        with_channel(1) $(todo) {
-            with_channel(workers) $(done) {
-                for (_ in range(workers)) {
-                    new_job() @() {
-                        while (todo |> pop_and_clone_one() $(job : SplitEmitJob#) {
-                                done |> push_clone(run_split_emit_job(job))
-                            }) {}
-                        todo |> release
-                        done |> notify_and_release
+    with_jobserver(max(threads, 0)) $(jobserver) {
+        with_channel(length(jobs)) $(done) {
+            for (job in jobs) {
+                new_job() @() {
+                    with_jobserver_token(jobserver) {
+                        done |> push_clone(run_split_emit_job(job))
                     }
+                    done |> notify_and_release
                 }
-                for (job in jobs) {
-                    todo |> push_clone(job)
-                }
-                todo |> notify
-                done |> for_each_clone() $(res : SplitEmitResult#) {
-                    ok = report_split_emit(res, log_jit_time) && ok
-                }
+            }
+            done |> for_each_clone() $(res : SplitEmitResult#) {
+                ok = report_split_emit(res, log_jit_time) && ok
             }
         }
     }

@@ -1,0 +1,1 @@
+Opens the GNU make jobserver pool the build advertises in ``MAKEFLAGS`` and runs the block with it inside a job queue, as ``with_job_que`` does; at most ``limit`` tokens are held at once when ``limit`` is positive, the process's own free token included.
