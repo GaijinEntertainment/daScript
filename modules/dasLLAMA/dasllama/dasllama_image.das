@@ -1177,20 +1177,21 @@ def count_meta_fields(var t) : int {
 //! name + full type name + byte size in order, recursing into struct fields and array-element
 //! structs — any meta-closure shape change refuses by name; IMAGE_VERSION covers behavior.
 def layout_fingerprint(var t) : uint64 {
-    var d = ""
-    layout_describe(t, d)
+    let d = build_string() $(var w) {
+        layout_describe(t, w)
+    }
     return hash(d)
 }
 
-def private layout_describe(var t; var d : string&) {
+def private layout_describe(var t; var d : StringBuilderWriter) {
     apply(t) $(name : string; var field) {
-        d += "{name}:{typeinfo typename(field)}:{typeinfo sizeof(field)};"
+        d |> write("{name}:{typeinfo typename(field)}:{typeinfo sizeof(field)};")
         static_if (typeinfo is_struct(field)) {
             layout_describe(field, d)
-            d += "^"   // close the nesting so sibling boundaries stay unambiguous
+            d |> write("^")   // close the nesting so sibling boundaries stay unambiguous
         } static_elif (typeinfo is_dim(field)) {
             layout_describe(field[0], d)   // one element's shape stands for the table
-            d += "^"
+            d |> write("^")
         } static_elif (typeinfo is_array(field)) {
             layout_describe_elem(field, d)
         }
@@ -1198,12 +1199,12 @@ def private layout_describe(var t; var d : string&) {
 }
 
 // an array field's ELEMENT struct also serializes element-wise — its shape is load-bearing
-def private layout_describe_elem(var a : array<auto(TT)>; var d : string&) {
+def private layout_describe_elem(var a : array<auto(TT)>; var d : StringBuilderWriter) {
     static_if (typeinfo is_struct(type<TT>)) {
         unsafe {   //! the zeroed value: a nested carrier's initializer chain overflows the init script's stack, and only the type is read
             var tmp : TT
             layout_describe(tmp, d)
-            d += "^"
+            d |> write("^")
             delete tmp
         }
     }

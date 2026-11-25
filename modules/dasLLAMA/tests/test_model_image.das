@@ -4645,7 +4645,7 @@ def test_devw_bake_tables(t : T?) {
     }
 }
 
-[test(description = "`layout_fingerprint` is deterministic per type and moves on field reorder, retype, add, nesting and array element shape, the Model closure fingerprints nonzero, and a flipped fingerprint byte at header offset 48 declines the image load")]
+[test(description = "`layout_fingerprint` is deterministic per type and moves on field reorder, retype, add, nesting and array element shape, the Model closure fingerprints nonzero with its description written once, and a flipped fingerprint byte at header offset 48 declines the image load")]
 def test_layout_fingerprint(t : T?) {
     t |> run("the fingerprint moves on any field-shape change and holds on none") @(t : T?) {
         if (!arm_on(t, "mechanics")) {
@@ -4670,6 +4670,10 @@ def test_layout_fingerprint(t : T?) {
         let mfp = layout_fingerprint(m)
         to_log(LOG_INFO, "image fingerprint: Model meta closure = {mfp}\n")
         t |> success(mfp != 0ul, "the real Model closure fingerprints (no recursion trap)")
+        let s0 = string_heap_bytes_allocated()
+        t |> equal(layout_fingerprint(m), mfp, "deterministic on the real closure")
+        let s1 = string_heap_bytes_allocated()
+        t |> success(s1 <= s0 + 262144ul, "the description is written once, not copied per field ({s0} -> {s1} bytes)")
         delete m
     }
     t |> run("a corrupted fingerprint byte refuses the image at parse") @(t : T?) {
