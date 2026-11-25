@@ -243,3 +243,23 @@ def test_mul_ab_golden(t : T?) {
         t |> equal(mul_ab_msl, GOLDEN_MUL_AB)
     }
 }
+
+[test(description = "sgmma_q8_blk2 lowers to a call of its preamble helper over byte and float views of its members.")]
+def test_sgmma_q8_blk2(t : T?) {
+    t |> run("sgmma_q8_blk2: the call and its helper") <| @(t : T?) {
+        let call_site = ("__das_sgmma_q8_blk2((const device uchar*)bqb + (2u), " +
+            "(const device uchar*)bqb + (36u), (const device float*)xa + (0u), " +
+            "(const device float*)xa + (64u), ushort(")
+        t |> success(contains(sgmmaq8_msl, call_site),
+            "the two weight rows through a byte view, the two token rows through a float view")
+        let helper_sig = ("static inline float4 __das_sgmma_q8_blk2(const device uchar* q0, " +
+            "const device uchar* q1, const device float* x0, const device float* x1, ushort l) \{")
+        t |> success(contains(sgmmaq8_msl, helper_sig), "the helper rides the preamble")
+        t |> success(contains(sgmmaq8_msl, "ma.thread_elements()[0] = h0.x;"),
+            "the codes enter the matrix operand from registers")
+        t |> success(contains(sgmmaq8_msl, "| ushort2(0x6400))) - half2(1152.0h);"),
+            "a code is the exact half 1024 + (q + 128), less 1152")
+        t |> success(!contains(sgmmaq8_msl, "MetalPerformancePrimitives"),
+            "no tensor-op header: the helper is plain simdgroup matrix code")
+    }
+}

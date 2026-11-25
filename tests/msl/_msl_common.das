@@ -1235,6 +1235,13 @@ class TmmTensor {
         sgmat_to_half(hout, acc)
         simdgroup_store(hout, och, 0u, 8u)
     }
+
+    [metal_kernel(name="sgmmaq8_msl"), marker(no_coverage)]
+    def sgmma_q8 {
+        let lane = gl_SubgroupInvocationID
+        let p = sgmma_q8_blk2(bqb, 2u, 36u, xa, 0u, 64u, lane)
+        oc[lane * 4u] = p.x + p.y + p.z + p.w
+    }
 }
 
 //! Gate B: exactly the construct kinds the fixture set must emit — the census meta-test
@@ -1465,6 +1472,7 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         "call.sgmat_mac.f16",
         "call.sgmat_mac.mixed",
         "call.sgmat_to_half",
+        "call.sgmma_q8_blk2",
         // Metal-4 tensor ops: the all-device helper forms + the staged begin/step/store protocol
         // (deva = device A stream, nt = natural B tile, devant = both)
         "call.tmm2d_f16w_f32",
@@ -1634,6 +1642,7 @@ def public all_msl_censuses : array<string> {
         tmmq8uh64_msl_census, tmmq8uh128_msl_census, tmmdeva_msl_census, tmmdevbar_msl_census,
         tmmdevaf_msl_census, tmmnt_msl_census, tmmdevant_msl_census, tmmdevab_msl_census,
         tmmdevabnt_msl_census, tmmrx_msl_census, tmmrx8_msl_census, sgmathalf_msl_census,
+        sgmmaq8_msl_census,
         sgmat_store_tg_msl_census,
         DerivedName_dkern_msl_census]
 }

@@ -489,7 +489,7 @@ def private scan_state_ptr_assign(var ctx : MslCtx; left, right : Expression?) {
 let private MSL_LADDER_OWNED : table<string> <- {
     "barrier", "memoryBarrierShared", "memoryBarrierBuffer", "simdgroup_load", "simdgroup_store",
     "tg_store_half4", "tg_store_float4", "simdgroup_multiply", "simdgroup_multiply_accumulate",
-    "sgmat_to_half",
+    "sgmat_to_half", "sgmma_q8_blk2",
     "make_filled_simdgroup_float8x8", "make_filled_simdgroup_half8x8",
     "simd_sum", "simd_max", "simd_shuffle", "simd_shuffle_up", "simd_shuffle_down", "simd_shuffle_xor",
     "sdot4", "usdot4", "i_das_ptr_add",
@@ -1172,7 +1172,92 @@ let private MSL_BITCASTS : table<string> <- {
 // to a preamble helper (single evaluation of the operands; the Metal compiler vectorizes freely)
 let private MSL_DOT_HELPERS : table<string; string> <- {
     "sdot4" => "static inline int __das_sdot4(uint a, uint b) \{\n    char4 va = as_type<char4>(a), vb = as_type<char4>(b);\n    return int(va.x) * int(vb.x) + int(va.y) * int(vb.y) + int(va.z) * int(vb.z) + int(va.w) * int(vb.w);\n\}",
-    "usdot4" => "static inline int __das_usdot4(uint a, uint b) \{\n    uchar4 va = as_type<uchar4>(a);\n    char4 vb = as_type<char4>(b);\n    return int(va.x) * int(vb.x) + int(va.y) * int(vb.y) + int(va.z) * int(vb.z) + int(va.w) * int(vb.w);\n\}"
+    "usdot4" => "static inline int __das_usdot4(uint a, uint b) \{\n" +
+        "    uchar4 va = as_type<uchar4>(a);\n" +
+        "    char4 vb = as_type<char4>(b);\n" +
+        "    return int(va.x) * int(vb.x) + int(va.y) * int(vb.y) + int(va.z) * int(vb.z) + " +
+        "int(va.w) * int(vb.w);\n" +
+        "\}",
+    "sgmma_q8_blk2" => "static inline float4 __das_sgmma_q8_blk2(const device uchar* q0, const " +
+        "device uchar* q1, const device float* x0, const device float* x1, ushort l) \{\n" +
+        "    const ushort fm = ((l / 4) & 4) + ((l / 2) % 4);\n" +
+        "    const ushort fn = ((l / 4) & 2) * 2 + (l % 2) * 2;\n" +
+        "    const ushort bo = 8 * (fm / 2) + 2 * (fm % 2);\n" +
+        "    const ushort4 a0 = ushort4(*(const device packed_ushort4*)(q0 + 4 * fn)) ^ " +
+        "ushort4(0x8080);\n" +
+        "    const ushort4 a1 = ushort4(*(const device packed_ushort4*)(q1 + 4 * fn)) ^ " +
+        "ushort4(0x8080);\n" +
+        "    const float2 u0 = float2(*(const device packed_float2*)(x0 + bo));\n" +
+        "    const float2 u1 = float2(*(const device packed_float2*)(x0 + bo + 4));\n" +
+        "    const float2 v0 = float2(*(const device packed_float2*)(x1 + bo));\n" +
+        "    const float2 v1 = float2(*(const device packed_float2*)(x1 + bo + 4));\n" +
+        "    simdgroup_float8x8 p0 = make_filled_simdgroup_matrix<float, 8>(0.0f);\n" +
+        "    simdgroup_float8x8 p1 = make_filled_simdgroup_matrix<float, 8>(0.0f);\n" +
+        "    for (ushort s = 0; s < 4; ++s) \{\n" +
+        "        const float2 bu = s >= 2 ? u1 : u0;\n" +
+        "        const float2 bv = s >= 2 ? v1 : v0;\n" +
+        "        simdgroup_float8x8 mb;\n" +
+        "        mb.thread_elements()[0] = (s & 1) != 0 ? bu.y : bu.x;\n" +
+        "        mb.thread_elements()[1] = (s & 1) != 0 ? bv.y : bv.x;\n" +
+        "        const ushort2 w0 = s < 2 ? a0.xy : a0.zw;\n" +
+        "        const ushort2 w1 = s < 2 ? a1.xy : a1.zw;\n" +
+        "        const half2 h0 = as_type<half2>(ushort2((((s & 1) != 0 ? (w0 >> 8) : w0) & " +
+        "ushort2(0x00FF)) | ushort2(0x6400))) - half2(1152.0h);\n" +
+        "        const half2 h1 = as_type<half2>(ushort2((((s & 1) != 0 ? (w1 >> 8) : w1) & " +
+        "ushort2(0x00FF)) | ushort2(0x6400))) - half2(1152.0h);\n" +
+        "        simdgroup_half8x8 ma;\n" +
+        "        ma.thread_elements()[0] = h0.x;\n" +
+        "        ma.thread_elements()[1] = h0.y;\n" +
+        "        simdgroup_multiply_accumulate(p0, ma, mb, p0);\n" +
+        "        ma.thread_elements()[0] = h1.x;\n" +
+        "        ma.thread_elements()[1] = h1.y;\n" +
+        "        simdgroup_multiply_accumulate(p1, ma, mb, p1);\n" +
+        "    \}\n" +
+        "    return float4(p0.thread_elements()[0], p0.thread_elements()[1], " +
+        "p1.thread_elements()[0], p1.thread_elements()[1]);\n" +
+        "\}"
+}
+
+[arch(at="../ARCHITECTURE.md#sgmma-q8-blk2")]
+def private emit_sgmma_q8_blk2(var ctx : MslCtx; ec : ExprCall?) : string {
+    let wmem = member_lookup(ctx, ec.arguments[0])
+    let xmem = member_lookup(ctx, ec.arguments[3])
+    var device = !empty(wmem) && !empty(xmem)
+    var wn = ""
+    var xn = ""
+    var welem = ""
+    var xelem = ""
+    if (device) {
+        let wm = ctx.members[wmem]
+        device = !wm.uniform && !wm.workgroup
+        wn = wm.msl_name
+        welem = wm.elem
+    }
+    if (device) {
+        let xm = ctx.members[xmem]
+        device = !xm.uniform && !xm.workgroup
+        xn = xm.msl_name
+        xelem = xm.elem
+    }
+    if (!device) {
+        shader_error(ctx, ec.at, "sgmma_q8_blk2 reads its weights and its rows from @ssbo members")
+        return "/*call sgmma_q8_blk2*/"
+    }
+    if (welem != "char" || xelem != "float") {
+        shader_error(ctx, ec.at,
+            "sgmma_q8_blk2 takes int8 weights and float rows (got {welem} and {xelem})")
+        return "/*call sgmma_q8_blk2*/"
+    }
+    let q0 = emit_value(ctx, ec.arguments[1])
+    let q1 = emit_value(ctx, ec.arguments[2])
+    let x0 = emit_value(ctx, ec.arguments[4])
+    let x1 = emit_value(ctx, ec.arguments[5])
+    let lane = emit_value(ctx, ec.arguments[6])
+    ctx.helpers |> insert("sgmma_q8_blk2")
+    note(ctx, "call.sgmma_q8_blk2")
+    return ("__das_sgmma_q8_blk2((const device uchar*){wn} + ({q0}), " +
+        "(const device uchar*){wn} + ({q1}), (const device float*){xn} + ({x0}), " +
+        "(const device float*){xn} + ({x1}), ushort({lane}))")
 }
 
 // simdgroup intrinsics, the math whitelist, + the ctor/convert/saturating-narrow family are the
@@ -1259,6 +1344,9 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         note(ctx, "call.{cname}")
         let tens = cname == "tmm2d_rx_left_count" ? "__tgl_{acc}" : "__tgf_{acc}"
         return "uint({tens}.get_capacity())"
+    }
+    if (cname == "sgmma_q8_blk2") {
+        return emit_sgmma_q8_blk2(ctx, ec)
     }
     if (key_exists(MSL_DOT_HELPERS, cname)) {
         if (na != 2) {

@@ -45,6 +45,22 @@ Cross-GPU parity of one source is secondary. Current entries:
   overload that types its call) is a member of this family, not a new asymmetry, and so is
   `coopmatScaleAcc`, the block-scaled int8 fold over a workgroup-scope accumulator pair (SPIR-V's
   per-element function the emitter synthesizes, CUDA's lane walk over the fragment layout).
+- **The KHR s8 16 x 16 tile pair and the accumulator's element read are Vulkan-only.** The marker
+  structs `coopmatA_s8_16x16` and `coopmatB_s8_16x16` with their `coopmatLoad` and `coopmatMulAdd`
+  overloads, and `coopmatElem`, a lane's read of one element of an s32 accumulator
+  (`modules/dasSpirv/ARCHITECTURE_COOPMAT.md#coopmat-elem`), lower SPV_KHR_cooperative_matrix.
+  The CUDA emitter has neither: its s8 fragment types are the 16 x 32 pair (`coopmatA_s8_16x32`,
+  `coopmatB_s8_32x16`), and its accumulator's lane elements are the intrinsics tier's `mma_acc_get`. Metal has no
+  KHR tile. A body that uses them is a Vulkan-only kernel (dasLLAMA's int8 window tile
+  `KqMmqKhrT`); the CUDA home's int8 tile is its own `MmqT`.
+- **The simdgroup-matrix family is Metal-only by hardware.** The marker structs
+  `simdgroup_float8x8` and `simdgroup_half8x8`, their `simdgroup_load` / `simdgroup_store` /
+  `simdgroup_multiply` / `simdgroup_multiply_accumulate` overloads with `sgmat_to_half`, and the
+  q8 block product `sgmma_q8_blk2` ([ARCHITECTURE.md](ARCHITECTURE.md#sgmma-q8-blk2)) lower
+  Metal's simdgroup matrices; they are declared in this module, and neither the SPIR-V nor the
+  CUDA emitter has a lowering for them. The CPU bodies of the same declarations are the
+  reference a kernel is held to. A body that calls one is a Metal-only kernel (dasLLAMA's rows8 matrix
+  forms and the block drafter's matrix attention). Deliberate, target-specific.
 - **A kernel body calling a `[spirv_decode]` method directly is Vulkan-only; pending, not
   deliberate.** dasSpirv emits the call as an ordinary function - on a plane element the
   callee takes the element's index and chains through the plane, on a copy the struct
@@ -69,8 +85,9 @@ Cross-GPU parity of one source is secondary. Current entries:
 vocabulary and lowers to C++ text, so each asymmetry lands on it as follows: method flattening
 and plain-member thread-locals - CUDA takes the SPIR-V side, a method is a `__device__`
 function taking the members it touches as hidden parameters, a plain member is rejected;
-`@readonly` - honored, a buffer no statement writes is `const T* __restrict__`; `tmm2d` - no,
-the coopmat families - yes, the KHR subgroup tiles as `mma.sync` fragment sets and the cm2
+`@readonly` - honored, a buffer no statement writes is `const T* __restrict__`; `tmm2d` and the
+simdgroup matrices - no; the coopmat families - yes, less the s8 16 x 16 pair and `coopmatElem`
+of the entry above: the KHR subgroup tiles as `mma.sync` fragment sets and the cm2
 workgroup tiles as shared arrays over per-warp fragment grids, both by inline PTX
 (`modules/dasCUDA/ARCHITECTURE.md`); `[spirv_decode]` - the decode-in-load callback is
 lowered, a direct call is a plain method call; literal fixed-array hoisting - present, to a

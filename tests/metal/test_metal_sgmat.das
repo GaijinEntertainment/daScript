@@ -401,3 +401,97 @@ def test_sgmat_tiled_gpu_vs_cpu(t : T?) {  // nolint:STYLE038 - one arm per tile
         delete want
     }
 }
+
+//! int8 codes at both range ends against small-integer x keep every
+//! 32-term sum exact in f32: the compare is BIT-EXACT
+class SgmmaQ8Gpu {
+    @ssbo @binding = 0 wq : array<int8>
+    @ssbo @binding = 1 xr : array<float>
+    @ssbo @binding = 2 po : array<float>
+
+    [metal_kernel(name="sgmma_q8_gpu_msl"), marker(no_coverage)]
+    def sgmma_q8_gpu {
+        let lane = gl_SubgroupInvocationID
+        let row = ((lane / 4u) & 4u) + ((lane / 2u) % 4u)
+        let col = ((lane / 4u) & 2u) * 2u + (lane % 2u) * 2u
+        let p = sgmma_q8_blk2(wq, row * 32u, (8u + row) * 32u,
+            xr, col * 32u, (col + 1u) * 32u, lane)
+        po[lane * 4u] = p.x
+        po[lane * 4u + 1u] = p.y
+        po[lane * 4u + 2u] = p.z
+        po[lane * 4u + 3u] = p.w
+    }
+}
+
+[test(description = "sgmma_q8_blk2 on the GPU is bit-exact with the CPU replay's dots, every lane's two rows against its two tokens.")]
+def test_sgmma_q8_gpu_vs_cpu(t : T?) {
+    t |> run("sgmma_q8_blk2: GPU == CPU replay, bit-exact") <| @(t : T?) {
+        var oracle = new SgmmaQ8Gpu()
+        oracle.wq |> resize(16 * 32)
+        oracle.xr |> resize(8 * 32)
+        oracle.po |> resize(32 * 4)
+        for (r in range(16)) {
+            for (k in range(32)) {
+                let v = (r * 37 + k * 53) % 256 - 128
+                oracle.wq[r * 32 + k] = int8(v)
+            }
+        }
+        oracle.wq[0] = int8(-128)
+        oracle.wq[33] = int8(127)
+        for (c in range(8)) {
+            for (k in range(32)) {
+                oracle.xr[c * 32 + k] = float((c * 5 + k * 3) % 15 - 7)
+            }
+        }
+        for (lane in range(int(TPG))) {
+            gl_SubgroupInvocationID = uint(lane)
+            oracle->sgmma_q8_gpu()
+        }
+        gl_SubgroupInvocationID = 0u
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            var gpu_bad = -1
+            with_metal_device() $(dev : MetalDevice?) {
+                if (dev == null) {
+                    t |> skip("no Metal device on this box")
+                    return
+                }
+                var perr : string
+                var pso = pipeline_from_source(dev, sgmma_q8_gpu_msl, sgmma_q8_gpu_msl_entry,
+                    sgmma_q8_gpu_msl_fastmath, perr)
+                t |> success(pso != null, "pipeline_from_source: {perr}")
+                if (pso == null) {
+                    return
+                }
+                var queue = metal_new_command_queue(dev)
+                var bwq = buf_upload(dev, oracle.wq)
+                var bxr = buf_upload(dev, oracle.xr)
+                var bpo = buf_fill(dev, 32 * 4, -1000.0)
+                var bufs <- [bwq, bxr, bpo]
+                var rerr : string
+                let ran = run_compute_1d(queue, pso, bufs, TPG, TPG, rerr)
+                t |> success(ran, "run_compute_1d: {rerr}")
+                if (ran) {
+                    gpu_bad = buf_mismatch_exact(bpo, oracle.po)
+                }
+                bufs |> clear()             // non-owning handles - clear() skips pointee finalize
+                unsafe {
+                    delete bufs
+                }
+                metal_release(bwq)
+                metal_release(bxr)
+                metal_release(bpo)
+                metal_release(pso)
+                metal_release(queue)
+            }
+            if (gpu_bad >= 0) {
+                t |> equal(gpu_bad, 0)
+            }
+            t |> equal(metal_live_object_count(), 0l)
+        } else {
+            t |> skip("das_metal is not built on this platform")
+        }
+        unsafe {
+            delete oracle
+        }
+    }
+}
