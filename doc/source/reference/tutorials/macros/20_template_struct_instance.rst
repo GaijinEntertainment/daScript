@@ -219,6 +219,9 @@ name would need to resolve. Only ``static_if`` arms get this: a
 naming the erased field is a compile error — restructure it as a
 ``static_if`` on the same axis. The string form inverts the gate:
 ``@template_gate = "!WEIGHTED"`` keeps a field only where the axis is off.
+The string form also joins terms with ``&``: ``@template_gate = "WEIGHTED&!PACKED"``
+keeps a field only where ``WEIGHTED`` is on and ``PACKED`` is off, so one field can
+depend on two axes without a third constant that restates them.
 
 
 What the reifier does

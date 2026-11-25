@@ -657,6 +657,18 @@ def private tsi_bind_constants(var st : StructurePtr; var rules : Template; var 
     return true
 }
 
+//! one `@template_gate` term against the instance's bool constants:
+//! `AXIS` holds where the axis is on, `!AXIS` where it is off;
+//! `known` is false where the term names no bool constant
+[macro_function]
+def private tsi_gate_term(term : string;
+                          consts : table<string; bool>) : tuple<known : bool; holds : bool> {
+    let inverted = term |> starts_with("!")
+    let axis = inverted ? slice(term, 1) : term
+    return (known = false, holds = false) if (!key_exists(consts, axis))
+    return (known = true, holds = (consts?[axis] ?? false) != inverted)
+}
+
 [macro_function]
 def private tsi_apply_gates(var st : StructurePtr; consts : table<string; bool>; var errors : das_string) : bool {
     var gateIdx : array<int>
@@ -665,20 +677,23 @@ def private tsi_apply_gates(var st : StructurePtr; consts : table<string; bool>;
         let arg = find_arg(f.annotation, "template_gate")
         if (arg is nothing) continue
         if (!(arg is tString)) {
-            errors := "[template_struct_instance] @template_gate on field '{f.name}' of {st.name} must be a bare identifier or a string (\"AXIS\" / \"!AXIS\")"
+            errors := ("[template_struct_instance] @template_gate on field '{f.name}' " +
+                "of {st.name} must be a bare identifier or a string " +
+                "(\"AXIS\" / \"!AXIS\" / \"A&!B\")")
             return false
         }
-        var nm = arg as tString
-        var want = true
-        if (nm |> starts_with("!")) {
-            want = false
-            nm = slice(nm, 1)
+        var kept = true
+        for (term in split(arg as tString, "&")) {
+            let verdict = tsi_gate_term(strip(term), consts)
+            if (!verdict.known) {
+                errors := ("[template_struct_instance] @template_gate '{arg as tString}' " +
+                    "on field '{f.name}' of {st.name}: '{strip(term)}' " +
+                    "must name a bool @template_constant of the template")
+                return false
+            }
+            kept = kept && verdict.holds
         }
-        if (!key_exists(consts, nm)) {
-            errors := "[template_struct_instance] @template_gate '{arg as tString}' on field '{f.name}' of {st.name} must name a bool @template_constant of the template"
-            return false
-        }
-        if ((consts?[nm] ?? false) != want) {
+        if (!kept) {
             gateIdx |> push(i)
         }
     }
@@ -763,7 +778,26 @@ class TsiReified : AstStructureAnnotation {
 
 [structure_macro(name = "template_struct_instance")]
 class TemplateStructInstance : AstStructureAnnotation {
-    //! Reifies a ``struct template`` / ``class template`` parent into the annotated instance at parse time: instance ``typedef``s bind the template's type parameters, ``override`` inits bind its ``@template_constant`` fields (erased from the result), ``@template_gate`` fields exist only in stamps where the named bool ``@template_constant`` is true (``@template_gate = AXIS``, or the string form ``"!AXIS"`` to invert; a gated-off field is erased as if never written, and the argument stays inert on kept fields — reference a gated field only from ``static_if`` arms on its axis: a dead ``static_if`` arm may name it, a dead ternary arm may not, since infer sees both ternary arms), ``@template_call`` fields rebind free-function callees by name (``override sdot = @@ssdot`` — bare-spelled calls AND ``@@`` addresses; erased too, while ``_::sdot`` / ``__::sdot`` keep their normal resolution rules — the pinned escape to the real function), template methods are cloned onto the instance (instance-authored methods win), and the template parent is cut — every later structure annotation sees a finished concrete struct or class.
+    //!@nolint
+    //! Reifies a ``struct template`` / ``class template`` parent into the
+    //! annotated instance at parse time: instance ``typedef``s bind the
+    //! template's type parameters, ``override`` inits bind its
+    //! ``@template_constant`` fields (erased from the result),
+    //! ``@template_gate`` fields exist only in stamps where the named
+    //! bool ``@template_constant`` is true (``@template_gate = AXIS``, or
+    //! the string form ``"!AXIS"`` to invert, or terms joined by ``&`` -
+    //! ``"A&!B"`` keeps the field only where every term holds; a
+    //! gated-off field is erased as if never written, and the argument
+    //! stays inert on kept fields — reference a gated field only from
+    //! ``static_if`` arms on its axis: a dead ``static_if`` arm may name
+    //! it, a dead ternary arm may not, since infer sees both ternary
+    //! arms), ``@template_call`` fields rebind free-function callees by
+    //! name (``override sdot = @@ssdot`` — bare-spelled calls AND ``@@``
+    //! addresses; erased too, while ``_::sdot`` / ``__::sdot`` keep their
+    //! normal resolution rules — the pinned escape to the real function),
+    //! template methods are cloned onto the instance (instance-authored
+    //! methods win), and the template parent is cut — every later
+    //! structure annotation sees a finished concrete struct or class.
     //! A template may itself derive from a template: the instance reifies the whole CHAIN in one pass - constants, typedefs, gates and calls bind at any level from the instance's materialized fields, methods stamp nearest-ancestor-first (an instance-authored method beats every level), and the parent cut lands past the last template ancestor.
     //! Put ``[|> template_struct_instance]`` on the template itself so every instance inherits the reifier ahead of its own annotations; under a chain the instance inherits one copy per ancestor, and the surplus copies no-op against the ``tsi_reified`` marker the first application appends. Names the instance leaves unbound are left to the compiler: module types resolve on their own, a later macro (e.g. a ``[dirty_infer_macro]``) may still supply a ``typedef``, and a genuinely missing one surfaces as an undefined-type error in the stamped code.
     [arch(at="ARCHITECTURE.md#typemacro-boost")]
