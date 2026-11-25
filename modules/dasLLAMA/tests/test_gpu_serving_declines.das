@@ -16,7 +16,9 @@ require dasllama/dasllama_env   // set_pf_window_rows_pin - the ring cells' 512-
 require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N-row command's slot cap, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_prefill  // ple_proj_gemv_why - the window projection's tile gate, where the module exists
 require dasllama/dasllama_gpu_kernels_common  // gk_bf16_pairs - the bf16 projection's stamp pick on both homes; the DFlash2 top-k's slice arithmetic
+require dasllama/dasllama_gpu_kernels_discrete   // fa_dec_groups, fa_dec_pieces - the decode tile's dispatch arithmetic on both discrete homes
 require dasllama/dasllama_gpu_rail   // kernel_skip_parse, kernel_skip_hit: the pricing rail's skip list
+require dasllama/dasllama_gpu_knee   // vk_alt_gemv_by_vendor - the load-ahead GEMV's device rule
 require ?vulkan dasllama/dasllama_vulkan_classes   // ple_proj_bf16_hw - the resident projection's halfword pick, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_common   // GpuState / g_gpu - the device shell ple_proj_gemv_why reads, where the module exists
 require ?vulkan vulkan/vulkan_boost   // subgroup_properties / compute_subgroup_size_pinnable - the pin cell's own reading of the device
@@ -1101,7 +1103,7 @@ def test_plan_room(t : T?) {
     }
 }
 
-[test(description = "With dasVulkan, `heap_room` takes the largest device-local heap by live budget on a discrete card and sums every heap on an integrated one, and `uma_spill_pick` picks only a coherent host-heap type")]
+[test(description = "With dasVulkan, `heap_room` takes the largest device-local heap by live budget on a discrete card and sums every heap on an integrated one, `uma_spill_pick` picks only a coherent host-heap type, and `carve_out_weights_off` moves the weight slabs out of the carve-out by the knob on an integrated device, else on an AMD integrated device with 512 MB of it or less")]
 def test_heap_room(t : T?) {
     t |> run("the plan's heaps: one device-local heap on a discrete card, every heap on an integrated device") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1145,6 +1147,23 @@ def test_heap_room(t : T?) {
             t |> equal(2, uma_spill_pick(0xFu, types, heaps), "the host heap's coherent type, past the device-local heap's own host-visible type")
             t |> equal(-1, uma_spill_pick(0x3u, types, heaps), "a requirement that admits only the device-local heap's types spills nowhere")
             t |> equal(-1, uma_spill_pick(0xBu, types, heaps), "a host-visible type that is not coherent is not a spill target")
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+    t |> run("the weight slabs keep out of the carve-out: by the knob on an integrated device, else on an AMD integrated device with 512 MB of it or less") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let amd = 0x1002u
+            t |> success(carve_out_weights_off(-1l, true, amd, 512l), "auto on an AMD integrated device whose kernel reports 512 MB")
+            t |> success(!carve_out_weights_off(-1l, false, amd, 512l), "control: a discrete AMD card keeps its slabs device-local")
+            t |> success(!carve_out_weights_off(-1l, true, 0x10DEu, 512l), "control: another vendor's integrated device")
+            t |> success(!carve_out_weights_off(-1l, true, amd, -1l), "control: no kernel counter (another OS, another driver)")
+            t |> success(!carve_out_weights_off(-1l, true, amd, 4096l), "control: a carve-out past {CARVE_OUT_AUTO_MAX_MB} MB is the knob's to name")
+            t |> success(carve_out_weights_off(1l, true, 0x10DEu, -1l), "the knob at 1 on any integrated device")
+            t |> success(!carve_out_weights_off(1l, false, amd, 512l), "the knob at 1 never moves a discrete card's slabs")
+            t |> success(!carve_out_weights_off(0l, true, amd, 512l), "the knob at 0 keeps the slabs device-local")
+            t |> equal(488l, carve_out_counter_mb("512000000 "), "a counter file's bytes as megabytes")
+            t |> equal(-1l, carve_out_counter_mb(""), "control: no file, no number")
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -1901,6 +1920,84 @@ def test_vk_subgroup_pin(t : T?) {
     }
 }
 
+[test(description = "`vk_attn_wave` answers the pin where it is positive, else the SM count, else an AMD device's active compute units, else the placeholder ATTN_WAVE_UNKNOWN - never zero - and the live tier's wave is that rule's answer under this run's DASLLAMA_VK_ATTN_WAVE")]
+def test_vk_attn_wave(t : T?) {
+    t |> run("the rule") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            t |> equal(vk_attn_wave(36, 0, 0l), 36, "an SM count is the wave")
+            t |> equal(vk_attn_wave(0, 40, 0l), 40, "no SM count: an AMD device's active compute units")
+            t |> equal(vk_attn_wave(36, 40, 0l), 36, "the SM count ahead of the compute units")
+            t |> equal(vk_attn_wave(0, 0, 0l), ATTN_WAVE_UNKNOWN, "a device that reports neither takes the placeholder")
+            t |> equal(vk_attn_wave(36, 40, 64l), 64, "a positive pin ahead of both")
+            t |> equal(vk_attn_wave(0, 0, 8l), 8, "... and ahead of the placeholder")
+            t |> equal(vk_attn_wave(36, 0, -1l), 36, "a negative pin is no pin")
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+    t |> run("the live tier's wave") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            t |> success(g_gpu.attn_wave > 0, "a live tier's wave is never zero ({g_gpu.attn_wave})")
+            let pin = g_env_vulkan.vk_attn_wave
+            if (pin > 0l) {
+                t |> equal(g_gpu.attn_wave, int(pin), "this run's DASLLAMA_VK_ATTN_WAVE ({pin}) is the wave")
+            } elif (g_gpu.sm_count > 0) {
+                t |> equal(g_gpu.attn_wave, g_gpu.sm_count, "the device's SM count is the wave")
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the shared-memory cap pin: DASLLAMA_VK_WG_CAP lowers the cap the class gates read and never raises it
+[test(description = "`vk_wg_cap` answers the device's shared-memory limit unless the pin is positive and lower, and the live tier's class gate and row-slab route read the cap this run's DASLLAMA_VK_WG_CAP gives")]
+def test_vk_wg_cap_pin(t : T?) {
+    t |> run("the pin lowers the cap and never raises it") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            t |> equal(vk_wg_cap(49152u, 0l), 49152u, "no pin: the device's limit")
+            t |> equal(vk_wg_cap(49152u, 32768l), 32768u, "a pin under the device's limit is the cap")
+            t |> equal(vk_wg_cap(32768u, 49152l), 32768u, "a pin over the device's limit leaves it")
+            t |> equal(vk_wg_cap(32768u, 32768l), 32768u, "a pin at the device's limit leaves it")
+            t |> equal(vk_wg_cap(49152u, -1l), 49152u, "a negative pin is no pin")
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+    t |> run("the live tier reads the cap") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            var props : VkPhysicalDeviceProperties
+            vkGetPhysicalDeviceProperties(g_gpu.phys, props)
+            let own = props.limits.maxComputeSharedMemorySize
+            t |> equal(g_gpu.max_wg_bytes, vk_wg_cap(own, g_env_vulkan.vk_wg_cap), "the class gate's cap is the device's {int(own)} B under this run's DASLLAMA_VK_WG_CAP ({g_env_vulkan.vk_wg_cap})")
+            t |> equal(g_gpu.dn_shared_ok, g_gpu.max_wg_bytes >= ROW_SLAB_SMALL_WG_BYTES, "... and the row-slab route follows the cap, not the device's own limit")
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the row slab the add+rms family and the attention prep stage under a shared-memory cap
+[test(description = "`row_slab_dim` answers the 8192-float row where the shared-memory cap holds the row slab's 33280 B, and the small-slab twins' 8064 floats one byte under it and at the twins' own 32768 B")]
+def test_row_slab_dim(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        t |> equal(row_slab_dim(33280u), 8192l, "a cap of 33280 B holds the 8192-float slab")
+        t |> equal(row_slab_dim(65536u), 8192l, "... and so does a wider cap")
+        t |> equal(row_slab_dim(33279u), 8064l, "one byte under it the twins' 8064-float slab serves")
+        t |> equal(row_slab_dim(32768u), 8064l, "... as at the twins' own 32768 B")
+    } else {
+        t |> skip("dasVulkan not present")
+    }
+}
+
 [test(description = "A class pipeline's dispatch count stays with its kernel's name when the driver hands that pipeline's handle to another kernel's: the census reads each kernel's own count, a kernel rebuilt on its own handle keeps its count whole, and a reset leaves neither a count")]
 def test_vk_census_count_keeps_its_kernel(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1930,6 +2027,100 @@ def test_vk_census_count_keeps_its_kernel(t : T?) {
     } else {
         t |> skip("no vulkan module in this build")
     }
+}
+
+//! the pin's arm of the served set: `DASLLAMA_VK_ALT_STAMPS` at 0 or more is the set, the box's stored set and the device's rules unread
+[test(description = "`vk_alt_served_of` answers a pin's bits alone where the pin is 0 or more - the box's stored set and the device's own rule bits unread, a pin of 0 serving no alternate - and the stored set joined with the device's where the pin is negative")]
+def test_vk_alt_pin_is_the_served_set(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        t |> equal(vk_alt_served_of(5l, 2l, 1024l), 5l, "DASLLAMA_VK_ALT_STAMPS=5 is the served set: the stored 2 and the device's 1024 are unread")
+        t |> equal(vk_alt_served_of(0l, 2l, 1024l), 0l, "DASLLAMA_VK_ALT_STAMPS=0 serves no alternate, the device's own among them")
+        t |> equal(vk_alt_served_of(-1l, 2l, 1024l), 1026l, "control: with no pin the stored set and the device's own join")
+        t |> equal(vk_alt_served_of(-1l, 2l, 0l), 2l, "... the stored set alone on a device with no rule")
+    } else {
+        t |> skip("dasVulkan not present")
+    }
+}
+
+//! a class that opts out of the subgroup pin: its workgroup width holds as many of the device's own subgroups as the pinned one held
+[test(description = "`vk_own_wg_x` scales a class's declared workgroup width by the device's own subgroup width over the pinned one, and answers 0 - the class builds at the tier's width - with no pin, no declared width, or a width past the device's widest workgroup")]
+def test_vk_own_wg_x(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        t |> equal(vk_own_wg_x(64, 64u, 32u, 1024u), 128u, "a 64-lane device pinned at 32: two subgroups a workgroup stay two")
+        t |> equal(vk_own_wg_x(256, 64u, 32u, 1024u), 512u, "... and eight stay eight")
+        t |> equal(vk_own_wg_x(64, 16u, 32u, 1024u), 32u, "a device narrower than the pin shrinks the workgroup")
+        t |> equal(vk_own_wg_x(64, 64u, 0u, 1024u), 0u, "no pin: the tier's width is the device's own")
+        t |> equal(vk_own_wg_x(0, 64u, 32u, 1024u), 0u, "no declared width: the class did not opt out")
+        t |> equal(vk_own_wg_x(1024, 64u, 32u, 1024u), 0u, "past the device's widest workgroup: the tier's width")
+        t |> equal(vk_own_wg_x(512, 64u, 32u, 1024u), 1024u, "at the device's widest workgroup: served")
+    } else {
+        t |> skip("dasVulkan not present")
+    }
+}
+
+//! the load-ahead q8 GEMV's device rule: an AMD device serves it with no race, any other vendor leaves it to the race
+[test(description = "`vk_alt_gemv_by_vendor` answers true for AMD's vendor id and false for NVIDIA's, Intel's and an unset one")]
+def test_vk_alt_gemv_by_vendor(t : T?) {
+    t |> success(vk_alt_gemv_by_vendor(VK_VENDOR_AMD), "AMD (0x1002): the load-ahead GEMV serves")
+    t |> success(!vk_alt_gemv_by_vendor(0x10DEu), "control: NVIDIA races it")
+    t |> success(!vk_alt_gemv_by_vendor(0x8086u), "control: Intel races it")
+    t |> success(!vk_alt_gemv_by_vendor(0u), "control: an unset vendor races it")
+}
+
+//! the integrated GPU's window cap: the driver's window near a context's start, fewer rows the further in, never under a step
+[test(description = "`pf_igpu_window_rows` keeps a 4096-row window at a context's start, brings it down in 256-row steps as the keys before it grow - 1024 rows at 28672 positions of a 1024-wide key row - holds every window's rows x keys x width under the cap or at the 256-row floor, and never grows with the context")]
+def test_pf_igpu_window_rows(t : T?) {
+    t |> equal(pf_igpu_window_rows(4096l, 0l, 1024l), 4096l, "the Llama-3.2-3B's key row at a context's start: the whole window")
+    t |> equal(pf_igpu_window_rows(4096l, 28672l, 1024l), 1024l, "... 28672 positions in: 1024 rows")
+    t |> equal(pf_igpu_window_rows(512l, 0l, 1024l), 512l, "a recurrent model's 512-row window is under the cap as it is")
+    t |> equal(pf_igpu_window_rows(4096l, 250000l, 4096l), PF_IGPU_ROWS_STEP, "a wide key row deep into a long context: the floor, one step")
+    var prev = 4096l
+    var over = 0
+    var grew = 0
+    for (k in range(64)) {
+        let keys0 = int64(k) * 4096l
+        let rows = pf_igpu_window_rows(4096l, keys0, 1024l)
+        over += (rows > PF_IGPU_ROWS_STEP && rows * (keys0 + rows) * 1024l > PF_IGPU_KEY_ELEMS) || rows % PF_IGPU_ROWS_STEP != 0l ? 1 : 0
+        grew += rows > prev ? 1 : 0
+        prev = rows
+    }
+    t |> equal(over, 0, "every window past the floor is under the cap and a whole count of steps")
+    t |> equal(grew, 0, "the window never grows as the context does")
+    t |> success(pf_igpu_window_rows(4096l, 28672l, 2048l) < pf_igpu_window_rows(4096l, 28672l, 1024l), "control: a key row twice as wide takes fewer rows at the same depth")
+}
+
+[test(description = "`pf_window_overlaps` keeps the window chain's chunked submits under the per-role profile on an integrated GPU, pins one submit under it on a discrete one, and is off with the knob off or a host-served expert layer")]
+def test_pf_window_overlaps(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        t |> success(pf_window_overlaps(true, false, false, false) && pf_window_overlaps(true, false, true, false), "no profile: the chain overlaps on both kinds of device")
+        t |> success(pf_window_overlaps(true, true, true, false), "the profile on an integrated GPU keeps the chunks: one submit of a long window runs past the driver's watchdog")
+        t |> success(!pf_window_overlaps(true, true, false, false), "the profile on a discrete GPU pins one fenced submit")
+        t |> success(!pf_window_overlaps(false, false, true, false) && !pf_window_overlaps(false, true, true, false), "control: the knob off pins one submit on any device")
+        t |> success(!pf_window_overlaps(true, false, true, true) && !pf_window_overlaps(true, true, true, true), "control: a host-served expert layer pins one submit")
+    } else {
+        t |> skip("dasVulkan not present")
+    }
+}
+
+[test(description = "`vk_alt_rule_bits` answers the load-ahead GEMV, the rotated residual GEMV, the tile-first flash, the split routed gate-up and the rotated N-column leaves' bits for AMD's vendor id - no raced bit and no int8 column among them - and no bit for NVIDIA's, Intel's and an unset one")]
+def test_vk_alt_rule_bits(t : T?) {
+    let amd = vk_alt_rule_bits(VK_VENDOR_AMD)
+    t |> equal(amd, (1l << int64(VK_ALT_Q8_GEMV)) | (1l << int64(VK_ALT_Q8_AR_ROT)) | (1l << int64(VK_ALT_FA_TFIRST)) | (1l << int64(VK_ALT_EGU_SPLIT)) | (1l << int64(VK_ALT_N_ROT)), "AMD (0x1002): the two GEMV alternates, the tile-first flash stamps, the split routed gate-up and the rotated N-column leaves")
+    t |> equal(amd & ((1l << int64(VK_ALT_KHR_ROT)) | (1l << int64(VK_ALT_DN_TOKEN)) | VK_ALT_MMQ_AMD), 0l, "... and neither a raced bit nor an int8 column, which wait for the race and the device check")
+    t |> equal(vk_alt_rule_bits(0x10DEu), 0l, "control: NVIDIA takes none")
+    t |> equal(vk_alt_rule_bits(0x8086u), 0l, "... nor Intel")
+    t |> equal(vk_alt_rule_bits(0u), 0l, "... nor an unset vendor")
+}
+
+//! the int8 columns' device rule: an AMD device takes the gate and up pieces and the down's s pieces, any other vendor none
+[test(description = "`vk_alt_mmq_by_vendor` answers the gate / up m and s bits and the down's s bit for AMD's vendor id, the down's m bit never, and no bit for NVIDIA's, Intel's and an unset one")]
+def test_vk_alt_mmq_by_vendor(t : T?) {
+    let amd = vk_alt_mmq_by_vendor(VK_VENDOR_AMD)
+    t |> equal(amd, (1l << int64(VK_ALT_MMQ_GU_M)) | (1l << int64(VK_ALT_MMQ_GU_S)) | (1l << int64(VK_ALT_MMQ_DN_S)), "AMD (0x1002): the gate and up pieces whole, the down's s pieces")
+    t |> equal(amd & (1l << int64(VK_ALT_MMQ_DN_M)), 0l, "... and the down's m pieces stay on the f16 tile")
+    t |> equal(vk_alt_mmq_by_vendor(0x10DEu), 0l, "control: NVIDIA takes none")
+    t |> equal(vk_alt_mmq_by_vendor(0x8086u), 0l, "control: Intel takes none")
+    t |> equal(vk_alt_mmq_by_vendor(0u), 0l, "control: an unset vendor takes none")
 }
 
 //! the prefill window's chunk cap: one layer a submit on an integrated GPU (the amdgpu watchdog), the ramp's hold on a discrete one
@@ -2109,6 +2300,24 @@ def test_dflash_topk_slices(t : T?) {
         t |> equal(ka.merge.vocab, uint(c.slices * 7l), "{c.vocab} logits: the merge stage reads {c.slices} lists of 7")
         t |> success(ka.slices.k == 7u && ka.merge.k == 7u, "{c.vocab} logits: both stages keep the call's k")
     }
+}
+
+[test(description = "`fa_dec_groups` counts a decode tile piece's workgroups as the K/V heads times the tiles of sixteen (row, query head) pairs, a short tile whole; `fa_dec_pieces` brings a launch to its budget of workgroups - whole pieces, one at least, the cap at most - and holds them to a sliding layer's 64-key steps, as `fa_dec_window_pieces` holds a named count")]
+def test_fa_dec_dispatch(t : T?) {
+    for (c in fixed_array((kv = 1l, rows = 8l, mul = 8l, groups = 4l), (kv = 1l, rows = 1l, mul = 8l, groups = 1l), (kv = 1l, rows = 3l, mul = 8l, groups = 2l),
+                          (kv = 4l, rows = 8l, mul = 2l, groups = 4l), (kv = 2l, rows = 16l, mul = 4l, groups = 8l), (kv = 8l, rows = 1l, mul = 4l, groups = 8l), (kv = 2l, rows = 17l, mul = 1l, groups = 4l))) {
+        t |> equal(fa_dec_groups(c.kv, c.rows, c.mul), c.groups, "{c.kv} K/V heads, {c.rows} rows of {c.mul} query heads each: {c.groups} workgroups a piece")
+    }
+    t |> equal(fa_dec_pieces(128l, 8l, 64l), 16l, "a budget of 128 workgroups at 8 a piece: 16 pieces")
+    t |> equal(fa_dec_pieces(127l, 8l, 64l), 15l, "... of 127: whole pieces, 15")
+    t |> equal(fa_dec_pieces(128l, 1l, 64l), 64l, "... at one workgroup a piece: the cap")
+    t |> equal(fa_dec_pieces(4l, 8l, 64l), 1l, "a budget under one piece's workgroups: one piece")
+    t |> equal(fa_dec_pieces(32l, 0l, 64l), 32l, "a piece of no workgroups counts as one")
+    t |> equal(fa_dec_pieces(128l, 8l, 64l, 512l), 8l, "a 512-key window holds the pieces to its eight steps")
+    t |> equal(fa_dec_pieces(128l, 8l, 64l, 4096l), 16l, "... and a window of more steps than pieces moves nothing")
+    t |> equal(fa_dec_pieces(128l, 8l, 64l, 40l), 1l, "a window under a step is one piece")
+    t |> equal(fa_dec_window_pieces(128l, 0l), 128l, "a flat layer keeps a named count")
+    t |> equal(fa_dec_window_pieces(128l, 1024l), 16l, "a 1024-key window holds a named count to its sixteen steps")
 }
 
 [test(description = "On a planes-trimmed model with per-layer embeddings the table's go-live check passes with no host plane - the device holds the table - and a host gather of one of its rows panics, while the same shell untrimmed fails the check for its missing plane")]

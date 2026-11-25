@@ -29,7 +29,8 @@ require daslib/linq   // nolint:STYLE030,LINT019 — count: the sentinel words a
 require _discrete_cells   // nolint:STYLE030,LINT019 — the case bodies the CUDA tower cells run too, called inside the vulkan arms alone
 
 //! The vision and audio towers' Vulkan kernel classes against their CPU oracles (a Vulkan device,
-//! else the cells skip): the bidirectional flash tiles, the tower row classes, the Conformer and
+//! else the cells skip; the bidirectional flash slots' stand-in cell skips too under a
+//! `DASLLAMA_VK_ALT_STAMPS` pin): the bidirectional flash tiles, the tower row classes, the Conformer and
 //! FastConformer classes, the biased-block classes and their f16-feed stamps, the whisper decoder's
 //! classes, the padded attention route, the window classes, the audio fronts' data movers and
 //! spectral classes, and canary's rel-plane attention.
@@ -40,9 +41,10 @@ let private TOWER_SLACK_ROWS = 64 //! shadow rows past kvlen that carry a large 
 let private TOWER_SENTINEL = 10000.0
 let private TOWER_SCALE = 0.125
 
-def private fa_bidir_arm(t : T?; khr : bool; hs : int) {
+//! `form` names the stand-in the KHR slots serve, in every message of the arm
+def private fa_bidir_arm(t : T?; khr : bool; hs : int; form : string = "") {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let tag = "{khr ? "fa_khr" : "fa_cm2"} h{hs} bidir"
+        let tag = "{khr ? "fa_khr" : "fa_cm2"} h{hs} bidir{form}"
         let nheads = TOWER_NHEADS
         let rows = TOWER_ROWS
         let qd = nheads * hs
@@ -122,7 +124,7 @@ def private vkt_fa_arm_on(khr : bool) : bool {
     }
 }
 
-[test(description = "The bidirectional flash tile (cm2 and KHR, h64 and h128) over 77 rows matches the all-keys CPU attention at the 2e-3 approx bar, keeps sentinel slack rows past kvlen masked, and differs from its causal twin on row 0 only")]
+[test(description = "The bidirectional flash tile (cm2 and KHR, h64 and h128) over 77 rows matches the all-keys CPU attention at the 2e-3 approx bar, keeps sentinel slack rows past kvlen masked, and differs from its causal twin on row 0 only; the KHR slots hold the same on their tile-first alternates under `VK_ALT_FA_TFIRST` and on their small-tile twins under a shared-memory cap below the tile's footprint, each stand-in taking its slot's dispatches")]
 def test_vkt_fa_bidir(t0 : T?) {
     t0 |> run("bidirectional flash attention (h64 and the padded h128, cm2 and KHR arms) == the CPU oracle over every key") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -148,6 +150,40 @@ def test_vkt_fa_bidir(t0 : T?) {
             t |> skip("dasVulkan not present")
         }
     }
+    t0 |> run("the KHR bidirectional slots on their tile-first alternates and on their small-tile twins == the CPU oracle over every key") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_tower_clamp_cvt_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            if (!vkt_fa_arm_on(true) || vk_alt_pinned()) {
+                t |> skip(vk_alt_pinned() ? "DASLLAMA_VK_ALT_STAMPS pins the set: the slot legs cannot toggle it" : "device lacks KHR cooperative matrices at subgroup 32")
+                return
+            }
+            for (form in fixed_array((tfirst = true, suffix = "tf_cls", what = "tile-first alternate"), (tfirst = false, suffix = "cls_s", what = "small-tile twin"))) {
+                with_fa_khr_slots(form.tfirst, form.tfirst ? g_gpu.max_wg_bytes : ROW_SLAB_SMALL_WG_BYTES) {
+                    for (hs in fixed_array(64, 128)) {
+                        let kernel = "fa_khr_h{hs}_bidir_{form.suffix}_spv"
+                        if (!fa_stamp_ensure(true, int64(hs), false, false, false, false, true) || !fa_stamp_ensure(true, int64(hs), false, false, false, false)) {
+                            if (g_gpu.max_wg_bytes >= ROW_SLAB_SMALL_WG_BYTES) {
+                                t |> failure("fa_khr h{hs} bidir: a shared-memory cap of {int(g_gpu.max_wg_bytes)} B holds the {form.what}, and the slot declines")
+                            } else {
+                                t |> skip("fa_khr h{hs} bidir, the {form.what}: the device's shared-memory cap ({int(g_gpu.max_wg_bytes)} B) is under the twins' footprint")
+                            }
+                            continue
+                        }
+                        t |> equal(vkd_slot_kernel("fa_khr_h{hs}_bidir_cls_spv"), kernel, "the h{hs} bidirectional slot serves its {form.what}")
+                        vk_kernel_coverage_reset()
+                        fa_bidir_arm(t, true, hs, ", the {form.what}")
+                        let runs = vk_kernel_coverage_of(kernel)
+                        t |> success(runs > 0l, "the h{hs} bidirectional slot's {form.what} `{kernel}` took the slot's dispatches ({runs})")
+                    }
+                }
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
 }
 
 [test(description = "The layernorm, post-add, bias-GELU and attention combine fused with the Q8_0 requant land the separate pass's Q8_0 bytes and scales exactly at widths 256, 384 and 1280, and their rows match the CPU forms at the approx bar")]
@@ -160,7 +196,7 @@ def test_vkt_wdec_fused_rq(t0 : T?) {
                 return
             }
             with_cell_planes() $(var cp : CellPlanes) {
-                wdec_fused_rq_case(t, cp, true)
+                wdec_fused_rq_case(t, cp, vk_rounds_alike())
             }
         } else {
             t |> skip("dasVulkan not present")
@@ -389,7 +425,7 @@ def test_vkt_tower_vision_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate
                 }
                 check_rows(t, "tower_patch_im2col the patch columns under the [0, 1] -> [-1, 1] map vs im2col_rgb_patches, the pad rows zero", col_dev, col_want, BAR_EXACT, VR_PD)
                 let x_want <- pos_add_2d_ref(x, tbl, npos, d, VR_PW, VR_POS_ENTRIES)
-                check_rows(t, "tower_pos_add_2d (row + x-table row) + y-table row vs the CPU form", x_dev, x_want, BAR_EXACT, d)
+                check_rows(t, "tower_pos_add_2d (row + x-table row) + y-table row vs the CPU form", x_dev, x_want, twin_bar(), d)
                 t |> success(moved_off(x_want, x, 0, BAR_EXACT), "tower_pos_add_2d: the rows moved off x")
                 var asm_want : array<float>
                 asm_want |> resize(nd)

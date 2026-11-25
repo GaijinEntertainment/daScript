@@ -45,6 +45,7 @@ require dasllama/dasllama_convert   // nolint:STYLE029,LINT019 — the plane con
 require dasllama/dasllama_gpu_kernels_discrete
 require _kv_codec_oracles
 require dasllama/dasllama_kv_dtype
+require dasllama/dasllama_env   // the wide flash tile's knob
 require daslib/f16_cvt
 require daslib/algorithm
 require dasllama/dasllama_common
@@ -2148,12 +2149,25 @@ def fa_h64_run(t : T?; window : int) {
     fa_run(t, 64, window)
 }
 
-//! the driver's flash ladder (`cud_fa_enc`) twice over the same rows: the f32 store into `bufs[3]`, the f16 one into `o16`
-def private fa_launch(t : T?; hs : int; gated, sink : bool; bufs : uint64[4]; o16 : uint64; sinkh : array<float>; var pc : FaArgs; wgs : int64) {
+//! the driver's flash ladder (`cud_fa_enc`) twice over the same rows: the f32 store into `bufs[3]`, the f16 one into `o16`;
+//! under `narrow` the 16-row stamps of head 512 or 256 themselves, the ladder handing a whole pass there to the wide tile
+def private fa_launch(t : T?; hs : int; gated, sink : bool; bufs : uint64[4]; o16 : uint64; sinkh : array<float>; var pc : FaArgs; wgs : int64; narrow : bool) {
     var s = g_cud.stream
     let psink = sink ? buf_upload(sinkh, s) : 0ul
-    cud_fa_enc(s, int64(hs), gated, false, sink, bufs, psink, pc, wgs)
-    cud_fa_enc(s, int64(hs), gated, true, sink, fixed_array(bufs[0], bufs[1], bufs[2], o16), psink, pc, wgs)
+    let bufs16 = fixed_array(bufs[0], bufs[1], bufs[2], o16)
+    if (narrow && hs == 512) {
+        enc_fa_khr_h512_cls(s, bufs, pc, wgs)
+        enc_fa_khr_h512_f16_cls(s, bufs16, pc, wgs)
+    } elif (narrow && gated) {
+        enc_fa_cm2_h256_g_cls(s, bufs, pc, wgs)
+        enc_fa_cm2_h256_g_f16_cls(s, bufs16, pc, wgs)
+    } elif (narrow) {
+        enc_fa_cm2_h256_cls(s, bufs, pc, wgs)
+        enc_fa_cm2_h256_f16_cls(s, bufs16, pc, wgs)
+    } else {
+        cud_fa_enc(s, int64(hs), gated, false, sink, bufs, psink, pc, wgs)
+        cud_fa_enc(s, int64(hs), gated, true, sink, bufs16, psink, pc, wgs)
+    }
     if (sink) {
         t |> success(cud_sync(), "fa h{hs} sink: the launches land before the sink plane goes ({cuda_last_error()})")
         cuda_mem_free(psink)
@@ -2161,10 +2175,9 @@ def private fa_launch(t : T?; hs : int; gated, sink : bool; bufs : uint64[4]; o1
 }
 
 //! the flash tile at head `hs` (64, 96, 128 or 256), f32 and f16 out, against the CPU attention oracle; under `gated` the q rows carry [q | gate] a head (the h256 `G` stamps); under `sink` a per-head sink logit inside the scaled scores' range (the gpt-oss h64 stamps)
-def fa_run(t : T?; hs, window : int; gated : bool = false; sink : bool = false; cap : float = 0.0) {
+def fa_run(t : T?; hs, window : int; gated : bool = false; sink : bool = false; cap : float = 0.0; narrow : bool = false; rows : int = 77) {
     let nheads = 4
     let kv_mul = 2
-    let rows = 77
     let w0 = 64
     let scale = 0.125
     var sinkh <- sink ? [for (hh in range(nheads)); 0.45 * float(hh) - 0.3] : array<float>()
@@ -2191,9 +2204,9 @@ def fa_run(t : T?; hs, window : int; gated : bool = false; sink : bool = false; 
     var pc = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u, scale = scale,
         qstride = uint(qrow), qhs = uint(qhs), window = uint(window), cap = cap, sinkoff = 0u, row0 = 0u, ring = 0u)
     let wgs = fa_stamp_wgs(cud_fa_khr(int64(hs)), int64(nheads), int64(rows))
-    fa_launch(t, hs, gated, sink, bufs, o16, sinkh, pc, wgs)
+    fa_launch(t, hs, gated, sink, bufs, o16, sinkh, pc, wgs, narrow)
     let cap_tag = cap != 0.0 ? " softcap {cap}" : ""
-    let tag = "fa h{hs}{gated ? " gated" : ""}{sink ? " sink" : ""}{cap_tag} window {window}"
+    let tag = "fa h{hs}{gated ? " gated" : ""}{sink ? " sink" : ""}{cap_tag}{narrow ? " 16-row arm" : ""} window {window}"
     t |> success(cud_sync(), "{tag}: the launches complete ({cuda_last_error()})")
     var y <- buf_download(bufs[3], rows * qd, type<float>)
     var y16 <- buf_download(o16, rows * qd, type<float16>)
@@ -2702,17 +2715,21 @@ def test_cud_fa_h128(t0 : T?) {
 }
 
 //! head 256 is the deltanet hybrids' attention head
-[test(description = "The cm2 flash tile at head 256, f32 and f16 out, matches fa_oracle within 2e-3 whole and under a 40-key window, plain and gated, the gated rows under the q panel's gate sigmoid and off the ungated oracle.")]
+[test(description = "The flash pass at head 256, f32 and f16 out, plain and gated, matches fa_oracle within 2e-3, the gated rows under the q panel's gate sigmoid and off the ungated oracle: on the wide tile whole (141 rows, a full 96-row tile and a partial one; the knob's default), and on the cm2 tile whole (its stamps called themselves) and under a 40-key window.")]
 def test_cud_fa_h256(t0 : T?) {
-    t0 |> run("CUDA cm2 flash tile at head 256, f32 and f16 out, plain and gated == the CPU attention oracle, whole and under a 40-key window") <| @(t : T?) {
-        if (!ensure_fa_cm2_h256_cls() || !ensure_fa_cm2_h256_f16_cls() || !ensure_fa_cm2_h256_g_cls() || !ensure_fa_cm2_h256_g_f16_cls()) {
+    t0 |> run("CUDA flash pass at head 256, f32 and f16 out, plain and gated == the CPU attention oracle: the wide tile whole, the cm2 tile whole and under a 40-key window") <| @(t : T?) {
+        if (!ensure_fa_cm2_h256_cls() || !ensure_fa_cm2_h256_f16_cls() || !ensure_fa_cm2_h256_g_cls() || !ensure_fa_cm2_h256_g_f16_cls()
+            || !ensure_fa_mma_h256_cls() || !ensure_fa_mma_h256_f16_cls() || !ensure_fa_mma_h256_g_cls() || !ensure_fa_mma_h256_g_f16_cls()) {
             t |> skip("no CUDA device with NVRTC")
             return
         }
-        fa_run(t, 256, 0)
-        fa_run(t, 256, 40)
-        fa_run(t, 256, 0, true)
-        fa_run(t, 256, 40, true)
+        for (gated in [false, true]) {
+            if (g_env_vulkan.cuda_fa_wide != 0l) {
+                fa_run(t, 256, 0, gated, false, 0.0, false, 141)
+            }
+            fa_run(t, 256, 0, gated, false, 0.0, true)
+            fa_run(t, 256, 40, gated)
+        }
     }
 }
 
@@ -2730,15 +2747,18 @@ def test_cud_fa_h256_softcap(t0 : T?) {
     }
 }
 
-//! the flash tile at head 512: gemma-4's global layers on the window (V off the raw k row), the Vulkan cell's h512 arm
-[test(description = "The flash tile at head 512 on the KHR arm (gemma-4's global layers), f32 and f16 out, matches fa_oracle within 2e-3 of the plane's largest magnitude, whole and under a 40-key window.")]
+//! the flash tile at head 512: gemma-4's global layers on the window (V off the raw k row) - the wide tile whole, the KHR arm whole and under a window
+[test(description = "The flash pass at head 512 (gemma-4's global layers), f32 and f16 out, matches fa_oracle within 2e-3 of the plane's largest magnitude: on the wide tile whole (77 rows, a full 48-row tile and a partial one, the keys' last step partial; the knob's default), and on the KHR arm whole (its stamps called themselves) and under a 40-key window.")]
 def test_cud_fa_h512(t0 : T?) {
-    t0 |> run("CUDA flash tile at head 512 on the KHR arm, f32 and f16 out == the CPU attention oracle, whole and under a 40-key window") <| @(t : T?) {
-        if (!ensure_fa_khr_h512_cls() || !ensure_fa_khr_h512_f16_cls()) {
+    t0 |> run("CUDA flash pass at head 512, f32 and f16 out == the CPU attention oracle: the wide tile whole, the KHR arm whole and under a 40-key window") <| @(t : T?) {
+        if (!ensure_fa_khr_h512_cls() || !ensure_fa_khr_h512_f16_cls() || !ensure_fa_mma_h512_cls() || !ensure_fa_mma_h512_f16_cls()) {
             t |> skip("no CUDA device with NVRTC")
             return
         }
-        fa_run(t, 512, 0)
+        if (g_env_vulkan.cuda_fa_wide != 0l) {
+            fa_run(t, 512, 0)
+        }
+        fa_run(t, 512, 0, false, false, 0.0, true)
         fa_run(t, 512, 40)
     }
 }

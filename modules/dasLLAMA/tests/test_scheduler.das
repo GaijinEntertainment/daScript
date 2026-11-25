@@ -65,6 +65,40 @@ def test_idle_chunk_follows_the_window(t : T?) {
     }
 }
 
+[test(description = "`take_within_stops` leaves a window whole while it holds no more checkpoint stops strictly inside it than a region keeps rows, ends it at the stop past that count, takes the stops in any order, and counts neither a stop on the window's first row nor one on its end")]
+def test_take_within_stops(t : T?) {
+    t |> run("a window holding more stops than a region keeps rows ends at the stop past the rows") @(t : T?) {
+        let stops = fixed_array(48l, 96l, 160l, 239l)
+        t |> equal(take_within_stops(stops, 0l, 240l, 4l), 240l, "four rows hold the four stops: the window stands whole")
+        t |> equal(take_within_stops(stops, 0l, 240l, 2l), 160l, "two rows: the window ends at the third stop")
+        t |> equal(take_within_stops(stops, 0l, 240l, 1l), 96l, "one row: at the second")
+        t |> equal(take_within_stops(stops, 160l, 80l, 2l), 80l, "from the third stop the one stop left rides its window whole")
+        t |> equal(take_within_stops(stops, 48l, 112l, 1l), 112l, "a stop on the window's first row and one on its end are not inside it: 96 alone is")
+        t |> equal(take_within_stops(fixed_array(160l, 48l, 0l, 96l), 0l, 240l, 2l), 160l, "the stops out of order, an unset one among them: still the third by row")
+    }
+}
+
+def private stops_are(got : int64[4]; a, b, c, d : int64) : bool => got[0] == a && got[1] == b && got[2] == c && got[3] == d
+
+[test(description = "`checkpoint_stops_plan` answers a device-home stream's stops ascending, takes the request's markers in the order given until a region's rows are spent, and drops a marker at or under the matched rows, at or past the prompt's end, or equal to one already taken")]
+def test_checkpoint_stops_plan(t : T?) {
+    t |> run("a region of fewer rows than markers keeps the first markers in the order given, ascending") @(t : T?) {
+        let marks = fixed_array(96l, 160l, 239l, 48l)   // the scheduler's order: the system opening, the stable stop, the messages' end, the opening's head
+        let whole = checkpoint_stops_plan(marks, 0l, 240l, 4l)
+        t |> success(stops_are(whole, 48l, 96l, 160l, 239l), "four rows: every marker a stop, ascending ({whole})")
+        let two = checkpoint_stops_plan(marks, 0l, 240l, 2l)
+        t |> success(stops_are(two, 96l, 160l, 0l, 0l), "two rows: the first two markers given, the lowest marker - the last given - not among them ({two})")
+        let one = checkpoint_stops_plan(marks, 0l, 240l, 1l)
+        t |> success(stops_are(one, 96l, 0l, 0l, 0l), "one row: the first marker alone ({one})")
+        let past = checkpoint_stops_plan(marks, 96l, 240l, 4l)
+        t |> success(stops_are(past, 160l, 239l, 0l, 0l), "a marker at or under the matched rows is no stop ({past})")
+        let ended = checkpoint_stops_plan(marks, 0l, 239l, 4l)
+        t |> success(stops_are(ended, 48l, 96l, 160l, 0l), "a marker at the prompt's end is no stop ({ended})")
+        let twice = checkpoint_stops_plan(fixed_array(96l, 96l, 239l, 48l), 0l, 240l, 2l)
+        t |> success(stops_are(twice, 96l, 239l, 0l, 0l), "a marker equal to one taken spends no row ({twice})")
+    }
+}
+
 //! the n-gram side-input carrier the capture cell's Metal arm runs, served as its image with the split head beside it
 let FLASH_NEXT_FILE = "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf"
 let FLASH_NEXT_HEAD = "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf"

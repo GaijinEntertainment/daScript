@@ -17,6 +17,7 @@ require _compares   // full_suite_only
 require _child_run   // the per-box file's policy stand-down reads the tune policy at context init, so it is a child's to show
 require ../performance/box_ident.das   // probe_cpu_brand: this box's CPU, the exe key's
 require dasllama/dasllama_gpu_knee   // the split rule and the pricing both homes' knee races share
+require dasllama/dasllama_gpu_tier   // gpu_want_arms_tier: the ask the Vulkan device comes up under
 require ?das_metal dasllama/dasllama_metal_kernels   // metal_knee_tiles: a Metal rung's grid
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_devw_race_grids, METAL_N32_ROWS: the dev-W and one-way races' candidates
 require ?vulkan dasllama/dasllama_vulkan_common   // g_gpu: whether the device the Vulkan knee race ran on serves the cm2 s column
@@ -28,7 +29,8 @@ require dasllama/dasllama_env   // dasllama_home_dir_from - the box file's path 
 // and the checked apply reads it back. The cells that run a race itself skip outside the full suite
 // (DASLLAMA_PARITY_FULL=1): the first-start race and the Metal knee race on a das_metal build - the
 // twins and knees race their whole ladders, past the test wall - and the box file's race with its two
-// children on every box; without a Metal device the knee race's cell skips. The box-profile apply fires an installed race hook exactly when
+// children on every box; without a Metal device the knee race's cell skips; the Vulkan alternate-stamp race's cell and
+// the deltanet bit's skip with no Vulkan device under an asked GPU tier, and under a DASLLAMA_VK_ALT_STAMPS pin. The box-profile apply fires an installed race hook exactly when
 // no section of this box's own exists; and outside a fat exe the fat hook does nothing. The
 // sidecar path is redirected into a temp directory for every case, so the app's real sidecar is
 // never touched.
@@ -209,6 +211,87 @@ def test_the_vulkan_knee_race_sets_the_knee(t : T?) {
     t |> equal(read_json_field(js, "vk_split_k_tgs", -1l), knee, "the snapshot records the raced knee")
     delete_json(js)
     set_vk_split_k_tgs(saved)
+}
+
+//! whether this context's Vulkan device is up and no pin holds the served set
+def private vk_alt_raceable() : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return g_gpu != null && !vk_alt_pinned()
+    } else {
+        return false
+    }
+}
+
+//! whether this context's Vulkan device is one the load-ahead q8 GEMV serves on by vendor
+def private vk_alt_gemv_vendor_device() : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return g_gpu != null && vk_alt_gemv_by_vendor(g_gpu.vendor)
+    } else {
+        return false
+    }
+}
+
+//! The Vulkan home's alternate-stamp race (`dasllama_vulkan_alt_race`, ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps): on a
+//! device the race overwrites a marker set with bits it names, recorded in the snapshot, the load-ahead GEMV's bit among
+//! them on an AMD device; with the GPU tier unasked, or under the pin, the marker stands. Which stamp wins a race is the
+//! race's verdict, not this cell's.
+[test(description = "On a Vulkan device the alternate-stamp race overwrites a marker set with a set of the bits it races, recorded in the snapshot; with no device, or under DASLLAMA_VK_ALT_STAMPS, the marker stands")]
+def test_the_vulkan_alt_race_sets_the_served_stamps(t : T?) {
+    let saved = vk_alt_stamps()
+    let marker = 1l << 40l   // a bit no alternate holds: the race either overwrites the set or leaves it standing
+    set_vk_alt_stamps(marker)
+    let ran = dasllama_vulkan_alt_race()
+    if (!(ran && vk_alt_raceable())) {
+        t |> equal(vk_alt_stamps(), marker, "nothing to race (tier up: {ran}): the set stands")
+        set_vk_alt_stamps(saved)
+        t |> skip("no Vulkan device under an asked GPU tier, or the set is pinned - the alternate-stamp race ran nothing")
+        return
+    }
+    let bits = vk_alt_stamps()
+    let raced = (1l << int64(VK_ALT_Q8_GEMV)) | (1l << int64(VK_ALT_KHR_ROT)) | (1l << int64(VK_ALT_DN_TOKEN)) | (1l << int64(VK_ALT_Q8_AR_ROT)) | (1l << int64(VK_ALT_FA_TFIRST)) | (1l << int64(VK_ALT_EGU_SPLIT)) | (1l << int64(VK_ALT_N_ROT)) | VK_ALT_MMQ_AMD
+    t |> success((bits & ~raced) == 0l, "the raced set holds only bits the race names ({bits})")
+    if (vk_alt_gemv_vendor_device()) {
+        t |> success((bits & (1l << int64(VK_ALT_Q8_GEMV))) != 0l, "an AMD device: the load-ahead GEMV's bit is set whatever its race would read ({bits})")
+    }
+    var js = dasllama_runtime_snapshot("")
+    t |> equal(read_json_field(js, "vk_alt_stamps", -1l), bits, "the snapshot records the raced set")
+    delete_json(js)
+    set_vk_alt_stamps(saved)
+}
+
+//! whether the window's deltanet scan is wanted on the chunked stamp, and whether the device and the knob alone would serve it
+def private vk_dn_chunk_answers() : tuple<wanted : bool; device : bool> {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return (wanted = vk_dn_chunk_wanted(), device = g_env_vulkan.dn_chunk != 0l && khr_kq_tile_on())
+    } else {
+        return (wanted = false, device = false)
+    }
+}
+
+//! the Vulkan home's device brought up as the races bring it, with no race run and the served set unpinned
+def private vk_unpinned_device_up() : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return gpu_want_arms_tier() && !gpu_want_cuda() && vk_moe_init() && !vk_alt_pinned()
+    } else {
+        return false
+    }
+}
+
+//! The served set's deltanet bit (`VK_ALT_DN_TOKEN`, ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps) is what the window reads:
+//! set, the scan is not wanted on the chunked stamp; clear, it is wanted wherever the device and the knob serve it.
+[test(description = "With the served set's deltanet bit set the window's scan is not wanted on the chunked stamp; with the bit clear it is wanted exactly where the device has the KHR tiles at subgroup 32 and DASLLAMA_DN_CHUNK is on")]
+def test_the_dn_token_bit_moves_the_scan(t : T?) {
+    let saved = vk_alt_stamps()
+    if (!vk_unpinned_device_up()) {
+        t |> skip("no Vulkan device under an asked GPU tier, or the set is pinned - the served set's deltanet bit has no window to move")
+        return
+    }
+    set_vk_alt_stamps(1l << int64(VK_ALT_DN_TOKEN))
+    t |> success(!vk_dn_chunk_answers().wanted, "the bit set: the per-token stamp serves the window's scan")
+    set_vk_alt_stamps(0l)
+    let clear = vk_dn_chunk_answers()
+    t |> equal(clear.wanted, clear.device, "control: the bit clear, the chunked stamp serves where the device and the knob have it ({clear.device})")
+    set_vk_alt_stamps(saved)
 }
 
 //! The CUDA short window's knee race (`dasllama_cuda_knee_race`, the Vulkan race's twin on the shared rung loop): under the CUDA

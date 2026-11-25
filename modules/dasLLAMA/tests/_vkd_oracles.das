@@ -26,6 +26,35 @@ require _compares   // NAN_SENTINEL_BITS
 require _attn_oracle public
 require _kernel_oracles public   // act_mul_ref: the gated activation the Metal cells read too
 require _vk_kq_fixtures
+require dasllama/dasllama_gpu_knee   // VK_VENDOR_AMD: the twin bar's device fact
+
+//! whether two programs of this device - two shaders, or a shader and the CPU - round one float expression alike. An AMD
+//! driver's compiler contracts and re-associates a shader's float arithmetic on its own, one shader at a time, so two
+//! kernels that compute one expression land an ulp apart there, and a compare that is bit for bit on any other device holds
+//! within a float bar on that one
+def vk_rounds_alike() : bool => g_gpu != null && g_gpu.vendor != VK_VENDOR_AMD
+
+//! the bar of such a compare: exact where the device rounds alike, the approx bar where it does not
+def twin_bar() : Bar => vk_rounds_alike() ? BAR_EXACT : BAR_APPROX
+
+//! `body` with every KHR flash slot on one stand-in on any device: the device's own alternate rules off, the tile-first bit in the
+//! served set (`tfirst`) or out of it, the shared-memory cap at `cap` at most (under `FA_KHR_WG_BYTES` a slot with the bit out
+//! builds its small-tile twin). The set, the rules and the cap come back after `body`; every class pipeline rebuilds on both sides
+def with_fa_khr_slots(tfirst : bool; cap : uint; body : block<() : void>) {
+    let stamps = vk_alt_stamps()
+    let rules = vk_alt_device_rules_()
+    let own = g_gpu.max_wg_bytes
+    let bit = 1l << int64(VK_ALT_FA_TFIRST)
+    set_vk_alt_device_rules_(false)
+    set_vk_alt_stamps(tfirst ? stamps | bit : stamps & ~bit)
+    g_gpu.max_wg_bytes = min(own, cap)
+    vkd_pipes_rebuild()
+    invoke(body)
+    g_gpu.max_wg_bytes = own
+    set_vk_alt_stamps(stamps)
+    set_vk_alt_device_rules_(rules)
+    vkd_pipes_rebuild()
+}
 
 //! the flash tiles' shadow planes carry sixteen zero rows past the last position: the KHR tile's last key step loads a whole 16-row fragment
 let FA_SHADOW_SLACK_ROWS = int(RDEC_MIR_SLACK_ROWS)   //! the flash fixtures pad their shadows the rows the driver's mirrors carry past their planes

@@ -70,6 +70,7 @@ struct CodecAttn {
     sink : bool
     g4_twin : bool
     resubmit : bool
+    fixcnt : bool   //! a tile arm: every row attends the arm's `keys` under the kernel's fixed count, the token block unread
     ring : int      //! a sliding layer's ring rows: the device mirror holds each region's last `ring` positions at their `kv_ring_row` slots, zero rows past them
 }
 
@@ -218,6 +219,16 @@ def private oracle_query(a : CodecAttn; f : CodecAttnFixture) : array<float> {
     return <- clone_to_move(f.q)
 }
 
+//! the four-head stamp's rows against the two-head slab's over the same rows (its dead lanes add zero): bit for bit, or at
+//! the approx bar with its control on a device whose two stamps part by an ulp (`vk_rounds_alike`)
+def private g4_twin_check(t : T?; tag : string; g4, got : array<float>; qdim, hs : int) {
+    if (vk_rounds_alike()) {
+        check_exact(t, "{tag}: the four-head stamp over the same rows is the two-head slab bit for bit (its dead lanes add zero)", g4, got)
+    } else {
+        check_rows(t, "{tag}: the four-head stamp over the same rows is the two-head slab at the approx bar (its dead lanes add zero)", g4, got, BAR_APPROX, qdim, hs)
+    }
+}
+
 //! the controls: the codec's own (`codec_control`), each mechanism dropped, and under a fold the control's row quantized
 def codec_attn_arm(t : T?; a : CodecAttn) {
     let kvd = a.nheads / a.kv_mul * a.hs
@@ -286,7 +297,7 @@ def codec_attn_arm(t : T?; a : CodecAttn) {
                 da_attn_stamp_enc(a.kv, DaSlab.four, rw, h, s4, pa, rowwgs * int64(a.nrows))
             }
             var g4 <- cp |> plane_run(yp)
-            check_exact(t, "{tag}: the four-head stamp over the same rows is the two-head slab bit for bit (its dead lanes add zero)", g4, got)
+            g4_twin_check(t, tag, g4, got, qdim, a.hs)
             delete g4
         }
         delete got
@@ -373,4 +384,121 @@ def codec_attn_arms(t : T?; kv : KVDtype) {
     codec_attn_arm(t, CodecAttn(kv = kv, hs = 256, nheads = 2, kv_mul = 2, window = 100, ring = 128, nrows = 2, nsplit = 4))   // ... two regions, the keys in pieces
     codec_attn_arm(t, CodecAttn(kv = kv, hs = 64, nheads = 8, kv_mul = 8, sink = true))               // the sink stamp: the pass folds the sink at its store
     codec_attn_arm(t, CodecAttn(kv = kv, hs = 64, nheads = 8, kv_mul = 8, sink = true, nsplit = 8))   // ... and the last piece's combine seeds it
+}
+
+let private TILE_BAR = Bar(rel = 2.0e-3)   //! the flash tile's bar: P and a step's P x V sum round to half
+let private TILE_ROW_STEP = 9              //! the keys a tile row attends past the row before it: far enough apart that a dropped limit lands outside the bar
+
+//! the keys row `r` of a tile arm attends: the last row every key of the region, each row before it TILE_ROW_STEP fewer
+def private tile_cnt(a : CodecAttn; r : int) : int => a.keys - (a.nrows - 1 - r) * TILE_ROW_STEP
+
+//! the CPU attention's rows of a tile arm, [rows x heads x hs]: every row over region 0, row r its own count of keys - or,
+//! with `one_count`, the last row's (the control that drops the per-row limit); `gate` off leaves the rows ungated
+def private tile_oracle(a : CodecAttn; f : CodecAttnFixture; one_count : bool = false; gate : bool = true) : array<float> {
+    let kvd = a.nheads / a.kv_mul * a.hs
+    let qdim = a.nheads * a.hs
+    var out : array<float>
+    out |> resize(a.nrows * qdim)
+    for (r in range(a.nrows)) {
+        let cnt = one_count ? a.keys : tile_cnt(a, r)
+        let kstart = a.window != 0 && cnt > a.window ? cnt - a.window : 0
+        for (hh in range(a.nheads)) {
+            attn_row_oracle(f.q, r * qdim + hh * a.hs, f.k.deq, 0, f.v.deq, 0, kvd, hh, a.hs, a.kv_mul, cnt, 1.0 / sqrt(float(a.hs)),
+                out, r * qdim + hh * a.hs, kstart)
+        }
+    }
+    if (gate && a.gated) {
+        gate_rows(out, f.gate)
+    }
+    return <- out
+}
+
+def private tile_attn_tag(a : CodecAttn) : string {
+    var tag = "the flash tile's decode form, hs {a.hs}, {a.nheads} heads over {a.nheads / a.kv_mul}, {a.keys} keys in {a.nsplit} piece(s), {a.nrows} row(s) of one region"
+    if (a.gated) {
+        tag += ", gated"
+    }
+    if (a.fixcnt) {
+        tag += ", one fixed count"
+    }
+    if (a.window != 0) {
+        tag += ", a {a.window}-key window"
+    }
+    return tag
+}
+
+//! The decode form of the KHR flash tile, then the decode attention's combine-only dispatch, against the CPU attention a row:
+//! `a.nrows` rows of one session over ONE mirror region (row r attends `tile_cnt` keys), the rows and a K/V head's query heads
+//! as the tile's rows, the keys in `a.nsplit` pieces a (kv head, q tile). Heads of 256 and 512, an f16 mirror. Controls: every
+//! row at the last row's count, and with a gate the ungated rows. `wgs` is the arm's dispatch counted by hand - a workgroup a
+//! (kv head, tile of sixteen (row, query head) pairs, key piece) - which the drivers' grid (`fa_dec_groups`) is held to.
+def tile_attn_arm(t : T?; a : CodecAttn; wgs : int64) {
+    let kvd = a.nheads / a.kv_mul * a.hs
+    let qdim = a.nheads * a.hs
+    let qstride = a.gated ? 2 * a.hs : a.hs
+    let slab = da_slab_of(false, int64(a.kv_mul))
+    let tag = tile_attn_tag(a)
+    var f <- codec_attn_fixture(a)
+    let region = uint(qa_units(a.kv, QA_REGION_BLOCKS))
+    var toks <- [for (r in range(a.nrows)); TokMeta(cnt = uint(tile_cnt(a, r)), mirbase = region)]
+    let rowgroups = int(da_attn_comb_wgs(int64(a.nheads)))
+    let part_floats = a.nrows * a.nheads * a.nsplit * (a.hs + 2)
+    var want <- tile_oracle(a, f, a.fixcnt)
+    with_cell_planes() $(var cp : CellPlanes) {
+        let qp = cp |> in_(f.q_plane)
+        let kp = cp |> in_plain(f.k.bytes)
+        let vp = cp |> in_plain(f.v.bytes)
+        let yp = cp |> out_(a.nrows * qdim)
+        let tp = cp |> in_plain(toks)
+        let pp = cp |> out_words(int64(part_floats + a.nrows * rowgroups) * 4l, NAN_SENTINEL_BITS)
+        upload_zeros(cp.dev[pp], int64(part_floats) * 4l, int64(a.nrows * rowgroups) * 4l)
+        let aqp = cp |> out_words(int64((a.nrows * qdim + 3) / 4 * 4), I8_SENTINEL_BITS)
+        let asp = cp |> out_(a.nrows * qdim / 32)
+        let sp = cp |> in_(f.sinks)
+        let tile_planes = fixed_array(qp, kp, vp, pp, tp)
+        var st = set_fa_khr_dec_cls(gather_planes(cp.dev, tile_planes), gather_planes(cp.bytes, tile_planes), gather_planes(cp.hazard_bit, tile_planes))
+        let planes = fixed_array(qp, kp, vp, yp, tp, pp, aqp, asp, sp)
+        var s = da_attn_stamp_set(a.kv, slab, gather_planes(cp.dev, planes), gather_planes(cp.bytes, planes), gather_planes(cp.hazard_bit, planes))
+        let base = uint(qa_units(a.kv, QA_BASE_BLOCKS))
+        let scale = 1.0 / sqrt(float(a.hs))
+        var pt = FaArgs(rows = uint(a.nrows), qd = uint(qdim), kvd = uint(kvd), kv_mul = uint(a.kv_mul), kvbase = base, scale = scale,
+            qstride = uint(a.nheads * qstride), qhs = uint(qstride), window = uint(a.window), ring = uint(a.ring), vbase = base,
+            nsplit = uint(a.nsplit))
+        if (a.fixcnt) {
+            pt.kvbase = base + region
+            pt.vbase = base + region
+            pt.fixcnt = uint(a.keys)
+        }
+        var pa = DaAttnArgs(kvd = uint(kvd), hs = uint(a.hs), kv_mul = uint(a.kv_mul), kbase = base, vbase = base, scale = scale,
+            qstride = uint(qstride), gated = a.gated ? 1u : 0u, window = uint(a.window), nsplit = uint(a.nsplit), rqk = DA_RQ_NONE,
+            rowwg = uint(rowgroups), qrow = uint(a.nheads * qstride), cntoff = uint(part_floats), ring = uint(a.ring), comb = 1u)
+        let tile_wgs = fa_dec_groups(int64(a.nheads / a.kv_mul), int64(a.nrows), int64(a.kv_mul)) * int64(a.nsplit)
+        t |> equal(tile_wgs, wgs, "{tag}: the drivers' grid is the {wgs} workgroups counted by hand")
+        cp |> cell_record() $(rw : VkCommandBuffer; var h : VkHaz) {
+            if (a.hs == 512) {
+                enc_fa_khr_dec_h512_cls(rw, h, st, pt, tile_wgs)
+            } elif (a.hs == 256) {
+                enc_fa_khr_dec_h256_cls(rw, h, st, pt, tile_wgs)
+            } else {
+                enc_fa_khr_dec_h128_cls(rw, h, st, pt, tile_wgs)
+            }
+            da_attn_stamp_enc(a.kv, slab, rw, h, s, pa, int64(rowgroups * a.nrows))
+        }
+        var got <- cp |> plane_run(yp)
+        check_rows(t, "{tag} vs the CPU attention a row", got, want, TILE_BAR, qdim, a.hs)
+        if (a.nrows > 1) {
+            var ctl <- tile_oracle(a, f, !a.fixcnt)
+            check_exceeds(t, a.fixcnt ? "{tag} control: each row at its own count" : "{tag} control: every row at the last row's count", got, ctl, TILE_BAR)
+            delete ctl
+        }
+        if (a.gated) {
+            var ctl <- tile_oracle(a, f, false, false)
+            check_exceeds(t, "{tag} control: the ungated rows", got, ctl, TILE_BAR)
+            delete ctl
+        }
+        delete got
+    }
+    delete want
+    delete toks
+    delete f
 }
