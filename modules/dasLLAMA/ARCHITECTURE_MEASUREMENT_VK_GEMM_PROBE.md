@@ -57,7 +57,14 @@ against the k4 CPU oracle on six corners of the output, at the coopmat kernel ce
 (`bar_ok`): within `4e-3 max|y|`, or within `2e-2` of the larger side floored at 1, a NaN on
 either side off. The probe's exit code is non-zero on a compared arm
 over its bound, a CPU-oracle miss, an unknown `khrprof` arm, or a run that produced no result
-row. The `moe:<fmt>` and `moesk:<fmt>` arms are the first axis over the expert schedule: the
+row. `moeq` is the first axis for the int8 tiles (`ARCHITECTURE_GPU_VULKAN_KHR.md#khr-int8-tiles`): the 35B window's
+routed buckets at the gate and up shape (Q4_K, d 512, K 2048, the rows fed from 512 f32 rows through the row map) and the
+down shape (Q5_K and Q6_K, d 2048, K 512, fed from the f16 hidden rows), the f16 KHR ladder against the int8 one, then each column
+apart, the feed's time on its own row, the int8 output read against the f16 one and - on Q8_0 planes - four outputs
+against a host sum; `mmqd` runs the two ladders over dense Q8_0 shapes. `mmqlay` prints the device's accumulator layout -
+every lane's eight elements as (row, column) - with the depth and sign of a 16 x 32 product and of two 16-deep ones, and
+`mmqsg` the subgroup a lane sits in: the two readings a new device's int8 tile is written from. The `moe:<fmt>` and
+`moesk:<fmt>` arms are the first axis over the expert schedule: the
 format's cm2 s and e stamps over the Qwen3-30B-A3B window's routed buckets (512 tokens, 8 routed
 of 128 experts, 4096 bucket rows) at the gate/up shape (d 768, K 2048) and the down shape (d
 2048, K 768), dispatched to the bound the device schedule sizes with its sentinel tail, both

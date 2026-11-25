@@ -6,6 +6,7 @@ options _dasllama_internal = true
 require dasllama/dasllama
 require dasllama/dasllama_common   // set_metal_mode, allow_cpu_prefill, generate, generate_mtp_greedy, the overrides
 require dasllama/dasllama_dflash   // attach_dflash_drafter, set_dflash_draft_temp
+require dasllama/dasllama_kqformat   // KqFmt: the Metal sites line
 require dasllama/dasllama_math   // parallel_argmax
 require dasllama/dasllama_sampling   // generate_, generate_mtp_sampled, set_seed_, set_mtp_draft_temp
 require dasllama/dasllama_chat   // create_chat_renderer_, set_tools_, render_turn_, turn_stop_ids_: the tool-call arm's prompts
@@ -59,6 +60,8 @@ struct Args {
     ctx : int = 0
     @clarg_doc = "run the drafter's pass on the CPU reference arm even where the device serves it"
     cpu_draft : bool
+    @clarg_doc = "every drafter layer rings at the window (default: the layers the file leaves dense attend their whole context)"
+    windowed : bool
     @clarg_doc = "drafts a round (1 .. 7; default: the engine's depth)"
     depth : int = 0
     @clarg_doc = "a file of comma-separated token ids as the prompt instead of the built-in text (a bench's prompt file, its chat template inside)"
@@ -67,7 +70,7 @@ struct Args {
     prof : bool
     @clarg_doc = "the Metal single-row driver's greedy pre-encode chain: -1 adaptive (the engine's default), 0 off, 1 forced"
     chain : int = -1
-    @clarg_doc = "print the Metal kernel census of the traced walk's third round (every kernel the round dispatched, with its count)"
+    @clarg_doc = "print the Metal kernel census: of the traced walk's third round (every kernel the round dispatched, with its count), and under --prompts the speculative walks' dispatches a round"
     census : bool
     @clarg_doc = "the accept mode: greedy (argmax match), sample (draw each verify row, accept while it equals the draft), residual (rejection sampling with the residual)"
     mode : string = "greedy"
@@ -195,6 +198,8 @@ struct PairWalk {
     spec : MtpSampledWalk
 }
 
+var private g_census : table<string; int64>   //! --census: the speculative walks' dispatches by kernel
+
 //! both walks over `prompt`, each ending on the first id among `stops` or at --steps ids
 def private walk_pair(a : Args; m : Model; prompt : array<int64>; var stops : array<int64>) : PairWalk {
     let steps = int64(a.steps)
@@ -213,6 +218,11 @@ def private walk_pair(a : Args; m : Model; prompt : array<int64>; var stops : ar
     if (a.prof) {
         forward_profile_reset()
     }
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (a.census) {
+            metal_kernel_coverage_reset()
+        }
+    }
     if (a.trace && a.mode == "greedy" && empty(stops)) {
         p.spec <- walk_traced(m, s2, prompt, steps)
     } else {
@@ -222,6 +232,13 @@ def private walk_pair(a : Args; m : Model; prompt : array<int64>; var stops : ar
         p.spec <- generate_mtp_sampled(m, s2, prompt, params, steps, stops)
         static_if (typeinfo module_exists(dasllama_cuda_dflash)) {
             cud_launch_timing(false)
+        }
+    }
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (a.census) {
+            for (e in metal_kernel_coverage_served()) {
+                g_census[e.name] += e.n
+            }
         }
     }
     if (a.prof) {
@@ -298,6 +315,19 @@ def private chat_turn(m : Model; question : string; tools : array<string>) : Pro
 
 def private one_line(text : string) : string => replace(text, "\n", "\\n")
 
+//! --census: the speculative walks' dispatches a round, by kernel name
+def private census_report(rounds : int64) {
+    var total = 0l
+    var inscope names <- [for (k in keys(g_census)); k]
+    sort(names)
+    for (k in names) {
+        let hits = g_census?[k] ?? 0l
+        total += hits
+        print("CENSUS {fmt(":8.2f", double(hits) / double(rounds))} a round  {k}\n")
+    }
+    print("CENSUS {fmt(":8.2f", double(total) / double(rounds))} a round  ALL\n")
+}
+
 //! every --prompts line's two walks, `ctx` ahead of each, pooled: tokens a round, drafts accepted, the mean decode a request
 //! (the first draw to the last id) and the pooled rate of both walks; 2 where a greedy walk's ids part from the plain walk's
 def private walk_pool(a : Args; m : Model; ctx : array<int64>) : int {
@@ -345,6 +375,18 @@ def private walk_pool(a : Args; m : Model; ctx : array<int64>) : int {
         if (a.times && rounds > 0l) {
             cuda_times_report("a round", rounds, 0.4lf, "ms in the timed launches of the speculative walks")
         }
+    }
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (a.metal) {
+            let ms = metal_dflash_stats()
+            if (ms.passes > 0l) {
+                print("DRAFTER pass on Metal: {fmt(":.2f", double(ms.gpu_us) / 1000.0lf / double(ms.passes))} ms on the device, {fmt(":.2f", double(ms.encode_us) / 1000.0lf / double(ms.passes))} ms of encode, over {ms.passes} passes and {ms.commits} commits since the attach\n")
+                print("DRAFTER sites on Metal: {metal_dflash_sites(KqFmt.q8)} q8 weight multiplies encoded, {metal_dflash_rows8_sites_of(KqFmt.q8)} of them on the eight-row matrix form; a prompt's commits apart from the passes {fmt(":.1f", double(metal_dflash_commit_us()) / 1000.0lf)} ms in all; hazard barriers {metal_hazard_stats().barriers}, gated dispatches {metal_hazard_stats().gated}, undeclared {metal_hazard_stats().undeclared}\n")
+            }
+        }
+    }
+    if (a.census && rounds > 0l) {
+        census_report(rounds)
     }
     let ds = dflash_device_stats()
     if (ds.passes > 0l && rounds > 0l) {
@@ -410,6 +452,9 @@ def private run(a : Args) : int {
             m.config.seq_len = min(m.config.seq_len, int64(a.ctx))
         }
         set_dflash_device(!a.cpu_draft)
+        if (a.windowed) {
+            set_dflash_dense(false)
+        }
         if (a.depth > 0) {
             set_mtp_depth(int64(a.depth))
         }
