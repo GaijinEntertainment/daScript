@@ -1061,6 +1061,402 @@ def private moe_sched_words(cnt : array<int>; plane_blk, wtiles, tc, bound : int
     return <- sched
 }
 
+//! the 35B window's bucket rows over its 256 experts (512 tokens, top-8), after its last routed layer's census: 101 experts
+//! touched - thirteen past 128 rows, three past 64, six past 32, seventy-nine short pieces
+def private moe35_bucket_counts : array<int> {
+    var cnt : array<int>
+    cnt |> resize(256)
+    for (e in range(256)) {
+        cnt[e] = e < 13 ? 150 : (e < 16 ? 90 : (e < 22 ? 45 : (e < 101 ? 16 : 0)))
+    }
+    var placed = 0
+    for (c in cnt) {
+        placed += c
+    }
+    cnt[0] += 4096 - placed   // the rows left onto the biggest bucket
+    return <- cnt
+}
+
+def private moeq_readback(dev : uint64; bytes : int64) : array<float> {
+    var out : array<float>
+    out |> resize(bytes / 4l)
+    var host = make_host_buf(bytes, true, [cached = true])
+    readback_range(dev, 0u, host, unsafe(addr(out[0])), bytes)
+    destroy_host_buf(host)
+    return <- out
+}
+
+//! one subgroup's product of A[r] = (r + 1, 1, 0 ..) by B[c] = (17, c, 0 ..): element (r, c) reads 17 (r + 1) + c, and
+//! every lane writes its eight elements in its own order
+[vk_dispatch(name = "mmq_layout_probe", grid = "wgs", params = "wgs : int64")]
+class MmqLayoutProbe {
+    @ssbo @binding = 0 elems : array<uint>   //! [lane][e]
+    @push_constant pa : MmqInvArgs
+    @workgroup la : uint[128]   //! 16 rows x 8 words
+    @workgroup lb : uint[128]   //! 16 columns x 8 words
+
+    [spirv_kernel(local_size_x = 32, name = "mmq_layout_probe_spv")]
+    def run {
+        let tid = gl_LocalInvocationID.x
+        if (tid < 16u) {
+            la[tid * 8u] = (tid + 1u) | (1u << 8u)
+            lb[tid * 8u] = 17u | (tid << 8u)
+            for [unroll_full] (i in range(7)) {
+                la[tid * 8u + 1u + uint(i)] = 0u
+                lb[tid * 8u + 1u + uint(i)] = 0u
+            }
+        }
+        barrier()
+        var a : coopmatA_s8_16x32
+        var b : coopmatB_s8_32x16
+        coopmatLoad(a, la, 0, 8, 0)
+        coopmatLoad(b, lb, 0, 8, 1)
+        var p : coopmatAcc_s32_16x16
+        p = coopmatMulAdd(a, b, p)   // nolint:STYLE011 — MulAdd seeds from its own zero-init tile
+        for [unroll_full] (e in range(8)) {
+            elems[gl_SubgroupInvocationID * 8u + uint(e)] = uint(coopmatElem(p, uint(e))) + pa.nk
+        }
+        barrier()
+        if (tid < 16u) {   // the depth and sign check: every A byte -1, B's column bytes 1 .. 32
+            for [unroll_full] (i in range(8)) {
+                la[tid * 8u + uint(i)] = 0xFFFFFFFFu
+                lb[tid * 8u + uint(i)] = 0x04030201u + uint(i) * 0x04040404u
+            }
+        }
+        barrier()
+        var a2 : coopmatA_s8_16x32
+        var b2 : coopmatB_s8_32x16
+        coopmatLoad(a2, la, 0, 8, 0)
+        coopmatLoad(b2, lb, 0, 8, 1)
+        var p2 : coopmatAcc_s32_16x16
+        p2 = coopmatMulAdd(a2, b2, p2)   // nolint:STYLE011 — MulAdd seeds from its own zero-init tile
+        elems[256u + gl_SubgroupInvocationID] = uint(coopmatElem(p2, 0u))
+        var a3l, a3h : coopmatA_s8_16x16
+        var b3l, b3h : coopmatB_s8_16x16
+        coopmatLoad(a3l, la, 0, 8, 0)
+        coopmatLoad(a3h, la, 4, 8, 0)
+        coopmatLoad(b3l, lb, 0, 8, 1)
+        coopmatLoad(b3h, lb, 4, 8, 1)
+        var p3 : coopmatAcc_s32_16x16
+        p3 = coopmatMulAdd(a3l, b3l, p3)   // nolint:STYLE011 — MulAdd seeds from its own zero-init tile
+        p3 = coopmatMulAdd(a3h, b3h, p3)
+        elems[288u + gl_SubgroupInvocationID] = uint(coopmatElem(p3, 0u))
+    }
+}
+
+//! the device's layout of a 16 x 16 s32 product over a subgroup's 32 lanes: each lane's eight (row, column)
+def private run_mmq_layout {
+    verify(ensure_mmq_layout_probe(), "the layout probe's pipeline must engage")
+    let bytes = 1280l
+    let dev = make_device_buf(bytes)
+    var set = set_mmq_layout_probe(fixed_array(dev), fixed_array(bytes), fixed_array(1u))
+    var pc = MmqInvArgs(nk = 0u, k = 0u)
+    var raw = alloc_cmd()
+    record_cmd(raw, false) $(r; var hz) {
+        enc_mmq_layout_probe(r, hz, set, pc, 1l)
+    }
+    submit_wait(raw)
+    var words <- moeq_readback(dev, bytes)   // the words read back as floats: their bits are the elements
+    for (lane in range(32)) {
+        print("lane {lane}:")
+        for (e in range(8)) {
+            let v = int(float_bits_to_uint(words[lane * 8 + e]))
+            print(" ({v / 17 - 1},{v % 17})")
+        }
+        print("\n")
+    }
+    print("depth and sign: element 0 of lanes 0, 5, 31 reads {int(float_bits_to_uint(words[256]))} {int(float_bits_to_uint(words[261]))} {int(float_bits_to_uint(words[287]))} (-528 = the whole depth of 32, signed)\n")
+    print("two depth-16 products: element 0 of lanes 0, 5, 31 reads {int(float_bits_to_uint(words[288]))} {int(float_bits_to_uint(words[293]))} {int(float_bits_to_uint(words[319]))} (-528)\n")
+    delete words
+}
+
+//! a 512-lane workgroup's lanes: subgroup id | lane in the subgroup << 8 | subgroup size << 16
+[vk_dispatch(name = "mmq_sg_probe", grid = "wgs", params = "wgs : int64")]
+class MmqSgProbe {
+    @ssbo @binding = 0 lanes : array<uint>
+    @push_constant pa : MmqInvArgs
+
+    [spirv_kernel(local_size_x = 512, name = "mmq_sg_probe_spv")]
+    def run {
+        lanes[gl_LocalInvocationID.x] = gl_SubgroupID | (gl_SubgroupInvocationID << 8u) | (gl_SubgroupSize << 16u) | pa.nk
+    }
+}
+
+def private run_mmq_sg {
+    verify(ensure_mmq_sg_probe(), "the subgroup probe's pipeline must engage")
+    let bytes = 2048l
+    let dev = make_device_buf(bytes)
+    var set = set_mmq_sg_probe(fixed_array(dev), fixed_array(bytes), fixed_array(1u))
+    var pc = MmqInvArgs(nk = 0u, k = 0u)
+    var raw = alloc_cmd()
+    record_cmd(raw, false) $(r; var hz) {
+        enc_mmq_sg_probe(r, hz, set, pc, 1l)
+    }
+    submit_wait(raw)
+    var words <- moeq_readback(dev, bytes)
+    for (t in fixed_array(0, 1, 31, 32, 33, 63, 64, 127, 128, 255, 256, 511)) {
+        let v = float_bits_to_uint(words[t])
+        print("tid {t}: subgroup {int(v & 255u)} lane {int((v >> 8u) & 255u)} size {int(v >> 16u)}\n")
+    }
+    delete words
+}
+
+//! the feed's block (row 1, block 1) against the host's quantization of the same 32 values: the quants off, the scale and
+//! the scale times the quants' sum beside the host's
+def private moeq_feed_check(name : string; xqd, xsd : uint64; xq_bytes, xs_bytes : int64; n : int) {
+    var fq <- moeq_readback(xqd, xq_bytes)
+    var fs <- moeq_readback(xsd, xs_bytes)
+    let nbq = n / 32
+    var amax = 0.0lf
+    for (k in range(32)) {
+        amax = max(amax, 0.0625lf * (1.0lf + double(((n + 32 + k) * 3 + 5) % 64) / 1024.0lf))
+    }
+    var off = 0
+    var hsum = 0
+    for (k in range(32)) {
+        let w = float_bits_to_uint(fq[((nbq + 1) * 32 + k) / 4])
+        let qd = int((w >> uint((k % 4) * 8)) & 255u)
+        let xv = 0.0625lf * (1.0lf + double(((n + 32 + k) * 3 + 5) % 64) / 1024.0lf)
+        let qh = int(floor(xv * 127.0lf / amax + 0.5lf))
+        hsum += qh
+        off += qd == qh ? 0 : 1
+    }
+    print("{name} feed block (1,1): {off} of 32 quants off the host's; scale {fs[(nbq + 1) * 2]} (host {amax / 127.0lf}), scale x sum {fs[(nbq + 1) * 2 + 1]} (host {amax / 127.0lf * double(hsum)})\n")
+    delete fq
+    delete fs
+}
+
+//! a Q8_0 plane's host sum for four outputs - weight row `mr` against row `tc` of the first region - beside both arms'
+def private moeq_host_ref(name : string; wqh, wsuh, tokh : array<uint>; y_f, y_i : array<float>; d, n, nk : int) {
+    let nb = n / 32
+    for (smp in fixed_array((tc = 0, mr = 0), (tc = 1, mr = 17), (tc = 37, mr = 130), (tc = min(nk, 500) - 1, mr = d - 1))) {
+        var acc = 0.0lf
+        for (k in range(n)) {
+            let blk = smp.mr * nb + k / 32
+            let wb = int((wqh[blk * 8 + (k % 32) / 4] >> uint(((k % 32) % 4) * 8)) & 255u)
+            let wv = double(wb >= 128 ? wb - 256 : wb)
+            let sw = wsuh[blk / 2]
+            let sh = (blk & 1) == 0 ? sw & 0xFFFFu : sw >> 16u
+            let dsc = 0.0625lf * (1.0lf + double(int(sh) - 0x2c00) / 1024.0lf)
+            let xi = int(tokh[smp.tc]) * n + k
+            let xv = 0.0625lf * (1.0lf + double((xi * 3 + 5) % 64) / 1024.0lf)
+            acc += wv * dsc * xv
+        }
+        print("{name} host ref y[{smp.tc}][{smp.mr}] = {acc}   khr f16 {y_f[smp.tc * d + smp.mr]}   int8 {y_i[smp.tc * d + smp.mr]}\n")
+    }
+}
+
+//! A ladder schedule's pieces of format `fmt` - `cnt` the rows a region, each region its own `d` x `n` plane - on the
+//! served KHR f16 tiles and on the int8 tiles, the two outputs compared (the int8 arm's rows carry the feed's
+//! quantization). `np` > 0: the regions' rows are gathered rows of an `np`-row window, the f16 arm reading the gathered
+//! copy and the int8 arm the window's rows through the row map (an expert's gate and up); `np` 0: the rows are the
+//! regions' own, quantized off the f16 rows (an expert's down, a dense site). The feed is timed apart.
+[arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
+def private run_moeq_shape(fmt : int; name : string; d, n, np : int; cnt : array<int>) {   // nolint:STYLE038 — one linear measurement sweep
+    let ne = length(cnt)
+    let unit = kq_sb(fmt) ? 256 : 32
+    let plane_blk = d * (n / unit)
+    let totblk = ne * plane_blk
+    let bb = arena_block_bytes(fmt)
+    let wq_words = int(bb.wq / 4l)
+    var nk = 0
+    for (c in cnt) {
+        nk += c
+    }
+    let xrows = nk + READ_SLACK
+    let frows = np > 0 ? np : nk   // the feed's rows
+    var wqh, wsuh, xfh, tokh : array<uint>
+    var xwh : array<float>
+    wqh |> reserve(totblk * wq_words)
+    wqh |> resize(totblk * wq_words)
+    for (i in range(totblk * wq_words)) {
+        wqh[i] = hash_word(uint(i) + 29u)
+    }
+    if (bb.ws < 4l) {
+        wsuh |> reserve(totblk / 2 + 1)
+        wsuh |> resize(totblk / 2 + 1)
+        for (i in range(totblk / 2 + 1)) {
+            wsuh[i] = cool_f16_pair(uint(i) + 7u)
+        }
+    } else {
+        let ws_words = int(bb.ws / 4l)
+        wsuh |> reserve(totblk * ws_words)
+        wsuh |> resize(totblk * ws_words)
+        for (sb in range(totblk)) {
+            for (wi in range(ws_words)) {
+                wsuh[sb * ws_words + wi] = scale_row_word(fmt, sb, wi, ws_words)
+            }
+        }
+    }
+    tokh |> resize(nk)
+    for (b in range(nk)) {
+        tokh[b] = uint(np > 0 ? (b * 7 + 3) % np : b)
+    }
+    xfh |> reserve(xrows * n / 2)
+    xfh |> resize(xrows * n / 2)
+    for (b in range(nk)) {   // the half 0x2c00 + m: 2^-4 x (1 + m / 1024), exact as f32
+        let src = int(tokh[b]) * n
+        for (j in range(n / 2)) {
+            let h0 = 0x2c00u + uint(((src + j * 2) * 3 + 5) % 64)
+            let h1 = 0x2c00u + uint(((src + j * 2 + 1) * 3 + 5) % 64)
+            xfh[b * (n / 2) + j] = h0 | (h1 << 16u)
+        }
+    }
+    if (np > 0) {
+        xwh |> reserve(np * n)
+        xwh |> resize(np * n)
+        for (i in range(np * n)) {
+            xwh[i] = 0.0625 * (1.0 + float((i * 3 + 5) % 64) / 1024.0)
+        }
+    }
+    let wtiles = (d + 127) / 128
+    let map_off = ne * 4
+    let bound_m = (nk / M_ROWS + ne) * wtiles
+    let bound_s = ne * wtiles
+    var live_m = 0
+    var live_s = 0
+    var words_m <- moe_sched_words(cnt, plane_blk, wtiles, M_ROWS, bound_m, MoeSchedForm.ladder_m, live_m)
+    var words_s <- moe_sched_words(cnt, plane_blk, wtiles, S_ROWS, bound_s, MoeSchedForm.ladder_s, live_s)
+    let wq_bytes = int64(totblk) * bb.wq
+    let ws_bytes = long_length(wsuh) * 4l
+    let xf_bytes = int64(xrows * n) * 2l
+    let xw_bytes = int64(max(np, 1)) * int64(n) * 4l
+    let xq_bytes = int64(frows * n)
+    let xs_bytes = int64(frows * (n / 32)) * 8l
+    let tok_bytes = int64(nk) * 4l
+    let m_bytes = long_length(words_m) * 4l
+    let s_bytes = long_length(words_s) * 4l
+    let y_bytes = int64(nk * d) * 4l
+    let wqd = make_device_buf(wq_bytes)
+    let wsd = make_device_buf(ws_bytes)
+    let xfd = make_device_buf(xf_bytes)
+    let xwd = make_device_buf(xw_bytes)
+    let xqd = make_device_buf(xq_bytes)
+    let xsd = make_device_buf(xs_bytes)
+    let tokd = make_device_buf(tok_bytes)
+    let md = make_device_buf(m_bytes)
+    let sd = make_device_buf(s_bytes)
+    let yf_a = make_device_buf(y_bytes)
+    let yf_b = make_device_buf(y_bytes)
+    let yi_a = make_device_buf(y_bytes)
+    let yi_b = make_device_buf(y_bytes)
+    let flop = 2.0lf * double(nk) * double(d) * double(n)
+    unsafe {
+        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
+        upload_region_at(wsd, 0l, addr<uint8 const?>(wsuh[0]), ws_bytes)
+        upload_region_at(xfd, 0l, addr<uint8 const?>(xfh[0]), xf_bytes)
+        if (np > 0) {
+            upload_region_at(xwd, 0l, addr<uint8 const?>(xwh[0]), xw_bytes)
+        }
+        upload_region_at(tokd, 0l, addr<uint8 const?>(tokh[0]), tok_bytes)
+        upload_region_at(md, 0l, addr<uint8 const?>(words_m[0]), m_bytes)
+        upload_region_at(sd, 0l, addr<uint8 const?>(words_s[0]), s_bytes)
+    }
+    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(map_off))
+    let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
+    var fm_a = cm2_cls_set(fmt, CM2_TC_E, fixed_array(wqd, wsd, md, xfd, yf_a), fixed_array(wq_bytes, ws_bytes, m_bytes, xf_bytes, y_bytes), gbits)
+    var fm_b = cm2_cls_set(fmt, CM2_TC_E, fixed_array(wqd, wsd, md, xfd, yf_b), fixed_array(wq_bytes, ws_bytes, m_bytes, xf_bytes, y_bytes), gbits)
+    var fs_a = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, sd, xfd, yf_a), fixed_array(wq_bytes, ws_bytes, s_bytes, xf_bytes, y_bytes), gbits)
+    var fs_b = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, sd, xfd, yf_b), fixed_array(wq_bytes, ws_bytes, s_bytes, xf_bytes, y_bytes), gbits)
+    let ibits = fixed_array(1u, 2u, 0u, 4u, 8u, 16u, 32u)
+    var im_a = mmq_cls_set(fmt, false, fixed_array(wqd, wsd, md, xqd, xsd, yi_a, tokd), fixed_array(wq_bytes, ws_bytes, m_bytes, xq_bytes, xs_bytes, y_bytes, tok_bytes), ibits)
+    var im_b = mmq_cls_set(fmt, false, fixed_array(wqd, wsd, md, xqd, xsd, yi_b, tokd), fixed_array(wq_bytes, ws_bytes, m_bytes, xq_bytes, xs_bytes, y_bytes, tok_bytes), ibits)
+    var is_a = mmq_cls_set(fmt, true, fixed_array(wqd, wsd, sd, xqd, xsd, yi_a, tokd), fixed_array(wq_bytes, ws_bytes, s_bytes, xq_bytes, xs_bytes, y_bytes, tok_bytes), ibits)
+    var is_b = mmq_cls_set(fmt, true, fixed_array(wqd, wsd, sd, xqd, xsd, yi_b, tokd), fixed_array(wq_bytes, ws_bytes, s_bytes, xq_bytes, xs_bytes, y_bytes, tok_bytes), ibits)
+    var pcf = MmqFeedArgs(n = uint(n), rows = uint(frows))
+    let feed_wgs = int64((frows * (n / 32) + 255) / 256)
+    var feed_us = 0.0lf
+    if (np > 0) {
+        var feed = set_mmq_feed_cls(fixed_array(xwd, xqd, xsd), fixed_array(xw_bytes, xq_bytes, xs_bytes), fixed_array(1u, 2u, 4u))
+        feed_us = timed_chain(1) $(rawf; var hzf) {
+            enc_mmq_feed_cls(rawf, hzf, feed, pcf, feed_wgs)
+        }
+    } else {
+        var feed16 = set_mmq_feed16_cls(fixed_array(xfd, xqd, xsd), fixed_array(xf_bytes, xq_bytes, xs_bytes), fixed_array(1u, 2u, 4u))
+        feed_us = timed_chain(1) $(rawf; var hzf) {
+            enc_mmq_feed16_cls(rawf, hzf, feed16, pcf, feed_wgs)
+        }
+    }
+    print("{name} feed: {frows} rows of {n} to int8  {feed_us / 1000.0lf} ms  timing-only\n")
+    for (rep in range(2)) {
+        let us_f = timed_chain() $(raw; var _h) {
+            for (k in range(DISPATCHES)) {
+                var hz_m, hz_s : VkHaz
+                cm2_cls_enc(fmt, CM2_TC_E, raw, hz_m, k % 2 == 0 ? fm_a : fm_b, pc, int64(bound_m))
+                if (live_s > 0) {
+                    cm2_cls_enc(fmt, 32l, raw, hz_s, k % 2 == 0 ? fs_a : fs_b, pc, int64(bound_s))
+                }
+            }
+        }
+        let us_i = timed_chain() $(raw2; var _h) {
+            for (k in range(DISPATCHES)) {
+                var hz_m, hz_s : VkHaz
+                mmq_cls_enc(fmt, false, raw2, hz_m, k % 2 == 0 ? im_a : im_b, pc, int64(bound_m))
+                if (live_s > 0) {
+                    mmq_cls_enc(fmt, true, raw2, hz_s, k % 2 == 0 ? is_a : is_b, pc, int64(bound_s))
+                }
+            }
+        }
+        print("{name} rep {rep}: khr f16 {us_f / 1000.0lf} ms ({flop / (us_f * 1000000.0lf)} TFLOP/s)   int8 mmq {us_i / 1000.0lf} ms ({flop / (us_i * 1000000.0lf)} TFLOP/s)   wgs {bound_m}+{bound_s} ({live_m}+{live_s} live)\n")
+    }
+    if (live_s > 0) {   // the two columns apart, each arm's
+        let fm = timed_chain() $(raw; var _h) {
+            for (k in range(DISPATCHES)) {
+                var hz : VkHaz
+                cm2_cls_enc(fmt, CM2_TC_E, raw, hz, k % 2 == 0 ? fm_a : fm_b, pc, int64(bound_m))
+            }
+        }
+        let fs = timed_chain() $(raw; var _h) {
+            for (k in range(DISPATCHES)) {
+                var hz : VkHaz
+                cm2_cls_enc(fmt, 32l, raw, hz, k % 2 == 0 ? fs_a : fs_b, pc, int64(bound_s))
+            }
+        }
+        let im = timed_chain() $(raw; var _h) {
+            for (k in range(DISPATCHES)) {
+                var hz : VkHaz
+                mmq_cls_enc(fmt, false, raw, hz, k % 2 == 0 ? im_a : im_b, pc, int64(bound_m))
+            }
+        }
+        let iss = timed_chain() $(raw; var _h) {
+            for (k in range(DISPATCHES)) {
+                var hz : VkHaz
+                mmq_cls_enc(fmt, true, raw, hz, k % 2 == 0 ? is_a : is_b, pc, int64(bound_s))
+            }
+        }
+        print("{name} columns apart: m khr f16 {fm / 1000.0lf} ms, int8 {im / 1000.0lf} ms;  s khr f16 {fs / 1000.0lf} ms, int8 {iss / 1000.0lf} ms\n")
+    }
+    {   // the compared outputs are one whole pass of each arm
+        var raw_f = alloc_cmd()
+        record_cmd(raw_f, false) $(raw; var _h) {
+            var hz_m, hz_s : VkHaz
+            cm2_cls_enc(fmt, CM2_TC_E, raw, hz_m, fm_b, pc, int64(bound_m))
+            mmq_cls_enc(fmt, false, raw, hz_m, im_b, pc, int64(bound_m))
+            if (live_s > 0) {
+                cm2_cls_enc(fmt, 32l, raw, hz_s, fs_b, pc, int64(bound_s))
+                mmq_cls_enc(fmt, true, raw, hz_s, is_b, pc, int64(bound_s))
+            }
+        }
+        submit_wait(raw_f)
+    }
+    var y_f <- moeq_readback(yf_b, y_bytes)
+    var y_i <- moeq_readback(yi_b, y_bytes)
+    print("{name} int8 mmq vs khr f16: max rel diff {max_rel_diff(y_i, y_f):.5f} over {nk} x {d} outputs\n")
+    moeq_feed_check(name, xqd, xsd, xq_bytes, xs_bytes, n)
+    if (fmt == int(KqFmt.q8)) {
+        moeq_host_ref(name, wqh, wsuh, tokh, y_f, y_i, d, n, nk)
+    }
+    delete y_f
+    delete y_i
+    delete wqh
+    delete wsuh
+    delete xfh
+    delete xwh
+    delete tokh
+    delete words_m
+    delete words_s
+}
+
 [arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
 //! `cnt`: the bucket rows an expert, every expert of the layer; `profile` names the row; a per-32 format (its one cm2 stamp
 //! the s column) runs the whole-bucket form alone
@@ -3620,7 +4016,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     var only = ""
     var cm2_fmt = -1
     for (a in get_command_line_arguments()) {
-        if (a == "plef32" || a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "gemma" || a == "wh" || a == "splitk" || a == "khrsk" || a == "q8i8" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
+        if (a == "plef32" || a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "gemma" || a == "wh" || a == "splitk" || a == "khrsk" || a == "moeq" || a == "mmqd" || a == "mmqlay" || a == "mmqsg" || a == "q8i8" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
             only = a
         } elif (fmt_arm_of(a) != "") {
             only = fmt_arm_of(a)
@@ -4010,6 +4406,45 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             for (rows in [16, 32]) {
                 run_shape("r{round} gate@{rows}", 17408, 5120, rows, false, true)
                 run_shape("r{round} down@{rows}", 5120, 17408, rows, false, true)
+            }
+        }
+        return
+    }
+    if (only == "mmqsg") {
+        run_mmq_sg()
+        return
+    }
+    if (only == "mmqlay") {
+        run_mmq_layout()
+        return
+    }
+    if (only == "moeq" || only == "mmqd") {
+        if (g_gpu.coopmat_mode != COOPMAT_MM) {
+            print("{only} reads the KHR arm - run with DASLLAMA_COOPMAT=mm\n")
+            g_probe_exit = 1
+            return
+        }
+        let k4 = int(KqFmt.k4)
+        let k5 = int(KqFmt.k5)
+        let q8 = int(KqFmt.q8)
+        for (f in fixed_array(k4, k5, int(KqFmt.k6), q8)) {
+            verify(cm2_cls_ensure(f, 32l) && cm2_cls_ensure(f, CM2_TC_E) && mmq_cls_ensure(f, false) && mmq_cls_ensure(f, true), "the int8 probe cells' pipelines must engage")
+        }
+        verify(ensure_mmq_feed_cls() && ensure_mmq_feed16_cls(), "the int8 probe cells' feeds must engage")
+        for (round in range(2)) {
+            if (only == "moeq") {   // the 35B's routed block: gate / up Q4_K over the window's rows, down Q5_K and Q6_K over the hidden rows
+                var cnt <- moe35_bucket_counts()
+                run_moeq_shape(k4, "r{round} 35B gate/up k4", 512, 2048, 512, cnt)
+                run_moeq_shape(k5, "r{round} 35B down k5   ", 2048, 512, 0, cnt)
+                run_moeq_shape(int(KqFmt.k6), "r{round} 35B down k6   ", 2048, 512, 0, cnt)
+                delete cnt
+            } else {   //! its dense Q8_0 sites at a 512-row window: the recurrent qkv, z and out planes, an attention q
+                var one <- [512]
+                for (shape in fixed_array((name = "qkv 8192x2048", d = 8192, n = 2048), (name = "z   4096x2048", d = 4096, n = 2048),
+                        (name = "out 2048x4096", d = 2048, n = 4096), (name = "q   2048x2048", d = 2048, n = 2048))) {
+                    run_moeq_shape(q8, "r{round} q8 {shape.name}", shape.d, shape.n, 0, one)
+                }
+                delete one
             }
         }
         return

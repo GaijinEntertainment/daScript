@@ -6,12 +6,12 @@ options _dasllama_internal = true
 //! codec's) over a synthetic llama-shaped layer, timed per layer across the key-split ladder, so
 //! a kernel change reads as a number before a model runs it.
 //!
-//!   bin/daslang -jit modules/dasLLAMA/harness/vk_attn_probe.das -- [rows] [cnt] [hs] [nheads] [kv_mul] [slab] [f16 | q8_0 | tq4]
+//!   bin/daslang -jit modules/dasLLAMA/harness/vk_attn_probe.das -- [rows] [cnt] [hs] [nheads] [kv_mul] [slab] [f16 | q8_0 | tq4] [shared] [tile]
 //!
 //! Defaults: 4 rows, 640 positions, head 64, 32 heads, 4 heads a kv head (Llama-3.2-1B after
 //! pp512 and tg128), the slab the token command picks at that group width (`da_slab_heads`: two
 //! on a group of one or two heads, else four); `slab` 2 or 4 pins a stamp, so the two race in one
-//! process. Each row attends its own mirror region. Every split of the ladder records
+//! process. Each row attends its own mirror region (a batch of streams); `shared` points every row at row 0's (a verify's rows); `tile` times the flash tile's decode form with the combine-only dispatch over such rows (heads of 512 and 256). Every split of the ladder records
 //! DISPATCHES layers chained through their outputs, and
 //! the device clock over SUBMITS submits after a warm-up is the layer's cost.
 
@@ -44,7 +44,7 @@ def private cool_block_bytes(nblocks, blk : int) : array<uint8> {
 }
 
 //! one split's layer cost in microseconds on the `slab`-head stamp over a mirror in codec `dt`
-def private time_split(rows, cnt, hs, nheads, kv_mul, nsplit, slab : int; dt : KVDtype) : double {
+def private time_split(rows, cnt, hs, nheads, kv_mul, nsplit, slab : int; dt : KVDtype; one_region : bool) : double {
     let kvd = nheads / kv_mul * hs
     let qd = nheads * hs
     let q_bytes = int64(qd) * int64(rows) * 4l
@@ -64,6 +64,8 @@ def private time_split(rows, cnt, hs, nheads, kv_mul, nsplit, slab : int; dt : K
     var inscope kb <- blk > 0 ? cool_block_bytes(mir_units * rows, blk) : array<uint8>()
     var inscope vb <- blk > 0 ? cool_block_bytes(mir_units * rows, blk) : array<uint8>()
     if (blk == 0) {
+        kw |> reserve(mir_elems * rows / 2)
+        vw |> reserve(mir_elems * rows / 2)
         kw |> resize(mir_elems * rows / 2)
         vw |> resize(mir_elems * rows / 2)
         for (i in range(mir_elems * rows / 2)) {
@@ -95,7 +97,7 @@ def private time_split(rows, cnt, hs, nheads, kv_mul, nsplit, slab : int; dt : K
             tm[r].pos = uint(cnt - 1)
             tm[r].cnt = uint(cnt)
             tm[r].parity = 0u
-            tm[r].mirbase = uint(r * mir_units)
+            tm[r].mirbase = one_region ? 0u : uint(r * mir_units)
         }
         let dslab = slab == 2 ? DaSlab.two : DaSlab.four
         var sc = da_attn_stamp_set(dt, dslab, fixed_array(qdev, kd, vd, yd, tokb.buf, partd, aqd, asd, asd),
@@ -119,6 +121,89 @@ def private time_split(rows, cnt, hs, nheads, kv_mul, nsplit, slab : int; dt : K
     return pfq_avg_us(raw, SUBMITS, DISPATCHES)
 }
 
+//! one piece count's layer cost in microseconds on the flash tile's decode form followed by the combine-only dispatch: `rows` rows
+//! of one region at consecutive counts up to `cnt`, an f16 mirror, heads of 512 or 256
+def private time_tile(rows, cnt, hs, nheads, kv_mul, nsplit : int) : double {
+    let kvd = nheads / kv_mul * hs
+    let qd = nheads * hs
+    let q_bytes = int64(qd) * int64(rows) * 4l
+    let mir_elems = (cnt + 64) * kvd   // a step of rows past the last key: the tile loads sixteen rows at a time
+    let m_bytes = int64(mir_elems) * 2l
+    let part_floats = nheads * nsplit * (hs + 2) * rows
+    let rowgroups = da_attn_row_wgs(int64(nheads), int64(kv_mul), 1l)
+    let p_bytes = (int64(part_floats) + rowgroups * int64(rows)) * 4l
+    let s_bytes = int64(qd / 32 * rows) * 4l
+    var qh : array<float>
+    qh |> resize(qd * rows)
+    for (i in range(qd * rows)) {
+        qh[i] = hash_unit(uint(i))
+    }
+    var kw, vw : array<uint>
+    kw |> reserve(mir_elems / 2)
+    vw |> reserve(mir_elems / 2)
+    kw |> resize(mir_elems / 2)
+    vw |> resize(mir_elems / 2)
+    for (i in range(mir_elems / 2)) {
+        kw[i] = cool_f16_pair(uint(i))
+        vw[i] = cool_f16_pair(uint(i) + 7919u)
+    }
+    let qdev = make_device_buf(q_bytes)
+    let kd = make_device_buf(m_bytes)
+    let vd = make_device_buf(m_bytes)
+    let yd = make_device_buf(q_bytes)
+    let partd = make_device_buf(p_bytes)
+    let aqd = make_device_buf(int64(qd * rows))
+    let asd = make_device_buf(s_bytes)
+    var tokb = make_host_buf(TOK_META_BYTES * int64(rows), true)
+    var raw = alloc_cmd()
+    unsafe {
+        upload_region_at(qdev, 0l, addr<uint8 const?>(qh[0]), q_bytes)
+        upload_region_at(kd, 0l, addr<uint8 const?>(kw[0]), m_bytes)
+        upload_region_at(vd, 0l, addr<uint8 const?>(vw[0]), m_bytes)
+        upload_zeros(partd, int64(part_floats) * 4l, rowgroups * int64(rows) * 4l)
+        var tm = reinterpret<TokMeta?>(tokb.mapped)
+        for (r in range(rows)) {
+            tm[r].pos = uint(cnt - rows + r)
+            tm[r].cnt = uint(cnt - rows + r + 1)
+            tm[r].parity = 0u
+            tm[r].mirbase = 0u
+        }
+        let dslab = kv_mul <= 2 ? DaSlab.two : DaSlab.four
+        var st = set_fa_khr_dec_cls(fixed_array(qdev, kd, vd, partd, tokb.buf),
+            fixed_array(q_bytes, m_bytes, m_bytes, p_bytes, TOK_META_BYTES * int64(rows)), fixed_array(1u, 2u, 4u, 32u, 0u))
+        var sc = da_attn_stamp_set(KVDtype.f16, dslab, fixed_array(qdev, kd, vd, yd, tokb.buf, partd, aqd, asd, asd),
+            fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES * int64(rows), p_bytes, int64(qd * rows), s_bytes, s_bytes),
+            fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 64u, 64u, 64u))
+        let scale = 1.0 / sqrt(float(hs))
+        var pt = FaArgs(rows = uint(rows), qd = uint(qd), kvd = uint(kvd), kv_mul = uint(kv_mul), scale = scale, qstride = uint(qd),
+            qhs = uint(hs), nsplit = uint(nsplit))
+        var pc = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale,
+            qstride = uint(hs), nsplit = uint(nsplit), rqk = DA_RQ_Q8, rowwg = uint(rowgroups), qrow = uint(qd),
+            cntoff = uint(part_floats), comb = 1u)
+        let tile_wgs = tile_row_wgs(rows, nheads, kv_mul, nsplit)
+        record_cmd(raw, false) $(r; var h) {
+            pfq_arm(r)
+            pfq_ts(r)
+            for (_i in range(DISPATCHES)) {
+                if (hs == 512) {
+                    enc_fa_khr_dec_h512_cls(r, h, st, pt, tile_wgs)
+                } else {
+                    enc_fa_khr_dec_h256_cls(r, h, st, pt, tile_wgs)
+                }
+                da_attn_stamp_enc(KVDtype.f16, dslab, r, h, sc, pc, rowgroups * int64(rows))
+                vhz_dep(r, h, 16u | 32u | 64u, 0u, true)   //! the next layer waits on this one's row
+                pfq_ts(r)
+            }
+            pfq_end(r)
+        }
+    }
+    return pfq_avg_us(raw, SUBMITS, DISPATCHES)
+}
+
+//! the tile form's workgroups a dispatch: a (kv head, 16-pair q tile, key piece) each
+def private tile_row_wgs(rows, nheads, kv_mul, nsplit : int) : int64
+    => fa_dec_groups(int64(nheads / kv_mul), int64(rows), int64(kv_mul)) * int64(nsplit)
+
 [export]
 def main : int {
     let args <- get_command_line_arguments()
@@ -130,7 +215,11 @@ def main : int {
     let kv_mul = length(nums) > 4 ? nums[4] : 4
     let slab = length(nums) > 5 ? nums[5] : int(da_slab_heads(int64(kv_mul)))
     var dt = KVDtype.f16
+    var one_region = false
+    var tile = false
     for (a in args) {
+        one_region = one_region || a == "shared"
+        tile = tile || a == "tile"
         if (a == "q8_0") {
             dt = KVDtype.q8_0
         } elif (a == "tq4") {
@@ -150,11 +239,18 @@ def main : int {
         return 1
     }
     print("vk_attn_probe: decode attention ({dt} mirror, the {slab}-head slab) at {rows} rows x {cnt} positions, head {hs}, {nheads} heads, {kv_mul} a kv head, {g_gpu.sm_count} SMs; {DISPATCHES} layers x {SUBMITS} submits after a warm-up\n")
+    if (tile && !((hs == 512 || hs == 256) && khr_kq_tile_on() && ensure_fa_khr_dec_h512_cls() && ensure_fa_khr_dec_h256_cls())) {
+        print("vk_attn_probe: the tile form serves heads of 512 and 256 on a device with KHR cooperative matrices\n")
+        return 1
+    }
+    if (tile) {
+        print("the flash tile's decode form + the combine-only dispatch, the rows over one region; wgs is the dispatch's\n")
+    }
     print("| split | wgs/row |  us/layer |\n")
     print("| ----: | ------: | --------: |\n")
-    for (nsplit in [1, 2, 3, 4, 6, 8, 12, 16]) {
-        let wgs = da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit))
-        let us = time_split(rows, cnt, hs, nheads, kv_mul, nsplit, slab, dt)
+    for (nsplit in [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 40, 48, 64]) {
+        let wgs = tile ? tile_row_wgs(rows, nheads, kv_mul, nsplit) : da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit))
+        let us = tile ? time_tile(rows, cnt, hs, nheads, kv_mul, nsplit) : time_split(rows, cnt, hs, nheads, kv_mul, nsplit, slab, dt, one_region)
         print("| {nsplit:5d} | {wgs:7d} | {us:9.1f} |\n")
     }
     return 0

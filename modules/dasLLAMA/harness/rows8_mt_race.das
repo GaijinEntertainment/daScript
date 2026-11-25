@@ -744,6 +744,9 @@ def private race_variants() : array<Variant> {
                Variant(name = "q8_rows8_i8", flags = "#define Q8_LT int8_t\n#define Q8_I8 1\n", entry_q8 = "q8_rows8_32"),
                Variant(name = "q8_rows8_h32", flags = "#define Q8_LT half\n#define Q8_HALF 1\n", entry_q8 = "q8_rows8_32"),
                Variant(name = "q8_rows8_bd", entry_q8 = "q8_rows8_bd", tab = XTable.bd),
+               mma_variant(2, 8), mma_variant(2, 16), mma_variant(4, 8), mma_variant(4, 16),
+               Variant(name = "q8 mma nt2 nsg8 nopipe", flags = "#define MMA_NT 2\n#define MMA_NSG 8\n#define MMA_NOPIPE 1\n", entry_q8 = "q8_rows8_mma", tab = XTable.natural, rs = 1, ks = 8),
+               Variant(name = "q8 mma nt2 nsg4", flags = "#define MMA_NT 2\n#define MMA_NSG 4\n", entry_q8 = "q8_rows8_mma", tab = XTable.natural, rs = 1, ks = 4),
                tg_variant(1, 2, false), tg_variant(1, 4, false), tg_variant(1, 8, false), tg_variant(1, 16, false),
                tg_variant(2, 4, false), tg_variant(2, 8, false), tg_variant(4, 2, false), tg_variant(4, 4, false),
                tg_variant(1, 4, true), tg_variant(1, 8, true), tg_variant(2, 4, true), tg_variant(4, 4, true),
@@ -760,6 +763,14 @@ def private iq4_variant(lut, blk : int; ks : int = 8) : Variant {
                    entry_iq4 = "iq4_rows8_tg", tab = XTable.natural, rs = 1, ks = ks)
 }
 
+//! the q8 block kernel on 8x8 simdgroup matrices: `nt` tiles of 8 weight rows a simdgroup (16 `rs` rows a threadgroup), `nsg`
+//! simdgroups splitting K between them
+def private mma_variant(nt, nsg : int) : Variant {
+    let rs = nt / 2
+    return Variant(name = "q8 mma nt{nt} nsg{nsg}", flags = "#define MMA_NT {nt}\n#define MMA_NSG {nsg}\n", entry_q8 = "q8_rows8_mma",
+                   tab = XTable.natural, rs = rs, ks = nsg / rs)
+}
+
 //! an in-threadgroup split arm: `rs` row tiles and `ks` K slices a threadgroup, the slices contiguous or interleaved (`il`)
 def private tg_variant(rs, ks : int; il : bool) : Variant {
     let flags = "#define TG_RS {rs}\n#define TG_KS {ks}\n{il ? "#define TG_IL 1\n" : ""}"
@@ -773,6 +784,10 @@ def private race_shapes() : array<Shape> {
                Shape(tag = "ffn down k4", fmt = Fmt.k4, n = 17408l, d = 5120l, ways = fixed_array<int64>(8l, 16l, 34l), one_row_us = 88.0lf),
                Shape(tag = "dn qkv q8", fmt = Fmt.q8, n = 5120l, d = 10240l, ways = fixed_array<int64>(8l, 16l, 0l), one_row_us = 94.3lf),
                Shape(tag = "attn wo k6", fmt = Fmt.k6, n = 5120l, d = 6144l, ways = fixed_array<int64>(5l, 20l, 10l), one_row_us = 0.0lf),
+               Shape(tag = "e2b gate/up q8", fmt = Fmt.q8, n = 1536l, d = 6144l, ways = fixed_array<int64>(1l, 2l, 1l), one_row_us = 0.0lf),
+               Shape(tag = "e2b down q8", fmt = Fmt.q8, n = 6144l, d = 1536l, ways = fixed_array<int64>(1l, 2l, 1l), one_row_us = 0.0lf),
+               Shape(tag = "e2b wq q8", fmt = Fmt.q8, n = 1536l, d = 4096l, ways = fixed_array<int64>(1l, 2l, 1l), one_row_us = 0.0lf),
+               Shape(tag = "e2b head q8", fmt = Fmt.q8, n = 1536l, d = 262144l, ways = fixed_array<int64>(1l, 2l, 1l), one_row_us = 0.0lf),
                Shape(tag = "classifier k6", fmt = Fmt.k6, n = 5120l, d = 248320l, ways = fixed_array<int64>(1l, 4l, 2l), one_row_us = 0.0lf),
                Shape(tag = "mlx ffn gate/up", fmt = Fmt.mlx4b, n = 5120l, d = 17408l, ways = fixed_array<int64>(4l, 16l, 8l), one_row_us = 0.0lf),
                Shape(tag = "mlx ffn down", fmt = Fmt.mlx4b, n = 17408l, d = 5120l, ways = fixed_array<int64>(17l, 68l, 34l), one_row_us = 0.0lf),

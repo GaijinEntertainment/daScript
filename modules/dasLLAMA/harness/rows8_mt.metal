@@ -1936,3 +1936,136 @@ kernel void iq4_gemv1(device const uint4* sc [[buffer(0)]], device const uint* q
         }
     }
 }
+
+// q8_0 on the 8x8 simdgroup matrix, a block a product chain: a simdgroup holds MMA_NT tiles of 8 weight rows against the 8
+// tokens, and the threadgroup's MMA_NSG simdgroups each take every MMA_NSG-th 32-block of the way's range, so a threadgroup
+// reads each weight byte once for all eight tokens. A lane holds A elements (row fm, columns fn and fn + 1) and B elements
+// (row fm, columns fn and fn + 1): its 8 code bytes 4 fn .. 4 fn + 7 of the block enter as the halves 1024 + (q + 128) filled
+// from registers (no staging), the x halves off the natural table [token][K] at k 8 (fm / 2) + 2 (fm % 2) + {0, 1, 4, 5};
+// four products a block, the block's scale once after them, the next block's loads issued ahead of the products; the
+// simdgroups' tiles are summed through threadgroup memory.
+#ifndef MMA_NT
+#define MMA_NT 2
+#endif
+#ifndef MMA_NSG
+#define MMA_NSG 16
+#endif
+inline uint mma_fm(uint l) { return ((l / 4u) & 4u) + ((l / 2u) % 4u); }
+inline uint mma_fn(uint l) { return ((l / 4u) & 2u) * 2u + (l % 2u) * 2u; }
+
+kernel void q8_rows8_mma(device const uchar* blob [[buffer(0)]], device const half* T [[buffer(2)]],
+                         device float* y [[buffer(3)]], constant uint& K [[buffer(4)]], constant uint& N [[buffer(5)]], constant uint& NSK [[buffer(6)]],
+                         uint3 tgid [[threadgroup_position_in_grid]], uint sgid [[simdgroup_index_in_threadgroup]], uint lane [[thread_index_in_simdgroup]]) {
+    threadgroup float red[MMA_NSG * MMA_NT * 64];
+    const uint nkb = K / 32u;
+    const uint per = (nkb + NSK - 1u) / NSK;
+    const uint kbeg = min(tgid.z * per, nkb);
+    const uint kend = min(kbeg + per, nkb);
+    const uint fm = mma_fm(lane), fn = mma_fn(lane);
+    const uint n0 = tgid.x * (8u * MMA_NT);
+    const uint boff = 8u * (fm / 2u) + 2u * (fm % 2u);
+    const device half* x0 = T + fn * K + boff;
+    const device half* x1 = T + (fn + 1u) * K + boff;
+    const device ushort* wr[MMA_NT];
+    for (uint t = 0; t < MMA_NT; ++t) {
+        wr[t] = (const device ushort*)(blob + (min(n0 + 8u * t + fm, N - 1u) * nkb) * 34u);
+    }
+    float acc[MMA_NT][2];
+    for (uint t = 0; t < MMA_NT; ++t) {
+        acc[t][0] = 0.0f;
+        acc[t][1] = 0.0f;
+    }
+    ushort4 q[MMA_NT];
+    float d[MMA_NT];
+    half2 b0[2], b1[2];
+    uint kb = kbeg + sgid;
+    {
+        const uint kc = min(kb, nkb - 1u);
+        for (uint t = 0; t < MMA_NT; ++t) {
+            const device ushort* blk = wr[t] + kc * 17u;
+            d[t] = float(as_type<half>(blk[0]));
+            q[t] = ushort4(*(const device packed_ushort4*)(blk + 1u + 2u * fn));
+        }
+        b0[0] = half2(*(const device packed_half2*)(x0 + kc * 32u));
+        b1[0] = half2(*(const device packed_half2*)(x0 + kc * 32u + 4u));
+        b0[1] = half2(*(const device packed_half2*)(x1 + kc * 32u));
+        b1[1] = half2(*(const device packed_half2*)(x1 + kc * 32u + 4u));
+    }
+    for (; kb < kend; kb += MMA_NSG) {
+#ifdef MMA_NOPIPE
+        for (uint t = 0; t < MMA_NT; ++t) {
+            const device ushort* blk = wr[t] + kb * 17u;
+            d[t] = float(as_type<half>(blk[0]));
+            q[t] = ushort4(*(const device packed_ushort4*)(blk + 1u + 2u * fn));
+        }
+        b0[0] = half2(*(const device packed_half2*)(x0 + kb * 32u));
+        b1[0] = half2(*(const device packed_half2*)(x0 + kb * 32u + 4u));
+        b0[1] = half2(*(const device packed_half2*)(x1 + kb * 32u));
+        b1[1] = half2(*(const device packed_half2*)(x1 + kb * 32u + 4u));
+#endif
+        ushort4 qc[MMA_NT];
+        float dc[MMA_NT];
+        for (uint t = 0; t < MMA_NT; ++t) {
+            qc[t] = q[t] ^ ushort4(0x8080);
+            dc[t] = d[t];
+        }
+        const half2 b0c[2] = { b0[0], b0[1] };
+        const half2 b1c[2] = { b1[0], b1[1] };
+#ifndef MMA_NOPIPE
+        {
+            const uint kc = min(kb + MMA_NSG, nkb - 1u);
+            for (uint t = 0; t < MMA_NT; ++t) {
+                const device ushort* blk = wr[t] + kc * 17u;
+                d[t] = float(as_type<half>(blk[0]));
+                q[t] = ushort4(*(const device packed_ushort4*)(blk + 1u + 2u * fn));
+            }
+            b0[0] = half2(*(const device packed_half2*)(x0 + kc * 32u));
+            b1[0] = half2(*(const device packed_half2*)(x0 + kc * 32u + 4u));
+            b0[1] = half2(*(const device packed_half2*)(x1 + kc * 32u));
+            b1[1] = half2(*(const device packed_half2*)(x1 + kc * 32u + 4u));
+        }
+#endif
+        simdgroup_float8x8 mp[MMA_NT];
+        for (uint t = 0; t < MMA_NT; ++t) {
+            mp[t] = make_filled_simdgroup_matrix<float, 8>(0.0f);
+        }
+        for (uint s = 0; s < 4u; ++s) {
+            simdgroup_half8x8 mb;
+            const half2 v0 = s >= 2u ? b1c[0] : b0c[0];
+            const half2 v1 = s >= 2u ? b1c[1] : b0c[1];
+            mb.thread_elements()[0] = (s % 2u) != 0u ? v0.y : v0.x;
+            mb.thread_elements()[1] = (s % 2u) != 0u ? v1.y : v1.x;
+            for (uint t = 0; t < MMA_NT; ++t) {
+                const ushort2 w = s < 2u ? qc[t].xy : qc[t].zw;
+                const ushort2 qq = (s % 2u) == 0u ? w : (w >> 8);
+                const half2 h = as_type<half2>(ushort2((qq & ushort2(0x00FF)) | ushort2(0x6400))) - half2(1152.0h);
+                simdgroup_half8x8 ma;
+                ma.thread_elements()[0] = h.x;
+                ma.thread_elements()[1] = h.y;
+                simdgroup_multiply_accumulate(mp[t], ma, mb, mp[t]);
+            }
+        }
+        for (uint t = 0; t < MMA_NT; ++t) {
+            acc[t][0] = fma(dc[t], mp[t].thread_elements()[0], acc[t][0]);
+            acc[t][1] = fma(dc[t], mp[t].thread_elements()[1], acc[t][1]);
+        }
+    }
+    for (uint t = 0; t < MMA_NT; ++t) {
+        red[(sgid * MMA_NT + t) * 64u + 2u * lane] = acc[t][0];
+        red[(sgid * MMA_NT + t) * 64u + 2u * lane + 1u] = acc[t][1];
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    device float* yp = y + tgid.z * 8u * N;
+    for (uint idx = sgid * 32u + lane; idx < MMA_NT * 64u; idx += MMA_NSG * 32u) {
+        float sum = 0.0f;
+        for (uint sg = 0; sg < MMA_NSG; ++sg) {
+            sum += red[sg * (MMA_NT * 64u) + idx];
+        }
+        const uint t = idx / 64u;
+        const uint l = (idx % 64u) / 2u;
+        const uint r0 = n0 + 8u * t + mma_fm(l);
+        if (r0 < N) {
+            yp[(mma_fn(l) + (idx % 2u)) * N + r0] = sum;
+        }
+    }
+}
