@@ -5,6 +5,7 @@
 #include "ast_compile_modules.h"
 #include "ast_parse.h"
 #include "daScript/misc/job_que.h"
+#include "daScript/misc/jobserver.h"
 #include "daScript/misc/performance_time.h"
 #include "daScript/simulate/das_qsort_r.h"
 
@@ -379,6 +380,7 @@ namespace das {
             vector<std::atomic<int32_t>>    remaining;
             std::atomic<int32_t>            finished{0};
             std::atomic<int32_t>            firstSequential{INT32_MAX};
+            Jobserver                       jobserver;
 
             ModuleJobs ( const vector<ModuleInfo> & mods, const ModuleDag & d, const FileAccessPtr & acc, const CodeOfPolicies & pol,
                     ModuleGroup & libGroup )
@@ -419,6 +421,7 @@ namespace das {
                 if ( node >= firstSequential ) {
                     results[node].skipped = true;
                 } else {
+                    auto token = jobserver.acquire();
                     results[node] = compileModuleJob(modules[node], prepared[node], access, policies, initialModules, deps);
                     if ( results[node].deferred ) {
                         for ( auto seen = firstSequential.load(); node < seen && !firstSequential.compare_exchange_weak(seen, node); ) {}

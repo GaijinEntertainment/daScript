@@ -713,7 +713,8 @@ def document_module_jobque(_root : string) {
         group_by_regex("Internal invocations", mod, %regex~(new_job_invoke|new_thread_invoke|new_thread_loop_invoke|is_thread_loop_capture|new_debugger_thread|set_jobque_fork_pool|get_jobque_fork_pool|get_jobque_fork_skip_init|set_jobque_fork_skip_heap_reset|set_jobque_worker_spin|set_jobque_batch_dispatch|set_jobque_join_spin|set_jobque_team_mode|get_jobque_team_mode|set_jobque_thread_team_mode|get_jobque_thread_team_mode|set_current_thread_priority|get_current_processor|set_current_thread_affinity|set_jobque_threads_cap|set_jobque_threads|get_jobque_threads|set_jobque_affinity|get_jobque_affinity|set_jobque_worker_limit|get_jobque_worker_limit|set_jobque_team_rank_gate|get_jobque_team_rank_gate|set_jobque_team_prof|reset_jobque_team_prof|get_jobque_team_prof|get_jobque_team_prof_counts|get_jobque_team_prof_react|team_parallel_for_invoke|team_parallel_for_indexed_invoke|team_parallel_stages_invoke|flush_jobque_batch|jobque_try_run_one|_builtin_seq_box_publish|_builtin_seq_box_read)$%%),
         group_by_regex("Construction", mod, %regex~(with_channel|with_stream|with_job_status|with_job_que|with_lock_box|with_seq_box|create_job_que|destroy_job_que)$%%),
         group_by_regex("SeqBox operations", mod, %regex~(clear)$%%),
-        group_by_regex("Atomic", mod, %regex~(atomic32_create|atomic32_remove|with_atomic32|atomic64_create|atomic64_remove|with_atomic64|get|set|inc|dec)$%%)
+        group_by_regex("Atomic", mod, %regex~(atomic32_create|atomic32_remove|with_atomic32|atomic64_create|atomic64_remove|with_atomic64|get|set|inc|dec)$%%),
+        group_by_regex("Jobserver", mod, %regex~(with_jobserver|with_jobserver_token)$%%)
     )
     document("Jobs and threads", mod, "jobque.rst", groups)
 }

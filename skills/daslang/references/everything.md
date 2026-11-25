@@ -4686,6 +4686,7 @@ The JOBQUE module provides low-level job queue and threading primitives. It incl
 - `Stream` - FIFO pipe of opaque byte buffers shared between contexts and threads.
 - `SeqBox.hasValue` - Returns true when a snapshot has been published and not since cleared.
 - `SeqBox` - Wait-free snapshot box.
+- `Jobserver` - The GNU make jobserver pool of a `with_jobserver` block.
 - `Atomic64` - Atomic 64 bit integer.
 - `Atomic32` - Atomic 32 bit integer.
 - `JobStatus.isReady` - Whether the job has completed execution.
@@ -4804,6 +4805,11 @@ The JOBQUE module provides low-level job queue and threading primitives. It incl
 - `set` - Sets the atomic integer to the specified value.
 - `with_atomic32` - Creates an `Atomic32` scoped to the given block and automatically destroys it afterward.
 - `with_atomic64` - Creates an `Atomic64` scoped to the given block and automatically destroys it afterward.
+
+### Jobserver
+
+- `with_jobserver` - Opens the GNU make jobserver pool the build advertises in `MAKEFLAGS` and runs the block with it inside a job queue, as `with_job_que` does; at most `limit` tokens are held at once when `limit` is positive, the process's own free token included.
+- `with_jobserver_token` - Runs the block while holding one token of the jobserver, waiting until one is free; the token goes back when the block ends.
 
 ## algorithm
 

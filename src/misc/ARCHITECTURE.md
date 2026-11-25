@@ -13,6 +13,8 @@
 - `network.cpp` - the single-client TCP `Server` the DAP debugger and `daslib/network` sit on,
   the `Client` end beside it, `probe_local_port`, and the two helpers every socket error passes
   through.
+- `jobserver.cpp` - the GNU make jobserver client a compile's extra threads take their tokens
+  from (`ARCHITECTURE_JOBSERVER.md`).
 - `dep_recorder.cpp` - what a run read, for a build system deciding whether a check has to run
   at all; armed by `DAS_DEPFILE` / `-MD`, silent otherwise.
 - `alloc_tracker.cpp` - the RelWithDebInfo C++ heap leak tracker: the live-allocation map, the

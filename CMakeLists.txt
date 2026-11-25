@@ -1063,6 +1063,7 @@ include/daScript/misc/uric.h
 include/daScript/misc/lexer_alloc_track.h
 include/daScript/misc/env_cfg.h
 include/daScript/misc/dep_recorder.h
+include/daScript/misc/jobserver.h
 src/misc/env_cfg.cpp
 src/misc/das_common.cpp
 src/misc/gc_node.cpp
@@ -1073,6 +1074,7 @@ src/misc/string_writer.cpp
 src/misc/luau_float2string.cpp
 src/misc/memory_model.cpp
 src/misc/job_que.cpp
+src/misc/jobserver.cpp
 src/misc/handle_registry.cpp
 src/misc/free_list.cpp
 src/misc/alloc_tracker.cpp
