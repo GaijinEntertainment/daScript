@@ -1,0 +1,8 @@
+options gen2
+
+include policy_modules.das_project
+
+//! a project for uncategorized.das: names a policy that is not one
+
+[export]
+def project_policies() : string => "no_such_policy"

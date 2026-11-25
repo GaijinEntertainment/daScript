@@ -342,6 +342,7 @@ namespace das {
                 ss << "\n";
             }
             if ( fn->tempStringResult ) { ss << "// [temp_string_result]\n"; }
+            if ( fn->noCaptureString ) { ss << "// [no_capture_string]\n"; }
             if ( fn->fastCall ) { ss << "[fastcall]\n"; }
             // if ( fn->addr ) { ss << "[addr]\n"; }
             if ( fn->exports ) { ss << "[export]\n"; }

@@ -131,6 +131,14 @@ static int64_t startupRunUsec = 0;
 static bool buildingDocumentation = false;
 
 static vector<string> dllSearchPaths;
+static vector<string> policyOverrides;
+
+static bool set_project_and_command_line_policies ( CodeOfPolicies & policies, const FileAccessPtr & access ) {
+    string error;
+    if ( setProjectAndCommandLinePolicies(policies, access, policyOverrides, error) ) return true;
+    tout << error << "\n";
+    return false;
+}
 
 static CodeOfPolicies getPolicies() {
     CodeOfPolicies policies;
@@ -185,6 +193,7 @@ bool aot_compile ( vector<pair<string, string>> &aot_files, bool dryRun, bool cr
     cop.aot = false;
     cop.aot_lib = isAotLib;
     cop.ignore_shared_modules = false;
+    if ( !set_project_and_command_line_policies(cop, access) ) return false;
     bool compiled = true;
     for (const auto &[in, out] : aot_files) {
         // Use `or` here, to return `true` if at least one file compiled successfully.
@@ -224,7 +233,7 @@ int das_aot_main ( int argc, char * argv[] ) {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     #endif
     if ( argc<=3 ) {
-        tout << "daslang -aot <in_script.das> <out_script.das.cpp> [-v2Syntax] [-v1Syntax] [-v2makeSyntax] [-project <project file>] [-dasroot <dasroot folder>] [-q] [-j] [-aot-macros] [-cross-platform] [-no-lint] [-log-compile-time]\n";
+        tout << "daslang -aot <in_script.das> <out_script.das.cpp> [-v2Syntax] [-v1Syntax] [-v2makeSyntax] [-project <project file>] [-policy <name>=<value>] [-dasroot <dasroot folder>] [-q] [-j] [-aot-macros] [-cross-platform] [-no-lint] [-log-compile-time]\n";
         return -1;
     }
     bool dryRun = false;
@@ -258,6 +267,13 @@ int das_aot_main ( int argc, char * argv[] ) {
                     return -1;
                 }
                 projectFile = argv[ai+1];
+                ai += 1;
+            } else if ( !scriptArgs && strcmp(argv[ai],"-policy")==0 ) {
+                if ( ai+1 >= argc ) {
+                    tout << "-policy requires name=value";
+                    return -1;
+                }
+                policyOverrides.push_back(argv[ai+1]);
                 ai += 1;
             } else if ( strcmp(argv[ai],"-dll-path")==0 ) {
                 if ( ai+1 >= argc ) {
@@ -556,6 +572,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     policies.compile_threads = compileThreads;
     policies.building_documentation = buildingDocumentation;
     policies.persistent_heap = true;
+    if ( !set_project_and_command_line_policies(policies, access) ) return 1;
     // The AST module-cache rail (env serializer): -ser captures every parsed module as the
     // compile runs, -deser feeds them back in the same order instead of parsing (loud
     // verdict below - the silent fallback-to-parse must not fake a cache hit). -module-cache
@@ -794,6 +811,8 @@ void print_help() {
         << "                processes this one spawns\n"
         << "    -no-module-cache  no AST module cache at all\n"
         << "    -no-optimization  compile every module unoptimized (a debugger then stops on every statement the source has)\n"
+        << "    -policy <name>=<value> set one CodeOfPolicies field for this compile, after the project's\n"
+        << "                project_policies have been set; a bare <name> sets a bool to true. Repeatable\n"
         << "    -ser <path> write the compiled AST module cache to <path> after compile (explicit write half)\n"
         << "    -deser <path> read the AST module cache from <path> during compile instead of parsing;\n"
         << "                prints 'deser: clean' when every module came from the cache, 'deser: FALLBACK' otherwise\n"
@@ -1133,6 +1152,14 @@ MAIN_FUNC_LINKAGE int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 noModuleCache = true;
             } else if ( cmd=="no-optimization" ) {
                 noOptimization = true;
+            } else if ( !scriptArgs && cmd=="policy" ) {
+                if ( i+1 >= argc ) {
+                    printf("-policy requires name=value\n");
+                    print_help();
+                    return -1;
+                }
+                policyOverrides.push_back(argv[i+1]);
+                i += 1;
             } else if ( cmd=="-list-shared-modules" ) {
                 // script will pick up next argument by itself (read from llvm_exe.das via get_command_line_arguments())
                 if ( i+1 >= argc ) {

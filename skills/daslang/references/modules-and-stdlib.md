@@ -162,6 +162,13 @@ register their own.
   declare it, and the failure surfaces *inside* the library.
 - **`threadlock_context` alone unifies upward:** OR-ed across every module parsed, so a library
   needing the context mutex gets it regardless of the program.
+- **`daslang -policy <field>=<value>` sets the compile policy every file of one compile starts
+  from** - repeatable, and a bare `<field>` sets a bool to true. An option whose default comes
+  from the policy (`force_inscope_pod`, `stack`) takes the file's `options` value when the file
+  sets one, and context options are still read from the entry program only. `-policy
+  no_optimizations` turns optimization off whatever a file's `optimize` says. The name is the
+  policy's field name, which is not always the option name: `gc` and `optimize` have no field,
+  and `-policy` rejects a name it does not know.
 
 | Option | Type | Default | Notes |
 |---|---|---|---|
@@ -173,7 +180,7 @@ register their own.
 | `relaxed_assign` | bool | true | Silently promote `=` to `<-` for non-copyable temporaries. |
 | `default_init_containers` | bool | true | New `resize` slots and fresh `tab[key]` slots get `default<T>`, not zeros. |
 | `unsafe_table_lookup` | bool | false | Make every `tab[key]` require `unsafe`. |
-| `force_inscope_pod` | bool | false | Scope exit / move-assign collect POD-like contents; arms container collect on `erase`/`clear`/shrink. |
+| `force_inscope_pod` | bool | false | Scope exit / move-assign collect POD-like contents; arms container collect on `erase`/`clear`/shrink; builds an array literal whose elements own no heap on the stack where it is passed to a non-`var` `array<T>` parameter of a function whose result cannot hold the array. |
 | `no_unused_function_arguments`, `no_unused_block_arguments`, `no_deprecated`, `no_aliasing`, `no_init`, `no_global_variables`, `strict_properties`, `multiple_contexts`, `no_aot`, `debugger`, `profiler` | bool | false | Opt-in strictness and tooling. |
 | `strict_smart_pointers`, `strict_unsafe_delete`, `no_unsafe_uninitialized_structures`, `no_writing_to_nameless`, `no_local_class_members`, `lint`, `optimize`, `fusion`, `scoped_stack_allocator`, `remove_unused_symbols` | bool | true | On by default; `no_optimization = true` inverts `optimize`, and `remove_unused_symbols` must be `false` for a module fed to an AOT tool. |
 | `max_infer_passes` (50), `indenting` (0) | int | - | Inference-pass cap; indentation-sensitive parsing (`0`, `2`, `4`, `8`). |
@@ -201,6 +208,9 @@ with `require ?mod ...`.
 
 Arrays and tables always pass by reference and cannot be copied - only moved (`<-`) or cloned
 (`:=`).
+
+`for (x in [a, b, c])` allocates nothing: a literal of up to 1024 bytes whose elements own no heap
+(numbers, strings, pointers, structs of them) is iterated as a stack array.
 
 ### Array
 

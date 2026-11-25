@@ -193,4 +193,6 @@ namespace das {
     // mismatch - no policy field can be trusted when the host wrote a different layout
     DAS_CC_API bool checkCodeOfPoliciesStamp ( const CodeOfPolicies & policies );
     DAS_CC_API void verifyCodeOfPoliciesStamp ( const CodeOfPolicies & policies );
+
+    DAS_CC_API bool setCodeOfPolicy ( CodeOfPolicies & policies, const string & policy, string & error );
 }

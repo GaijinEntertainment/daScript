@@ -28,6 +28,7 @@ add_custom_command(
     COMMAND $<TARGET_FILE:daslang> --disable-module dasLLVM --disable-module dasVulkan
         --disable-module dasCUDA
         "${PROJECT_SOURCE_DIR}/utils/aot/main.das" -- -ctx "${DASLLAMA_LIB_SRC}" "${DASLLAMA_CTX_GEN}/"
+        -policy force_inscope_pod
     DEPENDS ${DASLLAMA_LIB_DEPS} "${PROJECT_SOURCE_DIR}/utils/aot/main.das"
         "${PROJECT_SOURCE_DIR}/daslib/aot_standalone.das" "${PROJECT_SOURCE_DIR}/daslib/aot_cpp.das"
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
@@ -110,7 +111,7 @@ if(NOT DAS_LLVM_DISABLED)
             OUTPUT "${_lib}" "${_dir}/dasllama_lib.h" ${_bind}
             COMMAND ${CMAKE_COMMAND} -E make_directory "${_dir}"
             COMMAND ${CMAKE_COMMAND} -E env ${_env} $<TARGET_FILE:daslang> --disable-module dasVulkan
-                -lib "${DASLLAMA_LIB_SRC}" -output "${_rel}" ${_tail}
+                -policy force_inscope_pod -lib "${DASLLAMA_LIB_SRC}" -output "${_rel}" ${_tail}
             DEPENDS ${DASLLAMA_LIB_DEPS} ${_profiles}
                 "${PROJECT_SOURCE_DIR}/modules/dasLLVM/daslib/jit_standalone.das"
                 "${PROJECT_SOURCE_DIR}/modules/dasLLVM/daslib/llvm_jit_run.das"

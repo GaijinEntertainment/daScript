@@ -210,6 +210,7 @@ The BUILTIN module contains core runtime functions available in all daslang prog
 - `macro_function` - Marks a function as part of the macro subsystem, excluding it from the final compiled context unless it is explicitly referenced.
 - `generic` - Forces a function to be treated as generic regardless of its argument types, causing it to be instanced in each calling module.
 - `unsafe_outside_of_for` - Marks a function as unsafe to call outside of a source-level `for` loop, enforcing iterator-context usage.
+- `no_capture_string` - Declares that the function keeps no string argument past the call, whatever it writes into its other arguments.
 - `finalize` - Registers a function to be called automatically when the context is shut down, for cleanup and resource release.
 - `no_io` - Declares that the function, and everything it calls, must not perform console or file I/O.
 - `no_aot` - Prevents ahead-of-time (AOT) C++ code generation for the annotated function, keeping it interpreted only.
@@ -337,6 +338,7 @@ The BUILTIN module contains core runtime functions available in all daslang prog
 - `subarray` - Returns a temporary sub-range of the dynamic array `a` defined by the signed range `r`, providing access to elements from `r.x` up to but not including `r.y`.
 - `to_array` - Converts a fixed-size array `a` into a new dynamic array by cloning each element.
 - `to_array_move` - Converts a mutable container `a` into a new dynamic array, moving elements when possible instead of cloning.
+- `to_array_temp` - Returns an `array` over the fixed array `a`'s own storage: nothing is allocated, and the result is valid only while `a` is.
 - `to_table` - Converts a fixed-size array of key-value tuples `a` into a `table<keyT, valT>` by cloning each key and value.
 - `to_table_move` - Converts a mutable dynamic array of keys `a` into a set-style `table<keyT, void>`, moving its elements and freeing the source array.
 - `values` - Returns a read-only iterator over all values in a `table<keyT, valT>`, yielding each value by const reference.
@@ -4193,6 +4195,9 @@ The AST module provides access to the abstract syntax tree representation of das
 - `parse_file_no_prerequisites` - Parses one file alone and stops there: no prerequisite walk, no type inference, no macro run, and the host's module-cache stream is hidden for the duration.
 - `require_module_now` - Compiles `module_name` - a `shared` module, named by its file - and its prerequisites into the process at the point of the call, or answers the module already there, under `codeOfPolicies`; a null `fileAccess` means the compiling program's own.
 - `set_file_source` - Registers a source code `string` for the given file name inside the `FileAccess` object, allowing in-memory compilation without disk files.
+- `set_policies` - Sets on `policies` each of `items` in order - the `name=value` items `set_policy` takes - and stops at the first one refused: the items before it stay set.
+- `set_policy` - Sets one field of `policies` from text: `name=value`, or a bare `name` to turn a bool on - the form `daslang -policy` takes.
+- `set_project_policies` - Sets on `policies` the items the project file behind `access` returns from its `project_policies` function - the `name=value` items `set_policy` takes, separated by `;` or by line - in order, and stops at the first one refused: the items before it stay set.
 - `simulate` - Simulates (links and initializes) a compiled `Program`, returning a `Context` pointer ready for function execution, or null on failure.
 
 ### AST serialization

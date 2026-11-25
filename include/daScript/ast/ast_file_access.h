@@ -36,6 +36,7 @@ namespace das {
         virtual bool isOptionBlocked ( const string & opt, const string & from ) const override;
         virtual bool isAnnotationAllowed ( const string & /*ann*/, const string & /*from*/ ) const override;
         virtual bool isPodInScopeAllowed ( const string & /*moduleName*/, const string & /*fileName*/ ) const override;
+        virtual bool setProjectPolicies ( CodeOfPolicies & policies, string & error ) const override;
     protected:
         Context *           context = nullptr;
         SimFunction *       modGet = nullptr;
@@ -51,6 +52,7 @@ namespace das {
         SimFunction *       podInScopeAllowed = nullptr;
         SimFunction *       dynModulesFolderGet = nullptr;
         FileAccessPtr       projectAccess;
+        SimFunction *       projectPolicies = nullptr;
     };
     template <> struct isCloneable<ModuleFileAccess> : false_type {};
 }

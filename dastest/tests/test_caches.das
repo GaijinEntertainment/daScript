@@ -98,11 +98,12 @@ def test_module_cache_filenames(t : T?) {
     t |> success(first != module_cache_path("first/test.das", policies))
 }
 
-[test(description = "a fresh runner rejects a malformed worker module-cache path or run-env pair with exit code 1 and a message naming which", timeout = 1200)]
+[test(description = "a fresh runner rejects a malformed worker module-cache path, run-env pair or policy pair with exit code 1 and a message naming which", timeout = 1200)]
 def test_invalid_worker_module_cache_path(t : T?) {
     let malformed = base64_encode(test_temp_dir()) + "=ignored"
     let flags = [("--worker-module-cache-dir", "invalid worker module-cache path"),
-        ("--worker-run-env", "invalid worker run-env pair")]
+        ("--worker-run-env", "invalid worker run-env pair"),
+        ("--worker-policy", "invalid worker policy pair")]
     for (flag in flags) {
         for (encoded in ["#", malformed]) {
             var inscope argv <- [get_host_binary(), "-dasroot", get_das_root(),

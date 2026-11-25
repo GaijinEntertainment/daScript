@@ -1,0 +1,1 @@
+Returns an ``array`` over the fixed array ``a``'s own storage: nothing is allocated, and the result is valid only while ``a`` is. The compiler calls it under ``force_inscope_pod`` for an array literal whose elements own no heap, bound to a constant array parameter of a function whose result cannot hold the array; a call written by hand is an unsafe operation.

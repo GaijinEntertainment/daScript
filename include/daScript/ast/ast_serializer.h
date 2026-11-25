@@ -361,7 +361,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 287;   // 287: a function records whether its body reaches a builtin that runs other macros
+            return 288;   // 288: a function records the [no_capture_string] contract
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

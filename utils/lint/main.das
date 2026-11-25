@@ -875,25 +875,6 @@ def private file_nolint_codes(prog : ProgramPtr; base : table<string>) : table<s
     return <- merged
 }
 
-def private set_policy(var cop : CodeOfPolicies; name, value : string) : bool {
-    var found = false
-    let ti = typeinfo rtti_typeinfo(type<CodeOfPolicies>)
-    let ann = unsafe(reinterpret<BasicStructureAnnotation?>(ti.annotation))
-    basic_struct_for_each_field(*ann) $(field, _cpp_name, field_type, offset) {
-        return if (field != name)
-        let base = unsafe(addr<uint8?>(cop))
-        let at = unsafe(base + int(offset))
-        if (field_type.basicType == Type.tBool && (value == "true" || value == "false")) {
-            *unsafe(reinterpret<bool?>(at)) = value == "true"
-            found = true
-        } elif (field_type.basicType == Type.tInt || field_type.basicType == Type.tUInt) {
-            *unsafe(reinterpret<int?>(at)) = to_int(value)
-            found = true
-        }
-    }
-    return found
-}
-
 def private lint_policies(var cop : CodeOfPolicies; cop_overrides : array<string>) {
     cop.ignore_shared_modules = !lint_shared_modules
     cop.promote_shared_unoptimized = lint_shared_modules
@@ -910,9 +891,9 @@ var lint_shared_modules = false   //! the run's compiles promote and reuse the s
 def private apply_cop_overrides(var cop : CodeOfPolicies; cop_overrides : array<string>) : bool {
     var ok = true
     for (o in cop_overrides) {
-        let eq = find(o, "=")
-        if (eq <= 0 || !set_policy(cop, slice(o, 0, eq), slice(o, eq + 1))) {
-            to_log(LOG_ERROR, "error: --cop {o}: expected name=value of a bool or integer policy\n")
+        let refused = set_policy(cop, o)
+        if (!empty(refused)) {
+            to_log(LOG_ERROR, "error: --cop {o}: {refused}\n")
             ok = false
         }
     }

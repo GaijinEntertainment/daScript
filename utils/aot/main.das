@@ -16,7 +16,8 @@ require daslib/rtti
 require daslib/ast_boost
 
 
-def updateCOP(var cop : CodeOfPolicies; gen2 : bool; gen2_make : bool; aot_lib : bool) {
+def updateCOP(var cop : CodeOfPolicies; args : array<string>; gen2 : bool; gen2_make : bool;
+              aot_lib : bool) {
     cop.threadlock_context = false
     cop.aot = false;
     cop.aot_module = true;
@@ -30,6 +31,18 @@ def updateCOP(var cop : CodeOfPolicies; gen2 : bool; gen2_make : bool; aot_lib :
     // stubs record stamped-world hashes while the AOT-consuming runtime compiles gated →
     // error[50101] on any function with a [tune] family in its static call graph)
     cop.tune_frozen = true;
+    apply_policy_arguments(cop, args)
+}
+
+//! sets each `-policy name=value` given after the `--`
+def apply_policy_arguments(var cop : CodeOfPolicies; args : array<string>) {
+    let first = find_index(args, "--") + 1
+    let policies <- [for (i in range(first, length(args) - 1));
+        args[i + 1]; where args[i] == "-policy"]
+    let refused = set_policies(cop, policies)
+    if (!empty(refused)) {
+        panic("-policy: {refused}")
+    }
 }
 
 
@@ -161,7 +174,7 @@ def main() {
     var (aot_files, aotlib_files, ctx_files) <- collect_inputs(args)
     var result = true
     using() $(var cop : CodeOfPolicies) {
-        updateCOP(cop, !gen1, gen2_make, false)
+        updateCOP(cop, args, !gen1, gen2_make, false)
         for ((aot_in, aot_out) in aot_files) {
             ast_gc_guard() {
                 let res = aot(aot_in, false, cross_platform, cop)
@@ -174,7 +187,7 @@ def main() {
                 }
             }
         }
-        updateCOP(cop, !gen1, gen2_make, true)
+        updateCOP(cop, args, !gen1, gen2_make, true)
         for ((aot_in, aot_out) in aotlib_files) {
             ast_gc_guard() {
                 let res = aot(aot_in, false, cross_platform, cop)
@@ -187,7 +200,7 @@ def main() {
                 }
             }
         }
-        updateCOP(cop, !gen1, gen2_make, false)
+        updateCOP(cop, args, !gen1, gen2_make, false)
         let bindings = find_argument_or(args, "-bindings", "")
         let bindings_library = find_argument_or(args, "-bindings_library", "")
         if (!bindings.empty() && length(ctx_files) != 1) {

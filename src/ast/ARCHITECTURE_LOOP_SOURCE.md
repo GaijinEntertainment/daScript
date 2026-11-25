@@ -1,4 +1,4 @@
-# A value made in a loop header
+# A value made in a loop header or a call argument
 
 This document follows `ARCHITECTURE_COMMON.md`.
 
@@ -50,3 +50,43 @@ clones the generator lowering makes. So a source that calls an `[unsafe_outside_
 such as `keys(tab)`, is marked `alwaysSafe` (`isSafeOnlyAsLoopSource`), like the generated `each`
 call beside it: it needs no `unsafe`, as in the loop header it came from. The mark covers that one
 call and not its arguments.
+
+## An array literal as a loop source (`ast_infer_type.cpp`) {#stack-loop-literal}
+
+`for (x in [a, b, c])` iterates a fixed array on the stack. A gen2 array literal is
+`to_array_move` over a make-array node built on the heap; where one is a loop source, inference
+(`stackLoopLiteral`) drops the call and leaves the node, which then builds `T[N]` as
+`fixed_array(a, b, c)` does. No policy asks for it: the literal is a temporary nothing else names,
+so it cannot outlive the loop. It stays a heap array when its elements own heap, which a stack
+array has no collect to free, and past 1024 bytes, which would otherwise come out of the
+function's stack. A generator takes the same rewrite, and the lowering of a loop that yields
+keeps the fixed array in the generator's frame.
+
+## A stack array literal under a call argument (`ast_inscope_pod.cpp`, `ast_allocate_stack.cpp`) {#stack-array-argument}
+
+Under `force_inscope_pod` an array literal that binds to a constant `array<T>` parameter is built
+as a fixed array on the stack and not on the heap (`PodVisitor`). The parameter needs an
+`array<T>`, so the literal goes through `to_array_temp` (`daslib/builtin.das`, repo root), which
+returns an array header that points into the fixed array and allocates nothing.
+
+`PodVisitor` takes a literal only when each of these holds:
+
+- its elements own no heap - a collect would have freed them, and a stack array has no collect;
+- the parameter is declared an `array<T>` and is constant, so the callee cannot resize or move
+  the array;
+- the callee's result cannot hold the array: it is no reference, pointer, iterator, lambda or
+  block, and it holds none of them - a result that owns heap other than an array or a table of
+  plain values is refused whole;
+- the function is not a generator, whose frame does not last across a `yield`, and not a
+  generated function other than a lambda or a local function;
+- its module, and the module of the generic it was instanced from, allow in-scope POD.
+
+The rewrite adds no collect, so a function with `unsafe` or `try`/`recover` takes it. The check
+reads the callee's signature only: a callee that stores the array through `unsafe`, or a C++
+builtin that keeps its argument, is outside what it sees.
+
+The header points into the fixed array, which sits in an argument slot of the `to_array_temp`
+call, and the outer call reads it after that call has returned. The stack allocator gives a call's
+argument slots to whatever is allocated next once the call ends, and here the next allocation is a
+sibling argument of the outer call. So the allocator releases no slot allocated under a
+`to_array_temp` call (`holdsArgumentStorage`); the slots stay taken until the outer call ends.

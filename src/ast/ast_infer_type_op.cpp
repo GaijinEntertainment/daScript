@@ -3,6 +3,7 @@
 #include "daScript/ast/ast_generate.h"
 #include "ast_generate_typed.h"
 #include "ast_infer_type.h"
+#include "ast_inscope_pod.h"
 #include "daScript/ast/ast_visitor.h"
 
 #include <optional>
@@ -792,8 +793,18 @@ namespace das {
             error("moving classes requires unsafe" + moveErrorInfo(expr), "", "",
                   expr->at, CompilationError::unsafe_class);
         } else if (
-            forceInscopePod && !expr->podDelete && func && (func->module->allowPodInscope && (!func->fromGeneric || func->fromGeneric->module->allowPodInscope)) // both modules allow pod inscope
-            && !func->hasUnsafe && isPodDelete(expr->left->type)                                                                                           // its a pod type
+            forceInscopePod && !expr->podDelete && func && logs && logInscopePod
+            && !inScopePodRefusal(func, InScopePodRewrite::moveCollect).empty()
+            && isPodDelete(expr->left->type) && !expr->left->type->isUnresolvedAnywhere()
+        ) {
+            TextWriter what;
+            what << "warning: POD optimization failed for '" << *expr << "'" << inScopePodSite(func)
+                 << inScopePodRefusal(func, InScopePodRewrite::moveCollect);
+            program->logInScopePodOnce(*logs, expr->at, what.str());
+        } else if (
+            forceInscopePod && !expr->podDelete && func
+            && inScopePodRefusal(func, InScopePodRewrite::moveCollect).empty()
+            && isPodDelete(expr->left->type)
             && !expr->left->type->isUnresolvedAnywhere()
         ) {
             reportAstChanged();

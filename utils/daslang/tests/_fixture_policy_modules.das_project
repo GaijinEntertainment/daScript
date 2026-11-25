@@ -1,0 +1,16 @@
+options gen2
+
+require strings
+require daslib/strings_boost
+
+//! the module resolver the policy fixture projects share
+
+typedef module_info = tuple<string; string; string> const
+
+var DAS_PAK_ROOT = "./"
+
+[export]
+def module_get(req, from : string) : module_info {
+    let parts <- split_by_chars(req, "./")
+    return (parts[length(parts) - 1], "{get_das_root()}/{req}.das", "")
+}

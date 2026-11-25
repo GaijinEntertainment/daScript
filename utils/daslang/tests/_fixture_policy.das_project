@@ -1,0 +1,9 @@
+options gen2
+
+include _fixture_policy_modules.das_project
+
+//! a project for test_policy.das: turns force_inscope_pod on for
+//! every module it compiles; one item a line, an empty item last
+
+[export]
+def project_policies() : string => "log_inscope_pod = false\nforce_inscope_pod;"

@@ -1026,6 +1026,10 @@ namespace das {
         return this;
     }
 
+    bool Function::isBuiltinGenericInstance ( const char * genericName ) const {
+        return fromGeneric && fromGeneric->name==genericName && fromGeneric->module->name=="builtin";
+    }
+
     FunctionPtr Function::setNoReturn() {
         noReturn = true;
         return this;

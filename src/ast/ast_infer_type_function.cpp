@@ -1369,10 +1369,7 @@ namespace das {
         return newCall;
     }
     bool InferTypes::isConsumeArgumentFunc(Function *fn) {
-        if (fn->fromGeneric && fn->fromGeneric->module->name == "builtin" && fn->fromGeneric->name == "consume_argument") {
-            return true;
-        }
-        return false;
+        return fn->isBuiltinGenericInstance("consume_argument");
     }
     bool InferTypes::isConsumeArgumentCall(Expression *arg) {
         if (arg->rtti_isCall()) {

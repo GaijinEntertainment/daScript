@@ -497,3 +497,52 @@ def test_unmet_expect(t : T?) {
         "the line names the code and the count owed: {output}")
     remove(file)
 }
+
+[test(description = "--policy sets a compile policy for every test file under --test, --together and isolated workers, after the policies a --test-project file names, a project item that is no policy fails the run naming it, and a --policy name that is no policy stops dastest with exit code 2 naming it", timeout = 1200)]
+def test_policy(t : T?) {
+    let fixture = "{dastest_root()}/tests/_fixture_policy.das"
+    let head <- [get_command_line_arguments()[0], "-dasroot", get_das_root(), "-no-module-cache",
+        "{dastest_root()}/dastest.das", "--", "--failures-only"]
+    var output : string
+    var plain := head
+    plain |> push_from(["--test", fixture])
+    let plain_rc = run_and_capture(plain, output, 300.0)
+    t |> success(plain_rc != 0,
+        "control: without the flag the fixture compiles with the policy off: {output}")
+    var flagged := plain
+    flagged |> push_from(["--policy", "force_inscope_pod"])
+    let flagged_rc = run_and_capture(flagged, output, 300.0)
+    t |> equal(flagged_rc, 0, "the flag reaches a --test compile: {output}")
+    var together := head
+    together |> push_from(["--together", fixture, "--policy", "force_inscope_pod=true"])
+    let together_rc = run_and_capture(together, output, 300.0)
+    t |> equal(together_rc, 0, "the flag reaches a --together compile: {output}")
+    var isolated := flagged
+    isolated |> push_from(["--isolated-mode", "--isolated-mode-threads", "1"])
+    let scratch = test_temp_dir()
+    let scratch_env <- ["TMP={scratch}", "TEMP={scratch}", "TMPDIR={scratch}"]
+    let isolated_rc = run_and_capture(isolated, "", scratch_env, output, 300.0)
+    t |> equal(isolated_rc, 0, "the flag reaches an isolated worker: {output}")
+    var by_project := plain
+    by_project |> push_from(["--test-project",
+        "{dastest_root()}/tests/_fixtures/policy_project.das_project"])
+    let by_project_rc = run_and_capture(by_project, output, 300.0)
+    t |> equal(by_project_rc, 0, "a project's project_policies reach the compile: {output}")
+    var overridden := by_project
+    overridden |> push_from(["--policy", "force_inscope_pod=false"])
+    let overridden_rc = run_and_capture(overridden, output, 300.0)
+    t |> success(overridden_rc != 0, "--policy is set after the project's policies: {output}")
+    var bad_project := plain
+    bad_project |> push_from(["--test-project",
+        "{dastest_root()}/tests/_fixtures/policy_project_bad.das_project"])
+    let bad_project_rc = run_and_capture(bad_project, output, 300.0)
+    t |> success(bad_project_rc != 0, "a project item that is no policy fails the run: {output}")
+    t |> success(find(output, "project_policies: unknown policy 'no_such_policy'") >= 0,
+        "... and the line names it: {output}")
+    var refused := plain
+    refused |> push_from(["--policy", "no_such_policy"])
+    let refused_rc = run_and_capture(refused, output, 300.0)
+    t |> equal(refused_rc, 2, "a name that is no policy refuses the run: {output}")
+    t |> success(find(output, "--policy: unknown policy 'no_such_policy'") >= 0,
+        "... and the line names it: {output}")
+}

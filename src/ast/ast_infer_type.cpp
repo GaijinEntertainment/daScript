@@ -4,6 +4,7 @@
 #include "daScript/ast/ast_generate.h"
 #include "ast_generate_typed.h"
 #include "ast_infer_type.h"
+#include "ast_inscope_pod.h"
 #include "ast_pass_macros.h"
 #include "daScript/ast/ast_visitor.h"
 
@@ -568,6 +569,9 @@ namespace das {
         }
     }
 
+    static bool isContainerOrRecord(const TypeDeclPtr &type) {
+        return type->isGoodArrayType() || type->isGoodTableType() || type->isStructure() || type->isTuple() || type->isVariant();
+    }
     static void seedTupleShorthandFromTargetType(const TypeDeclPtr &targetType, Expression *init) {
         if (!targetType || !init) return;
         if (targetType->baseType != Type::tTuple) return;
@@ -5470,7 +5474,20 @@ namespace das {
         that->isForLoopSource = true;
         markNoDiscard(that);
     }
+    // src/ast/ARCHITECTURE_LOOP_SOURCE.md#stack-loop-literal
+    static ExprMakeArray *stackLoopLiteral(Expression *source) {
+        const uint64_t maxStackLiteralBytes = 1024;
+        auto mka = heapArrayLiteral(source);
+        if (!mka || literalElementsOwnHeap(mka)) return nullptr;
+        auto bytes = uint64_t(mka->values.size()) * mka->recordType->getSizeOf64();
+        return bytes <= maxStackLiteralBytes ? mka : nullptr;
+    }
     ExpressionPtr InferTypes::visitForSource(ExprFor *expr, Expression *that, bool last) {
+        if (auto mka = stackLoopLiteral(that)) {
+            mka->makeArrayOnHeap = false;
+            reportAstChanged();
+            return mka;
+        }
         // now, for the one where we did not find anything
         if (that->type && !that->type->isExprType()) {
             if (that->type->baseType != Type::tFixedArray &&
@@ -5708,6 +5725,14 @@ namespace das {
                     if (isPodDelete(var->type)) {
                         var->pod_delete = true;
                         reportAstChanged();
+                    } else if (logs && logInscopePod && !var->generated && isContainerOrRecord(var->type)) {
+                        das_set<Structure *> dep;
+                        bool hasHeap = false;
+                        string why;
+                        if (!isPodDelete(var->type, dep, hasHeap, &why)) {
+                            program->logInScopePodOnce(*logs, var->at, "warning: POD optimization failed for '" + var->name
+                                + "'" + inScopePodSite(func) + "\t" + why + "\n");
+                        }
                     }
                 }
             }

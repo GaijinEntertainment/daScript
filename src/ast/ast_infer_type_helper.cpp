@@ -1320,59 +1320,63 @@ namespace das {
             return false;
         return hasHeap;
     }
-    bool InferTypes::isPodDelete(TypeDecl *typ, das_set<Structure *> &dep, bool &hasHeap) {
+    static bool notPodBecause(string *why, const string &reason) {
+        if (why && why->empty()) *why = reason;
+        return false;
+    }
+    bool InferTypes::isPodDelete(TypeDecl *typ, das_set<Structure *> &dep, bool &hasHeap, string *why) {
         if (typ->temporary)
-            return false;
+            return notPodBecause(why, "temporary type " + typ->describe());
         if (typ->baseType == Type::tHandle) {
-            return typ->annotation->isPod();
+            return typ->annotation->isPod() || notPodBecause(why, "handled type " + typ->annotation->name + " is not POD");
         } else if (typ->baseType == Type::tStructure) {
             if (typ->structType) {
                 if (dep.find(typ->structType) != dep.end())
                     return true;
                 dep.insert(typ->structType);
                 if (typ->structType->isClass)
-                    return false;
+                    return notPodBecause(why, typ->structType->name + " is a class");
                 auto finFn = getFinalizeFunc(typ);
                 if (finFn.size() == 0) {
                     // ok, no finalize - there will be one generated
                 } else if (finFn.size() == 1) {
                     auto finFunc = finFn.back();
                     if (!finFunc->generated)
-                        return false;
+                        return notPodBecause(why, typ->structType->name + " has a user finalize");
                 } else {
                     // seriously? more than one
-                    return false;
+                    return notPodBecause(why, typ->structType->name + " has more than one finalize");
                 }
                 for (const auto &fd : typ->structType->fields) {
-                    if (fd.type && !fd.doNotDelete && (fd.type->constant || !isPodDelete(fd.type, dep, hasHeap))) {
-                        return false;
+                    if (fd.type && !fd.doNotDelete && (fd.type->constant || !isPodDelete(fd.type, dep, hasHeap, why))) {
+                        return notPodBecause(why, "field " + typ->structType->name + "." + fd.name + " is constant");
                     }
                 }
             }
             return true;
         } else if (typ->baseType == Type::tTuple || typ->baseType == Type::tVariant || typ->baseType == Type::option) {
             for (const auto &arg : typ->argTypes) {
-                if (arg->constant || !isPodDelete(arg, dep, hasHeap)) {
-                    return false;
+                if (arg->constant || !isPodDelete(arg, dep, hasHeap, why)) {
+                    return notPodBecause(why, "constant element in " + typ->describe());
                 }
             }
             return true;
         } else if (typ->baseType == Type::tArray || typ->baseType == Type::tTable) {
-            if (typ->firstType && (typ->firstType->constant || !isPodDelete(typ->firstType, dep, hasHeap)))
-                return false;
-            if (typ->secondType && (typ->secondType->constant || !isPodDelete(typ->secondType, dep, hasHeap)))
-                return false;
+            if (typ->firstType && (typ->firstType->constant || !isPodDelete(typ->firstType, dep, hasHeap, why)))
+                return notPodBecause(why, "constant element in " + typ->describe());
+            if (typ->secondType && (typ->secondType->constant || !isPodDelete(typ->secondType, dep, hasHeap, why)))
+                return notPodBecause(why, "constant element in " + typ->describe());
             hasHeap = true;
         } else if (typ->baseType == Type::tFixedArray) {
             // a fixed array's elements are live at init - their pod-delete-ness (and heap) counts.
             // without this branch Foo[4] fell through to 'true' with hasHeap untouched, so a struct
             // holding array<int>[4] read as no-heap and force_inscope_pod never collected it
-            if (typ->firstType && (typ->firstType->constant || !isPodDelete(typ->firstType, dep, hasHeap)))
-                return false;
+            if (typ->firstType && (typ->firstType->constant || !isPodDelete(typ->firstType, dep, hasHeap, why)))
+                return notPodBecause(why, "constant element in " + typ->describe());
         } else if (typ->baseType == Type::tPointer) {
-            return !typ->needDelete(); // pointer is good if we don't need to delete
-        } else if (typ->baseType == Type::tIterator || typ->baseType == Type::tBlock || typ->baseType == Type::tLambda || typ->baseType == Type::tFunction) {
-            return false;
+            return !typ->needDelete() || notPodBecause(why, "pointer " + typ->describe() + " needs delete");
+        } else if (typ->baseType == Type::tIterator || typ->baseType == Type::tBlock || typ->baseType == Type::tLambda) {
+            return notPodBecause(why, typ->describe() + " is not POD");
         }
         return true;
     }
@@ -1553,11 +1557,7 @@ namespace das {
         auto call = (ExprCall *)(expr->arguments[1]);
         if (!call->func)
             return false;
-        if (!call->func->fromGeneric)
-            return false;
-        if (!(call->func->fromGeneric->name == "to_array_move" && call->func->fromGeneric->module->name == "builtin"))
-            return false;
-        return true;
+        return call->func->isBuiltinGenericInstance("to_array_move");
     }
 
 }

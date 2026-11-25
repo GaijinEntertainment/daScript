@@ -583,6 +583,9 @@ namespace das {
                 }
             }
             fnc->knownSideEffects = true;
+            if ( fnc->noCaptureString ) {
+                flags &= ~uint32_t(SideEffects::captureString);
+            }
             if ( flags & uint32_t(SideEffects::captureString) ) {
                 fnc->captureString = true;
                 flags &= ~uint32_t(SideEffects::captureString);

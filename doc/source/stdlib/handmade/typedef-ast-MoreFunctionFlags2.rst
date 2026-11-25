@@ -8,3 +8,4 @@ Generator whose body had a statement-position unsafe block - inference dissolved
 Function never returns to its caller (panic) - a call to it ends every control path, so no return is needed after it.
 Function reads its context's function or global RTTI tables at runtime, or calls one that does - a standalone AOT context or JIT exe that uses it keeps those tables.
 Function compiles, simulates or invokes other code (compile, require_module_now, invoke_in_context and the like): a builtin is marked where its module registers it, a function compiled from source when its body calls or takes the address of a marked function. Under a parallel compile, the modules that can use the macros of a macro context reaching such a function compile alone.
+Function carries ``[no_capture_string]`` - it keeps no string argument past the call, whatever it writes into its other arguments.

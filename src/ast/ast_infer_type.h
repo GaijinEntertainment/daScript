@@ -636,7 +636,7 @@ namespace das {
         bool cloneResolvedType(ExprVar *expr, const TypeDeclPtr &type);
         void reportPendingType(const string &name, const LineInfo &at);
 
-        bool isPodDelete(TypeDecl *typ, das_set<Structure *> &dep, bool &hasHeap);
+        bool isPodDelete(TypeDecl *typ, das_set<Structure *> &dep, bool &hasHeap, string *why = nullptr);
 
         virtual void preVisit(ExprLet *expr) override;
         virtual void preVisitLet(ExprLet *expr, const VariablePtr &var, bool last) override;

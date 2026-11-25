@@ -5,7 +5,7 @@ that a rule cites; `ARCHITECTURE_INFER.md` the inference mechanisms code cites, 
 host-built programs, `ARCHITECTURE_GC.md` gc roots, `ARCHITECTURE_SHARED.md` shared-module promotion,
 `ARCHITECTURE_MODULE_SCAN.md` the module scan and the descriptor manifest, `ARCHITECTURE_INLINE.md`
 the inliner's conditional call lowering, `ARCHITECTURE_LIBRARIES.md` which library a source links into,
-`ARCHITECTURE_LOOP_SOURCE.md` a value made in a loop header, `ARCHITECTURE_ALIASING.md` in-place
+`ARCHITECTURE_LOOP_SOURCE.md` a value made in a loop header or a call argument, `ARCHITECTURE_ALIASING.md` in-place
 builds and what the alias pass counts as a read of the target, `ARCHITECTURE_COMPILE_MODULES.md`
 compiling the required modules.
 The rest of inference, with parsing and simulation, is in `skills/internal/cpp_codebase_notes.md` (repo-only).

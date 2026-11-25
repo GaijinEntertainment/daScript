@@ -810,6 +810,9 @@ CLI reference
      - Change to the script's directory before loading.
    * - ``-v1syntax``
      - Use v1 syntax (default: v2).
+   * - ``-policy <name>=<value>``
+     - Set one ``CodeOfPolicies`` field for every compile and reload, after the project's
+       ``project_policies``; a bare ``<name>`` sets a bool to ``true``. Repeatable.
    * - ``-track-allocations``
      - Track where heap allocations came from.
    * - ``-heap-report``
