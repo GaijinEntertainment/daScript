@@ -196,6 +196,11 @@ Optimization
      - bool
      - false
      - Disables the fastcall optimization.
+   * - ``disable_sink``
+     - bool
+     - false
+     - Disables the sink pass, which moves a local with a pure initializer into the one ``if`` arm
+       that reads it, so an inlined check builds its message only when the check fails.
    * - ``max_fast_call_depth``
      - int
      - 0

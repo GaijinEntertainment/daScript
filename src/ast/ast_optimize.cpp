@@ -4,6 +4,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_visitor.h"
+#include "ast_sink.h"
 
 namespace das {
 
@@ -44,6 +45,9 @@ namespace das {
             if ( logPass ) logs << *program;
             last = program->optimizationDeadStores(optimizationRound);  if ( program->failed() ) break;  noteChange(last);
             if ( log ) logs << "DEAD STORES:" << (last ? "optimized" : "nothing") << "\n";
+            if ( logPass ) logs << *program;
+            last = optimizationSink(program, optimizationRound);  if ( program->failed() ) break;  noteChange(last);
+            if ( log ) logs << "SINK:" << (last ? "optimized" : "nothing") << "\n";
             if ( logPass ) logs << *program;
             // this is here again for a reason
             last = program->optimizationUnused(logs, optimizationRound);    if ( program->failed() ) break;  noteChange(last);

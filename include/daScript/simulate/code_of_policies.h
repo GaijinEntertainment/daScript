@@ -115,6 +115,7 @@ namespace das {
         /*option*/ bool fast_math = false;                         // allow VALUE-SAFE float optimizations with bit differences (reassociation, FMA contraction, signed-zero laxity); inf/NaN semantics are preserved — no rcp division, no nan-compare flips (JIT stamps reassoc|nsz|contract only). doubles stay bit-exact unless this is on
         /*option*/ bool disable_dse = false;                       // disable the dead-store-elimination pass
         /*option*/ bool disable_cse = false;                       // disable the common-subexpression-elimination pass
+        /*option*/ bool disable_sink = false;                      // disable the pass that sinks a pure local into the one `if` arm reading it
         /*option*/ bool disable_inline = false;                    // disable the [inline] function inliner (calls stay regular calls; declaration-level contract checks - shape, recursion, @@ - still lint)
         /*option*/ bool disable_auto_inline = false;               // disable automatic inlining of block-literal call sites and invoke-of-literal devirtualization ([inline] splicing is unaffected)
         /*option*/ bool auto_inline_functions = true;              // heuristic best-effort inlining of plain calls and operator sites of small same-module [inline]-shaped functions (default ON; silent declines; optimized builds only; disable_auto_inline overrides)
