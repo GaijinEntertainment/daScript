@@ -129,6 +129,7 @@ namespace das {
                     podVar->at = expr->sources[i]->at;
                     podVar->name = "`pod`source`" + expr->iterators[i];
                     podVar->type = new TypeDecl(Type::autoinfer, podVar->at);
+                    auto sourceSize = uint32_t(expr->sources[i]->type->getSizeOf());
                     podVar->init = move(expr->sources[i]);
                     podVar->init_via_move = true;
                     podVar->pod_delete = true;
@@ -138,7 +139,7 @@ namespace das {
                     // and collect
                     auto CallCollectLocal = new ExprCall(expr->at,"_::builtin_collect_local_and_zero");
                     CallCollectLocal->arguments.push_back(new ExprVar(expr->at, podVar->name));
-                    CallCollectLocal->arguments.push_back(new ExprConstUInt(expr->at, expr->iteratorVariables[i]->type->getSizeOf()));
+                    CallCollectLocal->arguments.push_back(new ExprConstUInt(expr->at, sourceSize));
                     CallCollectLocal->alwaysSafe = true;
                     newBlock->finalList.push_back(CallCollectLocal);
                     if ( logs ) {
