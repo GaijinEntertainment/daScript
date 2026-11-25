@@ -142,7 +142,9 @@ heap string - a slice-per-element loop over a big string is O(n^2).
 - **Escape a literal brace as `\{` / `\}`** - an unescaped `{` starts an interpolation even in
   JSON-looking text, and the errors point somewhere else entirely.
 - **A nested string literal inside an interpolation is written plain** - `"{s == "abc"}"` works;
-  *escaping* the inner quotes (`"{s == \"abc\"}"`) is the syntax error.
+  *escaping* the inner quotes (`"{s == \"abc\"}"`) is the syntax error. The nested literal holds
+  no interpolation of its own: `"{n == 0 ? "none" : "count {n}"}"` is `error[10101]: nested string
+  constants are not allowed` - bind the inner string to a `let` first.
 - **`das_string` compares with `string` directly** - `das_str == "foo"`, `empty(das_str)`; never
   `string(das_str) == "foo"`. `to_int(s, true)` is the accept-hex parse.
 - `:=` on a string clones only under `options multiple_contexts` (see memory.md).
