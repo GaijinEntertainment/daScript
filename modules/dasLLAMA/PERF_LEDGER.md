@@ -79,6 +79,98 @@ what it costs today and what the fix would change.
   build kept outside the tree), kitten-mini, `--limit 3`, `DASLLAMA_GPU_PROF=1`, the CUDA flags above: a stamp whose
   predecessor had already landed - the device waiting on the host - at most 3 of the albert seat's 124 stamps, 3 of
   the text seat's 18, none of the dur_enc, durations and prosody seats', 4 of the decode seat's 354.
+- **MEASURED (2026-11-25, `direction-grade`, `debug-jit`) - the block drafter's attention tile a (K/V head, chunk of eight
+  queries, key tile) a workgroup against a (row, the query heads of a K/V head, key tile): the pair alone on the CUDA
+  home (RunPod RTX PRO 4500 Blackwell 32 GB, driver 595.112.07, 27 cores of the pod).** Exe: the daslang binary built
+  from origin/master 440bd2a668's C++, `-jit`, running the `modules/dasLLAMA` sources of commit eb897ad578, which hold
+  both tile kernels over rings of halves. The pair alone, no model loaded and no output compared (`timing-only`), the
+  box idle: `DASLLAMA_GPU=1 DASLLAMA_CUDA=1 bin/daslang -jit modules/dasLLAMA/harness/dflash_attn_probe.das -- --heads
+  <32|12> --kv <8|4> --rows <8|16> --tile <queries|heads>` (the `--tile` arm is that commit's) - synthetic planes, heads
+  of 128, a window of 2048, 5 layers' rings read in turn; the tile launch's microseconds a layer at each ring fill, the
+  best of five chains of 50 launches after one warm chain, two passes of each line (the merge launch reads 1.9 to 2.4
+  us a layer in every row). 32 query heads on 8 K/V heads is the 27B drafter's geometry, 12 on 4 the E2B drafter's:
+
+    | query heads on K/V heads, rows | fill | a row's heads | a row's heads, second pass | eight queries | eight queries, second pass |
+    | :--- | ---: | ---: | ---: | ---: | ---: |
+    | 32 on 8, 8 rows | 0 | 13.5 | 13.5 | 12.1 | 12.1 |
+    | 32 on 8, 8 rows | 256 | 75.7 | 75.5 | 48.9 | 48.8 |
+    | 32 on 8, 8 rows | 512 | 113.9 | 115.3 | 63.7 | 63.7 |
+    | 32 on 8, 8 rows | 1024 | 126.7 | 127.0 | 80.4 | 80.5 |
+    | 32 on 8, 8 rows | 2048 | 211.5 | 211.3 | 120.0 | 120.2 |
+    | 32 on 8, 16 rows | 0 | 16.0 | 16.0 | 13.3 | 13.3 |
+    | 32 on 8, 16 rows | 256 | 114.4 | 114.5 | 76.1 | 76.6 |
+    | 32 on 8, 16 rows | 512 | 131.9 | 132.4 | 80.6 | 80.6 |
+    | 32 on 8, 16 rows | 1024 | 212.4 | 212.3 | 126.9 | 125.8 |
+    | 32 on 8, 16 rows | 2048 | 347.9 | 348.3 | 196.2 | 195.8 |
+    | 12 on 4, 8 rows | 0 | 13.5 | 13.5 | 12.0 | 12.1 |
+    | 12 on 4, 8 rows | 256 | 106.5 | 107.2 | 48.5 | 48.5 |
+    | 12 on 4, 8 rows | 512 | 119.3 | 119.1 | 48.7 | 48.7 |
+    | 12 on 4, 8 rows | 1024 | 169.8 | 171.5 | 48.8 | 48.8 |
+    | 12 on 4, 8 rows | 2048 | 271.0 | 271.2 | 64.2 | 64.0 |
+    | 12 on 4, 16 rows | 0 | 22.5 | 22.4 | 13.2 | 13.2 |
+    | 12 on 4, 16 rows | 256 | 120.5 | 121.1 | 48.8 | 48.8 |
+    | 12 on 4, 16 rows | 512 | 178.4 | 176.9 | 48.8 | 48.8 |
+    | 12 on 4, 16 rows | 1024 | 277.5 | 278.8 | 64.3 | 64.0 |
+    | 12 on 4, 16 rows | 2048 | 472.8 | 473.9 | 81.4 | 81.4 |
+
+  The chunk of eight queries is ahead at every filled ring, 1.5x to 1.8x at the 27B's geometry and 2.2x to 5.8x at the
+  E2B's, where a K/V head's three query heads leave the other tile a head a workgroup; at an empty ring the two are
+  level. The tile a row's heads is deleted with this entry (`ARCHITECTURE_GPU_SHARED_DRAFTER.md#dflash-attn-tiles`).
+  Not measured: the Vulkan home (the probe runs on CUDA), and a model's round. Each ratio is the time of the tile a
+  row's heads over the time of the chunk of eight queries. Not recorded for this run: whether `DAS_TUNE_POLICY`,
+  `DASLLAMA_CUDA_MMQ` and `DASLLAMA_CUDA_PDL` were set.
+
+  The column a row's heads is the after arm of the 2026-11-24 entry below (the block drafter's attention tile a (row,
+  the query heads of a K/V head, key tile) a workgroup against a (row, head, key tile)), read again on another tree.
+  That entry reads it at 197.6 us at 32 on 8, 8 rows, fill 2048, and this one at 211.5: the two trees differ - that
+  entry's kernels read rings of floats, this one's read rings of halves - so the two figures are not one kernel timed
+  twice. This entry replaces that entry's conclusion, that a discrete home serves the grouped tile where a workgroup
+  scores two or four heads and the tile a head elsewhere: the grouped tile is deleted, and the discrete homes stamp
+  the tile a chunk of eight queries alone.
+- **SIZED (2026-11-25, any box - the allocation sites' arithmetic, no run) - the memory that grows with the context or
+  with the prompt window since the block drafter's dense layers and the Vulkan window's int8 tiles: the drafter's ring
+  and partials plane on a device arm, and the int8 feed.** Derived from `dflash_ring_elems` and `dflash_ring_grown`
+  (`dasllama/dasllama_dflash.das`), `df_ring_bytes` and `df_ring_grow` (the three drafter drivers) and `pf_moe_setup`
+  (`dasllama/dasllama_vulkan_prefill.das`). MiB = 2^20 B.
+
+  The drafter's ring. A session's ring is a K plane and a V plane of halves. A plane is
+  `((n_win x window + dense x cap) x n_kv x hs + slack x n_kv x hs) x 2` bytes: `n_win` layers ring at the file's
+  window, `dense` layers - the ones the file's `sliding_window_pattern` leaves unwindowed, dense on a device arm by
+  default - hold `cap` slots each, and `slack` is 80 slots on the Vulkan and CUDA homes and 64 on Metal (the matrix
+  attention's, `ARCHITECTURE_GPU_SHARED_DRAFTER.md#dflash-metal-matrix`). `cap` starts
+  at the window (or at `set_dflash_dense_reserve`'s count) and grows to the larger of twice itself and the positions a
+  pass needs, so it is at least the context in view and under twice it. Before the dense layers a plane was
+  `n_layers x window x n_kv x hs x 4` bytes, floats, at any context. The dense term of a ring, both planes, at 8 K/V
+  heads of 128 (the 27B drafter's K/V geometry) is `dense x cap x 4096` bytes:
+
+    | `cap`, slots | a dense layer, a ring, bytes |
+    | ---: | ---: |
+    | 2048, a new ring | 8,388,608 (8 MiB) |
+    | 32768, a 32768-token context reached by doubling | 134,217,728 (128 MiB) |
+
+  The count of dense layers is the drafter file's, and no file's count is recorded here.
+
+  The partials plane on the Vulkan and CUDA homes, one a drafter:
+  `16 x n_heads x ceil(max(2304, cap + 16) / 256) x (hs + 2) x 4` bytes, remade when a ring grows past its keys. At 32
+  query heads of 128 that is 2,396,160 bytes (2.3 MiB) at a `cap` of 2048, 9 tiles, and 34,344,960 (32.8 MiB) at
+  32768, 129 tiles. Metal's partials plane does not grow.
+
+  The int8 feed, Vulkan alone, made once a residency where the routed block rides the f16-fed tiles and the served set
+  names an int8 column (`vk_mmq_any`). `np` is the window's rows, `k` the experts a row routes to, `dim` the model's
+  width, `nfe` an expert's hidden width:
+
+    | buffer | bytes |
+    | :--- | :--- |
+    | `pf_mmq_xq`, the window's rows as int8 | `np x dim` |
+    | `pf_mmq_xs`, two floats a 32-block of them | `np x (dim / 32) x 8` |
+    | `pf_mmq_tok`, the row map | `np x k x 4` |
+    | `pf_mmq_hq`, the hidden rows as int8 | `np x k x nfe` |
+    | `pf_mmq_hs`, two floats a 32-block of them | `np x k x (nfe / 32) x 8` |
+    | `pf_mmq_ident`, the identity map | `np x k x 4` |
+
+  On the Qwen3.6-35B-A3B (`dim` 2048, `nfe` 512, `k` 8 - the shapes of `harness/vk_gemm_probe.das`'s `moeq` arm) the
+  six are 7744 bytes a window row: 15,859,712 bytes (15.125 MiB) at the 2048-row default window and 31,719,424
+  (30.25 MiB) at the 4096-row one. The window's rows take any multiple of 128 a pin names (`pf_window_rows`).
 - **MEASURED (2026-11-24, `direction-grade`) - the nv4 lane split measures out: an nv4 decode GEMV row past 96 blocks
   at the whole subgroup against the grid formats' sixteen lanes, both discrete homes (RunPod RTX PRO 4500 Blackwell 32
   GB).** The box and the unset flags are the nv4 device unit entry's of this date. Exe: the daslang binary built from
@@ -363,7 +455,376 @@ what it costs today and what the fix would change.
   `resident image` line on the CUDA home): 4017 MB with the head's two rows (the NextN arm's server), 5104 MB
   with the block-rounds ask's nine (the DFlash2 arm's server) - a rollback copy of every recurrent layer's state a
   verify row past the first.
+- **MEASURED (2026-11-23, `direction-grade`) - the far row: a one-row token step's flat layers on the decode tile form
+  against the row form, the Qwen3.6-35B on the CUDA home of an RTX PRO 6000 Blackwell.** Provenance: commit bf130184f6
+  wrote these figures into the far-row section, now `ARCHITECTURE_GPU_VULKAN_ATTN.md#decode-far-row`, and into its own
+  message. Not recorded: the harness and its command line, the exe and its tier, the flags of the serving run, the
+  model file's quant, the box beyond the card's name, and the tree each arm ran on. Decode tok/s after a context of the
+  keys named:
 
+    | keys | row form | tile form |
+    | ---: | ---: | ---: |
+    | 1024 | 214.4 | 220.4 |
+    | 16384 | 190.4 | 208.8 |
+    | 130000 | 108.4 | 157.5 |
+
+  The commit's message, the same card and model. The tile form's combine dispatch as four heads a workgroup, a thread
+  walking a head's pieces, costs a fixed 42 us a layer at 96 pieces; as a workgroup a head, a thread a piece, it costs
+  8 to 11 us. `tg128` tok/s after 8k / 16k / 65k / 130k tokens reads 205.6 / 200.9 / 169.0 / 139.5 before the commit
+  and 219.0 / 215.3 / 186.0 / 160.0 after it. The far count of a device of 64 SMs or more (`CRD_FAR_KEYS_WIDE`, 128
+  keys) and the tiers of the pieces (`crd_tile_pieces`) are that commit's picks.
+
+  The section's earlier sentence (commits d4c320d22a to ec647fde90, 2026-11-20; bf130184f6 replaced it) carries the
+  only readings of the other devices, on the tree before the combine changed, with the same things not recorded. Tok/s,
+  row form / tile form - the gemma-4-E2B Q8_0 after 65536 tokens: 133.3 / 154.9 on the RTX PRO 4500's CUDA home, 91.2 /
+  140.2 on its Vulkan home, 49.8 / 55.2 on the Radeon 8060S; gpt-oss-20b after 16384 tokens: 181.7 / 203.7 on the RTX
+  PRO 4500's CUDA home. Not measured: the Vulkan home's far row on the tip's tree.
+- **MEASURED (2026-11-22, `direction-grade`, `out-of-process`) - the Vulkan home's head-256 flash pass on NVIDIA carries the same cost a row as
+  the CUDA home's did, and the cm2 tile at 128 query rows a workgroup takes a fifth off it.** The profile of our server's
+  turn behind 175k tokens (`DASLLAMA_GPU_PROF=1`, Qwen3.6-35B-A3B-MTP UD-Q4_K_M, RTX PRO 4500, a 200000 context): the flash
+  stage is 1730 ms of the 3557-row window's 2151 ms on the 64-row tile (48.6 us a row; the CUDA home 36.8 before its wide
+  tile and 27.3 on it) and 1359 of 1770 on the wide stamps (`DASLLAMA_VK_FA_WIDE`). Costs today: the flash stage is still
+  three quarters of a deep window. What a further fix changes: the rows below - `harness/model_bench_run.das --only behind`,
+  three reps a cell, one pod, ours on the wide stamps / ours on the 64-row tile / llama.cpp 4483b2b.
+
+    | base, tokens | `pp4096+base`, tok/s | wide over 64 | wide over llama.cpp | `tg128+4096+base`, tok/s (ours / llama.cpp) |
+    | ---: | ---: | ---: | ---: | ---: |
+    | 30,414 | 4387 / 4105 / 3079 | 1.07 | 1.42 | 141.5 / 125.4 |
+    | 60,682 | 3312 / 2957 / 2421 | 1.12 | 1.37 | 128.1 / 114.1 |
+    | 116,624 | 2185 / 1863 / 1776 | 1.17 | 1.23 | 108.3 / 97.6 |
+    | 175,393 | 680 / 542 / 1400 | - | - | 93.9 / 83.4 |
+
+  The 175k row is not the kernel's: on this pod a turn at that depth waits 0.8 to 6 s in `forward_prefill_alloc` before its
+  window (the session's host scratch, allocated a request) - the container holds 62 GB, its page cache carries the 22 GB
+  model file, a 23 GB image and the bench's slot files, and the cgroup's direct reclaim counter moves with every such turn.
+  A pod with room read that row at 1446 tok/s on the 64-row tile. A tile of 256 rows is slower, not faster: on the Qwen3.8-27B's 3785-row window behind 61k keys the flash stage reads 2352 ms against 1173 at 128. Not read: the pass on an AMD card
+  (its KHR arm serves 16 rows a workgroup), a request's scratch allocation off a loaded box. Tree 3e71983778. The reference rows' recipe: llama.cpp 4483b2b on the command line `ARCHITECTURE_MEASUREMENT_SERVED.md#model-bench-runner` gives; its build line on this run's box is not recorded.
+- **MEASURED (2026-11-22, `direction-grade`, `out-of-process`) - Qwen3.6-35B-A3B-MTP UD-Q4_K_M on the RTX PRO 4500 (Vulkan on Linux, one
+  stream): the lead of the next 4096 tokens' prefill over llama.cpp shrinks with the depth to a tie at 175k tokens, and at a
+  262144 context the card does not hold the model whole on this home.** Costs today: at a 262144 context decode behind 175k
+  tokens runs at 31.9 tok/s against llama.cpp's 85.9 and the next 4096 tokens at 1293 against 1392; a slot restore of 175k
+  tokens takes 12 s against 1.2. What a fix changes: the rows below. Rows: `harness/model_bench_run.das --only behind`,
+  three reps a cell, ours / llama.cpp 4483b2b, the context each server started at beside the base.
+
+    | context | base, tokens | `pp4096+base`, tok/s | x | `tg128+4096+base`, tok/s | x | the model on the card |
+    | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
+    | 131072 | 30,414 | 4334 / 2900 | 1.49 | 141.4 / 129.3 | 1.09 | whole |
+    | 131072 | 60,682 | 2922 / 2340 | 1.25 | 127.9 / 116.6 | 1.10 | whole |
+    | 131072 | 116,624 | 1952 / 1723 | 1.13 | 107.8 / 98.9 | 1.09 | whole |
+    | 200000 | 175,393 | 1446 / 1422 | 1.02 | 93.9 / 86.1 | 1.09 | whole |
+    | 262144 | 175,393 | 1293 / 1392 | 0.93 | 31.9 / 85.9 | 0.37 | one routed layer's experts on the host |
+    | 262144 | 230,649 | 1033 / 1131 | 0.91 | 25.6 / 76.2 | 0.34 | one routed layer's experts on the host |
+
+  The plan at 262144 positions (`DASLLAMA_GPU_PROF=1`): weights 21615 + K/V 5632 + scratch 1456 = 28703 MiB against 28527
+  usable - the heap's size less the 2 GiB desktop reserve, less the 2 GiB headroom of a box whose OS answers no room
+  (`ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-plan-room`); the CUDA home's plan reads 30325 usable on the same card and holds the
+  model whole. The window pick keeps the 4096-row window with a host layer over the 2048-row window whole (scratch 999, which
+  fits). Held whole by force the card is out of room: under `DASLLAMA_GPU_PF_ROWS=2048` decode reads 94.0 tok/s and the
+  next 4096 tokens 686, a restore 39 s; under a pinned cap (`DASLLAMA_GPU_VRAM_MB=32060`) 94.0 and 423, a restore 48 s, and
+  the 230k base's run died. Not read: why a whole plan at that context prefills and restores slowly, the flash pass's
+  kernel time on this home (its tile serves 64 query rows a key walk, the count the CUDA home's pass was slow at), an AMD
+  card past 117k tokens. Tree 1adab7a412. The reference rows' recipe: llama.cpp 4483b2b on the command line `ARCHITECTURE_MEASUREMENT_SERVED.md#model-bench-runner` gives; its build line on this run's box is not recorded.
+- **MEASURED (2026-11-22, `direction-grade`, `out-of-process`) - Qwen3.6-35B-A3B-MTP UD-Q4_K_M on the RTX PRO 4500 (CUDA, one stream): behind
+  a long context the next 4096 tokens' prefill fell from 1.28x llama.cpp's at 30k tokens to 0.96x at 231k, and the cause is
+  the head-256 flash pass's query rows a key walk, not bandwidth.** The pass's time is linear in the keys on both engines
+  (ours 9.1 -> 49.2 ms a launch from 30k to 175k keys, theirs 1.23 -> 6.82), ours 1.45 to 1.48x theirs a row at both depths;
+  its share of the turn grows with the depth (11% -> 31% of the kernel time). The cm2 tile serves 64 rows a walk, the wide
+  tile as stamped for head 512 serves 48 and runs the pass in the same time (49.4 ms); at 96 rows a walk
+  (`ARCHITECTURE_GPU_SHARED_ATTN.md#cuda-fa-wide`) it takes 36.7 ms. Costs today: none at the depths read. What a further
+  fix changes: the `pp4096+<base>` rows below. Rows: `harness/model_bench_run.das --only behind`, both servers at a 262144
+  context, three reps a cell, ours / llama.cpp 4483b2b.
+
+    | base, tokens | `pp4096+base` before, tok/s | `pp4096+base`, tok/s | x | `tg128+4096+base`, tok/s | x |
+    | ---: | ---: | ---: | ---: | ---: | ---: |
+    | 30,414 | 5444 / 4252 | 5685 / 4161 | 1.37 | 152.6 / 144.9 | 1.05 |
+    | 60,682 | 3834 / 3345 | 4304 / 3327 | 1.29 | 136.8 / 129.7 | 1.05 |
+    | 116,624 | 2621 / 2486 | 2905 / 2502 | 1.16 | 113.2 / 108.1 | 1.05 |
+    | 175,393 | 1954 / 1932 | 2284 / 1948 | 1.17 | 96.7 / 92.6 | 1.05 |
+    | 230,649 | 1529 / 1586 | 1924 / 1585 | 1.21 | 84.4 / 81.3 | 1.04 |
+
+  The cold 230,640-token prefill: 3682 tok/s against 2982 before (llama.cpp 3116). The prompt ladder with the tile off and
+  on (`DASLLAMA_CUDA_FA_WIDE`), pp2048 / 4096 / 8192 / 16384: the 35B 8040 / 8927 / 8832 / 8931 off and 8032 / 8936 / 8936 /
+  9221 on; gemma-3-4b Q8_0 (head 256, its global layers) 15101 / 15362 / 15401 / 14819 off and 15086 / 15417 / 15531 /
+  15070 on. Not read: a slot restore (ours 0.5 to 0.9x llama.cpp's rate), our `pp4096+base` rows' spread (5 to 8% against
+  1%), a block of more than 96 rows, the Vulkan home past 117k tokens, another card. Tree 1adab7a412. The reference rows' recipe: llama.cpp 4483b2b on the command line `ARCHITECTURE_MEASUREMENT_SERVED.md#model-bench-runner` gives; its build line on this run's box is not recorded.
+- **MEASURED (2026-11-22, `direction-grade`, `out-of-process`) - Qwen3.6-35B-A3B-MTP UD-Q4_K_M on the Radeon 8060S (Vulkan, one stream): what
+  follows a long context slows with its depth - behind 117k tokens the next 4096 prefill at a third of the rate behind 30k,
+  and decode loses a quarter.** Costs today: a turn of 4096 new tokens waits 11.8 s for its first text behind 117k tokens
+  against 4.1 s behind 30k. What a fix changes: the `pp4096+<base>` and `tg128+4096+<base>` rows below, each read in about
+  a minute off a restored base (`harness/model_bench_run.das --only behind`, `ARCHITECTURE_MEASUREMENT_SERVED.md#model-bench`).
+  Rows: ours alone, three reps a cell, the base turn's own cold prefill beside them (one turn); the timed turn's time to
+  first text holds the cached base's attach, here its upload from the host pool into the card's region.
+
+    | base, tokens | base cold, tok/s | `pp4096+base`, tok/s | first text, s | `tg128+4096+base`, tok/s |
+    | ---: | ---: | ---: | ---: | ---: |
+    | 30,414 | 1412.9 | 977.4 | 4.06 | 76.5 |
+    | 60,682 | 1010.6 | 633.4 | 5.90 | 66.3 |
+    | 116,624 | 672.0 | 332.8 | 11.77 | 56.6 |
+
+  The slot routes on the same model: a save wrote 30,423 / 60,691 / 116,633 tokens in 0.36 / 0.62 / 2.04 s, a restore read
+  the first back in 0.20 s, and a 138,761-token state is 3.19 GB in the f16 codec (saved in 2.6 s, restored in 1.65 s).
+  Not read: the reference's rows (the runner hands llama-server the same flag and routes; no run yet), any other box.
+  Tree c7764dc0be.
+- **MEASURED (2026-11-22, `direction-grade`, `out-of-process`) - the draft depth of the served speculative arms on three discrete setups:
+  depth 1, the default of a NextN head and of a block drafter on a Vulkan or CUDA home, is the slowest point on every one;
+  the best depth is 2 to 4 and moves with the device, the model and the row. A NextN head's round on a Vulkan or CUDA
+  home now drafts three (`MTP_DEPTH_NEXTN_DISCRETE`, `ARCHITECTURE_GPU_MTP.md#mtp-depth-knob`), and with it a block
+  drafter's round on a trunk with a head; the Metal home keeps its knob. Kept as the notes the per-platform defaults are
+  written from.** Costs today: on the M1 Max the 35B's NextN arm runs 2 to 6% under its best depth. Its DFlash2 arm
+  drafted five a round there (`DFLASH_ROUTED_DRAFTS`), 18% under depth 2; off the matrix-unit form the Metal verify seat
+  now caps an unpinned block round at three (`METAL_ROWS_DRAFTS`): 90.6 / 76.2 tok/s with no depth set, against 70.5 / 65.1. What a fix changes: the rates below, per (home,
+  device, model, arm).
+  Rows: `harness/model_bench_run.das --only <arm>` against our server, three reps a cell, greedy, a 512-token reply to
+  the bench's coding task with no context (`tg512`) and behind 4096 tokens of code (`tg512+4096`); the depth through a
+  copy of `harness/model_bench.json` whose arm flags carry `--mtp-depth <d>`. One prompt kind: the accepted share, and so
+  the best depth, moves with the text. Tok/s, short row / long row; drafted tokens accepted of drafted, short row.
+  rizen is the Ryzen AI Max+ 395's Radeon 8060S under Windows (Vulkan), the pod the RunPod RTX PRO 4500 Blackwell 32 GB,
+  the M1 an M1 Max (32-core GPU, 64 GB) on its Metal home, the box otherwise idle, ours alone.
+
+    | setup | model, arm | depth 1 | depth 2 | depth 3 | depth 4 | depth 6 | llama.cpp 4483b2b |
+    | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+    | rizen, Vulkan | Qwen3.5-0.8B-MTP Q8_0, NextN | 254.0 / 242.0 | 284.2 / 253.4 | 300.7 / 250.0 | 260.0 / 231.3 | | 244.0 / 201.2 |
+    | rizen, Vulkan | Qwen3.6-35B-A3B-MTP UD-Q4_K_M, NextN | 86.9 / 83.2 | 92.9 / 88.5 | 94.2 / 92.0 | 91.0 / 83.5 | | 79.4 / 72.3 |
+    | rizen, Vulkan | Qwen3.6-35B-A3B-MTP UD-Q4_K_M, DFlash2 Q8_0 | 75.2 / 67.7 | 93.1 / 84.0 | 96.6 / 87.9 | 98.3 / 90.7 | 92.4 / 87.4 | 77.2 / 73.6 |
+    | pod, Vulkan | Qwen3.5-0.8B-MTP Q8_0, NextN | 638.8 / 576.9 | 701.7 / 583.9 | 697.4 / 545.4 | 628.7 / 465.5 | | 378.6 / 333.5 |
+    | pod, CUDA | Qwen3.5-0.8B-MTP Q8_0, NextN | 717.1 / 700.2 | 848.5 / 737.0 | 874.3 / 745.5 | 872.7 / 724.8 | | 627.6 / 544.2 |
+    | pod, Vulkan | Qwen3.6-35B-A3B-MTP UD-Q4_K_M, NextN | 227.0 / 213.8 | 255.6 / 224.6 | 240.7 / 223.9 | 228.4 / 197.2 | | 177.9 / 173.4 |
+    | pod, Vulkan | Qwen3.6-35B-A3B-MTP UD-Q4_K_M, DFlash2 Q8_0 | 185.9 / 168.8 | 213.6 / 194.5 | 236.3 / 212.6 | 226.0 / 194.9 | | 189.2 / 170.6 |
+    | pod, CUDA | Qwen3.6-35B-A3B-MTP UD-Q4_K_M, NextN | 239.8 / 229.7 | 284.4 / 258.9 | 273.9 / 267.8 | 298.1 / 265.6 | | 230.0 / 229.4 |
+    | pod, CUDA | Qwen3.6-35B-A3B-MTP UD-Q4_K_M, DFlash2 Q8_0 | 200.0 / 187.9 | 247.1 / 236.9 | 278.2 / 240.9 | 282.1 / 263.6 | | 250.9 / 228.7 |
+    | M1, Metal | Qwen3.6-35B-A3B-MTP UD-Q4_K_M, NextN | 82.0 / 76.4 | 86.7 / 79.6 | 83.3 / 80.8 | 74.7 / 72.1 | | |
+    | M1, Metal | Qwen3.6-35B-A3B-MTP UD-Q4_K_M, DFlash2 Q8_0 | 73.0 / 68.1 | 86.2 / 75.8 | 84.3 / 74.6 | 75.8 / 69.4 | | |
+
+    | setup | model, arm | accepted of drafted at depth 1 / 2 / 3 / 4 |
+    | :--- | :--- | :--- |
+    | rizen, Vulkan | 0.8B, NextN | 708 of 826 / 949 of 1171 / 1067 of 1399 / 1076 of 1831 |
+    | rizen, Vulkan | 35B, NextN | 708 of 827 / 916 of 1236 / 1016 of 1553 / 1077 of 1831 |
+    | rizen, Vulkan | 35B, DFlash2 | 699 of 835 / 926 of 1217 / 1005 of 1586 / 1073 of 1849 (depth 6: 1062 of 2361) |
+    | pod, Vulkan | 0.8B, NextN | 686 of 849 / 944 of 1178 / 1057 of 1432 / 1066 of 1874 |
+    | pod, CUDA | 0.8B, NextN | 685 of 850 / 925 of 1217 / 1045 of 1470 / 1096 of 1751 |
+    | pod, Vulkan | 35B, NextN | 85% / 950 of 1171 / 1020 of 1542 / 1074 of 1839 |
+    | pod, Vulkan | 35B, DFlash2 | 84% / 896 of 1276 / 1007 of 1583 / 1060 of 1896 |
+    | pod, CUDA | 35B, NextN | 87% / 930 of 1207 / 999 of 1604 / 1079 of 1821 |
+    | pod, CUDA | 35B, DFlash2 | 80% / 890 of 1288 / 995 of 1614 / 1033 of 2005 |
+    | M1, Metal | 35B, NextN | 697 of 830 / 922 of 1197 / 996 of 1565 / 1045 of 1887 |
+    | M1, Metal | 35B, DFlash2 | 681 of 854 / 931 of 1207 / 998 of 1606 / 1029 of 2020 |
+
+  Readings. The reference drafts about three a round (its 35B rows: 1003 of 1583 on NextN, 993 of 1611 on DFlash2) and
+  accepts 62%; our depth 1 accepts 85% of one draft a round. On rizen depth 3 is the best or within noise of it on all
+  three arms, and takes the 35B's DFlash2 row from 0.97x of the reference to 1.25x. On the pod's Vulkan home the 0.8B is
+  best at 2 and its long row loses from 3 on (545.4 against 576.9 at depth 1); on its CUDA home 3 is best on both rows.
+  The pod's 35B: the DFlash2 arm at depth 1 is the one row under the reference on either home (0.98x and 0.99x on Vulkan,
+  0.80x and 0.82x on CUDA) and passes it from depth 2 on Vulkan and from depth 3 on CUDA (1.25x and 1.25x at 3 on Vulkan,
+  1.11x and 1.05x on CUDA, 1.12x and 1.15x at 4); its NextN arm is best at 2 on Vulkan and at 3 or 4 on CUDA. The block
+  drafter gains most from its first extra depth: 185.9 -> 213.6 and 200.0 -> 247.1 from depth 1 to 2.
+  The M1: with no depth set its NextN arm reads the depth-1 row (81.5 / 77.8) and its DFlash2 arm 70.5 / 65.1 at five
+  drafts a round (1060 of 2375 accepted), under every depth from 1 to 4; depth 2 or 3 gains 2 to 6% on NextN, depth 4
+  loses 6 to 9%.
+  So one number does not fit: a default wants the home, the device and the model. The assistant drafter's discrete
+  default is 3 (`MTP_DEPTH_ASSISTANT_DISCRETE`, `ARCHITECTURE_GPU_MTP.md#mtp-depth-knob`: the 26B's assistant arm read
+  227 / 269 / 276 / 266 tok/s at depths 1 to 4 on the pod's CUDA home). Trees: the 0.8B's rizen rows at 5c7f6dce72, the
+  pod's 35B rows at 20ac4742a5, the M1's at 0b059d175b, every other row at 8b2c823992. The reference rows' recipe: llama.cpp 4483b2b on the command line `ARCHITECTURE_MEASUREMENT_SERVED.md#model-bench-runner` gives; its build line on each of this run's boxes is not recorded.
+
+- **MEASURED (2026-11-22, the Radeon 8060S) - the Qwen3-30B seven-block cut's two routed bars on a device whose compiler
+  rounds a shader at a time.** Provenance: commit 0b059d175b wrote both readings into the comments above the bars'
+  constants, in `tests/_moe_resident.das` and `tests/_resident_regions.das`. Not recorded: the test run's command line
+  and flags, the cell that printed each reading, the exe and its tier, the driver, and the tree. The carrier is
+  `Qwen3-30B-A3B-7L-Q4_K_M-local.gguf`.
+  - `MOE_LOGIT_BAR_REL_APART`, 0.25 of the step's max |logit| (`tests/_moe_resident.das`): the bar `moe_carrier_bar_rel`
+    gives the device feeds of `tests/test_gpu_resident_qwen_moe.das`'s default form against the CPU chain where
+    `home_rounds_alike` is false, in place of `MOE_LOGIT_BAR_REL` (0.20). The cut's 40-token prefill row reads 3.11 of
+    a 14.8 peak (0.21) under every alternate set, its argmax across a 0.33 near-tie, the feeds behind it 0.57 to 1.54;
+    the one-step-off control reads 17.5 (1.18).
+  - `ROUTED_BAR_REL`, 0.25 of the peak (`tests/_resident_regions.das`): the cut's batched rows hold it against the
+    session alone (`test_regions_batched_steps_q30` in `tests/test_gpu_resident_qwen_moe.das`), a
+    driver-against-itself compare, in place of the wide bar (`WIDE_BAR_REL`, 0.10) where the N-column leaves walk
+    rotated (`home_ncol_rotates`). The batched rows read 1e-6 of the row alone on the plain walk and, on the rotated
+    one, 1.60 of a 15.4 peak and 1.57 of a 14.0 where a near-tie flips an expert; the row one off reads 16 to 17.
+- **MEASURED (2026-11-21, `direction-grade`) - the N-column GEMV leaves' rotated walk on the Radeon 8060S: a plane
+  whose quant rows sit a multiple of 512 bytes apart, read rotated against plain and against the one-column leaf.**
+  Provenance: commit 9b9b408df8 wrote the figures into `ARCHITECTURE_GPU_SHARED_GEMM.md#ncol-rotated-walk`, and
+  7836a0723b replaced that section's served tok/s pair with the stage times below. The isolated figures' command as the
+  section gave it: `harness/vk_gemv_probe.das -- <n> <d> cols cold n2off`, a plane a dispatch, two columns. Not
+  recorded: the exe and its tier, the environment, the `<n> <d>` of each line beyond the K named, the tree of each arm,
+  and for the served rows the harness, its command line and its flags. Microseconds a dispatch:
+
+    | plane | N-column leaf, plain | N-column leaf, rotated | one-column leaf |
+    | :--- | ---: | ---: | ---: |
+    | Q4_K, K 4096 | 65.9 | 27.4 | 24.7 |
+    | Q8_0, K 4096 | 89.1 | 42.9 | 51.3 |
+    | K 2304, rows off the 512-byte step (the format is not recorded) | 16.8 | | 16.7 |
+    | Q5_K, K 2048, rows that do not collide | 18.6 | 23.1 | |
+
+  Served on the 8060S, the Qwen1.5-MoE-A2.7B's two-row step, milliseconds without the twins -> with them: the
+  attention q GEMV 0.90 -> 0.55, q/k/v 1.09 -> 0.67, the attention out 0.71 -> 0.49, the dense gate and up 2.87 ->
+  2.18, the step 13.7 -> 12.1 where the two streams route apart. The Qwen3.5-0.8B, a dense model: 349.8 -> 382.2 tok/s
+  at two streams and 645.9 -> 694.6 at four. The message of 9b9b408df8 also reads, at two and at four streams, the
+  Qwen1.5-MoE-A2.7B at 135.4 -> 172.6 and 212.1 -> 252.3 tok/s and the gemma-4 26B at 146.7 -> 174.9 at four;
+  7836a0723b withdraws the A2.7B pair as a reading of the kernel, because a routed model's stream rate moves with
+  whether its streams pick the same experts. The section says the formats with no twin gain nothing at K 2048 and 4096;
+  no figure of theirs is recorded.
+- **MEASURED (2026-11-21, `direction-grade`) - the assistant drafter's draft depth on the discrete homes: the 26B's
+  assistant arm at depths 1 to 3 on the RTX PRO 4500's Vulkan home and on the Radeon 8060S.** Provenance: commit
+  cea78df392, which sets `MTP_DEPTH_ASSISTANT_DISCRETE` to 3, wrote the figures into
+  `ARCHITECTURE_GPU_MTP.md#mtp-depth-knob`; its message carries none. Not recorded: the harness and its command line,
+  the exe and its tier, the flags, the model and drafter files, the prompt, the reps, and the tree. Tok/s at depth
+  1 / 2 / 3: 213 / 247 / 269 on the RTX PRO 4500's Vulkan home, 71 / 85 / 90 on the Radeon 8060S. The same arm on the
+  RTX PRO 4500's CUDA home, at depths 1 to 4, is the 2026-11-22 draft-depth entry's: 227 / 269 / 276 / 266. Not
+  measured: depth 4 on these two homes.
+- **MEASURED (2026-11-21, `direction-grade`) - the one-row routed gate and up as two GEMVs and an act against the fused
+  arm on the Radeon 8060S (`VK_ALT_EGU_SPLIT`).** Provenance: commit cbadeaeaa6 wrote the figures into
+  `ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token` and the token-step pair into its message. Not recorded: the
+  harness and its command line, the exe and its tier, the flags, the model files beyond the names below, how the
+  stage's time was read, and the tree of each arm. Milliseconds a token, two GEMVs / the fused arm:
+
+    | model | the gate and up stage | the token step |
+    | :--- | ---: | ---: |
+    | gemma-4 26B, Q4_K stacks, 8 of 128 experts a layer | 2.61 / 4.08 | 18.4 / 20.0 |
+    | gpt-oss-20b, MXFP4 stacks | 3.72 / 4.01 | 12.6 / 13.0 |
+
+- **MEASURED (2026-11-21, `direction-grade`) - the Radeon 8060S under Windows loses the device under one long job: the
+  three cases the integrated-GPU window cap, the chunked profile and the tower's block cut rest on.** Provenance:
+  commit 9368024b80 (2026-11-17) wrote the first and the third reading into
+  `ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`, and commit 20ac4742a5 (2026-11-21) the second, also in its
+  message. Not recorded: the harness and its command line, the exe and its tier, the flags and environment beyond
+  those named, the driver's version, the model files' quants, and the trees.
+  - A 4096-row window of the Llama-3.2-3B on the head-first flash stamps loses the device some 25000 positions into
+    the context. Under the window cap (`pf_window_cap`) the windows there are 1024 rows and a 28672-position prompt
+    prefills.
+  - Pinned to one fenced submit under `DASLLAMA_GPU_PROF`, the Qwen3.6-35B's 4096-row window is 2.05 s in one submit,
+    past the Windows driver's 2 s, and the device is lost.
+  - The gemma-3 vision tower's 27 blocks over 4096 rows as one job lose the device.
+
+  Not measured: the driver's limit itself - the 2 s is the section's statement, with no reading recorded - and
+  another AMD integrated device.
+- **MEASURED (2026-11-20, `direction-grade`) - the CUDA home's wide flash tile at a head of 512 against the KHR arm,
+  and its O accumulators as f16 against f32.** Provenance: commit 8c06b77997 wrote the first group into
+  `ARCHITECTURE_GPU_SHARED_ATTN.md#cuda-fa-wide` and its message, commit 8fbe696d34 the second. Not recorded: the
+  harness and its command line, the exe and its tier, the flags, the trees, and the reference's version and command
+  line.
+  - The RTX PRO 4500, the gemma-4-E2B Q8_0's seven global layers: over a 16384-token prompt 170 ms on the wide tile
+    against 591 on the KHR arm, and 11.3 against 38.4 at 4096 tokens. The server prefills the 16384-token prompt at
+    18264 tok/s on the wide tile against 12386 on the KHR arm (llama.cpp 15345).
+  - The pass with f16 accumulators against f32 ones: 51.1 ms against 61.8 on the RTX 5060 Ti. The section says the RTX
+    PRO 4500 runs both alike; no figure of that is recorded, nor the model and prompt of the 5060 Ti's pass.
+
+  The head-256 stamps' readings, 96 query rows a block, are the 2026-11-22 entry's (the 35B on the RTX PRO 4500's CUDA
+  home).
+- **MEASURED (2026-11-20, `direction-grade`) - an AMD integrated device's carve-out on the Radeon 780M: a weight slab
+  that lands in it against the same slab in system memory.** Provenance: commit a3fa7fcfa1 wrote the figures into
+  `ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-carve-out`; its message carries none. Not recorded: the box beyond the GPU's
+  name, the model, the harness and its command line, the exe and its tier, the flags, how a slab was put in or out of
+  the carve-out for each arm, and the trees. A weight slab in the carve-out reads at about half the rate of the same
+  slab in system memory: the first q8 slab's 256 MB scale plane costs a decode step 5 ms of its 46. The small buffers
+  a step writes and reads (the scratch planes, a K/V side) run no slower there, and a drafter's rounds run 5% faster
+  with them in it. No raw rate of either placement is recorded.
+- **STATED (2026-11-19, no figure recorded) - the block drafter's accept on the CUDA home: a device accept is slower
+  there than the host's walk over the verify's picks.** Provenance: commit 31cd1e3ed0 wrote the ordering into
+  `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-dflash-pass` with its reason - a device accept's row leaves through a
+  kernel, where the late row of the host's walk is one copy. Git records no figure, no card, no model and no command for
+  it; a reading that shows the ordering on a named card is owed before it is cited as measured.
+- **MEASURED (2026-11-18, `direction-grade`) - the alternate stamps of the Vulkan class slots on the two AMD boxes, the
+  Radeon 8060S and the Radeon 760M: the readings the served set's device rules and the race's shapes rest on.**
+  Provenance: five commits wrote them into `ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps`, each named beside its
+  reading. Not recorded, for every one: the harness or probe and its command line, the exe and its tier, the flags and
+  environment, the driver, the commit of each arm's build, and the reference's version and command line.
+
+    | reading | box | figures | commit |
+    | :--- | :--- | :--- | :--- |
+    | the load-ahead q8 GEMV (`q8_gemv_ahead_cls`) against its class, the isolated chain | 760M | a gain of two percent, inside the race's own spread | f080409aaa, 2026-11-18 |
+    | the same on a served decode | not recorded | a gain of three to seven percent | f080409aaa |
+    | the KHR window tile, a 2560-row GEMM at K 4096 against K 3840 | 8060S | two and a half times the cost | 9375828fc5, 2026-11-17 |
+    | the rotated KHR tile's time over its class's | 760M | 0.84 to 0.88 at K 2048, at no other K under 1.0 | 995f13cdea, 2026-11-17 |
+    | the same | 8060S | under 1.0 at every multiple of 2048, no figure recorded | 995f13cdea |
+    | a 512-row deltanet scan, chunked / a token at a time, ms | 8060S | 2.1 / 0.9 | 2ef22e387c, 2026-11-17 |
+    | the same | 760M | 8.4 / 2.7 | 2ef22e387c |
+    | the gemma-4-E2B's decode with the rotated residual GEMV / without it, tok/s | 8060S | 78.8 / 64.7 (llama.cpp 77.9) | 96d81338d3, 2026-11-17 |
+    | the same | 760M | 22.75 / 22.1 | 96d81338d3 |
+    | the gemma-4-E2B's down step (1536 rows of K 6144) without the alternate | 8060S | 4.9 ms a token, the time of its gate and up step at half the bytes | 96d81338d3 |
+
+  Stated in the section with no figure in git: the load-ahead GEMV on a 64-lane device at the device's own width
+  against the pinned 32, a step of clamped loads over one loop against the ladder at 64 lanes, and a 64-row tile and a
+  tile staging two blocks a step against the K collision.
+- **MEASURED (2026-11-18, the Radeon 8060S) - two bars a model cell holds on a device whose compiler rounds a shader at
+  a time: the split bar of the gemma-4-E2B's peel and the hybrid K-quant rows' bar on the f16 feed.** Provenance: commit
+  ef1ed72433 wrote the first reading into the comment above the bar's constant in `tests/_resident_feed.das`, commit
+  0d6922e1db the second into the one in `tests/test_gpu_resident_hybrid.das`. Not recorded: the test runs' command
+  lines and flags, the cell that printed each reading, the exe and its tier, the driver, the trees, and the hybrid
+  rows' model file.
+  - `SPLIT_BAR_REL_APART`, 0.09 of the row's max |logit| (`tests/_resident_feed.das`): the bar `split_bar_rel` gives
+    where `home_rounds_alike` is false, in place of `SPLIT_BAR_REL` (0.06); the peels of
+    `tests/test_gpu_resident_gemma4_e2b.das` hold it, and the ringed mirror's rows against the flat one's in
+    `tests/test_mtp_gemma_drafter.das`, each a driver-against-itself compare. On this device the row command's
+    residual GEMV walks its K rotated and the rows command's tiles do not. The gemma-4-E2B's peel reads a 1-row tail
+    bit for bit, a 5-row tail 0.74 of a 24.1 max logit, and one step of a 2-row tail 1.74 of a 27.4 max logit (0.063);
+    the row one step off reads 6.2 there.
+  - `DN_LOGIT_BAR_REL_KQ_F16_FEED_APART`, 0.12 of the max logit (`tests/test_gpu_resident_hybrid.das`): the K-quant
+    rows' bar against the CPU chain on the f16 feed and mirror where `home_rounds_alike` is false, in place of
+    `DN_LOGIT_BAR_REL_KQ_F16_FEED` (0.08). The rows read 0.44 to 0.61 of an 11.5 to 15.6 max logit, but for one step of
+    the one-window cell: 1.09 of a 10.9 max logit, a row whose top two sit 0.33 apart on the f32 chain, the device 0.89
+    from it and the CPU chain 0.50, the pick flipped; the step after it reads 0.86. The summed distances from the f32
+    chain read 4.41 for the device and 4.30 for the CPU chain, the one-step-off control 9.4.
+- **MEASURED (2026-11-18, the Radeon 8060S) - the token-table gather lands an ulp off the host embed on an AMD device:
+  the gemma-4-E2B's batched rows against a load whose host embeds every row.** Provenance: commit 0d6922e1db wrote the
+  reading into `ARCHITECTURE_GPU_SHARED_ROWS.md#token-table-gather` and into `tests/_resident_regions.das`'
+  `gathered_rows_within`, the check of the E2B cell that reads it (at that commit the test of
+  `tests/test_gpu_resident_regions_e2b.das` whose description opens "On gemma-4-E2B the batched rows gather their
+  token rows on the device off their ids"). Not recorded: the test run's command line and flags, the exe and its tier,
+  the driver, and the tree. The gathered rows' logits read
+  0.47 to 2.07 a row from the host-embedded rows', against bars of 2.0 to 4.0, where the row one step off reads 9.5 to
+  33. Stamped `precise` the same rows are bit for bit; the cost of `precise` is measured on no device.
+- **MEASURED (2026-11-17, `direction-grade`) - the KHR flash stamps' tile-first alternates against the head-first
+  stamps on the two AMD boxes: a prompt's prefill on the Radeon 8060S and the Radeon 760M.** Provenance: commit
+  9368024b80 wrote the figures into `ARCHITECTURE_GPU_SHARED_ATTN.md#flash-attn-tile`; its message carries none. Not
+  recorded: the harness and its command line, the exe and its tier, the flags, the driver and the OS, the tree of each
+  arm, and the reference's version and command line. The 8060S, the Llama-3.2-3B Q4_K_M (eight key heads of 128, a
+  2048-byte key row), prefill tok/s:
+
+    | prompt, tokens | head-first | tile-first | llama.cpp |
+    | ---: | ---: | ---: | ---: |
+    | 4096 | 975 | 2636 | 2389 |
+    | 12288 | 273 | 1914 | 1545 |
+    | 28672 | 116 | 1215 | 985 |
+
+  The 8060S, the gemma-4-E2B Q8_0 (one key head): 3609 at 8192 tokens under either order, and "2367 against 2474" at
+  28672. The 760M, the Llama-3.2-1B at 8192 tokens: "900 against 847". The section's sentence does not say which order
+  each figure of the two quoted pairs is. Stated in the section with no figure in git: a walk rotated a tile at a
+  time, the query rows in runs of 256 a dispatch, and a wait between two dispatches each measured under the
+  tile-first order on that device.
+- **MEASURED (2026-11-17, `direction-grade`) - the routed block's int8 tiles against its f16 tiles on the two AMD boxes,
+  the Radeon 8060S and the Radeon 760M: a plane's time on each tile, and the served window under each set of int8
+  columns.** Provenance: commits f22d6588ee and adc72472aa (the Q6_K rows) wrote the figures into
+  `ARCHITECTURE_GPU_VULKAN_KHR.md#khr-int8-tiles`. The isolated planes, by the command the section gave:
+  `./bin/daslang -jit modules/dasLLAMA/harness/vk_gemm_probe.das -- moeq` under `DASLLAMA_COOPMAT=mm`, each figure an
+  arm's best round (`debug-jit`). The served window, by the command the section gave: `benchmarks/lcpp_bench.das -p 512
+  -n 0 -r 3` on the Qwen3.6-35B-A3B Q4_K_M. Not recorded: the exe and the tier of the served rows, how each set of
+  columns was pinned, the other flags and the environment, the drivers, the trees, and the spread of the three reps.
+
+  The 35B's planes over the window's routed buckets, milliseconds a plane, int8 tile / f16 tile:
+
+    | plane | pieces | 8060S | 760M |
+    | :--- | :--- | ---: | ---: |
+    | gate and up, Q4_K, 512 rows by K 2048 | all | 0.79 / 1.24 | |
+    | the gate and up shape | s | | 6.9 / 3.8 |
+    | down, Q5_K, 2048 rows by K 512 | all | 0.99 / 1.19 | |
+    | down, K 512 | m | 0.45 / 0.35 | 2.1 / 1.6 |
+    | down, Q6_K | s | 0.63 / 0.87 | 2.2 / 3.6 |
+    | down, Q6_K | m | 0.74 / 0.38 | 2.3 / 1.7 |
+
+  The served window, the Qwen3.6-35B-A3B Q4_K_M at 512 tokens, prefill tok/s:
+
+    | int8 columns | 760M | 8060S |
+    | :--- | ---: | ---: |
+    | none | 357 | 1616 |
+    | the down's s pieces alone | 383 | |
+    | the rule's three (`VK_ALT_MMQ_AMD`: the gate and up whole, the down's s pieces) | 396 | 1970 |
+    | all four | 392 | 1949 |
+
+  The section gave the two Q6_K pairs with no order named ("its s pieces 0.63 ms against 0.87 and 2.2 against 3.6, its
+  m pieces 0.74 against 0.38 and 2.3 against 1.7", a plane that "reads the same way" as the K 512 row); they stand
+  int8 first here, the one order under which its s pieces are faster on the int8 tile and its m pieces on the f16 one.
+  Stated in the section with no figure in git: two 16 x 16 x 16 products take the time of one 16 x 32 product a plane
+  on the 8060S, and a 64-sum subgroup or a lane-local array of the step's scales runs the tile at half its rate.
 - **MEASURED (2026-11-14, `direction-grade`) - the final tree's token rows on both discrete homes against llama.cpp
   5676dfb: pp512, tg128, batched streams, the NextN head, the assistant drafter and the block drafter (RunPod RTX PRO 4500
   Blackwell 32 GB).** Box: the RunPod RTX PRO 4500 Blackwell 32 GB (`nvidia-smi`: NVIDIA RTX PRO 4500 Blackwell, driver
