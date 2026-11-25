@@ -20,6 +20,7 @@ require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active
 require dasllama/dasllama_cuda_common
 require dasllama/dasllama_cuda_classes
 require dasllama/dasllama_cuda_classes_dflash
+require dasllama/dasllama_env   // g_env_vulkan: the tile form's knob
 require dasllama/dasllama_cuda_decode   // the armed driver's seats: the table gather, the classifier over a feed
 
 // The block drafter (DFlash, DFlash2) on the CUDA resident driver: the drafter's q8 planes, its activation planes and a ring a
@@ -36,13 +37,29 @@ struct private DfSite {
     d : int64
 }
 
-//! a session's ring on the device: a layer's K and V rows a slot, [L][window][n_kv * hs] each
+//! a session's ring on the device: a layer's K and V rows a slot as halves, the engine's layout (`dflash_ring_off`)
 struct private DfRing {
     rk : uint64
     rv : uint64
+    cap : int64   //! the slots a dense layer holds: grown as the context does
+}
+
+//! whether a drafter's dense layers attend on the flash tile's decode form: a dense layer, a head of 128, the knob
+//! DASLLAMA_CUDA_ATTN_TILE not at 0, and the stamp built
+def private df_dense_tile_on(dr : DflashDrafter) : bool
+    => dr.n_win < dr.n_layers && dr.hs == 128l && g_env_vulkan.cuda_attn_tile != 0l && ensure_fa_khr_dec_h128_cls()
+
+//! a ring plane's bytes for dense layers of `cap` slots: the engine's, a block's own rows joined past a dense layer's context
+def private df_ring_bytes(dr : DflashDrafter; cap : int64) : int64 => dflash_ring_bytes(dr, cap, DF_ROWS)
+
+//! `n` elements of the scratch plane `src`'s rows as halves at the ring plane `dst`'s element `at`
+def private df_halves(var s : void?; src, dst : uint64; at, n : int64) {
+    var pc = gk_f16_rows_args(uint(n), 1.0, uint(at))
+    enc_tower_clamp_cvt_cls(s, fixed_array(src, dst), pc, (n / 4l + 255l) / 256l)
 }
 
 struct private DflashCud {
+    dense_tile : bool   //! a dense layer attends on the flash tile's decode form (`df_dense_tile_on`), else on the scalar tiles
     ready : bool
     fq, fs : uint64[KQ_FMT_COUNT]   //! a format's quant and scale planes in the device layout, its tensors' blocks one after another (0 = no plane of it)
     feed_src : uint64          //! the float rows the feed (xq, xs) was requantized from, and how many
@@ -62,6 +79,7 @@ struct private DflashCud {
     cid, cval : uint64         //! ... and each draft row's list, [nd][topk]
     sel_ok : bool              //! the device top-k serves this drafter's top-k
     walk_ok : bool             //! ... and the selector's walk runs there too: its two codebooks up in the CPU form the walk dequantizes
+    dr : DflashDrafter const?  //! the drafter of the pass now held (the landing's decode reads its shape); null = none held yet
     cb : uint64[4]             //! the predecessor codebook's quant bytes and scale rows, then the successor's (a Q8_0 codebook's scale rows its own bytes)
     wids : uint64              //! the walk's ids: the anchor, then the picks
     walk : GkDflashWalkArgs
@@ -72,18 +90,22 @@ struct private DflashCud {
     sites : array<DfSite>
     rings : table<uint64; DfRing>
     ring_bytes : int64
+    tp_keys : int64   //! the keys a (row, head) attends at most within the partials plane
     ring_said : bool           //! a session found no room for its ring, and the attach said so
     passes, commits : int64
+    grows : int64   //! the times a session's ring grew its dense layers
     pass_us, commit_us : int64   //! the wall time the passes and the commits took, waits included
 }
 
 var private g_df : DflashCud
 
 def private df_stats : DflashDeviceStats => DflashDeviceStats(passes = g_df.passes, commits = g_df.commits, pass_us = g_df.pass_us,
-    commit_us = g_df.commit_us, selected = g_df.selected, walked = g_df.walked)
+    commit_us = g_df.commit_us, selected = g_df.selected, walked = g_df.walked, grows = g_df.grows)
 
 //! every handle dropped, nothing destroyed: the model drop already swept the device
 def private df_forget(var g : DflashCud) {
+    g.dr = null
+    g_df_held = DflashHeldPass()
     g.sites |> clear()
     g.rings |> clear()
     for (i in range(KQ_FMT_COUNT)) {
@@ -158,7 +180,7 @@ def private df_why(dr : DflashDrafter) : string {
     }
     delete sites
     return "a weight plane's decode GEMV did not compile on this device" if (!served)
-    let stamps = (ensure_dflash_conv_cls() && ensure_dflash_qkn_cls() && ensure_dflash_attn_tile_cls() && ensure_dflash_attn_tile_heads_cls() && ensure_dflash_attn_merge_cls() && ensure_cls_ar() && ensure_cls_dn_rq()
+    let stamps = (ensure_dflash_conv_cls() && ensure_dflash_qkn_cls() && ensure_dflash_attn_tile_cls() && ensure_dflash_attn_merge_cls() && ensure_tower_clamp_cvt_cls() && ensure_cls_ar() && ensure_cls_dn_rq()
         && ensure_cls_q8k_rq() && ensure_q8_actrq_cls() && ensure_q8k_actrq_cls() && ensure_words_copy())
     return "a kernel of the pass did not compile on this device" if (!stamps)
     return ""
@@ -218,7 +240,8 @@ def private df_buffers(t : Model; dr : DflashDrafter; var g : DflashCud) : bool 
     g.q = cud_dev_zero(oom, DF_ROWS * qd * 4l)
     g.qn = cud_dev_zero(oom, DF_ROWS * qd * 4l)
     g.att = cud_dev_zero(oom, DF_ROWS * qd * 4l)
-    g.tp = cud_dev_zero(oom, gk_dflash_attn_partials(DF_ROWS, dr.n_heads, dr.hs) * 4l)
+    g.tp_keys = max(int64(GK_DFLASH_ATTN_KEYS), dflash_ring_first(dr) + DF_ROWS)
+    g.tp = cud_dev_zero(oom, gk_dflash_attn_partials(DF_ROWS, dr.n_heads, dr.hs, g.tp_keys) * 4l)
     g.kb = cud_dev_zero(oom, DF_ROWS * kvd * 4l)
     g.kn = cud_dev_zero(oom, DF_ROWS * kvd * 4l)
     g.vb = cud_dev_zero(oom, DF_ROWS * kvd * 4l)
@@ -244,7 +267,8 @@ def private df_buffers(t : Model; dr : DflashDrafter; var g : DflashCud) : bool 
     g.capin = cud_mapped_make(oom, DF_ROWS * ncap * d * 4l)
     g.land = cud_mapped_make(oom, nd * (vocab + max(dr.rank, 4l)) * 4l)
     g.xin = cud_mapped_make(oom, rd)
-    g.ring_bytes = dr.n_layers * dr.window * kvd * 4l
+    g.dense_tile = df_dense_tile_on(dr)
+    g.ring_bytes = df_ring_bytes(dr, dflash_ring_first(dr))
     return !oom
 }
 
@@ -347,10 +371,12 @@ def private df_ready(t : Model; dr : DflashDrafter) : bool {
     verify(cud_sync(), "cud dflash: the drafter's planes did not land")
     g.passes = 0l
     g.commits = 0l
+    g.grows = 0l
     g.selected = 0l
     g.walked = 0l
     g.ring_said = false
     g.ready = true
+    dflash_tile_knob_say("cuda", "DASLLAMA_CUDA_ATTN_TILE", g_env_vulkan.cuda_attn_tile, dr.n_win < dr.n_layers && dr.hs == 128l)
     return true
 }
 
@@ -425,27 +451,39 @@ def private df_branch(g : DflashCud; dr : DflashDrafter; var s : void?; boff, ro
 //! layer `l` over the block's `rows` at `pos`: on entry g.hn holds the rows under the layer's attention norm, on exit under the
 //! next layer's (the final norm past the last)
 [arch(at="../ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-dflash-pass")]
-def private df_layer(var g : DflashCud; dr : DflashDrafter; var s : void?; ring : DfRing; l, rows, pos, lo, nctx : int64) {
+def private df_layer(var g : DflashCud; dr : DflashDrafter; var s : void?; ring : DfRing; l, rows, pos, lo, nctx, dlo : int64) {
     let qd = dr.n_heads * dr.hs
-    let kvd = uint(dr.n_kv * dr.hs)
     df_feed(g, dr, s, dflash_site(l, 0), dr.v2 ? dr.aconv_base_offs[l] : 0l, rows)
     df_gemv(g, s, dflash_site(l, 1), g.q, rows)
     df_gemv(g, s, dflash_site(l, 2), g.kb, rows)
     df_gemv(g, s, dflash_site(l, 3), g.vb, rows)
     df_qkn(g, dr, s, g.q, g.qn, dr.n_heads, dr.qn_offs[l], 0l, pos, rows)
     df_qkn(g, dr, s, g.kb, g.kn, dr.n_kv, dr.kn_offs[l], 0l, pos, rows)
-    let lbase = uint(l * dr.window) * kvd
-    let tiles = gk_dflash_attn_tiles(nctx + rows)
-    var pa = GkDflashAttnArgs(rows = uint(rows), pos0 = uint(pos), lo = uint(lo), nctx = uint(nctx), w = uint(dr.window), hs = uint(dr.hs),
+    let lbase = uint(dflash_ring_off(dr, l, ring.cap))
+    let span = dflash_layer_span(dr, l, lo, nctx, dlo)
+    let tiles = gk_dflash_attn_tiles(span.nctx + rows)
+    var pa = GkDflashAttnArgs(rows = uint(rows), pos0 = uint(pos), lo = uint(span.lo), nctx = uint(span.nctx),
+        w = uint(dflash_ring_slots(dr, l, ring.cap)), hs = uint(dr.hs),
         nheads = uint(dr.n_heads), grp = uint(dr.n_heads / dr.n_kv), scale = dr.attn_scale, rbase = 0u,
         koff = lbase, voff = lbase)
-    let wgs = gk_dflash_attn_heads_wgs(rows, dr.n_heads, dr.n_heads / dr.n_kv, tiles)
-    if (gk_dflash_attn_grouped(dr.n_heads / dr.n_kv)) {
-        enc_dflash_attn_tile_heads_cls(s, fixed_array(g.qn, g.kn, g.vb, ring.rk, ring.rv, g.tp), pa, wgs)
+    if (dr.dense[l] && g.dense_tile) {   // the block's own rows joined to the ring past the context, every row attending them all on the flash tile's decode form
+        let kvd = dr.n_kv * dr.hs
+        let grp = dr.n_heads / dr.n_kv
+        let k0 = int64(lbase) + span.lo * kvd
+        df_halves(s, g.kn, ring.rk, k0 + span.nctx * kvd, rows * kvd)
+        df_halves(s, g.vb, ring.rv, k0 + span.nctx * kvd, rows * kvd)
+        let groups = fa_dec_groups(dr.n_kv, rows, grp)
+        let pieces = fa_dec_pieces(2l * int64(g_cud.sm_count), groups, clamp(g.tp_keys / 256l, 1l, 16l))
+        var pt = FaArgs(rows = uint(rows), qd = uint(qd), kvd = uint(kvd), kv_mul = uint(grp), kvbase = uint(k0), scale = dr.attn_scale,
+            qstride = uint(qd), qhs = uint(dr.hs), vbase = uint(k0), nsplit = uint(pieces), fixcnt = uint(span.nctx + rows))
+        enc_fa_khr_dec_h128_cls(s, fixed_array(g.qn, ring.rk, ring.rv, g.tp, g.fblob), pt, groups * pieces)
+        var pm = pa   // the merge reads the tile form's pieces as its key tiles
+        pm.nctx = uint(pieces * 256l - rows)
+        enc_dflash_attn_merge_cls(s, fixed_array(g.tp, g.att), pm, dr.n_heads * rows)
     } else {
-        enc_dflash_attn_tile_cls(s, fixed_array(g.qn, g.kn, g.vb, ring.rk, ring.rv, g.tp), pa, wgs)
+        enc_dflash_attn_tile_cls(s, fixed_array(g.qn, g.kn, g.vb, ring.rk, ring.rv, g.tp), pa, gk_dflash_attn_tile_wgs(rows, dr.n_heads, dr.n_heads / dr.n_kv, tiles))
+        enc_dflash_attn_merge_cls(s, fixed_array(g.tp, g.att), pa, dr.n_heads * rows)
     }
-    enc_dflash_attn_merge_cls(s, fixed_array(g.tp, g.att), pa, dr.n_heads * rows)
     df_rq(g, s, g.att, rows * qd, rows, dflash_site(l, 4))
     df_gemv(g, s, dflash_site(l, 4), g.o, rows)
     let abranch = df_branch(g, dr, s, dr.v2 ? dr.aconv_base_offs[l] : 0l, rows)
@@ -487,7 +525,7 @@ def private df_ring_room(g : DflashCud) : bool {
     return pl.k != 0ul
 }
 
-def private df_ring(var g : DflashCud; uid : uint64) : DfRing {
+def private df_ring(dr : DflashDrafter; var g : DflashCud; uid : uint64) : DfRing {
     if (!key_exists(g.rings, uid)) {
         let pl = df_ring_planes(g)
         if (pl.k == 0ul) {
@@ -497,9 +535,54 @@ def private df_ring(var g : DflashCud; uid : uint64) : DfRing {
             }
             return DfRing()
         }
-        g.rings[uid] = DfRing(rk = pl.k, rv = pl.v)
+        g.rings[uid] = DfRing(rk = pl.k, rv = pl.v, cap = dflash_ring_first(dr))
     }
     return g.rings?[uid] ?? DfRing()
+}
+
+//! the session's ring holds positions under `need`: its dense layers' slots grown into new planes (the rows copied to their new
+//! places) and the partials plane remade for the keys a dense layer then attends; false where the card has no room
+[cold_path]
+def private df_ring_grow(dr : DflashDrafter; var g : DflashCud; uid : uint64; need : int64) : bool {
+    let old = g.rings?[uid] ?? DfRing()
+    let cap = dflash_ring_grown(dr, old.cap, need)
+    g.grows++
+    let bytes = df_ring_bytes(dr, cap)
+    let keys = cap + DF_ROWS
+    var oom = false
+    let rk = cud_dev_zero(oom, bytes)
+    let rv = cud_dev_zero(oom, bytes)
+    let tp = keys > g.tp_keys ? cud_dev_zero(oom, gk_dflash_attn_partials(DF_ROWS, dr.n_heads, dr.hs, keys) * 4l) : 0ul
+    if (oom) {
+        cuda_mem_free(rk)
+        cuda_mem_free(rv)
+        cuda_mem_free(tp)
+        return false
+    }
+    var s = g_cud.stream
+    dflash_ring_moves(dr, old.cap, cap) $(from, to, n) {
+        cuda_memcpy_dtod(rk + uint64(to * 2l), old.rk + uint64(from * 2l), uint64(n * 2l), s)
+        cuda_memcpy_dtod(rv + uint64(to * 2l), old.rv + uint64(from * 2l), uint64(n * 2l), s)
+    }
+    let landed = cud_sync()   // the old planes are freed under no launch that reads them
+    cuda_mem_free(old.rk)
+    cuda_mem_free(old.rv)
+    if (tp != 0ul) {
+        cuda_mem_free(g.tp)
+        g.tp = tp
+        g.tp_keys = keys
+    }
+    g.rings[uid] = DfRing(rk = rk, rv = rv, cap = cap)
+    return landed
+}
+
+//! the session's ring holding positions under `need`: made at its first use, its dense layers grown where it is short; no
+//! planes (`rk` 0) where the card has no room for either
+def private df_ring_reach(dr : DflashDrafter; var g : DflashCud; uid : uint64; need : int64) : DfRing {
+    let ring = df_ring(dr, g, uid)
+    return ring if (ring.rk == 0ul || !dflash_ring_short(dr, ring.cap, need))
+    return DfRing() if (!df_ring_grow(dr, g, uid, need))
+    return df_ring(dr, g, uid)
 }
 
 def private df_drop(uid : uint64) {
@@ -517,7 +600,7 @@ def private df_drop(uid : uint64) {
 //! the pass's launches over `rows` token rows from the anchor `tok` at `pos`: the rows embedded, the layers over the session's
 //! ring, the `nd` draft rows through the trunk's classifier into `g.logits` and, on a selector file, their selector rows into
 //! `g.hsel` - nothing landed, nothing waited
-def private df_pass_enc(t : Model; dr : DflashDrafter; var g : DflashCud; ring : DfRing; var s : void?; tok, pos, rows, nd, lo, nctx : int64) {
+def private df_pass_enc(t : Model; dr : DflashDrafter; var g : DflashCud; ring : DfRing; var s : void?; tok, pos, rows, nd, lo, nctx, dlo : int64) {
     let d = dr.dim
     if (cud_rdec_emb_on()) {
         unsafe {
@@ -543,7 +626,7 @@ def private df_pass_enc(t : Model; dr : DflashDrafter; var g : DflashCud; ring :
     }
     df_norm(g, dr, s, g.x, g.x, g.hn, false, dr.attn_norm_offs[0], rows)
     for (l in range64(dr.n_layers)) {
-        df_layer(g, dr, s, ring, l, rows, pos, lo, nctx)
+        df_layer(g, dr, s, ring, l, rows, pos, lo, nctx, dlo)
     }
     let draft_rows = g.hn + uint64(d * 4l)   // row 0 is the anchor's: the drafts are the rows after it
     cud_rdec_rq_rows(s, cud_rdec_cls_fmt(), draft_rows, g.xq, g.xs, nd * d, nd)
@@ -555,16 +638,16 @@ def private df_pass_enc(t : Model; dr : DflashDrafter; var g : DflashCud; ring :
     }
 }
 
-def private df_pass(t : Model; dr : DflashDrafter; uid : uint64; tok, pos, rows, nd, lo, nctx : int64; var logits : array<float>; var hsel : array<float>) : bool {
+def private df_pass(t : Model; dr : DflashDrafter; uid : uint64; tok, pos, rows, nd, lo, nctx, dlo : int64; var logits : array<float>; var hsel : array<float>) : bool {
     var g & = unsafe(g_df)
     return false if (!g.ready || rows > DF_ROWS || nd < 1l || nd >= rows || nd >= dr.nblock)
     let t0 = ref_time_ticks()   // clock: control - the pass's wall for the stats seat, never a decision
-    let ring = df_ring(g, uid)
+    let ring = g.dense_tile ? df_ring_reach(dr, g, uid, lo + nctx + rows) : df_ring(dr, g, uid)
     return false if (ring.rk == 0ul)
     cud_rdec_commit_kick()   // the trunk's recurrent commit beside the pass: the pass reads none of its slots
     var s = g_cud.stream
     let vocab = t.config.vocab_size
-    df_pass_enc(t, dr, g, ring, s, tok, pos, rows, nd, lo, nctx)
+    df_pass_enc(t, dr, g, ring, s, tok, pos, rows, nd, lo, nctx, dlo)
     cuda_memcpy_dtoh(g.land.host, g.logits, uint64(nd * vocab * 4l), s)
     if (dr.v2) {
         unsafe {
@@ -593,7 +676,7 @@ def private df_commit(dr : DflashDrafter; uid : uint64; caps : array<float>; row
     var g & = unsafe(g_df)
     return false if (!g.ready)
     let t0 = ref_time_ticks()   // clock: control - the commit's wall for the stats seat, never a decision
-    let ring = df_ring(g, uid)
+    let ring = df_ring_reach(dr, g, uid, pos0 + rows)
     return false if (ring.rk == 0ul)
     var s = g_cud.stream
     let d = dr.dim
@@ -614,11 +697,12 @@ def private df_commit(dr : DflashDrafter; uid : uint64; caps : array<float>; row
         df_norm(g, dr, s, g.o, g.o, g.hn, false, dr.hnorm_off, n)
         df_rq(g, s, g.hn, n * d, n, dflash_site(0l, 2))
         for (l in range64(dr.n_layers)) {
-            let at = l * w * kvd + slot * kvd
+            let at = dflash_ring_off(dr, l, ring.cap) + (pos % dflash_ring_slots(dr, l, ring.cap)) * kvd
             df_gemv(g, s, dflash_site(l, 2), g.kb, n)
-            df_qkn(g, dr, s, g.kb, ring.rk, dr.n_kv, dr.kn_offs[l], at, pos, n)
+            df_qkn(g, dr, s, g.kb, g.kn, dr.n_kv, dr.kn_offs[l], 0l, pos, n)
+            df_halves(s, g.kn, ring.rk, at, n * kvd)
             df_gemv(g, s, dflash_site(l, 3), g.vb, n)
-            cuda_memcpy_dtod(ring.rv + uint64(at * 4l), g.vb, uint64(n * kvd * 4l), s)
+            df_halves(s, g.vb, ring.rv, at, n * kvd)
         }
         c0 += n
         return false if (c0 < rows && !cud_sync())   // the mapped block is the next chunk's too; the last chunk runs unwaited, the stream ordering the next pass behind it
@@ -630,8 +714,10 @@ def private df_commit(dr : DflashDrafter; uid : uint64; caps : array<float>; row
 
 def private df_selects(soft : bool) : bool => dflash_device_selects(soft, g_df.ready && g_df.sel_ok)
 
-//! the selector's walk on the device over the pass's lists, the picks alone landed into `drafts`; false where the stream failed
-def private df_walk_device(var g : DflashCud; var s : void?; tok, nd : int64; var drafts : array<int64>) : bool {
+var private g_df_held : DflashHeldPass   //! the pass this home queued unwaited
+
+//! the selector's walk on the device over the pass's lists, queued with the picks' landing behind it
+def private df_walk_queue(var g : DflashCud; var s : void?; tok, nd : int64) {
     unsafe {
         var w = reinterpret<uint?>(g.idin.host)
         w[0] = uint(tok)
@@ -642,22 +728,12 @@ def private df_walk_device(var g : DflashCud; var s : void?; tok, nd : int64; va
     let ns = g.cb[3] != 0ul ? g.cb[3] : g.cb[2]
     enc_dflash_walk_cls(s, fixed_array(g.idin.dev, g.hsel, g.cid, g.cval, g.cb[0], g.cb[0], ps, ps, g.cb[2], g.cb[2], ns, ns, g.wids), wka, 1l)
     cuda_memcpy_dtoh(g.land.host, g.wids, uint64((nd + 1l) * 4l), s)
-    return false if (!cud_sync())
-    unsafe {
-        let idw = reinterpret<uint?>(g.land.host)
-        for (r in range64(nd)) {
-            drafts[r + 1l] = dflash_slot_id(idw[r + 1l])
-        }
-    }
-    g.walked++
-    return true
 }
 
-//! the pass's lists and selector rows landed and walked by the host's own `dflash_walk` into `drafts` (a drafter with no
-//! selector takes each row's best); false where the stream failed
-def private df_walk_host(g : DflashCud; dr : DflashDrafter; var s : void?; tok, nd : int64; var drafts : array<int64>) : bool {
-    let k = dr.topk
-    let lists = nd * k * 4l
+//! the pass's lists and selector rows queued into the landing, for the host's own walk (a drafter with no selector takes each
+//! row's best)
+def private df_lists_queue(g : DflashCud; dr : DflashDrafter; var s : void?; nd : int64) {
+    let lists = nd * dr.topk * 4l
     let rank = dr.v2 ? dr.rank : 0l
     unsafe {
         let host = reinterpret<uint8?>(g.land.host)
@@ -667,38 +743,60 @@ def private df_walk_host(g : DflashCud; dr : DflashDrafter; var s : void?; tok, 
             cuda_memcpy_dtoh(reinterpret<void?>(host + 2l * lists), g.hsel, uint64(nd * rank * 4l), s)
         }
     }
-    return false if (!cud_sync())
-    unsafe {
-        let host = reinterpret<uint8?>(g.land.host)
-        dflash_drafts_of_landing(dr, tok, nd, reinterpret<uint const?>(host), reinterpret<float const?>(host + lists),
-            reinterpret<float const?>(host + 2l * lists), drafts)
+}
+
+//! RdecHeldDraftsFn: the held pass's drafts once the verify's wait returned - the stream ran the pass ahead of it
+def private df_held_drafts(var drafts : array<int64>; nd : int64) : bool
+    => dflash_held_drafts(g_df_held, g_df.dr, g_df.land.host, drafts, nd)
+
+//! the `land` seam: a held pass's drafts; where no verify came for them the stream is waited here
+[unused_argument(rng, cids, qs)]
+def private df_land(var drafts : array<int64>; nd : int64; var rng : int4&; var cids : array<int64>; var qs : array<float>) : double {
+    return dflash_held_land(g_df_held, g_df.dr, g_df.land.host, drafts, nd) $ {
+        return cud_sync()
     }
-    return true
 }
 
 //! the pass with the selector's top-k on the device: each draft row's `topk` best logits (a list a slice, the slices' lists
 //! merged) and its selector row - kilobytes where the rows' logits are megabytes - then the walk over them on the device
-//! where the codebooks let it, the picks alone landed, else the host's own (`dflash_walk`)
-[unused_argument(may_hold, may_hold_ahead, temp, rng, cids, qs), arch(at="../ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-dflash-pass")]
-def private df_select_pass(t : Model; dr : DflashDrafter; uid : uint64; tok, pos, rows, nd, lo, nctx : int64; may_hold, may_hold_ahead : bool; temp : float;
+//! where the codebooks let it, the picks alone landed, else the host's own (`dflash_walk`). Where the round lets it hold and
+//! the verify takes its rows' ids off the device, nothing is waited: the drafts - the walk's picks, or a selector-less file's
+//! one candidate a row - are the verify's rows, and its wait covers both
+[unused_argument(may_hold_ahead, temp, rng, cids, qs), arch(at="../ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-dflash-pass")]
+def private df_select_pass(t : Model; dr : DflashDrafter; uid : uint64; tok, pos, rows, nd, lo, nctx, dlo : int64; may_hold, may_hold_ahead : bool; temp : float;
                            var rng : int4&; var drafts : array<int64>; var cids : array<int64>; var qs : array<float>) : DflashSelect {
     var g & = unsafe(g_df)
     return DflashSelect.failed if (rows > DF_ROWS || nd < 1l || nd >= rows || nd >= dr.nblock)
     let t0 = ref_time_ticks()   // clock: control - the pass's wall for the stats seat, never a decision
-    let ring = df_ring(g, uid)
+    let ring = g.dense_tile ? df_ring_reach(dr, g, uid, lo + nctx + rows) : df_ring(dr, g, uid)
     return DflashSelect.failed if (ring.rk == 0ul)
     cud_rdec_commit_kick()   // the trunk's recurrent commit beside the pass: the pass reads none of its slots
     var s = g_cud.stream
-    df_pass_enc(t, dr, g, ring, s, tok, pos, rows, nd, lo, nctx)
+    df_pass_enc(t, dr, g, ring, s, tok, pos, rows, nd, lo, nctx, dlo)
     let vocab = t.config.vocab_size
     let nsl = gk_dflash_topk_slices(vocab)
     var ka = gk_dflash_topk_args(vocab, dr.topk)
     enc_dflash_topk_slices_cls(s, fixed_array(g.logits, g.logits, g.pid, g.pval), ka.slices, nsl * nd)
     enc_dflash_topk_merge_cls(s, fixed_array(g.pval, g.pid, g.cid, g.cval), ka.merge, nd)
-    let landed = g.walk_ok && dflash_device_walk_on() ? df_walk_device(g, s, tok, nd, drafts) : df_walk_host(g, dr, s, tok, nd, drafts)
-    return DflashSelect.failed if (!landed)
+    let on_device = g.walk_ok && dflash_device_walk_on()
+    let top1 = !dr.v2 && dr.topk == 1l   // no selector and one candidate a row: the list is the drafts
+    if (on_device) {
+        df_walk_queue(g, s, tok, nd)
+        g.walked++
+    } else {
+        df_lists_queue(g, dr, s, nd)
+    }
     g.passes++
     g.selected++
+    if (may_hold && (on_device || top1) && !has_ple_ngram(t.config) && !t.config.hyper_conn && cud_rdec_verify_takes_dev_ids()) {
+        cud_rdec_verify_dev_ids(on_device ? g.wids + 4ul : g.cid, nd)
+        g.dr = unsafe(addr(dr))
+        g_df_held = DflashHeldPass(nd = nd, tok = tok, walked = on_device)
+        g.pass_us += int64(get_time_usec(t0))
+        return DflashSelect.held
+    }
+    return DflashSelect.failed if (!cud_sync())
+    dflash_landed_drafts(dr, tok, nd, on_device, g.land.host, drafts)
     g.pass_us += int64(get_time_usec(t0))
     return DflashSelect.landed
 }
@@ -719,6 +817,7 @@ def private cud_dflash_install {
         g_df_hooked = true
         register_cud_drop_hook(@@df_drop_forget)
     }
+    install_rdec_held_drafts(@@df_held_drafts)
     register_dflash_device("vulkan", DflashDeviceSeams(ready = @@df_ready, commit = @@df_commit, draft_pass = @@df_pass, selects = @@df_selects,
-        select_pass = @@df_select_pass, land = @@dflash_land_none, drop = @@df_drop, detach = @@df_detach, stats = @@df_stats))
+        select_pass = @@df_select_pass, land = @@df_land, drop = @@df_drop, detach = @@df_detach, stats = @@df_stats))
 }

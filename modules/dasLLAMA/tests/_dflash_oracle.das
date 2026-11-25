@@ -12,7 +12,6 @@ require daslib/f16_cvt   // f32_to_f16, f16_to_f32: the codebooks' half scales
 require dasllama/dasllama_kqformat   // kq_qsb, kq_ssb: a superblock's quant and scale bytes
 require dasllama/dasllama_convert   // dequant_kq_plane_sb: the oracle's codebook rows
 require dasllama/dasllama_dflash public   // DflashDrafter, DflashW: the codebooks' home
-require dasllama/dasllama_gpu_kernels_common   // GkDflashAttnArgs, gk_dflash_attn_tiles: the block attention's fixture
 require dastest/testing_boost public
 require math   // min: a list's live slots
 require _compares   // check_exact: the lists' live slots
@@ -309,99 +308,4 @@ def df_topk_fixture(leg : DfTopkLeg) : DfTopkFixture {
     var flipped <- df_topk_oracle(lg, leg.rows, leg.vocab, leg.k, true)
     return <- DfTopkFixture(nsl = nsl, lg <- lg, want <- want, flipped <- flipped, part_ids <- part_ids, part_vals <- part_vals,
         part_live <- part_live, row_live <- [for (_r in range(leg.rows)); min(leg.k, leg.vocab)])
-}
-
-let DF_ATTN_ROWS = 8   //! the block rows of the attention fixture
-
-//! the V floats a key tile's lanes past the keys in view would read behind the block's rows: the slack a cell poisons there
-def df_attn_v_slack(f : DfAttnFixture) : int
-    => (256 * f.tiles - int(f.pa.nctx) - int(f.pa.rows)) * (int(f.pa.nheads) / int(f.pa.grp)) * int(f.pa.hs)
-
-//! one block leg of the block attention's fixture (`GkDflashAttnTile` or `GkDflashAttnTileHeads`, then `GkDflashAttnMerge`): the planes a home uploads - q and K of
-//! both signs, so a key's score sits near zero and a masked key scored at zero would weigh in - the stamps' arguments, the
-//! windowed softmax a home lands (`want`) and the softmax with no window, the control it misses (`open`)
-struct DfAttnFixture {
-    q : array<float>
-    kb : array<float>
-    vb : array<float>
-    rk : array<float>
-    rv : array<float>
-    pa : GkDflashAttnArgs
-    tiles : int
-    want : array<float>
-    open : array<float>
-}
-
-//! the fixture's rows through the softmax over the ring and the block, a head at a time: under the window, or with none
-def private df_attn_softmax(f : DfAttnFixture; windowed : bool) : array<float> {
-    let rows = int(f.pa.rows)
-    let hs = int(f.pa.hs)
-    let nheads = int(f.pa.nheads)
-    let grp = int(f.pa.grp)
-    let nctx = int(f.pa.nctx)
-    let w = int(f.pa.w)
-    let pos0 = int(f.pa.pos0)
-    let lo = int(f.pa.lo)
-    let rbase = int(f.pa.rbase)
-    let ringoff = int(f.pa.koff)
-    let kvd = (nheads / grp) * hs
-    let qd = nheads * hs
-    let nkeys = nctx + rows
-    var out <- plane_of(rows * qd, 0.0)
-    var sc : array<float>
-    sc |> resize(nkeys)
-    for (r in range(rows)) {
-        for (h in range(nheads)) {
-            let kh = (h / grp) * hs
-            var mx = -3.0e38
-            for (j in range(nkeys)) {
-                let kpos = j < nctx ? lo + j : pos0 + (j - nctx)
-                sc[j] = -3.0e38
-                if (!windowed || abs(pos0 + r - kpos) < w) {
-                    var dot = 0.0
-                    for (e in range(hs)) {
-                        let kv = j < nctx ? f.rk[ringoff + (kpos % w) * kvd + kh + e] : f.kb[(rbase + j - nctx) * kvd + kh + e]
-                        dot += f.q[(rbase + r) * qd + h * hs + e] * kv
-                    }
-                    sc[j] = dot * f.pa.scale
-                    mx = max(mx, sc[j])
-                }
-            }
-            var tot = 0.0
-            for (j in range(nkeys)) {
-                sc[j] = sc[j] <= -1.0e38 ? 0.0 : exp(sc[j] - mx)
-                tot += sc[j]
-            }
-            for (i in range(hs)) {
-                var acc = 0.0
-                for (j in range(nkeys)) {
-                    let kpos = j < nctx ? lo + j : pos0 + (j - nctx)
-                    acc += sc[j] * (j < nctx ? f.rv[ringoff + (kpos % w) * kvd + kh + i] : f.vb[(rbase + j - nctx) * kvd + kh + i])
-                }
-                out[r * qd + h * hs + i] = acc / tot
-            }
-        }
-    }
-    delete sc
-    return <- out
-}
-
-//! `nheads` query heads of `hs`, `grp` a key-value head, `DF_ATTN_ROWS` rows at `pos0` .. over the `nctx` ring positions from `lo`
-//! under the window `w`, at the panel's block `arm` (its first or its second)
-def df_attn_fixture(hs, w, pos0, lo, nctx, nheads, grp, arm : int) : DfAttnFixture {
-    let rows = DF_ATTN_ROWS
-    let kvd = (nheads / grp) * hs
-    let qd = nheads * hs
-    let ringoff = w * kvd + 9
-    let rbase = arm * rows
-    let prow = rbase + rows
-    var f <- DfAttnFixture(q <- [for (i in range(prow * qd)); hash_weight(i, 31, 1.0)], kb <- [for (i in range(prow * kvd)); hash_weight(i, 17, 1.0)],
-        vb <- row_fill(prow * kvd, 23, 3, 0.03, -1.3), rk <- [for (i in range(ringoff + w * kvd)); hash_weight(i, 43, 1.0)],
-        rv <- row_fill(ringoff + w * kvd, 19, 13, 0.03, -1.2), tiles = int(gk_dflash_attn_tiles(int64(nctx + rows))),
-        pa = GkDflashAttnArgs(rows = uint(rows), pos0 = uint(pos0), lo = uint(lo), nctx = uint(nctx), w = uint(w), hs = uint(hs),
-            nheads = uint(nheads), grp = uint(grp), scale = 1.0 / sqrt(float(hs)), rbase = uint(rbase), koff = uint(ringoff),
-            voff = uint(ringoff)))
-    f.want <- df_attn_softmax(f, true)
-    f.open <- df_attn_softmax(f, false)
-    return <- f
 }

@@ -602,6 +602,8 @@ def private crd_drop {
     crd_state_settle()
     cud_sync()
     g_crd_relay.serial = -1l   //! the feed's record names the dropped driver's buffers
+    g_crd_dev_ids = 0ul
+    g_crd_dev_ids_n = 0l
     crd_free_buffers(*g_crd)
     unsafe {
         delete g_crd
@@ -3325,6 +3327,19 @@ def cud_rdec_verify_rows : int64 {
 //! Whether the last served verify landed the rows' logits (the tier's `landed_logits` seat)
 def cud_rdec_verify_landed_logits : bool => g_crd != null && g_crd.verify_landed_logits
 
+var private g_crd_dev_ids = 0ul   //! the next verify's draft rows' ids on the device (rows 1 ..), 0 = the host's
+var private g_crd_dev_ids_n = 0l
+
+//! whether the N-row verify takes its draft rows' ids off the device: it gathers the rows itself
+def cud_rdec_verify_takes_dev_ids : bool => g_crd != null && g_crd.ready && g_crd.emb_blk >= 0l && cud_rdec_verify_rows() >= 2l
+
+//! the next verify gathers rows 1 .. `n` off the `n` id words at device `ids`, which a launch queued ahead of it writes: the
+//! stream orders the copy into the in block behind that launch and ahead of the command's own read of it
+def cud_rdec_verify_dev_ids(ids : uint64; n : int64) {
+    g_crd_dev_ids = ids
+    g_crd_dev_ids_n = n
+}
+
 //! the same-slab verify of `n` rows at `pos` in the selected region (`RdecVerifyFn`): the rows' token blocks at their positions, the
 //! head rows' a position below, both rope sets, the rows (or their ids) and the pre-draft carry into the in block, the verify command,
 //! then every row's pick, hidden and - unless `pick_only` - logits off the out block; a hybrid's region moves on `n` rows
@@ -3367,6 +3382,12 @@ def cud_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; ids : array<
         crd_stage_head_rows(r, hcos, pos - 1l, n)
     }
     r.verify_landed_logits = !pick_only
+    if (g_crd_dev_ids != 0ul) {
+        if (gathered) {
+            cuda_memcpy_dtod(r.in_dev + uint64((int64(CRD_IN_ID_WORD) + 1l) * 4l), g_crd_dev_ids, uint64(min(n - 1l, g_crd_dev_ids_n) * 4l), g_cud.stream)
+        }
+        g_crd_dev_ids = 0ul
+    }
     let lt0 = ref_time_ticks()   // clock: control - the command's wall for the stats seat
     crd_launch(r, plain ? CrdCmd.verify_plain : CrdCmd.verify, n, !pick_only, gathered, pos + n, true) $(l : int64) {
         unsafe {

@@ -5,7 +5,7 @@ options _dasllama_internal = true
 module dasllama_vulkan_classes_dflash shared public
 
 //! The block drafter's stamps on the Vulkan home: the common templates Metal and the CUDA home stamp
-//! (`GkDflashConv`, `GkDflashQkn`, `GkDflashAttnTile`, `GkDflashAttnTileHeads`, `GkDflashAttnMerge`, `GkDflashTopk`, `GkDflashWalk`), each under this home's dispatch stem
+//! (`GkDflashConv`, `GkDflashQkn`, `GkDflashAttnTile`, `GkDflashAttnMerge`, `GkDflashTopk`, `GkDflashWalk`), each under this home's dispatch stem
 
 require dasllama/dasllama_lint public
 require spirv/spirv_shader
@@ -44,15 +44,6 @@ class DflashAttnTile : GkDflashAttnTile {
     [spirv_kernel(local_size_x = 256)]
     def run {
         dflash_attn_tile_body()
-    }
-}
-
-//! that tile over the query heads of a K/V head (`GkDflashAttnTileHeads`)
-[vk_dispatch(name = "dflash_attn_tile_heads_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class DflashAttnTileHeads : GkDflashAttnTileHeads {
-    [spirv_kernel(local_size_x = 256)]
-    def run {
-        dflash_attn_tile_heads_body()
     }
 }
 

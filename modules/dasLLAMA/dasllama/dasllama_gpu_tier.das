@@ -992,6 +992,14 @@ def public cuda_moe_fp4_rows_say(env : VulkanEnv; fp4_layers : int64) {
     }
 }
 
+//! a home's decode tile knob at 0 said at the block drafter's attach, where it leaves a drafter with dense layers at a head
+//! of 128 (`dense_h128`) on the scalar tiles: `knob` the env spelling, `value` its value
+def public dflash_tile_knob_say(home, knob : string; value : int64; dense_h128 : bool) {
+    if (dense_h128 && value == 0l) {
+        to_log(LOG_INFO, "dasLLAMA {home} dflash: {knob}=0 - the block drafter's dense layers attend on the scalar tiles (unset it for the flash tile's decode form)\n")
+    }
+}
+
 //! The segmented resident prefill: every segment's embedded rows (or ids, where the driver gathers) and rope rows back to
 //! back in segment order, each segment's logits at its slot of `logits` (`vocab` floats a slot)
 typedef RdecPrefillSegsFn = function<(x_batch : array<float>; tokens : array<int64>; use_ids : bool; emb_scale : float; cos_batch : array<float>; segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) : void>
@@ -1199,6 +1207,21 @@ def public install_rdec_logits_rows(f : RdecLogitsRowsFn) {
 }
 
 def public rdec_logits_rows_installed() : bool => g_rdec_logits_rows_installed
+
+//! the drafts of a block drafter's pass that was left on the device as the verify's rows, landed into `drafts[1 ..]` once the
+//! verify's wait returned: the drafter's device arm installs it, the verify seat calls it ahead of its own walk over the picks;
+//! false = no pass of `nd` drafts is held
+typedef RdecHeldDraftsFn = function<(var drafts : array<int64>; nd : int64) : bool>
+var g_rdec_held_drafts : RdecHeldDraftsFn
+var g_rdec_held_drafts_installed = false
+
+def public install_rdec_held_drafts(f : RdecHeldDraftsFn) {
+    g_rdec_held_drafts = f
+    g_rdec_held_drafts_installed = true
+}
+
+def public rdec_held_drafts(var drafts : array<int64>; nd : int64) : bool
+    => g_rdec_held_drafts_installed && invoke(g_rdec_held_drafts, drafts, nd)
 
 def public rdec_logits_rows(row0, nrows : int64; var dst : array<float>) {
     invoke(g_rdec_logits_rows, row0, nrows, dst)
@@ -3593,6 +3616,7 @@ def private gpu_home_reset_flags {
     g_rdec_verify_installed = false
     g_rdec_verify_plain = false
     g_rdec_logits_rows_installed = false
+    g_rdec_held_drafts_installed = false
     g_rdec_rollback_installed = false
     g_rdec_token_seq_installed = false
     g_rdec_chain_charged = false

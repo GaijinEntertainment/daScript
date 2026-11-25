@@ -4495,6 +4495,17 @@ def private rd_v_rows_mismatch(n : int64) : bool {
     return false
 }
 
+var private g_rd_v_dev_ids = false   //! a command queued ahead of the next verify writes its draft rows' ids into the staging
+
+//! whether the N-row verify takes its draft rows' ids off the device: it gathers the rows itself, on the plain rail
+def vk_rdec_verify_takes_dev_ids : bool => g_rd != null && g_rd.ready && !g_rd.hc && rd_emb_on() && vk_rdec_verify_rows() >= 2l
+
+//! the next verify's draft rows gather off ids a command ahead of it on the queue copies into `g_rd.tok_ids_host` from word 1:
+//! the host stages row 0's id alone, since a host write after that copy would undo it
+def vk_rdec_verify_dev_ids {
+    g_rd_v_dev_ids = true
+}
+
 //! the verify's rows up: the host's rows, or - `ids` not empty - every row's token id, the trunk row and the head's embed half gathered off it
 def private rd_verify_stage(x, cossin, hcos : array<float>; ids : array<int64>; pos, n : int64; plain : bool = false) {
     let r = g_rd.region
@@ -4504,7 +4515,9 @@ def private rd_verify_stage(x, cossin, hcos : array<float>; ids : array<int64>; 
             memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l * n)
         } else {
             var idp = reinterpret<uint?>(g_rd.tok_ids_host.mapped)
-            for (i in range64(n)) {
+            let staged = g_rd_v_dev_ids ? 1l : n
+            g_rd_v_dev_ids = false
+            for (i in range64(staged)) {
                 idp[i] = uint(ids[i])
             }
             g_rdec_nrow_emb_gathered += n
@@ -6570,8 +6583,14 @@ def private rd_sel_forget {
     g_rd_sel_landed = 0l
 }
 
+//! a verify's device ids asked of the dropped driver are that driver's: the next driver's first verify stages every row's id
+def private rd_v_dev_ids_forget {
+    g_rd_v_dev_ids = false
+}
+
 [init]
 def private rd_register_drop_hooks {
     register_vk_drop_hook(@@rd_hot_dma_forget)
     register_vk_drop_hook(@@rd_sel_forget)
+    register_vk_drop_hook(@@rd_v_dev_ids_forget)
 }
