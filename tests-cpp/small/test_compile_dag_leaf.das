@@ -2,6 +2,8 @@ options gen2
 
 module test_compile_dag_leaf public
 
+// a comment the reader of a compile that starts with it loaded must see
+
 require daslib/ast_boost
 require daslib/cross_context
 require test_compile_dag_base

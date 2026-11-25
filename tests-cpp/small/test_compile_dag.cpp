@@ -24,6 +24,63 @@ TEST_CASE("compile DAG: four threads compile the modules one thread compiles") {
     CHECK_EQ(parallel, compileWith(1));
 }
 
+TEST_CASE("compile DAG: the modules after an !inscope module wait for it, so its comment reader sees a later module") {
+    auto fAccess = make_smart<FsFileAccess>();
+    TextWriter logs;
+    ModuleGroup libGroup;
+    CodeOfPolicies policies;
+    policies.compile_threads = 4;
+    auto program = compileDaScript(getDasRoot() + "/tests-cpp/small/test_compile_dag_reader_root.das", fAccess, logs, libGroup, policies);
+    REQUIRE_MESSAGE(!program->failed(), logs.str());
+    auto reader = libGroup.findModule("test_compile_dag_reader");
+    REQUIRE(reader);
+    REQUIRE(reader->macroContext);
+    auto ctx = reader->macroContext.get();
+    auto index = ctx->findVariable("sibling_comment_chars");
+    REQUIRE(index >= 0);
+    CHECK_GT(*(int32_t *)ctx->getVariable(index), 0);
+}
+
+TEST_CASE("compile DAG: a module that installs a comment reader without !inscope fails to compile") {
+    auto fAccess = make_smart<FsFileAccess>();
+    auto dir = getDasRoot() + "/tests-cpp/small/";
+    string reader = "options gen2\nmodule test_compile_dag_unmarked public\nrequire daslib/ast_boost\n"
+        "require test_compile_dag_reader\n[comment_reader]\nclass UnmarkedCommentCounter : SiblingCommentCounter {}\n";
+    string root = "options gen2\nrequire test_compile_dag_unmarked\n";
+    fAccess->setFileInfo(dir + "test_compile_dag_unmarked.das", make_unique<TextFileInfo>(reader.c_str(), uint32_t(reader.size()), false));
+    fAccess->setFileInfo(dir + "test_compile_dag_unmarked_root.das", make_unique<TextFileInfo>(root.c_str(), uint32_t(root.size()), false));
+    TextWriter logs;
+    ModuleGroup libGroup;
+    auto program = compileDaScript(dir + "test_compile_dag_unmarked_root.das", fAccess, logs, libGroup);
+    REQUIRE(program->failed());
+    string errors;
+    for ( auto & err : program->errors ) errors += err.what + " " + err.extra + "\n";
+    CHECK_MESSAGE(errors.find("!inscope") != string::npos, errors);
+}
+
+TEST_CASE("compile DAG: a compile that starts with a comment reader loaded runs its jobs, and the reader reads what one thread reads") {
+    auto readWith = []( int32_t threads ) {
+        auto fAccess = make_smart<FsFileAccess>();
+        TextWriter logs;
+        ModuleGroup libGroup;
+        CodeOfPolicies policies;
+        policies.compile_threads = 1;
+        auto withReader = compileDaScript(getDasRoot() + "/tests-cpp/small/test_compile_dag_reader_root.das", fAccess, logs, libGroup, policies);
+        REQUIRE_MESSAGE(!withReader->failed(), logs.str());
+        auto ctx = libGroup.findModule("test_compile_dag_reader")->macroContext.get();
+        auto chars = (int32_t *)ctx->getVariable(ctx->findVariable("all_comment_chars"));
+        auto before = *chars;
+        policies.compile_threads = threads;
+        auto program = compileDaScript(getDasRoot() + "/tests-cpp/small/test_compile_dag_reader_jobs.das", fAccess, logs, libGroup, policies);
+        REQUIRE_MESSAGE(!program->failed(), logs.str());
+        return *chars - before;
+    };
+    readWith(1);
+    auto read = readWith(1);
+    CHECK_GT(read, 0);
+    CHECK_EQ(readWith(4), read);
+}
+
 TEST_CASE("compile DAG deadlock prevention: a macro module reaching a nesting builtin through a helper is nesting") {
     auto fAccess = make_smart<FsFileAccess>();
     TextWriter logs;

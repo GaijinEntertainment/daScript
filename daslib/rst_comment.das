@@ -5,7 +5,7 @@ options indenting = 4
 options no_aot = true
 options strict_smart_pointers = true
 
-module rst_comment shared private
+module rst_comment shared private !inscope
 
 //! Documentation comment extractor.
 //!
