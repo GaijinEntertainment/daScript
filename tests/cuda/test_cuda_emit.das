@@ -62,6 +62,12 @@ def test_cuda_signature(t : T?) {
         has(t, precise_cuda, "acc = __fdiv_rn(acc, 1.5f);", "the compound divide")
         lacks(t, farith_cuda, "__fadd_rn", "a plain kernel's sums stay operators")
     }
+    t |> run("fastmath = false: the text carries the marker its compile options read; a plain text does not") <| @(t : T?) {
+        has(t, nofastmath_cuda, "#define __DAS_NO_FAST_MATH__ 1", "the marker")
+        t |> success(cuda_source_is_exact_math(nofastmath_cuda), "the marker reads back")
+        lacks(t, precise_cuda, "__DAS_NO_FAST_MATH__", "a kernel without the switch")
+        lacks(t, farith_cuda, "__DAS_NO_FAST_MATH__", "a plain kernel")
+    }
 }
 
 [test(description = "The emitted CUDA spells vectors, control flow with loop hints and the math names, with the right operators, swizzles and bitcasts.")]

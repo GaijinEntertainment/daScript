@@ -25,6 +25,8 @@ require daslib/strings_boost
 //!   N_block    : uint3   - the block the annotation names (local_size_x/y/z, default 1) - the launch's block,
 //!                          and the kernel's __launch_bounds__ (`min_blocks = N` adds its second argument: the
 //!                          blocks an SM the register allocation must leave room for)
+//! `fastmath = false` (default true, `[metal_kernel]`'s spelling) compiles the text without NVRTC's
+//! `--use_fast_math`; `precise = true` emits the scalar f32 operators as the correctly rounded intrinsics
 [function_macro(name="cuda_kernel")]
 class CudaKernel : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
@@ -53,7 +55,8 @@ class CudaKernel : AstFunctionAnnotation {
                 uint(args |> find_arg("local_size_y") ?as tInt ?? 1),
                 uint(args |> find_arg("local_size_z") ?as tInt ?? 1)),
             min_blocks = args |> find_arg("min_blocks") ?as tInt ?? 0,
-            precise = args |> find_arg("precise") ?as tBool ?? false)
+            precise = args |> find_arg("precise") ?as tBool ?? false,
+            no_fast_math = !(args |> find_arg("fastmath") ?as tBool ?? true))
         var smem = 0ul
         let text = generate_cuda(func, err, cfg, census, smem)
         if (!empty(err)) {

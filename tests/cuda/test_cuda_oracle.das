@@ -191,6 +191,40 @@ def test_precise_gpu_vs_cpu(t : T?) {
     }
 }
 
+[test(description = "A fastmath = false kernel's f32 quotients and square roots on the GPU equal the CPU reference bit for bit.")]
+def test_no_fast_math_gpu_vs_cpu(t : T?) {
+    t |> run("a fastmath = false kernel's quotients and square roots: GPU == CPU-reference bit for bit") <| @(t : T?) {
+        var o = new NoFastMath()
+        o.a |> resize(N)
+        o.b |> resize(N)
+        o.c |> resize(N)
+        o.d |> resize(N)
+        for (k in range(N)) {
+            o.a[k] = float(k) * 0.37 + 0.11
+            o.b[k] = float(k % 13) * 0.3 + 0.7
+        }
+        for (k in range(N)) {
+            gl_GlobalInvocationID = uint3(uint(k), 0u, 0u)
+            o->nofastmath()
+        }
+        with_cuda_context() $(cc : CudaContext?) {
+            return if (!gpu_ready(cc))
+            var err : string
+            var p = Bufs4(a = buf_upload(o.a), b = buf_upload(o.b), c = buf_fill(N, 0.0), d = buf_fill(N, 0.0))
+            t |> success(launch(cc, nofastmath_cuda, "nofastmath", nofastmath_cuda_entry, p, uint(N), err), "nofastmath launch: {err}")
+            t |> equal(mismatch_exact(buf_download(p.c, N, type<float>), o.c), 0, "every quotient is the CPU's")
+            t |> equal(mismatch_exact(buf_download(p.d, N, type<float>), o.d), 0, "every square root is the CPU's")
+            for (q in [p.a, p.b, p.c, p.d]) {
+                cuda_mem_free(q)
+            }
+        }
+        t |> equal(cuda_log_leaks_if_any(), 0l)
+        unsafe {
+            delete o
+        }
+    }
+}
+
 [test(description = "A kernel using the args struct and a method gives the same results on the GPU as the CPU reference.")]
 def test_axpy_gpu_vs_cpu(t : T?) {
     t |> run("the args struct and a method: GPU == CPU-reference") <| @(t : T?) {

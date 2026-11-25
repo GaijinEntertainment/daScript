@@ -545,11 +545,16 @@ def public cuda_launch(fn : void?; grid, block_size : uint3; shared_bytes : uint
     return cu_ok(cuLaunchKernel(fn, grid.x, grid.y, grid.z, block_size.x, block_size.y, block_size.z, shared_bytes, stream, null, extra_p), "cuLaunchKernel")
 }
 
-//! the NVRTC options every kernel compiles with on a card of compute capability `sm`: its sm
-//! target, C++17 and fast math; `arch_suffix` is "a" for a kernel using the arch-specific tensor
-//! forms (FP4 on sm_120 needs it)
-def public cuda_compile_options(sm : int; arch_suffix : string = "") : array<string> =>
-    <- [ "--gpu-architecture=sm_{sm}{arch_suffix}", "--std=c++17", "--use_fast_math" ]
+//! the NVRTC options a kernel compiles with on a card of compute capability `sm`: its sm target,
+//! C++17 and, unless `fast_math` is false, `--use_fast_math`; `arch_suffix` is "a" for a kernel
+//! using the arch-specific tensor forms (FP4 on sm_120 needs it)
+def public cuda_compile_options(sm : int; arch_suffix : string = ""; fast_math : bool = true) : array<string> {
+    var opts <- ["--gpu-architecture=sm_{sm}{arch_suffix}", "--std=c++17"]
+    if (fast_math) {
+        opts |> push("--use_fast_math")
+    }
+    return <- opts
+}
 
 //! the options under the context's own sm target
 def public cuda_compile_options(cc : CudaContext?; arch_suffix : string = "") : array<string> =>
@@ -558,10 +563,13 @@ def public cuda_compile_options(cc : CudaContext?; arch_suffix : string = "") : 
 //! a kernel text that uses the arch-specific tensor forms compiles for an `sm_<cc>a` target
 def public cuda_source_is_arch_specific(source : string) : bool => find(source, "__DAS_ARCH_A__") >= 0
 
+//! a kernel text whose annotation says `fastmath = false` compiles without `--use_fast_math`
+def public cuda_source_is_exact_math(source : string) : bool => find(source, "__DAS_NO_FAST_MATH__") >= 0
+
 //! the options kernel text `source` compiles with on a card of compute capability `sm`: the one
 //! derivation the load and the prewarm share, so the prewarm writes the cubin a load reads
 def public cuda_text_compile_options(sm : int; source : string) : array<string> =>
-    <- cuda_compile_options(sm, cuda_source_is_arch_specific(source) ? "a" : "")
+    <- cuda_compile_options(sm, cuda_source_is_arch_specific(source) ? "a" : "", !cuda_source_is_exact_math(source))
 
 let public CUDA_CACHE_DIR = ".cache/daslang/cuda"
 
@@ -793,7 +801,8 @@ def public cubin_prewarm(texts : array<CudaPrewarmText>; cache_dir : string; nvr
 def public module_from_source(cc : CudaContext?; source, name : string; var error : string&; arch_suffix : string = "";
                               cache_dir : string = CUDA_CACHE_DIR) : CudaModule? {
     let sm = cuda_device_compute_capability(cc)
-    let compile_opts <- !empty(arch_suffix) ? cuda_compile_options(sm, arch_suffix) : cuda_text_compile_options(sm, source)
+    let compile_opts <- (!empty(arch_suffix) ? cuda_compile_options(sm, arch_suffix, !cuda_source_is_exact_math(source))
+        : cuda_text_compile_options(sm, source))
     var image <- cubin_cached(source, name, compile_opts, error, cache_dir)
     return null if (empty(image))
     return cuda_load_module(image, error)

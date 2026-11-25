@@ -19,6 +19,14 @@ A `[cuda_kernel]` class method lowers to one self-contained CUDA C++ text:
   fma and approximates a division; a kernel whose stored bytes must be the CPU's - the tq4 K/V codec's
   rotation and quantizer - names its sums through the intrinsics, which neither pass touches. The vector
   lanes and the half family are untouched: a precise kernel is written in scalar f32.
+- **`fastmath = false` on the annotation (`[metal_kernel]`'s spelling, default true) compiles the
+  text without `--use_fast_math`.** The text carries `#define __DAS_NO_FAST_MATH__ 1` among its
+  helpers (census kind `prelude.no_fast_math`), and `cuda_text_compile_options` reads the marker,
+  so the load, the prewarm and the cache key learn it from the text alone - the launcher never
+  does. Such a kernel's division and square root are correctly rounded, its `sin`, `cos`, `exp`,
+  `log` and `tanh` are the full-precision library forms, and denormals are kept; `--fmad` stays at
+  NVRTC's default, so `a * b + c` may still contract into an fma. A kernel whose every scalar f32
+  operator must round singly takes `precise = true` as well.
   The `@ssbo` members are the fields of `Class_method_bufs`, one slot per `@binding` in binding
   order, each a pointer - `const T*` where no statement writes through the binding, `T*` where
   one does - and the kernel's first lines unpack them into bare names

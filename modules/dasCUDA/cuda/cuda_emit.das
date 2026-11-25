@@ -32,6 +32,7 @@ struct public CudaEmitConfig {
     block_size : uint3      //! the launch's block from the annotation; a zero lane leaves __launch_bounds__ off
     min_blocks : int        //! the annotation's min_blocks: __launch_bounds__'s second argument, the blocks an SM the register allocation must allow; 0 leaves it off
     precise : bool          //! the annotation's precise: every scalar f32 add, subtract, multiply and divide emits as its correctly rounded intrinsic (`__fadd_rn` ...), which the fast-math compile neither contracts into an fma nor approximates
+    no_fast_math : bool     //! the annotation's `fastmath = false`: the text carries `__DAS_NO_FAST_MATH__`, which compiles it without `--use_fast_math`
 }
 
 struct private CudaMember {
@@ -4667,6 +4668,10 @@ def public generate_cuda(fn : FunctionPtr; var errors : array<string>; cfg : Cud
     census_kind(ctx, "preamble")
     census_kind(ctx, "kernel_sig")
     census_kind(ctx, "stmt.pdl_wait")
+    if (cfg.no_fast_math) {
+        census_kind(ctx, "prelude.no_fast_math")
+        register_helper(ctx, "{HELPER_RANK_INTRINSIC}no_fast_math", "#define __DAS_NO_FAST_MATH__ 1")
+    }
     var helper_text = ""
     if (!empty(ctx.helpers)) {
         var hk <- [for (k in keys(ctx.helpers)); k]

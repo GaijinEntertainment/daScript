@@ -14,6 +14,7 @@ require cuda/das_cuda_boost
 require daslib/fio
 require daslib/jobque_boost   // the worker-thread bind: a context of its own on another thread
 require strings
+require daslib/strings_boost
 require math   // min, clamp: the prewarm's worker count, computed beside it
 
 let N = 1 << 16
@@ -607,6 +608,25 @@ def test_cuda_cubin_prewarm(t : T?) {
         t |> equal(text_opts[0], "--gpu-architecture=sm_120a", "an arch-specific text's options take the suffix")
         let plain_opts <- cuda_text_compile_options(120, "// plain text")
         t |> equal(plain_opts[0], "--gpu-architecture=sm_120", "a plain text's options take none")
+    }
+}
+
+[test(description = "A text without the fastmath switch compiles under its sm target, C++17 and fast math; a fastmath = false text drops fast math alone and keys another cubin.")]
+def test_cuda_compile_options_fast_math(t : T?) {
+    t |> run("the option builder with the switch on and off, through the text and the builder") <| @(t : T?) {
+        let plain_text = "// plain text"
+        let plain_opts <- cuda_text_compile_options(120, plain_text)
+        t |> equal(join(plain_opts, " "), "--gpu-architecture=sm_120 --std=c++17 --use_fast_math",
+            "a text without the switch: its sm target, C++17 and fast math")
+        let exact_text = "#define __DAS_NO_FAST_MATH__ 1\n{plain_text}"
+        let exact_opts <- cuda_text_compile_options(120, exact_text)
+        t |> equal(join(exact_opts, " "), "--gpu-architecture=sm_120 --std=c++17", "a fastmath = false text drops fast math alone")
+        let exact_rung <- cuda_text_compile_options(120, "{exact_text} __DAS_ARCH_A__")
+        t |> equal(join(exact_rung, " "), "--gpu-architecture=sm_120a --std=c++17", "the arch suffix and the switch compose")
+        let exact_built <- cuda_compile_options(120, "", false)
+        t |> equal(join(exact_built, " "), join(exact_opts, " "), "the builder's switch is the text's")
+        t |> success(cubin_cache_key(exact_text, exact_opts, STUB_NVRTC, STUB_DRIVER)
+            != cubin_cache_key(exact_text, plain_opts, STUB_NVRTC, STUB_DRIVER), "one text under the two option sets keys two cubins")
     }
 }
 
