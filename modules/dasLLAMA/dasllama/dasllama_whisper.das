@@ -754,7 +754,7 @@ def private stream_whisper_model(path : string; enc_q8, dec_q8 : bool; img, tag 
     }
     var wrote = false
     fmap(f) $(var bytes : array<uint8>#) {
-        var st = WhisperStaging()
+        var inscope st = WhisperStaging()
         var recs : table<string; WTensorRec>
         var encJobs, decJobs : array<WFillJob>
         whisper_index(bytes, int64(stat(path).size), st, recs, encJobs, decJobs)
