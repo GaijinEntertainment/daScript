@@ -68,6 +68,8 @@ DAS_CC_API das::smart_ptr<das::FileAccess> get_file_access( char * pak ) {
 
 namespace das {
 
+    static recursive_mutex g_commentReadersMutex;
+
     void applyPostRewriteMacros ( Program * program ) {
         program->library.foreach([&](Module * mod) -> bool {
             for ( const auto & pm : mod->postRewriteMacros ) {
@@ -137,7 +139,7 @@ namespace das {
         vector<FileInfo *> & chain;
     };
 
-    void getAllRequireReq ( FileInfo * fi, const FileAccessPtr & access, string& modName, vector<RequireRecord> & req, vector<FileInfo *> & chain, das_set<FileInfo *> & collected ) {
+    static void scanRequires ( FileInfo * fi, const FileAccessPtr & access, string& modName, vector<RequireRecord> & req, vector<FileInfo *> & chain, das_set<FileInfo *> & collected, bool * visibleEverywhere ) {
         ChainGuard guard(chain,fi);
         const char * src = nullptr;
         uint32_t length = 0;
@@ -219,7 +221,7 @@ namespace das {
                     if ( incInfo != fi && incInfo ) {
                         if ( collected.find(incInfo)==collected.end() ) {
                             collected.insert(incInfo);
-                            getAllRequireReq(incInfo, access, incModName, req, chain, collected);
+                            scanRequires(incInfo, access, incModName, req, chain, collected, nullptr);
                         }
                     }
                     continue;
@@ -316,7 +318,7 @@ namespace das {
                                     if ( info ) {
                                         if ( collected.find(info)==collected.end() ) {
                                             collected.insert(info);
-                                            getAllRequireReq(info, access, incModName, req, chain, collected);
+                                            scanRequires(info, access, incModName, req, chain, collected, nullptr);
                                         }
                                     }
                                 }
@@ -352,6 +354,29 @@ namespace das {
                                 if ( !mod.empty() ) {
                                     modName = mod; // override default module name
                                 }
+                                // src/ast/ARCHITECTURE_COMPILE_MODULES.md#comment-readers
+                                auto skipSpace = [&]() {
+                                    while ( src < src_end && isspaceE(src[0]) ) {
+                                        if ( src[0]=='\n' ) line ++;
+                                        src ++;
+                                    }
+                                };
+                                auto takeWord = [&]( const char * word ) {
+                                    skipSpace();
+                                    auto n = strlen(word);
+                                    if ( src + n > src_end || memcmp(src, word, n) != 0 ) return false;
+                                    if ( src + n < src_end && (isalnumE(src[n]) || src[n]=='_') ) return false;
+                                    src += n;
+                                    return true;
+                                };
+                                takeWord("shared");
+                                if ( !takeWord("public") ) takeWord("private");
+                                skipSpace();
+                                if ( src < src_end && src[0]=='!' ) {
+                                    src ++;
+                                    if ( takeWord("inscope") && visibleEverywhere ) *visibleEverywhere = true;
+                                }
+                                wb = true;
                                 continue;
                             } else {
                                 wb = true;
@@ -374,10 +399,15 @@ namespace das {
         }
     }
 
-    vector<RequireRecord> getAllRequire ( FileInfo * fi, string &modName, vector<FileInfo *> & chain, const FileAccessPtr & access  ) {
+    void getAllRequireReq ( FileInfo * fi, const FileAccessPtr & access, string& modName, vector<RequireRecord> & req, vector<FileInfo *> & chain, das_set<FileInfo *> & collected ) {
+        scanRequires(fi, access, modName, req, chain, collected, nullptr);
+    }
+
+    vector<RequireRecord> getAllRequire ( FileInfo * fi, string &modName, vector<FileInfo *> & chain, const FileAccessPtr & access,
+            bool * visibleEverywhere ) {
         das_set<FileInfo *> collected;
         vector<RequireRecord> req;
-        getAllRequireReq(fi, access, modName, req, chain, collected);
+        scanRequires(fi, access, modName, req, chain, collected, visibleEverywhere);
         return req;
     }
 
@@ -1395,6 +1425,9 @@ namespace das {
             for ( auto cr : commentReaders ) {
                 parserState.g_CommentReaders.push_back(cr);
             }
+            // src/ast/ARCHITECTURE_COMPILE_MODULES.md#comment-readers
+            unique_lock<recursive_mutex> readersLock(g_commentReadersMutex, std::defer_lock);
+            if ( !commentReaders.empty() ) readersLock.lock();
             if ( gen2 ) {
                 err = das2_yyparse(scanner);
                 das2_yylex_destroy(scanner);
@@ -1814,14 +1847,6 @@ namespace das {
             "module " + mod.moduleName + " is required", "", LineInfo(),
                 CompilationError::missing_module_name);
         return false;
-    }
-
-    void buildDeferredMacroModule ( const ProgramPtr & program, ModuleGroup & libGroup, TextWriter & logs ) {
-        CompileEnvScope envScope(daScriptEnvironment::getBound());
-        gc_active_scope gcScope(program->thisModule->module_gc_root.get());
-        daScriptEnvironment::getBound()->g_Program = program;
-        program->thisModuleGroup = &libGroup;
-        program->makeMacroModule(logs);
     }
 
     void addNewModules ( ModuleGroup & libGroup, ProgramPtr program ) {

@@ -2607,6 +2607,12 @@ namespace das {
     }
 
     void addModuleCommentReader ( Module * module, CommentReaderPtr newM, Context * context, LineInfoArg * at ) {
+        // src/ast/ARCHITECTURE_COMPILE_MODULES.md#comment-readers
+        if ( !module->visibleEverywhere ) {
+            context->throw_error_at(at, "module %s installs a comment reader, so it has to be declared `module %s !inscope`: "
+                "every module after it in the require order waits for it and reads its comments through it",
+                module->name.c_str(), module->name.c_str());
+        }
         module->noteRegistrationAtCompile();
         if ( !module->addCommentReader(newM, true) ) {
             context->throw_error_at(at, "can't add comment reader to module %s", module->name.c_str());

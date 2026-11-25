@@ -30,6 +30,7 @@ namespace das {
                 for ( auto & mod : modules ) {
                     auto node = int32_t(deps.size());
                     deps.push_back(extraDeps);
+                    bool visibleEverywhere = false;
                     publicDeps.emplace_back();
                     sourceBytes.push_back(1);
                     if ( FileInfo * fi = access->getFileInfo(mod.fileName) ) {
@@ -39,7 +40,7 @@ namespace das {
                         sourceBytes[node] = das::max(len, 1u);
                         string modName;
                         vector<FileInfo *> chain;
-                        for ( auto & rec : getAllRequire(fi, modName, chain, access) ) {
+                        for ( auto & rec : getAllRequire(fi, modName, chain, access, &visibleEverywhere) ) {
                             auto it = nodeByFile.find(access->getModuleInfo(rec.name, mod.fileName).fileName);
                             if ( it == nodeByFile.end() ) continue;
                             auto & nodeDeps = deps[node];
@@ -49,7 +50,8 @@ namespace das {
                         }
                     }
                     nodeByFile[mod.fileName] = node;
-                    if ( mod.extraDepModule ) extraDeps.push_back(node);
+                    // src/ast/ARCHITECTURE_COMPILE_MODULES.md#comment-readers
+                    if ( mod.extraDepModule || visibleEverywhere ) extraDeps.push_back(node);
                 }
                 dependents.resize(deps.size());
                 for ( int32_t node = 0; node != int32_t(deps.size()); ++node ) {
@@ -68,29 +70,6 @@ namespace das {
             }
 
             // src/ast/ARCHITECTURE_COMPILE_MODULES.md#deadlock-prevention
-            vector<int32_t> macroUsers ( int32_t macroModule ) const {
-                vector<bool> exports(deps.size(), false);
-                exports[macroModule] = true;
-                for ( size_t i = macroModule + 1; i < deps.size(); ++i ) {
-                    for ( auto p : publicDeps[i] ) {
-                        if ( exports[p] ) {
-                            exports[i] = true;
-                            break;
-                        }
-                    }
-                }
-                vector<int32_t> users;
-                for ( size_t i = macroModule + 1; i < deps.size(); ++i ) {
-                    for ( auto d : deps[i] ) {
-                        if ( exports[d] ) {
-                            users.push_back(int32_t(i));
-                            break;
-                        }
-                    }
-                }
-                return users;
-            }
-
             struct ReadyQueue {
                 const ModuleDag &   dag;
                 const vector<bool> & exclusive;
@@ -207,15 +186,13 @@ namespace das {
             void log ( const vector<ModuleInfo> & modules, const vector<uint64_t> & usec,
                     ModuleGroup & libGroup, TextWriter & logs ) const {
                 auto count = deps.size();
-                vector<int32_t> nesting;
-                vector<bool> exclusive(count, false);
-                for ( size_t i = 0; i != count; ++i ) {
+                size_t sequential = count;
+                for ( size_t i = 0; i != count && sequential == count; ++i ) {
                     auto mod = libGroup.findModule(modules[i].moduleName);
-                    if ( mod && mod->macroNestsCompile ) {
-                        nesting.push_back(int32_t(i));
-                        for ( auto u : macroUsers(int32_t(i)) ) exclusive[u] = true;
-                    }
+                    if ( mod && mod->macroNestsCompile ) sequential = i;
                 }
+                vector<bool> exclusive(count, false);
+                for ( size_t i = sequential; i < count; ++i ) exclusive[i] = true;
                 uint64_t total = 0;
                 size_t edges = 0;
                 for ( size_t i = 0; i != count; ++i ) {
@@ -239,10 +216,8 @@ namespace das {
                 for ( auto n : path ) pathUsec += usec[n];
                 logs << "compile DAG: " << count << " modules, " << edges << " edges, total " << (total / 1000000.)
                      << ", critical path " << (pathUsec / 1000000.) << "\n";
-                for ( auto m : nesting ) {
-                    logs << "\tnesting macro module " << modules[m].moduleName << ", users compile alone:";
-                    for ( auto u : macroUsers(m) ) logs << " " << modules[u].moduleName;
-                    logs << "\n";
+                if ( sequential < count ) {
+                    logs << "\tfrom " << modules[sequential].moduleName << " on, the modules compile in walk order\n";
                 }
                 vector<uint64_t> ones(count, 1);
                 for ( int32_t workers : { 2, 4, 8, 16, 32 } ) {
@@ -307,7 +282,8 @@ namespace das {
         // src/ast/ARCHITECTURE_COMPILE_MODULES.md#cache-prefix
         InOrderResult compileModulesInOrder ( const vector<ModuleInfo> & modules, size_t from, const FileAccessPtr & access,
                 TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies & policies, bool promoteShared,
-                const ModuleCacheStream & stream, bool untilCutoff, vector<uint64_t> & usec ) {
+                const ModuleCacheStream & stream, bool untilCutoff, vector<uint64_t> & usec,
+                vector<ProgramPtr> * compiled = nullptr ) {
             InOrderResult result;
             for ( result.next = from; result.next != modules.size(); ++result.next ) {
                 if ( untilCutoff && (!stream.read || stream.read->seenNewModule) ) break;
@@ -323,6 +299,7 @@ namespace das {
                     result.failed = program;
                     break;
                 }
+                if ( compiled && !compiled->empty() ) (*compiled)[result.next] = program;
             }
             return result;
         }
@@ -401,6 +378,7 @@ namespace das {
             vector<CompiledModule>          results;
             vector<std::atomic<int32_t>>    remaining;
             std::atomic<int32_t>            finished{0};
+            std::atomic<int32_t>            firstSequential{INT32_MAX};
 
             ModuleJobs ( const vector<ModuleInfo> & mods, const ModuleDag & d, const FileAccessPtr & acc, const CodeOfPolicies & pol,
                     ModuleGroup & libGroup )
@@ -437,7 +415,15 @@ namespace das {
                     deps.push_back(&results[i]);
                     for ( auto dep : dag.deps[i] ) reach[dep] = true;
                 }
-                results[node] = compileModuleJob(modules[node], prepared[node], access, policies, initialModules, deps);
+                // src/ast/ARCHITECTURE_COMPILE_MODULES.md#walk-order-tail
+                if ( node >= firstSequential ) {
+                    results[node].skipped = true;
+                } else {
+                    results[node] = compileModuleJob(modules[node], prepared[node], access, policies, initialModules, deps);
+                    if ( results[node].deferred ) {
+                        for ( auto seen = firstSequential.load(); node < seen && !firstSequential.compare_exchange_weak(seen, node); ) {}
+                    }
+                }
                 daScriptEnvironment::setBound(bound);
                 vector<int32_t> ready;
                 for ( auto dependent : dag.dependents[node] ) {
@@ -481,18 +467,17 @@ namespace das {
                     libGroup.findModule(mod.moduleName)->fromExtraDependency &= mod.extraDepModule;
                     continue;
                 }
-                if ( failed || result.skipped ) continue;
+                if ( failed || result.skipped || node >= jobs.firstSequential ) continue;
                 logs << result.logs;
                 if ( result.root ) {
                     while ( auto gcNode = result.root->gc_first ) gcNode->gc_assign(&target);
                 }
-                if ( result.deferred ) buildDeferredMacroModule(result.program, libGroup, logs);
                 if ( !compiled.empty() ) compiled[node] = result.program;
                 if ( !registerCompiledModule(result.program, mod, access, libGroup, policies, promoteShared) ) failed = result.program;
             }
             if ( failed ) return failed;
             return compileModulesInOrder(modules, 0, access, logs, libGroup, policies, promoteShared, ModuleCacheStream(), false,
-                usec).failed;
+                usec, &compiled).failed;
         }
 
         bool loadedModuleNests ( ModuleGroup & libGroup ) {

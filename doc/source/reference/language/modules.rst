@@ -206,6 +206,9 @@ Module can be made visible to all modules in the project via the ``!inscope`` mo
 
     module Foo !inscope
 
+A module that installs a comment reader has to be ``!inscope``: the reader reads the comments of
+every module compiled after it, so those modules wait for it.
+
 ---------------
 Builtin modules
 ---------------
