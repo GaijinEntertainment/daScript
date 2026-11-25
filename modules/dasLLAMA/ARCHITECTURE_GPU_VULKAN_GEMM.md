@@ -143,7 +143,7 @@ long (the 35B-A3B's 512-row window 160 ms with the twin against 237 without on t
 the tier warns at device init when the driver reports no such extension; which drivers list it,
 and the reference exe's own two arms measured beside ours, are `followup_vulkan.md` item 45. The seat
 is also the in-process A/B: `vkd_pipes_rebuild` marks every class slot stale, so the next ensure
-rebuilds it under whatever `decvec_on` says, which is how the `cm2:<fmt>` probe runs both arms interleaved in one process.
+rebuilds it under whatever `decvec_on` says, which is how the `cm2:<fmt>` probe runs both arms interleaved in one process. A rebuild destroys the slot's pipeline, and the driver may give a destroyed pipeline's handle to the next pipeline built, which can be another kernel's. The census counts dispatches by handle, so `vkd_pipe_register` first moves a count it finds under the new pipeline's handle to the name of the kernel that held it.
 
 **The dump and the keeping seam run before the override:** `DASLLAMA_VK_SPV_DUMP=<dir>` writes the
 EMITTED words as `<dir>/<kernel>.spv`, `g_vkd_spv_keep` keeps the same words in `g_vkd_spv_kept` under

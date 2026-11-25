@@ -3562,6 +3562,7 @@ var @scratch g_pipe_access : table<uint64; uint2>     // VkPipeline -> (read-bin
 var @scratch g_set_bits : table<uint64; SetBits>      // VkDescriptorSet -> per-binding region-bit masks
 var @scratch g_pipe_names : table<uint64; string>   // VkPipeline -> kernel name (the coverage census)
 var @scratch g_vk_kcov : table<uint64; int64>       // VkPipeline -> dispatches (REVIEW: "A new GPU kernel ships with a small model in the kernel coverage suite")
+var private g_vk_kcov_retired : table<string; int64>   //! kernel name -> the dispatches of its pipelines whose handle another pipeline took since
 
 struct SetBits {
     b : uint[VKD_SET_BINDINGS]   // per-binding region bits
@@ -3790,6 +3791,16 @@ def private spv_override_load(kernel : string; var spv : array<uint>) {
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-class-pipeline-build")]
+def vkd_pipe_register(pk : uint64; rmask, wmask : uint; kernel : string) {
+    if (key_exists(g_vk_kcov, pk)) {
+        g_vk_kcov_retired[g_pipe_names?[pk] ?? "pipe_{pk}"] += g_vk_kcov?[pk] ?? 0l
+        g_vk_kcov |> erase(pk)
+    }
+    g_pipe_access[pk] = uint2(rmask, wmask)
+    g_pipe_names[pk] = kernel
+}
+
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-class-pipeline-build")]
 def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wmask : uint; kernel : string) {
     if (length(c.pipes) <= ord) {
         c.pipes |> resize(ord + 1)   // empty slots hold null handles until their kernel ensures
@@ -3818,9 +3829,7 @@ def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wm
     c.pipe_epochs[ord] = g_vkd_pipe_epoch
     g_vkd_pipe_build_us += get_time_usec(t0)
     g_vkd_pipe_builds++
-    let pk = intptr(boost_value_to_vk(c.pipes[ord]))
-    g_pipe_access[pk] = uint2(rmask, wmask)
-    g_pipe_names[pk] = kernel
+    vkd_pipe_register(intptr(boost_value_to_vk(c.pipes[ord])), rmask, wmask, kernel)
 }
 
 var g_vkd_pipe_build_us : int   //! the driver's share of every class pipeline built so far: the shader module and the pipeline
@@ -3984,6 +3993,9 @@ def public vk_kernel_coverage() : table<string; int64> {
     for (k, n in keys(g_vk_kcov), values(g_vk_kcov)) {
         out[g_pipe_names?[k] ?? "pipe_{k}"] += n
     }
+    for (name, n in keys(g_vk_kcov_retired), values(g_vk_kcov_retired)) {
+        out[name] += n
+    }
     return <- out
 }
 
@@ -3999,6 +4011,7 @@ def public vk_kernel_coverage_of(kernel : string) : int64 {
 
 def public vk_kernel_coverage_reset {
     g_vk_kcov |> clear()
+    g_vk_kcov_retired |> clear()
 }
 
 //! Log the census (`kernel_coverage_report`): every seeded kernel, a never-dispatched one warned.
