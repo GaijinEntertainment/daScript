@@ -3392,6 +3392,47 @@ def private check_census_evidence_pinned {
     }
 }
 
+let private VK_BLIND_TABLE = "let private VK_CENSUS_NEVER_DISPATCHED <- ["
+let private VK_CONDITIONAL_TABLE = "let private VK_CENSUS_PICK_CONDITIONAL : table<string; string> <- \{"
+
+//! the quoted entries of the Vulkan blind list that opens at line `from` of the coverage file's comment-stripped `lines`
+def private vk_blind_entries(lines : array<string>; from : int) : table<string> {
+    var out : table<string>
+    for (i in range(from - 1, length(lines))) {
+        for (name in quoted_segments(lines[i])) {
+            out |> insert(name)
+        }
+        break if (find(lines[i], "\"]") >= 0 || strip(lines[i]) |> starts_with("]"))
+    }
+    return <- out
+}
+
+//! every key of the Vulkan census's conditional table is an entry of its blind list, by its exact text: the census asserts it only where a device runs it
+def private check_vk_census_conditional_blind {
+    return if (!fexist(COVERAGE_FILE))
+    let text = strip_line_comments(read_lf(COVERAGE_FILE))
+    let blind_at = find_line(text, VK_BLIND_TABLE)
+    let cond_at = find_line(text, VK_CONDITIONAL_TABLE)
+    if (blind_at <= 0 || cond_at <= 0) {
+        gate_finding(COVERAGE_FILE, "no `{blind_at <= 0 ? VK_BLIND_TABLE : VK_CONDITIONAL_TABLE}` line - the check that every conditional key of the Vulkan census is a blind entry has no table to read; keep the spelling or move this check with it")
+        return
+    }
+    var inscope lines <- split(text, "\n")
+    var inscope blind <- vk_blind_entries(lines, blind_at)
+    for (i in range(cond_at, length(lines))) {
+        break if (lines[i] |> starts_with("}"))
+        var inscope parts <- split(lines[i], "=>")
+        for (p in range(length(parts) - 1)) {
+            var inscope names <- quoted_segments(parts[p])
+            continue if (empty(names))
+            let key = names[length(names) - 1]
+            if (!key_exists(blind, key)) {
+                gate_finding(COVERAGE_FILE, i + 1, "`{key}` is a key of VK_CENSUS_PICK_CONDITIONAL and no entry of VK_CENSUS_NEVER_DISPATCHED spells it - a conditional line marks a blind entry that census rows dispatch where its driver pick holds, so it names an entry of the blind list by that entry's exact text, and the census itself asserts this only on a box with a Vulkan device; add `{key}` to VK_CENSUS_NEVER_DISPATCHED with its reason and its cell, or drop the conditional line")
+            }
+        }
+    }
+}
+
 let private LOAD_FILE = "modules/dasLLAMA/dasllama/dasllama_load.das"
 
 //! the top-level argument count of the call whose `(` sits at `open`
@@ -3929,6 +3970,7 @@ def main() : int {
     check_bench_stamps()
     check_running_max_nan()
     check_census_evidence_pinned()
+    check_vk_census_conditional_blind()
     check_load_big_format()
     check_rdec_pass_words()
     check_tests_doc()

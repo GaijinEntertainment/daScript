@@ -100,7 +100,8 @@ require _metal_batched_cells   // metal_qwen35_cells, metal_qwen35_mtp_cells: th
 // two-window K-quant feed and the two-window head warm skip where the prompt window is not the file's 512 rows. Under
 // DASLLAMA_CUDA=1 the Vulkan home's own cells (the four-length and K-quant feeds' census witnesses, the f32-chain witness,
 // the window cells) give way to the CUDA home's, and the NVFP4 leaf cells skip on a card below the FP4 rung (`FP4_RUNG_SM`).
-// Under DASLLAMA_DEVICE_POOL=0 the pool cells hold the off rail or skip. The regions rig's no-cache scheduler cell skips its
+// Under DASLLAMA_DEVICE_POOL=0 the pool cells hold the off rail or skip. The segmented window's capture cell skips under
+// DASLLAMA_GPU_DN_SNAPS=1: a region then keeps one checkpoint row, and the cell plants two. The regions rig's no-cache scheduler cell skips its
 // cache-on control on every file here: a recurrent model's claim keeps its state at its last row only, so an opening that ends
 // at the prompt boundary adopts nothing.
 
@@ -108,6 +109,11 @@ require _metal_batched_cells   // metal_qwen35_cells, metal_qwen35_mtp_cells: th
 //! 4500 (the Q8 file 0.19-0.36) and 0.45-0.79 of a 10.9-15.6 max logit on the RTX 5060 Ti, with no growth and the one-step-off
 //! control well past it; the device's distance from the file's f32 chain is held beside it (`f32_chain_witness`)
 let private DN_LOGIT_BAR_REL_KQ_F16_FEED = 0.08
+//! ... on a device whose compiler rounds a shader at a time (`home_rounds_alike`): on the Radeon 8060S the same rows read
+//! under the bar above but for one step of the one-window cell - a row whose top two sit close on the f32 chain, the pick
+//! flipped; the device's summed distance from the f32 chain reads level with the CPU chain's, the one-step-off control
+//! well past both
+let private DN_LOGIT_BAR_REL_KQ_F16_FEED_APART = 0.12
 //! the K-quant bar on the quant feed (no coopmat tile serves the planes, the prefill's activations ride Q8_K): the mixed twin's two-window cell under `DASLLAMA_COOPMAT=sdot4` on the RTX 5060 Ti reads 0.084 of an 11.6 max logit at one step, argmax unchanged, the rest under 0.05
 let private DN_LOGIT_BAR_REL_KQ_QUANT_FEED = 0.10
 //! the mixed twin's bar on the f16 feed: its CPU chain quantizes the activations twice a recurrent layer (Q8_K for qkv/z, Q8_0
@@ -139,11 +145,12 @@ enum HybridPlanes {
     kq_q8out
 }
 
-//! the K-quant cm2 tile dispatches of format `f` so far (the l, m and s columns summed); NO_CENSUS with no vulkan module
+//! the f16-fed window tile dispatches of format `f` so far: the cm2 l, m and s columns, and the KHR tile a device in mm mode
+//! serves in their place (`census` counts it under the stamp its slot serves); NO_CENSUS with no vulkan module
 def private kq_cm2_tiles_census(f : KqFmt) : int64 {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let stem = kq_tile_stem("{f}")
-        return census("{stem}_cm2l_cls_spv") + census("{stem}_cm2m_cls_spv") + census("{stem}_cm2s_cls_spv")
+        return census("{stem}_cm2l_cls_spv") + census("{stem}_cm2m_cls_spv") + census("{stem}_cm2s_cls_spv") + census("{stem}_khr_cls_spv")
     } else {
         return NO_CENSUS
     }
@@ -241,10 +248,10 @@ def private hybrid_census_within(t : T?; r : HybridRows; n : int64; f : HybridCe
     let windows = prompt_windows(n, HYBRID_WINDOW)
     to_log(LOG_INFO, "prefill ({n} tokens, {windows} windows) [{tile_arm_tag()}]: {f.rq} Q8_K requants over {r.nrec} recurrent layers ({r.nrec_ba_kq} with K-quant beta / alpha planes), {f.tiles} k4 cm2 tiles, f16 feed admits kq {r.f16_feed}\n")
     if (r.f16_feed) {
-        t |> success(f.tiles > 0l, "on the f16 feed the K-quant qkv/z pair's GEMMs ride the k4 cm2 tiles ({f.tiles} dispatches) [{tile_arm_tag()}]")
+        t |> success(f.tiles > 0l, "on the f16 feed the K-quant qkv/z pair's GEMMs ride the k4 window tiles - the cm2 columns, or the KHR tile in mm mode ({f.tiles} dispatches) [{tile_arm_tag()}]")
         t |> success(f.rq <= windows * r.nrec_ba_kq + 1l, "on the f16 feed the prefill requantized the row to Q8_K for the K-quant beta / alpha planes alone, once a recurrent layer a window, and never for the qkv/z pair ({f.rq} Q8_K requants, {r.nrec_ba_kq} such layers, {windows} windows, the classifier's one) [{tile_arm_tag()}]")
     } else {
-        t |> equal(f.tiles, 0l, "off the f16 feed no k4 cm2 tile serves the pair [{tile_arm_tag()}]")
+        t |> equal(f.tiles, 0l, "off the f16 feed no k4 window tile serves the pair [{tile_arm_tag()}]")
         t |> success(f.rq >= windows * r.nrec, "off the f16 feed the K-quant qkv/z pair reads the Q8_K form ({f.rq} Q8_K requants, {r.nrec} recurrent layers, {windows} windows) [{tile_arm_tag()}]")
     }
 }
@@ -255,7 +262,7 @@ def private hybrid_bar(r : HybridRows) : float {
     return _mtp_resident_cells::DN_LOGIT_BAR_REL if (r.planes == HybridPlanes.q8)
     return DN_LOGIT_BAR_REL_KQ_CUDA if (r.feeds.cuda)
     return DN_LOGIT_BAR_REL_KQ_QUANT_FEED if (!r.f16_feed)
-    return r.planes == HybridPlanes.kq_q8out ? DN_LOGIT_BAR_REL_KQ_Q8OUT : DN_LOGIT_BAR_REL_KQ_F16_FEED
+    return r.planes == HybridPlanes.kq_q8out ? DN_LOGIT_BAR_REL_KQ_Q8OUT : (home_rounds_alike() ? DN_LOGIT_BAR_REL_KQ_F16_FEED : DN_LOGIT_BAR_REL_KQ_F16_FEED_APART)
 }
 
 //! a hybrid file's feeds held after its block: each one's device rows against the CPU form's at the home's bar, on the Vulkan
@@ -603,8 +610,10 @@ def test_gpu_resident_hybrid_kq(t : T?) {
     }
     if (ran) {
         hybrid_rows_within(t, "Qwen3.5-0.8B-Q4_K_M", r.feed)
-        long_row_within(t, r, r.wide, "Qwen3.5-0.8B: a {LONG_PROMPT}-token prompt at the wide prompt window against the CPU chain - the recurrent window uncut at DN_WINDOW")
-        long_row_within(t, r, r.past, "Qwen3.5-0.8B: a {LONG_PROMPT}-token prompt at a {PAST_WINDOW}-row prompt window against the CPU chain - the recurrent window cut at DN_WINDOW")
+        with_dasllama_jobque_() {   //! the compares decode and reduce rows off the engine's queue
+            long_row_within(t, r, r.wide, "Qwen3.5-0.8B: a {LONG_PROMPT}-token prompt at the wide prompt window against the CPU chain - the recurrent window uncut at DN_WINDOW")
+            long_row_within(t, r, r.past, "Qwen3.5-0.8B: a {LONG_PROMPT}-token prompt at a {PAST_WINDOW}-row prompt window against the CPU chain - the recurrent window cut at DN_WINDOW")
+        }
     }
     delete r
     delete forms
@@ -846,7 +855,7 @@ def private hybrid_mtp_forms(t : T?; var r : HybridMtpRows) : array<ModelForm> {
     return <- forms
 }
 
-[test(description = "On Qwen3.5-0.8B-MTP the resident prefill and every step land the post-norm hidden as the speculative carry at its row's watermark within the deltanet bar of the CPU chain's, one row at a time and through the N-row command, and with speculation off no carry lands; a NextN draft through the resident head matches the CPU forward_mtp, uploads past the device's rows, pins a suppressed pick, and is bit-identical despite NaN-poisoned host residual rows; the round's verify rows sit within twice the deltanet bar of one-row steps, a forced reject rolls back on the device, the head's warmed K rows sit within twice the deltanet bar of the CPU warm's over one and two windows, and six rounds match the CPU rounds up to near-ties; the depth-8 knob prepares nine verify rows (depth 1 two) and its walk emits the plain decode, a seeded sampled stream at depth 2 decodes the rows-landed stream; a NaN carry panics the draft by row, the pass arms hand the round to the CPU rails by name, a rewind is refused, a head kept off the device passes the verify as verify_rows; the head holds its bars over q8_0 and tq4 mirrors; the peel with speculation off; pooled openings carry the draft head's rows; on the CUDA home the trunk's forced feed holds 4 percent of the CPU chain with every position served; at two regions segmented windows hold the split bar of solo windows, and checkpoint stops captured inside one call adopt and continue at their rows; on the q8 CPU form, on every box, the NextN extras load and the spec-off trunk continues the plain file's fixture, self-speculative greedy decode emits plain decode's tokens on the counting and prose prompts, the k-deep round at depths 2, 3 and 4 decodes the plain stream with depth 4 accepting more than depth 1, a poisoned verify and a forced-reject round roll back to plain decode, the continuation prefill's seam row is written exactly where no seat serves it, and a prefill driver serving the verify window panics the round naming it; on the q4_0 CPU form self-speculative decode emits plain decode's counting tokens; on the Metal home's blob twin, one load on a das_metal build: on Qwen3.5-0.8B-MTP Q8 with speculation off, the batched row serves through the device driver, and after plain batched steps each stream's NextN carry trails its position by at most one; on Qwen3.5-0.8B-MTP Q8 with self-speculation on, the batched row refuses by name (each stream's round runs alone), reads no rate, and counts no device or CPU batched step; on Qwen3.5-0.8B-MTP Q8, a depth-2 greedy MTP walk emits the depth-1 walk's tokens over 24 reply tokens while drafting more than it and accepting some drafts; on Qwen3.5-0.8B-MTP Q8, a greedy scheduler stream lands its device pick at most once a token and emits what `generate` emits off the host argmax, while a non-argmax sampler lands no pick; on Qwen3.5-0.8B-MTP Q8, three self-speculative streams admitted together emit each solo stream's tokens, every tick stepping each through its own round, with draft and accept counts equal to the solo sums; on Qwen3.5-0.8B-MTP Q8, three speculating streams, the last on a prompt past 200 tokens across 64-row chunk boundaries, emit each solo stream's tokens with every tick stepping their own rounds; on Qwen3.5-0.8B-MTP Q8, a self-speculative stream of 150 reply tokens on 64-row pages, spanning three pages, emits the flat stream's tokens with drafts accepted on both sides; on Qwen3.5-0.8B-MTP Q8, a third prompt on a shared opening attaches the checkpoint the second left and replies as an uncached run at the same cut, and a marked stop inside a later window is captured; on Qwen3.5-0.8B-MTP Q8, a request marked with its stable opening leaves that checkpoint at once, which the next prompt attaches and replies with as uncached, while an unmarked request leaves none there; on Qwen3.5-0.8B-MTP Q8, a session attached at an off-boundary checkpoint lands the donor's logits bit for bit after the same tail, while the checkpoint with its recurrent state zeroed lands 5% of the largest logit away or more; on Qwen3.5-0.8B-MTP Q8, a checkpoint captured at a marked stop inside one prefill window, attached and fed the tail, lands within 0.2% of an uncached prefill's largest logit, and zeroing its recurrent state misses by 5% or more; on Qwen3.5-0.8B-MTP Q8, a conversation's next turn attaches the finished turn's checkpoint, prompt plus 40 tokens, and continues the count token for token against an uncached 80-token stream; each form loads once")]
+[test(description = "On Qwen3.5-0.8B-MTP the resident prefill and every step land the post-norm hidden as the speculative carry at its row's watermark within the deltanet bar of the CPU chain's, one row at a time and through the N-row command, and with speculation off no carry lands; a NextN draft through the resident head matches the CPU forward_mtp, uploads past the device's rows, pins a suppressed pick, and is bit-identical despite NaN-poisoned host residual rows; the round's verify rows sit within twice the deltanet bar of one-row steps, a forced reject rolls back on the device, the head's warmed K rows sit within an eighth of the row's max of the CPU warm's over one and two windows, and six rounds match the CPU rounds up to near-ties; the depth-8 knob prepares nine verify rows (depth 1 two) and its walk emits the plain decode, a seeded sampled stream at depth 2 decodes the rows-landed stream; a NaN carry panics the draft by row, the pass arms hand the round to the CPU rails by name, a rewind is refused, a head kept off the device passes the verify as verify_rows; the head holds its bars over q8_0 and tq4 mirrors; the peel with speculation off; pooled openings carry the draft head's rows; on the CUDA home the trunk's forced feed holds 4 percent of the CPU chain with every position served; at two regions segmented windows hold the split bar of solo windows, and checkpoint stops captured inside one call adopt and continue at their rows; on the q8 CPU form, on every box, the NextN extras load and the spec-off trunk continues the plain file's fixture, self-speculative greedy decode emits plain decode's tokens on the counting and prose prompts, the k-deep round at depths 2, 3 and 4 decodes the plain stream with depth 4 accepting more than depth 1, a poisoned verify and a forced-reject round roll back to plain decode, the continuation prefill's seam row is written exactly where no seat serves it, and a prefill driver serving the verify window panics the round naming it; on the q4_0 CPU form self-speculative decode emits plain decode's counting tokens; on the Metal home's blob twin, one load on a das_metal build: on Qwen3.5-0.8B-MTP Q8 with speculation off, the batched row serves through the device driver, and after plain batched steps each stream's NextN carry trails its position by at most one; on Qwen3.5-0.8B-MTP Q8 with self-speculation on, the batched row refuses by name (each stream's round runs alone), reads no rate, and counts no device or CPU batched step; on Qwen3.5-0.8B-MTP Q8, a depth-2 greedy MTP walk emits the depth-1 walk's tokens over 24 reply tokens while drafting more than it and accepting some drafts; on Qwen3.5-0.8B-MTP Q8, a greedy scheduler stream lands its device pick at most once a token and emits what `generate` emits off the host argmax, while a non-argmax sampler lands no pick; on Qwen3.5-0.8B-MTP Q8, three self-speculative streams admitted together emit each solo stream's tokens, every tick stepping each through its own round, with draft and accept counts equal to the solo sums; on Qwen3.5-0.8B-MTP Q8, three speculating streams, the last on a prompt past 200 tokens across 64-row chunk boundaries, emit each solo stream's tokens with every tick stepping their own rounds; on Qwen3.5-0.8B-MTP Q8, a self-speculative stream of 150 reply tokens on 64-row pages, spanning three pages, emits the flat stream's tokens with drafts accepted on both sides; on Qwen3.5-0.8B-MTP Q8, a third prompt on a shared opening attaches the checkpoint the second left and replies as an uncached run at the same cut, and a marked stop inside a later window is captured; on Qwen3.5-0.8B-MTP Q8, a request marked with its stable opening leaves that checkpoint at once, which the next prompt attaches and replies with as uncached, while an unmarked request leaves none there; on Qwen3.5-0.8B-MTP Q8, a session attached at an off-boundary checkpoint lands the donor's logits bit for bit after the same tail, while the checkpoint with its recurrent state zeroed lands 5% of the largest logit away or more; on Qwen3.5-0.8B-MTP Q8, a checkpoint captured at a marked stop inside one prefill window, attached and fed the tail, lands within 0.2% of an uncached prefill's largest logit, and zeroing its recurrent state misses by 5% or more; on Qwen3.5-0.8B-MTP Q8, a conversation's next turn attaches the finished turn's checkpoint, prompt plus 40 tokens, and continues the count token for token against an uncached 80-token stream; each form loads once")]
 def test_gpu_resident_hybrid_mtp(t : T?) {
     pin_window_rows()
     return if (!family_on(t, "qwen35"))

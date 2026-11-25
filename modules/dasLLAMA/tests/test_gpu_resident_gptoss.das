@@ -67,6 +67,7 @@ let private GPTOSS = MoeFixture(file = "gpt-oss-4L-mxfp4-local.gguf", shexp = fa
 //! the heat pool's walk reaches eighty fed steps, and one of them (step 11) lands a router near-tie the pool's summation order
 //! flips - 0.447 against the 5% bar's 0.378, the argmax intact - so the heat cell holds the routed block's bar (`MOE_LOGIT_BAR_REL`)
 let private GPTOSS_HEAT = MoeFixture(file = "gpt-oss-4L-mxfp4-local.gguf", shexp = false, bar_rel = MOE_LOGIT_BAR_REL, window = 128l)
+let private MX4 = int(KqFmt.mx4)   //! the fixture's expert format, as the chain's admission reads it
 
 [test(description = "With the whole-model route off, the per-op tier places every gpt-oss-4L routed layer's mx4 stacks on the device, and a 40-token window plus six fed steps sit within the 5% logits bar of the CPU chain")]
 def test_gpu_perop_gptoss(t : T?) {
@@ -221,7 +222,8 @@ def private gptoss_codec_rows(var r : GptossRows; m : Model; form : ModelForm) {
 }
 
 //! the default form: the admission, the census feeds of every
-//! prompt, the CUDA home's feeds of the same prompts, and under
+//! prompt, the CUDA home's feeds of the same prompts and its far row
+//! (the tile's pieces under the sink stamp's combine), and under
 //! DASLLAMA_VK_KV32=1 the f32 sink stamp's feed
 def private gptoss_main_rows(var r : GptossRows; m : Model; form : ModelForm) {
     r.carrier |> held_equal(m.arch, "gpt-oss", "the file is a gpt-oss-family model")
@@ -233,6 +235,7 @@ def private gptoss_main_rows(var r : GptossRows; m : Model; form : ModelForm) {
         for (n in r.prompts) {
             r.cuda_feeds |> emplace <| cuda_feed_rows(r.carrier, m, form, n, prompt_windows(n))
         }
+        cuda_far_row_rows(r.carrier, m)
     }
     if (form.kv == KVDtype.f32) {
         gptoss_codec_rows(r, m, form)
@@ -252,7 +255,8 @@ def private gptoss_cpu_rows(var r : GptossRows; m : Model; form : ModelForm) {
 
 //! a host-layers form: the feed with the prompt stream on - on the
 //! CUDA home the exact host-layer count beside the stream's witnesses
-//! - and the chain's biased acts; or the feed with the stream off,
+//! - and the chain's biased acts, none on a home whose expert chain
+//! does not admit mx4; or the feed with the stream off,
 //! the control: on the CUDA home no window streamed and no expert
 //! met, on either home no biased act
 def private gptoss_host_layers_rows(var r : GptossRows; m : Model; form : ModelForm) {
@@ -278,10 +282,14 @@ def private gptoss_host_layers_rows(var r : GptossRows; m : Model; form : ModelF
                 "no discrete GPU home on this build: the stream chain is the Vulkan and CUDA " +
                 "drivers'")
         }
-    } elif (form.pf_stream) {
+    } elif (form.pf_stream && moe_gpu_ffn_xf_ok(r.stream_on.nprompt, m.config.dim, MX4, MX4, MX4)) {
         r.host_layers |> held_fact(biased_acts() > b0,
             "the chain's acts took the routed form's bias rows ({biased_acts() - b0} biased " +
             "acts)")
+    } elif (form.pf_stream) {
+        r.host_layers |> held_equal(biased_acts(), b0,
+            "this home's f16-fed expert chain does not admit the mx4 stacks: the host's sums " +
+            "serve the streamed layers and the chain takes no biased act")
     } else {
         r.host_layers |> held_equal(biased_acts(), b0,
             "control: with the prompt stream off the chain took no biased act")
@@ -417,7 +425,7 @@ def private gptoss_forms(var r : GptossRows) : array<ModelForm> {
     return <- forms
 }
 
-[test(description = "The resident gpt-oss-4L driver - mx4 MoE window, biased router, sinked token command - holds the CPU chain's logits within the bar on one window and across two with the sliding layers masking, the one-step-off control past it, the routed block's census once per routed layer per window; the q8_0 and f32 K/V mirrors' sink stamps hold a 40-token window and eight fed steps within the routed bar of the CPU chain at the same codec; with two routed layers' experts on the host the streamed window and eight steps sit within the stream twin's bar of the stream-off load and the stream chain's acts take the picks' bias rows; over two mirror regions batched steps over two sessions - at one window, past the unsplit position, and before any one-row step - and over three a batched step over two rows, a one-row step, then batched steps over three keep every row within the routed bar of its session alone; on a CUDA card with the FP4 rung the CUDA driver's forced feeds over one and two windows and the host-layers feed hold 20 percent of max logit of the CPU chain with every position served, the meet splitting the experts, and the ringed K/V mirrors match a flat every-row mirror bit for bit over 1300 prose ids in 512-row windows on f16 and q8_0; on the q8 CPU form, on every box, with an mx4 rows core the fused MoE expert chain matches the three-dispatch groupn path's greedy ids and final logits bit for bit; on the uncached CPU form harmony's reasoning budget opens on the channel mark, analysis and message mark, leaves on the end mark, forces a close into the final channel and ends the turn on a later channel mark; on the parity-pinned CPU form, fed the 20b's reference greedy stream, every reference id keeps within 2% of its row's top logit on the short prompt and on the 449-token one that engages the sliding window, the stream one step late outside; each form loads once")]
+[test(description = "The resident gpt-oss-4L driver - mx4 MoE window, biased router, sinked token command - holds the CPU chain's logits within the bar on one window and across two with the sliding layers masking, the one-step-off control past it, on the CUDA home a step's full layers on the decode tile form under the sink combine hold the row form's logits, the routed block's census once per routed layer per window; the q8_0 and f32 K/V mirrors' sink stamps hold a 40-token window and eight fed steps within the routed bar of the CPU chain at the same codec; with two routed layers' experts on the host the streamed window and eight steps sit within the stream twin's bar of the stream-off load and the stream chain's acts take the picks' bias rows where the home's expert chain admits mx4 and none where it does not; over two mirror regions batched steps over two sessions - at one window, past the unsplit position, and before any one-row step - and over three a batched step over two rows, a one-row step, then batched steps over three keep every row within the routed bar of its session alone; on a CUDA card with the FP4 rung the CUDA driver's forced feeds over one and two windows and the host-layers feed hold 20 percent of max logit of the CPU chain with every position served, the meet splitting the experts, and the ringed K/V mirrors match a flat every-row mirror bit for bit over 1300 prose ids in 512-row windows on f16 and q8_0; on the q8 CPU form, on every box, with an mx4 rows core the fused MoE expert chain matches the three-dispatch groupn path's greedy ids and final logits bit for bit; on the uncached CPU form harmony's reasoning budget opens on the channel mark, analysis and message mark, leaves on the end mark, forces a close into the final channel and ends the turn on a later channel mark; on the parity-pinned CPU form, fed the 20b's reference greedy stream, every reference id keeps within 2% of its row's top logit on the short prompt and on the 449-token one that engages the sliding window, the stream one step late outside; each form loads once")]
 def test_gpu_resident_gptoss(t : T?) {
     return if (!family_on(t, "gptoss"))
     var r : GptossRows

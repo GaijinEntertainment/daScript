@@ -176,6 +176,10 @@ def private rows_are(rows : array<int64>; a, b : int64) : bool =>
 //! and continues as the solo form does - a stop's capture lands
 //! on its own segment's row, not the first free row
 def captures_cell(t : T?; tr : Model) {
+    if (g_env_gpu.gpu_dn_snaps == 1l) {   // a region here holds an opening's row and a stop's, or two stops'
+        t |> skip("captures: DASLLAMA_GPU_DN_SNAPS=1 keeps one checkpoint row a region, the cell plants two")
+        return
+    }
     var open_a <- resident_prompt(SEG_OPEN_ROWS, 0l)
     var open_b <- resident_prompt(SEG_OPEN_ROWS, 7l)
     var tail_a <- ramp_ids(SEG_TAIL_A, 3l, 2000l, 53l, 4000l)
@@ -216,6 +220,14 @@ def captures_cell(t : T?; tr : Model) {
     let claim_a2 = adopt_at_row(t, tr, claim_a, stop_a, open_a, tail_a, toks, want_a, "captures: session A's stop")
     let claim_b3 = adopt_at_row(t, tr, claim_b2, stop_b0, open_b, tail_b, toks, want_b, "captures: session B's first stop")
     t |> success(claim_a2 != 0l && claim_b3 != 0l, "captures: every adopter parked its claim")
+    var over <- create_device_session(tr, gpu_device_session_dtype())
+    over.dn_stops <- [for (i in range64(int64(RDEC_DN_SNAPS) + 1l)); 4l + 4l * i]   // one stop past the most rows a region keeps
+    let why = panic_text() $ {
+        eval_(tr, over, tail_a)
+    }
+    t |> success(find(why, "checkpoint stops inside one call") >= 0 && find(why, "rows a region keeps") >= 0,
+        "captures: a call with more stops than a region keeps rows is refused by name, two stops on one row leaving it at neither's state: '{why}'")
+    delete over
     delete sa
     delete sb
     delete rows_a

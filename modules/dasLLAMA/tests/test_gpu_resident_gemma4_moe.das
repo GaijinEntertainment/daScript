@@ -36,6 +36,8 @@ def test_gpu_resident_gemma4_26b_format(t : T?) {
 // without the file under models_dir(), or when the residency plan does not fit the card (DASLLAMA_GPU_MIN_CTX shortens the
 // mirror).
 let private GEMMA4_26B_K_CUT = GemmaFile(file = "gemma-4-26B-A4B-6L-Q4_K_M-local.gguf", arm = "g4mk")
+//! the cut's repeat prompt: long enough that an expert's bucket passes one m column, so its rows split between the m and s tiles
+let private G4MOE_REPEAT_IDS = 400l
 
 // gemma-4-26B-A4B MXFP4_MOE (the Q4_K_M file requantized, `../performance/model_specs.das`: the fused gate_up and the down
 // expert stacks MXFP4 on disk, every other plane the source's): arm `mx26`. The expert stacks load as the native-MXFP4
@@ -142,6 +144,10 @@ def private g4moe_k_rows(t : T?; var r : G4MoeKRows; m : Model; form : ModelForm
         }
         regions_batched_rows(r.regions, m, LogitsBar.ctrl_bar, DownFold.folded)
         gather_half(r.gather, r.regions, m, true, GEMMA4_26B_K_CUT.file)
+        static_if (typeinfo builtin_module_exists(vulkan)) {   // the discrete homes: the Metal home's repeat is its own pass
+            prefill_repeats(t, m, G4MOE_REPEAT_IDS, GEMMA4_26B_K_CUT.file)
+        }
+        egu_form_follows_set(t, GEMMA4_26B_K_CUT.file)
     } else {
         gather_half(r.gather, r.regions, m, false, GEMMA4_26B_K_CUT.file)
     }

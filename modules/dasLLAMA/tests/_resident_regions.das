@@ -415,7 +415,10 @@ enum LogitsBar {
 let private WIDE_BAR_REL = 0.10
 //! the biased router's bar: the gpt-oss rows read 0.47 of a 7 peak against the session alone on the RTX PRO 4500 (a router
 //! near-tie flips an expert on a row); a plain MoE's row one off sits inside a quarter (1.65 of a 7 peak on the Qwen3.5-35B),
-//! so the carriers whose rows read a tenth keep the wide bar and its control
+//! so the carriers whose rows read a tenth keep the wide bar and its control. The Qwen3-30B seven-block cut holds it where
+//! the N-column leaves walk rotated (`home_ncol_rotates`): on the Radeon 8060S its batched rows sit at float noise from the
+//! row alone on the plain walk and, on the rotated one, past the wide bar where a near-tie flips an expert, the row one off
+//! well past this bar
 let private ROUTED_BAR_REL = 0.25
 //! `ctrl_bar` holds no share of the peak but the control form (`tq4_within`): the gemma-4 26B's
 //! double router amplifies a float-class difference at a near-tie into whole logits (15.6 of a 23 peak on the RTX PRO 4500 against 20.7 for the row one off, the support matrix's own finding on the file), so its batched rows
@@ -460,6 +463,18 @@ def private segment_windows_count : int64 {
         return vk_rdec_prefill_segment_windows()
     }
     return 0l
+}
+
+//! whether the armed home's N-column GEMV leaves walk a colliding plane rotated (`VK_ALT_N_ROT`, an AMD Vulkan device's
+//! own rule): the N-row command's projections then sum a row's terms in another order than the row alone
+def home_ncol_rotates : bool {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return false if (gpu_want_cuda())
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return g_gpu != null && vk_gemv_n_rot()
+    }
+    return false
 }
 
 def private home_rows_split_alike(rows, pos : int64) : bool {
@@ -512,9 +527,24 @@ def private home_nrow_embed_gathered : int64 {
     return 0l
 }
 
-//! `bar`, or the split bar where a bit-for-bit claim cannot hold over `rows`: past the unsplit position the N-row command splits
-//! a layer's keys into fewer pieces than the row alone wherever its rows' workgroups over the pieces run past one wave of the
-//! card's SMs, and the two commands then sum the keys in two orders (`vk_rdec_rows_split_alike`)
+//! the one-row step's routed gate-up follows the served alternate set on the Vulkan home: the fused leaf on the routed
+//! layers with `VK_ALT_EGU_SPLIT` off, on none of them with it on (an AMD device's own rule)
+def egu_form_follows_set(t : T?; what : string) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return if (gpu_want_cuda())
+        let fused = rd_egu_layers_()
+        if (vk_egu_split()) {
+            t |> equal(fused, 0l, "{what}: the served set splits the one-row routed gate-up, and no layer takes the fused leaf ({fused} do)")
+        } else {
+            t |> success(fused > 0l, "{what}: the served set leaves the one-row routed gate-up fused, and the routed layers take the leaf ({fused} do)")
+        }
+    }
+}
+
+//! `bar`, or over `rows` whose keys split apart from the row alone, the wider of the batched-row and split bars: past the
+//! unsplit position the N-row command splits a layer's keys into fewer pieces than the row alone wherever its rows' workgroups
+//! over the pieces run past one wave of the device, the two commands then sum the keys in two orders
+//! (`vk_rdec_rows_split_alike`), and an unlike split reads no closer than a like one
 def private rows_bar(bar : LogitsBar; rows, pos : int64) : LogitsBar {
     if (bar == LogitsBar.bit_or_wide) {
         return LogitsBar.bit_exact if (home_rows_split_alike(rows, pos))
@@ -522,8 +552,9 @@ def private rows_bar(bar : LogitsBar; rows, pos : int64) : LogitsBar {
         return LogitsBar.wide_bar
     }
     if (bar == LogitsBar.bit_exact && !home_rows_split_alike(rows, pos)) {
-        to_log(LOG_WARNING, "the N-row command over {rows} rows splits the keys apart from the row alone at {pos} positions on this card: the batched rows hold the split bar, not bit for bit\n")
-        return LogitsBar.split_bar
+        let wider = BATCH_ROW_BAR_REL >= SPLIT_BAR_REL ? LogitsBar.bit_exact : LogitsBar.split_bar
+        to_log(LOG_WARNING, "the N-row command over {rows} rows splits the keys apart from the row alone at {pos} positions on this device: the batched rows hold the wider of the batched-row bar ({BATCH_ROW_BAR_REL}) and the split bar ({SPLIT_BAR_REL})\n")
+        return wider
     }
     return bar
 }
@@ -634,6 +665,19 @@ def private batched_rows_logits(var h : Held; tr : Model) : array<array<float>> 
     return <- rows
 }
 
+//! the gathered rows against the host-embedded rows on a device that rounds a shader at a time (`home_rounds_alike`): its
+//! compiler folds the gather's embed scale into the block scale, the rows land an ulp off the host's, and the model carries
+//! that to the logits (the gemma-4-E2B on the Radeon 8060S). Each row within the batched-row bar of the host row's peak,
+//! the host row one step off outside it
+def gathered_rows_within(var h : Held; tr : Model; tag : string; dev, host : array<array<float>>; per_step : int64) {
+    h |> held_equal(long_length(dev), long_length(host), "{tag}: both runs stepped every row")
+    let n = min(long_length(dev), long_length(host))
+    for (i in range64(n)) {
+        let off = i >= per_step ? i - per_step : min(i + per_step, n - 1l)
+        hold_within(h, tr, dev[i], host[i], host[off], "{tag} step {i / per_step}, row {i % per_step}: the gathered row against the host row", BATCH_ROW_BAR_REL)
+    }
+}
+
 //! one half of the embed-gather cell on a two-region load: the batched rows, and where each token row came from - with the
 //! gather on (`gathered`) every one off its id and none embedded on the host; with it off every one embedded on the host,
 //! none gathered and no side row gathered off an id, the counters' controls
@@ -665,6 +709,7 @@ struct GatherPair {
     host_embedded : array<array<float>>
     gathered_ran : bool
     host_ran : bool
+    within : bool   //! the device rounds a shader at a time (`home_rounds_alike`): the host half held the gathered rows to a bar, not bit for bit
 }
 
 //! one half of the embed-gather cell on the form's two-region load
@@ -681,6 +726,10 @@ def gather_half(var gp : GatherPair; var h : Held; m : Model; gathered : bool; f
             delete gp.host_embedded
             gp.host_embedded <- regions_embed_rows(h, m, false)
             log_gathered_rows(m, file, gp.gathered, gp.host_embedded, 2l)
+            gp.within = gp.gathered_ran && !home_rounds_alike()
+            if (gp.within) {
+                gathered_rows_within(h, m, file, gp.gathered, gp.host_embedded, 2l)
+            }
             gp.host_ran = true
         }
     } else {
@@ -692,9 +741,9 @@ def gather_half(var gp : GatherPair; var h : Held; m : Model; gathered : bool; f
 }
 
 //! the embed-gather cell's compare under `tag`: the two halves' rows
-//! bit for bit, where both ran
+//! bit for bit, where both ran and the host half held no bar in their place
 def gather_pair_within(t : T?; tag : string; gp : GatherPair) {
-    if (gp.gathered_ran && gp.host_ran) {
+    if (gp.gathered_ran && gp.host_ran && !gp.within) {
         gathered_rows_bit_same(t, tag, gp.gathered, gp.host_embedded, 2l)
     }
 }

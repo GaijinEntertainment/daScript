@@ -462,8 +462,8 @@ def private trunk_served_since(t : T?; m0 : TrunkCounts; tag : string) {
     }
 }
 
-//! one scheduler's run over `prompts`, `budget` tokens a stream on `kv` sessions, speculating or plain: each stream's tokens and
-//! the scheduler's speculative tallies
+//! one scheduler's run over `prompts`, `budget` tokens a stream on `kv` sessions, speculating or plain, host-cached or (`device`)
+//! device-home: each stream's tokens and the scheduler's speculative tallies
 struct private SchedRun {
     toks : array<array<int64>>
     drafted : int64
@@ -474,11 +474,14 @@ struct private SchedRun {
 }
 
 [cold_path]
-def private sched_run(t : T?; trg : Model; prompts : array<array<int64>>; budget : int64; kv : KVDtype; spec : bool) : SchedRun {
+def private sched_run(t : T?; trg : Model; prompts : array<array<int64>>; budget : int64; kv : KVDtype; spec : bool; device : bool = false) : SchedRun {
     var run : SchedRun
     var ev : array<SchedEvent>
     let m0 = trunk_counts()
     var sch <- create_scheduler(trg, long_length(prompts), 4l, 0l, 64l, 0l, kv, spec)
+    if (device) {
+        t |> success(set_device_kv(sch, true), "the idle scheduler switches to device-home sessions")
+    }
     run.mtp = sch.mtp
     for (i in range64(long_length(prompts))) {
         submit(trg, sch, make_req(i + 1l, prompts[i], budget))
@@ -517,6 +520,37 @@ def private same_streams(t : T?; trg : Model; tag : string; plain, spec : SchedR
         t |> equal(long_length(spec.toks[i]), budget, "{tag}: stream {i} emits its whole budget")
         log_gen_texts(trg, "{tag} stream {i} (plain, speculating)", plain.toks[i], spec.toks[i])
         t |> success(ids_equal(spec.toks[i], plain.toks[i]), "{tag}: stream {i} walks the counting prompt as the plain scheduler does")
+    }
+}
+
+//! how near the plain chain's argmax a parting token's logit sits, of the row's peak, where a home's two commands round apart
+let private PART_TIE_REL = 0.15
+
+//! `same_streams` on a home whose commands round one expression alike; on one that rounds them apart (`home_rounds_alike`) a
+//! speculating stream walks the plain one's tokens to their first parting, and that parting is a near-tie on the plain chain's
+//! own row there - the round's verify is the N-row command, the plain step the one-row one
+def private streams_same_or_tied(t : T?; trg : Model; tag : string; prompts : array<array<int64>>; plain, spec : SchedRun; budget : int64; kv : KVDtype) {
+    if (home_rounds_alike()) {
+        same_streams(t, trg, tag, plain, spec, budget)
+        return
+    }
+    for (i in range64(long_length(plain.toks))) {
+        t |> equal(long_length(spec.toks[i]), budget, "{tag}: stream {i} emits its whole budget")
+        log_gen_texts(trg, "{tag} stream {i} (plain, speculating)", plain.toks[i], spec.toks[i])
+        var at = 0l
+        while (at < budget && spec.toks[i][at] == plain.toks[i][at]) {
+            at++
+        }
+        continue if (at == budget)
+        var ids := prompts[i]
+        ids |> reserve(long_length(ids) + at)
+        for (j in range64(at)) {
+            ids |> push(plain.toks[i][j])
+        }
+        var s <- stepped_session(trg, ids, kv)
+        pick_agrees(t, trg, "{tag}: stream {i} parts from the plain one at token {at}", spec.toks[i][at], s.logits, PART_TIE_REL)
+        delete s
+        delete ids
     }
 }
 
@@ -785,6 +819,14 @@ def private gdraft_served_cell(t : T?; trg : Model) {
     t |> equal(st1.drafted - st0.drafted, spec.drafted, "every draft was the device drafter's: its counter rose by the scheduler's drafts")
     t |> equal(st1.drafted - st0.drafted, st1.rounds - st0.rounds, "depth 1: one draft a round")
     to_log(LOG_INFO, "gdraft sched: {spec.accepted} of {spec.drafted} drafts accepted over {spec.ticks} ticks for 24 tokens\n")
+    static_if (!typeinfo builtin_module_exists(das_metal)) {
+        t |> success(gpu_resident_mtp_device_home_(trg), "the assistant's round runs on the device alone, so a device-home session speculates")
+        var home <- sched_run(t, trg, prompts, 24l, KVDtype.f16, true, true)
+        same_streams(t, trg, "gdraft sched device-home", plain, home, 24l)
+        t |> equal(home.drafted, spec.drafted, "the device-home stream drafts round for round as the host-cached one")
+        t |> equal(home.accepted, spec.accepted, "... and accepts the same drafts")
+        delete home
+    }
     detach_mtp_drafter(trg)   //! the control: the same speculating scheduler with the drafter detached
     var off <- sched_run(t, trg, prompts, 24l, KVDtype.f16, true)
     t |> success(!off.mtp, "a scheduler told to speculate stands down with the drafter detached")
@@ -975,7 +1017,7 @@ def private gdraft_codec_cell(t : T?; trg : Model; kv : KVDtype) {
     let st0 = mtp_drafter_stats(trg)
     var spec <- sched_run(t, trg, prompts, 24l, kv, true)
     let st1 = mtp_drafter_stats(trg)
-    same_streams(t, trg, "gdraft {kv}", plain, spec, 24l)
+    streams_same_or_tied(t, trg, "gdraft {kv}", prompts, plain, spec, 24l, kv)
     t |> success(st1.rounds > st0.rounds, "{kv}: the rounds ran on the device ({st1.rounds - st0.rounds}), none cold for the codec")
     t |> success(spec.accepted > 0l, "{kv}: drafts were accepted ({spec.accepted} of {spec.drafted})")
     restore_mtp_depth(depth_pin)
@@ -993,6 +1035,7 @@ struct private RingDraftRun {
     count : int   //! the counting prompt's last number: sized off the ringed load's rows, the flat load's prompt the same
     anchor : int64
     pick : int64   //! the one-row chain's argmax at the anchor, the drafter's seed
+    alike : bool   //! the run's home rounds its commands alike (`home_rounds_alike`), read while it is armed
     trunk : array<float>
     drafts : array<int64>
     dlogits : array<float>
@@ -1087,6 +1130,7 @@ def private ring_draft_rows(t : T?; trg : Model; ring : int; budget : int64; cou
     run.stream <- sched_run(t, trg, prompts, budget, KVDtype.f16, true)
     restore_mtp_depth(depth_pin)
     run.text = decode(trg, run.stream.toks[0])
+    run.alike = home_rounds_alike()
     run.ok = true
     delete prompts
     delete prompt
@@ -1110,7 +1154,7 @@ def private ring_draft_run(t : T?; var m : Model; ring : int; budget : int64;
 }
 
 //! the ringed run against the flat one: the ring's rows and the anchor past them, the trunk's and the drafter's logits at the
-//! anchor (bit for bit off Metal, the pick on Metal), the drafts, and the two speculating streams with their acceptance
+//! anchor (bit for bit off Metal - within the split bar with the same pick where either run's home rounds its commands apart - the pick on Metal), the drafts, and the two speculating streams with their acceptance
 def private past_ring_within(t : T?; ringed, flat : RingDraftRun; budget : int64) {
     t |> success(ringed.ring > 0l && flat.ring == 0l, "the ringed load rings the sliding capture layer ({ringed.ring} rows), the flat load keeps a row a position ({flat.ring})")
     t |> success(ringed.anchor > ringed.ring, "the anchor {ringed.anchor} sits past the ring: the capture layer holds more keys than its ring's rows")
@@ -1119,8 +1163,15 @@ def private past_ring_within(t : T?; ringed, flat : RingDraftRun; budget : int64
         //! Metal's AV pass splits a ringed layer's key run at the wrap, so the sums part in order: the picks hold, the bits do not
         t |> equal(ringed.pick, flat.pick, "the one-row chain's pick at the anchor: the ringed mirror's is the flat one's")
     } else {
-        check_exact(t, "the one-row chain's logits at the anchor: the ringed mirror against the flat one, bit for bit", ringed.trunk, flat.trunk)
-        check_exact(t, "the drafter's first step's logits at the anchor: the ringed mirror against the flat one, bit for bit", ringed.dlogits, flat.dlogits)
+        if (ringed.alike && flat.alike) {
+            check_exact(t, "the one-row chain's logits at the anchor: the ringed mirror against the flat one, bit for bit", ringed.trunk, flat.trunk)
+            check_exact(t, "the drafter's first step's logits at the anchor: the ringed mirror against the flat one, bit for bit", ringed.dlogits, flat.dlogits)
+        } else {
+            //! the flat mirror spans slabs the ringed one does not, so the two loads' commands are not one program: the rows hold the split bar, the picks hold
+            row_within(t, "the one-row chain's logits at the anchor: the ringed mirror within the split bar of the flat one", ringed.trunk, flat.trunk, row_bar(flat.trunk, split_bar_rel()))
+            row_within(t, "the drafter's first step's logits at the anchor: the ringed mirror within the split bar of the flat one", ringed.dlogits, flat.dlogits, row_bar(flat.dlogits, split_bar_rel()))
+            t |> equal(ringed.pick, flat.pick, "the one-row chain's pick at the anchor: the ringed mirror's is the flat one's")
+        }
     }
     t |> success(ids_equal(ringed.drafts, flat.drafts), "the drafter's chain at the anchor drafts the flat mirror's tokens ({ringed.drafts} vs {flat.drafts})")
     to_log(LOG_INFO, "gdraft ring: anchor {ringed.anchor} past the {ringed.ring}-row ring; trunk logits ringed vs flat maxd {logits_maxdiff(ringed.trunk, flat.trunk)}, draft logits maxd {logits_maxdiff(ringed.dlogits, flat.dlogits)}\n")
@@ -1543,7 +1594,7 @@ def private capture_within(t : T?; r : CaptureRows) {
         "a prompt one token short reads other rows (the bar's control)")
 }
 
-[test(description = "On the whole-model driver gemma-4-26B Q4_K_M with q51 down experts scores teacher-forced perplexity within 2x of the CPU chain over 150 positions and 2.5x over two windows, hits within 16; on the CUDA driver at the full rig context, the first routed layers' experts moved to the host, its 150-position perplexity within 2x through the split command and cut window chain, hits within 12; on the discrete homes' served trunk the GPU drafter step agrees with the CPU oracle within the Q8_0 feed's bars at a short anchor and past the sliding window, a scheduler speculating at depth 1 through the attached drafter emits the plain scheduler's counting tokens and stands down detached, drafter depths 3 and 1 draft k tokens a round across a page boundary with a reasoning budget's forced close in place, three streams ride one joint verify a tick, q8_0 and tq4 mirrors' rounds run on the device, and past a sliding capture layer's KV ring the drafter drafts the flat mirror's tokens bit for bit with the ringed stream within 10 percent of the flat one's acceptance; the Q8_0 and Q4_K_M DFlash drafters' greedy walks on the device arm are the plain walk's; on the CPU one drafter step over the target's live K/V yields a finite token and hidden, and the DFlash drafter's greedy speculative walk over a chat turn emits the plain walk's ids; on the parity row's CPU form, on every box, the file's frozen greedy ids to the half-span prefix bar, with its flipped-id control and its per-expert-prefill arm; on the Metal home's served image, one load on a das_metal build: the GPU drafter step on the served 26B agrees with the CPU oracle's draft token and sits within the home's logits and h_next bars (0.25 and 0.05 on Metal, 1.0 on a Q8_0 feed) at a short anchor and past the sliding window, an off-by-one seed landing outside; a scheduler speculating at depth 1 through the attached gemma-4 drafter emits the plain scheduler's counting tokens exactly, every draft counted by the device drafter, and with the drafter detached it stands down, drafts nothing, and still matches; on Metal a joint drafter verify over two streams on two KV codecs carries no stream and counts no round, each stream's step equal bit for bit to a plain decode step, while one codec across both carries both streams; at drafter depths 3 and 1 the speculating scheduler drafts k tokens a round and emits the plain scheduler's counting tokens exactly across a page boundary, and a reasoning budget lands its forced close at the budget with the plain stream's tokens; three speculating streams at depths 1 and 2 ride one joint verify a tick, each emitting the plain scheduler's counting tokens exactly, while a lone stream counts no joint verify (the counter's control); on q8_0 and tq4 KV mirrors the drafter's rounds run on the device, accept drafts, and the speculating scheduler emits the same codec's plain scheduler tokens exactly; past a sliding capture layer's KV ring the drafter at the same anchor drafts the flat mirror's tokens - logits bit for bit off Metal, the same pick on Metal - and the ringed stream matches the flat one with acceptance within 10 percent; the Metal form's prefill window hands the regular DFlash drafter the prompt's layer rows, every captured layer's sum over the prompt's last row within 5% of the CPU form's route, the CPU route's row for a prompt one token short outside it; each form loads once")]
+[test(description = "On the whole-model driver gemma-4-26B Q4_K_M with q51 down experts scores teacher-forced perplexity within 2x of the CPU chain over 150 positions and 2.5x over two windows, hits within 16; on the CUDA driver at the full rig context, the first routed layers' experts moved to the host, its 150-position perplexity within 2x through the split command and cut window chain, hits within 12; on the discrete homes' served trunk the GPU drafter step agrees with the CPU oracle within the Q8_0 feed's bars at a short anchor and past the sliding window, a scheduler speculating at depth 1 through the attached drafter emits the plain scheduler's counting tokens, a device-home stream drafting and accepting as the host-cached one, and stands down detached, drafter depths 3 and 1 draft k tokens a round across a page boundary with a reasoning budget's forced close in place, three streams ride one joint verify a tick, q8_0 and tq4 mirrors' rounds run on the device (the speculating stream the plain one's - on a home whose commands round apart, to a parting that is a near-tie on the plain chain's row), and past a sliding capture layer's KV ring the drafter drafts the flat mirror's tokens, the logits bit for bit (within the split bar with the same pick on a home whose commands round apart), with the ringed stream within 10 percent of the flat one's acceptance; the Q8_0 and Q4_K_M DFlash drafters' greedy walks on the device arm are the plain walk's; on the CPU one drafter step over the target's live K/V yields a finite token and hidden, and the DFlash drafter's greedy speculative walk over a chat turn emits the plain walk's ids; on the parity row's CPU form, on every box, the file's frozen greedy ids to the half-span prefix bar, with its flipped-id control and its per-expert-prefill arm; on the Metal home's served image, one load on a das_metal build: the GPU drafter step on the served 26B agrees with the CPU oracle's draft token and sits within the home's logits and h_next bars (0.25 and 0.05 on Metal, 1.0 on a Q8_0 feed) at a short anchor and past the sliding window, an off-by-one seed landing outside; a scheduler speculating at depth 1 through the attached gemma-4 drafter emits the plain scheduler's counting tokens exactly, every draft counted by the device drafter, and with the drafter detached it stands down, drafts nothing, and still matches; on Metal a joint drafter verify over two streams on two KV codecs carries no stream and counts no round, each stream's step equal bit for bit to a plain decode step, while one codec across both carries both streams; at drafter depths 3 and 1 the speculating scheduler drafts k tokens a round and emits the plain scheduler's counting tokens exactly across a page boundary, and a reasoning budget lands its forced close at the budget with the plain stream's tokens; three speculating streams at depths 1 and 2 ride one joint verify a tick, each emitting the plain scheduler's counting tokens exactly, while a lone stream counts no joint verify (the counter's control); on q8_0 and tq4 KV mirrors the drafter's rounds run on the device, accept drafts, and the speculating scheduler emits the same codec's plain scheduler tokens exactly; past a sliding capture layer's KV ring the drafter at the same anchor drafts the flat mirror's tokens - logits bit for bit off Metal, the same pick on Metal - and the ringed stream matches the flat one with acceptance within 10 percent; the Metal form's prefill window hands the regular DFlash drafter the prompt's layer rows, every captured layer's sum over the prompt's last row within 5% of the CPU form's route, the CPU route's row for a prompt one token short outside it; each form loads once")]
 def test_gemma_drafter_26b_trunk(t : T?) {
     return if (!family_on(t, "gemma4moe"))
     let host_walk = empty(cuda_home_why()) && empty(arm_why(G26_HOST_CUDA_ARM))

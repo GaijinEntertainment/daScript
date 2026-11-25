@@ -15,6 +15,7 @@ require dasllama/dasllama   // create_session, moe_gpu_drop_model
 require dasllama/dasllama_image
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active / gpu_resident_prefills_: the driver's witnesses
 require dasllama/dasllama_gpu_tier   // gpu_cpu_passes_: the calls the driver handed to the CPU rails, by reason
+require dasllama/dasllama_gpu_knee   // nolint:STYLE030,LINT019 - VK_VENDOR_AMD: `home_rounds_alike`'s device fact, inside the Vulkan half
 require dasllama/dasllama_kv_dtype   // kv_row_bytes / kv_layer_kbase: the head's K row
 require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_decode   // the greedy chain's mode pin and its hits and misses
@@ -94,6 +95,15 @@ def ramp_ids(n, salt, base, stride, span : int64) : array<int64> => <- [for (i i
 //! one prompt reduce its attention in two orders, so two row counts round apart (the 0.5B's own device-vs-CPU rounding reads
 //! 0.30-0.50 of a 9.5-18 max logit, `test_gpu_resident_qwen2.das`'s bar)
 let SPLIT_BAR_REL = 0.06
+let private FAR_ROW_TOK = 1234l   //! the token the far row's step takes
+//! ... on a device whose compiler rounds a shader at a time (`home_rounds_alike`), where the row command's residual GEMV
+//! walks its K rotated and the rows command's tiles do not: the gemma-4-E2B's peel on the Radeon 8060S reads a 1-row tail bit
+//! for bit, a 5-row tail under the bar above, and one step of a 2-row tail past it, the row one step off well past this
+//! bar
+let SPLIT_BAR_REL_APART = 0.09
+
+//! the split bar this device's two commands hold: `SPLIT_BAR_REL`, or `SPLIT_BAR_REL_APART` where they round apart
+def split_bar_rel() : float => home_rounds_alike() ? SPLIT_BAR_REL : SPLIT_BAR_REL_APART
 
 //! the logits now, then after each of `toks` stepped one at a time on `s` at its own position (`eval_` advancing it)
 def steps_after(tr : Model; var s : Session; toks : array<int64>) : array<array<float>> {
@@ -396,7 +406,9 @@ def dense_planes_tagged(t : T?; tr : Model; path : string; f : KqFmt) {
 
 let NO_CENSUS = -1l   //! the census count with no vulkan module: a census witness stands down
 
-//! the coverage census's count of a kernel's dispatches so far; NO_CENSUS with no vulkan module
+//! the coverage census's count of a kernel's dispatches so far - on the Vulkan home a class slot's, under the kernel's own
+//! name and under the stamp its pipe slot serves on this device where that is another (a small-slab twin, or an alternate of
+//! the box's set: `vkd_slot_kernel`), so a count holds whatever set serves; NO_CENSUS with no vulkan module
 def census(kernel : string) : int64 {
     static_if (typeinfo builtin_module_exists(cuda)) {
         if (gpu_want_cuda()) {   // the CUDA home stamps the same stems under `_cuda`: a stamp this home has no leaf of reads NO_CENSUS
@@ -405,7 +417,9 @@ def census(kernel : string) : int64 {
         }
     }
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        return vk_kernel_coverage_of(kernel)
+        let own = vk_kernel_coverage_of(kernel)
+        let served = g_gpu != null ? vkd_slot_kernel(kernel) : kernel
+        return served == kernel ? own : own + vk_kernel_coverage_of(served)
     }
     return NO_CENSUS
 }
@@ -767,6 +781,17 @@ def head_k_row_marked(tr : Model; var s : Session; row : int64) : array<uint8> {
         unsafe(kp[row * rowb + i]) = 0xA5u8
     }
     return <- head_k_row_bytes(tr, s, row)
+}
+
+//! whether the armed home rounds two programs of one float expression alike - two shaders, or a shader and the CPU: false on
+//! an AMD Vulkan device, whose compiler contracts and re-associates a shader's arithmetic one shader at a time (the kernel
+//! cells' `vk_rounds_alike`), so a model cell that is bit for bit elsewhere holds a bar with its control there
+def home_rounds_alike() : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return g_gpu == null || g_gpu.vendor != VK_VENDOR_AMD
+    } else {
+        return true
+    }
 }
 
 //! `got` within `bar` of `want` - its largest difference, a NaN read past the bar - asserted under `what`; the difference back
@@ -1696,4 +1721,35 @@ def with_cuda_mmq_winners(body : block<() : void>) {
         }
     }
     invoke(body)
+}
+
+//! the CUDA token step's far row on the loaded model: after a 40-id prompt one step on the decode tile form (the far count
+//! pinned to the first key), on the row form (pinned off), and on the tile form over a token one off - the logits each, and the
+//! steps the tile form served; nothing on a build without the CUDA module
+[unused_argument(h, m)]
+def cuda_far_row_rows(var h : Held; m : Model) {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        var prompt <- resident_prompt(40l)
+        var rows : array<float>[3]
+        var far : int64[3]
+        let far_pin = cuda_attn_tile_far_pin()
+        for (i in range(3)) {
+            set_cuda_attn_tile_far_pin(i == 1 ? 0l : 1l)
+            var sc <- create_session(m, mirror_kv_dtype())
+            forward_prefill(m, sc, prompt, 40l, 0l)
+            let f0 = cud_rdec_far_tokens()
+            forward(m, sc, FAR_ROW_TOK + (i == 2 ? 1l : 0l), 40l)
+            far[i] = cud_rdec_far_tokens() - f0
+            rows[i] := sc.logits
+            delete sc
+        }
+        set_cuda_attn_tile_far_pin(far_pin)
+        h |> held_row("a step's logits on the decode tile form against the row form", rows[0], rows[1], rows[2], SPLIT_BAR_REL)
+        h |> held_equal(far[0], 1l, "the far count pinned to the first key: the step's flat layers took the tile form")
+        h |> held_equal(far[1], 0l, "control: the far count pinned off, the row form serves the step")
+        for (i in range(3)) {
+            delete rows[i]
+        }
+        delete prompt
+    }
 }

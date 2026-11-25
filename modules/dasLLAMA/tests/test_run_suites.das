@@ -1005,6 +1005,7 @@ let private CUDA_REACH <- [
 
 //! the files whose text names the CUDA home and that hold no CUDA cell
 let private CUDA_REACH_NO_CELL <- [
+    "test_fat_start.das",   // its Vulkan race cells skip on the CUDA home
     "test_gpu_home.das",   // a unit of the home pick itself, on no device
     "test_run_suites.das",   // this file, which names the reach text
     "test_vulkan_moe_cm2.das",   // its CUDA branch only skips
@@ -1215,7 +1216,7 @@ def test_child_chunks(t : T?) {
     t |> equal(length(tier[1]), 3, "the files before and after it ride one child")
 }
 
-[test(description = "`model_names` reads every whole quoted .gguf name out of a file's text once and skips interpolated names, paths and patterns, `model_paths` keeps a path under the models folder and drops a climb, an absolute path, a backslash path and the bare suffix, and `missing_models` lists the names a run's files and the fixtures they require ask that the directory lacks, each with its askers, while a directory holding them lists none")]
+[test(description = "`model_names` reads every whole quoted .gguf name out of a file's text once and skips interpolated names, paths and patterns, `model_paths` keeps a path under the models folder and drops a climb, an absolute path, a drive path, a backslash path and the bare suffix, and `missing_models` lists the names a run's files and the fixtures they require ask that the directory lacks, each with its askers, while a directory holding them lists none")]
 def test_missing_models(t : T?) {
     let names <- model_names("let a = \"B-model.gguf\"\nlet b = \"\{stem\}.gguf\"\nlet c = \"dir/C.gguf\"\nlet d = \"*.gguf\"\nrun(\"A-model.gguf\", \"B-model.gguf\", \"note.txt\")\n")
     t |> equal(join(names, ","), "A-model.gguf,B-model.gguf", "whole quoted names once each, in order; an interpolated name, a path and a pattern are not names")

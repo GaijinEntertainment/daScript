@@ -1128,8 +1128,8 @@ def private describe_reach(r : Reach) : string {
 //! a `[test]` function's wall in seconds in the suites the wall is armed for: past it the test is a red that ends the run
 let MODEL_FREE_BATCH = 1000   //! the whole suite one program: no file loads a model, and a file costs a context's clone, so one parse and one JIT serve them all
 //! on Windows a batch's JIT DLL exports over two symbols a function and a DLL holds 65,535 exports: the suite whole
-//! does not link as one DLL, nor does a batch of thirty of its files; twenty do
-let MODEL_FREE_BATCH_WINDOWS = 20
+//! does not link as one DLL, nor does a batch of twenty of its files; sixteen do
+let MODEL_FREE_BATCH_WINDOWS = 16
 let MODEL_BATCH = 10
 //! the suites whose files run as a process of their own kind: their device leak gates count the whole process
 let PROCESS_SUITES <- ["decode", "mtp", "prefill", "matrix", "kernels", "image", "image-vulkan", "coverage"]

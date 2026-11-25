@@ -51,7 +51,8 @@ require _metal_batched_cells   // metal_gemma4_e2b_cells: the Q8_0 file's Metal 
 // without its drafter file under models_dir() (`drafters/gemma-4-E2B-it-dflash2-GGUF/`), the discrete legs on a build with
 // no discrete DFlash arm, and the assistant head's refusal without the 26B's head (`mtp-gemma-4-26B-A4B-it-Q8_0.gguf`, the
 // gemma4-moe category's). The segment form (two regions, the planes on the host, the SEG_WINDOW-row prompt window) carries
-// the segmented window's cells, and the default form the embeddings' no-scratch cell (`_embedding_cells.das`). The Q4_K_M file's
+// the segmented window's cells - its capture cell skips under DASLLAMA_GPU_DN_SNAPS=1, where a region keeps one checkpoint
+// row and the cell plants two -, and the default form the embeddings' no-scratch cell (`_embedding_cells.das`). The Q4_K_M file's
 // q8 and uncached CPU forms, on every box, carry its chat cells (`_chat_cells.das`), and its K-quant-native CPU form under the
 // portable backend's pin its per-layer token table's plane (`_kquant_cells.das`). The Q8_0, Q4_K_M and Q4_0 files' parity rows'
 // CPU forms (the row's load mode and K-quant knob under DASLLAMA_PIN_BACKEND's pin), on every box, carry each row's frozen
@@ -175,9 +176,12 @@ struct E2bRows {
     pre : PreStep[2]
     side_cpu, side_other : array<float>
     chain : Held   //! the greedy chain's walks on the default form's one region
+    tail_cut : Held   //! the window's cut at the shared-K/V tail on the default form
+    far_row : Held   //! the CUDA token step's far row on the default form
     regions : Held   //! the rig's two-session cells on the two-region form
     gather : GatherPair   //! the embed-gather cell's batched rows, both halves
     host_rows : Held   //! the gather-off form's host half of the embed-gather cell, the pin cell, the CUDA prefill pin's control
+    split_rel : float   //! the split bar the peels' device holds (`split_bar_rel`)
     groups : Held   //! the groups cell on the nine-region form
     split_forms : Held   //! the split one-row forms on the Vulkan home
     cuda : bool   //! the default form ran on the CUDA home: its own cells collected
@@ -201,10 +205,15 @@ def private e2b_rows(var r : E2bRows; var m : Model; form : ModelForm; feeds : a
         r.rows[1] <- gemma_rows(m, form, feeds, gaps, walks)
         delete r.peels
         r.peels <- e_series_peel_rows(m, [for (n in E2B_TAILS); n])
+        r.split_rel = split_bar_rel()
         codec_rows(r.codec, m, form, E2B_CODEC)
         r.pre[0] <- pre_step_rows(m, form)
         r.cuda = gpu_want_cuda()
         greedy_chain_rows(r.chain, m, GEMMA4E_FILE.file)
+        tail_cut_rows(r.tail_cut, m)
+        if (r.cuda) {
+            cuda_far_row_rows(r.far_row, m)
+        }
     } elif (form.on_gpu && form.regions == 2l && form.gather && !form.split_forms) {
         e2b_regions_rows(r, m)
     } elif (form.on_gpu && form.regions == 2l && form.split_forms) {
@@ -265,6 +274,8 @@ def private e2b_rows_within(t : T?; r : E2bRows; walks : array<GemmaWalk>) {
         gemma_rows_within(t, "gemma-4-E2B Q8_0", r.rows[1], r.rows[0], gaps, walks)
     }
     held_within(t, r.chain, "gemma-4-E2B Q8_0, the greedy chain: ", false)
+    held_within(t, r.tail_cut, "gemma-4-E2B Q8_0, the window's tail cut: ", false)
+    held_within(t, r.far_row, "gemma-4-E2B Q8_0, the far row: ", false)
     held_within(t, r.regions, "gemma-4-E2B Q8_0, two regions: ", false)
     held_within(t, r.host_rows, "gemma-4-E2B Q8_0, two regions, the gather off: ", false)
     held_within(t, r.groups, "gemma-4-E2B Q8_0, nine regions: ", false)
@@ -279,14 +290,14 @@ def private e2b_rows_within(t : T?; r : E2bRows; walks : array<GemmaWalk>) {
     with_dasllama_jobque_() {
         if (r.main.ran) {
             ple_feed_within(t, "gemma-4-E2B Q8_0", r.ple[1], r.ple[0], GEMMA4E_FILE.file, "")
-            e_series_peels_within(t, r.peels, SPLIT_BAR_REL)
+            e_series_peels_within(t, r.peels, r.split_rel)
         }
         rings_within(t, "gemma-4-E2B Q8_0", GEMMA_RING_IDS, r.codec.rings, r.main.kv,
             E2B_CODEC.ring_kv)
     }
 }
 
-[test(description = "On gemma-4-E2B Q8_0 the resident driver holds the CPU chain's forty-token forced feed, its perplexity over a two-window prefill and 80 teacher-forced positions, and its window chain against token command gap within 6x of the CPU chain's own; tails of 1, 2 and 5 rows peel within the split bar of the row-at-a-time tail; the all-Q8_0 per-layer planes dispatch no format GEMV and no f32 class; a q8_0 K/V mirror holds the CPU chain's forty-token logits and a tq4 mirror its perplexity; the sliding layers' rings match a flat mirror bit for bit over 1300 ids and eight steps on the default and the tq4 mirror; the decode step builds its side row on the device off the gathered id within 1e-4 of the CPU pre-step's, and with the gather off no row gathers; the greedy chain walks bit for bit the plain greedy walk; over two mirror regions interleaved single steps, batched steps (past the unsplit position too, and on the split one-row forms on Vulkan) and nine sessions batched in command groups read what each session reads alone, every side row and token row gathered on the device bit for bit the host-embedded rows, two device-home sessions step bit for bit a host-cached session while a live region is never handed to an outsider, a device-mode scheduler emits the host-cached scheduler's tokens and hands two streams to one segmented window, and the window's fused q/k norm reads within the wide bar of the split pair; on the CUDA driver forty-token forced-feed logits, a 150-position perplexity and the device-built side rows hold the CPU chain's, a prefill-pinned prompt passing to the CPU as pinned_off; the PLE table of an fp32 load sits on an exactly-sized q8 plane bit-identical to the file and refuses both in-place requants, and greedy chat turns in the q8, fp32 and q4_0 serving modes are text; with the E2B's DFlash2 drafter on the CPU arm a planes-trimmed trunk refuses the attach and the untrimmed one attaches, the greedy speculative walk emits the plain walk's ids with drafts accepted for the Q8_0, Q4_K_M and NVFP4 drafter files (each file's planes tagged with their disk type), and the exact sampled walk spends one draw a judged row with drafts accepted, opens on the plain sampled walk's first id and honors a stop id while both rejection walks accept some drafts and reject some; on the discrete home's drafter form each drafter file's greedy walk on the device arm is the plain walk's, every pass on the device's top-k and walk, the host's walk and selector drafting the same ids, and with the Q8_0 file a stop id ends the drafted stream on its first occurrence and an embedding call commits no drafter context; the 26B's assistant head refuses the E-series trunk naming its per-layer embeddings; on the segment form each segment's side rows gather off its ids in one segmented window within 16% of solo windows, and with the token-table gate unseated host-embedded rows decline the segmented form; on the default form, with per-layer embeddings and sliding layers, no scratch window is promised or run and the mean-pooled batch matches its singles at cosine above 0.9999; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token on its encoded text prompt; on the Metal home's blob twin, one load on a das_metal build: on gemma-4-E2B Q8, the batched bench row serves four streams at a rate through the Metal batched driver's PLE rows form, every timed step a device step, none on the CPU stack; on gemma-4-E2B Q8, the Metal batched step gathers every row of three sessions off its token id on the device, its logits bit for bit those with the gather off, where the host embeds every row; each form loads once")]
+[test(description = "On gemma-4-E2B Q8_0 the resident driver holds the CPU chain's forty-token forced feed, its perplexity over a two-window prefill and 80 teacher-forced positions, and its window chain against token command gap within 6x of the CPU chain's own; tails of 1, 2 and 5 rows peel within the split bar of the row-at-a-time tail; the all-Q8_0 per-layer planes dispatch no format GEMV and no f32 class; a q8_0 K/V mirror holds the CPU chain's forty-token logits and a tq4 mirror its perplexity; the sliding layers' rings match a flat mirror bit for bit over 1300 ids and eight steps on the default and the tq4 mirror; the decode step builds its side row on the device off the gathered id within 1e-4 of the CPU pre-step's, and with the gather off no row gathers; the greedy chain walks bit for bit the plain greedy walk; over two mirror regions interleaved single steps (past the wide position too, where a one-row step's global layers take the decode tile form), batched steps (past the unsplit position too, and on the split one-row forms on Vulkan) and nine sessions batched in command groups read what each session reads alone, every side row and token row gathered on the device bit for bit the host-embedded rows (within the batched-row bar, the row one step off outside it, on a device whose compiler rounds the gather apart), two device-home sessions step bit for bit a host-cached session while a live region is never handed to an outsider, a device-mode scheduler emits the host-cached scheduler's tokens and hands two streams to one segmented window, and the window's fused q/k norm reads within the wide bar of the split pair; on the CUDA driver forty-token forced-feed logits, a 150-position perplexity and the device-built side rows hold the CPU chain's, a prefill-pinned prompt passing to the CPU as pinned_off, and a one-row step on the decode tile form reads within the split bar of the row form; a 300-row window cutting every row but its last ahead of the shared-K/V tail reads within the split bar of every row walking every layer; the PLE table of an fp32 load sits on an exactly-sized q8 plane bit-identical to the file and refuses both in-place requants, and greedy chat turns in the q8, fp32 and q4_0 serving modes are text; with the E2B's DFlash2 drafter on the CPU arm a planes-trimmed trunk refuses the attach and the untrimmed one attaches, the greedy speculative walk emits the plain walk's ids with drafts accepted for the Q8_0, Q4_K_M and NVFP4 drafter files (each file's planes tagged with their disk type), and the exact sampled walk spends one draw a judged row with drafts accepted, opens on the plain sampled walk's first id and honors a stop id while both rejection walks accept some drafts and reject some; on the discrete home's drafter form each drafter file's greedy walk on the device arm is the plain walk's, every pass on the device's top-k and walk, the host's walk and selector drafting the same ids, and with the Q8_0 file a stop id ends the drafted stream on its first occurrence and an embedding call commits no drafter context; on the dense drafter form, over a prompt past two of the drafter's windows, the device arm whose ring grew its dense layer to the context drafts id for id what a ring reserved that wide drafts, and with every layer held to the window the drafts differ; the 26B's assistant head refuses the E-series trunk naming its per-layer embeddings; on the segment form each segment's side rows gather off its ids in one segmented window within 16% of solo windows, and with the token-table gate unseated host-embedded rows decline the segmented form; on the default form, with per-layer embeddings and sliding layers, no scratch window is promised or run and the mean-pooled batch matches its singles at cosine above 0.9999; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token on its encoded text prompt; on the Metal home's blob twin, one load on a das_metal build: on gemma-4-E2B Q8, the batched bench row serves four streams at a rate through the Metal batched driver's PLE rows form, every timed step a device step, none on the CPU stack; on gemma-4-E2B Q8, the Metal batched step gathers every row of three sessions off its token id on the device, its logits bit for bit those with the gather off, where the host embeds every row; each form loads once")]
 def test_gpu_resident_gemma4_e2b(t : T?) {
     return if (!family_on(t, "gemma4e") || !arm_on(t, GEMMA4E_FILE.arm))
     var walks : array<GemmaWalk>
@@ -307,6 +318,7 @@ def test_gpu_resident_gemma4_e2b(t : T?) {
         forms |> push(device_form(regions = 2l, split_forms = true, ctx = REGIONS_RIG_CTX))
     }
     forms |> push(discrete_drafter_form())
+    forms |> push(dense_drafter_form())
     forms |> push(device_form(regions = 2l, host = true, ctx = REGIONS_RIG_CTX, pf_window_rows = SEG_WINDOW))
     forms |> push(metal_form(ctx = METAL_ROW_CTX))
     var ran = false
@@ -316,8 +328,13 @@ def test_gpu_resident_gemma4_e2b(t : T?) {
                 metal_gemma4_e2b_cells(t, m)
                 return
             }
-            if (form.strict_ctx) {
+            if (form.strict_ctx && form.host_ctx > 0l) {
                 e2b_drafter_discrete_cells(t, m)
+                return
+            }
+            if (form.strict_ctx) {
+                discrete_dense_cell(t, m, "gemma-4-E2B's resident trunk on the serving discrete home, over a prompt past two of the DFlash2 drafter's windows: the device arm whose ring grew its dense layer to the context drafts id for id what a ring reserved that wide drafts, and with every layer held to the window the drafts differ",
+                    E2B_DRAFTER_FILE, "E2B discrete, the dense layer")
                 return
             }
             if (form.pf_window_rows == SEG_WINDOW) {
@@ -548,6 +565,7 @@ def private format_gemv_count(gemv : string) : int64 => census("{gemv}_cls_spv")
 //! streams leave parked claims behind
 def private e2b_regions_rows(var r : E2bRows; m : Model) {
     regions_interleaved_rows(r.regions, m)
+    regions_wide_rows(r.regions, m)
     regions_batched_rows(r.regions, m)
     regions_split_rows(r.regions, m)
     regions_side_rows(r.regions, m)
@@ -574,6 +592,47 @@ def private e2b_host_rows(var r : E2bRows; m : Model) {
         cuda_prefill_pinned_off(r.host_rows, m)
     }
     reset_gpu_cpu_passes()
+}
+
+let private TAIL_CUT_ROWS = 300l   //! the tail cut cell's prompt: one window, past the short window's peel
+
+//! the serving home's count of window rows cut ahead of the shared-K/V tail
+def private tail_cut_count() : int64 {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return cud_rdec_prefill_tail_cut_rows() if (gpu_want_cuda())
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return vk_rdec_prefill_tail_cut_rows()
+    }
+    return 0l
+}
+
+//! the window's cut at the shared-K/V tail: a prompt read with the cut, with every row walking every layer (the lever off, put
+//! back), and a prompt one token off with the cut - the logits each, and the rows each call's window cut
+def private tail_cut_rows(var h : Held; m : Model) {
+    var prompt <- resident_prompt(TAIL_CUT_ROWS)
+    var other <- resident_prompt(TAIL_CUT_ROWS, 1l)
+    let lever = rdec_prefill_tail_cut()
+    var rows : array<float>[3]
+    var cuts : int64[3]
+    for (i in range(3)) {
+        set_rdec_prefill_tail_cut(i != 1)
+        var sc <- create_session(m, mirror_kv_dtype())
+        let c0 = tail_cut_count()
+        forward_prefill(m, sc, i == 2 ? other : prompt, TAIL_CUT_ROWS, 0l)
+        cuts[i] = tail_cut_count() - c0
+        rows[i] := sc.logits
+        delete sc
+    }
+    set_rdec_prefill_tail_cut(lever)
+    h |> held_row("the prompt's logits under the cut against every row through every layer", rows[0], rows[1], rows[2], SPLIT_BAR_REL)
+    h |> held_equal(cuts[0], TAIL_CUT_ROWS - 1l, "the window cut every row but its last ahead of the tail")
+    h |> held_equal(cuts[1], 0l, "control: the lever off, no row is cut")
+    for (i in range(3)) {
+        delete rows[i]
+    }
+    delete prompt
+    delete other
 }
 
 //! the CUDA pre-step on one form: the counters a 40-row prompt and one step on `PRE_STEP_TOK` moved (held), the window's last side
