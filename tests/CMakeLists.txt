@@ -18,12 +18,13 @@
 # another ~1.4x night to night.
 
 # What a fast-math build sweeps: under JIT the folders whose tests have a HOST_FAST_MATH arm,
-# under AOT the two of them test_aot_subset carries.
+# under AOT the three of them test_aot_subset carries.
 set(_DAS_FAST_MATH_JIT_DIRS)
-foreach(_dir flatten jit jit_tests language math spirv type_lattice)
+foreach(_dir flatten jit jit_tests language math optimization spirv type_lattice)
     list(APPEND _DAS_FAST_MATH_JIT_DIRS ${PROJECT_SOURCE_DIR}/tests/${_dir})
 endforeach()
-set(_DAS_FAST_MATH_AOT_DIRS ${PROJECT_SOURCE_DIR}/tests/language ${PROJECT_SOURCE_DIR}/tests/math)
+set(_DAS_FAST_MATH_AOT_DIRS ${PROJECT_SOURCE_DIR}/tests/language ${PROJECT_SOURCE_DIR}/tests/optimization
+    ${PROJECT_SOURCE_DIR}/tests/math)
 
 if(NOT DAS_TOOLS_DISABLED)
     set(DAS_TEST_TIMEOUT 1800 CACHE STRING
@@ -68,12 +69,12 @@ if(NOT DAS_TOOLS_DISABLED)
             list(APPEND _DAS_SAN_ENV "ASAN_OPTIONS=detect_leaks=0")
         endif()
 
-        # A sanitizer lane sweeps tests/language only: the whole suite under asan/tsan/ubsan
-        # costs ~10 minutes more without proportionate coverage. A fast-math build sweeps its own
-        # folder list.
+        # A sanitizer lane sweeps tests/language and tests/optimization only: the whole suite
+        # under asan/tsan/ubsan costs ~10 minutes more without proportionate coverage. A fast-math
+        # build sweeps its own folder list.
         set(_DAS_JIT_TEST_DIRS ${_DAS_TEST_DIR})
         if(DAS_USE_SANITIZER AND NOT DAS_USE_SANITIZER STREQUAL "none")
-            set(_DAS_JIT_TEST_DIRS ${_DAS_TEST_DIR}/language)
+            set(_DAS_JIT_TEST_DIRS ${_DAS_TEST_DIR}/language ${_DAS_TEST_DIR}/optimization)
         elseif(DAS_FAST_MATH)
             set(_DAS_JIT_TEST_DIRS ${_DAS_FAST_MATH_JIT_DIRS})
         endif()
@@ -169,11 +170,11 @@ if(TARGET test_aot)
     )
 endif()
 
-# Fast AOT run over tests/language (and tests/math in a fast-math build), against the subset
-# binary that per-PR CI already builds as part of ALL. The build lane runs it; its own result
-# cache serves it until the subset binary changes.
+# Fast AOT run over tests/language and tests/optimization (and tests/math in a fast-math build),
+# against the subset binary that per-PR CI already builds as part of ALL. The build lane runs it;
+# its own result cache serves it until the subset binary changes.
 if(TARGET test_aot_subset)
-    set(_aot_subset_test_dirs ${PROJECT_SOURCE_DIR}/tests/language)
+    set(_aot_subset_test_dirs ${PROJECT_SOURCE_DIR}/tests/language ${PROJECT_SOURCE_DIR}/tests/optimization)
     if(DAS_FAST_MATH)
         set(_aot_subset_test_dirs ${_DAS_FAST_MATH_AOT_DIRS})
     endif()

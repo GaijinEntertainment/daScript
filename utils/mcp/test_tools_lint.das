@@ -209,8 +209,8 @@ def test_lint_skip_expect(t : T?) {
     t |> run("a `lint-skip-file` header skips instead of hard-failing on policy-conflicted files") <| @(t : T?) {
         var text : string
         var is_error = false
-        let ok = parse_result(do_lint("{get_das_root()}/tests/language/dead_branch_folding.das"),
-            text, is_error)
+        let fixture = "{get_das_root()}/tests/optimization/dead_branch_folding.das"
+        let ok = parse_result(do_lint(fixture), text, is_error)
         t |> success(ok, "skip result is a valid envelope")
         t |> success(!is_error, "skip is not an error")
         t |> success(find(text, "SKIP") >= 0, "should report SKIP: {text}")

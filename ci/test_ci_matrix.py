@@ -262,7 +262,8 @@ class WorkflowShapes(unittest.TestCase):
         self.assertIn("    if(DAS_FAST_MATH)\n"
                       "        set(_aot_subset_test_dirs ${_DAS_FAST_MATH_AOT_DIRS})\n", tests_cmake)
         self.assertIn("set(_DAS_FAST_MATH_AOT_DIRS ${PROJECT_SOURCE_DIR}/tests/language"
-                      " ${PROJECT_SOURCE_DIR}/tests/math)\n", tests_cmake)
+                      " ${PROJECT_SOURCE_DIR}/tests/optimization\n"
+                      "    ${PROJECT_SOURCE_DIR}/tests/math)\n", tests_cmake)
 
         with open(os.path.join(os.path.dirname(HERE), "tests", "aot", "CMakeLists.txt"), encoding="utf-8") as f:
             aot_cmake = f.read()
