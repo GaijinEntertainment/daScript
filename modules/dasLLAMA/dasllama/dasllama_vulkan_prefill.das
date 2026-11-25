@@ -706,6 +706,15 @@ def private pf_moe_setup {
     if (!q8c) {
         g_rd.pf_mxg = make_device_buf((nk + TILE_READ_SLACK) * dim * 2l)
         g_rd.pf_mhf = make_device_buf((nk + TILE_READ_SLACK) * nfe * 2l)
+        if (vk_mmq_any()) {
+            verify(ensure_mmq_feed_cls() && ensure_mmq_feed16_cls() && ensure_mmq_inv_cls(), "vk prefill: the int8 feed's class rails must engage")
+            g_rd.pf_mmq_xq = make_device_buf(np * dim)
+            g_rd.pf_mmq_xs = make_device_buf(np * (dim / Q8_BLOCK_ELEMS) * 8l)
+            g_rd.pf_mmq_tok = make_device_buf(nk * 4l)
+            g_rd.pf_mmq_hq = make_device_buf(nk * nfe)
+            g_rd.pf_mmq_hs = make_device_buf(nk * (nfe / Q8_BLOCK_ELEMS) * 8l)
+            g_rd.pf_mmq_ident = make_ramp_buf(nk, 0l)
+        }
     }
     g_rd.pf_my1 = make_device_buf(nk * nfe * 4l)
     g_rd.pf_my2 = make_device_buf(nk * nfe * 4l)
@@ -717,6 +726,51 @@ def private pf_moe_setup {
         g_rd.pf_mgs = make_device_buf((nk + TILE_READ_SLACK) * (dim / 32l) * 4l)
         assert(nk * nfe <= BATCH_HQ_BYTES, "dasLLAMA vulkan tier: the Q8-fed chain's hidden rows exceed the act's quant plane")
     }
+}
+
+//! one expert plane's two columns of a window - the m pieces, then the s pieces - each on its int8 tile where the layer
+//! rides it there, else on the f16 tile of its column
+[arch(at = "../ARCHITECTURE_GPU_VULKAN_KHR.md#khr-int8-tiles")]
+def private pf_expert_cols(raw : VkCommandBuffer; var h : VkHaz; fmt : int; i8_m, i8_s : bool; var f16_m, f16_s, i8_m_set, i8_s_set : VkDescriptorSet;
+                           var pc_m, pc_s : BatchArgs; groups_m, groups_s : int64) {
+    if (i8_m) {
+        mmq_cls_enc(fmt, false, raw, h, i8_m_set, pc_m, groups_m)
+    } else {
+        cm2_cls_enc(fmt, CM2_TC_E, raw, h, f16_m, pc_m, groups_m)
+    }
+    if (i8_s) {
+        mmq_cls_enc(fmt, true, raw, h, i8_s_set, pc_s, groups_s)
+    } else {
+        cm2_cls_enc(fmt, int64(SCHED_S_ROWS), raw, h, f16_s, pc_s, groups_s)
+    }
+}
+
+//! whether a column of the layer's routed block rides an int8 tile: its bucket schedule then keeps slot-row order
+[arch(at = "../ARCHITECTURE_GPU_VULKAN_KHR.md#khr-int8-tiles")]
+def private pf_rides_int8(L : RLayer) : bool => L.mmq_gu_m || L.mmq_gu_s || L.mmq_dn_m || L.mmq_dn_s
+
+//! the int8 tiles' sets for a layer's gate and up pieces, their feed's and their row map's
+def private pf_mmq_layer_sets(var L : RLayer; pe1, pe3 : tuple<wq : uint64; ws : uint64; wqb : int64; wsb : int64>) {
+    let np = g_rd.pf_np
+    let dim = g_rd.dim
+    let nk = g_rd.pf_nk
+    let y_bytes = nk * g_rd.nfe * 4l
+    let xq_bytes = np * dim
+    let xs_bytes = np * (dim / Q8_BLOCK_ELEMS) * 8l
+    L.pf_mmq_feed_set = set_mmq_feed_cls(fixed_array(g_rd.pf_xb, g_rd.pf_mmq_xq, g_rd.pf_mmq_xs),
+        fixed_array(np * dim * 4l, xq_bytes, xs_bytes), fixed_array(VHZ_XB, VHZ_MXG, VHZ_MXG))
+    L.pf_mmq_inv_set = set_mmq_inv_cls(fixed_array(g_rd.pf_minv, g_rd.pf_mmq_tok),
+        fixed_array(nk * 4l, nk * 4l), fixed_array(VHZ_MRT, VHZ_MXG))
+    let sizes1 = fixed_array(pe1.wqb, pe1.wsb, BATCH_META_BYTES, xq_bytes, xs_bytes, y_bytes, nk * 4l)
+    let sizes3 = fixed_array(pe3.wqb, pe3.wsb, BATCH_META_BYTES, xq_bytes, xs_bytes, y_bytes, nk * 4l)
+    L.pf_e1q_set = mmq_cls_set(L.fe1, true, fixed_array(pe1.wq, pe1.ws, g_rd.pf_msch1, g_rd.pf_mmq_xq, g_rd.pf_mmq_xs, g_rd.pf_my1, g_rd.pf_mmq_tok),
+        sizes1, fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_MXG, VHZ_GATE, VHZ_MXG))
+    L.pf_e1qm_set = mmq_cls_set(L.fe1, false, fixed_array(pe1.wq, pe1.ws, g_rd.pf_msch1, g_rd.pf_mmq_xq, g_rd.pf_mmq_xs, g_rd.pf_my1, g_rd.pf_mmq_tok),
+        sizes1, fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_MXG, VHZ_GATE_M, VHZ_MXG))
+    L.pf_e3q_set = mmq_cls_set(L.fe3, true, fixed_array(pe3.wq, pe3.ws, g_rd.pf_msch3, g_rd.pf_mmq_xq, g_rd.pf_mmq_xs, g_rd.pf_my2, g_rd.pf_mmq_tok),
+        sizes3, fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_MXG, VHZ_UP, VHZ_MXG))
+    L.pf_e3qm_set = mmq_cls_set(L.fe3, false, fixed_array(pe3.wq, pe3.ws, g_rd.pf_msch3, g_rd.pf_mmq_xq, g_rd.pf_mmq_xs, g_rd.pf_my2, g_rd.pf_mmq_tok),
+        sizes3, fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_MXG, VHZ_UP_M, VHZ_MXG))
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
@@ -799,6 +853,33 @@ def private pf_moe_layer_sets(l : int64) {
             fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hf_bytes, dn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_MDN))
         L.pf_e2m_set = cm2_cls_set(L.fe2, tce, fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mhf, g_rd.pf_mdn),
             fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hf_bytes, dn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_MDN_M))
+        //! a column rides the int8 tile where the box's set names it, the planes' formats have the tile, and the widths are whole steps of it
+        let i8 = g_gpu.coopmat_mode == COOPMAT_MM && vk_mmq_any() && vk_mmq_device_ok()
+        let gu_fits = i8 && mmq_cls_fits(L.fe1, dim) && mmq_cls_fits(L.fe3, dim) && !g_rd.exps_bias
+        let dn_fits = i8 && mmq_cls_fits(L.fe2, nfe)
+        L.mmq_gu_m = gu_fits && vk_mmq_col(false, false)
+        L.mmq_gu_s = gu_fits && vk_mmq_col(false, true)
+        L.mmq_dn_m = dn_fits && vk_mmq_col(true, false)
+        L.mmq_dn_s = dn_fits && vk_mmq_col(true, true)
+        if (pf_rides_int8(L)) {
+            verify(moe_sched_ensure(g_rd.ne, true), "vk prefill: the ordered bucket schedule's class rail must engage")
+        }
+        if (L.mmq_gu_m || L.mmq_gu_s) {
+            verify(mmq_cls_ensure(L.fe1, false) && mmq_cls_ensure(L.fe1, true) && mmq_cls_ensure(L.fe3, false) && mmq_cls_ensure(L.fe3, true),
+                "vk prefill: the int8 expert tile class rails must engage")
+            pf_mmq_layer_sets(L, pe1, pe3)
+        }
+        if (L.mmq_dn_m || L.mmq_dn_s) {
+            verify(mmq_cls_ensure(L.fe2, false) && mmq_cls_ensure(L.fe2, true), "vk prefill: the int8 expert tile class rails must engage")
+            let hq_bytes = nk * nfe
+            let hs_bytes = nk * (nfe / Q8_BLOCK_ELEMS) * 8l
+            L.pf_mmq_feed16_set = set_mmq_feed16_cls(fixed_array(g_rd.pf_mhf, g_rd.pf_mmq_hq, g_rd.pf_mmq_hs),
+                fixed_array(hf_bytes, hq_bytes, hs_bytes), fixed_array(VHZ_HQ, VHZ_MXG, VHZ_MXG))
+            let dn_bufs = fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mmq_hq, g_rd.pf_mmq_hs, g_rd.pf_mdn, g_rd.pf_mmq_ident)
+            let dn_sizes = fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hq_bytes, hs_bytes, dn_bytes, nk * 4l)
+            L.pf_e2q_set = mmq_cls_set(L.fe2, true, dn_bufs, dn_sizes, fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_MXG, VHZ_MDN, 0u))
+            L.pf_e2qm_set = mmq_cls_set(L.fe2, false, dn_bufs, dn_sizes, fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_MXG, VHZ_MDN_M, 0u))
+        }
     }
     if (L.moe_g4) {
         verify(ensure_cls_ar_comb_g4() && ensure_cls_ar_comb_g4_f16_b(), "vk prefill: the gemma-4 combine class rails must engage on a live device")
@@ -949,13 +1030,11 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
         pf_moe_g4_feed(raw, h, l, wlen)
     }
     let bounds = pf_moe_bounds(nk)
-    let tcs = int64(SCHED_S_ROWS)
-    let tce = CM2_TC_E
     let map_m_gu = uint(MOE_SCHED_MAP_OFF + bounds.gu)   //! the m dispatch's maps follow the s dispatch's
     let map_m_dn = uint(MOE_SCHED_MAP_OFF + bounds.dn)
     let wcol = g_rd.pf_moe_q8 ? 32u : 128u   //! the expert tiles' output columns: the sdot4 tile's 32, the cm2 and KHR tiles' 128
     var pcs = gk_sched_args(nk, ne, nfe, dim, wcol, g_rd.pf_moe_q8, bounds, arena_local_blk(L.be1), arena_local_blk(L.be3), arena_local_blk(L.be2), L.fe1, L.fe3, L.fe2)
-    moe_sched_enc(ne, raw, h, L.pf_sched_set, pcs)
+    moe_sched_enc(ne, raw, h, L.pf_sched_set, pcs, pf_rides_int8(L))
     pfq_ts(raw)
     var pcg = GatherArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(nk))
     if (g_rd.pf_moe_q8) {
@@ -964,15 +1043,21 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
         pf_moe_q8_experts(raw, h, l, nk, bounds)
         return
     }
-    enc_moe_gather_f16_cls(raw, h, L.pf_gather_set, pcg, nk)
-    pfq_ts(raw)
     var pc1 = BatchArgs(n = uint(dim), d = uint(nfe), map_off = uint(MOE_SCHED_MAP_OFF), ksplit = 0u)
     var pc1m = BatchArgs(n = uint(dim), d = uint(nfe), map_off = map_m_gu, ksplit = 0u)
-    cm2_cls_enc(L.fe1, tce, raw, h, L.pf_e1m_set, pc1m, bounds.mgu)
-    cm2_cls_enc(L.fe1, tcs, raw, h, L.pf_e1_set, pc1, bounds.gu)
+    if (L.mmq_gu_m || L.mmq_gu_s) {
+        var pcf = MmqFeedArgs(n = uint(dim), rows = uint(wlen))
+        enc_mmq_feed_cls(raw, h, L.pf_mmq_feed_set, pcf, (wlen * (dim / Q8_BLOCK_ELEMS) + 255l) / 256l)
+        var pci = MmqInvArgs(nk = uint(nk), k = uint(k))
+        enc_mmq_inv_cls(raw, h, L.pf_mmq_inv_set, pci, (nk + 255l) / 256l)
+    }
+    if (!(L.mmq_gu_m && L.mmq_gu_s)) {
+        enc_moe_gather_f16_cls(raw, h, L.pf_gather_set, pcg, nk)
+    }
     pfq_ts(raw)
-    cm2_cls_enc(L.fe3, tce, raw, h, L.pf_e3m_set, pc1m, bounds.mgu)
-    cm2_cls_enc(L.fe3, tcs, raw, h, L.pf_e3_set, pc1, bounds.gu)
+    pf_expert_cols(raw, h, L.fe1, L.mmq_gu_m, L.mmq_gu_s, L.pf_e1m_set, L.pf_e1_set, L.pf_e1qm_set, L.pf_e1q_set, pc1m, pc1, bounds.mgu, bounds.gu)
+    pfq_ts(raw)
+    pf_expert_cols(raw, h, L.fe3, L.mmq_gu_m, L.mmq_gu_s, L.pf_e3m_set, L.pf_e3_set, L.pf_e3qm_set, L.pf_e3q_set, pc1m, pc1, bounds.mgu, bounds.gu)
     pfq_ts(raw)
     var pca = ActArgs(nelem = uint(nk * nfe), act = act_code(g_rd.act_oai, g_rd.is_gelu), nblk = uint(nk * nfe / 32l), elem0 = 0u,
         bias_on = g_rd.exps_bias ? 1u : 0u, gboff = uint(L.router_slot * ne * nfe), brow = uint(nfe))
@@ -984,8 +1069,11 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     pfq_ts(raw)
     var pc2 = BatchArgs(n = uint(nfe), d = uint(dim), map_off = uint(MOE_SCHED_MAP_OFF), ksplit = 0u)
     var pc2m = BatchArgs(n = uint(nfe), d = uint(dim), map_off = map_m_dn, ksplit = 0u)
-    cm2_cls_enc(L.fe2, tce, raw, h, L.pf_e2m_set, pc2m, bounds.mdn)
-    cm2_cls_enc(L.fe2, tcs, raw, h, L.pf_e2_set, pc2, bounds.dn)
+    if (L.mmq_dn_m || L.mmq_dn_s) {
+        var pcf = MmqFeedArgs(n = uint(nfe), rows = uint(nk))
+        enc_mmq_feed16_cls(raw, h, L.pf_mmq_feed16_set, pcf, (nk * (nfe / Q8_BLOCK_ELEMS) + 255l) / 256l)
+    }
+    pf_expert_cols(raw, h, L.fe2, L.mmq_dn_m, L.mmq_dn_s, L.pf_e2m_set, L.pf_e2_set, L.pf_e2qm_set, L.pf_e2q_set, pc2m, pc2, bounds.mdn, bounds.dn)
     pfq_ts(raw)
 }
 

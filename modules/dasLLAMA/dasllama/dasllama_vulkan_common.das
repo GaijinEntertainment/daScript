@@ -2834,6 +2834,9 @@ struct RLayer {
     pf_router_set, pf_topk_set, pf_sched_set, pf_gather_set : VkDescriptorSet   //! the window chain's MoE block
     pf_e1_set, pf_e3_set, pf_e2_set : VkDescriptorSet   //! the expert tiles over the device-written schedules: the s column's
     pf_e1m_set, pf_e3m_set, pf_e2m_set : VkDescriptorSet   //! ... and the m column's, over the same planes
+    mmq_gu_m, mmq_gu_s, mmq_dn_m, mmq_dn_s : bool   //! the columns of the layer's routed block that ride the int8 tiles: the gate and up m and s pieces, the down's
+    pf_mmq_feed_set, pf_mmq_inv_set, pf_e1q_set, pf_e1qm_set, pf_e3q_set, pf_e3qm_set : VkDescriptorSet
+    pf_mmq_feed16_set, pf_e2q_set, pf_e2qm_set : VkDescriptorSet
     pf_eact_set : VkDescriptorSet
     pf_grq_set : VkDescriptorSet    //! the Q8-fed chain's requant of the gathered rows into the expert tiles' feed
     pf_arcomb_set, pf_arcomb_f16_set : VkDescriptorSet   //! the residual step with the combine folded in: the f32 and f16 normed-row forms
@@ -3169,6 +3172,8 @@ struct RDec {
     pf_bex : uint64               //! [nk] bucket row -> its expert (the biased act's row map)
     pf_msch1, pf_msch3, pf_msch2 : uint64   //! the three expert planes' device-written schedules
     pf_mxg : uint64               //! [nk + slack x dim] the gathered f16 rows
+    pf_mmq_xq, pf_mmq_xs, pf_mmq_tok : uint64   //! the window's int8 rows, their block scales, and bucket row -> token row
+    pf_mmq_hq, pf_mmq_hs, pf_mmq_ident : uint64   //! the hidden rows' int8 and block scales, bucket order, and the identity row map
     pf_my1, pf_my2 : uint64       //! [nk x nfe] the gate / up rows
     pf_mhf : uint64               //! [nk + slack x nfe] the hidden rows, f16
     pf_mdn : uint64               //! [nk x dim] the routed down rows
@@ -3980,11 +3985,18 @@ def vk_pf_window_rows(np, keys0, kvd : int64) : int64 => g_gpu.integrated ? pf_i
 
 def vk_alt_bit(bit : int) : bool => ((vk_alt_served() >> int64(bit)) & 1l) != 0l
 
+//! whether the box's set puts a column of the routed block on the int8 tile: `down` the down plane's (else the gate
+//! and up planes'), `short` its s pieces (else its m pieces)
+def vk_mmq_col(down, short : bool) : bool => vk_alt_bit(down ? (short ? VK_ALT_MMQ_DN_S : VK_ALT_MMQ_DN_M) : (short ? VK_ALT_MMQ_GU_S : VK_ALT_MMQ_GU_M))
+
 //! whether the one-row step's routed gate and up ride their own dispatches in place of the fused gate-up leaf (`VK_ALT_EGU_SPLIT`)
 def vk_egu_split : bool => vk_alt_bit(VK_ALT_EGU_SPLIT)
 
 //! whether the N-column GEMV leaves take their rotated twins where a plane's rows collide (`VK_ALT_N_ROT`)
 def vk_gemv_n_rot : bool => vk_alt_bit(VK_ALT_N_ROT)
+
+//! whether any of the routed block's columns rides the int8 tiles
+def vk_mmq_any : bool => vk_mmq_col(false, false) || vk_mmq_col(false, true) || vk_mmq_col(true, false) || vk_mmq_col(true, true)
 
 var private g_vkd_alt_built = 0l   //! the served set the live pipe epoch was built under
 
