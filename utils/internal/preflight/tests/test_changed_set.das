@@ -93,6 +93,15 @@ def test_parse_gate_reports(t : T?) {
     t |> equal(e[2].breakdown, "12.0s  tests/z.das", "the last report closes without a trailing newline")
 }
 
+[test(description = "a gate --only names runs whatever changed, and a gate it does not name runs only when the diff reaches it")]
+def test_gate_reached(t : T?) {
+    let imgui <- ["modules/dasImgui/"]
+    let elsewhere <- ["x.md"]
+    t |> success(gate_reached(true, elsewhere, imgui), "a named gate runs on a diff that misses it")
+    t |> success(!gate_reached(false, elsewhere, imgui), "an unnamed gate does not")
+    t |> success(gate_reached(false, ["modules/dasImgui/a.das"], imgui), "it runs on a reach hit")
+}
+
 [test(description = "the fast tier always runs, a lane runs only under --full, and a module gate never runs from a tier")]
 def test_tier_runs(t : T?) {
     t |> success(tier_runs("fast", false), "the fast tier runs without --full")
@@ -100,6 +109,18 @@ def test_tier_runs(t : T?) {
     t |> success(!tier_runs("lane", false), "a lane waits for --full")
     t |> success(tier_runs("lane", true), "and runs under it")
     t |> success(!tier_runs("module", false) && !tier_runs("module", true), "a module gate never runs from a tier")
+}
+
+[test(description = "a lane runs in a child unless the run is --serial, every other tier runs in process, and a lane child is started --serial so it starts no child of its own")]
+def test_runs_in_child(t : T?) {
+    t |> success(runs_in_child("lane", false), "a lane goes to a child")
+    t |> success(!runs_in_child("lane", true), "a --serial run keeps it in process")
+    t |> success(!runs_in_child("fast", false), "a fast gate runs in process")
+    t |> success(!runs_in_child("module", false), "a module gate runs in process")
+    let head <- lane_child_head("das.exe", "tests-jit")
+    t |> equal(head,
+        ["das.exe", "utils/internal/preflight/main.das", "--", "--only", "tests-jit", "--serial"],
+        "the child is this tool for one gate, serial")
 }
 
 [test(description = "the sweep excludes listed trees by whole path segment, each with a reason, and excludes a module-gated tree exactly when the box lacks its module")]
