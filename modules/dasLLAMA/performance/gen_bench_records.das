@@ -1334,9 +1334,10 @@ def private run_cell_child(display, log_leg : string; args : array<string>; cell
 //! One media cell's das child, absorbed via the same cell protocol with the row's `note` and
 //! `parity` stamp: the backend its das row stamped back, "" where the child failed or wrote no
 //! records. `mint` brackets the child with the image-mint snapshot and check.
-def private media_das_cell(display, log_leg : string; args : array<string>; cellPath, store : string;
-                           var models : array<BenchModel>; var failed : array<string>;
-                           note : string = ""; parity : string = ""; mint : bool = false) : string {
+def media_das_cell(display, log_leg : string; args : array<string>; cellPath, store : string;
+                   var models : array<BenchModel>; var failed : array<string>;
+                   note : string = ""; parity : string = ""; mint : bool = false;
+                   want_backend : string = "") : string {
     let t0 = ref_time_ticks()
     if (mint) {
         mint_snapshot(models_dir())
@@ -1347,6 +1348,13 @@ def private media_das_cell(display, log_leg : string; args : array<string>; cell
     }
     if (mint) {
         mint_check(models_dir(), "{display} das {log_leg}")
+    }
+    if (!cell_served_on(cell, want_backend)) {
+        cell_failed("{display} das {log_leg} - a das row came back off the {want_backend} backend",
+                    display, "das", log_leg)
+        failed |> push("{display} das {log_leg}")
+        remove(cellPath)
+        return ""
     }
     var backend = ""
     for (c in cell) {
@@ -1678,11 +1686,23 @@ def tts_das_args(spec : TtsModelSpec; cfg : Args; threads : int; cellPath, exe, 
     return <- args
 }
 
-//! One das TTS cell: the backend its row stamped ("" on a failed cell).
+//! One das TTS cell: the backend its row stamped ("" on a failed cell, and on a discrete home's
+//! leg a row another backend stamped).
 def private tts_das_cell(spec : TtsModelSpec; cfg : Args; threads : int; cellPath, store, exe : string;
                          var models : array<BenchModel>; var failed : array<string>; leg : string = "") : string {
     var inscope args <- tts_das_args(spec, cfg, threads, cellPath, exe, leg)
-    return media_das_cell(spec.display, empty(leg) ? "tts" : "tts {leg}", args, cellPath, store, models, failed)
+    let log_leg = empty(leg) ? "tts" : "tts {leg}"
+    return media_das_cell([display = spec.display, log_leg = log_leg, args = args, cellPath = cellPath,
+                           store = store, models = models, failed = failed, want_backend = leg])
+}
+
+//! The discrete home's leg a run asked (`--legs vulkan` | `--legs cuda`, each alone), "" for none.
+def discrete_leg(vulkan, cuda : bool) : string => cuda ? "cuda" : (vulkan ? "vulkan" : "")
+
+def tts_pairs_torch_cuda(backend : string; torch_gpu : bool) : bool {
+    //! a das TTS row a discrete home served (`vulkan` or `cuda`) pairs the family's package on torch CUDA
+    //! where that package serves the GPU
+    return torch_gpu && (backend == "vulkan" || backend == "cuda")
 }
 
 //! One reference TTS row: the family's package (`mlx` false: torch or onnxruntime on `device`) or
@@ -1721,13 +1741,27 @@ def private tts_ref_pass(spec : TtsModelSpec; mlx : bool; device, backend : stri
     cell_done("{spec.display} ref {engine} {leg} - {ms:.0f} ms over {audio_s:.1f} s of audio ({elapsed_ms(t0)} ms)", spec.display, engine, leg, elapsed_ms(t0))
 }
 
-//! Every TTS catalog model the box stocks, each leg's das cell beside its references: the metal
-//! leg against torch mps (a family whose package serves the GPU) and mlx-audio, the cpu leg against
-//! the package on the cpu - and torch cuda where the das row came back stamped `vulkan` - and the
-//! accel leg's das row pairing the same cpu reference.
+//! A discrete home's leg of one TTS model: its das cell (`das_cell`, the backend that served it back), then torch cuda's
+//! reference (`ref_cuda`) where a discrete home served the row and the family's package serves the GPU (`torch_gpu`)
+def tts_discrete_leg(cfg : Args; torch_gpu : bool; das_cell : block<() : string>; ref_cuda : block<() : void>) {
+    settle(cfg.das_settle)
+    let served = invoke(das_cell)
+    if (tts_pairs_torch_cuda(served, torch_gpu)) {
+        settle(cfg.settle)
+        invoke(ref_cuda)
+    }
+}
+
+//! Every TTS catalog model the box stocks, each leg's das cell beside its references: a discrete
+//! home's leg (vulkan or cuda) against torch cuda, the metal leg against torch mps (a family whose
+//! package serves the GPU) and mlx-audio, the cpu leg against the package on the cpu - and torch
+//! cuda where a discrete home served its row - and the accel leg's das row pairing the same cpu
+//! reference.
 [arch(at="../ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument")]
-def private tts_sweep(cfg : Args; legNeon, legAmx, legMetal : bool; threads : int; hw : HardwareInfo;
-                      box, date, cellPath, store, exe : string; var models : array<BenchModel>; var failed : array<string>) {
+def private tts_sweep(cfg : Args; legNeon, legAmx, legMetal, legVulkan, legCuda : bool;
+                      threads : int; hw : HardwareInfo; box, date, cellPath, store, exe : string;
+                      var models : array<BenchModel>; var failed : array<string>) {
+    let leg = discrete_leg(legVulkan, legCuda)
     var inscope cat <- tts_catalog()
     for (spec in cat) {
         continue if (!empty(cfg.only) && find(spec.file, cfg.only) < 0 && find(spec.display, cfg.only) < 0)
@@ -1735,6 +1769,13 @@ def private tts_sweep(cfg : Args; legNeon, legAmx, legMetal : bool; threads : in
         if (!stat(path).is_valid) {
             to_log(LOG_WARNING, "gen_bench_records: SKIP {spec.display} - {path} not on this box\n")
             continue
+        }
+        if (!empty(leg)) {
+            tts_discrete_leg(cfg, spec.torch_gpu, $ {
+                return tts_das_cell(spec, cfg, threads, cellPath, store, exe, models, failed, leg)
+            }, $ {
+                tts_ref_pass(spec, false, "cuda", "cuda", cfg, threads, hw, box, date, store, models, failed)
+            })
         }
         if (legMetal) {
             settle(cfg.das_settle)
@@ -1751,7 +1792,7 @@ def private tts_sweep(cfg : Args; legNeon, legAmx, legMetal : bool; threads : in
             let backend = tts_das_cell(spec, cfg, threads, cellPath, store, exe, models, failed)
             settle(cfg.settle)
             tts_ref_pass(spec, false, "cpu", "cpu", cfg, threads, hw, box, date, store, models, failed)
-            if (backend == "vulkan" && spec.torch_gpu) {
+            if (tts_pairs_torch_cuda(backend, spec.torch_gpu)) {
                 settle(cfg.settle)
                 tts_ref_pass(spec, false, "cuda", "cuda", cfg, threads, hw, box, date, store, models, failed)
             }
@@ -2132,7 +2173,8 @@ def main : int {
         }
     }
     if (scope.tts) {
-        tts_sweep(cfg, legNeon, legAmx, legMetal, threads, hw, box, date, cellPath, store, exe, models, failed)
+        tts_sweep(cfg, legNeon, legAmx, legMetal, legVulkan, legCuda, threads, hw, box, date,
+                  cellPath, store, exe, models, failed)
     }
     if (!empty(refSkipped)) {
         // the loud tail of the sweep-start UNSET warning: name every pair the board is missing

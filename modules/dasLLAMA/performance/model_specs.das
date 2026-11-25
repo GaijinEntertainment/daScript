@@ -173,6 +173,7 @@ struct ModelSpec {
     serve_vision : string           // vision-tower companion NAME ("" = text only); [[serve_companion]] resolves it
     serve_drafter : string          //! the drafter companion NAME the server serves the file with ("" = none): an assistant drafter it attaches beside the trunk, or a split NextN head it pins for the load where no adjacency rule names it; [[serve_companion]] resolves it
     serve_tts : bool = false        // a speech model of the served text-to-speech set ([[serve_tts_set]]); its packs ride the companions
+    serve_packs : array<string>     //! the front-end packs the served speech file reads, in `tts_pack_names` order - the card's answer before the file is here
     serve_mtp : string              //! the platforms ("metal", "vulkan", comma list) where the model's self-speculation measured a win at one stream (PERF_LEDGER.md); "" = the server's unset `mtp` decodes plain
     mlx_repo : string               //! the MLX checkpoint (HF repo) of the same model the board's mlx-lm reference leg runs on Apple boxes; "" = no MLX leg
     mlx_fmt : string                //! that checkpoint's precision, stamped as the MLX row's exec_fmt
@@ -451,6 +452,14 @@ let CANARY_DEC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggm
 let CANARY_DEC_F16_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv) --decoder-outtype f16 - the decoder the Q8_0 quantize reads (fetch_models --convert writes it on the way)"
 let TTS_HF = "{HF}/borisbat/dasllama-tts/resolve/a62130a44d6f8fef8a5113825c5f15b01e1c8f80"   //! the published set, commit-pinned
 let FORMATS_HF = "{HF}/borisbat/dasllama-formats/resolve/49d44cd688b8f0aea4b075c1923ebb713e549e52"   //! the format matrix, commit-pinned
+//! the borisbat/dasllama-tts commit that publishes the Pocket parity rail's reference files
+let TTS_HF_REFS_REVISION = "f0cc0de73e5ce856e1604a83114d2fe01315f3b3"
+
+//! a reference file's url at the TTS repository's commit `revision`; "" for an empty revision, so its row reads as converted on-box
+def tts_ref_url(revision, file : string) : string {
+    return "" if (empty(revision))
+    return "{HF}/borisbat/dasllama-tts/resolve/{revision}/{file}"
+}
 let TTS_KITTEN_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kitten.py over KittenML/kitten-tts-nano-0.8 @ 7a1db645b1f3ab9420761d87428e042b9cec3f26 and kitten-tts-mini-0.8 @ c02725660cea441db4c383af69f1f26f5cd00947 (the ONNX weights into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 let TTS_KOKORO_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kokoro.py at 807f0164c3 (a later converter also writes kokoro.voice_langs; the pinned file carries none, its voices named in the pipeline's shape) over hexgrad/Kokoro-82M @ f3ff3571791e39611d31c381e3a41a3af07b4987 (kokoro-v1_0.pth + the voice packs into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 let TTS_KOKORO_RU_RECIPE = "convert: harness/convert_kokoro.py --checkpoint <pth> --config config.json --voices <dir of .bin packs> --name <stem> --lang ru --source 'zaakirio/kokoro-ru @ d649c57b239b18c4c384378127cbf01dba039bc1' (kokoro-ru-v2-base.pth with sveta and masha into kokoro-ru.gguf, kokoro-ru-v2-dima.pth with dima into kokoro-ru-dima.gguf, f32); THIRD_PARTY_NOTICES.md carries the attribution"
@@ -467,9 +476,9 @@ let TTS_POCKET_LANG_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.p
 let TTS_POCKET_KQ_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py --language english_2026-04 --kq --name pocket-tts-en-kq under pocket-tts 4.0.1 over the sources of pocket-tts-en-q8.gguf's recipe (the backbone and the codec transformers as Q4_K through ggml's own quantizer, the flow head as Q8_0, the codec convolutions f16, the embedding table Q4_K, the codec encoder inside, the 19 voices as the latent frames of their clips); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 let TTS_POCKET_STUART_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py --language english_2026-04 --kq --voices stuart_bell --no-cloning --name pocket-tts-en-stuart-kq under pocket-tts 4.0.1 over the sources of pocket-tts-en-q8.gguf's recipe (the small form of pocket-tts-en-kq.gguf with one voice as latent frames and no codec encoder: reads text in stuart_bell, cannot clone); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 // the f16 twin the parity rail loads on its f32 lane: the same sources, no --q8; never published
-let TTS_POCKET_F16_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py --language english_2026-04 --name pocket-tts-en under pocket-tts 4.0.1 over the sources of pocket-tts-en-q8.gguf's recipe (every tensor f16; the parity rail's reference under tests/test_tts_pocket.das, local only)"
+let TTS_POCKET_F16_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py --language english_2026-04 --name pocket-tts-en under pocket-tts 4.0.1 over the sources of pocket-tts-en-q8.gguf's recipe (every tensor f16; the parity rail's reference under tests/test_tts_pocket.das)"
 let TTS_POCKET_SMALL_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py --language <config> [--q8 | --kq] [--voices stuart_bell --no-cloning] --name pocket-tts-en-<size>[-refl][-q8 | -kq | -stuart-kq] under pocket-tts 4.0.1 over kyutai/pocket-tts languages/<config>/model.safetensors @ db04f0e653473e5c7333c69686ac92b7460b0c1d (english_18m_2026-10, english_7m_2026-10, english_2m_2026-10 and the _refl_ twins), the tokenizer of kyutai/pocket-tts-without-voice-cloning languages/<config>/tokenizer.model @ 08ffc58775e62aad9409511b9591c9af626270f3 and the voice clips of kyutai/tts-voices @ 323332d33f997de8394f24a193e1a76df720e01a, each trimmed to end on a pause before the encoder (the 2m's widths sit off the quant lattices, so its file is f16); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
-let TTS_POCKET_SMALL_F32_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py --language <config> --keep-f32 --name pocket-tts-en-<size>[-f32] over the sources of the small files' recipe (every tensor as the f32 bundle stores it; the parity rail's reference under tests/test_tts_pocket.das, local only)"
+let TTS_POCKET_SMALL_F32_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py --language <config> --keep-f32 --name pocket-tts-en-<size>[-f32] over the sources of the small files' recipe (every tensor as the f32 bundle stores it; the parity rail's reference under tests/test_tts_pocket.das)"
 let TTS_PACKS_RECIPE = "mint: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/build_g2p_data.py (misaki 0.9.4 gold/silver + CMUdict 0.7a + the g2p_en 2.1.0 GRU + harness/g2p_local_additions.json into tts_g2p.bin) and harness/train_postag.py (UD English-EWT + spaCy-labelled silver prose into tts_postag.bin)"
 let TTS_ORACLE_RECIPE = "mint: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs the PyTorch / ONNX reference per model over the bring-up sentences and dumps every stage the parity rail (tests/_tts_parity.das) compares"
 //! the Bergamot translation students (tests/test_nmt.das): Firefox Translations' Marian int8 files, each with its shared
@@ -1318,6 +1327,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // row 77); the English front-end packs ride the kitten-nano row, the Russian stress pack
         // the kokoro-ru row, the per-model oracle dumps their own rows
         ModelSpec(file = "kitten-nano.gguf", recipe = TTS_KITTEN_RECIPE, serve_tts = true,
+            serve_packs <- ["tts_g2p.bin", "tts_postag.bin"],
             tts = TtsBoard(display = "KittenTTS nano", voice = "Bella", ref = "kitten-nano", package = "kittentts"),
             url = "{TTS_HF}/kitten-nano.gguf", bytes = 59331456l,
             sha256 = "4556948c36a29e4be5ad521e597a20ae817059c404fea3c5d935afa73506d9da",
@@ -1333,20 +1343,46 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
                     sha256 = "38c2e85f7fef3e57d561d2aa0af25fccda4276376ba1993c3dbc2ae0ebfa57b4"),
                 ProvEntry(name = "tts_oracle/kitten_nano", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
         ModelSpec(file = "kitten-mini.gguf", recipe = TTS_KITTEN_RECIPE, serve_tts = true,
+            serve_packs <- ["tts_g2p.bin", "tts_postag.bin"],
             tts = TtsBoard(display = "KittenTTS mini", voice = "Bella", ref = "kitten-mini", package = "kittentts"),
             url = "{TTS_HF}/kitten-mini.gguf", bytes = 295975008l,
             sha256 = "e127a95c6ffa390eccc5956e7156ff055e9f30078cf16361cbcd0eea6c21fdb5",
             companions <- [
                 ProvEntry(name = "tts_oracle/kitten_mini", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
         ModelSpec(file = "kokoro-82m.gguf", recipe = TTS_KOKORO_RECIPE, serve_tts = true,
+            serve_packs <- ["tts_g2p.bin", "tts_postag.bin"],
             tts = TtsBoard(display = "Kokoro-82M", voice = "af_heart", ref = "kokoro-82m", package = "kokoro", torch_gpu = true),
             url = "{TTS_HF}/kokoro-82m.gguf", bytes = 352965024l,
             sha256 = "e0d6584b5b650730bd62e7b105a2e9502384bbe3fbebf3030113560355e6232f",
             companions <- [
                 ProvEntry(name = "tts_oracle/kokoro", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
+        // the Russian stress-context models; the q4 row pins the rubert file's copy (tts_ctx_ru.gguf) by url
+        ModelSpec(file = "ru-stress-rubert-base.gguf", recipe = TTS_RU_STRESS_SEEDED_RECIPE,
+            bytes = 714155040l,
+            sha256 = "dd74321523a6e331ead017f891f3ee258e43fcf61af5d4c2fa05bffe5948bd2b",
+            companions <- [
+                ProvEntry(name = "tts_oracle/ru_stress", root = "llm",
+                    recipe = TTS_RU_STRESS_ORACLE_RECIPE)]),
+        ModelSpec(file = "ru-stress-rubert-base-q4.gguf", recipe = TTS_RU_STRESS_Q4_RECIPE,
+            url = "{TTS_HF}/ru-stress-rubert-base-q4.gguf", bytes = 120522080l,
+            sha256 = "28692fe9fbea9cb7b06f6c39e18a78e4c1e30b37173f2040808865a1d7730624",
+            companions <- [
+                ProvEntry(name = "ru-stress-rubert-base-f32.gguf", root = "llm",
+                    recipe = TTS_RU_STRESS_F32_RECIPE,
+                    bytes = 714181728l,
+                    sha256 = "c621439f4b661bb2dd4f776ec67dbdc5b05007401007119f262294b984937ce0"),
+                ProvEntry(name = "tts_ctx_ru.gguf", root = "llm", recipe = TTS_RU_STRESS_Q4_RECIPE,
+                    url = "{TTS_HF}/ru-stress-rubert-base-q4.gguf", bytes = 120522080l,
+                    sha256 = "28692fe9fbea9cb7b06f6c39e18a78e4c1e30b37173f2040808865a1d7730624"),
+                ProvEntry(name = "tts_oracle/ru_stress", root = "llm",
+                    recipe = TTS_RU_STRESS_ORACLE_RECIPE)]),
+        ModelSpec(file = "ru-stress-ruelectra-small-q4.gguf", recipe = TTS_RU_STRESS_Q4_RECIPE,
+            url = "{TTS_HF}/ru-stress-ruelectra-small-q4.gguf", bytes = 38428800l,
+            sha256 = "43475b1535fdcd3d142bb04ac845909f2557bee32b524af5e19eb1528bbc1ae3"),
         // the Russian fine-tune: the base checkpoint's two voices, its stress pack beside it; the English
         // packs its facade cell reads for a Latin word are named without their pins, which ride the kitten-nano row
         ModelSpec(file = "kokoro-ru.gguf", recipe = TTS_KOKORO_RU_RECIPE, serve_tts = true,
+            serve_packs <- ["tts_g2p_ru.bin"],
             url = "{TTS_HF}/kokoro-ru.gguf", bytes = 325804992l,
             sha256 = "635a43debfcbff5cf1fd0380a4ffc55dfacff083ae16d057bae6d7e7c9a29c9f",
             companions <- [
@@ -1362,33 +1398,41 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // the five files above as the files that store a lane's weights: -q8 the Q8_0 lane's, -kq the recipe lane's; each reads the
         // packs its f32 row names
         ModelSpec(file = "kitten-nano-q8.gguf", recipe = TTS_STORED_RECIPE, serve_tts = true,
+            serve_packs <- ["tts_g2p.bin", "tts_postag.bin"],
             url = "{TTS_HF}/kitten-nano-q8.gguf", bytes = 16646016l,
             sha256 = "ed1b412ccc10499d2f4bc4fe4f4c78c7308dfb772c311782989f41ed8aee9dbe",
             companions <- [
                 ProvEntry(name = "tts_g2p.bin", root = "llm", recipe = TTS_PACKS_RECIPE),
                 ProvEntry(name = "tts_postag.bin", root = "llm", recipe = TTS_PACKS_RECIPE)]),
         ModelSpec(file = "kitten-nano-kq.gguf", recipe = TTS_STORED_RECIPE, serve_tts = true,
+            serve_packs <- ["tts_g2p.bin", "tts_postag.bin"],
             url = "{TTS_HF}/kitten-nano-kq.gguf", bytes = 14785920l,
             sha256 = "d92014bdfa7cc7bafb3093f3e755c0fdc76a974e03c363b1b6c42b610860326e",
             companions <- [
                 ProvEntry(name = "tts_g2p.bin", root = "llm", recipe = TTS_PACKS_RECIPE),
                 ProvEntry(name = "tts_postag.bin", root = "llm", recipe = TTS_PACKS_RECIPE)]),
         ModelSpec(file = "kitten-mini-q8.gguf", recipe = TTS_STORED_RECIPE, serve_tts = true,
+            serve_packs <- ["tts_g2p.bin", "tts_postag.bin"],
             url = "{TTS_HF}/kitten-mini-q8.gguf", bytes = 80495296l,
             sha256 = "1e1d094ee91aaf28a33ec4a1617a1acdd7d3a35fba7a681d2d99e022532701ed"),
         ModelSpec(file = "kitten-mini-kq.gguf", recipe = TTS_STORED_RECIPE, serve_tts = true,
+            serve_packs <- ["tts_g2p.bin", "tts_postag.bin"],
             url = "{TTS_HF}/kitten-mini-kq.gguf", bytes = 59725504l,
             sha256 = "f90e4f5aaac96cbd887fce4b9eeb3d05bd39a34a9f80c188a32a8902e6475d46"),
         ModelSpec(file = "kokoro-82m-q8.gguf", recipe = TTS_STORED_RECIPE, serve_tts = true,
+            serve_packs <- ["tts_g2p.bin", "tts_postag.bin"],
             url = "{TTS_HF}/kokoro-82m-q8.gguf", bytes = 95792544l,
             sha256 = "cb1ade7573957ed00bffe4968f1cc0ddec4222dd28d654636b93b5ea406a6d20"),
         ModelSpec(file = "kokoro-82m-kq.gguf", recipe = TTS_STORED_RECIPE, serve_tts = true,
+            serve_packs <- ["tts_g2p.bin", "tts_postag.bin"],
             url = "{TTS_HF}/kokoro-82m-kq.gguf", bytes = 71391648l,
             sha256 = "4b5102ab80b568ed6d9dc23417d7864fb23435b6f744729146a8fd1977b5bc4f"),
         ModelSpec(file = "kokoro-ru-q8.gguf", recipe = TTS_STORED_RECIPE, serve_tts = true,
+            serve_packs <- ["tts_g2p_ru.bin"],
             url = "{TTS_HF}/kokoro-ru-q8.gguf", bytes = 88575552l,
             sha256 = "1961e4ca0cfde51c6e57244e19c45163c3c7e67808d94387cee942849789e5ff"),
         ModelSpec(file = "kokoro-ru-kq.gguf", recipe = TTS_STORED_RECIPE, serve_tts = true,
+            serve_packs <- ["tts_g2p_ru.bin"],
             url = "{TTS_HF}/kokoro-ru-kq.gguf", bytes = 64174656l,
             sha256 = "b3a238b377514b11fa778ba7b8003f83c460f3a427a5fea54525c2064d725bdb"),
         ModelSpec(file = "kokoro-ru-dima-q8.gguf", recipe = TTS_STORED_RECIPE,
@@ -1397,27 +1441,12 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "kokoro-ru-dima-kq.gguf", recipe = TTS_STORED_RECIPE,
             url = "{TTS_HF}/kokoro-ru-dima-kq.gguf", bytes = 64035872l,
             sha256 = "b396a6c2dfe4461b7127eb89aade5007654f39606e31cb56a31fa489870d978c"),
-        ModelSpec(file = "ru-stress-rubert-base.gguf", recipe = TTS_RU_STRESS_SEEDED_RECIPE, bytes = 714155040l,
-            sha256 = "dd74321523a6e331ead017f891f3ee258e43fcf61af5d4c2fa05bffe5948bd2b",
-            companions <- [
-                ProvEntry(name = "tts_oracle/ru_stress", root = "llm", recipe = TTS_RU_STRESS_ORACLE_RECIPE)]),
-        ModelSpec(file = "ru-stress-rubert-base-q4.gguf", recipe = TTS_RU_STRESS_Q4_RECIPE,
-            url = "{TTS_HF}/ru-stress-rubert-base-q4.gguf", bytes = 120522080l,
-            sha256 = "28692fe9fbea9cb7b06f6c39e18a78e4c1e30b37173f2040808865a1d7730624",
-            companions <- [
-                ProvEntry(name = "ru-stress-rubert-base-f32.gguf", root = "llm", recipe = TTS_RU_STRESS_F32_RECIPE,
-                    bytes = 714181728l, sha256 = "c621439f4b661bb2dd4f776ec67dbdc5b05007401007119f262294b984937ce0")]),
-        ModelSpec(file = "ru-stress-ruelectra-small-q4.gguf", recipe = TTS_RU_STRESS_Q4_RECIPE,
-            url = "{TTS_HF}/ru-stress-ruelectra-small-q4.gguf", bytes = 38428800l,
-            sha256 = "43475b1535fdcd3d142bb04ac845909f2557bee32b524af5e19eb1528bbc1ae3"),
-        // the Pocket TTS family reads text, so it needs no pack; the published form is the Q8_0 file,
-        // the f16 twin (pocket-tts-en.gguf, the parity rail's reference) stays local
+        // the Pocket TTS family reads text, so it needs no pack; the published form is the Q8_0 file
         ModelSpec(file = "pocket-tts-en-q8.gguf", recipe = TTS_POCKET_RECIPE, serve_tts = true,
             tts = TtsBoard(display = "Pocket TTS en q8", voice = "alba", ref = "pocket-en", package = "pocket-tts"),
             url = "{TTS_HF}/pocket-tts-en-q8.gguf", bytes = 136812032l,
             sha256 = "ff41c88d0099375e096c1a0bb9db43c10e8b53b8bc9d3874b03f658f94a5487e",
             companions <- [
-                ProvEntry(name = "pocket-tts-en.gguf", root = "llm", recipe = TTS_POCKET_F16_RECIPE),
                 ProvEntry(name = "tts_oracle/pocket_english_2026-04", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
         ModelSpec(file = "pocket-tts-de-q8.gguf", recipe = TTS_POCKET_LANG_RECIPE, serve_tts = true,
             url = "{TTS_HF}/pocket-tts-de-q8.gguf", bytes = 136519648l,
@@ -1470,13 +1499,12 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "pocket-tts-en-stuart-kq.gguf", recipe = TTS_POCKET_STUART_RECIPE, serve_tts = true,
             url = "{TTS_HF}/pocket-tts-en-stuart-kq.gguf", bytes = 67005056l,
             sha256 = "e9e69e52254f48e544509a0dff3b594779f737eac5b372d61adda8b696a5af46"),
-        // the 2026-10 small English models: one q8 (or f16) file each and the 18m's kq form; the f32 references stay local, as companions
+        // the 2026-10 small English models: one q8 (or f16) file each and the 18m's kq form
         ModelSpec(file = "pocket-tts-en-18m-q8.gguf", recipe = TTS_POCKET_SMALL_RECIPE, serve_tts = true,
             tts = TtsBoard(display = "Pocket TTS en 18m q8", voice = "alba", ref = "pocket-en-18m", package = "pocket-tts"),
             url = "{TTS_HF}/pocket-tts-en-18m-q8.gguf", bytes = 36712480l,
             sha256 = "d5b138be971d7907eb7a568b827510d85775d7ce933fad4dba0245d2d0536fa2",
             companions <- [
-                ProvEntry(name = "pocket-tts-en-18m.gguf", root = "llm", recipe = TTS_POCKET_SMALL_F32_RECIPE),
                 ProvEntry(name = "tts_oracle/pocket_english_18m_2026-10", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
         ModelSpec(file = "pocket-tts-en-18m-kq.gguf", recipe = TTS_POCKET_SMALL_RECIPE, serve_tts = true,
             url = "{TTS_HF}/pocket-tts-en-18m-kq.gguf", bytes = 23547232l,
@@ -1488,13 +1516,11 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             url = "{TTS_HF}/pocket-tts-en-7m-q8.gguf", bytes = 22991840l,
             sha256 = "b3d99bc412613c4323f023572c782b980a375fed83d88239b7e5d68de2621c4c",
             companions <- [
-                ProvEntry(name = "pocket-tts-en-7m.gguf", root = "llm", recipe = TTS_POCKET_SMALL_F32_RECIPE),
                 ProvEntry(name = "tts_oracle/pocket_english_7m_2026-10", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
         ModelSpec(file = "pocket-tts-en-2m.gguf", recipe = TTS_POCKET_SMALL_RECIPE, serve_tts = true,
             url = "{TTS_HF}/pocket-tts-en-2m.gguf", bytes = 23758400l,
             sha256 = "612a583ce4811f8904200295fa9293423074cffe4eadbcc3a5232aec1be5f68d",
             companions <- [
-                ProvEntry(name = "pocket-tts-en-2m-f32.gguf", root = "llm", recipe = TTS_POCKET_SMALL_F32_RECIPE),
                 ProvEntry(name = "tts_oracle/pocket_english_2m_2026-10", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
         ModelSpec(file = "pocket-tts-en-18m-refl-q8.gguf", recipe = TTS_POCKET_SMALL_RECIPE, serve_tts = true,
             url = "{TTS_HF}/pocket-tts-en-18m-refl-q8.gguf", bytes = 36712480l,
@@ -1505,6 +1531,35 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "pocket-tts-en-2m-refl.gguf", recipe = TTS_POCKET_SMALL_RECIPE, serve_tts = true,
             url = "{TTS_HF}/pocket-tts-en-2m-refl.gguf", bytes = 23758432l,
             sha256 = "54dead7cb04aa87971b32f4a25288d566c95c739290581df91742155fcc61230"),
+        // the parity rail's references, served by no view: the 100M model's f16 file, the small ones' f32 bundles, each with oracle dumps
+        ModelSpec(file = "pocket-tts-en.gguf", recipe = TTS_POCKET_F16_RECIPE,
+            url = tts_ref_url(TTS_HF_REFS_REVISION, "pocket-tts-en.gguf"),
+            bytes = 219418112l,
+            sha256 = "7f6b978e6738938a03b6a9e76c4a81b56ab8ad6bbbd201bc58b7928c12f7dfcc",
+            companions <- [
+                ProvEntry(name = "tts_oracle/pocket_english_2026-04", root = "llm",
+                    recipe = TTS_ORACLE_RECIPE)]),
+        ModelSpec(file = "pocket-tts-en-18m.gguf", recipe = TTS_POCKET_SMALL_F32_RECIPE,
+            url = tts_ref_url(TTS_HF_REFS_REVISION, "pocket-tts-en-18m.gguf"),
+            bytes = 112111872l,
+            sha256 = "4d3ca593407e8f09359ec2125db48c46c4ebdd40c91794c63aab1c3ea10ec049",
+            companions <- [
+                ProvEntry(name = "tts_oracle/pocket_english_18m_2026-10", root = "llm",
+                    recipe = TTS_ORACLE_RECIPE)]),
+        ModelSpec(file = "pocket-tts-en-7m.gguf", recipe = TTS_POCKET_SMALL_F32_RECIPE,
+            url = tts_ref_url(TTS_HF_REFS_REVISION, "pocket-tts-en-7m.gguf"),
+            bytes = 66866368l,
+            sha256 = "c3610765abde17fc1e821d8d0f7609d03a622362f6961d08074b1d064f2e6292",
+            companions <- [
+                ProvEntry(name = "tts_oracle/pocket_english_7m_2026-10", root = "llm",
+                    recipe = TTS_ORACLE_RECIPE)]),
+        ModelSpec(file = "pocket-tts-en-2m-f32.gguf", recipe = TTS_POCKET_SMALL_F32_RECIPE,
+            url = tts_ref_url(TTS_HF_REFS_REVISION, "pocket-tts-en-2m-f32.gguf"),
+            bytes = 47102208l,
+            sha256 = "bcc4126ef3c9f6a7c992137ebe16e05d64105fad1d67d13bededc29fbd82d66c",
+            companions <- [
+                ProvEntry(name = "tts_oracle/pocket_english_2m_2026-10", root = "llm",
+                    recipe = TTS_ORACLE_RECIPE)]),
         // the translation family: the five Bergamot students the suite holds to marian's graph (tests/test_nmt.das), each with
         // its vocabulary and its oracle dumps as companions, and the translation LLM the facade's completion form serves
         ModelSpec(file = "bergamot/ru-en-base-memory/model.ruen.intgemm.alphas.bin", recipe = BERGAMOT_RECIPE,

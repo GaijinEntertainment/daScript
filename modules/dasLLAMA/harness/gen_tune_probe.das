@@ -34,6 +34,12 @@ options _dasllama_internal = true
 //         is the whole output image of both shapes; every emitting seat is held to it within the
 //         fixture's magnitude bar; the report row is each arm's best of ROUNDS, the calibration
 //         windows that size its repeat count dropped, and carries the compare and the bound.
+//   The f32 GEMM tile family (gemm_f32_tile_gen) races the conformer attention block's three
+//         products: the baseline arm is the first emitting variant, held to each fixture's double
+//         sum within `gemm_f32_sum_bar`; the compare region is every output of the three products on
+//         both walk orders; every other variant is held to the baseline's bits; the report row is
+//         each arm's best of ROUNDS, no warmup round dropped (the gate pass runs every arm
+//         first), and carries the compare and the worst difference from the double sum.
 //   tune: iso-bench every variant (interleaved) on its own repacked buffers — the
 //         tile on a batch shape, the gemv core on a single-token decode shape — print both
 //         tables, and tune_manifest_set the merged winner: the row whose TILE knobs win the
@@ -1449,6 +1455,183 @@ def bf16w_tune_family(var rows_out : table<string; JsonValue?>) : string {
     return best
 }
 
+typedef GemmF32TileFn = function<(var cp : float?; ap : float const?; bp : float const?; i0 : int64; j0 : int64; nc : int64; kn : int64; cs : int64; astride : int64; bs : int64) : void>
+
+struct GemmF32Fixture {
+    M : int64
+    K : int64
+    N : int64
+    a : array<float>
+    b : array<float>
+    c0 : array<float>
+    want : array<float>
+}
+
+def build_gemm_f32_fixture(M, K, N : int64) : GemmF32Fixture {
+    var fx = GemmF32Fixture(M = M, K = K, N = N)
+    fx.a |> resize(M * K)
+    fx.b |> resize(K * N)
+    fx.c0 |> resize(M * N)
+    fx.want |> resize(M * N)
+    for (i in range64(M * K)) {
+        fx.a[i] = sin(float(i) * 0.0173) * 0.8
+    }
+    for (i in range64(K * N)) {
+        fx.b[i] = cos(float(i) * 0.0091) * 0.7
+    }
+    for (i in range64(M * N)) {
+        fx.c0[i] = sin(float(i) * 0.031) * 0.5
+    }
+    for (i in range64(M)) {
+        for (j in range64(N)) {
+            var acc = double(fx.c0[i * N + j])
+            for (k in range64(K)) {
+                acc += double(fx.a[i * K + k]) * double(fx.b[k * N + j])
+            }
+            fx.want[i * N + j] = float(acc)
+        }
+    }
+    return <- fx
+}
+
+//! one variant over a fixture: the engine's walk with this variant's tile and row, `mr` rows a tile, `tc` columns
+def run_gemm_f32_variant(tile, row : GemmF32TileFn; mr, tc : int64; fx : GemmF32Fixture; cols_outer : bool; var c : array<float>) {
+    c := fx.c0
+    unsafe {
+        var cp = addr(c[0])
+        let ap = addr<float const?>(fx.a[0])
+        let bp = addr<float const?>(fx.b[0])
+        gemm_f32_walk(fx.M, fx.N, mr, tc, cols_outer, $(i0, j0, nc : int64) {
+            invoke(tile, cp, ap, bp, i0, j0, nc, fx.K, fx.N, fx.K, fx.N)
+        }) $(i0 : int64) {
+            invoke(row, cp, ap, bp, i0, 0l, fx.N, fx.K, fx.N, fx.K, fx.N)
+        }
+    }
+}
+
+typedef GemmF32Cand = tuple<name : string; tile : GemmF32TileFn; row : GemmF32TileFn; mr : int64; tc : int64>
+
+//! the family's emitting variants: a perm the target declines stamps the reference bodies, whose row count reads 0
+def gemm_f32_candidates() : array<GemmF32Cand> {
+    var tvs <- gemm_f32_tile_gen_variants()
+    var rows <- by_suffix(gemm_f32_row_gen_variants())
+    var mrs <- forms_of(gemm_f32_mr_gen_variants())
+    var cols <- forms_of(gemm_f32_cols_gen_variants())
+    var cands : array<GemmF32Cand>
+    cands |> reserve(length(tvs))
+    for (v in tvs) {
+        let mr = int64(mrs?[v._0] ?? 0)
+        continue if (mr <= 0l)
+        cands |> push((name = v._0, tile = v._1, row = rows?[v._0] ?? v._1, mr = mr, tc = int64(cols?[v._0] ?? 16)))
+    }
+    delete cols
+    delete mrs
+    delete rows
+    delete tvs
+    return <- cands
+}
+
+//! a run's outputs past the fixture's double-sum bar and off the first emitting variant's bits, and its worst difference from the double sum
+def private gemm_f32_misses(fx : GemmF32Fixture; c, first : array<float>) : tuple<bar : int; bits : int; worst : float> {
+    let bar = gemm_f32_sum_bar(fx.K)
+    var miss = (bar = 0, bits = 0, worst = 0.0)
+    for (g, w, f in c, fx.want, first) {
+        miss.bar += abs(g - w) > bar ? 1 : 0
+        miss.bits += g != f ? 1 : 0
+        miss.worst = max(miss.worst, abs(g - w))
+    }
+    return miss
+}
+
+//! every emitting variant gated on `fxs` on both walk orders (the baseline vs the double sum, the rest its bits); `compares` takes each
+def gemm_f32_test_family(fxs : array<GemmF32Fixture>; var compares : table<string; string>) : bool {
+    var cands <- gemm_f32_candidates()
+    var allok = true
+    var worst : table<string; float>
+    var missed : table<string; int>
+    if (empty(cands)) {
+        print("gemm_f32: no perm emits on this target - the hand-written tile serves\n")
+    }
+    for (fx in fxs) {
+        var inscope first : array<float>
+        for (cand in cands) {
+            for (cols_outer in fixed_array(false, true)) {
+                var inscope c : array<float>
+                run_gemm_f32_variant(cand.tile, cand.row, cand.mr, cand.tc, fx, cols_outer, c)
+                if (empty(first)) {
+                    first := c
+                }
+                let miss = gemm_f32_misses(fx, c, first)
+                let ok = miss.bar == 0 && miss.bits == 0
+                worst[cand.name] = max(worst?[cand.name] ?? 0.0, miss.worst)
+                missed[cand.name] = (missed?[cand.name] ?? 0) + miss.bar + miss.bits
+                if (!ok) {
+                    print("gemm_f32 {cand.name} M={fx.M} K={fx.K} N={fx.N} cols_outer={cols_outer}: MISMATCH ({miss.bar} past the bar, {miss.bits} off the first variant's bits)\n")
+                }
+                allok = allok && ok
+            }
+        }
+    }
+    let base = empty(cands) ? "" : cands[0].name
+    for (cand in cands) {
+        let held = (missed?[cand.name] ?? 0) == 0
+        let against = cand.name == base ? "the baseline" : "{held ? "bit-exact" : "NOT bit-exact"} vs {base}"
+        compares[cand.name] = "{against}, at most {worst?[cand.name] ?? 0.0} off the double sum{held ? "" : " (MISSED)"}"
+        print("gemm_f32 {cand.name} (mr={cand.mr}, cols={cand.tc}): {held ? "ok" : "see above"} - {compares[cand.name]}\n")
+    }
+    delete worst
+    delete missed
+    delete cands
+    return allok
+}
+
+//! the f32 GEMM tune pass: gate and race on the conformer's 3 products (64 rows, head 128, 138 keys, 275 positions); the fastest the entry
+def gemm_f32_tune_family(var rows_out : table<string; JsonValue?>) : string {
+    let entry = "gemm_f32_tile_gen"
+    var inscope fxs <- [ <- build_gemm_f32_fixture(64l, 128l, 138l), <- build_gemm_f32_fixture(64l, 128l, 275l), <- build_gemm_f32_fixture(64l, 138l, 128l)]
+    var inscope compares : table<string; string>
+    if (!gemm_f32_test_family(fxs, compares)) {
+        print("gemm_f32: a variant missed the gate - aborting tune\n")
+        return ""
+    }
+    var cands <- gemm_f32_candidates()
+    var names <- [for (cand in cands); cand.name]
+    var times <- [for (_c in cands); 1.0e30lf]
+    var inscope c : array<float>
+    for (_rep in range(ROUNDS)) {
+        for (cand, dt in cands, times) {
+            let t0 = ref_time_ticks()
+            for (_pass in range(16)) {
+                for (fx in fxs) {
+                    run_gemm_f32_variant(cand.tile, cand.row, cand.mr, cand.tc, fx, true, c)
+                }
+            }
+            dt = min(dt, double(get_time_usec(t0)) / 16.0lf)
+        }
+    }
+    var best = ""
+    var bestDt = 1.0e30lf
+    var flops = 0.0lf
+    for (fx in fxs) {
+        flops += 2.0lf * double(fx.M * fx.K * fx.N)
+    }
+    for (cand, dt in cands, times) {
+        rows_out[cand.name] = JV((tile_us = dt))
+        tune_detail("gemm_f32 {cand.name} (mr={cand.mr}, cols={cand.tc}): {dt} us ({flops / dt / 1000.0lf:0.1f} GFLOP/s); {compares?[cand.name] ?? "not compared"}\n")
+        if (dt < bestDt) {
+            bestDt = dt
+            best = cand.name
+        }
+    }
+    if (!empty(best)) {
+        best = names[gen_sticky(entry, names, times, find_index(names, best))]
+    }
+    delete names
+    delete times
+    delete cands
+    return best
+}
+
 let X16_KQ_FMTS = fixed_array(4l, 5l, 6l)   //! the K-quant formats with a 16-bit rows family, by fixture id
 let X16_Q8_ENTRY = "q8x16_rows_gen"
 let X16_FALLBACK = "nt4"
@@ -2095,6 +2278,10 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     allok = bf16w_test_family(bfxs) && allok
     allok = x16_test_family() && allok
     delete bfxs
+    // the f32 GEMM family: every column tail and a row tail in the first shape, the conformer block's products after
+    var inscope gfxs <- [ <- build_gemm_f32_fixture(13l, 31l, 127l), <- build_gemm_f32_fixture(64l, 128l, 138l), <- build_gemm_f32_fixture(64l, 138l, 128l)]
+    var inscope gcompares : table<string; string>
+    allok = gemm_f32_test_family(gfxs, gcompares) && allok
     delete wtab
     delete mtab
     delete gtab
@@ -2526,12 +2713,16 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     var kqSel <- [for (fmt in kids); fmt; where tune_family_selected(kq_tile_entry(fmt))]
     var q8vs <- q8q8_tile_gen_variants()
     var bfvs <- bf16w_tile_gen_variants()
+    var gfvs <- gemm_f32_tile_gen_variants()
     let q8Seated = seated(q8vs)
     let bf16wSeated = seated(bfvs)
+    let gemmF32Seated = seated(gfvs)
     delete q8vs
     delete bfvs
+    delete gfvs
     let wantQ8 = q8Seated && tune_family_selected("q8q8_tile_gen")
     let wantBf16w = bf16wSeated && tune_family_selected("bf16w_tile_gen")
+    let wantGemmF32 = gemmF32Seated && tune_family_selected("gemm_f32_tile_gen")
     var b32All <- [for (f in fixed_array(KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032)); f; where b32_seated(f)]
     var b32Sel <- [for (f in b32All); f; where tune_family_selected(b32_tile_entry(f))]
     var rmFmts <- rm_family_fmts()
@@ -2542,13 +2733,13 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     var kqx16Sel <- [for (f in kqx16All); f; where tune_family_selected(kqx16_entry(f))]
     let q8x16Emits = q8x16_has_emitting_seat()
     let wantQ8x16 = q8x16Emits && tune_family_selected(X16_Q8_ENTRY)
-    let standaloneFamilies = (q8Seated ? 1 : 0) + (bf16wSeated ? 1 : 0) + (q8x16Emits ? 1 : 0)
+    let standaloneFamilies = (q8Seated ? 1 : 0) + (bf16wSeated ? 1 : 0) + (q8x16Emits ? 1 : 0) + (gemmF32Seated ? 1 : 0)
     let familyTotal = standaloneFamilies + length(kids) + length(b32All) + length(rmAll) + length(kqx16All)
     delete kids
     delete b32All
     delete rmAll
     delete kqx16All
-    let planTotal = (wantQ8 ? 2 : 0) + length(kqSel) + length(b32Sel) + length(rmSel) + (wantBf16w ? 1 : 0) + length(kqx16Sel) + (wantQ8x16 ? 1 : 0)
+    let planTotal = (wantQ8 ? 2 : 0) + length(kqSel) + length(b32Sel) + length(rmSel) + (wantBf16w ? 1 : 0) + length(kqx16Sel) + (wantQ8x16 ? 1 : 0) + (wantGemmF32 ? 1 : 0)
     if (planTotal == 0) {
         print("tune-only '{tune_only_filter()}': no generator family matches - half skipped, sidecar untouched\n")
         delete kqSel
@@ -2624,6 +2815,9 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     if (wantBf16w) {
         //! the base row is the fallback: its production route is the widen walk
         seat_family("bf16w_tile_gen", "bf16w family", "mr16", pending) $(var rows : table<string; JsonValue?>) => bf16w_tune_family(rows)
+    }
+    if (wantGemmF32) {
+        seat_family("gemm_f32_tile_gen", "gemm_f32 family", "reference", pending) $(var rows : table<string; JsonValue?>) => gemm_f32_tune_family(rows)
     }
     for (f in kqx16Sel) {
         seat_family(kqx16_entry(f), "{kqx16_fmt(f)}x16 family", X16_FALLBACK, pending) $(var rows : table<string; JsonValue?>) => kqx16_tune_family(f, rows)

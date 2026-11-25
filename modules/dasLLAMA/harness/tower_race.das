@@ -14,12 +14,12 @@ require ?cuda dasllama/dasllama_cuda_common   // the launch census, the carveout
 require ?cuda dasllama/dasllama_cuda_rail   // the q / k / v fork seam
 require ?cuda dasllama/dasllama_cuda_tower_seat   // the column and split-floor seams, the tower's served counters
 require ?cuda dasllama/dasllama_cuda_tower_fc   // the FastConformer front handoff seam
-require ../performance/profile_common.das   // tune_gate + apply_box_profile_runtime, the standing pre-measure stack
 require _row_stats   // spread_of: the row statistic over rounds
-require daslib/clargs
+require _seam_race   // the candidates over the seam table, the preamble, the rotated rounds
+require daslib/clargs   // [CommandLineArgs]
 require daslib/jobque_boost
 require daslib/fio
-require daslib/strings_convert
+require daslib/strings_boost
 require strings
 
 // The CUDA tower's in-process race: one model, one clip, a list of candidates - each a set of the tower's in-process seams -
@@ -37,10 +37,10 @@ require strings
 //
 // A candidate is `key=value` pairs joined by `,`: `col` (32 | 128 | 256, 0 = the tower's own pick:
 // `set_cuda_tower_cm2_col`), `floor` (the fc2 site's split-k row floor: `set_cuda_tower_splitk_min_rows`), `fill` (the fc2
-// site's split-k fill bound, 0 = none: `set_cuda_tower_splitk_fill`), `carveout` (1 = the full carveout on the tower's
-// no-smem kernels: `set_cuda_tower_carveout_full`), `fork` (0 = the q / k / v GEMMs on one stream: `set_cuda_tower_fork`),
-// `handoff` (0 = the FastConformer front's round trip: `set_cuda_fc_front_handoff`), `graphs` (0 = the chains launched
-// kernel by kernel: `set_cuda_tower_graphs`).
+// site's split-k fill bound, 0 = none: `set_cuda_tower_splitk_fill`), `carveout` (1 = the full carveout on the scoped
+// kernels, `cud_l1_scoped`: `set_cuda_tower_carveout_full`), `fork` (0 = the q / k / v GEMMs on one stream:
+// `set_cuda_tower_fork`), `handoff` (0 = the FastConformer front's round trip: `set_cuda_fc_front_handoff`), `graphs`
+// (0 = the chains launched kernel by kernel: `set_cuda_tower_graphs`).
 
 [CommandLineArgs]
 struct RaceArgs {
@@ -81,19 +81,16 @@ struct RaceArgs {
     help : bool
 }
 
-let private SEAM_KEEP = -1l   //! a seam the candidate does not name: the value the race found
-
-//! one candidate: its seams' values, `SEAM_KEEP` where it names none
-struct Cand {
-    name : string
-    col : int64 = SEAM_KEEP
-    floor : int64 = SEAM_KEEP
-    fill : int64 = SEAM_KEEP
-    carveout : int64 = SEAM_KEEP
-    fork : int64 = SEAM_KEEP
-    handoff : int64 = SEAM_KEEP
-    graphs : int64 = SEAM_KEEP
-}
+//! the race's seams, in `apply_seams`' order
+let private SEAMS <- [
+    RaceSeam(key = "col", allowed <- [0l, 32l, 128l, 256l], words = "0, 32, 128 or 256"),
+    RaceSeam(key = "floor", words = "0 or more"),
+    RaceSeam(key = "fill", words = "0 or more"),
+    RaceSeam(key = "carveout", allowed <- [0l, 1l], words = "0 or 1"),
+    RaceSeam(key = "fork", allowed <- [0l, 1l], words = "0 or 1"),
+    RaceSeam(key = "handoff", allowed <- [0l, 1l], words = "0 or 1"),
+    RaceSeam(key = "graphs", allowed <- [0l, 1l], words = "0 or 1")
+]
 
 //! a candidate's served counters over its timed passes
 struct Served {
@@ -111,71 +108,6 @@ struct CandRun {
     wall_ms : array<float>
     hashes : array<uint64>
     served : Served
-}
-
-//! the candidate `spec` names, or the reason it names none
-def private parse_cand(spec : string) : tuple<ok : bool; c : Cand; why : string> {
-    var c = Cand(name = spec)
-    for (kv in split(spec, ",")) {
-        let eq = find(kv, "=")
-        return (ok = false, c = c, why = "'{kv}' is not key=value") if (eq <= 0)
-        let key = slice(kv, 0, eq)
-        let v = try_to_int64(slice(kv, eq + 1))
-        return (ok = false, c = c, why = "'{kv}': the value is not an integer") if (v |> is_err)
-        let n = v |> unwrap
-        if (key == "col") {
-            return (ok = false, c = c, why = "col={n}: 0, 32, 128 or 256") if (n != 0l && n != 32l && n != 128l && n != 256l)
-            c.col = n
-        } elif (key == "floor" || key == "fill") {
-            return (ok = false, c = c, why = "{key}={n}: 0 or more") if (n < 0l)
-            if (key == "floor") {
-                c.floor = n
-            } else {
-                c.fill = n
-            }
-        } elif (key == "carveout" || key == "fork" || key == "handoff" || key == "graphs") {
-            return (ok = false, c = c, why = "{key}={n}: 0 or 1") if (n != 0l && n != 1l)
-            if (key == "carveout") {
-                c.carveout = n
-            } elif (key == "fork") {
-                c.fork = n
-            } elif (key == "handoff") {
-                c.handoff = n
-            } else {
-                c.graphs = n
-            }
-        } else {
-            return (ok = false, c = c, why = "unknown seam '{key}' (col, floor, fill, carveout, fork, handoff, graphs)")
-        }
-    }
-    return (ok = true, c = c, why = "")
-}
-
-//! the seams' values before the race: what a candidate that names no value for a seam runs on
-def private seams_now() : Cand {
-    static_if (typeinfo builtin_module_exists(cuda)) {
-        return Cand(name = "found", col = cuda_tower_cm2_col(), floor = cuda_tower_splitk_min_rows(),
-            fill = cuda_tower_splitk_fill(), carveout = cuda_tower_carveout_full() ? 1l : 0l,
-            fork = cuda_tower_fork_on() ? 1l : 0l, handoff = cuda_fc_front_handoff_on() ? 1l : 0l,
-            graphs = cuda_tower_graphs_on() ? 1l : 0l)
-    } else {
-        return Cand(name = "found")
-    }
-}
-
-def private pick_seam(v, base : int64) : int64 => v != SEAM_KEEP ? v : base
-
-//! the candidate's seams set, each it does not name at `base`'s value
-def private apply_seams(c, base : Cand) {
-    static_if (typeinfo builtin_module_exists(cuda)) {
-        set_cuda_tower_cm2_col(pick_seam(c.col, base.col))
-        set_cuda_tower_splitk_min_rows(pick_seam(c.floor, base.floor))
-        set_cuda_tower_splitk_fill(pick_seam(c.fill, base.fill))
-        set_cuda_tower_carveout_full(pick_seam(c.carveout, base.carveout) == 1l)
-        set_cuda_tower_fork(pick_seam(c.fork, base.fork) == 1l)
-        set_cuda_fc_front_handoff(pick_seam(c.handoff, base.handoff) == 1l)
-        set_cuda_tower_graphs(pick_seam(c.graphs, base.graphs) == 1l)
-    }
 }
 
 //! the launch census of every kernel whose name holds one of `subs`
@@ -240,10 +172,34 @@ def private transcribe_pass(m : AsrModel; samples : array<float>; lang : string)
     return text
 }
 
+//! the seams' values before the race, in `SEAMS`' order: what a candidate that names no value for a seam runs on
+def private seams_found() : array<int64> {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return <- [cuda_tower_cm2_col(), cuda_tower_splitk_min_rows(), cuda_tower_splitk_fill(),
+            cuda_tower_carveout_full() ? 1l : 0l, cuda_tower_fork_on() ? 1l : 0l,
+            cuda_fc_front_handoff_on() ? 1l : 0l, cuda_tower_graphs_on() ? 1l : 0l]
+    } else {
+        return <- array<int64>()
+    }
+}
+
+//! the seams set to `vals`, in `SEAMS`' order
+def private apply_seams(vals : array<int64>) {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        set_cuda_tower_cm2_col(vals[0])
+        set_cuda_tower_splitk_min_rows(vals[1])
+        set_cuda_tower_splitk_fill(vals[2])
+        set_cuda_tower_carveout_full(vals[3] == 1l)
+        set_cuda_tower_fork(vals[4] == 1l)
+        set_cuda_fc_front_handoff(vals[5] == 1l)
+        set_cuda_tower_graphs(vals[6] == 1l)
+    }
+}
+
 //! candidate `c`'s turn in a round: its seams, its warm passes, its timed passes into `run`
-def private cand_turn(cfg : RaceArgs; m : AsrModel; samples : array<float>; c, base : Cand; subs : array<string>; round : int;
-                      var run : CandRun) {
-    apply_seams(c, base)
+def private cand_turn(cfg : RaceArgs; m : AsrModel; samples : array<float>; c : RaceCand; found : array<int64>;
+                      subs : array<string>; round : int; var run : CandRun) {
+    apply_seams(race_resolve(c, found))
     for (_w in range(cfg.warm)) {
         transcribe_pass(m, samples, cfg.lang)
     }
@@ -271,82 +227,40 @@ def private cand_turn(cfg : RaceArgs; m : AsrModel; samples : array<float>; c, b
 }
 
 //! the summary line of candidate `c` over the race
-def private cand_summary(c : Cand; var run : CandRun) {
-    var distinct <- {for (h in run.hashes); h}
+def private cand_summary(c : RaceCand; var run : CandRun) {
     let sp = spread_of(run.enc_ms)
     let wl = spread_of(run.wall_ms)
-    let texts = join([for (h in keys(distinct)); "{h:x}"], " ")
+    let texts = race_distinct_hashes(run.hashes)
     print("SUMMARY [{c.name}]: encode {sp.mean:.3f} ms mean ({sp.best:.3f}-{sp.worst:.3f}), cv {sp.cv:.2f}% over {length(run.enc_ms)} passes; wall {wl.mean:.1f} ms mean; texts {texts}; {served_words(run.served, length(run.enc_ms))}\n")
 }
 
 [export, cold_path]
 def main() : int {
     allow_cpu_prefill()   // the LLM-decoder families (qwen3a, canary, gemma4a) prefill their encoder rows on the CPU decoder
-    var r <- parse_args(type<RaceArgs>)
-    if (r |> is_err) {
-        print("error: {r |> unwrap_err}\n\n")
-        print_help(get_command_info(type<RaceArgs>), "tower_race")
-        return 1
-    }
-    var cfg <- r |> move_unwrap
-    if (cfg.help) {
-        print_help(get_command_info(type<RaceArgs>), "tower_race")
+    return race_main("tower_race", "the CUDA tower's", type<RaceArgs>, SEAMS) $(var cfg; cands) {
+        cfg.reps = max(cfg.reps, 1)
+        let subs <- split(cfg.census, ",")
+        let samples <- load_audio_16k_mono(cfg.wav)
+        let audio_s = float(length(samples)) / float(AUDIO_SAMPLE_RATE)
+        let t_load = ref_time_ticks()
+        var m <- empty(cfg.mmproj) ? load_asr_model(cfg.model) : load_asr_model(cfg.model, cfg.mmproj)
+        print("RACE model {base_name(cfg.model)}, clip {base_name(cfg.wav)} ({audio_s:.2f} s), exec {asr_exec_fmt(m)}, load {float(get_time_usec(t_load)) / 1000.0:.1f} ms, {length(cands)} candidates, {cfg.rounds} rounds, warm {cfg.warm}, reps {cfg.reps}, encode bucket '{asr_encode_bucket(m)}'\n")
+        let found <- seams_found()
+        print(race_seams_line(SEAMS, found))
+        var runs : array<CandRun>
+        runs |> resize(length(cands))
+        with_dasllama_jobque_() {
+            set_asr_prof(true)
+            asr_prof_reset()
+            race_rounds(cfg.rounds, length(cands)) $(ci, round) {
+                cand_turn(cfg, m, samples, cands[ci], found, subs, round, runs[ci])
+            }
+            set_asr_prof(false)
+        }
+        apply_seams(found)
+        for (c, run in cands, runs) {
+            cand_summary(c, run)
+        }
         return 0
     }
-    if (!jit_enabled()) {
-        print("JIT-only - run with: daslang -jit <file>\n")
-        return 1
-    }
-    static_if (!typeinfo builtin_module_exists(cuda)) {
-        print("tower_race: this build carries no CUDA module - the seams it races are the CUDA tower's\n")
-        return 1
-    }
-    if (length(cfg.cand) < 2) {
-        print("tower_race: a race needs two candidates or more (--cand, repeated)\n")
-        return 1
-    }
-    var cands : array<Cand>
-    cands |> reserve(length(cfg.cand))
-    for (spec in cfg.cand) {
-        let pc = parse_cand(spec)
-        if (!pc.ok) {
-            print("tower_race: --cand {spec}: {pc.why}\n")
-            return 1
-        }
-        cands |> push(pc.c)
-    }
-    cfg.rounds = max(cfg.rounds, 1)
-    cfg.warm = max(cfg.warm, 1)
-    cfg.reps = max(cfg.reps, 1)
-    apply_box_profile_runtime()
-    if (!tune_gate()) {
-        print("tower_race: tune_gate refused - point DAS_TUNE_MANIFEST at a complete sidecar\n")
-        return 1
-    }
-    let subs <- split(cfg.census, ",")
-    let samples <- load_audio_16k_mono(cfg.wav)
-    let audio_s = float(length(samples)) / float(AUDIO_SAMPLE_RATE)
-    let t_load = ref_time_ticks()
-    var m <- empty(cfg.mmproj) ? load_asr_model(cfg.model) : load_asr_model(cfg.model, cfg.mmproj)
-    print("RACE model {base_name(cfg.model)}, clip {base_name(cfg.wav)} ({audio_s:.2f} s), exec {asr_exec_fmt(m)}, load {float(get_time_usec(t_load)) / 1000.0:.1f} ms, {length(cands)} candidates, {cfg.rounds} rounds, warm {cfg.warm}, reps {cfg.reps}, encode bucket '{asr_encode_bucket(m)}'\n")
-    let base = seams_now()
-    print("RACE seams found: col {base.col}, floor {base.floor}, fill {base.fill}, carveout {base.carveout}, fork {base.fork}, handoff {base.handoff}, graphs {base.graphs}\n")
-    var runs : array<CandRun>
-    runs |> resize(length(cands))
-    with_dasllama_jobque_() {
-        set_asr_prof(true)
-        asr_prof_reset()
-        for (round in range(cfg.rounds)) {
-            for (i in range(length(cands))) {
-                let ci = (i + round) % length(cands)
-                cand_turn(cfg, m, samples, cands[ci], base, subs, round, runs[ci])
-            }
-        }
-        set_asr_prof(false)
-    }
-    apply_seams(base, base)
-    for (c, run in cands, runs) {
-        cand_summary(c, run)
-    }
-    return 0
 }

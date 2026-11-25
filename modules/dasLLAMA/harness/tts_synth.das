@@ -17,7 +17,7 @@ require tts_corpus   // tts_corpus_path / tts_corpus_head - the rig's sentences
 // The rig's synthesis half: every sentence of the 200-sentence fixture through one TTS model
 // and voice, one WAV per sentence, one JSON of timings beside them. harness/tts_rig.py drives
 // it once per model and scores the folder.
-//   daslang -jit harness/tts_synth.das -- --model <gguf> --voice <name> --out <dir> [--speed 1.0] [--limit N] [--fixture <json>]
+//   daslang -jit harness/tts_synth.das -- --model <gguf> --voice <name> --out <dir> [--speed 1.0] [--limit N] [--fixture <json>] [--clip <audio>]
 
 [CommandLineArgs]
 struct SynthArgs {
@@ -44,8 +44,10 @@ struct SynthArgs {
     small : bool = false
     @clarg_doc = "pin weight groups' formats on a phoneme family's recipe lane, group=format pairs comma-separated (dasllama_styletts2's set_styletts2_recipe); mints in memory"
     recipe : string = ""
-    @clarg_doc = "print the generator's per-op profile over the whole run (PROF rows)"
+    @clarg_doc = "print the CPU generator's per-op profile over the whole run (PROF rows); a GPU seat's per-role report is DASLLAMA_GPU_PROF=1's"
     prof : bool = false
+    @clarg_doc = "clone the voice from this audio clip and speak with it under --voice's name (a Pocket file that carries its codec encoder)"
+    clip : string = ""
 }
 
 struct private SentenceTiming {
@@ -97,6 +99,17 @@ def main() : int {
     with_dasllama_jobque_() {
         set_asr_prof(args.prof)
         var inscope m <- load_tts_model(args.model)
+        if (!empty(args.clip)) {
+            var inscope c <- caps(m)
+            let clip_pcm <- load_audio_mono(args.clip, c.sample_rate)
+            if (!c.cloning) {
+                failed = "--clip: {args.model} cannot clone a voice"
+            } elif (empty(clip_pcm)) {
+                failed = "--clip: {args.clip} did not decode"
+            } else {
+                tts_register_voice(m, args.voice, clip_pcm, c.sample_rate)
+            }
+        }
         var n = 0
         for (r in rows) {
             break if (!empty(failed))
