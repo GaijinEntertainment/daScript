@@ -278,6 +278,18 @@ the box first and keeps the kernel off where the probe disagrees. The destinatio
 element in a pad column reads `tmm2d_rx_dest_valid` false. The CPU twins are inert - a kernel on this flavor is
 GPU-only, its oracle a plain CPU product.
 
+## The q8 simdgroup block product {#sgmma-q8-blk2}
+
+`sgmma_q8_blk2(wq, q0, q1, x, x0, x1, lane)` is a few-row GEMM's inner product on the 8x8 simdgroup matrix: one q8_0
+32-block of two weight rows (the int8 codes at `wq[q0 ..]`, `wq[q1 ..]`) against two token rows (the floats at
+`x[x0 ..]`, `x[x1 ..]`), returned as `float4(q0 . x0, q0 . x1, q1 . x0, q1 . x1)` for the caller to scale. Every lane
+of a simdgroup calls it in step with the rows whose elements it owns in the `thread_elements()` layout - weight rows
+`((lane / 4) & 4) + ((lane / 2) % 4)` of their 8-row tile, token rows `((lane / 4) & 2) * 2 + (lane % 2) * 2` and the
+next - and the preamble helper `__das_sgmma_q8_blk2` moves its 8 code bytes a weight row and 4 values a token row from
+registers into those slots, four steps a block of a product a weight row. A code enters the matrix unit as an exact half: its byte, offset by 128, fills the mantissa of 1024, and subtracting 1152 leaves the code. The sums are
+integer-by-float in f32, so the CPU body's plain dots are the oracle up to rounding order. The helper reads through `const device` views, so both arguments are `@ssbo` members: a `@workgroup` or `@uniform` member, or an argument that is no member, is
+refused by name. It reads the codes as signed bytes and the rows as floats, so a weight member that is not int8, or a row member that is not float, is refused too.
+
 ## Shim autorelease pools {#shim-autorelease-pools}
 
 Every Objective-C property read in `src/dasMetal.mm` - `obj.prop`, or `[obj prop]` with no
