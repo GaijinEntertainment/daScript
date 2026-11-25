@@ -36,8 +36,8 @@ require _deltanet_cells public   // DN_LOGIT_BAR_REL: the deltanet bar the cells
 
 let MTP_WINDOW = 512l   //! the cells' prompt window (the file pins it before every load): the two-window warm cell reads the seam
 
-//! the head's K row is the f16-stored projection of a trunk hidden row that already sits within DN_LOGIT_BAR_REL of the CPU chain's, so the row's own rounding stacks on the trunk's: twice the deltanet bar
-let private HEAD_K_BAR_REL = 0.10
+//! the head's K row is the f16-stored projection of a trunk hidden row that already sits within DN_LOGIT_BAR_REL of the CPU chain's, so the row's own rounding stacks on the trunk's; the bar holds the widest of a warm's rows - six hundred over two windows, their mean miss under a third of it: an eighth of the row's max
+let private HEAD_K_BAR_REL = 0.125
 //! the CPU row one down misses a device row by at least this many bars, or the bar is too wide to tell the row from its neighbour
 let private HEAD_K_CONTROL_BARS = 2.0
 
@@ -1214,7 +1214,7 @@ def mtp_head_warm_declined_cell(t : T?; tr : Model) {
 
 def mtp_head_warm_within(t : T?; tag : string; warms : array<MtpWarmRows>) {
     return if (empty(warms))
-    let labels = fixed_array("Qwen3.5-0.8B-MTP: the head's K rows the window chain warmed, read back to the host, against the CPU warm's rows on the same prompt within twice the deltanet bar, the row one down past it",
+    let labels = fixed_array("Qwen3.5-0.8B-MTP: the head's K rows the window chain warmed, read back to the host, against the CPU warm's rows on the same prompt within an eighth of the row's max, the row one down past it",
         "Qwen3.5-0.8B-MTP: the same over two windows - the second window's carry row is its row 0, the head's rope a row behind the trunk's - every head K row of a prompt one window plus 88 rows long against the CPU warm's")
     for (w, name in warms, labels) {
         unsafe {
@@ -1335,7 +1335,7 @@ def mtp_rounds_cpu_rows(var r : MtpRoundsRows; tr : Model; kv : KVDtype) {
 def mtp_rounds_within(t : T?; tag : string; r : MtpRoundsRows) {
     return if (!r.ran)
     unsafe {
-        t |> run("{tag}Qwen3.5-0.8B-MTP: six speculative rounds on the resident driver against the CPU round from the same prompt - every round's draft the CPU round's or a near-tie of it, accept and position equal while the drafts agree; then two rounds whose draft the seat declines - the CPU head over the head's rows hydrated from the device - against the CPU round, the hydrated rows within twice the deltanet bar, the CPU round on poisoned head rows as the control") @capture(& r)(t : T ?) {
+        t |> run("{tag}Qwen3.5-0.8B-MTP: six speculative rounds on the resident driver against the CPU round from the same prompt - every round's draft the CPU round's or a near-tie of it, accept and position equal while the drafts agree; then two rounds whose draft the seat declines - the CPU head over the head's rows hydrated from the device - against the CPU round, the hydrated rows within an eighth of the row's max, the CPU round on poisoned head rows as the control") @capture(& r)(t : T ?) {
             held_within(t, r.h)
             t |> equal(length(r.cpu), length(r.gpu), "the CPU form ran as many rounds as the device")
             return if (length(r.cpu) != length(r.gpu) || empty(r.c7) || empty(r.c8))
