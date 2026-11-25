@@ -609,7 +609,7 @@ namespace das {
                     !var->argument &&
                     !var->block ) {
                     if ( variable->init->rtti_isConstant() ) {
-                        if ( recordConstAccess ) variable->access_fold = true;
+                        if ( recordConstAccess && !isFrozenGlobal(variable) ) variable->access_fold = true;
                         auto folded = variable->init->clone();
                         // a C++-registered constant has no location of its own, so the folded
                         // value reports where it was used
@@ -623,7 +623,7 @@ namespace das {
                         // always a fresh clone, since a node has exactly one parent
                         auto memo = constExprFolded.find(variable);
                         if ( memo != constExprFolded.end() ) {
-                            if ( recordConstAccess ) variable->access_fold = true;
+                            if ( recordConstAccess && !isFrozenGlobal(variable) ) variable->access_fold = true;
                             auto folded = memo->second->clone();
                             stampMissingAt(folded, expr->at);
                             return folded;
@@ -635,7 +635,7 @@ namespace das {
                         auto folded = foldConstInit(variable->init);
                         constExprFolding.erase(variable);
                         if ( folded ) {
-                            if ( recordConstAccess ) variable->access_fold = true;
+                            if ( recordConstAccess && !isFrozenGlobal(variable) ) variable->access_fold = true;
                             constExprFolded[variable] = folded->clone();
                             return folded;
                         }

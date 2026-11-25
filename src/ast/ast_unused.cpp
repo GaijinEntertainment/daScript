@@ -7,12 +7,6 @@
 
 namespace das {
 
-    // a global of a frozen (already compiled) module is read-only: module jobs that require it
-    // must not stamp its flags. src/ast/ARCHITECTURE_COMPILE_MODULES.md#compile-workers
-    static inline bool isFrozenGlobal ( const Variable * var ) {
-        return var->module && var->module->frozen;
-    }
-
     class TrackVariableFlags : public Visitor {
     protected:
         virtual bool canVisitFunction ( Function * fun ) override {

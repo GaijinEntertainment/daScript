@@ -12,6 +12,9 @@ With `compile_threads` above 1 the modules run as `JobQue` jobs: a module starts
 dependencies are done, longest remaining chain first. No job waits for another, so the queue
 cannot deadlock.
 
+`compile_threads` 0 is the `JobQue` thread count. A build with no threads - wasm without
+`-pthread` - compiles in walk order whatever the count, since it cannot start a worker.
+
 `options log_compile_dag` prints the graph with measured times and the best possible schedule.
 
 ## Compile workers {#compile-workers}
@@ -21,7 +24,12 @@ When all jobs finish, the main thread registers the modules in walk order, so sh
 writer. Jobs share the compile's `FileAccess`: it is locked, since the walk already loaded every
 file, and jobs only borrow the pointer, since its reference count is not atomic. A locked access
 loads no new file, and a `.das_project` access runs its project context under that context's lock.
-A frozen module is read-only: a job reads its globals' access flags but never stamps them.
+A frozen module is read-only: a job reads its globals' access flags but never stamps them. A
+`Visitor` stores every child it passes back into its node, so a walk that only reads - the printer,
+the inliner's clone shape - is a `ConstVisitor`, and the printer keeps the levels that place its
+brackets in a table of its own: walking or printing a frozen module's AST writes nothing. A dynamic module loaded on demand by the walk freezes like the ones
+loaded at startup, since iterating an unfrozen table stamps its lock, and a module freezes with the
+alias cache of every type on its root filled, since a type fills it on first read.
 
 ## The cached prefix {#cache-prefix}
 
