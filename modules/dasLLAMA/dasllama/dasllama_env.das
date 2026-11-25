@@ -621,6 +621,9 @@ struct public VulkanEnv {
     @clarg_doc = "The workgroups the decode attention counts as one wave of the device, in place of the device's own count (0 = the device's: its SM count, or an AMD device's active compute units, or 16 on a device that reports neither): the token command splits a head's keys into pieces to fill two waves, and the N-row command into the pieces its rows leave of one"
     vk_attn_wave : int64 = 0l
 
+    @clarg_doc = "The Vulkan home's prefill flash pass at a head of 256 on its wide cm2 stamps - 128 query rows of a head a workgroup, the keys walked once for all of them (the deltanet hybrids' attention, gemma-3's global layers): a whole pass with no softcap. 0 = the 64-row stamps."
+    vk_fa_wide : int64 = 1l
+
     @clarg_doc = "The alternate stamps the class slots serve, a bit a slot, in place of the box's raced set (the sidecar's vk_alt_stamps): bit 0 the q8 decode GEMV's load-ahead stamp at the device's own subgroup width, bit 1 every format's KHR window tile with its K walk rotated a weight tile, bit 2 the window's deltanet scan on the per-token stamp in place of the chunked one, bit 3 the q8 decode GEMV that carries the residual step with every row's K walk rotated, bits 4 to 7 the routed block's columns on the int8 tiles (the gate and up m pieces, their s pieces, the down's m pieces, its s pieces), bit 8 every KHR flash-attention stamp with its workgroups tile-first, bit 9 the one-row step's routed gate and up on their own dispatches in place of the fused gate-up leaf, bit 10 the N-column GEMV leaves' rotated twins over a plane whose quant rows sit a power of two apart. 0 serves every class its own stamp; -1 leaves the box's set."
     vk_alt_stamps : int64 = -1l
 
@@ -647,6 +650,9 @@ struct public VulkanEnv {
 
     @clarg_doc = "The CUDA home's window chain on the MMQ GEMMs: the int8 one (`q8_mmq` and the leaves of Q4_K, IQ4_XS, Q4_0, IQ4_NL, Q5_0, Q5_1), the activations requantized to Q8_0 blocks between the GEMMs, as the token step's feeds are; and NVFP4's FP4 tensor leaf (`nv4_mmq`, W4A4: the activations quantized to e2m1 per token); a routed layer's MXFP4 or NVFP4 expert stacks ride the same rung fed from the expert schedule (`mx4_fp4_mmq_moe` / `nv4_fp4_mmq_moe`, the gathered rows as the stacks' FP4 feed; 0 keeps them on the cm2 s and e tiles). 1 = every plane whose format's leaf beat the cm2 tiles in the measured cards' windows, where its shape fits the tile (the output width a multiple of 128, the reduction of 256), runs on that leaf, the other planes on the f16-fed cm2 tiles; 2 = every leaf, the ones the cards split or lost on too (Q5_0, Q5_1) - a new card's own measurement; 0 = the cm2 tiles everywhere (A/B instrument). The FP4 leaf needs compute capability 120; below it an nv4 plane stays on the tiles under every value. The first window reads the value once and keeps it. The load log names the pick, and the value with the setter that gave it (`set_cuda_mmq_pin` under a test's pin)."
     cuda_mmq : int64 = 1l
+
+    @clarg_doc = "The CUDA home's prefill flash pass at a head of 512 or 256 on its wide tile - 48 query rows of a head a block at 512 and 96 at 256, the keys walked once for all of them, the K and V rows of a step staged in shared memory (gemma-4's global layers, the deltanet hybrids' attention). 0 = the narrower tiles every home shares."
+    cuda_fa_wide : int64 = 1l
 
     @clarg_doc = "The CUDA home's launches under programmatic dependent launch: a kernel is launched while the one before it in the stream still runs, and its entry wait (`griddepcontrol.wait`, in every emitted kernel on sm_90 and up) holds its reads until that one completes, so the launch latency rides under the predecessor's tail. 1 = on where the card is sm_90 or newer, 0 = plain stream order (A/B instrument). The TTS seats' shots launch in plain stream order under every value (`rail_tts_shot`). The device-ready log line names the state."
     cuda_pdl : int64 = 1l

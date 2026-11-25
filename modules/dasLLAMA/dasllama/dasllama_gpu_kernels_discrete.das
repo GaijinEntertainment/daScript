@@ -3817,8 +3817,8 @@ struct FaArgs {
 def facm2_softcap(r, c : uint; v : float; cap : float) : float => softcap_exp(v, cap)
 
 [arch(at="../ARCHITECTURE_GPU_SHARED_ATTN.md#flash-attn-tile")]
-def fa_stamp_wgs(khr : bool; nheads, rows : int64) : int64 {
-    let qrows_per_wg = khr ? 16l : 64l
+def fa_stamp_wgs(khr : bool; nheads, rows : int64; wide : bool = false) : int64 {
+    let qrows_per_wg = khr ? 16l : (wide ? 128l : 64l)
     return nheads * ((rows + qrows_per_wg - 1l) / qrows_per_wg)
 }
 

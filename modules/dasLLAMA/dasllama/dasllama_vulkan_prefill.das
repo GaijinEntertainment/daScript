@@ -1411,6 +1411,7 @@ def private pf_setup {
         && (!key_exists(fa_hs, 96l) || fa_stamp_pair_ensure(false, 96l, false, false, false, any_f16_feed))
         && (!key_exists(fa_hs, 128l) || fa_stamp_pair_ensure(false, 128l, false, false, false, any_f16_feed))
         && (!key_exists(fa_hs, 256l) || fa_stamp_pair_ensure(false, 256l, gated_stamp, false, false, any_f16_feed))
+        && (!key_exists(fa_hs, 256l) || g_env_vulkan.vk_fa_wide == 0l || fa_stamp_wide_ensure(gated_stamp, any_f16_feed))
         && (!any_cap || fa_stamp_pair_ensure(false, 256l, false, true, false, any_f16_feed))
         && (!key_exists(fa_hs, 512l) || fa_stamp_pair_ensure(false, 512l, false, false, false, any_f16_feed))
         && (!key_exists(fakhr_hs, 64l) || fa_stamp_pair_ensure(true, 64l, false, false, sinks, any_f16_feed))
@@ -1430,6 +1431,7 @@ def private pf_setup {
     if (g_rd.pf_fakhr) {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: KHR flash attention armed ({long_length(fakhr_hs)} head size(s), {kvq ? "the block-codec mirrors' f16 shadow" : "native f16 mirrors"}; {long_length(chunked_hs)} on the chunked pair)\n")
     }
+    vk_fa_wide_say(g_env_vulkan, key_exists(fa_hs, 256l))
     for (k, v in keys(chunked_why), values(chunked_why)) {   //! one line a reason, whether or not any layer armed a tile
         to_log(LOG_INFO, "dasLLAMA vulkan tier: {v} attention layer(s) on the chunked pair, off the flash tiles: {k}\n")
     }
@@ -2563,8 +2565,9 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
                 kvd = uint(kvd), kv_mul = kv_mul, kvbase = kv_base,
                 scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window, cap = g_rd.layers[l].attn_cap,
                 sinkoff = uint(l * g_rd.n_heads), row0 = uint(sg.row0), ring = kv_ring)
+            let fa_wide = g_env_vulkan.vk_fa_wide != 0l && fa_stamp_wide(khr, hs, g_rd.has_sinks, pcf)
             fa_stamp_enc(khr, hs, hs == 256l && rd_attn_gated(), pcf.cap != 0.0, g_rd.has_sinks, fa_lands_f16, raw, h, g_rd.pf_sets[b + 5], pcf,
-                fa_stamp_wgs(khr, g_rd.n_heads, sg.npos))
+                fa_stamp_wgs(khr, g_rd.n_heads, sg.npos, fa_wide), false, fa_wide)
         } else {
             let attnwg = fa128 ? g_rd.n_heads * ((sg.npos + 31l) / 32l) : at_attn_tile_wgs(g_rd.n_heads, sg.npos, wide ? 4l : 8l)
             var pca = DaAttnBArgs(npos = uint(sg.npos), nh = uint(g_rd.n_heads), kvd = uint(kvd),

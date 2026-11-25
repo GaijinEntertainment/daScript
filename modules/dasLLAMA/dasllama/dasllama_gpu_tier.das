@@ -918,6 +918,13 @@ def public rdec_seg_ending_at(segs : array<RdecPfSeg>; w0, row : int64) : int64 
     return -1l
 }
 
+//! DASLLAMA_VK_FA_WIDE=0 in `env` said at the Vulkan window's setup on a model with a head-256 layer on the cm2 flash tiles (`h256`)
+def public vk_fa_wide_say(env : VulkanEnv; h256 : bool) {
+    if (h256 && env.vk_fa_wide == 0l) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: DASLLAMA_VK_FA_WIDE=0 - the prefill flash pass at a head of 256 runs the 64-row stamps (unset it, or set it to 1, for the wide cm2 stamps)\n")
+    }
+}
+
 //! The segmented resident prefill: every segment's embedded rows (or ids, where the driver gathers) and rope rows back to
 //! back in segment order, each segment's logits at its slot of `logits` (`vocab` floats a slot)
 typedef RdecPrefillSegsFn = function<(x_batch : array<float>; tokens : array<int64>; use_ids : bool; emb_scale : float; cos_batch : array<float>; segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) : void>
