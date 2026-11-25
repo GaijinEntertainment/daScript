@@ -259,6 +259,25 @@ def test_tokenizer_spm_byte_pieces_by_name(t : T?) {
     }
 }
 
+[test(description = "A unigram encode leaves no string behind: the lattice frees each candidate piece it looks up, so twenty encodes of a sentence keep the string heap where one left it")]
+def test_tokenizer_unigram_encode_no_garbage(t : T?) {
+    var pieces <- ["<unk>", "<s>", "</s>", " ", "a", "b", " a", "ab", " ab"]
+    var tk <- spm_vocab(pieces)
+    tk.max_token_length = 3
+    tk.add_space_prefix = true
+    let reserved : array<int64>
+    let text = "ab ab ba ab ab ba ab ab ba ab ab ba"
+    var warm <- unigram_encode(tk, text, 0l, false, reserved)
+    delete warm
+    let before = string_heap_bytes_allocated()
+    for (_ in range(20)) {
+        var ids <- unigram_encode(tk, text, 0l, false, reserved)
+        delete ids
+    }
+    t |> equal(before, string_heap_bytes_allocated(), "the string heap after twenty encodes")
+    delete tk
+}
+
 [test(description = "On the Mistral v0.3 vocab, newline and tab byte pieces resolve to 781 and 780 past the control tokens, and sample texts encode to the exact ids llama-tokenize gives and decode back")]
 def test_tokenizer_mistral_v03_byte_pieces(t : T?) {
     t |> run("Mistral v0.3: byte pieces past 768 control tokens, llama-tokenize's ids") @(t : T?) {
