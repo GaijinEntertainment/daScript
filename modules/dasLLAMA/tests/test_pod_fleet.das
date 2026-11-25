@@ -5,6 +5,7 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 require dastest/testing_boost public
 require ../harness/pod_fleet.das
 require _model_categories   // CUDA_PASS_ONLY: the CUDA home's pass
+require run   // run_exclusion: the files the runner drops for a module its children leave out
 require _child_cuda_cache   // CudaWarm: the prewarm step's line and exit code
 require daslib/strings_boost
 require daslib/fio
@@ -93,7 +94,8 @@ def test_fleet_commands(t : T?) {
     var on_volume <- fleet_args()
     on_volume.env = "DASLLAMA_MODELS_DIR=/workspace/models DASLLAMA_GPU=1"
     let volume_run = run_command(on_volume, "20261027-000000", "vulkan", false)
-    t |> success(find(volume_run, "origin/master --batch 30 --exclude {CUDA_ONLY_EXCLUDE} --await-models") >= 0
+    let volume_args = "origin/master --batch 30 --exclude {CUDA_ONLY_EXCLUDE} --await-models"
+    t |> success(find(volume_run, volume_args) >= 0
         && find(volume_run, "--reap-images") < 0,
         "a run on the volume's models directory reaps nothing: the images there are every pod's")
     t |> success(find(run, "> {at}/cuda.log") >= 0,
@@ -183,7 +185,8 @@ def test_fleet_home_commands(t : T?) {
     var own_batch = FleetArgs()
     own_batch.args = "--changed --batch 12"
     let caller = run_command(own_batch, "20261027-000000", "vulkan", false)
-    t |> success(find(caller, "--changed --batch 12 --exclude {CUDA_ONLY_EXCLUDE} --reap-images") >= 0
+    let caller_args = "--changed --batch 12 --exclude {CUDA_ONLY_EXCLUDE} --reap-images"
+    t |> success(find(caller, caller_args) >= 0
             && find(caller, "--batch 30") < 0,
         "the caller's --batch wins, one --batch on the line: {caller}")
     t |> equal(batched_args("--changed --batch=12"), "--changed --batch=12", "--batch=<n> is the caller's too")
@@ -363,7 +366,8 @@ def test_fleet_model_free_once(t : T?) {
     for (seat in home_plan(two)) {
         let run = run_command(cfg, "20261027-000000", seat.home, seat.model_free)
         let whole = find(run, "--suite model-free --await-models") >= 0
-        let slice_args = "--suite model-free --only {VULKAN_FREE_ONLY} --exclude {CUDA_ONLY_EXCLUDE} --await-models"
+        let slice_args = ("--suite model-free --only {VULKAN_FREE_ONLY}"
+            + " --exclude {CUDA_ONLY_EXCLUDE} --await-models")
         let vk_slice = find(run, slice_args) >= 0
         t |> success(seat.home == "cuda" ? whole && !vk_slice : vk_slice && !whole,
             "two pods: the CUDA home runs the suite whole, the Vulkan home its Vulkan files: {run}")
@@ -379,29 +383,41 @@ def test_fleet_model_free_once(t : T?) {
     t |> success(find(solo, "--suite model-free --await-models") >= 0, "the lone pod's Vulkan command carries it: {solo}")
 }
 
-[test(description = "A two-pod fleet's Vulkan home leaves out the CUDA-only files (`CUDA_ONLY_EXCLUDE`) in its given command, its model list and its model-free slice, with one `--exclude` that joins a caller's own; the CUDA home and a lone pod leave out none")]
+[test(description = "A two-pod fleet's Vulkan home leaves out the CUDA-only files (`CUDA_ONLY_EXCLUDE`) in its model list, its model-free slice and its given command by one `--exclude` of the fleet's, under the default environment and under a caller `--env` that keeps dasCUDA, where the runner's own exclusion (`run_exclusion`) drops nothing; under the default the runner drops them too; the CUDA home and a lone pod leave out none; a caller's `--exclude` takes the tokens")]
 def test_fleet_cuda_only_excluded(t : T?) {
-    let cfg = FleetArgs()
     let exclude = " --exclude {CUDA_ONLY_EXCLUDE}"
-    let vulkan = run_command(cfg, "20261027-000000", "vulkan", false)
-    t |> success(find(vulkan, "--batch 30{exclude} --list-models") >= 0
-            && find(vulkan, "--batch 30{exclude} --reap-images") >= 0,
-        "the paired Vulkan home's model list and given command leave the CUDA-only files out: {vulkan}")
-    t |> success(find(vulkan, "--only {VULKAN_FREE_ONLY}{exclude} --await-models") >= 0,
-        "and so does its model-free slice: {vulkan}")
-    let cuda = run_command(cfg, "20261027-000000", "cuda", true)
-    t |> success(find(cuda, CUDA_ONLY_EXCLUDE) < 0, "the CUDA home leaves out none: {cuda}")
-    let solo = run_command(cfg, "20261027-000000", "vulkan", true)
-    t |> success(find(solo, CUDA_ONLY_EXCLUDE) < 0, "nor does a lone pod, which runs both homes' files: {solo}")
+    let files <- ["tests/test_cuda_kernels.das", "tests/test_cuda_tts_kernels.das",
+        "tests/test_vulkan_kernels.das"]
+    var keeps_cuda = FleetArgs()
+    keeps_cuda.env = "{keeps_cuda.env} DASLLAMA_DISABLE_MODULES="
+    for (cfg, runner_drops in fixed_array(FleetArgs(), keeps_cuda), fixed_array(true, false)) {
+        let vulkan = run_command(cfg, "20261027-000000", "vulkan", false)
+        t |> success(find(vulkan, "--batch 30{exclude} --list-models") >= 0
+                && find(vulkan, "--batch 30{exclude} --reap-images") >= 0
+                && find(vulkan, "--only {VULKAN_FREE_ONLY}{exclude} --await-models") >= 0,
+            "env `{cfg.env}`: the paired Vulkan home's three commands leave them out: {vulkan}")
+        let disabled = home_disabled_modules(cfg.env, "vulkan", true)
+        var inscope dropped <- run_exclusion(files, "", disabled)
+        t |> equal(length(dropped.kept), runner_drops ? 1 : 3,
+            "env `{cfg.env}`: the runner's own drop follows the children's disabled modules")
+    }
+    for (home, model_free in fixed_array("cuda", "vulkan"), fixed_array(true, true)) {
+        let run = run_command(FleetArgs(), "20261027-000000", home, model_free)
+        t |> success(find(run, CUDA_ONLY_EXCLUDE) < 0,
+            "{home}, model-free {model_free}: the CUDA-only files stay: {run}")
+    }
     var own = FleetArgs()
     own.args = "--changed --exclude test_gemma"
     let merged = run_command(own, "20261027-000000", "vulkan", false)
-    t |> success(find(merged, "--exclude test_gemma,{CUDA_ONLY_EXCLUDE} --batch 30 --reap-images") >= 0,
+    let merged_args = "--changed --exclude test_gemma,{CUDA_ONLY_EXCLUDE} --batch 30 --reap-images"
+    t |> success(find(merged, merged_args) >= 0,
         "a caller's --exclude takes the tokens: {merged}")
     t |> equal(length(split(merged, "--exclude test_")) - 1, 3,
         "one --exclude a command - the model list's, the slice's, the run's: {merged}")
-    t |> equal(excluded_args("--changed --exclude=a", "b"), "--changed --exclude=a,b", "--exclude=<tokens> takes them too")
-    t |> equal(excluded_args("--changed", "b"), "--changed --exclude b", "and arguments with none gain one")
+    t |> equal(excluded_args("--changed --exclude=a", "b"), "--changed --exclude=a,b",
+        "--exclude=<tokens> takes them too")
+    t |> equal(excluded_args("--changed", "b"), "--changed --exclude b",
+        "and arguments with none gain one")
 }
 
 [test(description = "Each home's run warms the CUDA kernels (cuda_prewarm.das) after the copier starts and ahead of the model-free suite, in the pod's tree; a red prewarm reds RUN-EXIT without stopping the suites; the status reads its line; the tool's line and exit code read its counts")]
@@ -524,4 +540,58 @@ def test_fleet_home_modules(t : T?) {
     t |> success(owns && !home_default, "the caller's value is the run's: {run}")
     let flags = "./bin/daslang --disable-module dasCUDA --disable-module dasVulkan -jit"
     t |> success(find(run, flags) >= 0, "and its prewarm's: {run}")
+}
+
+[test(description = "A fleet file that records each pod's home seats it there whatever its order or index, a pod with no recorded home takes the first home left, `unseated_homes` names the homes `up` fills - the CUDA home's beside a kept Vulkan pod and the Vulkan home's beside a kept CUDA pod - and the model-free suite goes to the last seated home")]
+def test_fleet_recorded_homes(t : T?) {
+    let swapped <- Fleet(pods <- [FleetPod(id = "c", index = 1, home = "cuda"), FleetPod(id = "v", index = 2, home = "vulkan")])
+    let plan <- home_plan(swapped)
+    t |> success(plan[0].home == "vulkan" && plan[0].seat == 1 && plan[1].home == "cuda" && plan[1].seat == 0,
+        "each pod sits at the home its file records, not at its place in the file: {plan}")
+    t |> success(!plan[0].model_free && plan[1].model_free, "the CUDA home runs the model-free suite: {plan}")
+    let kept_vulkan <- Fleet(pods <- [FleetPod(id = "v", index = 1, home = "vulkan")])
+    let up_cuda <- unseated_homes(kept_vulkan)
+    t |> equal(length(up_cuda), 1, "one home has no pod: {up_cuda}")
+    t |> equal(up_cuda[0], "cuda", "beside the kept Vulkan pod `up` makes the CUDA home's")
+    let kept_cuda <- Fleet(pods <- [FleetPod(id = "c", index = 2, home = "cuda")])
+    let lone <- home_plan(kept_cuda)
+    t |> success(lone[0].seat == -1 && lone[1].seat == 0 && lone[1].model_free,
+        "a lone CUDA pod stays the CUDA home, the Vulkan home unseated: {lone}")
+    let up_vulkan <- unseated_homes(kept_cuda)
+    t |> success(length(up_vulkan) == 1 && up_vulkan[0] == "vulkan", "beside a kept CUDA pod `up` makes the Vulkan home's: {up_vulkan}")
+    let mixed <- Fleet(pods <- [FleetPod(id = "old", index = 1), FleetPod(id = "c", index = 3, home = "cuda")])
+    let legacy <- home_plan(mixed)
+    t |> success(legacy[0].seat == 0 && legacy[1].seat == 1,
+        "a pod whose file records no home takes the home left: {legacy}")
+    let none : Fleet
+    let empty_up <- unseated_homes(none)
+    t |> success(length(empty_up) == 2 && empty_up[0] == "vulkan" && empty_up[1] == "cuda",
+        "an empty fleet takes the Vulkan home's pod first: {empty_up}")
+    let full <- unseated_homes(swapped)
+    t |> equal(length(full), 0, "a fleet with both homes seated has no home to fill")
+}
+
+[test(description = "`down` deletes the fleet file's pods only: every one with no --home, the named home's pod alone with one - the other home's pod kept, nothing for a home with no pod -, a --home that names no home refused; the pods it names are the file's ids, so another session's pod on the account (dasllama-q-4500b) is never one")]
+def test_fleet_down_selection(t : T?) {
+    let fleet <- Fleet(pods <- [FleetPod(id = "v1", name = "dasllama-fleet-1", index = 1, home = "vulkan"),
+                               FleetPod(id = "c2", name = "dasllama-fleet-2", index = 2, home = "cuda")])
+    let all <- down_ids(fleet, "")
+    t |> success(length(all) == 2 && all[0] == "v1" && all[1] == "c2", "no --home: every pod of the file: {all}")
+    let cuda <- down_ids(fleet, "cuda")
+    t |> success(length(cuda) == 1 && cuda[0] == "c2", "--home cuda: the CUDA home's pod alone, the Vulkan pod kept: {cuda}")
+    let vulkan <- down_ids(fleet, "vulkan")
+    t |> success(length(vulkan) == 1 && vulkan[0] == "v1", "--home vulkan: the Vulkan home's pod alone: {vulkan}")
+    let lone <- Fleet(pods <- [FleetPod(id = "v1", index = 1, home = "vulkan")])
+    t |> equal(length(down_ids(lone, "cuda")), 0, "a home with no pod: nothing to delete")
+    let legacy <- Fleet(pods <- [FleetPod(id = "a", index = 1), FleetPod(id = "b", index = 2)])
+    let legacy_cuda <- down_ids(legacy, "cuda")
+    t |> success(length(legacy_cuda) == 1 && legacy_cuda[0] == "b", "a file with no recorded homes: the CUDA seat's pod: {legacy_cuda}")
+    t |> equal(home_refusal(""), "", "no --home names every home")
+    t |> equal(home_refusal("cuda"), "", "--home cuda stands")
+    let wrong = home_refusal("dasllama-q-4500b")
+    t |> success(find(wrong, "--home takes vulkan or cuda") >= 0, "a --home naming no home is refused: {wrong}")
+    for (one in all) {
+        t |> success(one == "v1" || one == "c2", "a deleted id is one of the file's: {one}")
+    }
+    t |> success(has_value(create_argv(FleetArgs(), 1, "key"), "dasllama-fleet-1"), "`up` names its pods dasllama-fleet-<index>")
 }
