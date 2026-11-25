@@ -53,7 +53,8 @@ def public dasllama_runtime_snapshot(metal_crowns : string) : JsonValue? {
         metal_cvt_min_rows = metal_cvt_min_rows(), metal_split_k_tgs = metal_split_k_tgs(), metal_split_k_tgs_kq = metal_split_k_tgs_kq(),
         metal_q8_n32_rows = metal_q8_n32_rows(), metal_split_k_tgs_base = metal_split_k_tgs_base(),
         metal_split_k_tgs_kq_base = metal_split_k_tgs_kq_base(), metal_devw_min_tgs = metal_devw_min_tgs(),
-        metal_split_k_tgs_hmm = metal_split_k_tgs_hmm(), vk_split_k_tgs = vk_split_k_tgs(), cud_split_k_tgs = cud_split_k_tgs()))
+        metal_split_k_tgs_hmm = metal_split_k_tgs_hmm(), vk_split_k_tgs = vk_split_k_tgs(), cud_split_k_tgs = cud_split_k_tgs(),
+        vk_alt_stamps = vk_alt_stamps()))
 }
 
 // one METAL_TWIN race row: log it and bank the family when the tensor twin won. Untyped `r` on
@@ -131,6 +132,20 @@ def public dasllama_vulkan_knee_race() : bool {
     return ran
 }
 
+//! The Vulkan home's alternate stamps (`vk_alt_stamp_race`) where the GPU tier is asked for and a device comes up; false = no race
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps")]
+def public dasllama_vulkan_alt_race() : bool {
+    var ran = false   // nolint:LINT003,LINT019 — written by the vulkan arm
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (gpu_want_arms_tier() && !gpu_want_cuda() && vk_moe_init()) {
+            let bits = vk_alt_stamp_race()
+            to_log(LOG_INFO, "dasLLAMA vulkan: alternate stamps vk_alt_stamps={bits}\n")
+            ran = true
+        }
+    }
+    return ran
+}
+
 //! The CUDA short window's knee (`cud_split_knee_race`) where the CUDA home is asked for and its device comes up; false = no race
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split")]
 def public dasllama_cuda_knee_race() : bool {
@@ -175,6 +190,7 @@ def public dasllama_race_runtime_section() : bool {
         let crowns = join(race.wins, ",")
         dasllama_metal_knee_race()
         dasllama_vulkan_knee_race()
+        dasllama_vulkan_alt_race()
         dasllama_cuda_knee_race()
         tune_progress_kernel_end("metal_crowns", crowns, !race.ran ? "skipped" : (empty(crowns) ? "holds" : "beats"))
         tune_progress_finish()

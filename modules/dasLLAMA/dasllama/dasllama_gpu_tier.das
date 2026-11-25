@@ -164,6 +164,7 @@ def public rdec_norms_final_base(n_layers, dim : int64) : int64 => n_layers * RD
 def public rdec_norm_off(l, kind, dim : int64) : int64 => (l * RDEC_NORM_ROWS + kind) * dim
 
 let public RDEC_AR_MAX_DIM = 8_192l   //! the residual step's row stash: 32 KB of the 48 KiB workgroup memory the tier requires of a device
+let public RDEC_AR_SMALL_DIM = 8_064l   //! the small-slab twins' row stash: the widest whose stamp, with its 512 B of reduce partials, fits a 32 KiB shared-memory cap
 let public RDEC_MIR_SLACK_ROWS = 16l   //! the K/V rows a flash fragment may read past a window's end
 let public RDEC_MIR_SLACK = RDEC_MIR_SLACK_ROWS * RDEC_AR_MAX_DIM   //! slack elements past each K/V mirror's last plane and past a block codec's shadow row
 

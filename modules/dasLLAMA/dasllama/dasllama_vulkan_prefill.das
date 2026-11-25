@@ -61,7 +61,7 @@ var private g_dn_chunk_announced = false
 
 //! the chunked scan serves the window's recurrent layers: the knob on and the KHR tiles present; the form announced once, with why not
 def private vk_dn_chunk_on : bool {
-    let on = g_env_vulkan.dn_chunk != 0l && khr_kq_tile_on() && ensure_dn_scan_chunk_cls()
+    let on = vk_dn_chunk_wanted() && ensure_dn_scan_chunk_cls()
     announce_dn_chunk(on) if (!g_dn_chunk_announced)
     return on
 }
@@ -69,7 +69,9 @@ def private vk_dn_chunk_on : bool {
 [cold_path]
 def private announce_dn_chunk(on : bool) {
     g_dn_chunk_announced = true
-    let form = on ? "the chunked form" : (g_env_vulkan.dn_chunk == 0l ? "a token at a time (DASLLAMA_DN_CHUNK=0)" : "a token at a time (no KHR cooperative-matrix tile at subgroup 32)")
+    let why = (g_env_vulkan.dn_chunk == 0l ? "DASLLAMA_DN_CHUNK=0"
+        : (!khr_kq_tile_on() ? "no KHR cooperative-matrix tile at subgroup 32" : "the box's served set, vk_alt_stamps"))
+    let form = on ? "the chunked form" : "a token at a time ({why})"
     to_log(LOG_INFO, "dasLLAMA vulkan tier: the window's deltanet scan: {form}\n")
 }
 
@@ -3867,7 +3869,8 @@ def vk_moe_attn(var yp : float?; var kp : float?; var vp : float?;
     let half = rot / 2l
     let n_kv = kv_dim / hs
     let kv_mul = n_kv > 0l ? n_heads / n_kv : 0l
-    assert(npos <= AT_CTX && qd <= AT_MAX_QD && kv_dim <= AT_MAX_KV
+    let qd_cap = min(AT_MAX_QD, row_slab_dim(g_gpu.max_wg_bytes))   // the prep's row: its small-slab twin holds less
+    assert(npos <= AT_CTX && qd <= qd_cap && kv_dim <= AT_MAX_KV
            && (hs == 128l || hs == 256l) && half >= 1l && 2l * half <= hs
            && n_heads * hs == qd && n_kv * hs == kv_dim && n_heads == n_kv * kv_mul
            && n_heads <= 64l && dim % 32l == 0l && kv_dim % 32l == 0l
