@@ -1242,11 +1242,11 @@ def test_intrin_gpu(t : T?) {
             }
             var err : string
             var p = IntrinParams(a8 = buf_upload(a8), b8 = buf_upload(b8), row_scales = buf_upload(rs), col_scales = buf_upload(cs), o = buf_fill(512, 0.0), misc = buf_fill(128, 0.0),
-                a16 = buf_upload(a16), b16 = buf_upload(b16), o16 = buf_fill(1024, 0.0))
+                a16 = buf_upload(a16), b16 = buf_upload(b16), o16 = buf_fill(1280, 0.0))
             t |> success(launch(cc, intrin_cuda, "intrin", intrin_cuda_entry, p, 32u, err, intrin_cuda_smem, 32u), "intrin launch: {err}")
             let go <- buf_download(p.o, 512, type<float>)
             let gm <- buf_download(p.misc, 128, type<uint>)
-            let g16 <- buf_download(p.o16, 1024, type<float>)
+            let g16 <- buf_download(p.o16, 1280, type<float>)
             intrin_int8_products(t, go, a8, b8, rs, cs)
             var badm = 0
             for (l in range(32)) {
@@ -1260,6 +1260,7 @@ def test_intrin_gpu(t : T?) {
             var badtt = 0
             var bade = 0
             var bads = 0
+            var badh = 0
             for (m in range(16)) {
                 for (n in range(16)) {
                     var ab = 0.0
@@ -1272,12 +1273,14 @@ def test_intrin_gpu(t : T?) {
                     badtt += g16[256 + m * 16 + n] == atbt ? 0 : 1
                     bade += g16[512 + m * 16 + n] == go[m * 16 + n] ? 0 : 1
                     bads += g16[768 + m * 16 + n] == float((m >= 8 ? 2 : 0) | (n >= 8 ? 4 : 0) | (n & 1)) ? 0 : 1
+                    badh += g16[1024 + m * 16 + n] == ab * (m >= 8 ? 2.0 : 0.5) ? 0 : 1
                 }
             }
             t |> equal(badt, 0, "the f16 product with B off a [k][n] tile through the transposing ldmatrix matches")
             t |> equal(badtt, 0, "the f16 product with A off a [k][m] tile through the transposing ldmatrix matches")
             t |> equal(bade, 0, "every lane element read through mma_acc_get sits at mma_acc_row / mma_acc_col of the stored tile")
             t |> equal(bads, 0, "an accumulator set element by element to its indices stores them at the same map")
+            t |> equal(badh, 0, "an f16 accumulator's rows scaled in its registers - the lane's first row halved, its second doubled - read back through mma_acc_get")
             for (q in [p.a8, p.b8, p.row_scales, p.col_scales, p.o, p.misc, p.a16, p.b16, p.o16]) {
                 cuda_mem_free(q)
             }

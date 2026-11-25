@@ -71,6 +71,10 @@ def public ldmatrix_trans(var m : coopmatB_f16_16x16; p : uint4?) : void {}
 def public mma_acc_get(f : coopmatAcc_f32_16x16; k : int) : float => 0.0
 [unused_argument(f, k, v), sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def public mma_acc_set(var f : coopmatAcc_f32_16x16; k : int; v : float) : void {}
+[unused_argument(f, k), sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
+def public mma_acc_get(f : coopmatAcc_f16_16x16; k : int) : float => 0.0
+[unused_argument(f, lo, hi), sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
+def public mma_acc_scale_rows(var f : coopmatAcc_f16_16x16; lo, hi : uint) : void {}
 
 [arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def public mma_acc_row(lane : uint; k : int) : uint => (lane >> 2u) + ((k & 2) != 0 ? 8u : 0u)

@@ -439,7 +439,7 @@ def test_cuda_reject_methods(t : T?) {
     }
 }
 
-[test(description = "A KHR tile form with a bad arity, operand type or layout fails to compile.")]
+[test(description = "A KHR tile form with a bad arity, operand type or layout fails to compile.", timeout = 1200)]
 def test_cuda_reject_khr_tiles(t : T?) {
     t |> run("a KHR tile form: an arity, an operand type, a layout") <| @(t : T?) {
         check_arms(t, [
@@ -479,6 +479,15 @@ def test_cuda_reject_khr_tiles(t : T?) {
             tile_arm("_reject_mma_block_scaled_mx_frags", "mma_block_scaled_mx(f32 accumulator, e2m1 A fragment, e2m1 B fragment",
                 "def mma_block_scaled_mx(var f : coopmatAcc_f32_16x16; a : coopmatA_f16_16x16; b : coopmatB_f16_16x16; sa, sb0, sb1 : uint) \{\n    let z = sa + sb0 + sb1\n\}",
                 "        var f : coopmatAcc_f32_16x16\n        var a : coopmatA_f16_16x16\n        var b : coopmatB_f16_16x16\n        mma_block_scaled_mx(f, a, b, 1u, 1u, 1u)"),
+            tile_arm("_reject_mma_acc_scale_rows_acc", "mma_acc_scale_rows(f16 accumulator, the first row's factor pair, the second row's)",
+                "def mma_acc_scale_rows(var f : coopmatAcc_f32_16x16; lo, hi : uint) \{\n    let z = lo + hi\n\}",
+                "        var f : coopmatAcc_f32_16x16\n        mma_acc_scale_rows(f, 1u, 1u)"),
+            tile_arm("_reject_mma_acc_get_frag", "mma_acc_get(f32 or f16 accumulator, k): the lane's element k (0..7)",
+                "def mma_acc_get(a : coopmatA_f16_16x16; k : int) : float => 0.0",
+                "        var a : coopmatA_f16_16x16\n        o[0] = mma_acc_get(a, 1)"),
+            tile_arm("_reject_mma_acc_set_acc", "mma_acc_set(f32 or f16 accumulator, k, value): the lane's element k (0..7)",
+                "def mma_acc_set(var f : coopmatAcc_s32_16x16; k : int; v : float) \{\n    let z = float(k) + v\n\}",
+                "        var f : coopmatAcc_s32_16x16\n        mma_acc_set(f, 1, 2.0)"),
             tile_arm("_reject_mma_scale_cols_acc", "mma_scale_cols(f32 accumulator, column scales)",
                 "def mma_scale_cols(var f : coopmatAcc_s32_16x16; cs : float4) \{\n    let z = cs.x\n\}",
                 "        var f : coopmatAcc_s32_16x16\n        mma_scale_cols(f, float4(1.0))"),
