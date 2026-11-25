@@ -69,6 +69,7 @@ struct private DfRing {
     rv : uint64
     s_qkn : VkDescriptorSet    //! the commit's K rows normed and roped into the ring
     s_attn_tile : VkDescriptorSet
+    s_attn_tile_heads : VkDescriptorSet   //! the same planes under the grouped tile's stamp
 }
 
 struct private DflashVk {
@@ -202,7 +203,7 @@ def private df_why(dr : DflashDrafter) : string {
     delete sites
     return "a weight plane's decode GEMV did not build on this device" if (!served)
     let cls_fmt = g_rd.cls_fmt_marker
-    let stamps = (ensure_dflash_conv_cls() && ensure_dflash_qkn_cls() && ensure_dflash_attn_tile_cls() && ensure_dflash_attn_merge_cls() && ensure_cls_ar() && ensure_cls_dn_rq()
+    let stamps = (ensure_dflash_conv_cls() && ensure_dflash_qkn_cls() && ensure_dflash_attn_tile_cls() && ensure_dflash_attn_tile_heads_cls() && ensure_dflash_attn_merge_cls() && ensure_cls_ar() && ensure_cls_dn_rq()
         && ensure_cls_q8k_rq() && ensure_q8_actrq_cls() && ensure_q8k_actrq_cls() && gemv_cls_ensure(cls_fmt) && gemv_cls_ensure_n(cls_fmt)
         && (g_rd.emb_blk < 0l || emb_cls_ensure(g_rd.emb_fmt)) && (g_rd.emb_f32 == 0ul || ensure_emb_gather_f32_cls()))
     return "a kernel of the pass did not build on this device" if (!stamps)
@@ -587,7 +588,12 @@ def private df_layer(var g : DflashVk; dr : DflashDrafter; raw : VkCommandBuffer
     var pa = GkDflashAttnArgs(rows = uint(rows), pos0 = uint(pos), lo = uint(lo), nctx = uint(nctx), w = uint(dr.window), hs = uint(dr.hs),
         nheads = uint(dr.n_heads), grp = uint(dr.n_heads / dr.n_kv), scale = dr.attn_scale, rbase = 0u,
         koff = lbase, voff = lbase)
-    enc_dflash_attn_tile_cls(raw, h, ring.s_attn_tile, pa, dr.n_heads * rows * tiles)
+    let wgs = gk_dflash_attn_heads_wgs(rows, dr.n_heads, dr.n_heads / dr.n_kv, tiles)
+    if (gk_dflash_attn_grouped(dr.n_heads / dr.n_kv)) {
+        enc_dflash_attn_tile_heads_cls(raw, h, ring.s_attn_tile_heads, pa, wgs)
+    } else {
+        enc_dflash_attn_tile_cls(raw, h, ring.s_attn_tile, pa, wgs)
+    }
     enc_dflash_attn_merge_cls(raw, h, g.s_attn_merge, pa, dr.n_heads * rows)
     df_rq(g, raw, h, g.s_rq_att, 0l, rows * qd, g.sites[dflash_site(l, 4)].fmt)
     df_gemv(g, raw, h, dflash_site(l, 4), rows)
@@ -647,6 +653,8 @@ def private df_ring(var g : DflashVk; uid : uint64) : DfRing {
             s_qkn = set_dflash_qkn_cls(fixed_array(g.kb, g.fblob, g.invf, rk), fixed_array(g.kv_bytes, g.fblob_bytes, g.invf_bytes, g.ring_bytes),
                 fixed_array(B_KB, 0u, 0u, B_RING)),
             s_attn_tile = set_dflash_attn_tile_cls(fixed_array(g.qn, g.kn, g.vb, rk, rv, g.tp),
+                fixed_array(g.q_bytes, g.kv_bytes, g.kv_bytes, g.ring_bytes, g.ring_bytes, g.tp_bytes), fixed_array(B_QN, B_KN, B_VB, B_RING, B_RING, B_TP)),
+            s_attn_tile_heads = set_dflash_attn_tile_heads_cls(fixed_array(g.qn, g.kn, g.vb, rk, rv, g.tp),
                 fixed_array(g.q_bytes, g.kv_bytes, g.kv_bytes, g.ring_bytes, g.ring_bytes, g.tp_bytes), fixed_array(B_QN, B_KN, B_VB, B_RING, B_RING, B_TP)))
     }
     return g.rings?[uid] ?? DfRing()

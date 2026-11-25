@@ -10,6 +10,81 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-11-24, `direction-grade`) - the block drafter's attention tile a (row, the query heads of a K/V head,
+  key tile) a workgroup against a (row, head, key tile): the pair alone and the 27B's DFlash2 rounds on the discrete
+  homes (RunPod RTX PRO 4500 Blackwell 32 GB).** The box, the reference and the unset flags are the nv4 device unit
+  entry's of this date. Exe: the daslang binary built from origin/master 8c75592c3c's C++, `-jit`, running the
+  `modules/dasLLAMA` sources of this change for the after arm and of its parent for the before arm (`modules/dasLLAMA`
+  tree e8ddfa24d318: the probe over the one tile kernel, a workgroup a (row, head, tile)). The pair alone, no model loaded
+  and no output compared (`timing-only`): `DASLLAMA_GPU=1 DASLLAMA_CUDA=1 bin/daslang -jit
+  modules/dasLLAMA/harness/dflash_attn_probe.das -- --rows <8|16> [--heads <n> --kv 8]` - synthetic planes, heads of
+  128, a window of 2048, 5 layers' rings read in turn, under the tile the drafter's driver takes at the geometry; the
+  tile launch's microseconds a layer at each ring fill, the best of five chains of 50 launches after one warm chain,
+  two passes of the line a tree (the merge launch reads 2.3 to 2.8 us a layer in every row). 32 query heads on 8
+  K/V heads is the 27B drafter's geometry and a workgroup of four heads, 16 on 8 a workgroup of two, and 24 on 8 a
+  group of three, which stays with the tile a head:
+
+    | query heads on K/V heads, rows | fill | before | before, second pass | after | after, second pass |
+    | :--- | ---: | ---: | ---: | ---: | ---: |
+    | 32 on 8, 8 rows | 0 | 12.3 | 12.2 | 13.7 | 13.7 |
+    | 32 on 8, 8 rows | 256 | 133.3 | 133.1 | 70.5 | 70.5 |
+    | 32 on 8, 8 rows | 512 | 189.2 | 189.7 | 105.4 | 105.6 |
+    | 32 on 8, 8 rows | 1024 | 307.7 | 306.7 | 110.5 | 110.5 |
+    | 32 on 8, 8 rows | 2048 | 544.4 | 542.2 | 197.6 | 197.7 |
+    | 32 on 8, 16 rows | 0 | 21.1 | 21.0 | 16.2 | 16.2 |
+    | 32 on 8, 16 rows | 256 | 193.0 | 192.5 | 105.4 | 105.9 |
+    | 32 on 8, 16 rows | 512 | 311.9 | 310.5 | 122.4 | 122.7 |
+    | 32 on 8, 16 rows | 1024 | 533.4 | 530.6 | 193.6 | 193.1 |
+    | 32 on 8, 16 rows | 2048 | 999.7 | 996.7 | 335.9 | 336.0 |
+    | 16 on 8, 8 rows | 0 | 9.0 | 9.0 | 12.8 | 12.9 |
+    | 16 on 8, 8 rows | 256 | 113.1 | 113.5 | 69.5 | 69.4 |
+    | 16 on 8, 8 rows | 512 | 135.5 | 135.1 | 104.5 | 103.0 |
+    | 16 on 8, 8 rows | 1024 | 190.1 | 190.1 | 109.3 | 109.5 |
+    | 16 on 8, 8 rows | 2048 | 332.4 | 331.7 | 194.9 | 194.7 |
+    | 24 on 8, 8 rows | 0 | 9.8 | 9.7 | 9.7 | 9.7 |
+    | 24 on 8, 8 rows | 256 | 125.6 | 125.2 | 125.0 | 124.6 |
+    | 24 on 8, 8 rows | 512 | 145.4 | 144.5 | 144.9 | 144.9 |
+    | 24 on 8, 8 rows | 1024 | 251.7 | 251.2 | 251.7 | 250.6 |
+    | 24 on 8, 8 rows | 2048 | 439.2 | 438.2 | 436.4 | 437.3 |
+
+  At a ring that holds context the grouped tile takes 1.3 to 3.0 times less than the tile a head; at an empty ring it
+  is up to 4 us a layer slower. The 24 on 8 rows are the one kernel on both sides.
+
+  The grouped tile forced at the group of three (`--rows 8 --heads 24 --kv 8 --grouped`), where a workgroup scores one
+  head, beside the tile a head there - the reading the driver's rule rests on (`gk_dflash_attn_grouped`): the
+  grouped tile is the slower at four of the five fills.
+
+    | fill | the tile a head | second pass | the grouped tile | second pass |
+    | ---: | ---: | ---: | ---: | ---: |
+    | 0 | 9.7 | 9.7 | 20.8 | 20.7 |
+    | 256 | 125.0 | 124.6 | 109.1 | 110.0 |
+    | 512 | 144.9 | 144.9 | 163.9 | 163.3 |
+    | 1024 | 251.7 | 250.6 | 252.6 | 252.5 |
+    | 2048 | 436.4 | 437.3 | 453.6 | 451.2 |
+
+  The served rounds (`out-of-process`): `bin/daslang -jit modules/dasLLAMA/harness/model_bench_run.das -- --gpu <home>
+  --out-dir <dir> --models-dir <models> --model Qwen3.8-27B-NVFP4-MTP-N4_0 --boot-seconds 2400 --only
+  dflash2,dflash2_nvfp4` (the runner starts the server and `harness/model_bench.das`, whose clock times a request),
+  in milliseconds a round - a request's generation time over its rounds, the reply's 512 tokens less its accepted
+  drafts - as the mean of three requests with the least and the most. Our round drafts the block's 7 and verifies 8
+  rows. The reference's columns are the nv4 device unit entry's run: at 3 drafts its `--spec-draft-n-max` default, at 7
+  the same server with `--spec-draft-n-max 7`. A round's cost repeats to a fraction of a percent, where a row's tok/s
+  moves with the reply's text, which differs between the two servers:
+
+    | home | drafter | context | before | after | | llama.cpp, 3 drafts | llama.cpp, 7 drafts |
+    | :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: |
+    | CUDA | Q8_0 | none | 34.61 (34.45 - 34.82) | 34.29 (34.12 - 34.44) | -0.9% | 29.85 (29.77 - 29.92) | 37.22 (37.01 - 37.36) |
+    | CUDA | Q8_0 | 4078 tokens | 39.45 (39.35 - 39.54) | 38.03 (37.97 - 38.07) | -3.6% | 30.28 (30.26 - 30.31) | 38.04 (37.96 - 38.12) |
+    | CUDA | NVFP4 | none | 34.16 (34.06 - 34.24) | 33.95 (33.90 - 34.04) | -0.6% | 29.04 (29.01 - 29.08) | 38.59 (37.85 - 39.96) |
+    | CUDA | NVFP4 | 4078 tokens | 38.97 (38.87 - 39.06) | 37.45 (37.33 - 37.62) | -3.9% | 29.60 (29.51 - 29.76) | 40.19 (39.77 - 40.64) |
+    | Vulkan | Q8_0 | none | 46.36 (45.56 - 46.77) | 45.63 (44.09 - 46.71) | -1.6% | 58.31 (58.03 - 58.83) |  |
+    | Vulkan | Q8_0 | 4078 tokens | 50.81 (50.39 - 51.19) | 49.57 (49.52 - 49.67) | -2.4% | 60.25 (59.86 - 60.60) |  |
+    | Vulkan | NVFP4 | none | 44.36 (43.89 - 44.78) | 43.92 (43.63 - 44.13) | -1.0% | 59.07 (58.75 - 59.24) |  |
+    | Vulkan | NVFP4 | 4078 tokens | 49.59 (49.23 - 49.96) | 47.88 (47.75 - 48.04) | -3.4% | 60.76 (60.17 - 61.64) |  |
+
+  What the tile leaves: a row still reads every key in view (the rows of a block do not share a tile), and the trunk's
+  verify rows' attention grows with the context beside it.
+
 - **MEASURED (2026-11-24, `direction-grade`) - the nv4 device unit and the block-rounds ask: the all-NVFP4 27B and the
   NVFP4 35B served on both discrete homes against llama.cpp 4483b2b, the 27B before and after, and the verify rows'
   device scratch (RunPod RTX PRO 4500 Blackwell 32 GB).** Box: the RunPod RTX PRO 4500 Blackwell 32 GB (`nvidia-smi`:

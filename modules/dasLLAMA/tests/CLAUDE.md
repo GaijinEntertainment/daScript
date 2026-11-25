@@ -1034,7 +1034,10 @@ against the dot in double, the poisoned lead element the control; `f32_rows_gate
 the float4 router stamps on the lattice, with and without the bias row, the element-walk stamps off it (dim 66, base 2, dim 515 on an odd base, the one-column
 walk past whole strides) - NaN past both row ends, exact against the dot in double, the poisoned lead element the control; `geglu_side_gate`, `ple_finish_gate` - the finish's `XSCALE` stamp (`GkPleFinish`), the finish without the
 prescale its control); the side rows' gather rides the token-table family, the misc file's embed gates. The misc file's `cls_select_gate` runs the selection kernel on the template both homes stamp (`GkClsSelect`) over the Vulkan cell's
-six rows at a 262144 and a 1000 vocab against `_sel_oracle.das`'s reading. Its `df_topk_gate` and `df_walk_gate` hold the
+six rows at a 262144 and a 1000 vocab against `_sel_oracle.das`'s reading. Its `df_attn_gate` holds the block attention's two stamps (`MetalDflashAttnTile`,
+`MetalDflashAttnMerge`) to `_dflash_oracle.das`'s softmax (`df_attn_fixture`) at the five shapes of the discrete homes' cell
+(`df_attn_case`: one tile, two, a head of 96, and K/V heads of one, two, four and six query heads), the softmax with no window the
+control. Its `df_topk_gate` and `df_walk_gate` hold the
 DFlash2 device selector to `_dflash_oracle.das`'s oracle (the fixture the CUDA home's walk cell, `test_cud_dflash_walk` in
 `test_cuda_tower_asr.das`, runs the same legs over through `_discrete_cells.das`'s `df_walk_case`; the Vulkan home's, `test_vkt_dflash_walk` in `test_vulkan_tower_kernels.das`, the same case; the discrete homes' top-k cells, `test_cud_dflash_topk` and `test_vkt_dflash_topk`, run this gate's five shapes through `df_topk_case`, and their pass-kernel cells, `test_cud_dflash_pass_kernels` and `test_vkt_dflash_pass_kernels`, the conv, norm-and-rope and block-attention cases) and to the engine's host twins (`dflash_top_k_row`, `dflash_walk`) id for id:
 the two-stage top-k (`MetalDflashTopkSlices`'s lists a slice against the oracle's list of each slice, `MetalDflashTopkMerge`'s rows
