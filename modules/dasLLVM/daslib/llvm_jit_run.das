@@ -23,6 +23,9 @@ require daslib/strings_boost
 require daslib/defer
 
 require daslib/fio
+require daslib/jobque_boost
+require daslib/safe_addr
+require math
 require daslib/option
 require daslib/result
 require jit
@@ -38,7 +41,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0xb6ad06f91d81b170ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x670ce6130f2bcf5eul
 
 [arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
@@ -443,13 +446,116 @@ def private remove_split_link_files(objs : array<string>; output_path : string) 
     remove(split_link_rsp_path(output_path), err)
 }
 
+//! the LLVM handles travel as integers: a channel clones the job
+//! into the worker's context, and a pointer field would be cloned
+//! as a pointer to own
+struct private SplitEmitJob {
+    mod : uint64
+    tm : uint64
+    pbo : uint64
+    pipeline : string
+    obj : string
+}
+
+struct private SplitEmitResult {
+    obj : string
+    error : string
+    passes_usec : int
+    emit_usec : int
+}
+
+def private run_split_emit_job(job : SplitEmitJob implicit) : SplitEmitResult {
+    var res = SplitEmitResult(obj = job.obj)
+    let mod = unsafe(reinterpret<LLVMOpaqueModule?>(job.mod))
+    let tm = unsafe(reinterpret<LLVMTargetMachineRef>(job.tm))
+    let pbo = unsafe(reinterpret<LLVMOpaquePassBuilderOptions?>(job.pbo))
+    let t0 = ref_time_ticks()
+    if (!empty(job.pipeline)) {
+        let err = LLVMRunPasses(mod, job.pipeline, tm, pbo)
+        if (err != null) {
+            let msg = LLVMGetErrorMessage(err)
+            res.error = "pass run failed: {msg}"
+            LLVMDisposeErrorMessage(msg)
+            return <- res
+        }
+    }
+    var verify_msg : string
+    let verify_action = LLVMVerifierFailureAction.LLVMReturnStatusAction
+    if (LLVMVerifyModule(mod, verify_action, safe_addr(verify_msg)) != 0) {
+        res.error = "post-optimize verify failed for {job.obj}: {verify_msg}"
+    }
+    LLVMDisposeMessage(verify_msg)
+    res.passes_usec = get_time_usec(t0)
+    return <- res if (!empty(res.error) || empty(job.obj))
+    let t1 = ref_time_ticks()
+    var emit_msg : string
+    let file_type = LLVMCodeGenFileType.LLVMObjectFile
+    if (LLVMTargetMachineEmitToFile(tm, mod, job.obj, file_type, safe_addr(emit_msg)) != 0) {
+        res.error = "emit failed for {job.obj}: {emit_msg}"
+        LLVMDisposeMessage(emit_msg)
+    }
+    res.emit_usec = get_time_usec(t1)
+    return <- res
+}
+
+def private report_split_emit(res : SplitEmitResult implicit; log_jit_time : bool) : bool {
+    if (!empty(res.error)) {
+        to_log(LOG_ERROR, "LLVM JIT: parallel emit: {res.error}\n")
+        return false
+    }
+    if (log_jit_time) {
+        let passes = double(res.passes_usec) / 1000000.0lf
+        let emit = double(res.emit_usec) / 1000000.0lf
+        to_log(LOG_INFO, "LLVM JIT time: job {res.obj} passes {passes} emit {emit}\n")
+    }
+    return true
+}
+
+//! optimize+emit every job on up to `threads` jobque jobs (<= 0 = the hardware job count), each partition
+//! owning its LLVMContext; jobs travel through channels so no string crosses a context; false on any failure
+def private run_split_emit(jobs : array<SplitEmitJob>; threads : int; log_jit_time : bool) : bool {
+    return true if (empty(jobs))
+    var ok = true
+    if (threads == 1 || length(jobs) == 1) {
+        for (job in jobs) {
+            ok = report_split_emit(run_split_emit_job(job), log_jit_time) && ok
+        }
+        return ok
+    }
+    with_job_que() {
+        let workers = clamp(threads > 0 ? threads : get_total_hw_jobs(), 1, length(jobs))
+        with_channel(1) $(todo) {
+            with_channel(workers) $(done) {
+                for (_ in range(workers)) {
+                    new_job() @() {
+                        while (todo |> pop_and_clone_one() $(job : SplitEmitJob#) {
+                                done |> push_clone(run_split_emit_job(job))
+                            }) {}
+                        todo |> release
+                        done |> notify_and_release
+                    }
+                }
+                for (job in jobs) {
+                    todo |> push_clone(job)
+                }
+                todo |> notify
+                done |> for_each_clone() $(res : SplitEmitResult#) {
+                    ok = report_split_emit(res, log_jit_time) && ok
+                }
+            }
+        }
+    }
+    return ok
+}
+
 // nolint:STYLE014
 // --jit-split-modules driver, three phases. A (serial das): partition `funcs` by owning das-module
 // (program order), codegen each partition into its OWN (context, module, engine) emitter state -
 // stashed in g_split_parts, the LAST left ambient for the shared install/finalize path. B: the
-// jit_par_emit_run C++ pool optimizes + emits every partition on K threads (K=1 = serial bring-up;
+// run_split_emit optimizes + emits every partition on K jobque jobs
+// (K=1 = serial bring-up;
 // one LLVMContext per job is LLVM's threading contract; the SAME LLVMRunPasses/EmitToFile calls as
-// the monolith path, entry points resolved through dasbind - libDaScript never links LLVM). C
+// the monolith path). C
 // (serial das): post-optimize verify per partition, then dispose everything but the ambient state.
 [macro_function, arch(at="../ARCHITECTURE_EXE.md#split-exe-lto")]
 def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<FunctionPtr>;  // nolint:STYLE037,STYLE038 - the split orchestration is one linear pipeline (the cache probe adds its branches); the phases share the re-pointed g_* state
@@ -477,7 +583,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
     to_log(LOG_INFO, "LLVM JIT: split codegen (--jit-split-modules) - {length(order)} das-module partitions, {thrTag} threads -> one {target.gen_exe ? "exe" : "DLL"}\n")
     // the dir must exist before the FIRST emit (a missing dir crashes LLVMTargetMachineEmitToFile)
     mkdir_rec(dir_name(output_path))
-    jit_par_emit_begin()
+    var emit_jobs : array<SplitEmitJob>
     g_split_parts |> reserve(length(order))
     // empty pipeline = pool skips optimization (the LLVM_ENABLE_OPT_PASS / LLVM_DEBUG_EVERYTHING rail)
     let pipeline = LLVM_ENABLE_OPT_PASS ? opt_pipeline_string(opt_level |> uint, size_level |> uint, sanitize) : ""
@@ -623,36 +729,23 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
     }
     let hide_run = main_ok && !lto_run && has_solid_part()
     if (main_ok) {
+        emit_jobs |> reserve(length(g_split_parts))
         for (p in g_split_parts) {
             // optimize only: LTO leaves as bitcode, a hide run emits in round two
-            jit_par_emit_add(p.mod, p.tm, p.pbo, pipeline, (lto_run || hide_run) ? "" : p.obj)
+            let obj = (lto_run || hide_run) ? "" : p.obj
+            emit_jobs |> push(SplitEmitJob(
+                mod = intptr(p.mod), tm = intptr(p.tm), pbo = intptr(p.pbo),
+                pipeline = pipeline, obj = obj))
         }
     }
     let tIr = get_time_usec(phase_tm)
     phase_tm = ref_time_ticks()
     // phase B - per-job walls logged by the pool under log_compile_time; all partitions cached -> zero jobs, skip the pool (and the LLVM symbol resolution) outright
     if (main_ok && !empty(g_split_parts)) {
-        let llvm_lib = __dasbind_get_library("llvm")
-        if (llvm_lib == null) {
-            reset_jit_globals_after_failure()
-            panic("LLVM JIT: split emit - can't resolve the LLVM library handle")
-        }
-        // resolve once + validate ALL entry points - a mismatched LLVM.dll names its missing symbol here
-        let lfn_names = ["LLVMRunPasses", "LLVMVerifyModule", "LLVMTargetMachineEmitToFile",
-                         "LLVMGetErrorMessage", "LLVMDisposeErrorMessage", "LLVMDisposeMessage"]
-        var lfns : array<void?>
-        lfns |> reserve(length(lfn_names))
-        for (nm in lfn_names) {
-            let p = llvm_lib |> get_function_address(nm)
-            if (p == null) {
-                reset_jit_globals_after_failure()
-                panic("LLVM JIT: split emit - can't resolve {nm} in the LLVM library")
-            }
-            lfns |> push(p)
-        }
-        var ok = jit_par_emit_run(split_threads, int(LLVMCodeGenFileType.LLVMObjectFile),
-            lfns[0], lfns[1], lfns[2], lfns[3], lfns[4], lfns[5], log_jit_time)
+        var ok = run_split_emit(emit_jobs, split_threads, log_jit_time)
         if (ok && hide_run) {
+            emit_jobs |> clear()
+            emit_jobs |> reserve(length(g_split_parts))
             for (p in g_split_parts) {
                 if (p.solid) {
                     hide_solid_array_bases(p.mod, p.ctx)
@@ -660,10 +753,11 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
                 if (dump_ir) {
                     dump_module_ir(dump_to, p.mod)
                 }
-                jit_par_emit_add(p.mod, p.tm, p.pbo, "", p.obj)
+                emit_jobs |> push(SplitEmitJob(
+                    mod = intptr(p.mod), tm = intptr(p.tm), pbo = intptr(p.pbo),
+                    pipeline = "", obj = p.obj))
             }
-            ok = jit_par_emit_run(split_threads, int(LLVMCodeGenFileType.LLVMObjectFile),
-                lfns[0], lfns[1], lfns[2], lfns[3], lfns[4], lfns[5], log_jit_time)
+            ok = run_split_emit(emit_jobs, split_threads, log_jit_time)
         }
         if (!ok) {
             reset_jit_globals_after_failure()
