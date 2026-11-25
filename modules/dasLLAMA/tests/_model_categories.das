@@ -13,13 +13,14 @@ require ../../../utils/common/text_lines.das   // split_trimmed: the comma lists
 //! serves the dense slice alone and reds on its declines. The fleet's
 //! CUDA pod and `tests/CLAUDE.md`'s command read this list, and
 //! `test_run_suites.das` holds every CUDA-reaching file to a token;
-//! the last line is the media towers' files, whose twins seat on the
-//! CUDA tower under the ask
+//! the line before the last is the media towers' files, whose twins
+//! seat on the CUDA tower under the ask, and the last the voice
+//! files, whose `@dev` forms serve the speech seats on the CUDA home
 let CUDA_PASS_ONLY = ("cuda,regions,resident_moe,embeddings,gptoss,gemma4_dense,"
     + "gemma4_moe,gemma2_3,gemma4_e2b,mtp_gemma_drafter,resident_hybrid,resident_qwen2,"
     + "resident_qwen3,resident_qwen_moe,resident_format_census,resident_llama,"
     + "audio,whisper,gigaam,rnnt,vad,gemma4uv,gemma4v,gemma3v,qwen3v,qwen25v,vision_chat,"
-    + "dflash_drafter")
+    + "dflash_drafter,tts_kitten,tts_kokoro,tts_pocket")
 
 //! the `--only` tokens of the model-free suite's files that reach the Vulkan home: on a two-pod fleet the CUDA home runs
 //! the suite without the Vulkan module (`DASLLAMA_DISABLE_MODULES=dasVulkan`), so the Vulkan home runs these files.
@@ -31,7 +32,7 @@ let VULKAN_FREE_ONLY = ("vulkan,fat_start,gen_records_args,gpu_serving_declines,
 //! (`dasllama_cuda_classes*`) with no `?cuda` guard, itself or through a fixture of this folder, so
 //! its cells are the CUDA home's alone. A two-pod fleet's Vulkan home, which leaves the CUDA module
 //! out, runs none of them; `test_run_suites.das` holds the tokens to that set
-let CUDA_ONLY_EXCLUDE = "test_cuda_kernels,test_cuda_tower"
+let CUDA_ONLY_EXCLUDE = "test_cuda_kernels,test_cuda_tower,test_cuda_tts"
 
 //! A model category: model files no run opens unless the run names the category. `stems` is a comma
 //! list - a file is the category's when its name starts with one of them; `opens` a comma list of
@@ -152,16 +153,16 @@ def list_names(named, name : string) : bool {
     return false
 }
 
-//! A model family: the decoder files a `--family` run opens, under the name `family_on` tags a block with. `stems` as a
+//! A model family: the carrier files a `--family` run opens, under the name `family_on` tags a block with. `stems` as a
 //! category's; a name is the family's whose stem opens the most of it, so `Qwen3-30B-A3B` is the routed family's under `Qwen3-`
 typedef ModelFamily = tuple<name : string; stems : string>
 
-//! every family with a row; a file no row holds - a tower, a speech model, a fixture - is open to any family run
+//! every family with a row: the chat decoders, then the speech, VAD and translation carriers
 def model_families() : array<ModelFamily> {
     return <- [
         (name = "llama", stems = "Llama-3.2,Meta-Llama-3.1,tinyllama,SmolLM2"),
-        (name = "qwen2", stems = "Qwen2.5-0.5B,Qwen2.5-1.5B"),
-        (name = "qwen3", stems = "Qwen3-"),
+        (name = "qwen2", stems = "Qwen2.5-0.5B,Qwen2.5-1.5B,Qwen2.5-Omni-"),
+        (name = "qwen3", stems = "Qwen3-,Qwen3VL-"),
         (name = "phi3", stems = "Phi-3.5"),
         (name = "gemma2", stems = "gemma-2-"),
         (name = "gemma3", stems = "gemma-3-"),
@@ -173,7 +174,17 @@ def model_families() : array<ModelFamily> {
         (name = "gptoss", stems = "gpt-oss"),
         (name = "qwen35", stems = "Qwen3.5-,Qwen3.6-27B,Qwen3.8-,mtp-Qwen3.8-"),
         (name = "qwen35moe", stems = "Qwen3.6-35B-A3B"),
-        (name = "qwen4exp", stems = "micro-qwen4exp")
+        (name = "qwen4exp", stems = "micro-qwen4exp"),
+        (name = "kitten", stems = "kitten-"),
+        (name = "kokoro", stems = "kokoro-"),
+        (name = "pocket", stems = "pocket-tts-"),
+        (name = "rustress", stems = "ru-stress-"),
+        (name = "whisper", stems = "ggml-tiny,ggml-base,ggml-small,ggml-medium,ggml-large"),
+        (name = "parakeet", stems = "ggml-parakeet-,parakeet-tdt-"),
+        (name = "gigaam", stems = "gigaam-"),
+        (name = "canary", stems = "canary-qwen-2.5b-encoder"),
+        (name = "vad", stems = "silero_vad"),
+        (name = "bergamot", stems = "model.enru.,model.ruen.,model.ende.")
     ]
 }
 

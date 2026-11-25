@@ -11,6 +11,7 @@ require dasllama/dasllama_math   // with_dasllama_jobque_
 require dasllama/dasllama_par    // set_single_thread_ - the decode step's one-lane leg
 require _rnnt_oracle   // rnnt_seat_*: the build's device transducer seat, its pin and counters
 require daslib/jobque_boost
+require daslib/defer   // defer() { reset_rows_f32() } - a rows pin never outlives its cell
 require math
 require strings
 require _compares   // nan_wide_diff: a NaN plog reads as outside the bar; sigmoid_d
@@ -375,23 +376,83 @@ def test_rnnt_baked_cpu(t : T?) {
     }
 }
 
-[test(description = "Poison control for the 1e-5 log-prob bar: the decoder over a net with token 0's joint row shifted by 0.125 lands outside the bar of the unmutated reference")]
+//! one net decoded through a session's own rows and through its baked form, under the rows pin as the caller set it
+struct private RowsLeg {
+    session : Leg
+    baked : Leg
+    session_f32 : bool     //!< the session laid floats
+    baked_f32 : bool       //!< the baked planes hold floats
+    dev_ok : bool          //!< the device layout check takes the baked planes
+}
+
+def private rows_leg(spec : NetSpec) : RowsLeg {
+    var r = RowsLeg()
+    var f <- build(spec)
+    r.session.want <- ref_greedy(f)
+    var s = RnntState()
+    rnnt_greedy(f.net, s, f.enc, long_length(f.enc) / f.net.joint_dim, r.session.got)
+    r.session_f32 = s.rows_f32
+    delete s
+    make_dev(f)
+    f.net.dev_only = false
+    r.baked_f32 = rnnt_baked_rows_f32(f.net)
+    r.dev_ok = rnnt_dev_planes_ok(f.net, rnnt_dev_layout(f.net))
+    r.baked.got <- engine_greedy(f)
+    r.baked.want <- ref_greedy(f)
+    unsafe {
+        delete f
+    }
+    return <- r
+}
+
+[test(description = "Pinned to float rows - what a target with no hardware half convert serves - a session and a baked net hold floats and decode to the scalar reference's ids, frames and durations, and the device layout check refuses the float planes; pinned to halves both hold halves and the check takes them")]
+def test_rnnt_f32_rows(t : T?) {
+    with_dasllama_jobque_() {
+        reset_rows_f32()
+        defer() {
+            reset_rows_f32()
+        }
+        for (spec, tag in [NetSpec(seed = 41u), NetSpec(nl = 2l, n_dur = 4, seed = 47u)], ["one layer", "two layers, a TDT head"]) {
+            set_rows_f32(true)
+            var inscope wide <- rows_leg(spec)
+            t |> success(wide.session_f32 && wide.baked_f32, "{tag}: under the float pin the session and the baked planes hold floats")
+            t |> success(!wide.dev_ok, "{tag}: the device layout check refuses float planes - its seat binds halves")
+            t |> equal(token_list(wide.session.got), token_list(wide.session.want), "{tag}, float rows, the session: id@frame+duration")
+            t |> equal(token_list(wide.baked.got), token_list(wide.baked.want), "{tag}, float rows, baked: id@frame+duration")
+            rnnt_tokens_match(t, "test_rnnt: {tag}, float rows", wide.session.got, wide.session.want, PLOG_BAR)
+            rnnt_tokens_match(t, "test_rnnt: {tag}, float rows, baked", wide.baked.got, wide.baked.want, PLOG_BAR)
+            set_rows_f32(false)
+            var inscope half <- rows_leg(spec)
+            t |> success(!half.session_f32 && !half.baked_f32 && half.dev_ok, "{tag}: under the halves pin both hold halves and the device check takes them (the control)")
+            same_tokens(t, "{tag}, halves", half.session)
+        }
+    }
+}
+
+[test(description = "Poison control for the 1e-5 log-prob bar, on half rows and on float rows: the decoder over a net with token 0's joint row shifted by 0.125 lands outside the bar of the unmutated reference")]
 def test_rnnt_plog_bar_control(t : T?) {
     t |> run("PLOG_BAR's control: the decoder over a net with one joint row mutated lands outside the bar of the reference") @(t : T?) {
         with_dasllama_jobque_() {
-            let spec = NetSpec(seed = 9u, n_frames = 16l)
-            var f <- build(spec)
-            var inscope want <- ref_greedy(f)
-            let row = f.net.joint_net_w   //! token 0's joint row
-            for (j in range64(f.net.joint_dim)) {
-                f.data[row + j] += 0.125
+            reset_rows_f32()
+            defer() {
+                reset_rows_f32()
             }
-            var inscope got <- engine_greedy(f)
-            unsafe {
-                delete f
+            for (floats, form in [false, true], ["half rows", "float rows"]) {   // the bar holds on both row forms, so its control runs on both
+                set_rows_f32(floats)
+                let spec = NetSpec(seed = 9u, n_frames = 16l)
+                var f <- build(spec)
+                var inscope want <- ref_greedy(f)
+                let row = f.net.joint_net_w   //! token 0's joint row
+                for (j in range64(f.net.joint_dim)) {
+                    f.data[row + j] += 0.125
+                }
+                var inscope got <- engine_greedy(f)
+                unsafe {
+                    delete f
+                }
+                to_log(LOG_INFO, "test_rnnt: {form}, the mutated net {token_list(got)} / the reference {token_list(want)}\n")
+                check_exceeds(t, "{form}: a joint row mutated by 0.125", plogs_of(got), plogs_of(want), Bar(abs_floor = PLOG_BAR))
             }
-            to_log(LOG_INFO, "test_rnnt: the mutated net {token_list(got)} / the reference {token_list(want)}\n")
-            check_exceeds(t, "a joint row mutated by 0.125", plogs_of(got), plogs_of(want), Bar(abs_floor = PLOG_BAR))
         }
     }
 }

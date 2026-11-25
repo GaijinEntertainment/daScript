@@ -187,7 +187,7 @@ def test_areas_for_path(t : T?) {
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_nmt_oracle.das"), ","), "translate,llm", "the Bergamot oracle fixture reaches translate and the kernel cells")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_npy.das"), ","), "audio,translate", "the npy reader reaches the GigaAM and Bergamot dumps")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_nmt.das"), ","), "translate", "the translation file reaches its own area")
-    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_tts_slab.das"), ","), "audio,vision,tts", "the shared TTS slab writer reaches every tower seat")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_tts_slab.das"), ","), "tts", "the TTS slab writer reaches the TTS seats alone: the driver is its one requirer")
     t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_vulkan_tts.das"), ","), "tts", "the Vulkan TTS driver reaches tts")
     t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_rope.das"), ","),
                "llm,tts,vision,audio",
@@ -201,6 +201,11 @@ def test_areas_for_path(t : T?) {
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_vulkan_tower_kernels.das"), ","), "audio,vision", "the Vulkan tower kernel cells reach both towers")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_vulkan_tts_conv_kernels.das"), ","), "tts", "the Vulkan TTS sequence-class cells reach the tts area")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_vulkan_tts_kernels.das"), ","), "tts", "the Vulkan TTS kernel cells reach the tts area")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_cuda_tts_kernels.das"), ","), "tts", "the CUDA TTS kernel cells reach the tts area")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_tower_tts.das"), ","), "tts", "the discrete TTS driver reaches tts")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_cuda_common.das"), ","),
+               "llm,audio,vision,tts",
+               "the CUDA home's common module reaches the TTS kernel cells that hold its carveout scope")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_vulkan_tts_pocket_kernels.das"), ","), "tts", "the Vulkan Pocket TTS cells reach the tts area")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_vulkan_tts_source_kernels.das"), ","), "tts", "the Vulkan TTS source and STFT cells reach the tts area")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_tower_twin.das"), ","), "audio,vision", "the tower twin fixture reaches both towers")
@@ -231,7 +236,7 @@ def test_areas_for_path(t : T?) {
 [test(description = "`area_plan` returns an area's census files sorted and deduplicated with the image file appended once and last when an area owns image arms, and `plan_files` lets an area override --suite")]
 def test_area_plan(t : T?) {
     let tts <- area_plan(["tts"])
-    t |> equal(length(tts.files), 18, "tts plans its seventeen files and the image file its kitten arm rides")
+    t |> equal(length(tts.files), 19, "tts plans its eighteen files and the image file its kitten arm rides")
     t |> equal(tts.image_arms, "kitten,pocket", "tts owns the kitten and pocket image arms")
     t |> equal(tts.files[length(tts.files) - 1], "{TESTS_DIR}/test_model_image.das", "the image file rides last")
     for (i in range(1, length(tts.files) - 1)) {
@@ -259,7 +264,7 @@ def test_area_plan(t : T?) {
     t |> equal(length(suite.files), 1, "a suite run plans the suite table")
     t |> equal(suite.image_arms, "arm12", "a suite run passes --arm through")
     let area <- plan_files(cfg, ["tts"])
-    t |> equal(length(area.files), 18, "an area run plans the area, whatever --suite says")
+    t |> equal(length(area.files), 19, "an area run plans the area, whatever --suite says")
 }
 
 //! the argument contracts: an area run refuses --arm/--full/--suite and an unknown area; a per-PR
@@ -722,11 +727,49 @@ def test_model_families(t : T?) {
     t |> equal(family_skip_reason("gemma-4-E2B-it-Q8_0.gguf", "gemma2, gemma4e"), "", "a named family's file opens")
     t |> success(find(family_skip_reason("Llama-3.2-1B-Instruct-Q8_0.gguf", "gemma4e"), "the llama family's") >= 0, "another family's file is left, the reason naming its family")
     t |> equal(family_skip_reason("mmproj-gemma-4-E2B-it-bf16.gguf", "llama"), "", "a file of no row is open to any family run")
+    t |> equal(model_family("Qwen2.5-Omni-3B-Q8_0.gguf"), "qwen2", "the Omni decoder the qwen25v tower's chat cells read")
+    t |> equal(model_family("Qwen3VL-4B-Instruct-Q8_0.gguf"), "qwen3", "the Qwen3-VL decoder the qwen3v tower's chat cells read")
+    t |> equal(model_family("mmproj-Qwen2.5-Omni-3B-f16.gguf"), "", "... whose towers stay in no row")
+    t |> equal(model_family("kitten-nano-q8.gguf"), "kitten", "a voice file is its family's")
+    t |> equal(model_family("ggml-parakeet-tdt-0.6b-v3-f32.bin"), "parakeet", "the longest stem wins among the ggml carriers")
+    t |> equal(model_family("ggml-tiny-q8_0.bin"), "whisper")
+    t |> equal(model_family("bergamot/ru-en-tiny/model.ruen.intgemm.alphas.bin"), "bergamot", "a student, by its file under its folder")
+    t |> equal(model_family("canary-qwen-2.5b-decoder-f16.gguf"), "", "the canary decoder is in no row: the qwen3 census reads it too")
+    for (pack in fixed_array("tts_g2p.bin", "tts_postag.bin", "tts_g2p_ru.bin", "tts_ctx_ru.gguf")) {
+        t |> equal(model_family(pack), "", "{pack}, which a voice reads beside it, is in no row")
+    }
+    t |> success(find(family_skip_reason("kokoro-82m.gguf", "kitten"), "the kokoro family's") >= 0, "a kitten run leaves a kokoro file")
     var seen : table<string>
     for (fam in model_families()) {
         t |> success(!empty(fam.name) && !empty(fam.stems) && !key_exists(seen, fam.name), "the family {fam.name} has one row with stems")
         seen |> insert(fam.name)
     }
+}
+
+//! the families of the tts area's voice and stress model files
+let private TTS_FAMILIES = fixed_array("kitten", "kokoro", "pocket", "rustress")
+
+[test(description = "A run narrowed to one TTS family opens, of the model files the tts area's tests name, every file of that family and no file of another family's row - kitten, kokoro, pocket and the Russian stress models in turn - and still opens a front-end file no row holds; a run that names no family opens all four families' files")]
+def test_tts_family_run(t : T?) {
+    var inscope files <- area_tests("tts")
+    let dir = stocked_models_dir("dasllama_tts_family", files)
+    var inscope whole <- opened_models(files, dir, "", "", false)
+    for (fam in TTS_FAMILIES) {
+        var inscope want <- [for (p in whole); p; where model_family(p) == fam]
+        t |> success(!empty(want), "the area's tests name files of the {fam} family")
+        var inscope opened <- opened_models(files, dir, "", fam, false)
+        var own = 0
+        for (p in opened) {
+            let of = model_family(p)
+            t |> success(empty(of) || of == fam, "--family {fam} opens no other family's file: {p} is {of}'s")
+            own += of == fam ? 1 : 0
+        }
+        t |> equal(own, length(want), "--family {fam} opens every file of its family")
+        t |> success(has_value(opened, "tts_ctx_ru.gguf"),
+            "--family {fam} opens the context model a voice reads beside it: no row holds it")
+    }
+    var why : string
+    rmdir_rec(dir, why)
 }
 
 [test(description = "`--category` takes known names and no flag that picks files or cells another way, plans the test files naming the categories' models, and hands every child the names", timeout = 1200)]
@@ -880,6 +923,57 @@ def test_exclude_filter(t : T?) {
     t |> equal(length(dir.kept), 3, "a token matches the base name, not the directory")
 }
 
+[test(description = "`run_exclusion` drops the CUDA-only files (`CUDA_ONLY_EXCLUDE`) where the children leave dasCUDA out and none where they leave out another module or none, each on an EXCLUDED line naming the knob, beside a caller's `--exclude` on its own lines, a file both drop on one line; a run it drops whole is refused naming both causes; a dry run under DASLLAMA_DISABLE_MODULES=dasCUDA prints the line and counts it, one without the knob neither")]
+def test_run_exclusion(t : T?) {
+    let files <- ["tests/test_cuda_tts_kernels.das", "tests/test_cuda_kernels.das",
+        "tests/test_parity.das", "tests/test_prefill.das"]
+    for (disabled in fixed_array("", "dasVulkan")) {
+        var inscope kept <- run_exclusion(files, "", disabled)
+        t |> success(length(kept.kept) == 4 && empty(kept.excluded) && empty(kept.refusal),
+            "'{disabled}' leaves out no CUDA-only file")
+    }
+    var inscope off <- run_exclusion(files, "", "dasVulkan, dasCUDA")
+    t |> equal(join(off.kept, ","), "tests/test_parity.das,tests/test_prefill.das",
+        "dasCUDA left out drops the CUDA-only files")
+    let why = ("dasCUDA left out (DASLLAMA_DISABLE_MODULES=dasVulkan, dasCUDA): "
+        + "it requires the CUDA kernel classes)")
+    t |> equal(join(off.excluded, "|"),
+        "EXCLUDED test_cuda_tts_kernels.das ({why}|EXCLUDED test_cuda_kernels.das ({why}",
+        "each on a line naming the knob")
+    var inscope both <- run_exclusion(files, "parity,cuda_tts", "dasCUDA")
+    t |> equal(join(both.kept, ","), "tests/test_prefill.das",
+        "the caller's --exclude and the module drop together")
+    t |> equal(length(both.excluded), 3, "a file both drop is one line: {both.excluded}")
+    let caller_first = (length(both.excluded) == 3
+        && find(both.excluded[0], "EXCLUDED test_cuda_tts_kernels.das (--exclude parity,cuda_tts)") == 0
+        && find(both.excluded[1], "EXCLUDED test_parity.das (--exclude") == 0
+        && find(both.excluded[2], "EXCLUDED test_cuda_kernels.das (dasCUDA left out") == 0)
+    t |> success(caller_first, "the caller's reason first: {both.excluded}")
+    var inscope all <- run_exclusion([for (f in files); f; where find(f, "cuda") >= 0], "", "dasCUDA")
+    t |> equal(all.refusal, "with dasCUDA left out dropped every file of the run",
+        "a run the module drops whole is refused")
+    var inscope all_both <- run_exclusion(files, "p", "dasCUDA")
+    t |> equal(all_both.refusal, "--exclude 'p' with dasCUDA left out dropped every file of the run",
+        "naming both causes")
+    if (get_platform_name() == "windows") {
+        t |> skip("the dry run stands in a POSIX no-op binary for the child")
+        return
+    }
+    let dry = "--suite model-free --only test_cuda_tts_kernels,test_run_suites --das /usr/bin/true"
+    var on : string
+    t |> equal(run_runner(dry, on, "DASLLAMA_DISABLE_MODULES=dasCUDA "), 0,
+        "a dry run under the knob is clean:\n{on}")
+    let line = "EXCLUDED test_cuda_tts_kernels.das (dasCUDA left out (DASLLAMA_DISABLE_MODULES=dasCUDA)"
+    t |> success(find(on, line) >= 0 && find(on, "ONLY test_run_suites.das") >= 0
+        && find(on, "ONLY test_cuda_tts_kernels.das") < 0 && find(on, " file(s) excluded") >= 0,
+        "the runner drops the file, runs the other and counts the drop:\n{on}")
+    var plain : string
+    t |> equal(run_runner(dry, plain, "DASLLAMA_DISABLE_MODULES= "), 0,
+        "a dry run without the knob is clean:\n{plain}")
+    t |> success(find(plain, "EXCLUDED") < 0 && find(plain, "ONLY test_cuda_tts_kernels.das") >= 0
+        && find(plain, " file(s) excluded") < 0, "the control: without the knob the file runs:\n{plain}")
+}
+
 //! --only keeps the files whose name contains a token and nothing else, "" the whole list; the dry run names each kept
 //! file on an ONLY line and the REPORT line carries the tokens, and a --only that keeps nothing is refused
 [test(description = "`only_files` keeps in order the files whose name holds a token, a dry run prints an ONLY line per kept file and the tokens on the REPORT line, and a --only keeping nothing is refused")]
@@ -901,12 +995,12 @@ def test_only_filter(t : T?) {
     t |> success(find(refused, "keeps no file") >= 0, "and says so:\n{refused}")
 }
 
-//! the text by which a test file reaches the CUDA home: the home
-//! ask, a CUDA fixture, a fixture seating a tower twin on the CUDA
-//! tower under the ask, or a CUDA tower module
+//! the text by which a test file reaches the CUDA home: the home ask, a CUDA fixture, a fixture
+//! seating a tower twin on the CUDA tower under the ask, the voices' rail, whose `@dev` forms
+//! serve the speech seats on the armed home, or a CUDA tower module
 let private CUDA_REACH <- [
     "gpu_want_cuda()", "require _cuda_", "require ?cuda _cuda_", "cuda_tower_asked",
-    "require _tower_twin", "require _audio_twin", "require _vision_forms",
+    "require _tower_twin", "require _audio_twin", "require _vision_forms", "require _tts_parity",
     "require ?cuda dasllama/dasllama_cuda_tower", "require ?cuda dasllama/dasllama_cuda_dflash"]
 
 //! the files whose text names the CUDA home and that hold no CUDA cell
@@ -1121,12 +1215,12 @@ def test_child_chunks(t : T?) {
     t |> equal(length(tier[1]), 3, "the files before and after it ride one child")
 }
 
-[test(description = "`model_names` reads every whole quoted .gguf name out of a file's text once and skips interpolated names, paths and patterns, `model_paths` keeps a path under the models folder and drops a climb, an absolute path and a backslash path, and `missing_models` lists the names a run's files and the fixtures they require ask that the directory lacks, each with its askers, while a directory holding them lists none")]
+[test(description = "`model_names` reads every whole quoted .gguf name out of a file's text once and skips interpolated names, paths and patterns, `model_paths` keeps a path under the models folder and drops a climb, an absolute path, a backslash path and the bare suffix, and `missing_models` lists the names a run's files and the fixtures they require ask that the directory lacks, each with its askers, while a directory holding them lists none")]
 def test_missing_models(t : T?) {
     let names <- model_names("let a = \"B-model.gguf\"\nlet b = \"\{stem\}.gguf\"\nlet c = \"dir/C.gguf\"\nlet d = \"*.gguf\"\nrun(\"A-model.gguf\", \"B-model.gguf\", \"note.txt\")\n")
     t |> equal(join(names, ","), "A-model.gguf,B-model.gguf", "whole quoted names once each, in order; an interpolated name, a path and a pattern are not names")
-    let paths <- model_paths("\"../x.gguf\" \"/a/b.gguf\" \"D:/m/g.gguf\" \"d\\e.gguf\" \"drafters/d/f.gguf\"")
-    t |> equal(join(paths, ","), "drafters/d/f.gguf", "`model_paths` keeps a path under the models folder and drops a climb, an absolute path, a drive path and a backslash path")
+    let paths <- model_paths("\"../x.gguf\" \"/a/b.gguf\" \"D:/m/g.gguf\" \"d\\e.gguf\" \"drafters/d/f.gguf\" \".gguf\"")
+    t |> equal(join(paths, ","), "drafters/d/f.gguf", "`model_paths` keeps a path under the models folder and drops a climb, an absolute path, a drive path, a backslash path and the suffix alone (no file's name)")
     let dir = path_join(test_temp_dir(), "dasllama_missing_models")
     mkdir_rec(dir)
     let run <- ["{TESTS_DIR}/test_gpu_model_swap.das"]
@@ -1144,6 +1238,36 @@ def test_missing_models(t : T?) {
         }
     }
     t |> equal(length(missing_models(run, dir)), 0, "a directory that holds every named file misses none")
+    var why : string
+    rmdir_rec(dir, why)
+}
+
+[test(description = "`missing_models` reports a stocked model a file names and no file the test writes: a name every line hands to a scratch call - `test_temp_dir()`, a function of the scratch fixture, or a function of the file that calls one - is synthesized, one plain line makes it a model, and a model-free suite's file names no model at all")]
+def test_missing_models_leave_scratch_files(t : T?) {
+    let fixture = "def scratch_path(name : string) : string => name\ndef arch_gguf(name, arch : string) : string => name\n"
+    let text = ("def private synth_file(name : string) : string \{\n    return scratch_path(name)\n\}\n"
+        + "def plain(name : string) : string => name\n"
+        + "let a = arch_gguf(\"made.gguf\", \"x\")\nlet b = synth_file(\"wrapped.gguf\")\n"
+        + "let c = path_join(test_temp_dir(), \"temp.gguf\")\nlet d = plain(\"stocked.gguf\")\n"
+        + "let e = scratch_path(\"both.gguf\")\nlet f = path_join(models_dir(), \"both.gguf\")\n")
+    var inscope calls <- scratch_calls(text, fixture)
+    t |> success(has_value(calls, "arch_gguf(") && has_value(calls, "synth_file(") && !has_value(calls, "plain("),
+        "the fixture's functions and the file's own wrapper are scratch calls, a plain function is none: {calls}")
+    for (made in fixed_array("made.gguf", "wrapped.gguf", "temp.gguf")) {
+        t |> success(names_only_written(text, made, calls), "{made} is a file the test writes")
+    }
+    t |> success(!names_only_written(text, "stocked.gguf", calls), "a name no scratch call takes is a model (the control)")
+    t |> success(!names_only_written(text, "both.gguf", calls), "a name one line reads from the models directory is a model")
+    t |> success(!names_only_written(text, "unnamed.gguf", calls), "a name the text does not hold is not synthesized")
+    let dir = path_join(test_temp_dir(), "dasllama_missing_scratch")
+    mkdir_rec(dir)
+    let missing <- missing_models(["{TESTS_DIR}/test_tts_g2p_ru.das"], dir)
+    let names <- [for (m in missing); m.name]
+    t |> success(has_value(names, "ru-stress-rubert-base.gguf"), "the file's stocked model is missing: {names}")
+    t |> success(!has_value(names, "kokoro_arch.gguf"), "a GGUF the scratch fixture writes is not: {names}")
+    t |> success(!has_value(names, "ru_stress_head_12.gguf"), "nor one the file's own writer writes: {names}")
+    let free <- missing_models(["{TESTS_DIR}/test_gguf_shards.das"], dir)
+    t |> equal(length(free), 0, "a model-free suite's file names no stocked model: {free}")
     var why : string
     rmdir_rec(dir, why)
 }
@@ -1499,10 +1623,10 @@ def test_child_builders_read_the_knob(t : T?) {
 let private VULKAN_REACH <- ["require ?vulkan ", "builtin_module_exists(vulkan)"]
 
 //! the model-free files that reach Vulkan and hold no Vulkan cell: the CUDA stamps over
-//! `_discrete_cells`' shared case bodies, this file, which names the reach text, and the file whose
-//! twin verdict reads synthetic rows
+//! `_discrete_cells`' and `_discrete_tts_cells`' shared case bodies, this file, which names the
+//! reach text, and the file whose twin verdict reads synthetic rows
 let private VULKAN_REACH_NO_CELL <- ["test_cuda_tower_front.das", "test_cuda_tower_blocks.das",
-    "test_cuda_tower_asr.das", "test_run_suites.das",
+    "test_cuda_tower_asr.das", "test_cuda_tts_kernels.das", "test_run_suites.das",
     "uncategorized__dasllama_internal_persistent_heap_stack_524288.das"]
 
 [test(description = "Every model-free file whose text, or a fixture it requires, reaches the Vulkan module sits in the two-pod fleet Vulkan home's slice of the model-free suite (`VULKAN_FREE_ONLY`) but the declared case-body files - the CUDA home runs the suite without that module - and the slice keeps no file that reaches none")]

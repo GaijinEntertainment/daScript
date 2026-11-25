@@ -382,7 +382,7 @@ let private TWIN_FORMS = fixed_array("f32_1L", "f32_1L@seat", "f32_1L_z0@seat", 
 def private qwen25o_decoder(t : T?; var emb : VisionEmbedder) {
     unsafe {
         t |> run("the Qwen2.5-Omni-3B decoder under the qwen25v tower") @capture(& emb)(t : T ?) {
-            return if (!vision_chat_gate(t, "", "Qwen2.5-Omni-3B-Q8_0.gguf", 0))
+            return if (!vision_chat_gate(t, "qwen2", "Qwen2.5-Omni-3B-Q8_0.gguf", 0))
             with_cpu_and_gpu_model(t, "vision", "Qwen2.5-Omni-3B-Q8_0.gguf", VISION_CHAT_CTX, [cpu_cells_form(QuantMode.q8), cpu_cells_form(QuantMode.q8, true)]) $(var m; form) {
                 vision_chat_cell(t, "the Qwen2.5-Omni image turn: window ViT + the NON-interleaved MROPE decoder, then the caption", m, form, false, emb, @@test_vision_chat_qwen25o)
                 vision_chat_cell(t, "a plain chat renders the Omni image span via the vocab's own spelling", m, form, true, emb, @@test_render_image_span_qwen25o)

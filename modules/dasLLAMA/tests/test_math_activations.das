@@ -5,6 +5,7 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_par
+require daslib/f16_cvt   // f32_to_f16 / f16_to_f32: the half-weight GEMM cell's planes
 require daslib/jobque_boost
 require math
 require _compares   // Sweep: the length sweeps' tally and verdict; opaque: the seeds' taint seam
@@ -13,13 +14,18 @@ require _compares   // Sweep: the length sweeps' tally and verdict; opaque: the 
 //! sigmoid_gate(4), silu_mul4, silu4_batch, l2_norm_rows and gemm_f32 / _jo / _uk_4x16 - against
 //! closed forms and in-test fp64 references over shapes that reach every tail; and the scalar
 //! kernels - rmsnorm, silu / gelu, the swiglu / geglu gates, softmax, parallel_argmax and hlse -
-//! against hand-computed values.
+//! against hand-computed values. `test_gemm_f32_family` skips where no f32 tile is stamped: an interpreted run, or a
+//! tier with no seat in the family.
 
 let ACT_SWEEP <- [ 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65,
                    100, 127, 128, 129, 1023, 1024, 1025 ]
 let L2_SHAPES <- [ 1, 1, 1, 7, 3, 8, 4, 64, 2, 127, 5, 33, 3, 128, 7, 4 ]
 let GEMM_SHAPES <- [ 1, 1, 1, 2, 3, 5, 3, 7, 16, 4, 5, 16, 4, 16, 16, 5, 9, 17,
                      7, 4, 33, 8, 32, 48, 9, 13, 19, 4, 1, 16, 6, 2, 31, 16, 40, 64 ]
+
+//! the family cell's shapes: the tiles' own, column tails past a 512-bit tile, row tails, conformer
+let FAMILY_SHAPES <- [ 1, 1, 1, 4, 16, 16, 5, 9, 17, 7, 4, 33, 8, 32, 48, 9, 13, 19, 6, 2, 31, 16, 40, 64,
+                       12, 24, 65, 13, 31, 127, 3, 128, 3, 64, 128, 138, 64, 128, 275, 64, 138, 128, 11, 8, 200 ]
 
 let ACT_POISON = 0.01
 let XMAG = 4.0
@@ -387,8 +393,6 @@ def private gemm_ref(c0, a, b : array<float>; M, K, N : int) : array<float> {
     return <- out
 }
 
-def private gemm_bar(K : int) : float => 6.0e-8 * float(K) * (float(K) + 2.0) + 1.0e-6
-
 def private sweep_gemm() : GemmCase {
     var r = GemmCase()
     for (s in range(length(GEMM_SHAPES) / 3)) {
@@ -410,7 +414,7 @@ def private sweep_gemm() : GemmCase {
 }
 
 def private tally_gemm(var r : GemmCase; K : int; c1, c2, want : array<float>) {
-    let bar = gemm_bar(K)
+    let bar = gemm_f32_sum_bar(int64(K))
     for (g, j, w in c1, c2, want) {
         r.elems++
         let diff = abs(g - w)
@@ -564,6 +568,147 @@ def test_gemm_f32(t : T?) {
         t |> equal(r.poison_inside, 0, "gemm_f32: poison legs inside the bar - a bar nothing exceeds discriminates nothing")
         feint("gemm_f32: {r.elems} elements, worst |diff| {r.worst} against bar {r.worst_bar} at K={r.worst_k}\n")
     }
+}
+
+//! C + A x B with every output one fused sum from C's own value: in k order, or in reverse k order (the control)
+def private gemm_chain(c0, a, b : array<float>; M, K, N : int; reversed : bool) : array<float> {
+    var out := c0
+    for (i in range(M)) {
+        for (j in range(N)) {
+            var acc = c0[i * N + j]
+            for (kk in range(K)) {
+                let k = reversed ? K - 1 - kk : kk
+                acc = mad(b[k * N + j], a[i * K + k], acc)
+            }
+            out[i * N + j] = acc
+        }
+    }
+    return <- out
+}
+
+struct private FamilyCase {
+    elems : int
+    off_rows : int       //! outputs of the row-blocks-outer walk off the ordered sum
+    off_cols : int       //! outputs of the column-blocks-outer walk off it
+    reversed_same : int  //! outputs the reverse-order sum lands on the same bits
+    first_shape : int = -1   //! the first output off the ordered sum on either walk: its shape's index ...
+    first_elem : int = -1    //! ... and its element in that shape's C
+}
+
+def private sweep_family() : FamilyCase {
+    var r = FamilyCase()
+    for (s in range(length(FAMILY_SHAPES) / 3)) {
+        let M = FAMILY_SHAPES[s * 3]
+        let K = FAMILY_SHAPES[s * 3 + 1]
+        let N = FAMILY_SHAPES[s * 3 + 2]
+        var inscope a <- lcg_pm(M * K, opaque(0x4a4au) + uint(s), 0.25, 1.0)
+        var inscope b <- lcg_pm(K * N, opaque(0x5b5bu) + uint(s), 0.25, 1.0)
+        var inscope c0 <- lcg_pm(M * N, opaque(0x6c6cu) + uint(s), 0.25, 1.0)
+        var inscope want <- gemm_chain(c0, a, b, M, K, N, false)
+        var inscope back <- gemm_chain(c0, a, b, M, K, N, true)
+        var inscope c1 := c0
+        gemm_f32(unsafe(addr(c1[0])), unsafe(addr(a[0])), unsafe(addr(b[0])), int64(M), int64(K), int64(N))
+        var inscope c2 := c0
+        gemm_f32_jo(unsafe(addr(c2[0])), unsafe(addr(a[0])), unsafe(addr(b[0])), int64(M), int64(K), int64(N))
+        for (g, j, w, v, e in c1, c2, want, back, count()) {
+            r.elems++
+            r.off_rows += g != w ? 1 : 0
+            r.off_cols += j != w ? 1 : 0
+            r.reversed_same += K > 2 && v == w ? 1 : 0
+            if (r.first_shape < 0 && (g != w || j != w)) {
+                r.first_shape = s
+                r.first_elem = e
+            }
+        }
+    }
+    return r
+}
+
+[test(description = "The stamped f32 GEMM tile family lands every output on the bits of one fused sum in k order from C's own value, on both walk orders and every row and column tail; the same sum in reverse k order lands elsewhere")]
+def test_gemm_f32_family(t : T?) {
+    if (gemm_f32_mr_gen() <= 0) {
+        t |> skip("no f32 tile is stamped on this tier (the family generates under the LLVM JIT)")
+        return
+    }
+    let r = sweep_family()
+    t |> success(r.elems > 0, "the sweep must compare at least one element")
+    t |> equal(r.off_rows, 0, "the row-blocks-outer walk: outputs off the ordered sum, of {r.elems}")
+    t |> equal(r.off_cols, 0, "the column-blocks-outer walk: outputs off the ordered sum, of {r.elems}")
+    t |> success(r.reversed_same * 4 < r.elems, "control: the reverse-order sum lands on other bits ({r.reversed_same} of {r.elems} equal)")
+    feint("f32 tile family: mr {gemm_f32_mr_gen()}, {gemm_f32_cols_gen()} columns a tile, {r.elems} outputs, {r.off_rows} / {r.off_cols} off the ordered sum on the two walks, the first at shape {r.first_shape} element {r.first_elem}\n")
+}
+
+//! the tiles and tail rows `gemm_f32_walk` visits over 10 rows by 7 columns in blocks of 4 rows and 3 columns, each tile as
+//! (i0, j0, nc) and each tail row as (i0, -1, -1)
+def private walk_visits(cols_outer : bool) : array<int64> {
+    var seen : array<int64>
+    gemm_f32_walk(10l, 7l, 4l, 3l, cols_outer, $(i0, j0, nc : int64) {
+        seen |> push_from(fixed_array(i0, j0, nc))
+    }) $(i0 : int64) {
+        seen |> push_from(fixed_array(i0, -1l, -1l))
+    }
+    return <- seen
+}
+
+[test(description = "`gemm_f32_walk` visits whole row blocks column block by column block where the caller asks for columns outermost and one call a row block over every column otherwise, then each row past the last block; the two orders differ")]
+def test_gemm_f32_walk_order(t : T?) {
+    var inscope cols <- walk_visits(true)
+    var inscope rows <- walk_visits(false)
+    let want_cols = fixed_array(0l, 0l, 3l, 4l, 0l, 3l, 0l, 3l, 3l, 4l, 3l, 3l, 0l, 6l, 1l, 4l, 6l, 1l, 8l, -1l, -1l, 9l, -1l, -1l)
+    let want_rows = fixed_array(0l, 0l, 7l, 4l, 0l, 7l, 8l, -1l, -1l, 9l, -1l, -1l)
+    t |> equal(length(cols), length(want_cols), "columns outermost: six tiles and two tail rows")
+    t |> equal(length(rows), length(want_rows), "rows outermost: two tiles and two tail rows")
+    return if (length(cols) != length(want_cols) || length(rows) != length(want_rows))
+    var off_cols = 0
+    for (got, want in cols, want_cols) {
+        off_cols += got != want ? 1 : 0
+    }
+    var off_rows = 0
+    for (got, want in rows, want_rows) {
+        off_rows += got != want ? 1 : 0
+    }
+    t |> equal(off_cols, 0, "columns outermost: every row block of a column block before the next column block, the last block the 1-column tail")
+    t |> equal(off_rows, 0, "rows outermost: one call a row block over all 7 columns")
+}
+
+[test(description = "`gemm_f16w_jo` over a plane of halves lands, bit for bit, `gemm_f32_jo` over the same plane widened, on every family shape; over the halves of another plane it lands elsewhere")]
+def test_gemm_f16w(t : T?) {
+    var elems = 0
+    var off = 0
+    var other_same = 0
+    var first_shape = -1
+    var first_elem = -1
+    for (s in range(length(FAMILY_SHAPES) / 3)) {
+        let M = FAMILY_SHAPES[s * 3]
+        let K = FAMILY_SHAPES[s * 3 + 1]
+        let N = FAMILY_SHAPES[s * 3 + 2]
+        var inscope a <- lcg_pm(M * K, opaque(0x7d7du) + uint(s), 0.25, 1.0)
+        var inscope b0 <- lcg_pm(K * N, opaque(0x8e8eu) + uint(s), 0.25, 1.0)
+        var inscope c0 <- lcg_pm(M * N, opaque(0x9f9fu) + uint(s), 0.25, 1.0)
+        var inscope bh <- [for (v in b0); uint16(f32_to_f16(v))]
+        var inscope bw <- [for (h in bh); f16_to_f32(uint(h))]
+        var inscope bo <- [for (v in b0); uint16(f32_to_f16(v * 1.5))]
+        var inscope want := c0
+        gemm_f32_jo(unsafe(addr(want[0])), unsafe(addr(a[0])), unsafe(addr(bw[0])), int64(M), int64(K), int64(N))
+        var inscope got := c0
+        gemm_f16w_jo(unsafe(addr(got[0])), unsafe(addr(a[0])), unsafe(addr(bh[0])), int64(M), int64(K), int64(N))
+        var inscope ctl := c0
+        gemm_f16w_jo(unsafe(addr(ctl[0])), unsafe(addr(a[0])), unsafe(addr(bo[0])), int64(M), int64(K), int64(N))
+        for (g, w, o, e in got, want, ctl, count()) {
+            elems++
+            off += g != w ? 1 : 0
+            other_same += o == w ? 1 : 0
+            if (first_shape < 0 && g != w) {
+                first_shape = s
+                first_elem = e
+            }
+        }
+    }
+    feint("gemm_f16w_jo: {off} of {elems} outputs off the widened plane's, the first at shape {first_shape} element {first_elem}\n")
+    t |> success(elems > 0, "the sweep must compare at least one element")
+    t |> equal(off, 0, "outputs off the f32 GEMM over the widened plane, of {elems}")
+    t |> success(other_same * 4 < elems, "control: another plane's halves land elsewhere ({other_same} of {elems} equal)")
+    feint("half-weight GEMM: hardware convert {target_half_converts()}, {elems} outputs\n")
 }
 
 [test(description = "A zero element or row count leaves the buffer untouched in every activation and norm kernel: softmax_sink, softcap, silu, sigmoid gate, swiglu_oai, silu_mul4 and l2_norm_rows")]

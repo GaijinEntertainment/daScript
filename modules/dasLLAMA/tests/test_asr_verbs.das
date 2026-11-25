@@ -210,7 +210,7 @@ def test_gpu_lane_seat_exact_ask(t : T?) {
     t |> equal(lane_why(bare, false), "the GPU tower serves the q8 image (the default lane)", "the stood-down seat still serves its q8 image")
 }
 
-[test(description = "Each audio family q8 lane defaults to its policy, a pin flips it either way and reset returns to the policy, and the ASR decoder K/V dtype defaults to f16 and reads back its setter")]
+[test(description = "Each audio family q8 lane defaults to its policy, a pin flips it either way and reset returns to the policy, and the ASR decoder K/V dtype defaults to the automatic codec and reads back its setter")]
 def test_audio_lane_knobs(t : T?) {
     t |> run("qwen3a: the q8 lane pin, and reset back to the policy") @(tt : T?) {
         tt |> success(qwen3a_serves_q8(), "the default is q8 on every home")
@@ -265,9 +265,9 @@ def test_audio_lane_knobs(t : T?) {
         }
         tt |> equal(gigaam_serves_q8(), !gigaam_gpu_exact_serves(), "the pin's scope ends on the policy")
     }
-    t |> run("the ASR decoder's K/V dtype: f16 by default, the setter's value read back, put back as found") @(tt : T?) {
+    t |> run("the ASR decoder's K/V dtype: automatic by default, the setter's value read back, put back as found") @(tt : T?) {
         let found = get_asr_kv()
-        tt |> equal(KVDtype.f16, found, "the serving default")
+        tt |> equal(KVDtype.automatic, found, "the serving default: the target's codec, resolved a session")
         set_asr_kv(KVDtype.f32)
         tt |> equal(KVDtype.f32, get_asr_kv(), "the parity rail the oracle cells pin")
         set_asr_kv(KVDtype.q8_0)

@@ -35,6 +35,7 @@ def private g2p_path() : string => path_join(models_dir(), "tts_g2p.bin")
 def private tagger_path() : string => path_join(models_dir(), "tts_postag.bin")
 
 def private data_present(t : T?) : bool {
+    return false if (!family_on(t, "g2p"))
     for (p in [g2p_path(), tagger_path()]) {
         let f = fopen(p, "rb")
         if (f == null) {
@@ -271,6 +272,7 @@ def test_us_only_pack(t : T?) {
 
 [test(description = "`load_g2p` panics on a missing pack and on a version 1 header, while the stocked version 2 pack loads through the same call as positive control")]
 def test_missing_pack(t : T?) {
+    return if (!family_on(t, "g2p"))
     own_load("the cell asserts on the load itself: its refusal of a missing pack and of a version 1 header, the stocked pack's load through the same call the refusal's control")
     t |> run("a missing pack panics by name") @(t : T?) {
         var refused = false
@@ -594,6 +596,7 @@ def private tagger_pack_form(path, _form : string) : PosTagger => <- load_pos_ta
 // tagger, then the phoneme pack's cells on both, the American-only pack's block inside the cell that reads it.
 [test(description = "tts_postag.bin, tts_g2p.bin and tts_g2p_en_us.bin each load once. The loaded tagger matches the reference tokenizer token for token, spacing included, on all 200 corpus sentences, splits contractions, abbreviations, dashes and possessives exactly on extra shapes, meets its header floors, agrees with the reference tagger on at least 96 percent of corpus tokens and 80 percent of heteronym words, and tags a pinned sentence exactly. The American G2P reproduces the reference front end's phonemes on the 200-sentence corpus except exactly 2 named tag-call rows and the pinned beyond-reference set, and reads both heteronym forms in at least 32 of 38 sentences; a verb tag on lead out-ranks the collocation table; the number reader reads values past 2^31 in full and a run wider than int64 digit by digit; function words take the reading the next word selects, speaking symbols and acronyms read to exact strings; the word splitter and the inflection stemmer produce exact phoneme strings; the fallback chain never drops a word and consults the lexicon before CMUdict in both dialects; the American-only pack reads the corpus identically to the full pack and refuses British by name. British G2P matches the reference British front end on all 157 in-vocabulary corpus sentences but exactly 2 tag-call rows and the pinned heteronym set, emits no American-only or off-inventory symbol where the American output carries over 100, applies its own -ed and -s inflections, declines -ing on schwa or length-mark stems, reads bath-trap, LOT and non-rhotic vowels from its lexicon, and for out-of-lexicon words equals the American reading through the rewrite, inside the British inventory")]
 def test_english_packs(t : T?) {
+    return if (!family_on(t, "g2p"))
     with_model_once(t, "tts", "tts_postag.bin", ["pack"], @@tagger_pack_form) $(var tg; _form) {
         tts_postag_cells(t, tg)
         with_model_once(t, "tts", "tts_g2p.bin", ["pack"], @@g2p_pack_form) $(var g; _g2p_form) {

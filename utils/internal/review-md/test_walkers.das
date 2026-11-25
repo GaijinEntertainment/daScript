@@ -726,8 +726,11 @@ def test_dasllama_gemm_gen_stamp(t : T?) {
     t |> equal(0, absent.rc, "a tree without the generated tier has no generator to stamp: {absent.out}")
 
     write_at(t, fixture, gen_at, gen_text)
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_gemm_gen_f32.das", "options gen2\n")
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das", "options gen2\n")
-    write_at(t, fixture, "modules/dasLLAMA/.das_module", "\"dasllama_gemm_gen\", \"dasllama_gemm_schema\", " + DASLLAMA_MODULE_LIST)
+    write_at(t, fixture, "modules/dasLLAMA/.das_module",
+        "\"dasllama_gemm_gen\", \"dasllama_gemm_gen_f32\", \"dasllama_gemm_schema\", "
+        + DASLLAMA_MODULE_LIST)
     let planted = spawn_at(fixture, [gate])
     t |> equal(1, planted.rc, "the planted generators do not match the shipped stamp")
     t |> success(find(planted.out, needle) >= 0, "finding fired: {needle}")

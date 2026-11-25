@@ -29,6 +29,9 @@ require dasllama/dasllama_config     // DlimConfiguration — the peek/round-tri
 require dasllama/dasllama_styletts2  // stage_styletts2/load_styletts2/mint_styletts2 + the two lane tags — the kitten arm's carrier, its family data riding the image meta
 require dasllama/dasllama_tts        // load_tts_model/caps/synthesize — the kitten arm's facade leg
 require dasllama/dasllama_pocket     // stage_pocket/load_pocket/mint_pocket + the three lane tags - the pocket arm's carrier
+require ?vulkan dasllama/dasllama_tower_tts   // tts_block_released_bytes_: the mapped block bytes a seat's upload let go
+require ?das_metal dasllama/dasllama_tower_tts
+require ?cuda dasllama/dasllama_tower_tts
 require dasllama/dasllama_kqformat   // kq_schema_id: the recipe lane's formats as the leaves record them
 require dasllama/dasllama_tts_blocks // TtsSpan — the staged blob's span table
 require daslib/defer
@@ -41,7 +44,7 @@ require ?das_metal dasllama/dasllama_metal_decode   // metal_decode_shutdown —
 require ?das_metal metal/das_metal_boost   // metal_create_system_default_device: the mlx-metal arms' device skip
 require dasllama/dasllama_gemm_schema // Q8_BLOCK_ELEMS/Q8_QPB/Q8_SPB — the dev-W bake key arithmetic
 require dasllama/dasllama_gpu_tier    // moe_gpu_bake_tag — the lane a cold load under an armed tier mints
-require dasllama/dasllama_env   // g_env_engine.image: the f16 by-path cells' skip with the rail off
+require dasllama/dasllama_env   // parity_full_mode: the cells the full suite alone runs
 require dasllama/dasllama_layout // convert_model_to_metal_blob — the derive cell's in-RAM control
 require daslib/jobque_boost
 require daslib/archive
@@ -71,7 +74,9 @@ require _child_run   // run_child / das_exe - the mx4-stream arm's mint child
 // mlx-metal-35b) skip on a build without das_metal, the mlx-metal pair also on a box with no Metal
 // device, and mx4-stream's footprint leg off macOS. The f16 by-path cells (`*_f16_image_by_path`)
 // also skip where no GPU home serving the family's f16 lane stands up (`f16_home_up`: every GPU home).
-// The pocket arm's voice-clear cell skips on a file that carries one voice.
+// The pocket arm's voice-clear cell skips on a file that carries one voice. The kitten and pocket arms' block-release cells
+// skip where no GPU device stands up for the TTS seats. The mechanics arm's bake-target cell skips where the CPU backend a
+// load selects carries no generated repack family.
 
 // element-exact plane compare: -1 = length mismatch, else the number of differing elements
 // the staged (owned array) side against the served (borrowed plane) side — the only comparison
@@ -472,6 +477,80 @@ def test_image_meta_carries_site_scales(t : T?) {
         delete blob
         delete dst
         delete src
+    }
+}
+
+[test(description = "A lane's identity - a config-free tower lane's and one the box's configuration keys - spells the float-row form under the float-rows pin and keeps its spelling under the halves pin, its tag still parsing, so the two forms of one baked model never share an identity")]
+def test_config_free_lane_names_the_row_form(t : T?) {
+    t |> run("a lane's identity names the row form the target serves") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        for (tag in ["parakeet-f32", "parakeet-f16", gigaam_image_tag(false), "parakeet-q8", POCKET_IMAGE_TAG]) {   // config-free lanes, then two the box's configuration keys
+            var halves = ""
+            var floats = ""
+            with_rows_f32(false) {
+                halves = image_identity(tag)
+            }
+            with_rows_f32(true) {
+                floats = image_identity(tag)
+            }
+            t |> success(find(halves, "f32rows") < 0, "{tag}: a target that converts halves keeps the lane's identity ('{halves}')")
+            t |> success(find(floats, " f32rows") >= 0, "{tag}: a target that serves float rows spells them ('{floats}')")
+            t |> equal(dlim_identity_tag(floats), tag, "{tag}: the row form rides inside the last fixed field - the tag still parses")
+        }
+    }
+}
+
+[test(description = "A cross-box bake's target names the row form over this target's and over the pin: armed for a target that serves float rows `active_rows_f32` answers true under the halves pin, armed for one that converts halves it answers false under the floats pin, and with the override cleared the pin answers again")]
+def test_bake_target_names_the_row_form(t : T?) {
+    t |> run("an armed bake target's row form outranks the pin") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        let seat = kernel_backend_seat()
+        let armed = bake_cpu_override_active()
+        var inscope target <- bake_cpu_override_config()
+        clear_bake_backend_override()
+        select_matmul_backend_for_load_()   // the backend a load would run on: a foreign target bakes only through its repack family
+        if (!kernel_backend_needs_repack(active_kernel_backend())) {
+            t |> skip("the CPU backend a load selects here ('{active_kernel_backend()}') carries no generated repack family: a foreign target has no bake route")
+        } else {
+            for (floats in fixed_array(true, false)) {
+                var inscope cpu = DlimCpuConfig(backend = "a-box-this-build-has-no-backend-of", rows_f32 = floats)
+                set_rows_f32(!floats)
+                t |> success(pin_backend_for_bake(cpu), "a foreign target arms over the repack family")
+                t |> equal(active_rows_f32(), floats, "armed for a target that {floats ? "serves float rows" : "converts halves"}, the pin the other way: the target's answer")
+                clear_bake_backend_override()
+                t |> equal(active_rows_f32(), !floats, "the override cleared: the pin answers again (the control)")
+            }
+            reset_rows_f32()
+        }
+        if (armed) {
+            pin_backend_for_bake(target)
+        }
+        restore_kernel_backend(seat)
+    }
+}
+
+[test(description = "`image_backing_mapped` answers true for a base nobody registered - a file mapping its carrier owns - and false for no backing, for an image chunk, and for memory a host lends until its last borrower lets it go")]
+def test_image_backing_mapped_is_the_carriers_own_mapping(t : T?) {
+    t |> run("only a mapping its carrier owns is a backing whose pages can be let go") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        t |> success(!image_backing_mapped(null), "no backing is no mapping")
+        let chunk = image_chunk_alloc(4096ul, 64ul)
+        t |> success(!image_backing_mapped(chunk), "an image chunk is the heap's")
+        t |> success(image_chunk_free(chunk), "the chunk goes back")
+        var inscope lent : array<uint8>
+        lent |> resize(4096)
+        let base = unsafe(addr<void?>(lent[0]))
+        t |> success(image_backing_mapped(base), "a base nobody registered reads as a mapping (the control)")
+        image_backing_borrow(base)
+        t |> success(!image_backing_mapped(base), "memory a host lends is the host's")
+        image_backing_release(base, 4096ul)
+        t |> success(image_backing_mapped(base), "the last borrower gone, the base is unregistered again")
     }
 }
 
@@ -1705,15 +1784,6 @@ def private tts_span_mismatch(blob : array<auto(TT)>; span : TtsSpan; view : arr
     return mismatch_exact(view, blob, 0, int(span.off), int(span.n))
 }
 
-// the recipe ask back as a cell found it: the spec in force again, or none
-def private recipe_restore(asked : bool; spec : string) {
-    if (asked) {
-        set_styletts2_recipe(spec)
-    } else {
-        reset_styletts2_recipe()
-    }
-}
-
 struct KittenRoundtrip {
     cold_backed : bool
     warm_backed : bool
@@ -1774,8 +1844,185 @@ def private kitten_image_roundtrip(path : string; q8 : bool) : KittenRoundtrip {
 
 // the TTS area's image arm: the StyleTTS2 carrier through its own loader (load_styletts2),
 // on both lanes, and the image loaded by its own path with the kitten family data riding its meta
-[test(description = "On both the f32 and q8 lanes the kitten-nano image (cold, warm and in-memory mint) serves every sampled weight span and all 8 voices element-exact against the staged read, and the image loaded by path carries the alias and speed-prior data"), arch(at = "../ARCHITECTURE_TTS.md#tts-image-rail")]
+[test(description = "On both the f32 and q8 lanes the kitten-nano image (cold, warm and in-memory mint) serves every sampled weight span and all 8 voices element-exact against the staged read, the image loaded by path carries the alias and speed-prior data, and a synthesis served off the mapped GPU image lets the device block's host pages go where an in-memory mint lets none, that image past its block under half the CPU image; the q8 GPU image loaded by its own path under a block layout another build registered refuses by name, and loads again with the layout put back"), arch(at = "../ARCHITECTURE_TTS.md#tts-image-rail")]
 def test_kitten_image(t : T?) {
+    with_cpu_flavor() {
+        kitten_image_cells(t)
+    }
+    kitten_flavor_cells(t)
+    kitten_block_release_cells(t)
+    kitten_block_layout_cells(t)
+}
+
+//! one synthesis of twelve tokens on `m`: whether the PL-BERT seat served, and the mapped block bytes the seats' uploads let go
+[unused_argument(m)]   // a build with no GPU module serves nothing
+def private block_released(m : StyleTts2Model) : tuple<served : bool; released : int64> {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)
+            || typeinfo builtin_module_exists(cuda)) {
+        var inscope sc = St2Scratch()
+        var inscope ids <- [for (i in range(12)); 1 + i]
+        var inscope style <- [for (_ in range64(m.style_dim)); 0.1]
+        var inscope noise = TtsNoise()
+        var tm = TtsTimings()
+        let s0 = styletts2_gpu_stats("albert").served
+        let r0 = tts_block_released_bytes_()
+        styletts2_synthesize(m, ids, style, 1.0, noise, 7ul, null, tm, sc)
+        return (served = styletts2_gpu_stats("albert").served > s0, released = tts_block_released_bytes_() - r0)
+    } else {
+        return (served = false, released = 0l)
+    }
+}
+
+//! the codec seat over two latent frames of zeros on `m`: whether it served, and the mapped block bytes its upload let go
+[unused_argument(m)]   // a build with no GPU module serves nothing
+def private block_released(m : PocketModel) : tuple<served : bool; released : int64> {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)
+            || typeinfo builtin_module_exists(cuda)) {
+        var inscope sc = PocketScratch()
+        var inscope lat <- [for (_ in range64(2l * m.latent_dim)); 0.0]
+        var inscope wave : array<float>
+        let c0 = pocket_gpu_stats("codec").served
+        let r0 = tts_block_released_bytes_()
+        pocket_decode_latents(m, lat, 2l, sc, wave)
+        return (served = pocket_gpu_stats("codec").served > c0, released = tts_block_released_bytes_() - r0)
+    } else {
+        return (served = false, released = 0l)
+    }
+}
+
+//! a speech family's seats' uploads off the mapped GPU image (`load`) let the block's host pages go; off an in-memory mint of
+//! the flavor (`mint`), whose block is the heap's, none; and that image past its block is under half the CPU image - the
+//! weights the block replaced are not in it. `reset` returns the family to its unpinned lane, before and after
+def private block_release_cell(t : T?; arm, path : string; reset : block<() : void>; load : block<() : auto(M)>; mint : block<(m : M) : M>) {
+    return if (!family_on(t, arm) || !arm_on(t, arm) || !jit_model_available(t, path))
+    if (serving_tower_dev(TowerFamily.tts) == TowerDev.none || !serving_tower_device_up(TowerFamily.tts)) {
+        t |> skip("no GPU device stands up for the TTS seats on this box")
+        return
+    }
+    return if (!image_rail_on(t))
+    with_dasllama_jobque_() {
+        with_gpu_knobs() {
+            invoke(reset)
+            set_serving_gpu_tower(true, TowerFamily.tts)
+            var inscope mapped <- invoke(load)
+            t |> success(mapped.image_map != null && mapped.dev_backend != TowerDev.none, "the load maps the GPU flavor's image")
+            let dev_bytes = int64(mapped.image_bytes)
+            let blk_bytes = length(mapped.dev)
+            let mapped_leg = block_released(mapped)
+            t |> success(mapped_leg.served, "the seats serve the mapped image")
+            t |> success(mapped_leg.released > 0l, "their uploads let the block's mapped pages go ({mapped_leg.released} bytes)")
+            var inscope minted <- invoke(mint, mapped)
+            let minted_leg = block_released(minted)
+            t |> success(minted_leg.served, "the seats serve the in-memory mint: its block uploads anew")
+            t |> equal(minted_leg.released, 0l, "a block on the heap lets nothing go (the control)")
+            with_cpu_flavor() {
+                var inscope plain <- invoke(load)
+                let plain_leg = block_released(plain)
+                t |> success(!plain_leg.served && plain_leg.released == 0l, "the CPU image serves no seat and lets nothing go (the served flag's control)")
+                let cpu_bytes = int64(plain.image_bytes)
+                to_log(LOG_INFO, "{arm}: the GPU image {dev_bytes} bytes, its block {blk_bytes}; the CPU image {cpu_bytes}\n")
+                t |> success(blk_bytes > 0l && dev_bytes - blk_bytes < cpu_bytes / 2l,
+                    "the GPU image keeps no host copy of the weights its block replaced ({dev_bytes} bytes, the block {blk_bytes} of them; the CPU image {cpu_bytes})")
+            }
+            invoke(reset)
+        }
+    }
+}
+
+//! a GPU flavor's image loaded by its own path under a block layout another build registered (`set_layout`, which answers
+//! the layout it replaced): the load refuses by name, and the layout put back the same path loads - the control. `pin`
+//! pins the lane `lane` names, `reset` returns the family to its unpinned lane
+def private block_layout_cell(t : T?; arm, path, lane : string; pin, reset : block<() : void>; set_layout : block<(layout : uint64) : uint64>;
+                              load : block<(from : string) : auto(M)>) {
+    return if (!family_on(t, arm) || !arm_on(t, arm) || !jit_model_available(t, path))
+    let dev = serving_tower_dev(TowerFamily.tts)
+    if (dev == TowerDev.none || !serving_tower_device_up(TowerFamily.tts)) {
+        t |> skip("no GPU device stands up for the TTS seats on this box")
+        return
+    }
+    return if (!image_rail_on(t))
+    with_dasllama_jobque_() {
+        with_gpu_knobs() {
+            invoke(pin)
+            set_serving_gpu_tower(true, TowerFamily.tts)
+            let img = image_path_for(path, tower_dev_tag(lane, dev))
+            var baked = TowerDev.none
+            {
+                var inscope m <- invoke(load, path)
+                baked = flavor_of(m)
+            }
+            t |> success(baked == dev && stat(img).is_valid, "the load bakes or maps the {dev} flavor's image beside the file ({baked}, {img})")
+            if (baked == dev && stat(img).is_valid) {
+                let was = invoke(set_layout, 0ul)
+                invoke(set_layout, was ^ 1ul)
+                var why = ""
+                try {
+                    var refused <- invoke(load, img)
+                    delete refused
+                } recover {
+                    why = this_context().last_exception
+                }
+                invoke(set_layout, was)
+                t |> success(find(why, "device block another build laid out") >= 0, "under another build's layout the image refuses by name: '{why}'")
+                var inscope again <- invoke(load, img)
+                t |> equal(flavor_of(again), dev, "the layout put back, the same path loads its {dev} block (the control)")
+            }
+            invoke(reset)
+        }
+    }
+}
+
+def private kitten_block_layout_cells(t : T?) {
+    let path = path_join(models_dir(), "kitten-nano.gguf")
+    t |> run("kitten-nano: a GPU flavor's image whose device block another build laid out refuses by name when loaded by its own path") @(t : T?) {
+        block_layout_cell(t, "kitten", path, ST2_IMAGE_TAG_Q8, $ {
+            reset_styletts2_recipe()
+            set_styletts2_q8(true)
+        }, $ {
+            reset_styletts2_q8()
+        }, $(layout : uint64) => set_styletts2_block_layout(layout), $(from : string) => load_styletts2(from))
+    }
+}
+
+def private kitten_block_release_cells(t : T?) {
+    let path = path_join(models_dir(), "kitten-nano.gguf")
+    t |> run("kitten-nano: seats that upload a mapped image's device block release the block's host pages") @(t : T?) {
+        block_release_cell(t, "kitten", path, $ {
+            reset_styletts2_q8()
+            reset_styletts2_recipe()
+        }, $ => load_styletts2(path)) $(mapped) {
+            var inscope stg <- tower_dev_staged(mapped.dev_backend) $ { return <- stage_styletts2(path, mapped.q8) }
+            var m = StyleTts2Model()
+            mint_styletts2(stg, m)
+            return <- m
+        }
+    }
+}
+
+//! the kitten-nano GPU flavor's image on both lanes: the cold load mints it, the warm load maps it, and both carry the device
+//! block an in-memory mint of the flavor builds
+def private kitten_flavor_cells(t : T?) {
+    let path = path_join(models_dir(), "kitten-nano.gguf")
+    t |> run("kitten-nano: the GPU flavor's image carries the device block an in-memory mint builds, on both lanes") @(t : T?) {
+        return if (!family_on(t, "kitten") || !arm_on(t, "kitten") || !image_rail_on(t) || !jit_model_available(t, path))
+        with_dasllama_jobque_() {
+            defer() {
+                reset_styletts2_q8()
+            }
+            for (q8 in [false, true]) {
+                set_styletts2_q8(q8)
+                gpu_lane_roundtrip(t, "kitten-nano {q8 ? "q8" : "f32"} lane", TowerFamily.tts, path, q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG, true, $ => load_styletts2(path)) $(dev) {
+                    var inscope stg <- tower_dev_staged(dev) $ { return <- stage_styletts2(path, q8) }
+                    var m = StyleTts2Model()
+                    mint_styletts2(stg, m)
+                    return <- m
+                }
+            }
+        }
+    }
+}
+
+def private kitten_image_cells(t : T?) {
     let path = path_join(models_dir(), "kitten-nano.gguf")
     t |> run("kitten-nano: the staged read, the mapped image and the in-memory mint agree on both lanes") @(t : T?) {
         return if (!family_on(t, "kitten") || !arm_on(t, "kitten") || !image_rail_on(t) || !jit_model_available(t, path))
@@ -1797,12 +2044,10 @@ def test_kitten_image(t : T?) {
     t |> run("kitten-nano: the recipe lane mints each weight group in its format, and the mapped image serves the staged planes whole") @(t : T?) {
         return if (!family_on(t, "kitten") || !arm_on(t, "kitten") || !image_rail_on(t) || !jit_model_available(t, path))
         with_dasllama_jobque_() {
-            var inscope st <- stage_styletts2(path, true, true)
+            var inscope st <- stage_styletts2_served(path, true, true)   // as the load stages it: under the flavor this box's seats take
             var inscope st8 <- stage_styletts2(path, true)
-            let asked = styletts2_serves_recipe()
-            let spec = styletts2_recipe()
             defer() {
-                recipe_restore(asked, spec)
+                reset_styletts2_recipe()
             }
             reset_styletts2_q8()
             set_styletts2_recipe("")
@@ -1825,23 +2070,21 @@ def test_kitten_image(t : T?) {
             let recipe_bytes = 4l * long_length(st.blob) + long_length(st.qblob)
             let q8_bytes = 4l * long_length(st8.blob) + long_length(st8.qblob)
             t |> success(recipe_bytes < q8_bytes, "the recipe lane's planes are the smaller: {recipe_bytes >> 20l} MB against the q8 lane's {q8_bytes >> 20l} MB")
-            let lanes <- [image_path_for(path, ST2_IMAGE_TAG_KQ), image_path_for(path, ST2_IMAGE_TAG_Q8), image_path_for(path, ST2_IMAGE_TAG)]
+            let lanes <- [image_path_for(path, tower_dev_tag(ST2_IMAGE_TAG_KQ, styletts2_dev_flavor(true))), image_path_for(path, ST2_IMAGE_TAG_Q8), image_path_for(path, ST2_IMAGE_TAG)]
             t |> success(lanes[0] != lanes[1] && lanes[0] != lanes[2], "the recipe lane is its own prepared image: {lanes[0]}")
         }
     }
     t |> run("kitten-nano: a recipe pin moves the groups it names and no other, mints in memory, and refuses a name it does not know") @(t : T?) {
         return if (!family_on(t, "kitten") || !arm_on(t, "kitten") || !image_rail_on(t) || !jit_model_available(t, path))
         with_dasllama_jobque_() {
-            let asked = styletts2_serves_recipe()
-            let spec = styletts2_recipe()
             defer() {
-                recipe_restore(asked, spec)
+                reset_styletts2_recipe()
             }
             reset_styletts2_q8()
             let pins = "decoder= q8, generator=k5,fc=f32,voice=f32"
             set_styletts2_recipe(pins)
             t |> equal(styletts2_recipe(), pins, "the getter answers the pin in force")
-            let img = image_path_for(path, ST2_IMAGE_TAG_KQ)
+            let img = image_path_for(path, tower_dev_tag(ST2_IMAGE_TAG_KQ, styletts2_dev_flavor(true)))
             let stamp = stat(img).mtime
             var inscope m <- load_styletts2(path)
             t |> success(m.kq, "the pinned load is the recipe lane's")
@@ -1891,10 +2134,8 @@ def test_kitten_image(t : T?) {
     t |> run("kitten-nano: the image loads by its own path, the family data riding its meta") @(t : T?) {
         return if (!family_on(t, "kitten") || !arm_on(t, "kitten") || !image_rail_on(t) || !jit_model_available(t, path))
         with_dasllama_jobque_() {
-            let asked = styletts2_serves_recipe()
-            let spec = styletts2_recipe()
             defer() {
-                recipe_restore(asked, spec)
+                reset_styletts2_recipe()
                 reset_styletts2_q8()
             }
             reset_styletts2_recipe()
@@ -1958,7 +2199,7 @@ def private pocket_image_roundtrip(path : string; q8, native : bool) : PocketRou
         set_pocket_q8(q8)
     }
     var r = PocketRoundtrip(asked_q8 = pocket_serves_q8(), asked_native = pocket_serves_native())
-    var inscope st <- stage_pocket(path, q8, native)
+    var inscope st <- stage_pocket_served(path, q8, native)
     var inscope m <- load_pocket(path)
     r.cold_backed = m.image_map != null
     r.lane_q8 = m.q8
@@ -1979,7 +2220,7 @@ def private pocket_image_roundtrip(path : string; q8, native : bool) : PocketRou
     for (i in range64(long_length(warm.text_h))) {
         r.mismatches += int8(warm.text_h[i]) != st.qblob[warm.text_h_span.off + i] ? 1l : 0l
     }
-    var inscope st2 <- stage_pocket(path, q8, native)
+    var inscope st2 <- stage_pocket_served(path, q8, native)
     var inscope minted = PocketModel()
     mint_pocket(st2, minted)
     r.minted_backed = minted.image_map != null
@@ -1987,8 +2228,68 @@ def private pocket_image_roundtrip(path : string; q8, native : bool) : PocketRou
     return r
 }
 
-[test(description = "On its native, q8 and f32 lanes the pocket 18m-kq image (cold, warm and in-memory mint) serves both planes element-exact against the staged read; the image copied away from its GGUF loads by its own path on the lane it was baked on and speaks the GGUF load's samples; a roster voice cleared on an image-served model leaves the rest speaking"), arch(at = "../ARCHITECTURE_POCKET.md#pocket-image")]
+[test(description = "On its native, q8 and f32 lanes the pocket 18m-kq image (cold, warm and in-memory mint) serves both planes element-exact against the staged read; the image copied away from its GGUF loads by its own path on the lane it was baked on and speaks the GGUF load's samples; a roster voice cleared on an image-served model leaves the rest speaking; the q8 GPU image loaded by its own path under a block layout another build registered refuses by name, and loads again with the layout put back"), arch(at = "../ARCHITECTURE_POCKET.md#pocket-image")]
 def test_pocket_image(t : T?) {
+    with_cpu_flavor() {
+        pocket_image_cells(t)
+    }
+    pocket_flavor_cells(t)
+    pocket_block_release_cells(t)
+    pocket_block_layout_cells(t)
+}
+
+//! the pocket 18m-kq GPU flavor's image on its three lanes: the cold load mints it, the warm load maps it, and both carry the
+//! device block an in-memory mint of the flavor builds
+def private pocket_flavor_cells(t : T?) {
+    let path = path_join(models_dir(), "pocket-tts-en-18m-kq.gguf")
+    t |> run("pocket 18m-kq: the GPU flavor's image carries the device block an in-memory mint builds, on all three lanes") @(t : T?) {
+        return if (!family_on(t, "pocket") || !arm_on(t, "pocket") || !image_rail_on(t) || !jit_model_available(t, path))
+        with_dasllama_jobque_() {
+            defer() {
+                reset_pocket_q8()
+            }
+            for (lane in [(q8 = true, native = true, tag = POCKET_IMAGE_TAG), (q8 = true, native = false, tag = POCKET_IMAGE_TAG_Q8), (q8 = false, native = false, tag = POCKET_IMAGE_TAG_F32)]) {
+                reset_pocket_q8()
+                if (!lane.native) {
+                    set_pocket_q8(lane.q8)
+                }
+                gpu_lane_roundtrip(t, "pocket 18m-kq {lane.tag} lane", TowerFamily.tts, path, lane.tag, true, $ => load_pocket(path)) $(dev) {
+                    var inscope stg <- tower_dev_staged(dev) $ { return <- stage_pocket_served(path, lane.q8, lane.native) }
+                    var m = PocketModel()
+                    mint_pocket(stg, m)
+                    return <- m
+                }
+            }
+        }
+    }
+}
+
+def private pocket_block_layout_cells(t : T?) {
+    let path = path_join(models_dir(), "pocket-tts-en-18m-kq.gguf")
+    t |> run("pocket 18m-kq: a GPU flavor's image whose device block another build laid out refuses by name when loaded by its own path") @(t : T?) {
+        block_layout_cell(t, "pocket", path, POCKET_IMAGE_TAG_Q8, $ {
+            set_pocket_q8(true)
+        }, $ {
+            reset_pocket_q8()
+        }, $(layout : uint64) => set_pocket_block_layout(layout), $(from : string) => load_pocket(from))
+    }
+}
+
+def private pocket_block_release_cells(t : T?) {
+    let path = path_join(models_dir(), "pocket-tts-en-18m-kq.gguf")
+    t |> run("pocket 18m-kq: a seat that uploads a mapped image's device block releases the block's host pages") @(t : T?) {
+        block_release_cell(t, "pocket", path, $ {
+            reset_pocket_q8()
+        }, $ => load_pocket(path)) $(mapped) {
+            var inscope stg <- tower_dev_staged(mapped.dev_backend) $ { return <- stage_pocket_served(path, true, true) }
+            var m = PocketModel()
+            mint_pocket(stg, m)
+            return <- m
+        }
+    }
+}
+
+def private pocket_image_cells(t : T?) {
     let path = path_join(models_dir(), "pocket-tts-en-18m-kq.gguf")
     t |> run("pocket 18m-kq: the staged read, the mapped image and the in-memory mint agree on all three lanes") @(t : T?) {
         return if (!family_on(t, "pocket") || !arm_on(t, "pocket") || !image_rail_on(t) || !jit_model_available(t, path))
@@ -2023,7 +2324,7 @@ def test_pocket_image(t : T?) {
     }
     t |> run("pocket 18m-kq: the three lanes are three files") @(t : T?) {
         if (!family_on(t, "pocket") || !arm_on(t, "pocket")) return
-        let native_img = image_path_for(path, POCKET_IMAGE_TAG)
+        let native_img = image_path_for(path, tower_dev_tag(POCKET_IMAGE_TAG, pocket_dev_flavor(true)))
         let q8_img = image_path_for(path, POCKET_IMAGE_TAG_Q8)
         let f32_img = image_path_for(path, POCKET_IMAGE_TAG_F32)
         t |> success(native_img != q8_img && q8_img != f32_img && native_img != f32_img, "each lane is its own prepared image:\n  {native_img}\n  {q8_img}\n  {f32_img}")
@@ -2041,7 +2342,7 @@ def test_pocket_image(t : T?) {
             mkdir_rec(dir)
             let img = path_join(dir, "voice.dlim")
             var why = ""
-            t |> success(copy_file(image_path_for(path, POCKET_IMAGE_TAG), img, true, why), "the native lane's image copied away from its GGUF: {why}")
+            t |> success(copy_file(image_path_for(path, tower_dev_tag(POCKET_IMAGE_TAG, pocket_dev_flavor(true))), img, true, why), "the native lane's image copied away from its GGUF: {why}")
             t |> success(pocket_serves_file(img), "the image's head names the family")
             t |> success(!tts_needs_packs(img), "a Pocket image needs no packs")
             var inscope packs <- tts_pack_names(img)

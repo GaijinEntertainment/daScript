@@ -204,7 +204,8 @@ let private ENGINE_LOADERS = fixed_array("load_model_", "load_model", "load_gguf
     "load_ru_stress_pack", "load_nmt_model", "load_translator", "load_checkpoint",
     "stage_whisper_model", "stage_parakeet_model", "stage_parakeet_kq_model", "stage_gigaam_model", "stage_canary_encoder",
     "stage_audio_tower", "stage_gemma4a_encoder", "stage_qwen3a_tower", "stage_gemma3v_tower", "stage_gemma4v_tower",
-    "stage_gemma4uv_embedder", "stage_qwen3v_tower", "stage_qwen25v_tower", "stage_styletts2", "stage_pocket", "stage_nmt_model")
+    "stage_gemma4uv_embedder", "stage_qwen3v_tower", "stage_qwen25v_tower", "stage_styletts2", "stage_styletts2_served", "stage_pocket",
+    "stage_pocket_served", "stage_nmt_model")
 let private LOADERS = fixed_array("aud_form", "aud_stage", "blob_twin", "canary_form", "canary_stage", "cuda_feed_rig", "cuda_forced_feed", "dense_feeds_block",
     "family_lane_cell", "g2p_pack_form", "g4a_stage", "gemma3v_12b_form", "gemma3v_form", "gemma3v_stage", "gemma4a_e2b_form", "gemma4a_e4b_form", "gemma4a_form", "gemma4uv_form", "gemma4uv_stage",
     "gemma4v_form", "gemma4v_stage", "gemma_format_cell", "gemma_model", "gigaam_form", "gigaam_minted", "greedy_turn", "image_file_transcript", "image_tower_form", "kq_clone_over_roster",
@@ -217,7 +218,7 @@ let private LOADERS = fixed_array("aud_form", "aud_stage", "blob_twin", "canary_
     "ru_pack_form", "ru_stress_form", "sampled_metal_cell", "slot_swap_cycle", "speak_line_of",
     "stage_panic", "staged_tokens_at", "staged_tower_form", "staged_twin_tower", "stored_file_pins",
     "stories15m_form", "stream_twin_within", "styletts2_form", "tagger_pack_form", "tail_after_load",
-    "translator_form", "translator_stage", "vad_form", "whisper_form", "whisper_stage", "with_cold_lane", "with_gemma_rig", "with_metal_trunk")
+    "translator_form", "translator_stage", "tts_unbuilt_seats_take_cpu_image", "vad_form", "whisper_form", "whisper_stage", "with_cold_lane", "with_gemma_rig", "with_metal_trunk")
 
 //! the file whose loads are the block's own body: no helper of it is listed
 let private LOADER_HOMES = fixed_array("_cpu_gpu_model.das")
@@ -377,9 +378,9 @@ def private global_names(files : array<string>) : table<string; array<string>> {
     return <- out
 }
 
-//! the functions of `text`, a `def` at column 0 each, with their parameters and their `own_load` marker; an `own_load` whose
-//! reason is not a non-empty literal is a finding against `file`
-def private source_fns(file, text : string) : array<SourceFn> {
+//! the functions of `text`, a `def` at column 0 each, with their parameters and - `mark_own` - their `own_load` marker; an
+//! `own_load` whose reason is not a non-empty literal is then a finding against `file`
+def private source_fns(file, text : string; mark_own : bool = true) : array<SourceFn> {
     var out : array<SourceFn>
     var inscope heads <- split("\n{text}", "\ndef ")   //! a `def` on the first line opens a function too
     out |> reserve(length(heads))
@@ -401,7 +402,9 @@ def private source_fns(file, text : string) : array<SourceFn> {
                 }
             }
         }
-        own_load_marker(f, file, text, head)
+        if (mark_own) {
+            own_load_marker(f, file, text, head)
+        }
         out |> emplace(f)
         at += length(head) + 5
     }
@@ -736,6 +739,54 @@ def private check_block_rows(files : array<string>) {
     }
 }
 
+//! the stocked fixtures that are no family's carrier: a block of one carries no family
+let private FAMILY_FREE = fixed_array("stories15M.bin")
+
+let private FAMILY_TAG = ("a block (`with_cpu_and_gpu_model`, `with_model_once`) loads a file of a family: a file a row of "
+    + "`model_families()` (`_model_categories.das`) holds, which the block's own gate reads, or a file of no row behind a "
+    + "`family_on(t, name)` call (`_model_tier.das`) in the function holding the block or in every function of the file "
+    + "that calls it - a block with neither loads under every `--family` filter (modules/dasLLAMA/tests/REVIEW_LOAD_ONCE.md)")
+
+//! whether every function of `fns` that calls `fns[held]` - one at least - calls `family_on` ahead of that call
+def private callers_tag_family(text : string; fns : array<SourceFn>; held : int) : bool {
+    var callers = 0
+    for (g, gi in fns, count()) {
+        continue if (gi == held)
+        let at = word_index(text, fns[held].name, g.start)
+        continue if (at < 0 || at >= g.stop)
+        callers++
+        let tag = find(text, "family_on(", g.start)
+        return false if (tag < 0 || tag >= at)
+    }
+    return callers > 0
+}
+
+//! Each block of `blocks` (`load_once_blocks` over `files`) carries a family: its file is a family row's or a fixture of
+//! no family, or a `family_on` call stands ahead of it - in the function holding it, or in every function of its file that
+//! calls that function.
+def private check_family_tags(files : array<string>; blocks : table<string; string>) {
+    var inscope paths <- {for (f in files); base_name(f) => f}
+    for (key, site in keys(blocks), values(blocks)) {
+        var inscope named <- split(key, ", ")
+        let area = named[0]
+        let file = named[1]
+        continue if (!empty(model_family(file)) || has_value(FAMILY_FREE, base_name(file)))
+        var inscope where_ <- split(site, ":")
+        let site_file = where_[0]
+        let site_line = to_int(where_[1])
+        let path = paths?[site_file] ?? ""
+        let text = fread(path)
+        var inscope fns <- source_fns(path, text, mark_own = false)
+        let at = find(text, "(t, \"{area}\", \"{file}\"")
+        let held = fn_at(fns, at)
+        let tag = held >= 0 ? find(text, "family_on(", fns[held].start) : -1
+        let tagged = held >= 0 && ((tag >= 0 && tag < at) || callers_tag_family(text, fns, held))
+        if (!tagged) {
+            gate_finding(path, site_line, "the block of {file} carries no family - {FAMILY_TAG}")
+        }
+    }
+}
+
 //! one block call (`BLOCKS`) an area and model file across the folder's test files (a second call naming the same area and
 //! file is a second full load of a form; every call names its area and file by literals on the call's first line), and in
 //! each area of LOAD_ONCE_AREAS no other load of a model file a call loads, nor two loads of one no call loads
@@ -757,6 +808,7 @@ def private check_models_load_once() {
         load_once_area(area, area_set, blocks, globals, loaders)
     }
     check_block_rows(files)
+    check_family_tags(files, blocks)
     stale_loaders(listed)
     if (g_unread > 0) {
         to_log(LOG_WARNING, "REVIEW.das load-once: {g_unread} load site(s) name their model file through a value the check cannot read - DAS_LOG_LEVEL=info prints them\n")
@@ -860,8 +912,8 @@ def private check_folder_shape(root : string) {
 
 //! the gate; `-- --load-once <file>... --loaders <name>... --area-run <run.das> --area <name>...` runs
 //! the load-once check over the named files alone as the named areas, `llm` where none is named (`check_load_once_files`),
-//! `-- --floor <folder>` the file-shape check over that folder, and `-- --cell-pins <file>...` the cell-pin check - its
-//! fixture rails
+//! `-- --floor <folder>` the file-shape check over that folder, `-- --cell-pins <file>...` the cell-pin check and
+//! `-- --family-tags <file>...` the family-tag check over the named files' blocks - its fixture rails
 [export]
 def main() : int {
     let fixtures <- gate_flag_args("--load-once")
@@ -879,6 +931,12 @@ def main() : int {
     if (!empty(floors)) {
         check_folder_shape(floors[0])
         return gate_verdict("modules/dasLLAMA/tests --floor")
+    }
+    let tagged <- gate_flag_args("--family-tags")
+    if (!empty(tagged)) {
+        var inscope blocks <- load_once_blocks(tagged)
+        check_family_tags(tagged, blocks)
+        return gate_verdict("modules/dasLLAMA/tests --family-tags")
     }
     let pinned <- gate_flag_args("--cell-pins")
     if (!empty(pinned)) {

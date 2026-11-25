@@ -144,7 +144,7 @@ def private room_of_a_megabyte(row_bytes : int64) : int64 => 1000000l / row_byte
 
 //! The rows a device holds a session's K/V for: the installed room seam over the model's K/V bytes a row, both planes of every
 //! layer that keeps rows of its own, never past the model's context; no seam bounds nothing.
-[test(description = "`device_kv_max_rows` divides the installed room seam by K/V bytes a row over the layers owning rows (488 f16, 244 f32 in a megabyte), caps at the model context, and on Metal ignores the idle mirror cap")]
+[test(description = "`device_kv_max_rows` divides the installed room seam by K/V bytes a row over the layers owning rows (488 f16, 244 f32 in a megabyte), reads the automatic codec as f16 where the target converts halves and q8_0 where it serves float rows, caps at the model context, and on Metal ignores the idle mirror cap")]
 def test_facade_device_kv_rows(t : T?) {
     var m = Model()
     m.config.n_layers = 3l
@@ -156,6 +156,13 @@ def test_facade_device_kv_rows(t : T?) {
     set_gpu_kv_room_hook(@@room_of_a_megabyte)
     t |> equal(device_kv_max_rows(m, KVDtype.f16, KVDtype.f16), 488l, "f16 K and V over two owning layers of 256: 2048 bytes a row, 488 rows in the megabyte")
     t |> equal(device_kv_max_rows(m, KVDtype.f32, KVDtype.f32), 244l, "f32 doubles a row and halves the rows")
+    with_rows_f32(false) {
+        t |> equal(device_kv_max_rows(m), 488l, "no codec named, a target that converts halves: the automatic codec is f16")
+    }
+    with_rows_f32(true) {
+        let q8_rows = device_kv_max_rows(m, KVDtype.q8_0, KVDtype.q8_0)
+        t |> success(q8_rows != 488l && device_kv_max_rows(m) == q8_rows, "no codec named, a target that serves float rows: the automatic codec is q8_0 ({q8_rows} rows)")
+    }
     m.config.seq_len = 300l
     t |> equal(device_kv_max_rows(m, KVDtype.f16, KVDtype.f16), 300l, "a context under the room is the bound")
     set_gpu_kv_room_hook(prior)

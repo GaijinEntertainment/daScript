@@ -8,6 +8,7 @@ require dasllama/dasllama_kitten
 require dasllama/dasllama_tts
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_styletts2
+require dasllama/dasllama_tts_blocks   // SineSourceCfg, TtsNoise: the decode hook's arguments
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/defer
@@ -28,10 +29,14 @@ require dasllama/dasllama_env     // g_env_engine.image: the image rail's switch
 // both minted by performance/build_tts_data.das through harness/convert_kitten.py and
 // harness/kitten_oracle.py): the parity rail of `_tts_parity.das` per size, and a facade smoke
 // cell that speaks one sentence. The facade and GPU cells also need the front-end packs
-// (`tts_g2p.bin`, `tts_postag.bin`) beside the models; the GPU cells run on Metal or Vulkan, skip
-// where no device serves or the driver registers no seat for the stage, and red where a present
-// seat declines a stage. The facade cell also speaks the published files that store a lane
-// (`kitten-nano-q8.gguf`, `kitten-nano-kq.gguf`), each leg skipping without its file; the stored-file
+// (`tts_g2p.bin`, `tts_postag.bin`) beside the models; the GPU cells run on the Metal, Vulkan or CUDA
+// home: where no device serves, a lane's `@dev` form, the CPU form whose leg is read only beside it
+// and the f32 form's served-synthesis leg are skipped cells, and a present seat that declines a
+// stage or is not registered is a red; the profile cell's pin-off leg skips under
+// DASLLAMA_GPU_PROF=1. The facade cell also speaks the published files that store a lane
+// (`kitten-nano-q8.gguf`, `kitten-nano-kq.gguf`), each leg skipping without its file, and each file's
+// lane runs the served synthesis and the cell of the formats the file stores on its CPU form and its
+// `@dev` form, skipped cells where no device serves; the stored-file
 // cell writes its own files from kitten-nano.gguf, its later legs skip where the first wrote none, and
 // its image-rail leg skips with the rail off (DASLLAMA_IMAGE=0). Each voice file loads once a form, through
 // its one `with_model_once` block; the stored-file cell holds its own loads.
@@ -110,9 +115,18 @@ def test_kitten_oracle(t : T?; m : TtsModel; form, size : string; var rows : St2
 
 // a lane form's cell of the served synthesis on kitten nano
 [cold_path]
-def test_kitten_synthesis_metal(t : T?; var m : TtsModel; form, path : string) {
+def test_kitten_synthesis_metal(t : T?; var m : TtsModel; form, path : string; var rows : St2LaneRows) {
     styletts2_synthesis_cell(t, m, form, path, "nano: the synthesis on the Metal tower vs the CPU chain",
-        "The tower serves the generator, and the words still land.", "Bella")
+        "The tower serves the generator, and the words still land.", "Bella", rows)
+}
+
+//! what the cells of a published stored file's served synthesis are named, after the file's stem
+let private STORED_CELL = "the stored file's synthesis on the tower vs the CPU chain"
+
+[cold_path]
+def private test_kitten_stored_synthesis(t : T?; var m : TtsModel; form, path, stem : string; var rows : St2LaneRows) {
+    styletts2_synthesis_cell(t, m, form, path, "{stem}: {STORED_CELL}",
+        "The tower serves the generator, and the words still land.", "Bella", rows, f32_lane = false)
 }
 
 // text in, speech out through the facade, on the image form `m` of kitten-`stem`.gguf: the front end's packs sit beside
@@ -140,17 +154,16 @@ def private kitten_facade_cell(t : T?; var m : TtsModel; stem : string) {
     }
 }
 
-// the generator hook under test: declines, or serves a silent waveform of the CPU chain's length
-var private g_hook_serves = false
+var private g_decode_stub_serves = false
 
-[unused_argument(d, x_rows, c, s, har_spec, har_frames, sc)]
-def private generator_stub(d : St2Decoder; x_rows : array<float>; c, t : int64; s : array<float>;
-                           har_spec : array<float>; har_frames : int64; var wave : array<float>; var sc : St2Scratch) : bool {
-    if (!g_hook_serves) {
+[unused_argument(d, text_c, source, asr, frames, f0, nrg, s_ref, noise, seed, sc)]
+def private decode_stub(d : St2Decoder; text_c : int64; source : SineSourceCfg; asr : array<float>; frames : int64; f0, nrg : array<float>; f2 : int64;
+                        s_ref : array<float>; noise : TtsNoise; seed : uint64; var wave : array<float>; var sc : St2Scratch) : bool {
+    if (!g_decode_stub_serves) {
         return false
     }
-    wave |> resize(t * 600l)
-    for (i in range64(t * 600l)) {
+    wave |> resize(f2 * 600l)
+    for (i in range64(f2 * 600l)) {
         wave[i] = 0.0
     }
     return true
@@ -164,39 +177,44 @@ struct HookProbe {
     silent_after_serve : bool
 }
 
+//! one chunk past a declining decode hook, then one past a serving one, on `m`, kitten nano's `image_cpu` form: a hook that
+//! declines hands its stage to the CPU chain, which only a CPU image runs
 def private hook_probe(var m : TtsModel) : HookProbe {
     var r = HookProbe()
-    register_styletts2_gpu(St2GpuDriver(gen = @@generator_stub))   // the generator seat alone: the decode seat empty, so the CPU chain reaches it
+    register_styletts2_gpu(St2GpuDriver(decode = @@decode_stub))   // the decode seat alone: every stage before it on the CPU chain
     defer() {
         unregister_styletts2_gpu()
     }
-    g_hook_serves = false
-    let s0 = styletts2_generator_gpu_stats()
+    g_decode_stub_serves = false
+    let s0 = styletts2_gpu_stats("decode")
     var inscope a <- synthesize(m, "The hook declines and the model speaks.", "Bella")
-    let s1 = styletts2_generator_gpu_stats()
+    let s1 = styletts2_gpu_stats("decode")
     r.calls_after_decline = s1.calls - s0.calls
     r.served_after_decline = s1.served - s0.served
     r.spoke_after_decline = logits_maxabs(a.pcm) > 0.05
-    g_hook_serves = true
+    g_decode_stub_serves = true
     var inscope b <- synthesize(m, "The hook serves silence.", "Bella")
-    let s2 = styletts2_generator_gpu_stats()
+    let s2 = styletts2_gpu_stats("decode")
     r.served_after_serve = s2.served - s1.served
     r.silent_after_serve = logits_maxabs(b.pcm) == 0.0 && !empty(b.pcm)
-    g_hook_serves = false
+    g_decode_stub_serves = false
     return r
 }
 
 [cold_path]
-def private test_kitten_generator_hook(t : T?; var m : TtsModel; path : string) {
+def private test_kitten_decode_hook(t : T?; var m : TtsModel; path : string) {
     unsafe {
-        t |> run("nano: the generator hook declines into the CPU chain and serves when it answers") @capture(& m)(t : T ?) {
+        t |> run("nano: the decode hook declines into the CPU chain and serves when it answers") @capture(& m)(t : T ?) {
             return if (tts_data_missing(t, path, false))
-            let r = hook_probe(m)
-            t |> equal(r.calls_after_decline, 1, "one chunk, one hook call")
-            t |> equal(r.served_after_decline, 0, "a decline serves nothing")
-            t |> success(r.spoke_after_decline, "the CPU chain spoke after the decline")
-            t |> equal(r.served_after_serve, 1, "the serving hook is counted")
-            t |> success(r.silent_after_serve, "the served waveform reached the facade")
+            with_gpu_knobs() {
+                set_serving_gpu_tower(true, TowerFamily.tts)   // the stub is asked whatever the knob; set, so no earlier cell's value rides in
+                let r = hook_probe(m)
+                t |> equal(r.calls_after_decline, 1, "one chunk, one hook call")
+                t |> equal(r.served_after_decline, 0, "a decline serves nothing")
+                t |> success(r.spoke_after_decline, "the CPU chain spoke after the decline")
+                t |> equal(r.served_after_serve, 1, "the serving hook is counted")
+                t |> success(r.silent_after_serve, "the served waveform reached the facade")
+            }
         }
     }
 }
@@ -216,49 +234,112 @@ def private test_kitten_over_long_chunk(t : T?; m : TtsModel) {
     }
 }
 
+//! the unpinned lane's `@dev` form of kitten nano, a GPU home's image as a load serves it, with its tower knob flipped off
+[cold_path]
+def private test_kitten_knob_flip_refuses(t : T?; var m : TtsModel; path : string) {
+    unsafe {
+        t |> run("nano: a GPU image with its tower turned off refuses the synthesis by name") @capture(& m)(t : T ?) {
+            return if (tts_data_missing(t, path))
+            tts_knob_flip_refuses(t, m, "kitten-nano.gguf", "The tower was on when this model loaded.", "Bella")
+        }
+    }
+}
+
+[test(description = "With the GPU seats' classes read as not built the flavor pick names no home and kitten-nano loads the CPU image, which speaks with no seat served; with them built the pick names the home")]
+def test_kitten_unbuilt_seats_take_cpu_image(t : T?) {
+    own_load("the cell asserts on the load itself: the image flavor it lands on with the GPU seats' classes read as not built")
+    t |> run("nano: seats whose classes did not build leave the load on the CPU image") @(t : T?) {
+        return if (tts_data_missing(t, path_join(models_dir(), "kitten-nano.gguf")))
+        tts_unbuilt_seats_take_cpu_image(t, path_join(models_dir(), "kitten-nano.gguf"), "The seats did not build, and the words still land.", "Bella", false)
+    }
+}
+
 // Kitten nano's file of floats, one block: the image form carries the facade's cells (`_tts_facade_cells.das` and this
-// file's), the lane forms the served synthesis across the tower knob and the parity rail.
-[test(description = "kitten-nano.gguf loads once a form. Its image form through the facade lists 8 voices at 24 kHz and speaks a 51-character sentence as 1 to 10 seconds of finite audio peaking above 0.05, with every stage clock running and the total covering its parts; a registered generator hook is called once per chunk, serves nothing when it declines while the CPU chain speaks, and its silent waveform reaches the facade when it serves; an id sequence 64 past the encoder's max positions is truncated, not refused, the timings counting its samples exactly; `tts_phonemize` reproduces the pinned corpus rows' misaki phonemes bare and with en-us, the model declares en-us alone and an undeclared language panics; the model's own chunker appends the driver's comma; a streamed synthesis at one lane concatenates to the buffered one at the box's lane count sample for sample; the source window and `tts_release_scratch` leave the next synthesis sample-identical and a 24-codepoint cap yields more chunks of audible speech. Its lane forms on the GPU tower hold the f32 reference lane against the CPU, then serve every seat once a chunk on the served and recipe lanes above the 0.05 peak floor within a twentieth of the CPU chain's sample count; against onnxruntime dumps with captured noise every case's token ids and sample count match and each traced stage holds 1e-4 of the oracle's peak, with poisoned controls, the q8 and recipe lanes' decode on the tower within their bars")]
+// file's), the `image_cpu` form the cells that hold the CPU chain, the lane forms the served synthesis across the tower
+// knob and the parity rail - a lane's CPU form its CPU leg, its `@dev` form its tower leg, the two held after the block -
+// and the unpinned lane's `@dev` form the knob flip.
+[test(description = "kitten-nano.gguf loads once a form. Its image form through the facade lists 8 voices at 24 kHz and speaks a 51-character sentence as 1 to 10 seconds of finite audio peaking above 0.05, with every stage clock running and the total covering its parts; a chunk 64 ids past the encoder's max positions is truncated instead of panicking, producing samples that the timings count; `tts_phonemize` reproduces the pinned corpus rows' misaki phonemes exactly, bare and with en-us, the model declares en-us alone and an undeclared language panics; the model's own chunker appends the driver's comma to unpunctuated chunks and keeps the text's own punctuation. On its CPU image a registered decode hook is called once per chunk, serves nothing when it declines while the CPU chain speaks, and its silent waveform reaches the facade and is counted when it serves; streaming synthesis at one lane emits one chunk a sentence whose concatenation equals the buffered synthesis at the box's lane count sample for sample, with the summed timings counting every sample; the source window and `tts_release_scratch` leave the next synthesis sample-identical while the release frees the carrier, and a 24-codepoint cap yields more chunks of audible speech of about the same length. Its lane forms, each lane's CPU image and the image the box's GPU home serves, hold the f32 reference lane on the GPU tower against the CPU, then serve every seat once a chunk on the served lane, the recipe lane and the recipe lane with its upsamplers pinned Q5_K, above the 0.05 peak floor within a twentieth of the CPU chain's sample count, launching the stamps of each stored format a lane holds and of no other and the f32 tiles at fewer dense sites than the f32 lane's image, which launches no quant format's stamp, the home's dense dispatches over widened rows one a chunk per off-lattice noise conv and none with the tower off; on the served lane's image the idle release gives the home's activation rows back and keeps its weights while the next synthesis speaks the same samples, and once every form is deleted the home holds no device byte for the TTS driver; the home's image speaks with the tower knob on, and with the knob flipped off its next synthesis refuses by name and points at the source model, every later stage entered on its own refusing by its own name and the image speaking again with the knob back on, on the CUDA home a failed readback refuses its synthesis by name and the image speaks again with the seam put back, and under the profile pin its decode shot's ledger holds stamps and device time on every role the decode seat stamps while the same synthesis with the pin off reports none; against onnxruntime dumps with captured noise every case's token ids and sample count match the oracle and each traced stage holds 1e-4 of the oracle's peak, with poisoned controls, each seat's stage on the tower within its bar of the CPU stage and the q8 and recipe lanes' decode on the tower within theirs")]
 def test_kitten_nano(t : T?) {
     let path = path_join(models_dir(), "kitten-nano.gguf")
     var inscope rows = St2LaneRows()
+    var dev_held = TtsDevHeld()
     with_dasllama_jobque_() {
-        with_model_once(t, "tts", "kitten-nano.gguf", styletts2_lane_forms(true), @@styletts2_form) $(var m; form) {
+        var inscope forms <- styletts2_lane_forms(t, "kitten-nano.gguf", ["image", "image_cpu"], true)
+        let ran = with_model_once(t, "tts", "kitten-nano.gguf", forms, @@styletts2_form) $(var m; form) {
             styletts2_form_is(t, m, path_join(models_dir(), "kitten-nano.gguf"), form)
             if (form == "image") {
                 kitten_facade_cell(t, m, "nano")
-                test_kitten_generator_hook(t, m, path)
                 test_kitten_over_long_chunk(t, m)
                 tts_facade_kitten_cells(t, m, path)
+            } elif (form == "image_cpu") {
+                test_kitten_decode_hook(t, m, path)
+                tts_facade_kitten_cpu_cells(t, m, path)
             } else {
-                test_kitten_synthesis_metal(t, m, form, path)
+                test_kitten_synthesis_metal(t, m, form, path, rows)
                 test_kitten_oracle(t, m, form, "nano", rows)
+                if (form == "q8@dev") {
+                    tts_device_release_cell(t, m, path, "The home gives its rows back when idle.",
+                        "Bella", true, dev_held)
+                    tts_seat_profile_cell(t, m, "nano")
+                    tts_cuda_take_fault_cell(t, m, path, "The readback reads the rows.",
+                        "Bella")
+                    test_kitten_knob_flip_refuses(t, m, path)
+                }
             }
         }
+        if (ran) {
+            styletts2_synthesis_held(t, "nano: the synthesis on the Metal tower vs the CPU chain", "kitten-nano.gguf", "Bella", rows)
+            styletts2_parity_held(t, "nano against onnxruntime, captured noise", rows)
+            tts_device_dropped_held(t, "kitten-nano.gguf", dev_held)
+        }
     }
 }
 
-[test(description = "The published kitten nano files that store a lane - the Q8_0 lane and the recipe lane - each load once and through the facade list 8 voices at 24 kHz and speak a 51-character sentence as 1 to 10 seconds of finite audio peaking above 0.05, with every stage clock running and the total covering its parts")]
+[test(description = "The published kitten nano files that store a lane - the Q8_0 lane and the recipe lane - each load once a form. Through the facade each lists 8 voices at 24 kHz and speaks a 51-character sentence as 1 to 10 seconds of finite audio peaking above 0.05, with every stage clock running and the total covering its parts; on the file's lane, its CPU image and the image the box's GPU home serves, the tower serves every seat once a chunk above the 0.05 peak floor within a twentieth of the CPU chain's sample count and launches the stamps of each format the file stores - Q8_0 blocks, on the recipe file the two K-quant formats the loader tags its text encoder's convs and its upsamplers beside them - and of no other, on the Metal home none of its own f32 tiles, the home's dense dispatches over widened rows one a chunk per off-lattice noise conv and none with the tower off")]
 def test_kitten_facade(t : T?) {
+    let q8_path = path_join(models_dir(), "kitten-nano-q8.gguf")
+    let kq_path = path_join(models_dir(), "kitten-nano-kq.gguf")
+    var inscope q8_rows = St2LaneRows()
+    var inscope kq_rows = St2LaneRows()
     with_dasllama_jobque_() {
-        with_model_once(t, "tts", "kitten-nano-q8.gguf", ["image"], @@styletts2_form) $(var m; form) {
-            styletts2_form_is(t, m, path_join(models_dir(), "kitten-nano-q8.gguf"), form)
-            kitten_facade_cell(t, m, "nano-q8")
+        var inscope q8_forms <- styletts2_stored_forms(t, "kitten-nano-q8.gguf", "q8")
+        let q8_ran = with_model_once(t, "tts", "kitten-nano-q8.gguf", q8_forms, @@styletts2_form) $(var m; form) {
+            styletts2_form_is(t, m, q8_path, form)
+            if (form == "image") {
+                kitten_facade_cell(t, m, "nano-q8")
+            } else {
+                test_kitten_stored_synthesis(t, m, form, q8_path, "nano-q8", q8_rows)
+            }
         }
-        with_model_once(t, "tts", "kitten-nano-kq.gguf", ["image"], @@styletts2_form) $(var m; form) {
-            styletts2_form_is(t, m, path_join(models_dir(), "kitten-nano-kq.gguf"), form)
-            kitten_facade_cell(t, m, "nano-kq")
+        if (q8_ran) {
+            styletts2_synthesis_held(t, "nano-q8: {STORED_CELL}", "kitten-nano-q8.gguf", "Bella", q8_rows)
+        }
+        var inscope kq_forms <- styletts2_stored_forms(t, "kitten-nano-kq.gguf", "kq")
+        let kq_ran = with_model_once(t, "tts", "kitten-nano-kq.gguf", kq_forms, @@styletts2_form) $(var m; form) {
+            styletts2_form_is(t, m, kq_path, form)
+            if (form == "image") {
+                kitten_facade_cell(t, m, "nano-kq")
+            } else {
+                test_kitten_stored_synthesis(t, m, form, kq_path, "nano-kq", kq_rows)
+            }
+        }
+        if (kq_ran) {
+            styletts2_synthesis_held(t, "nano-kq: {STORED_CELL}", "kitten-nano-kq.gguf", "Bella", kq_rows)
         }
     }
 }
 
-[test(description = "Kitten mini, a form loaded once each, against onnxruntime dumps with captured noise: every case's token ids and sample count match the oracle, and each traced stage holds 1e-4 of the oracle's peak, with poisoned controls, the q8 and recipe lanes' decode on the tower within their bars")]
+[test(description = "Kitten mini, a form loaded once each, against onnxruntime dumps with captured noise: every case's token ids and sample count match the oracle, and each traced stage holds 1e-4 of the oracle's peak, with poisoned controls, each seat's stage on the tower within its bar of the CPU stage and the q8 and recipe lanes' decode on the tower within theirs")]
 def test_kitten_mini(t : T?) {
     var inscope rows = St2LaneRows()
     with_dasllama_jobque_() {
-        with_model_once(t, "tts", "kitten-mini.gguf", styletts2_lane_forms(false), @@styletts2_form) $(var m; form) {
+        var inscope forms <- styletts2_lane_forms(t, "kitten-mini.gguf", array<string>(), false)
+        let ran = with_model_once(t, "tts", "kitten-mini.gguf", forms, @@styletts2_form) $(var m; form) {
             styletts2_form_is(t, m, path_join(models_dir(), "kitten-mini.gguf"), form)
             test_kitten_oracle(t, m, form, "mini", rows)
+        }
+        if (ran) {
+            styletts2_parity_held(t, "mini against onnxruntime, captured noise", rows)
         }
     }
 }
@@ -407,12 +488,12 @@ def private stored_file_pins(t : T?; src : string) {
                 t |> success(m.q8 && m.kq, "under a pinned recipe the stored file serves its own lane")
             }
             reset_styletts2_recipe()
-            t |> success(stat(image_path_for(stored, ST2_IMAGE_TAG_KQ)).is_valid, "and its load wrote the lane's image beside it, where a pinned mint of a file of floats writes none")
+            t |> success(stat(image_path_for(stored, tower_dev_tag(ST2_IMAGE_TAG_KQ, styletts2_dev_flavor(true)))).is_valid, "and its load wrote the lane's image beside it, where a pinned mint of a file of floats writes none")
             dlim_wipe(stored)
         }
 }
 
-[test(description = "kitten-nano written as a file that stores the Q8_0 lane's weights, and as one that stores the recipe lane's, stages the lane's own quant bytes with each Q8_0 scale as a half, is smaller than its source, serves the lane it names over an f32 pin and a recipe ask, and speaks; a pinned group is stored in its pin's format and a stored file bakes and loads on its own lane under a pin; a layout this build does not read, an unknown lane, a quantized tensor in a file that declares no layout, a format a site does not take, a conv whose channels the file does not name, a half-quantized LSTM, a rewrite of a stored file and an unwritable destination are refused or declined by name")]
+[test(description = "kitten-nano written as a file that stores the Q8_0 lane's weights, and as one that stores the recipe lane's, stages the lane's own planes bit for bit - quant bytes and Q8_0 scales, the halves a block stores - is smaller than its source, serves the lane it names over an f32 pin and a recipe ask, and speaks; a pinned group is stored in its pin's format and a stored file bakes and loads on its own lane under a pin; a layout this build does not read, an unknown lane, a quantized tensor in a file that declares no layout, a format a site does not take, a conv whose channels the file does not name, a half-quantized LSTM, a rewrite of a stored file and an unwritable destination are refused or declined by name")]
 def test_kitten_stored_file(t : T?) {
     own_load("the cell holds several models loaded at once: a stored file's staging beside its source's lane and the source's other lane, byte against byte, and a stored file's own load writes an image beside it")
     let src = path_join(models_dir(), "kitten-nano.gguf")
@@ -428,7 +509,7 @@ def test_kitten_stored_file(t : T?) {
             let lane = kq ? "kq" : "q8"
             let stored = stored_tmp(lane)
             remove(stored)
-            t |> run("the {lane} lane written to a file: the lane's quant bytes, its Q8_0 scales as halves") @(t : T?) {
+            t |> run("the {lane} lane written to a file: the lane's quant bytes and its Q8_0 scales, bit for bit") @(t : T?) {
                 t |> success(write_styletts2_gguf(src, stored, kq), "the file is written")
                 t |> success(stat(stored).size * 2ul < stat(src).size, "at {int64(stat(stored).size)} bytes it is under half its source's {int64(stat(src).size)}")
                 t |> equal(styletts2_stored_lane(stored), lane, "the file names its lane")
@@ -439,10 +520,10 @@ def test_kitten_stored_file(t : T?) {
                 t |> equal(long_length(from_file.qblob), long_length(from_lane.qblob), "as many quant bytes as the lane mints")
                 t |> equal(long_length(from_file.blob), long_length(from_lane.blob), "and as many floats")
                 let diff = staged_against(from_file, from_lane)
-                to_log(LOG_INFO, "kitten-nano {lane} file: {diff.qdiff} quant bytes off, {diff.same} floats equal, {diff.half} as halves, {diff.other} other\n")
+                to_log(LOG_INFO, "kitten-nano {lane} file: {diff.qdiff} quant bytes off, {diff.same} floats equal, {diff.half} a half's rounding off, {diff.other} other\n")
                 t |> equal(diff.qdiff, 0l, "every quant and K-quant byte is the lane's")
-                t |> equal(diff.other, 0l, "every float is the lane's, or the lane's rounded to a half")
-                t |> success(diff.half > 0l, "the Q8_0 scales are the halves the blocks hold ({diff.half} of them)")
+                t |> equal(diff.other, 0l, "every float is the lane's")
+                t |> equal(diff.half, 0l, "... each Q8_0 scale among them: the lane's mint keeps a scale as the half a block stores")
                 var inscope other_lane <- stage_styletts2(src, true, !kq)
                 t |> success(long_length(other_lane.qblob) != long_length(from_file.qblob), "control: the other lane mints another byte count")
             }

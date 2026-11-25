@@ -656,6 +656,42 @@ def private lo_gate_reads(t : T?; owner : string) {
     }
 }
 
+//! a family-tag fixture's function `fn` holding the block of `file`: `lead` its statements ahead of the block, `tail` after
+def private fam_block(fn, file : string; lead : string = ""; tail : string = "") : string =>
+    ("def {fn}(t : T?) \{\n{lead}    with_model_once{OPEN}t, \"tts\", \"{file}\", [\"image\"], @@fx_form) "
+        + "$(var m; form) \{\n    \}\n{tail}\}\n")
+
+let private FAM_TAG = "    return if (!family_on(t, \"fx\"))\n"   //! a fixture function's family tag
+
+[test(description = "The tests/ REVIEW.das family-tag gate passes a block whose file a family row holds, a block behind a `family_on` call in its own function and a block whose function's every caller calls `family_on` first, and an untagged block of a fixture the gate lists as no family's (stories15M.bin), and fails with one named finding each a block of a file of no row with no call, one whose only call follows the block, and one whose function an untagged function calls too", timeout = 1200)]
+def test_family_tags_gate(t : T?) {
+    let caller = "def test_caller(t : T?) \{\n{FAM_TAG}    fx_held(t)\n\}\n"
+    t |> run("a row's file, a call ahead of the block and a tagged caller pass") @(t : T?) {
+        let text = (fam_block("test_row", "kitten-nano.gguf") + fam_block("test_tagged", "fx-pack.bin", FAM_TAG)
+            + fam_block("fx_held", "fx-held.bin") + caller)
+        let run = run_tests_gate(["--family-tags", fixture("test_fx_family_ok.das", text)])
+        t |> equal(run.rc, 0, "the gate's exit code\n{run.output}")
+    }
+    t |> run("a fixture of no family (stories15M.bin) passes with no call, where the same block of fx-pack.bin does not") @(t : T?) {
+        let run = run_tests_gate(["--family-tags", fixture("test_fx_family_free.das", fam_block("test_bare", "stories15M.bin"))])
+        t |> equal(run.rc, 0, "the gate's exit code\n{run.output}")
+        t |> success(find(run.output, "carries no family") < 0, "no finding names the fixture\n{run.output}")
+    }
+    for (bad in fixed_array(
+            (name = "test_fx_family_bare.das", file = "fx-pack.bin", text = fam_block("test_bare", "fx-pack.bin")),
+            (name = "test_fx_family_late.das", file = "fx-pack.bin", text = fam_block("test_late", "fx-pack.bin", "", FAM_TAG)),
+            (name = "test_fx_family_caller.das", file = "fx-held.bin",
+                text = fam_block("fx_held", "fx-held.bin") + caller + "def test_other(t : T?) \{\n    fx_held(t)\n\}\n"))) {
+        t |> run("{bad.name}: a block of a file of no row that no `family_on` call stands ahead of is a finding") @(t : T?) {
+            let run = run_tests_gate(["--family-tags", fixture(bad.name, bad.text)])
+            t |> equal(run.rc, 1, "the gate's exit code\n{run.output}")
+            t |> success(find(run.output, "{bad.name}:2:") >= 0, "the finding names its site\n{run.output}")
+            t |> success(find(run.output, "the block of {bad.file} carries no family") >= 0, "the finding names the file and the rule\n{run.output}")
+            t |> success(find(run.output, "1 finding(s)") >= 0, "the one block is the one finding\n{run.output}")
+        }
+    }
+}
+
 //! a cell-pin fixture's clean cell: it reads the pin and the form's knob, and a commented pin is no call
 let private PIN_CLEAN = "def fx_cell(t : T?; var m : Model; form : ModelForm) \{\n    // pin_kernel_backend{OPEN}\"portable\") on the form, not here\n    t |> equal(kernel_backend_pin{OPEN}), form.backend)\n    t |> success(form.kq_native != KqNative.kept || m.kquant_native)\n\}\n"
 

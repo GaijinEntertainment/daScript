@@ -126,6 +126,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_metal_decode_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_gemv_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_misc_kernels.das",
+                    "modules/dasLLAMA/tests/test_metal_tts_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_gemm_kernels.das" ]
     } elif (name == "gpu-kernels") {
         return <- [ "modules/dasLLAMA/tests/test_vulkan_kernels.das",
@@ -220,6 +221,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_cuda_tower_blocks.das",
                     "modules/dasLLAMA/tests/test_cuda_tower_asr.das",
                     "modules/dasLLAMA/tests/test_cuda_tower_whisper_chain.das",
+                    "modules/dasLLAMA/tests/test_cuda_tts_kernels.das",
                     "modules/dasLLAMA/tests/uncategorized__dasllama_internal_persistent_heap_stack_524288.das",
                     "modules/dasLLAMA/tests/uncategorized_persistent_heap_stack_524288.das",
                     "modules/dasLLAMA/tests/uncategorized_no_aot_persistent_heap.das" ]
@@ -323,6 +325,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_metal_decode_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_gemv_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_misc_kernels.das",
+                    "modules/dasLLAMA/tests/test_metal_tts_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_gemm_kernels.das",
                     "modules/dasLLAMA/tests/test_model_image.das" ]
     }
@@ -352,7 +355,7 @@ def area_tests(area : string) : array<string> {
                     "test_qwen3v.das", "test_tower_helpers.das", "test_vision.das", "test_vision_chat.das",
                     "test_vision_embedder.das", "test_vulkan_tower_kernels.das" ]
     } elif (area == "tts") {
-        return <- [ "test_f32_batch_tile_perms.das", "test_tts_blocks.das", "test_tts_facade.das",
+        return <- [ "test_cuda_tts_kernels.das", "test_f32_batch_tile_perms.das", "test_tts_blocks.das", "test_tts_facade.das",
                     "test_tts_g2p.das", "test_tts_g2p_ru.das", "test_tts_g2p_ru_pack.das", "test_tts_kitten.das", "test_tts_kokoro.das", "test_tts_pocket.das",
                     "test_tts_postag.das", "test_tts_textnorm.das", "test_tts_textnorm_ru.das", "test_tts_voice_prompts.das", "test_vulkan_tts_conv_kernels.das",
                     "test_vulkan_tts_kernels.das", "test_vulkan_tts_pocket_kernels.das", "test_vulkan_tts_source_kernels.das" ]
@@ -415,7 +418,7 @@ def area_image_arms(area : string) : string {
 //! reaches every area (the safe default for a new module until it gets a row)
 let MODULE_AREAS <- {
     "dasllama_tower" => "audio,vision,tts,translate",   // the TTS blocks, Pocket and StyleTTS2 call its row kernels; the Bergamot chain its GEMMs
-    "dasllama_tower_image" => "audio,vision",   // the audio and vision families mint and pick their GPU flavors through it
+    "dasllama_tower_image" => "audio,vision,tts",   // the audio, vision and speech families mint and pick their GPU flavors through it
     "dasllama_metal_tower" => "audio,vision,tts",
     "dasllama_vulkan_tower" => "audio,vision,tts,translate",   // the Vulkan TTS and translation drivers ride the tower's classes
     "dasllama_cuda_tower" => "audio,vision,tts",   // the GPU knobs fixture the audio and TTS cells require reads its knob
@@ -430,8 +433,9 @@ let MODULE_AREAS <- {
     "dasllama_asr_dec_chains" => "audio", "dasllama_cuda_asr_dec" => "audio",   // the whisper decoder's chains and its CUDA seat
     "dasllama_tower_chains_fc" => "audio", "dasllama_cuda_tower_fc" => "audio", "dasllama_cuda_asr_dec_fc" => "audio",   // the FastConformer trio's chains, fronts and decoders, and their CUDA seats
     "dasllama_cuda_classes_front" => "audio", "dasllama_cuda_classes_blocks" => "audio,vision", "dasllama_cuda_classes_asr" => "audio",
-    "dasllama_tts_slab" => "audio,vision,tts",   // the Metal tower requires it for every seat
-    "dasllama_vulkan_tts" => "tts",
+    "dasllama_tts_slab" => "tts",
+    "dasllama_vulkan_tts" => "tts", "dasllama_tower_tts" => "tts", "dasllama_cuda_tts" => "tts", "dasllama_cuda_classes_tts" => "tts",   // the TTS driver, each home's seats and stamps
+    "dasllama_metal_tts" => "tts", "dasllama_metal_sites" => "tts", "dasllama_metal_classes_tts" => "tts", "dasllama_metal_rail" => "tts", "dasllama_metal_dispatch" => "tts",
     "dasllama_gpu_kernels_common" => "audio,vision,tts,translate,llm",   // the kernels both GPU homes stamp: the TTS chains', the depthwise rows and rope the audio and vision towers stamp, the Bergamot step's
     "dasllama_asr" => "audio", "dasllama_asr_types" => "audio", "dasllama_audio" => "audio",
     "dasllama_audio_embedder" => "audio", "dasllama_audio_io" => "audio", "dasllama_canary" => "audio",
@@ -472,7 +476,7 @@ let MODULE_AREAS <- {
     "dasllama_tokenizer" => "llm", "dasllama_transformer" => "llm",
     "dasllama_unicode" => "llm,tts",   // cpt_count serves the TTS front end and its chunker
     "dasllama_vulkan_decode" => "llm", "dasllama_vulkan_prefill" => "llm", "dasllama_vulkan_seams" => "llm",
-    "dasllama_cuda_common" => "llm,audio,vision", "dasllama_cuda_dispatch" => "llm,audio,vision", "dasllama_cuda_classes" => "llm,audio,vision",
+    "dasllama_cuda_common" => "llm,audio,vision,tts", "dasllama_cuda_dispatch" => "llm,audio,vision", "dasllama_cuda_classes" => "llm,audio,vision",
     "dasllama_cuda_decode" => "llm", "dasllama_cuda_stream" => "llm", "dasllama_math_cuda" => "llm", "dasllama_cuda_classes_rows" => "llm"
 }
 
@@ -748,6 +752,34 @@ def exclude_files(files : array<string>; exclude : string) : tuple<kept : array<
         }
     }
     return <- (kept <- kept, dropped <- dropped)
+}
+
+//! the files a run drops ahead of its first child, `excluded` one EXCLUDED line a file with the reason, and where none
+//! is kept `refusal`, the error that ends the run
+struct RunExclusion {
+    kept : array<string>
+    excluded : array<string>
+    refusal : string
+}
+
+def run_exclusion(files : array<string>; exclude, disabled : string) : RunExclusion {
+    //! the caller's `--exclude` (`exclude_files`), then - where the children leave dasCUDA out
+    //! (`disabled`, the comma list DASLLAMA_DISABLE_MODULES names) - the CUDA-only files
+    //! (`CUDA_ONLY_EXCLUDE`), which do not compile without it. Non-private: test_run_suites.das
+    //! gates it
+    var r = RunExclusion()
+    var inscope by_caller <- exclude_files(files, exclude)
+    r.excluded <- [for (file in by_caller.dropped); "EXCLUDED {base_name(file)} (--exclude {exclude})"]
+    let no_cuda = has_value(split_trimmed(disabled, ","), "dasCUDA")
+    var inscope by_module <- exclude_files(by_caller.kept, no_cuda ? CUDA_ONLY_EXCLUDE : "")
+    let why = "dasCUDA left out (DASLLAMA_DISABLE_MODULES={disabled}): it requires the CUDA kernel classes"
+    r.excluded |> push_from([for (file in by_module.dropped); "EXCLUDED {base_name(file)} ({why})"])
+    r.kept <- by_module.kept
+    if (empty(r.kept)) {
+        let by_exclude = empty(exclude) ? "" : "--exclude '{exclude}' "
+        r.refusal = "{by_exclude}{no_cuda ? "with dasCUDA left out " : ""}dropped every file of the run"
+    }
+    return <- r
 }
 
 //! --only: the files whose base name contains any comma-separated token, the rest dropped; "" keeps the whole list.
@@ -1325,7 +1357,7 @@ def child_cache_dir(das_exe : string; own_binary : bool) : string {
 def model_paths(text : string) : array<string> {
     var names : table<string>
     for (part in split(text, "\"")) {
-        if (part |> ends_with(".gguf") && find(part, "\{") < 0 && !(part |> starts_with("/")) && find(part, "..") < 0
+        if (part |> ends_with(".gguf") && part != ".gguf" && find(part, "\{") < 0 && !(part |> starts_with("/")) && find(part, "..") < 0
                 && find(part, "\\") < 0 && find(part, " ") < 0 && find(part, "*") < 0 && find(part, ":") < 0) {
             names |> insert(part)
         }
@@ -1357,14 +1389,93 @@ def reached_names(files : array<string>) : table<string> {
     return <- reached
 }
 
-//! the model files the run's `files`, and the fixtures they reach, name that `dir` does not hold, each with the files that
-//! name it: the cells that would skip, said before the run. Non-private: test_run_suites.das pins it
+let SCRATCH_FIXTURE = "_scratch_dir.das"   //! the fixture whose functions put a name under a test's scratch directory
+
+//! where a function's text ends, `head` its text from the `def` on: the first later line that opens at column 0 with
+//! anything but the brace closing it
+def private fn_text_end(head : string) : int {
+    var end = length(head)
+    peek_data(head) $(d) {
+        for (i in range(length(d) - 1)) {
+            let c = int(d[i + 1])
+            if (int(d[i]) == '\n' && c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '}') {
+                end = i
+                break
+            }
+        }
+    }
+    return end
+}
+
+//! each function `text` defines - a `def` at column 0: its call `name(`, and its text from the name to its end
+def private defined_fns(text : string) : array<tuple<call : string; body : string>> {
+    var out : array<tuple<call : string; body : string>>
+    var inscope heads <- split("\n{text}", "\ndef ")
+    for (i in range(1, length(heads))) {
+        let head = heads[i]
+        let from = head |> starts_with("private ") ? 8 : 0
+        let paren = find(head, "(", from)
+        if (paren > from) {
+            out |> push((call = slice(head, from, paren + 1), body = slice(head, from, fn_text_end(head))))
+        }
+    }
+    return <- out
+}
+
+def scratch_calls(text, fixture : string) : array<string> {
+    //! The calls by which a test file's `text` puts a name under its scratch directory:
+    //! `test_temp_dir()`, each function the scratch fixture defines (`fixture`, its text), and each
+    //! function of the file whose own body makes one of those. Non-private: test_run_suites.das
+    //! pins it
+    var calls <- [for (f in defined_fns(fixture)); f.call]
+    calls |> push("test_temp_dir()")
+    var inscope own : array<string>
+    for (f in defined_fns(text)) {
+        let at = length(f.call)
+        for (c in calls) {
+            if (find(f.body, c, at) >= 0) {
+                own |> push(f.call)
+                break
+            }
+        }
+    }
+    calls |> push_from(own)
+    return <- calls
+}
+
+def names_only_written(text, model : string; calls : array<string>) : bool {
+    //! Whether `text` names `model` only as a file it writes: every line holding the quoted name
+    //! hands it to one of `calls`, a test's scratch calls. Non-private: test_run_suites.das pins it
+    let quoted = "\"{model}\""
+    var named = 0
+    for (line in split(text, "\n")) {
+        continue if (find(line, quoted) < 0)
+        named++
+        var scratch = false
+        for (c in calls) {
+            scratch ||= find(line, c) >= 0
+        }
+        return false if (!scratch)
+    }
+    return named > 0
+}
+
 def missing_models(files : array<string>; dir : string) : array<tuple<name : string; asked : string>> {
+    //! The model files the run's `files`, and the fixtures they reach, name that `dir` does not
+    //! hold, each with the files that name it: the cells that would skip, said before the run. A
+    //! file of the model-free suite names no stocked model, and a name a file hands only to its
+    //! scratch calls (`names_only_written`) is a file the test writes: neither is missing.
+    //! Non-private: test_run_suites.das pins it
     var reached <- reached_names(files)
+    let free <- {for (f in free_files()); base_name(f)}
+    let fixture = fread("{TESTS_DIR}/{SCRATCH_FIXTURE}")
     var asked : table<string; array<string>>
     for (name in keys(reached)) {
-        for (model in model_names(fread("{TESTS_DIR}/{name}"))) {
-            if (!stat(path_join(dir, model)).is_valid) {
+        continue if (key_exists(free, name))
+        let text = fread("{TESTS_DIR}/{name}")
+        var inscope calls <- scratch_calls(text, fixture)
+        for (model in model_names(text)) {
+            if (!stat(path_join(dir, model)).is_valid && !names_only_written(text, model, calls)) {
                 asked[model] |> push(name)
             }
         }
@@ -2121,12 +2232,12 @@ def main() : int {
         to_log(LOG_ERROR, "--no-tune sets DASLLAMA_IMAGE=0 in every child, and the run owns the image arms {plan.image_arms} - drop --no-tune, or run those arms through --suite image --arm\n")
         return 2
     }
-    var split <- exclude_files(plan.files, cfg.exclude)
-    for (file in split.dropped) {
-        to_log(LOG_INFO, "EXCLUDED {base_name(file)} (--exclude {cfg.exclude})\n")
+    var split <- run_exclusion(plan.files, cfg.exclude, child_disabled_modules())
+    for (line in split.excluded) {
+        to_log(LOG_INFO, "{line}\n")
     }
     if (empty(split.kept)) {
-        to_log(LOG_ERROR, "--exclude '{cfg.exclude}' dropped every file of the run\n")
+        to_log(LOG_ERROR, "{split.refusal}\n")
         return 2
     }
     let only <- only_files(split.kept, cfg.only)
@@ -2146,6 +2257,6 @@ def main() : int {
     }
     log_missing_models(only)
     let tally <- run_plan(cfg, only, plan.image_arms, !empty(areas) || cfg.changed)
-    print_report(cfg, areas, length(only), length(split.dropped), tally, core)
+    print_report(cfg, areas, length(only), length(split.excluded), tally, core)
     return tally.failures
 }

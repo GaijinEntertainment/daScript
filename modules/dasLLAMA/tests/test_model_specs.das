@@ -242,6 +242,30 @@ def test_models_provenance_invariants(t : T?) {
     }
 }
 
+[test(description = "Two provenance entries of one name merge so the url + sha entry wins in either order, two that state different pins name the fields, and the Russian stress copy carries its url wherever its rows sit")]
+def test_prov_merge(t : T?) {
+    let bare = ProvEntry(name = "x.gguf", root = "llm", recipe = "convert")
+    let pinned = ProvEntry(name = "x.gguf", root = "llm", url = "https://h/x.gguf", bytes = 7l, sha256 = "s")
+    for (pair in [(a = bare, b = pinned), (a = pinned, b = bare)]) {
+        let m = prov_merge(pair.a, pair.b)
+        t |> equal(m.differ, "", "a bare entry and a pinned one agree")
+        t |> equal(m.merged.url, pinned.url, "the url entry wins whichever comes first")
+        t |> equal(m.merged.bytes, 7l, "its bytes ride along")
+        t |> equal(m.merged.sha256, "s", "its sha256 rides along")
+        t |> equal(m.merged.recipe, "convert", "the bare entry's recipe fills the pinned one's gap")
+    }
+    var other = pinned
+    other.url = "https://h/y.gguf"
+    other.sha256 = "t"
+    t |> equal(prov_merge(pinned, other).differ, "url, sha256", "different pins are named by field")
+    var inscope entries <- models_provenance()
+    var ru_url = ""
+    for (e in entries) {
+        ru_url = e.name == "tts_ctx_ru.gguf" ? e.url : ru_url
+    }
+    t |> success(!empty(ru_url), "tts_ctx_ru.gguf is fetched by its pinned url, not converted on-box")
+}
+
 [test(description = "Every `models_provenance` entry - a spec row's own pin, its companions, an ASR carrier - whose `bytes` put its file past `MODEL_TIER_CEILING_BYTES` is a model category's file, so no run opens it unless the run names its category")]
 def test_large_rows_have_a_category(t : T?) {
     var inscope entries <- models_provenance()
@@ -400,5 +424,37 @@ def test_tts_catalog_is_a_view(t : T?) {
         t |> equal(length(cat), n, "one catalog row a TTS cell")
         t |> success(n >= 5, "the board's five TTS models")
         t |> success(empty(tts_spec_of("pocket-tts-de-q8.gguf").file), "a served TTS model off the board has no cell")
+    }
+}
+
+//! the TTS parity rail's reference files: published at TTS_HF_REFS_REVISION once it is set
+let private TTS_REFERENCE_FILES = fixed_array("ru-stress-rubert-base.gguf", "ru-stress-rubert-base-f32.gguf",
+    "pocket-tts-en.gguf", "pocket-tts-en-18m.gguf", "pocket-tts-en-7m.gguf", "pocket-tts-en-2m-f32.gguf")
+
+[test(description = "`tts_ref_url` names a file at the TTS repository's given commit and nothing for an empty revision; each TTS reference file is one provenance entry pinning bytes, sha256 and its recipe - a Pocket file with its url at TTS_HF_REFS_REVISION, an f32 ru-stress file with none, since those are never published -, none of them in the served TTS set; tts_ctx_ru.gguf fetches as the published rubert q4 file")]
+def test_tts_reference_rows(t : T?) {
+    t |> equal(tts_ref_url("", "pocket-tts-en.gguf"), "", "an empty revision names no url: the row reads as converted on-box")
+    t |> equal(tts_ref_url("abc123", "pocket-tts-en.gguf"),
+        "https://huggingface.co/borisbat/dasllama-tts/resolve/abc123/pocket-tts-en.gguf", "a revision names the file at that commit")
+    var inscope entries <- models_provenance()
+    var inscope served <- serve_tts_set()
+    for (name in TTS_REFERENCE_FILES) {
+        let at = find_index_if(entries) $(e) => e.name == name
+        t |> success(at >= 0, "{name} is a provenance entry")
+        continue if (at < 0)
+        let e = entries[at]
+        t |> success(e.bytes > 0l && length(e.sha256) == 64 && !empty(e.recipe), "{name} pins bytes, sha256 and its recipe")
+        let published = !(name |> starts_with("ru-stress-"))
+        t |> equal(e.url, published ? tts_ref_url(TTS_HF_REFS_REVISION, name) : "",
+            "{name}'s url is the file at TTS_HF_REFS_REVISION, or none for a file a box holds privately")
+        let in_served = find_index_if(served) $(s) => s.entry.name == name
+        t |> equal(in_served, -1, "{name} is no served TTS file")
+    }
+    let ctx = find_index_if(entries) $(e) => e.name == "tts_ctx_ru.gguf"
+    let q4 = find_index_if(entries) $(e) => e.name == "ru-stress-rubert-base-q4.gguf"
+    t |> success(ctx >= 0 && q4 >= 0, "tts_ctx_ru.gguf and the rubert q4 file are entries")
+    if (ctx >= 0 && q4 >= 0) {
+        t |> equal(entries[ctx].url, entries[q4].url, "tts_ctx_ru.gguf fetches the published rubert q4 file")
+        t |> success(entries[ctx].bytes == entries[q4].bytes && entries[ctx].sha256 == entries[q4].sha256, "byte for byte")
     }
 }

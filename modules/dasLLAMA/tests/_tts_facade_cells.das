@@ -15,12 +15,13 @@ require strings
 require _model_tier   // tts_data_missing
 require _tts_corpus   // the 200-sentence front-end fixture: the phonemes arm E was scored against
 
-// The facade's cells on a loaded kitten-nano (its block's image form, `load_tts_model` with the front-end packs beside
-// the file): the facade's phonemes (`tts_phonemize`) against the corpus fixture's own inventory, the model's own chunker,
-// the streaming form's chunks concatenating to the buffered form's audio with summed timings, the two syntheses run at
-// different worker counts, and the idle release (`tts_release_scratch`): the carrier's generator rows, waveform and noise
-// gone, the next synthesis sample-identical, and a lowered cap speaking the same sentences in more pieces. `path` is the
-// model's file: every cell skips without the phoneme pack beside it.
+// The facade's cells on a loaded kitten-nano (`load_tts_model` with the front-end packs beside the file). On its block's
+// image form: the facade's phonemes (`tts_phonemize`) against the corpus fixture's own inventory, and the model's own
+// chunker. On its `image_cpu` form - the CPU image, whose CPU rows kernels and CPU generator are the claims; a home's image
+// serves every seat on the device: the streaming form's chunks concatenating to the buffered form's audio with summed
+// timings, the two syntheses run at different worker counts, and the idle release (`tts_release_scratch`): the carrier's
+// generator rows, waveform and noise gone, the next synthesis sample-identical, and a lowered cap speaking the same
+// sentences in more pieces. `path` is the model's file: every cell skips without the phoneme pack beside it.
 
 // corpus rows the daslang front end reproduces phoneme for phoneme, so a facade wrapper that
 // reached a family's rewrite instead of the front end's own inventory reds here
@@ -136,7 +137,7 @@ def private test_release_and_cap_on_a_model(t : T?; var m : TtsModel; path : str
                     set_styletts2_source_window(win0)
                 }
                 set_styletts2_source_window(SOURCE_WINDOW_FRAMES)
-                // the carrier claims below are the CPU generator's: the empty driver holds the device seat off, the defer puts it back
+                // the claims below are the CPU generator's: the empty driver holds the seats off
                 register_styletts2_gpu(St2GpuDriver())
                 defer() {
                     unregister_styletts2_gpu()
@@ -196,11 +197,16 @@ def private test_release_and_cap_on_a_model(t : T?; var m : TtsModel; path : str
     }
 }
 
-//! the facade's cells on `m`, kitten-nano's image form loaded from `path`; the release cell, which empties the carrier, last
+//! the facade's cells on `m`, kitten-nano's image form loaded from `path`
 [cold_path]
-def tts_facade_kitten_cells(t : T?; var m : TtsModel; path : string) {
+def tts_facade_kitten_cells(t : T?; m : TtsModel; path : string) {
     test_facade_phonemizer(t, m, path)
     test_chunker_model_rule(t, m, path)
+}
+
+//! the facade's CPU-chain cells on kitten-nano's `image_cpu` form; last the release that empties it
+[cold_path]
+def tts_facade_kitten_cpu_cells(t : T?; var m : TtsModel; path : string) {
     test_streaming(t, m, path)
     test_release_and_cap_on_a_model(t, m, path)
 }
