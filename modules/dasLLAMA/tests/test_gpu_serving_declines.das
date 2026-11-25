@@ -1901,6 +1901,37 @@ def test_vk_subgroup_pin(t : T?) {
     }
 }
 
+[test(description = "A class pipeline's dispatch count stays with its kernel's name when the driver hands that pipeline's handle to another kernel's: the census reads each kernel's own count, a kernel rebuilt on its own handle keeps its count whole, and a reset leaves neither a count")]
+def test_vk_census_count_keeps_its_kernel(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        var handle = 0x7ul   // a handle no live pipeline holds
+        while (key_exists(g_pipe_names, handle) || key_exists(g_vk_kcov, handle)) {
+            handle += 2ul
+        }
+        let first = "census_cell_first_spv"
+        let second = "census_cell_second_spv"
+        vkd_pipe_register(handle, 1u, 2u, first)
+        g_vk_kcov[handle] += 5l
+        vkd_pipe_register(handle, 1u, 2u, second)
+        g_vk_kcov[handle] += 3l
+        var inscope moved <- vk_kernel_coverage()
+        t |> equal(moved?[first] ?? 0l, 5l, "the first kernel keeps the five dispatches its pipeline took before its handle went to another")
+        t |> equal(moved?[second] ?? 0l, 3l, "the second kernel counts its own three alone")
+        vkd_pipe_register(handle, 1u, 2u, second)
+        g_vk_kcov[handle] += 2l
+        var inscope rebuilt <- vk_kernel_coverage()
+        t |> equal(rebuilt?[second] ?? 0l, 5l, "a kernel rebuilt on its own handle adds to its count")
+        t |> equal(rebuilt?[first] ?? 0l, 5l, "... and the first kernel's count stands")
+        vk_kernel_coverage_reset()
+        var inscope cleared <- vk_kernel_coverage()
+        t |> equal((cleared?[first] ?? 0l) + (cleared?[second] ?? 0l), 0l, "a reset leaves no count under either name")
+        g_pipe_names |> erase(handle)
+        g_pipe_access |> erase(handle)
+    } else {
+        t |> skip("no vulkan module in this build")
+    }
+}
+
 //! the prefill window's chunk cap: one layer a submit on an integrated GPU (the amdgpu watchdog), the ramp's hold on a discrete one
 [test(description = "`pf_chunk_cap` holds the prefill ramp at `PF_CHUNK_MAX` layers a submit on a discrete device shell and caps it at one layer on an integrated one")]
 def test_pf_chunk_cap(t : T?) {

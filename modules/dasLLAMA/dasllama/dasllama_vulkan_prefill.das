@@ -276,7 +276,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
         }
     } elif (kq_sb(fmt) || blk32_rail(fmt)) {
         // the role's format is static, so the slot never collides with the q8 router's variants
-        let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == COOPMAT_F16
+        let q40cm = kq_batch_q40cm(fmt)
         var kset = cached(g_rd.pf_cls_gemm, idx * 16 + 6) $ {
             verify(kq_batch_cls_ensure(fmt, q40cm), "vk prefill: the kq batch class rail must engage")
             return kq_batch_cls_set_for(fmt, q40cm,
@@ -3306,7 +3306,7 @@ def private stack_batch_enc(raw : VkCommandBuffer; var h : VkHaz; si : int; nwg 
     var st & = unsafe(g_gpu.stacks[si])
     let fmt = st.fmt
     // Q4_0 rides the f16 coopmat arm too (no s8-native for nibbles — mode 2 falls back to sdot4)
-    let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == COOPMAT_F16
+    let q40cm = kq_batch_q40cm(fmt)
     var v = 6   // the stack's fixed class (kq); 5 = the q40 f16 MMA twin
     if (fmt == int(KqFmt.q8)) {
         v = q8_batch_cls_variant(st.batch_tile, st.batch_aligned)

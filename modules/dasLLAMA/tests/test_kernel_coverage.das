@@ -20,6 +20,7 @@ require ?das_metal dasllama/dasllama_metal_decode  // decode stats + shutdown ra
 require ?das_metal metal/das_metal_boost  // device probe
 require ?vulkan dasllama/dasllama_vulkan_common  // the vulkan census rail (spec-only here)
 require ?vulkan dasllama/dasllama_vulkan_tower   // set_vulkan_tower - the serving census pins the TTS rows' knob ON
+require ?vulkan dasllama/dasllama_vulkan_classes   // the batch tile routers a twin leg of the mode sweep asks first
 require daslib/defer
 require dasllama/dasllama_gpu_resident  // moe_gpu_drop_model_ — the census's model-switch drops
 require dasllama/dasllama_image   // nolint:STYLE030,LINT019 — load_model_uncached: the codec census's load, inside the vulkan static_if
@@ -1439,7 +1440,9 @@ def private cov_prefill_two_steps(tr : Model; var s : Session) {
 }
 
 //! one model's sweep with the K/V mirror asked in block codec `kv`, on a session of that codec: a prefill (the window's staged
-//! store, the shadow, the flash tiles over it) and two decode steps (the token store, the codec's attention stamp, tq4's un-rotation)
+//! store, the shadow, the flash tiles over it) and two decode steps (the token store, the codec's attention stamp, tq4's
+//! un-rotation). A model the engine serves no `kv` cache on skips by name: the mirror arms another codec there, and a
+//! session of `kv` would ride the CPU rails
 [unused_argument(t, path, family, kv)]   // without vulkan the gated body is empty
 def private vk_cov_codec_model(t : T?; path, family : string; kv : KVDtype) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1450,25 +1453,61 @@ def private vk_cov_codec_model(t : T?; path, family : string; kv : KVDtype) {
         set_gpu_kv_want(kv)
         var tr <- load_model_uncached(path, QuantMode.q8)
         restore_gpu_kv_want(pin)
-        tr.config.seq_len = min(tr.config.seq_len, 512l)
-        with_dasllama_jobque() {
-            var s = make_run_state(tr.config, kv, kv)
-            cov_prefill_two_steps(tr, s)
-            delete s
+        let unserved = kv_codec_serving_why(tr.config, kv)
+        if (!empty(unserved)) {
+            t |> skip("{base_name(path)}: the {kv} pass skipped, the engine serves no {kv} K/V cache on this model - {unserved}")
+        } else {
+            tr.config.seq_len = min(tr.config.seq_len, 512l)
+            with_dasllama_jobque() {
+                var s = make_run_state(tr.config, kv, kv)
+                cov_prefill_two_steps(tr, s)
+                delete s
+            }
         }
         moe_gpu_drop_model_()
         delete tr
     }
 }
 
-[unused_argument(t, path, family, nbs, blocks)]   // without vulkan the gated body is empty
-def private vk_cov_model(t : T?; path, family : string; nbs : array<int>; blocks : int64 = 0l) {
+let private NO_TWIN = -1   //! `vk_cov_model`'s `twin_fmt` on a row no forced coopmat mode routes to a twin stamp
+
+//! the forced coopmat mode of a twin leg by its `DASLLAMA_COOPMAT` spelling
+def private vk_cov_twin_mode : string {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return g_gpu.coopmat_mode == COOPMAT_F16 ? "f16" : "int8"
+    } else {
+        return ""
+    }
+}
+
+//! whether this device builds the batch tile the forced coopmat mode routes a plane of format `fmt` to: the answer of the
+//! router the window itself asks, read under that mode
+[unused_argument(fmt)]   // without vulkan the gated body is empty
+def private vk_cov_twin_builds(fmt : int) : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (fmt == int(KqFmt.q8)) {
+            return q8_batch_cls_ensure(q8_batch_cls_variant(q8_batch_tile(), false))
+        }
+        return kq_batch_cls_ensure(fmt, kq_batch_q40cm(fmt))
+    } else {
+        return false
+    }
+}
+
+//! `ran` is false where the row's family, arm or file leaves it out, and on a twin leg - `twin_fmt` the plane format whose
+//! coopmat twin the forced mode reaches - where the device declines that twin; `dim` is the model's width
+[unused_argument(t, path, family, nbs, blocks, twin_fmt)]   // without vulkan the gated body is empty
+def private vk_cov_model(t : T?; path, family : string; nbs : array<int>; blocks : int64 = 0l; twin_fmt : int = NO_TWIN) : tuple<ran : bool; dim : int64> {
     // one model's vulkan coverage sweep: GPU prefill (the counting prompt clears the npos gate),
     // two greedy decode steps, a continuation prefill, then one batched step per requested B.
     // No parity asserts — the census wants DISPATCH DIVERSITY, the parity suites own truth.
     static_if (typeinfo builtin_module_exists(vulkan)) {
         if (!family_on(t, family) || !arm_on(t, "coverage-vk") || !model_available(t, path)) {
-            return
+            return (ran = false, dim = 0l)
+        }
+        if (twin_fmt != NO_TWIN && !vk_cov_twin_builds(twin_fmt)) {
+            t |> skip("{base_name(path)}: the {vk_cov_twin_mode()} coopmat mode skipped - this device declines the batch tile that mode routes the file's planes to (the driver's decline line names the stamp and the reason)")
+            return (ran = false, dim = 0l)
         }
         var tr <- load_model_(path, QuantMode.q8)
         if (blocks > 0l) {
@@ -1513,40 +1552,47 @@ def private vk_cov_model(t : T?; path, family : string; nbs : array<int>; blocks
         // first (the slot machinery / server do) — without this the stack table accumulates
         // across the zoo until the MAX_STACKS decline
         moe_gpu_drop_model_()
+        let dim = tr.config.dim
         delete tr
+        return (ran = true, dim = dim)
+    } else {
+        return (ran = false, dim = 0l)
     }
 }
 
-//! the two carriers the block codecs' attention stamps need: the four-head slab (qwen2: fourteen heads over two) and the
-//! two-head slab (gemma-2: eight over four)
+//! the carriers the block codecs' attention stamps need: the four-head slab (qwen2: fourteen heads over two) and the
+//! two-head slab (gemma-2: eight over four), each under q8_0 and tq4. The engine serves no tq4 cache on qwen2's biased
+//! attention, so that pass skips by name, and tinyllama (thirty-two heads over four) carries tq4's four-head slab
 [cold_path]
 def private vk_cov_codecs(t : T?) {
     for (kv in [KVDtype.q8_0, KVDtype.tq4]) {
         vk_cov_codec_model(t, path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf"), "qwen2", kv)
         vk_cov_codec_model(t, path_join(models_dir(), "gemma-2-2b-it-Q8_0.gguf"), "gemma2", kv)
     }
+    vk_cov_codec_model(t, path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf"), "llama", KVDtype.tq4)
 }
 
 //! every prefill tile family under the coopmat modes its planes have twins in - the box's resolved mode, mm,
-//! sdot4, and for the q8 and q40 planes the f16 and int8 coopmat twins too; the carriers are the qwen3 files
-//! (the Q8_0 also carries the resident fused qk_norm rail; the Q4_K_M k4/k6 with the Q8_K activation quant
-//! forms and qk_norm on the split rail) and the 1B requants the format arc used
+//! sdot4, and for the q8 and q40 planes the f16 and int8 coopmat twins too (`twin`: the plane format of a row that takes
+//! those two legs); the carriers are the qwen3 files (the Q8_0 also carries the resident fused qk_norm rail; the Q4_K_M
+//! k4/k6 with the Q8_K activation quant forms and qk_norm on the split rail) and the 1B requants the format arc used. The
+//! window asserts its batch tile's rail, so a twin leg asks the device first and skips by name where the twin is declined
 [unused_argument(t)]   // without vulkan the gated body is empty
 def private vk_cov_mode_sweep(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let vehicles = fixed_array(
-            (file = "Qwen3-0.6B-Q8_0.gguf", family = "qwen3", nmodes = 5),
-            (file = "Llama-3.2-1B-Instruct-Q4_0-local.gguf", family = "llama", nmodes = 5),
-            (file = "Qwen3-4B-Instruct-2507-Q4_K_M.gguf", family = "qwen3", nmodes = 3),          // k4 + k6
-            (file = "Llama-3.2-1B-Instruct-IQ4_XS.gguf", family = "llama", nmodes = 3),
-            (file = "Llama-3.2-1B-Instruct-Q3_K_L.gguf", family = "llama", nmodes = 3),           // k3 + k5
-            (file = "Llama-3.2-1B-Instruct-IQ3_M.gguf", family = "llama", nmodes = 3),            // iq3s
-            (file = "Llama-3.2-1B-Instruct-IQ3_XXS-local.gguf", family = "llama", nmodes = 3),
-            (file = "Llama-3.2-1B-Instruct-IQ4_NL-local.gguf", family = "llama", nmodes = 3),
-            (file = "Llama-3.2-1B-Instruct-Q2_K-local.gguf", family = "llama", nmodes = 3),
-            (file = "Llama-3.2-1B-Instruct-IQ2_XS-local.gguf", family = "llama", nmodes = 3),
-            (file = "Llama-3.2-1B-Instruct-IQ2_XXS-local.gguf", family = "llama", nmodes = 3),
-            (file = "Llama-3.2-1B-Instruct.i1-IQ3_XXS.gguf", family = "llama", nmodes = 3))       // iq2s on the attention planes
+            (file = "Qwen3-0.6B-Q8_0.gguf", family = "qwen3", twin = int(KqFmt.q8)),
+            (file = "Llama-3.2-1B-Instruct-Q4_0-local.gguf", family = "llama", twin = int(KqFmt.q40)),
+            (file = "Qwen3-4B-Instruct-2507-Q4_K_M.gguf", family = "qwen3", twin = NO_TWIN),          // k4 + k6
+            (file = "Llama-3.2-1B-Instruct-IQ4_XS.gguf", family = "llama", twin = NO_TWIN),
+            (file = "Llama-3.2-1B-Instruct-Q3_K_L.gguf", family = "llama", twin = NO_TWIN),           // k3 + k5
+            (file = "Llama-3.2-1B-Instruct-IQ3_M.gguf", family = "llama", twin = NO_TWIN),            // iq3s
+            (file = "Llama-3.2-1B-Instruct-IQ3_XXS-local.gguf", family = "llama", twin = NO_TWIN),
+            (file = "Llama-3.2-1B-Instruct-IQ4_NL-local.gguf", family = "llama", twin = NO_TWIN),
+            (file = "Llama-3.2-1B-Instruct-Q2_K-local.gguf", family = "llama", twin = NO_TWIN),
+            (file = "Llama-3.2-1B-Instruct-IQ2_XS-local.gguf", family = "llama", twin = NO_TWIN),
+            (file = "Llama-3.2-1B-Instruct-IQ2_XXS-local.gguf", family = "llama", twin = NO_TWIN),
+            (file = "Llama-3.2-1B-Instruct.i1-IQ3_XXS.gguf", family = "llama", twin = NO_TWIN))       // iq2s on the attention planes
         if (!vk_moe_init()) {   //! the sweep reads the device's resolved mode before its first row loads (a family filter may have skipped every earlier row)
             t |> skip("no Vulkan device for the coopmat mode sweep")
             return
@@ -1554,11 +1600,12 @@ def private vk_cov_mode_sweep(t : T?) {
         let none : array<int>
         let box_mode = g_gpu.coopmat_mode
         let modes = fixed_array(box_mode, COOPMAT_MM, COOPMAT_SDOT4, COOPMAT_F16, COOPMAT_INT8)
+        let common = 3   // the modes every vehicle takes; the two past them are the twin legs
         for (v in vehicles) {
             let vpath = path_join(models_dir(), v.file)
-            for (mi in range(v.nmodes)) {
+            for (mi in range(v.twin == NO_TWIN ? common : length(modes))) {
                 g_gpu.coopmat_mode = modes[mi]
-                vk_cov_model(t, vpath, v.family, none)
+                vk_cov_model(t, vpath, v.family, none, 0l, mi < common ? NO_TWIN : v.twin)
             }
             g_gpu.coopmat_mode = box_mode
         }

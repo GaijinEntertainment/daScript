@@ -7001,6 +7001,9 @@ def q8_batch_cls_enc(v : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : V
 // The family shares one set layout ("kq_batch_cls"); the q40 f16-MMA twin (coopmat_mode 1 —
 // no s8-native for nibbles) carries its own. The stack and resident-prefill encoders share it.
 
+//! whether a plane of format `fmt` takes the q40 f16-coopmat twin under the armed coopmat mode - the tests read the same answer the drivers act on
+def kq_batch_q40cm(fmt : int) : bool => fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == COOPMAT_F16
+
 def kq_batch_cls_ensure(fmt : int; q40cm : bool) : bool {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp
     if (q40cm) return ensure_kq_batch_q40_cmf16_cls()
     var r = false
