@@ -130,8 +130,12 @@ def main {   // nolint:STYLE038 — one emit per golden fixture: a flat list, on
     // coopmat int8: the s8 x s8 -> s32 tile + the signed-components
     // MulAdd operands mask
     emit_golden(dir, "coopmat_i8", coopmat_i8_words())
+    emit_golden(dir, "coopmat_i8k16", coopmat_i8k16_words())
     // coopmat from @workgroup shared memory (the tiled-GEMM staging path)
     emit_golden(dir, "coopmat_sm", coopmat_sm_words())
+    // the wide h256 flash tile: the 128-row cm2 tile types and their
+    // three products
+    emit_golden(dir, "coopmat2fa256w", coopmat2fa256w_words())
     emit_golden(dir, "spdirect", spdirect_words())
     emit_golden(dir, "spelem", spelem_words())
     emit_golden(dir, "spelemi", spelemi_words())

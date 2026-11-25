@@ -424,6 +424,24 @@ def public coopmatStore(mat : coopmatAcc_s32_16x16; dst; idx, stride, layout : i
 def public coopmatMulAdd(a : coopmatA_s8_16x32; b : coopmatB_s8_32x16; c : coopmatAcc_s32_16x16) : coopmatAcc_s32_16x16 =>
     c
 
+[arch(at="../ARCHITECTURE_COOPMAT.md#coopmat-elem")]
+struct coopmatA_s8_16x16 {}
+struct coopmatB_s8_16x16 {}
+
+[unused_argument(dst, src, idx, stride, layout), sideeffects]
+def public coopmatLoad(var dst : coopmatA_s8_16x16; src; idx : int | uint;
+                       stride, layout : int) : void {}
+[unused_argument(dst, src, idx, stride, layout), sideeffects]
+def public coopmatLoad(var dst : coopmatB_s8_16x16; src; idx : int | uint;
+                       stride, layout : int) : void {}
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatA_s8_16x16; b : coopmatB_s8_16x16;
+                         c : coopmatAcc_s32_16x16) : coopmatAcc_s32_16x16 =>
+    c
+
+[unused_argument(mat, e), sideeffects, arch(at="../ARCHITECTURE_COOPMAT.md#coopmat-elem")]
+def public coopmatElem(mat : coopmatAcc_s32_16x16; e : uint) : int => 0
+
 // ===== cooperative matrices v2 (SPV_NV_cooperative_matrix2 — tensor addressing, workgroup scope) =====
 // A cm2 tile is WORKGROUP-scoped (the whole workgroup owns one MxN tile; the driver manages staging)
 // and is addressed through tensor LAYOUT objects (dims + strides + a per-load slice window + an
@@ -470,6 +488,8 @@ struct coopmatWgB_f16_32x96 {}
 struct coopmatWgAcc_f16_64x96 {}
 struct coopmatWgAcc_f32_64x96 {}
 struct coopmatWgA_f16_64x256 {}
+[arch(at="../ARCHITECTURE_COOPMAT.md#cm2-tile-markers")]
+struct coopmatWgA_f16_128x256 {}
 struct coopmatWgB_f16_256x32 {}
 struct coopmatWgB_f16_32x256 {}
 struct coopmatWgAcc_f16_64x256 {}
@@ -560,6 +580,18 @@ def public coopmatMulAdd(a : coopmatWgA_f16_64x256; b : coopmatWgB_f16_256x32; c
     c
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x256; c : coopmatWgAcc_f32_64x256) : coopmatWgAcc_f32_64x256 =>
+    c
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_128x256; b : coopmatWgB_f16_256x32;
+                         c : coopmatWgAcc_f32_128x32) : coopmatWgAcc_f32_128x32 =>
+    c
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_128x32; b : coopmatWgB_f16_32x256;
+                         c : coopmatWgAcc_f16_128x256) : coopmatWgAcc_f16_128x256 =>
+    c
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_128x32; b : coopmatWgB_f16_32x32;
+                         c : coopmatWgAcc_f32_128x32) : coopmatWgAcc_f32_128x32 =>
     c
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_f16_64x512; b : coopmatWgB_f16_512x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 =>

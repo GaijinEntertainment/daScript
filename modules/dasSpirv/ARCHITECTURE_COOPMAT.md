@@ -32,7 +32,8 @@ a SPIR-V kernel through a `tensorLayout2D` or `tensorLayout2DPad` whose dimensio
 (Q), `coopmatWgB_f16_Hx32` (K^T), `coopmatWgB_f16_32xH` (V) and the `coopmatWgAcc_f16_64xH` /
 `coopmatWgAcc_f32_64xH` pair (O), plus the two `coopmatMulAdd` overloads typing S = Q @ K^T and
 O += P @ V and the `coopmatConvert` widening the f16 O to f32. The row block is 64 at every
-width. The column block is 64 at head width 64 and 32 above it, where a 64-wide KV tile beside
+width; head width 256 also declares a 128-row Q tile (`coopmatWgA_f16_128x256`) with its S, O and
+rowsum overloads, the flash tile at 128 query rows. The column block is 64 at head width 64 and 32 above it, where a 64-wide KV tile beside
 the wider O accumulator spills the workgroup staging budget; the 32-wide widths share one P tile
 (`coopmatWgA_f16_64x32`), one S accumulator and one rowsum `P @ One` overload. O accumulates in
 f16 beside f32 because the consumer biases its running row max so every P sits at an eighth or
@@ -159,3 +160,16 @@ bounded by `OpCooperativeMatrixLengthKHR`, and its `OpLoopMerge` sets loop contr
 control glslang emits for `[[unroll]]`. Rolled, the dynamic per-element `OpAccessChain` index
 moves the accumulator out of the registers holding the tile into addressable storage for the
 whole kernel, not only for the loop.
+
+### A lane reads its own elements of an s32 accumulator {#coopmat-elem}
+
+`coopmatElem(mat, e)` is the invocation's e-th component of an s32 accumulator local - glslang's `acc[e]` - with `e` below
+`OpCooperativeMatrixLengthKHR`, the tile's elements over the subgroup's lanes. Which (row, column) of the tile a lane's
+e-th component is belongs to the device, so a kernel that scales its elements by row and column is written to one layout
+and checks it on the device it runs on. A constant `e` - a literal, or an `[unroll_full]` induction constant
+(`#unroll-full`) - emits `OpCompositeExtract` on the tile's loaded value, which leaves the tile in its registers; a
+run-time `e` emits `OpAccessChain` into the local and `OpLoad`, the form that moves the tile into addressable storage for
+the whole kernel, as the rolled element loop does. The s8 tiles come in two depths: 16 x 32 by 32 x 16
+(`coopmatA_s8_16x32`, `coopmatB_s8_32x16`) and 16 x 16 by 16 x 16 (`coopmatA_s8_16x16`, `coopmatB_s8_16x16`), both into
+`coopmatAcc_s32_16x16` under the signed-operands mask; a driver may multiply only part of the deeper tile's depth - RADV
+on RDNA3 multiplies only the first sixteen columns of a 16 x 32 A - so a portable kernel takes the 16-deep pair twice.

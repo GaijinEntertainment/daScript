@@ -190,6 +190,12 @@ def test_fail_closed_rejections(t : T?) {   // nolint:STYLE038 — flat one-chec
         // cooperative matrices are subgroup-scoped -> compute-only; a coopmat
         // op in a fragment shader is rejected
         check_rejects(t, "_fc_coopmat_stage", "coopmatLoad is only valid in a compute shader")
+        check_rejects(t, "_fc_coopmat_elem_stage", "coopmatElem is only valid in a compute shader")
+        check_rejects(t, "_fc_coopmat_elem_arity", "coopmatElem expects (mat, e)")
+        check_rejects(t, "_fc_coopmat_elem_type",
+            "coopmatElem: the first argument must be an s32 coopmat accumulator local")
+        check_rejects(t, "_fc_coopmat_elem_rvalue",
+            "coopmatElem: could not resolve the coopmat local or the index")
         check_rejects(t, "_fc_scaleacc_stage", "coopmatScaleAcc is only valid in a compute shader")
         check_rejects(t, "_fc_scaleacc_shape",
             "coopmatScaleAcc: an f32 workgroup accumulator and the s32 accumulator of its shape")

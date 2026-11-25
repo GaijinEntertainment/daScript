@@ -15,7 +15,7 @@ require strings
 // accumulator, and stores the 16x16 result column-major. This pins the four KHR coopmat opcodes, the
 // CooperativeMatrixKHR capability + SPV_KHR_cooperative_matrix extension, and the SPIR-V 1.6 version
 // floor; spirv-val (vulkan1.3) is the independent witness that the whole shape is valid.
-[test(description = "Cooperative-matrix tiles (f16 GEMM, int8, f32 accumulator with convert, workgroup-memory load, accumulator arrays under unroll_full) emit the KHR coopmat opcodes, capabilities and SPIR-V 1.6 floor.")]
+[test(description = "Cooperative-matrix tiles (f16 GEMM, int8 at depth 32 and at depth 16 with per-lane element reads, f32 accumulator with convert, workgroup-memory load, accumulator arrays under unroll_full) emit the KHR coopmat opcodes, capabilities and SPIR-V 1.6 floor.")]
 def test_coopmat(t : T?) { // nolint:STYLE038 - flat list of opcode/capability assertions
     t |> run("cooperative matrix f16xf16->f32 GEMM tile: KHR coopmat opcodes + capability + 1.6 floor") <| @(t : T?) {
         var words <- coopmat_words()
@@ -67,6 +67,42 @@ def test_coopmat(t : T?) { // nolint:STYLE038 - flat list of opcode/capability a
             t |> success(r.ok, "spirv-val (vulkan1.3): {r.msg}")
         } else {
             feint("spirv-val not found locally; skipping - run on a box with the Vulkan SDK on PATH\n")
+        }
+        delete words
+    }
+    t |> run("cooperative matrix INT8 tile at depth 16: s8xs8->s32 (16x16x16) twice + " +
+            "coopmatElem's three index forms") <| @(t : T?) {
+        var words <- coopmat_i8k16_words()
+        t |> success(op_has_operand(words, SpvOp.Capability,
+                uint(SpvCapability.CooperativeMatrixKHR)),
+            "OpCapability CooperativeMatrixKHR (6022)")
+        t |> success(op_has_operand(words, SpvOp.Capability,
+                uint(SpvCapability.StorageBuffer8BitAccess)),
+            "OpCapability StorageBuffer8BitAccess (the int8 SSBO tiles)")
+        t |> success(op_has_operand(words, SpvOp.Capability, uint(SpvCapability.Int8)),
+            "OpCapability Int8 (the s8 components)")
+        t |> success(op_has_operand(words, SpvOp.Capability, uint(SpvCapability.VulkanMemoryModel)),
+            "OpCapability VulkanMemoryModel (cooperative matrices need it)")
+        t |> success(length(words) >= 2 && words[1] == SPV_VERSION_1_6,
+            "SPIR-V header version floored to 1.6")
+        t |> success(count_op(words, SpvOp.TypeCooperativeMatrixKHR) == 3,
+            "three OpTypeCooperativeMatrixKHR (A s8 16x16, B s8 16x16, accumulator s32 16x16)")
+        t |> success(count_op(words, SpvOp.CooperativeMatrixLoadKHR) == 2, "two loads")
+        t |> success(count_op_operand_at(words, SpvOp.CooperativeMatrixMulAddKHR, 5, 0xFu) == 2,
+            "two MulAdds, each declaring all operands signed (mask 0xF)")
+        t |> success(count_op(words, SpvOp.CooperativeMatrixStoreKHR) == 0,
+            "no store: the lanes read their elements")
+        t |> success(count_op(words, SpvOp.CompositeExtract) == 3,
+            "three OpCompositeExtract for the constant element indices")
+        t |> success(count_op(words, SpvOp.AccessChain) == 8,
+            "eight OpAccessChain: the two loads, the lane id, the four SSBO stores " +
+                "and the run-time element index")
+        let r = validate_spirv(words, "vulkan1.3")
+        if (r.ran) {
+            t |> success(r.ok, "spirv-val (vulkan1.3): {r.msg}")
+        } else {
+            feint("spirv-val not found locally; skipping - " +
+                "run on a box with the Vulkan SDK on PATH\n")
         }
         delete words
     }
@@ -853,6 +889,98 @@ def test_coopmat2_fa256_tiles(t : T?) {
         let r = validate_spirv(words, "vulkan1.3")
         if (r.ran) {
             t |> success(r.ok, "spirv-val (vulkan1.3): {r.msg}")
+        }
+        delete words
+    }
+}
+
+//! result ids of the OpTypeCooperativeMatrixKHR types with a float
+//! component of `bits` bits whose rows, columns and use constants are
+//! `rows`, `cols`, `use` (use 0 is A, 1 is B, 2 the accumulator)
+def private coopmat_type_ids(words : array<uint>; bits, rows, cols, use : uint) : array<uint> {
+    var consts, floats : table<uint; uint>
+    foreach_inst(words) $(op : uint; w : array<uint>; s, n : int) {
+        if (op == uint(SpvOp.Constant) && n == 3) {
+            consts |> insert(w[s + 1], w[s + 2])
+        } elif (op == uint(SpvOp.TypeFloat) && n >= 2) {
+            floats |> insert(w[s], w[s + 1])
+        }
+    }
+    var ids : array<uint>
+    foreach_inst(words) $(op : uint; w : array<uint>; s, n : int) {
+        if (op == uint(SpvOp.TypeCooperativeMatrixKHR) && n == 6
+            && (floats?[w[s + 1]] ?? 0u) == bits && (consts?[w[s + 3]] ?? ~0u) == rows
+            && (consts?[w[s + 4]] ?? ~0u) == cols && (consts?[w[s + 5]] ?? ~0u) == use) {
+            ids |> push(w[s])
+        }
+    }
+    delete consts
+    delete floats
+    return <- ids
+}
+
+// The wide h256 flash-attention tiles: 128 query rows a workgroup.
+// coopmatWgA_f16_128x256 and the 128-row accumulators - f32 128x256,
+// f32 128x32 and the f16 128x256 O - parse out of their names into
+// OpTypeCooperativeMatrixKHR with the declared rows, columns and
+// uses, and the three 128-row MulAdd overloads lower into the
+// accumulators their names give.
+[test(description = "The cm2 h256 flash tile at 128 query rows declares its eight tile types with the component width, rows, columns and use of their names, the 128x256 Q tile among them, and its three products land where the 128-row overloads say: two in the f32 128x32 accumulator, one in the f16 128x256 one.")]
+def test_coopmat2_fa256w_tiles(t : T?) {
+    t |> run("cm2 wide h256 flash tiles: A 128x256, B 256x32, A 128x32, B 32x32, B 32x256, " +
+            "acc 128x32 and acc 128x256 in f32 and f16") <| @(t : T?) {
+        var words <- coopmat2fa256w_words()
+        for (cap in fixed_array(SpvCapability.CooperativeMatrixKHR,
+                SpvCapability.VulkanMemoryModel, SpvCapability.Float16,
+                SpvCapability.StorageBuffer16BitAccess,
+                SpvCapability.PhysicalStorageBufferAddresses, SpvCapability.TensorAddressingNV,
+                SpvCapability.CooperativeMatrixTensorAddressingNV,
+                SpvCapability.CooperativeMatrixBlockLoadsNV,
+                SpvCapability.CooperativeMatrixReductionsNV,
+                SpvCapability.CooperativeMatrixConversionsNV,
+                SpvCapability.CooperativeMatrixPerElementOperationsNV)) {
+            t |> success(op_has_operand(words, SpvOp.Capability, uint(cap)), "OpCapability {cap}")
+        }
+        t |> success(length(words) >= 2 && words[1] == SPV_VERSION_1_6, "SPIR-V header version 1.6")
+        t |> equal(count_op(words, SpvOp.TypeCooperativeMatrixKHR), 8,
+            "eight OpTypeCooperativeMatrixKHR (the wide h256 loop's shapes)")
+        for (tile in fixed_array(
+                (bits = 32u, rows = 128u, cols = 256u, use = 2u,
+                    name = "the f32 128x256 accumulator"),
+                (bits = 16u, rows = 128u, cols = 256u, use = 0u,
+                    name = "the f16 128x256 A tile (Q)"),
+                (bits = 32u, rows = 128u, cols = 32u, use = 2u,
+                    name = "the f32 128x32 accumulator"),
+                (bits = 16u, rows = 128u, cols = 256u, use = 2u,
+                    name = "the f16 128x256 accumulator (O)"),
+                (bits = 16u, rows = 256u, cols = 32u, use = 1u,
+                    name = "the f16 256x32 B tile (K)"),
+                (bits = 16u, rows = 128u, cols = 32u, use = 0u,
+                    name = "the f16 128x32 A tile (P)"),
+                (bits = 16u, rows = 32u, cols = 32u, use = 1u,
+                    name = "the f16 32x32 B tile (the ones)"),
+                (bits = 16u, rows = 32u, cols = 256u, use = 1u,
+                    name = "the f16 32x256 B tile (V)"))) {
+            var inscope ids <- coopmat_type_ids(words, tile.bits, tile.rows, tile.cols, tile.use)
+            t |> equal(length(ids), 1, "one OpTypeCooperativeMatrixKHR is {tile.name}")
+        }
+        var inscope s_acc <- coopmat_type_ids(words, 32u, 128u, 32u, 2u)
+        var inscope o_acc <- coopmat_type_ids(words, 16u, 128u, 256u, 2u)
+        t |> equal(count_op(words, SpvOp.CooperativeMatrixMulAddKHR), 3,
+            "three OpCooperativeMatrixMulAddKHR (S, rowsum, O)")
+        if (length(s_acc) == 1 && length(o_acc) == 1) {
+            t |> equal(count_op_operand_at(words, SpvOp.CooperativeMatrixMulAddKHR, 0, s_acc[0]), 2,
+                "two products land in the f32 128x32 accumulator: " +
+                    "Q K^T through the 128x256 Q tile, and the row sum")
+            t |> equal(count_op_operand_at(words, SpvOp.CooperativeMatrixMulAddKHR, 0, o_acc[0]), 1,
+                "one product lands in the f16 128x256 accumulator: P V")
+        }
+        let r = validate_spirv(words, "vulkan1.3")
+        if (r.ran) {
+            t |> success(r.ok, "spirv-val (vulkan1.3): {r.msg}")
+        } else {
+            feint("spirv-val not found locally; skipping - " +
+                "run on a box with the Vulkan SDK on PATH\n")
         }
         delete words
     }

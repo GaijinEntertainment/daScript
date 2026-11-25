@@ -665,6 +665,12 @@ def private coopmat_info(t : TypeDecl?) : tuple<ok : bool; is_float : bool; sign
     if (n == "coopmatAcc_f16_16x16") return (ok = true, is_float = true, signed = false, comp_width = 16u, rows = 16u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixAccumulatorKHR), scope = sg)
     if (n == "coopmatA_s8_16x32") return (ok = true, is_float = false, signed = true, comp_width = 8u, rows = 16u, cols = 32u, use = uint(SpvCooperativeMatrixUse.MatrixAKHR), scope = sg)
     if (n == "coopmatB_s8_32x16") return (ok = true, is_float = false, signed = true, comp_width = 8u, rows = 32u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixBKHR), scope = sg)
+    if (n == "coopmatA_s8_16x16") return (ok = true, is_float = false, signed = true,
+        comp_width = 8u, rows = 16u, cols = 16u,
+        use = uint(SpvCooperativeMatrixUse.MatrixAKHR), scope = sg)
+    if (n == "coopmatB_s8_16x16") return (ok = true, is_float = false, signed = true,
+        comp_width = 8u, rows = 16u, cols = 16u,
+        use = uint(SpvCooperativeMatrixUse.MatrixBKHR), scope = sg)
     if (n == "coopmatAcc_s32_16x16") return (ok = true, is_float = false, signed = true, comp_width = 32u, rows = 16u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixAccumulatorKHR), scope = sg)
     if (n |> starts_with("coopmatWg")) {
         let wg = coopmat_wg_info(n)
@@ -5003,7 +5009,7 @@ class SpirvEmit : AstVisitor {
     // ----- calls: texture / vector constructors / dot / GLSL.std.450 math (args pre-visited) -----
     // Mirrors emit_call but reads operand ids via value_of (children already visited). for-source
     // range()/urange() calls are consumed by preVisitExprForBody and skipped here.
-    [arch(at="../ARCHITECTURE.md#files-and-emission"), arch(at="../ARCHITECTURE.md#small-int-surface"), arch(at="../ARCHITECTURE_COOPMAT.md#cm2-decode-vector")]
+    [arch(at="../ARCHITECTURE.md#files-and-emission"), arch(at="../ARCHITECTURE.md#small-int-surface"), arch(at="../ARCHITECTURE_COOPMAT.md#cm2-decode-vector"), arch(at="../ARCHITECTURE_COOPMAT.md#coopmat-elem")]
     def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
         if (key_exists(for_src, intptr(expr))) return expr
         var bm & = unsafe(*m)
@@ -5347,6 +5353,45 @@ class SpirvEmit : AstVisitor {
             }
             emit_n(bm, SEC_FUNCS, SpvOp.CooperativeMatrixMulAddKHR, ops)
             delete ops
+            e2id[k] = res
+            return expr
+        }
+        if (name == "coopmatElem") {
+            if (ctx.stage != ShaderStage.Compute) {
+                errs |> push("coopmatElem is only valid in a compute shader")
+                return expr
+            }
+            if (length(expr.arguments) != 2) {
+                errs |> push("coopmatElem expects (mat, e)")
+                return expr
+            }
+            let ci = coopmat_info(expr.arguments[0]._type)
+            if (!ci.ok || ci.is_float || ci.comp_width != 32u) {
+                errs |> push(
+                    "coopmatElem: the first argument must be an s32 coopmat accumulator local")
+                return expr
+            }
+            let src = coop_local_ptr(expr.arguments[0])
+            let ix = value_of(expr.arguments[1])
+            if (src.id == 0u || ix == 0u) {
+                errs |> push("coopmatElem: could not resolve the coopmat local or the index")
+                return expr
+            }
+            let comp_t = type_int(bm, 32u, 1u)
+            let lit = const_uint_value(expr.arguments[1])
+            if (lit.ok || key_exists(unroll_consts, ix)) {
+                let val = coop_local_val(expr.arguments[0])
+                let idx = lit.ok ? lit.value : uint(unroll_consts?[ix] ?? 0l)
+                let cres = alloc_id(bm)
+                emit(bm, SEC_FUNCS, SpvOp.CompositeExtract, comp_t, cres, val, idx)
+                e2id[k] = cres
+                return expr
+            }
+            let ept = type_pointer(bm, SpvStorageClass.Function, comp_t)
+            let ep = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.AccessChain, ept, ep, src.id, ix)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, comp_t, res, ep)
             e2id[k] = res
             return expr
         }

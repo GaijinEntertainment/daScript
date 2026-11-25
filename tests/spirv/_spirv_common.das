@@ -2350,6 +2350,29 @@ def coopmat_i8_kernel {
 
 def public coopmat_i8_words : array<uint> => clone_to_move(coopmat_i8_spv)
 
+var @ssbo @binding = 0 cmk_a : array<int8>
+var @ssbo @binding = 1 cmk_b : array<int8>
+var @ssbo @binding = 2 cmk_c : array<int>
+
+[compute_shader(local_size_x=32, name="coopmat_i8k16_spv"), marker(no_coverage)]
+def coopmat_i8k16_kernel {
+    var a : coopmatA_s8_16x16
+    var b : coopmatB_s8_16x16
+    var acc : coopmatAcc_s32_16x16
+    coopmatLoad(a, cmk_a, 0, 16, 0)
+    coopmatLoad(b, cmk_b, 0, 16, 1)
+    acc = coopmatMulAdd(a, b, acc)
+    acc = coopmatMulAdd(a, b, acc)
+    let lane = gl_LocalInvocationID.x
+    for [unroll_full] (e in range(2)) {
+        cmk_c[lane * 4u + uint(e)] = coopmatElem(acc, uint(e))
+    }
+    cmk_c[lane * 4u + 2u] = coopmatElem(acc, 3u)
+    cmk_c[lane * 4u + 3u] = coopmatElem(acc, lane & 7u)
+}
+
+def public coopmat_i8k16_words : array<uint> => clone_to_move(coopmat_i8k16_spv)
+
 // ===== coopmat from @workgroup SHARED memory: the real-GEMM prerequisite. A tiled GEMM stages a block of
 // A/B into shared, then coopMatLoads the tiles from SHARED (coalesced, reused) rather than straight from
 // the @ssbo global (memory-bound). This fixture stages an f16 tile into @workgroup and coopMatLoads it
@@ -2913,6 +2936,83 @@ def coopmat2fa256_kernel {
 }
 
 def public coopmat2fa256_words : array<uint> => clone_to_move(coopmat2fa256_spv)
+
+// ===== The wide h256 flash tile: the h256 loop at 128 query rows a
+// workgroup (Br=128, Bc=32), its O accumulated in f16 - the shapes
+// dasLLAMA's `FaH256WT` stamps declare =====
+[compute_shader(local_size_x=256, name="coopmat2fa256w_spv"), marker(no_coverage)]
+def coopmat2fa256w_kernel {
+    let n = fa_meta[0u]
+    let kv = fa_meta[1u]
+    let ti = gl_WorkGroupID.x
+    var tlq : tensorLayout2DPad
+    tensorLayoutCreate(tlq)
+    tensorLayoutSetDimension(tlq, n, 256u)
+    tensorLayoutSetStride(tlq, 256u, 1u)
+    var tlk : tensorLayout2DPad
+    tensorLayoutCreate(tlk)
+    tensorLayoutSetDimension(tlk, kv, 256u)
+    tensorLayoutSetStride(tlk, 256u, 1u)
+    var tlo : tensorLayout2D
+    tensorLayoutCreate(tlo)
+    tensorLayoutSetDimension(tlo, n, 256u)
+    tensorLayoutSetStride(tlo, 256u, 1u)
+    var tv : tensorView2Dt
+    tensorViewCreate(tv)
+    var q : coopmatWgAcc_f32_128x256
+    coopmatLoadTensor(q, fa_q, 0u, tlq, ti * 128u, 128u, 0u, 256u)
+    coopmatScale(q, 0.0625)
+    var qf : coopmatWgA_f16_128x256
+    coopmatConvert(qf, q)
+    var mrow : coopmatWgAcc_f32_128x32
+    coopmatFill(mrow, -1.7e38)
+    var lrow : coopmatWgAcc_f32_128x32
+    var o : coopmatWgAcc_f16_128x256
+    var j = 0u
+    while (j < kv) {
+        var s : coopmatWgAcc_f32_128x32
+        var kt : coopmatWgB_f16_256x32
+        coopmatLoadTensor(kt, fa_k, 0u, tlk, j, 32u, 0u, 256u, tv)
+        s = coopmatMulAdd(qf, kt, s)
+        coopmatPerElement(s, s, @@fa_mask, ti * 128u, j)
+        var rmax : coopmatWgAcc_f32_128x32
+        coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@fa_max)
+        var mold : coopmatWgAcc_f32_128x32
+        coopmatCopy(mold, mrow)
+        coopmatPerElement(mrow, rmax, @@fa_pick_max, mold)
+        coopmatSub(s, s, mrow)
+        coopmatPerElement(s, s, @@fa_exp)
+        var em : coopmatWgAcc_f32_128x32
+        coopmatSub(em, mold, mrow)
+        coopmatPerElement(em, em, @@fa_exp)
+        var pa : coopmatWgA_f16_128x32
+        coopmatConvert(pa, s)
+        var rsum : coopmatWgAcc_f32_128x32
+        var one : coopmatWgB_f16_32x32
+        coopmatFill(one, 1.0)
+        rsum = coopmatMulAdd(pa, one, rsum)
+        coopmatMulElem(lrow, em, lrow)
+        coopmatAdd(lrow, lrow, rsum)
+        var emd : coopmatWgAcc_f32_128x256
+        coopmatReduce(emd, em, COOPMAT_REDUCE_ROW, @@fa_smear)
+        var emf : coopmatWgAcc_f16_128x256
+        coopmatConvert(emf, emd)
+        coopmatMulElem(o, emf, o)
+        var vt : coopmatWgB_f16_32x256
+        coopmatLoadTensor(vt, fa_v, 0u, tlk, j, 32u, 0u, 256u)
+        o = coopmatMulAdd(pa, vt, o)
+        j += 32u
+    }
+    var o32 : coopmatWgAcc_f32_128x256
+    coopmatConvert(o32, o)
+    var ld : coopmatWgAcc_f32_128x256
+    coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@fa_smear)
+    coopmatPerElement(ld, ld, @@fa_recip)
+    coopmatMulElem(o32, ld, o32)
+    coopmatStoreTensor(o32, fa_o, 0u, tlo, ti * 128u, 128u, 0u, 256u)
+}
+
+def public coopmat2fa256w_words : array<uint> => clone_to_move(coopmat2fa256w_spv)
 
 // ===== The h512 flash tiles (Br=64, Bc=32): the loop at head size 512 with the O accumulated in f16 beside f32 =====
 [compute_shader(local_size_x=128, name="coopmat2fa512_spv"), marker(no_coverage)]
