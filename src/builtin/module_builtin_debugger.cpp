@@ -1869,7 +1869,7 @@ namespace das
                     ->args({"category","line","context"});;
             addExtern<DAS_BIND_FUN(forkDebugAgentContext)>(*this, lib,  "fork_debug_agent_context",
                 SideEffects::modifyExternal, "forkDebugAgentContext")
-                    ->args({"function","context","line"});;
+                    ->args({"function","context","line"})->setNestsCompile();
             addExtern<DAS_BIND_FUN(deleteDebugAgent)>(*this, lib,  "delete_debug_agent_context",
                 SideEffects::modifyExternal, "deleteDebugAgent")
                     ->args({"category","line","context"});;
