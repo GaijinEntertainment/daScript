@@ -32,6 +32,12 @@ shell, or - where the value that selects the difference is a run-time count - as
 body reads the count from its kargs; a twin's own body holds only what the selecting value
 changes, the shared guard and index arithmetic living in the template or the shell.**
 
+**A diff that gives a second shape - another head size, another row count, another home - the body of a kernel class
+template that serves one shape through module constants (the CUDA home's wide flash tile `FaMmaCuT`, its head and its tile
+the `FMC_*` constants) turns those constants into template constants of that template and stamps the new shape; a second
+body beside the template is a defect.** A single-shape template says so in the `//!` line above its constants, so the next
+shape finds the template before it finds a reason to copy it.
+
 **A diff that adds a fused kernel - a GEMV or tile whose body carries a prologue or epilogue beyond
 the product (a norm, a residual add, an activation, a gated mix, a combine, a scatter) over a weight
 plane - writes its body so the `KqFmt` member is a template constant selecting the fill (a stamp of
@@ -157,8 +163,20 @@ change, either a census row that pins the crown (`pin_metal_tensor_crowns`), or 
 blind-entry asserts look the row up by the entry's exact text, and they count the dispatches of every
 key the entry is a prefix of.
 
+**A diff that adds a new Vulkan census key that a census row dispatches on one kind of device and
+no census row reaches on another adds, in the same change, a `VK_CENSUS_NEVER_DISPATCHED` entry
+plus a `VK_CENSUS_PICK_CONDITIONAL` entry naming the driver pick (the driver function that chooses
+the kernel at the dispatch site) that tells the two kinds apart, both in
+`modules/dasLLAMA/tests/test_kernel_coverage.das` and both spelling the key exactly.**
+
+**A diff that adds a pick to `VK_CENSUS_PICK_CONDITIONAL` reads it through the function the driver
+calls at the dispatch site, and names the census rows that dispatch its entries - never a vendor
+or device name compared in the test.**
+
 **Weakening the blind-entry asserts in `modules/dasLLAMA/tests/test_kernel_coverage.das` - that
-an entry matches a compiled census key, and that it matches no dispatched one - is a defect.**
+an entry matches a compiled census key, that it matches no dispatched one, and that a conditional
+Vulkan entry whose pick holds counts a dispatch once every row that carries it ran - is a
+defect.**
 
 **Weakening any refusal a lens - the macro behind a `[*_dispatch]` annotation that derives each
 field's access and generates the builder - makes at compile time, or any cell that holds one, is a

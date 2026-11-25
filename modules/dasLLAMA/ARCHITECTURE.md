@@ -140,12 +140,12 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   sessions' chunks (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-segments`), the recurrent scan over
   half rows, and how a kernel's hot loads are addressed.
 - `ARCHITECTURE_GPU_SHARED_ATTN.md` - the attention bodies both discrete homes (Vulkan and CUDA) stamp: the token
-  command's attention key split, the prefill's flash-attention tile, the K/V mirror's block codecs (q8_0, tq4) with
-  tq4's rotated basis, the batched rope store's strided k and v reads, and the FastConformer rel-position attention; `ARCHITECTURE_GPU_SHARED_DRAFTER.md` - the block drafter's tiled attention every home stamps.
+  command's attention key split, the prefill's flash-attention tile, the CUDA home's wide flash tile, the K/V mirror's block codecs (q8_0, tq4) with
+  tq4's rotated basis, the batched rope store's strided k and v reads, and the FastConformer rel-position attention; `ARCHITECTURE_GPU_SHARED_DRAFTER.md` - the block drafter's tiled attention every home stamps, and Metal's matrix form of it.
 - `ARCHITECTURE_GPU_SHARED_GEMM.md` - the GEMM tiles and GEMVs both discrete homes stamp: the cm2 decode callbacks'
   16-bit lanes, the mx4 decode, the device scale row, the cm2 tile body's k step, fast path and loop bounds, the KHR
   arm's hand-staged kq tile, the decode GEMV family's lane split by row length and region walk, the N-column forms'
-  load waves (`ARCHITECTURE_GPU_SHARED_GEMM.md#ncol-load-waves`), and the routed gate-up fusion.
+  load waves (`ARCHITECTURE_GPU_SHARED_GEMM.md#ncol-load-waves`) and rotated walk, and the routed gate-up fusion.
 - `ARCHITECTURE_GPU_SHARED_ROWS.md` - the row kernels of the token step and the routed block more than one home
   stamps: the Q8 requant byte store, the residual step's two forms, the batched step's rows through the token block,
   the token-table gather, the routed combine and its gemma-4 form, the select's depth, the routed weights' scales and
@@ -156,21 +156,21 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   device-init roster of the Vulkan capabilities the tier keys its routes on, and the
   `[vk_dispatch]` lens's readonly derivation.
 - `ARCHITECTURE_GPU_VULKAN_ATTN.md` - the attention-side planes the resident driver uploads beside its norms - the
-  q/k/v projection bias, gpt-oss's sink logits with the flash tiles' sink stamps, and its output bias.
+  q/k/v projection bias, gpt-oss's sink logits with the flash tiles' sink stamps, and its output bias - and the far row of a one-row step.
 - `ARCHITECTURE_GPU_VULKAN_WINDOW.md` - what the prefill window does a session at a time: the
   recurrent block over its region's state and ring, the segmented window holding several sessions'
-  chunks, the short window's peel through the token commands, an embedding's hidden rows
+  chunks, the short window's peel through the token commands, the cut at a shared-K/V tail, an embedding's hidden rows
   (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-hidden-rows`) and the one scratch region its texts share
   (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-scratch`).
 - `ARCHITECTURE_GPU_VULKAN_GEMM.md` - how the Vulkan driver runs its GEMMs on the cooperative-matrix
   tiles - the tile pick and the coopmat mode ladder, the short window's split-K
-  (`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split`), the class-pipeline build seat, and the MoE expert
+  (`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split`), the class-pipeline build seat, a slot's alternate stamps, and the MoE expert
   chain on those tiles.
 - `ARCHITECTURE_GPU_VULKAN_KHR.md` - the window GEMMs over a file's f32 rows that ride the KHR arm's
-  staged tile on every coopmat card, and why a K-quant window plane stays on the cm2 tiles.
+  staged tile, why a K-quant window plane stays on the cm2 tiles, and the routed block's int8 tiles.
 - `ARCHITECTURE_GPU_VULKAN_ROOM.md` - the room the residency plan may fill on a card shared with a
   desktop: the OS's answer and the headroom where none comes, the over-commit guards, and the two
-  allocation shapes the Windows memory manager pages out (the priority tag, the mapped ReBAR type).
+  allocation shapes the Windows memory manager pages out (the priority tag, the mapped ReBAR type), and an integrated device's carve-out.
 - `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` - what a model has to fit on the card before the driver
   runs - the residency plan, the checkpoints a device-home recurrent stream keeps on the device,
   the token rows' gather off the table's own plane, the GPU-slot marks swap that lets one slot

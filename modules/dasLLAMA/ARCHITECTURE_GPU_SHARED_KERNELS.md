@@ -238,11 +238,11 @@ words for up to 512 experts twice), the two tile counts scanned as one packed wo
 admitted shape: 512 tokens by 64 slots over 512 experts). Every dispatch is sized for its worst case - one s tile per
 expert; every expert's whole columns plus a partial one - and the map's tail past the real workgroup count carries the
 sentinel (`SCHED_NONE`): a tile workgroup that reads it sees a zero-row region and returns before its first barrier. The
-slot-to-bucket-row map hands every slot the next row of its expert's bucket through an atomic cursor, so the rows within
-a bucket land in an order the schedule does not fix - which nothing downstream reads: the tiles compute rows apart and
-the combine reads each slot's row through the map, so the sums are the CPU walk's to the bit (the kernel cells check the
-map as a permutation of each bucket's rows). The per-expert slot walks this replaced - thread e scanning every slot twice,
-staged through workgroup memory in 256-slot chunks - cost 163 us per layer on the 30B.
+slot-to-bucket-row map hands every slot the next row of its expert's bucket through an atomic cursor: a bucket's rows land
+in no fixed order, which nothing downstream reads while a bucket rides one tile family (the combine reads a slot's row
+through the map; the cells check it as a permutation of a bucket's rows). Where a layer's tiles round apart, a `STABLE`
+stamp keeps slot-row order (`place_in_order`). A per-expert slot walk - thread e scanning every slot twice, staged through
+workgroup memory in 256-slot chunks - is the slower form on the Qwen3-30B's window (`followup_vulkan.md` row 43 keeps the figures).
 
 ### The deltanet kernels both discrete homes stamp {#dn-discrete-kernels}
 
