@@ -804,6 +804,7 @@ namespace das {
             fn->aliasCMRES, fn->neverAliasCMRES, fn->propertyFunction, fn->jitOnly, fn->requestNoJit,
             fn->jitContextAndLineInfo, fn->nodiscard, fn->captureString, fn->unsafeWhenNotCloneArray,
             fn->neverInline, fn->tempStringResult, fn->needCallerStackFrame, fn->nttp,
+            fn->noCaptureString,
         };
         hb.updateString((const char *)traits, sizeof(traits));
         hb.update(fn->builtIn && static_cast<const BuiltInFunction *>(fn)->noFolding);

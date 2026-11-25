@@ -1,0 +1,9 @@
+options gen2
+
+include policy_modules.das_project
+
+//! a project for uncategorized.das: every file it compiles runs under
+//! force_inscope_pod
+
+[export]
+def project_policies() : string => "force_inscope_pod"

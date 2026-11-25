@@ -60,6 +60,7 @@ Any other argument, or a wrong type, is a compile error from the macro.
 - `--timeout <seconds>`: The whole suite's timeout. Past it the process ends at once with exit code 124 and no summary, after one line naming the timeout and, in the sequential mode, the file, the test and the subtest that were running (`--failures-only` hides the `run N/M` lines, so this line is the one record). `0` disables it. The default is 20 minutes
 - `--test-wall <seconds>`: One `[test]` function's wall. Each test arms the process's kill switch (`kill_switch.das`), and a test still running past the wall ends the process at once with exit code 125 and no summary, after one line naming the test and, in the sequential mode, its file; no later test runs. A test that declares a longer budget, `[test(timeout = N)]`, is held to that budget instead; a shorter one changes nothing. `0` (default) disables it.
 - `--run-env NAME=VALUE` (repeatable): A variable set only while the compiled tests run - once a test program has compiled, put back exactly when its run ends (a variable that was absent is removed again) - so a value only the running tests read names no compile record of its own: a run under another value reads the same cached program. It reaches `--together` runs and isolated workers byte for byte. A pair with no `=` or an empty name stops dastest with exit code 2 and a line naming the pair. A variable a macro reads while compiling stays in the environment.
+- `--policy NAME=VALUE` (repeatable): One `CodeOfPolicies` field every test file compiles under, named as in C++ (`force_inscope_pod`, `stack`) and set after dastest's own policies and after the ones a `--test-project` file returns from its `project_policies`; a bare `NAME` sets a bool to true. An `options` line in a test file still wins for that file. It reaches `--together` runs and isolated workers. A name that is no policy, or a value the field does not take, stops dastest with exit code 2 and a line naming it.
 - `--force-tune`: Force the tune sidecar. `DAS_TUNE_FORCE` takes the `DAS_TUNE_MANIFEST` file before a test compiles, so the tests' `[tune]` kernels stamp from it whatever its age against the binary or the box that minted it - a rebuild does not drop a test run to the fallback kernels. Exit code 2 where `DAS_TUNE_MANIFEST` names no file
 - `--max-file-time <seconds>`: Fail after the suite finishes if any completed test file exceeded this wall-clock duration plus the `[test(timeout = N)]` budgets it declares. `0` (default) disables the limit; this is independent of the global `--timeout` deadlock guard.
 - `--isolated-mode`: Run tests in isolated processes, useful to catch crashes
@@ -99,6 +100,8 @@ Note that benchmarks will be executed only if all module tests have already pass
   the process shell.
 - `--worker-run-env <base64>` (repeatable): Internal encoding of one
   `--run-env` pair for workers, preserving its bytes through the process shell.
+- `--worker-policy <base64>` (repeatable): Internal encoding of one
+  `--policy` pair for workers, preserving its bytes through the process shell.
 
 ### Benchmark measurement {#benchmark-measurement}
 

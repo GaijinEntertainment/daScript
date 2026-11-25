@@ -542,6 +542,18 @@ def private worker_decoded(encoded : string) : tuple<ok : bool; text : string> {
     return (ok = decoded.size >= 0 && base64_encode(decoded.text) == encoded, text = decoded.text)
 }
 
+//! appends each base64 worker pair of `encoded`, decoded, to `pairs`;
+//! false at the first one that does not decode
+def private push_worker_pairs(var pairs : array<string>; encoded : array<string>) : bool {
+    pairs |> reserve(length(pairs) + length(encoded))
+    for (item in encoded) {
+        let decoded = worker_decoded(item)
+        return false if (!decoded.ok)
+        pairs |> push(decoded.text)
+    }
+    return true
+}
+
 [export]
 def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
     // ansi-colors detection scans full argv for --color / --no-color so
@@ -568,14 +580,21 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
         }
         test_args.module_cache_dir = decoded.text
     }
-    test_args.run_env |> reserve(length(test_args.run_env) + length(test_args.worker_run_env))
-    for (encoded in test_args.worker_run_env) {
-        let decoded = worker_decoded(encoded)
-        if (!decoded.ok) {
-            log::error("dastest: invalid worker run-env pair")
-            return 1
-        }
-        test_args.run_env |> push(decoded.text)
+    if (!push_worker_pairs(test_args.run_env, test_args.worker_run_env)) {
+        log::error("dastest: invalid worker run-env pair")
+        return 1
+    }
+    if (!push_worker_pairs(test_args.policy, test_args.worker_policy)) {
+        log::error("dastest: invalid worker policy pair")
+        return 1
+    }
+    var badPolicy = ""
+    using() $(var cop : CodeOfPolicies) {
+        badPolicy = set_policies(cop, test_args.policy)
+    }
+    if (!empty(badPolicy)) {
+        log::red("command-line args: --policy: {badPolicy}")
+        return 2
     }
     if (test_args.skip_fully_cached && empty(test_args.module_cache_dir)) {
         log::red("command-line args: --skip-fully-cached needs --module-cache-dir, "
@@ -820,10 +839,12 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
             : " --pass-stamp {base64_encode(test_args.pass_stamp)}")
         let runEnvFlags = join([for (pair in test_args.run_env);
             " --worker-run-env {base64_encode(pair)}"], "")
+        let policyFlags = join([for (pair in test_args.policy);
+            " --worker-policy {base64_encode(pair)}"], "")
         let cmdSuffix = (" {benchstr}{log::useTtyColors ? " --color" : ""}"
             + "{headlessFlag}{stackExcFlag}{failuresOnlyFlag}"
             + "{useAotFlag}{compileOnlyFlag}{jitFlags}{moduleCacheFlag}{passStampFlag}"
-            + "{runEnvFlags}")
+            + "{runEnvFlags}{policyFlags}")
         let batchSize = max(1, test_args.batch)
         // Each batch is run by one worker subprocess (batchCmd); per-file
         // singleCmds are kept so a crash can be re-dispatched

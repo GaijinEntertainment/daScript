@@ -49,6 +49,7 @@ struct SuiteCtx {
     projectPath : string
     moduleCacheDir : string
     runEnv : array<string>   //! `--run-env` pairs: the environment of a compiled program's run
+    policies : array<string>   //! `--policy` pairs, set on every test compile
     //! `--skip-fully-cached`: a pass mark of an unchanged program
     //! is trusted
     skipFullyCached : bool = false
@@ -120,6 +121,7 @@ def SuiteCtx(args : DastestArgs) : SuiteCtx {
     ctx.projectPath = args.test_project
     ctx.moduleCacheDir = args.module_cache_dir
     ctx.runEnv := args.run_env
+    ctx.policies := args.policy
     ctx.skipFullyCached = args.skip_fully_cached && !args.bench && empty(args.cov_path)
     ctx.passKey = cache_key_args(raw_args)
     ctx.compile_only = args.compile_only
@@ -220,6 +222,14 @@ def private test_policies(ctx : SuiteCtx; var cop : CodeOfPolicies; var access :
         cop.export_all = true
         cop.rtti = true
         access |> add_extra_module("coverage", "{get_das_root()}/daslib/coverage.das")
+    }
+    let project_refused = set_project_policies(access, cop)
+    if (!empty(project_refused)) {
+        panic("project_policies: {project_refused}")
+    }
+    let refused = set_policies(cop, ctx.policies)
+    if (!empty(refused)) {
+        panic("--policy: {refused}")
     }
 }
 

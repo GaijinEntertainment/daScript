@@ -201,6 +201,15 @@ Callback reference
    * - ``is_pod_in_scope_allowed(moduleName, fileName : string) : bool``
      - Control whether ``var inscope`` is allowed for POD types in the given
        module. When absent, ``inscope`` is allowed.
+   * - ``project_policies() : string``
+     - Return the compile policies of every module the project compiles: the same
+       ``name=value`` items ``daslang -policy`` takes, separated by ``;`` or by line, a
+       bare ``name`` setting a bool to ``true`` -
+       ``"force_inscope_pod; stack=1048576"``. The host sets them once per compile,
+       after its own defaults and before its ``-policy`` command-line overrides; an
+       ``options`` line in a file still wins for that file. A name that is no policy,
+       or a value its field does not take, stops the compile with a line naming it.
+       When absent, the host's policies are used as they are.
    * - ``is_same_file_name(a, b : string) : bool``
      - Custom file path comparison (e.g. case-insensitive matching on Windows).
        When absent, the default comparison is used.

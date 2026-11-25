@@ -172,6 +172,7 @@ namespace das
         string              fromFile2;
     };
 
+    struct CodeOfPolicies;
     typedef smart_ptr<class FileAccess> FileAccessPtr;
     class DAS_API FileAccess : public ptr_ref_count {
     public:
@@ -193,6 +194,7 @@ namespace das
         virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const;
         virtual string getDynModulesFolder () const { return ""; }
         virtual bool isPodInScopeAllowed ( const string & /*moduleName*/, const string & /*fileName*/ ) const { return true; };
+        virtual bool setProjectPolicies ( CodeOfPolicies & /*policies*/, string & /*error*/ ) const { return true; }
         virtual bool isModuleAllowed ( const string &, const string & ) const { return true; };
         virtual bool canModuleBeUnsafe ( const string &, const string & ) const { return true; };
         virtual bool isWithModuleUnsafe ( const string & /*targetModule*/, const string & /*fileName*/ ) const { return false; };

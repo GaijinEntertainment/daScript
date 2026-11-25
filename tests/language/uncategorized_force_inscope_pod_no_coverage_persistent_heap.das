@@ -47,3 +47,24 @@ def test_returned_loop_source_keeps_the_callers_locals(t : T?) {
     }
     t |> equal(spoiled, 0)
 }
+
+[never_inline]
+def twice(v : int) : int => v * 2
+
+[never_inline]
+def thrice(v : int) : int => v * 3
+
+[test(description = "a local array of function pointers is collected when its scope ends, like any array that owns only its buffer")]
+def test_function_pointer_array_is_collected(t : T?) {
+    g_no_fold = 0
+    var sum = 0
+    let before = heap_bytes_allocated()
+    for (_ in range(10)) {
+        let steps <- [@@twice, @@thrice]
+        for (step in steps) {
+            sum += invoke(step, 1 + g_no_fold)
+        }
+    }
+    t |> equal(heap_bytes_allocated(), before)
+    t |> equal(sum, 50)
+}

@@ -1012,6 +1012,7 @@ def clone_value(var Tab : table<auto(keyT); smart_ptr<auto(valT)>>; at : keyT | 
     }
 }
 
+[no_capture_string]
 def erase(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : bool {
     static_if (typeinfo needs_container_finalize(type<valT>)) {
         var val = __builtin_table_find(Tab, at)
@@ -1852,6 +1853,17 @@ def to_array(var arr : array<auto(TT)>) : array<TT -const -#> {
     //! No-op identity over an `array` — moves it through unchanged. Lets source-agnostic linq
     //! emitters (e.g. linq_das) always append `|> to_array()` regardless of whether the chain is
     //! already array-typed. `_sql(...)` intercepts this call as a no-op terminal (see analyze_chain).
+    return <- arr
+}
+
+[unsafe_operation]
+def to_array_temp(a : auto(TT)[]) : array<TT -const> {
+    //! An `array` over the fixed array's own storage: nothing is
+    //! allocated, and it is valid only while `a` is.
+    var arr : array<TT -const>
+    unsafe {
+        _builtin_make_temp_array(arr, addr(a[0]), length(a))
+    }
     return <- arr
 }
 

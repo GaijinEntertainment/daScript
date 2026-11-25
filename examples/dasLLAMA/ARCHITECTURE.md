@@ -286,7 +286,7 @@ Both emissions leave dasVulkan out, and the `-ctx` one leaves dasLLVM and dasCUD
 GPU tier would pull tens of megabytes of kernel C++ into a translation unit that is already
 large, and the tune framework and the CUDA module are no-AOT modules: a standalone context links
 no interpreter, so every function it reaches must have a C++ body, and a module marked no-AOT as
-a whole has none.
+a whole has none. Both build under `-policy force_inscope_pod`; the engine sets no such `options`.
 
 A library is entered and left once per call, which is what separates this program from the
 scripts beside it. `with_job_que()` is a scope no C caller can hold open, so the library opens

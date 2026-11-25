@@ -403,3 +403,106 @@ def test_temp_string_reclaim_embedded_nul(t : T?) {
     }
     t |> equal(total, 200 * 'A')
 }
+
+[no_capture_string]
+def drop_key(var tab : table<string; int>; key : string) : bool => erase(tab, key)
+
+//! a global, so no key sliced from it is folded to a constant
+var key_word = "hello"
+
+def word_table() : table<string; int> {
+    return <- { "he" => 1, "llo" => 2, "k7" => 7 }
+}
+
+[test(description = "a fresh string used as the key of tab?[k], key_exists, get, erase or a [no_capture_string] call is reclaimed, so the string heap stays flat over a long loop")]
+def test_temp_string_table_key_flatness(t : T?) {
+    t |> run("tab?[slice] and tab?[builder]") @@(t) {
+        var inscope tab <- word_table()
+        let before = string_heap_bytes_allocated()
+        var summ = 0
+        for (i in range(20000)) {
+            summ += tab?[slice(key_word, 0, 2)] ?? 0   // nolint:PERF031 the key under test
+            summ += tab?["k{i % 10}"] ?? 0
+            let named = "k{i % 10}"
+            summ += tab?[named] ?? 0
+        }
+        t |> equal(summ, 20000 + 4000 * 7)
+        t |> success(int64(string_heap_bytes_allocated()) - int64(before) < 256l,
+            "lookup keys should be reclaimed")
+    }
+    t |> run("key_exists and get") @@(t) {
+        var inscope tab <- word_table()
+        let before = string_heap_bytes_allocated()
+        var summ = 0
+        for (i in range(20000)) {
+            if (key_exists(tab, slice(key_word, 2))) {   // nolint:PERF031 the key under test
+                summ++
+            }
+            get(tab, "k{i % 10}") $(v) {
+                summ += v
+            }
+            if (key_exists(tab, "k{i % 10}")) {
+                summ++
+            }
+        }
+        t |> equal(summ, 20000 + 2000 * 7 + 2000)
+        t |> success(int64(string_heap_bytes_allocated()) - int64(before) < 256l,
+            "lookup keys should be reclaimed")
+    }
+    t |> run("erase and a [no_capture_string] function") @@(t) {
+        var inscope tab <- word_table()
+        let before = string_heap_bytes_allocated()
+        var misses = 0
+        for (i in range(20000)) {
+            if (!erase(tab, "miss{i}")) {
+                misses++
+            }
+            if (!drop_key(tab, slice(key_word, 1, 3))) {   // nolint:PERF031 the key under test
+                misses++
+            }
+            if (!erase(tab, slice(key_word, 1, 4))) {   // nolint:PERF031 the key under test
+                misses++
+            }
+        }
+        t |> equal(misses, 60000)
+        t |> equal(length(tab), 3)
+        t |> success(int64(string_heap_bytes_allocated()) - int64(before) < 256l,
+            "erase keys should be reclaimed")
+    }
+}
+
+[test(description = "a reclaimed table key still finds, misses and erases the right entry, a key the table stores survives the churn, and a lookup whose table is itself looked up by a fresh key reads the right value")]
+def test_temp_string_table_key_correctness(t : T?) {
+    t |> run("hits, misses and erases") @@(t) {
+        var inscope tab : table<string; int>
+        for (i in range(200)) {
+            tab |> insert("key{i}", i)
+        }
+        var bad = 0
+        for (i in range(200)) {
+            bad += (tab?["key{i}"] ?? -1) == i ? 0 : 1
+            bad += (tab?["nokey{i}"] ?? -1) == -1 ? 0 : 1
+            bad += key_exists(tab, "key{i}") ? 0 : 1
+        }
+        t |> equal(bad, 0)
+        for (half in range(100)) {
+            t |> success(erase(tab, "key{half * 2}"), "an even key erases")
+        }
+        t |> equal(length(tab), 100)
+        t |> success(!key_exists(tab, "key{10}") && key_exists(tab, "key{11}"))
+    }
+    t |> run("a table found by a fresh key, then read by another") @@(t) {
+        var inscope tabs : table<string; table<string; int>>
+        for (j in range(4)) {
+            var inner <- { "v{j}" => j, "w{j}" => 10 * j }
+            tabs |> emplace("t{j}", inner)
+        }
+        var bad = 0
+        for (i in range(2000)) {
+            let j = i % 4
+            bad += ((tabs?["t{j}"])?["w{j}"] ?? -1) == 10 * j ? 0 : 1
+            bad += ((tabs?["t{j}"])?["v{j + 1}"] ?? -1) == -1 ? 0 : 1
+        }
+        t |> equal(bad, 0)
+    }
+}

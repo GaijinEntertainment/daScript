@@ -316,6 +316,14 @@ namespace das
         }
     };
 
+    struct NoCaptureStringFunctionAnnotation : MarkFunctionAnnotation {
+        NoCaptureStringFunctionAnnotation() : MarkFunctionAnnotation("no_capture_string") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
+            func->noCaptureString = true;
+            return true;
+        };
+    };
+
     struct DeprecatedFunctionAnnotation : MarkFunctionAnnotation {
         DeprecatedFunctionAnnotation() : MarkFunctionAnnotation("deprecated") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
@@ -2297,6 +2305,7 @@ namespace das
         addAnnotation(new NeverFastMathFunctionAnnotation());
         addAnnotation(new RequestNoDiscardFunctionAnnotation());
         addAnnotation(new TempStringResultFunctionAnnotation());
+        addAnnotation(new NoCaptureStringFunctionAnnotation());
         addAnnotation(new DeprecatedFunctionAnnotation());
         addAnnotation(new AliasCMRESFunctionAnnotation());
         addAnnotation(new NeverAliasCMRESFunctionAnnotation());

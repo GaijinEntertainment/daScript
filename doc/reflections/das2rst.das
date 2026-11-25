@@ -191,7 +191,7 @@ def document_module_builtin(_root : string) {
         hide_group(group_by_regex("Internal container init infrastructure", mod, %regex~_table_index_and_init%%)),
         group_by_regex("Containers", mod, %regex~(capacity|clear|length|resize|resize_no_init|reserve|each|each_kv|emplace|emplace_from|erase|find|
 find_for_edit|find_if_exists|find_index|find_index_if|has_value|key_exists|keys|values|get_key|lock|each_enum|each_ref|
-find_for_edit_if_exists|lock_forever|next|nothing|pop|push|push_from|push_clone|push_clone_from|back|sort|stable_sort|to_array|to_table|to_array_move|
+find_for_edit_if_exists|lock_forever|next|nothing|pop|push|push_from|push_clone|push_clone_from|back|sort|stable_sort|to_array|to_table|to_array_move|to_array_temp|
 to_table_move|empty|subarray|insert|move_to_ref|copy_to_local|move_to_local|get|remove_value|erase_if|resize_and_init|
 get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_default|modify|long_length|long_capacity|long_find_index|ensure_capacity|set_scratch|is_scratch|scratch_reserve|scratch_ensure_capacity|scratch_resize)$%%),
         group_by_regex("Character set groups", mod, %regex~(is_alpha|is_number|is_white_space|is_char_in_set)$%%),
@@ -506,7 +506,7 @@ def document_module_rtti(_root : string) {
 def document_module_ast(_root : string) {
     var mod = [get_module("ast_core"), find_module("ast")]
     var groups <- array<DocGroup>(
-        group_by_regex("Compilation and file access", mod, %regex~(compile|compile_file|module_cache_path|module_cache_verdict|parse_file|parse_file_no_prerequisites|make_file_access|require_module_now|simulate|clone_context|set_file_source)$%%),
+        group_by_regex("Compilation and file access", mod, %regex~(compile|compile_file|module_cache_path|module_cache_verdict|parse_file|parse_file_no_prerequisites|make_file_access|require_module_now|simulate|clone_context|set_file_source|set_policy|set_policies|set_project_policies)$%%),
         group_by_regex("AST serialization", mod, %regex~(create_ast_serializer|create_ast_deserializer|delete_ast_serializer|serialize_program|deserialize_program|ast_serializer_get_data|ast_serializer_finalize_usec|ast_serializer_setup_usec)$%%),
         group_by_regex("Building programs from AST nodes", mod, %regex~(make_program|make_module|make_main_module)$%%),
         group_by_regex("Call generation", mod, %regex~(make_call)$%%),

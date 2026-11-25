@@ -36,6 +36,15 @@ Multiple ``options`` statements are allowed per file. They can appear before or 
     The host application can restrict which options are allowed in which files via the
     ``isOptionAllowed`` method on the project's file access object.
 
+An option is one file's override of a compile policy. The policy itself is the default
+for every module of the compile, and it is set outside the sources: ``daslang -policy
+name=value`` on the command line (repeatable; a bare ``name`` sets a bool to ``true``),
+or ``project_policies`` in a :ref:`project file <embedding_project_files>`.
+
+.. code-block:: text
+
+    daslang -policy force_inscope_pod -policy stack=1048576 main.das
+
 --------------------
 Language and Syntax
 --------------------
@@ -541,7 +550,10 @@ default ``false``.
    * - ``log_aliasing``
      - Logs aliasing analysis.
    * - ``log_inscope_pod``
-     - Logs inscope analysis for POD-like types.
+     - Logs the ``force_inscope_pod`` pass: one line for each variable, loop source, move
+       and array literal it rewrote, and one for each it left alone, with the reason.
+       A module read from the module cache is not compiled again and logs nothing, so run
+       with ``-no-module-cache``.
 
 --------------------
 Print Control
@@ -596,7 +608,9 @@ Miscellaneous
        user code). The banner fires only when collection is fully generated, frees heap the
        element owns, and deletes no pointees (``typeinfo is_pod_delete`` and
        ``is_safe_to_delete``); user finalizers never run implicitly — ``delete`` remains the
-       full teardown that runs them.
+       full teardown that runs them. An array literal whose elements own no heap is built on
+       the stack, with no allocation, where it binds to a constant ``array<T>`` parameter
+       of a function whose result cannot hold the array.
    * - ``keep_alive``
      - bool
      - false

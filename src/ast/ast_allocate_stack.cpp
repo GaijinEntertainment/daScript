@@ -603,6 +603,10 @@ namespace das {
         static bool holdsLoopSourceTemporaries ( const ExprCall * expr ) {
             return expr->isForLoopSource && expr->func->unsafeOutsideOfFor;
         }
+        // src/ast/ARCHITECTURE_LOOP_SOURCE.md#stack-array-argument
+        static bool holdsArgumentStorage ( const ExprCall * expr ) {
+            return expr->func->isBuiltinGenericInstance("to_array_temp");
+        }
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
             // temp-string marking (builders and [temp_string_result] calls) lives in
@@ -622,7 +626,7 @@ namespace das {
             }
             // order of evaluation for interop functions is not specified
             onPreExprCallFunc(expr);
-            doNotOptimize += holdsLoopSourceTemporaries(expr);
+            doNotOptimize += holdsLoopSourceTemporaries(expr) + holdsArgumentStorage(expr);
             pushSp();
         }
 
@@ -631,7 +635,7 @@ namespace das {
             if (!inStruct && efun != nullptr) {
                 onExprCallFunc(expr);
                 popSp();
-                doNotOptimize -= holdsLoopSourceTemporaries(expr);
+                doNotOptimize -= holdsLoopSourceTemporaries(expr) + holdsArgumentStorage(expr);
             }
             return Visitor::visit(expr);
         }
@@ -1127,6 +1131,17 @@ namespace das {
         bool isWrapperCall ( Expression * e ) const {
             return wrapper && e->rtti_isCall() && static_cast<ExprCall *>(e)->func == wrapper;
         }
+        bool canBeSite ( Expression * e ) const {
+            return e->rtti_isStringBuilder() || isWrapperCall(e) || (insertWrappers && isFreshStringCall(e));
+        }
+        Expression * makeSite ( ExpressionPtr & slot ) {
+            if ( slot->rtti_isStringBuilder() ) {
+                static_cast<ExprStringBuilder *>(slot)->isTempString = true;
+            } else if ( !isWrapperCall(slot) ) {          // a wrapper is a re-run on the same tree
+                slot = makeTempStringWrapper(wrapper, slot);
+            }
+            return slot;
+        }
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
             auto efun = expr->func;
@@ -1144,9 +1159,7 @@ namespace das {
             if ( expr->type && expr->type->isString() && !efun->tempStringResult ) return;
             for ( int ai=int(expr->arguments.size())-1; ai>=0; ai-- ) {
                 auto & arg = expr->arguments[ai];
-                bool eligible = arg->rtti_isStringBuilder() || isWrapperCall(arg)
-                    || (insertWrappers && isFreshStringCall(arg));
-                if ( !eligible ) continue;
+                if ( !canBeSite(arg) ) continue;
                 // a SIBLING calling into may-queue code flushes this site while it is live
                 // (argument evaluation order is unspecified) - then no site at all
                 bool siblingDanger = false;
@@ -1154,16 +1167,7 @@ namespace das {
                     if ( aj!=ai && callsIntoQueueSite(expr->arguments[aj]) ) siblingDanger = true;
                 }
                 if ( siblingDanger ) break;
-                if ( arg->rtti_isStringBuilder() ) {
-                    static_cast<ExprStringBuilder *>(arg)->isTempString = true;
-                    siteOf[expr] = arg;
-                } else if ( isWrapperCall(arg) ) {          // already wrapped - a re-run on the same tree
-                    siteOf[expr] = arg;
-                } else {
-                    auto w = makeTempStringWrapper(wrapper, arg);
-                    arg = w;
-                    siteOf[expr] = w;
-                }
+                siteOf[expr] = makeSite(arg);
                 break;
             }
         }
@@ -1179,6 +1183,50 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             siteOf.erase(expr);
+            return Visitor::visit(expr);
+        }
+        das_hash_map<Expression *, Expression *> keySiteOf;
+        bool queueTableKey ( Expression * lookup, Expression * tab, ExpressionPtr & key ) {
+            if ( inhibit || !key->type || !key->type->isString() || key->type->ref ) return false;
+            if ( !canBeSite(key) || callsIntoQueueSite(tab) ) return false;
+            keySiteOf[lookup] = makeSite(key);
+            return true;
+        }
+        virtual void preVisit ( ExprSafeAt * expr ) override {
+            Visitor::preVisit(expr);
+            if ( queueTableKey(expr, expr->subexpr, expr->index) ) inhibit ++;
+        }
+        virtual void preVisitSafeAtIndex ( ExprSafeAt * expr, Expression * index ) override {
+            Visitor::preVisitSafeAtIndex(expr, index);
+            if ( keySiteOf.erase(expr) ) inhibit --;
+        }
+        void queueTableCallKey ( ExprLooksLikeCall * expr ) {
+            if ( expr->arguments.size()==2 ) queueTableKey(expr, expr->arguments[0], expr->arguments[1]);
+        }
+        virtual void preVisit ( ExprFind * expr ) override {
+            Visitor::preVisit(expr);
+            queueTableCallKey(expr);
+        }
+        virtual void preVisit ( ExprKeyExists * expr ) override {
+            Visitor::preVisit(expr);
+            queueTableCallKey(expr);
+        }
+        virtual void preVisit ( ExprErase * expr ) override {
+            Visitor::preVisit(expr);
+            queueTableCallKey(expr);
+        }
+        virtual void preVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
+            Visitor::preVisitLooksLikeCallArg(call, arg, last);
+            auto it = keySiteOf.find(call);
+            if ( it!=keySiteOf.end() && it->second!=arg ) inhibit ++;
+        }
+        virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
+            auto it = keySiteOf.find(call);
+            if ( it!=keySiteOf.end() && it->second!=arg ) inhibit --;
+            return Visitor::visitLooksLikeCallArg(call, arg, last);
+        }
+        virtual ExpressionPtr visit ( ExprLooksLikeCall * expr ) override {
+            keySiteOf.erase(expr);
             return Visitor::visit(expr);
         }
     };
@@ -1223,6 +1271,22 @@ namespace das {
             if ( call->type && call->type->isString() && !f->tempStringResult ) return; // passthrough may alias the arg into the result
             auto barg = peelR2V(arg);
             if ( barg->rtti_isVar() && static_cast<ExprVar *>(barg)->variable==var ) safe ++;
+        }
+        static bool isTableKeyLookup ( ExprLooksLikeCall * call ) {
+            return call->arguments.size()==2 && ( strcmp(call->__rtti,"ExprFind")==0
+                || strcmp(call->__rtti,"ExprKeyExists")==0 || strcmp(call->__rtti,"ExprErase")==0 );
+        }
+        void countKeyUse ( Expression * key ) {
+            auto bkey = peelR2V(key);
+            if ( !blockDepth && bkey->rtti_isVar() && static_cast<ExprVar *>(bkey)->variable==var ) safe ++;
+        }
+        virtual void preVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
+            Visitor::preVisitLooksLikeCallArg(call, arg, last);
+            if ( isTableKeyLookup(call) && arg==call->arguments[1] ) countKeyUse(arg);
+        }
+        virtual void preVisitSafeAtIndex ( ExprSafeAt * expr, Expression * index ) override {
+            Visitor::preVisitSafeAtIndex(expr, index);
+            countKeyUse(index);
         }
     };
 

@@ -1,0 +1,8 @@
+options gen2
+
+include _fixture_policy_modules.das_project
+
+//! a project for test_policy.das: names a policy that does not exist
+
+[export]
+def project_policies() : string => "force_inscope_pod; no_such_policy = 1"

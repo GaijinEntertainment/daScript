@@ -30,8 +30,15 @@ records that the C++ use site reads `options.get*Option("<field>", policies.<fie
 it the field exists, is bound to rtti (which is what makes the option NAME valid:
 `getCodeOfPolicyOptions` in `src/builtin/module_builtin_rtti.cpp` lists every bound workhorse
 field), and reads plausibly in docs, but `options that_field = true` in a `.das` silently
-does nothing - only a C++ embedder setting the policy can reach it. Check the marker before
+does nothing - only code that sets the `CodeOfPolicies` field reaches it: a C++ embedder,
+`daslang -policy <field>=<value>`, `project_policies` in a `.das_project`, or a daslang tool
+calling `set_policy` (`ast` module). Check the marker before
 believing an option is live: a policy-gated pass with no marker has effectively never run.
+
+`-policy`, `project_policies` and `set_policy` name a field by its C++ name, from the list
+`DAS_MODULE_CACHE_POLICY_FIELDS` in `src/builtin/module_builtin_ast_serialize.cpp` - a field
+missing from that list cannot be set by name, nor can `abi_stamp` or a list-valued field, though
+both are listed.
 
 ## Table index rewrite
 

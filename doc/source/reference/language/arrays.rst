@@ -190,6 +190,10 @@ It's possible to iterate over an array via a regular ``for`` loop.
     print("x = {x}\n")
   }
 
+An array literal written as the loop source is not allocated: when its elements own no heap
+(numbers, strings, pointers) and it takes at most 1024 bytes, the loop iterates a fixed array
+on the stack, as ``for ( x in fixed_array(1,2,3,4) )`` does.
+
 Additionally, a collection of unsafe iterators is provided:
 
 .. das-doc: signatures

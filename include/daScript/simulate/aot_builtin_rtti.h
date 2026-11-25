@@ -131,6 +131,9 @@ namespace das {
     DAS_API void rtti_add_extra_module ( smart_ptr_raw<FileAccess> access, const char * modName, const char * modFile, Context * context, LineInfoArg * at );
 
     struct CodeOfPolicies;
+    DAS_API char * rtti_set_policy ( CodeOfPolicies & policies, const char * policy, Context * context, LineInfoArg * at );
+    DAS_API char * rtti_set_policies ( CodeOfPolicies & policies, const TArray<char *> & items, Context * context, LineInfoArg * at );
+    DAS_API char * rtti_set_project_policies ( smart_ptr_raw<FileAccess> access, CodeOfPolicies & policies, Context * context, LineInfoArg * at );
     DAS_API void rtti_builtin_compile(char * modName, char * str, const CodeOfPolicies & cop,
         const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context, LineInfoArg * lineinfo);
     DAS_API void rtti_builtin_compile_ex ( char * modName, char * str, const CodeOfPolicies & cop, bool exportAll,

@@ -269,3 +269,88 @@ def test_need_rtti(t : T?) {
             + "[export]\ndef main \{\n    print(\"\{g_s\}\\n\")\n\}\n"),
         true, "a shared global")
 }
+
+[test(description = "set_policy sets a CodeOfPolicies field by its C++ name from name=value text, a bare name turning a bool on, and answers with the reason for a name that is no policy, a value its field does not take or that is out of its range and a field text cannot set, leaving the field as it was; set_policies stops at the first item refused")]
+def test_set_policy(t : T?) {
+    using() $(var cop : CodeOfPolicies) {
+        t |> equal(set_policy(cop, "force_inscope_pod"), "")
+        t |> success(cop.force_inscope_pod, "a bare name turns the bool on")
+        t |> equal(set_policy(cop, " force_inscope_pod = false "), "")
+        t |> success(!cop.force_inscope_pod, "spaces around the name and the value are dropped")
+        t |> equal(set_policy(cop, "stack=0x10000"), "")
+        t |> equal(cop.stack, 65536u)
+        t |> equal(set_policy(cop, "max_infer_passes=7"), "")
+        t |> equal(cop.max_infer_passes, 7)
+        t |> equal(set_policy(cop, "max_heap_allocated=5000000000"), "")
+        t |> equal(cop.max_heap_allocated, 5000000000ul)
+        t |> equal(set_policy(cop, "jit_output_path=out/lib"), "")
+        t |> equal(string(cop.jit_output_path), "out/lib")
+        t |> equal(set_policy(cop, "no_such_policy"), "unknown policy 'no_such_policy'")
+        t |> equal(set_policy(cop, "abi_stamp=1"), "unknown policy 'abi_stamp'")
+        t |> equal(set_policy(cop, "stack=-1"),
+            "policy 'stack' expects a 32-bit unsigned integer, got '-1'")
+        t |> equal(set_policy(cop, "max_infer_passes=many"),
+            "policy 'max_infer_passes' expects a 32-bit integer, got 'many'")
+        t |> equal(set_policy(cop, "max_heap_allocated=1.5"),
+            "policy 'max_heap_allocated' expects an unsigned integer, got '1.5'")
+        t |> equal(set_policy(cop, "force_inscope_pod=maybe"),
+            "policy 'force_inscope_pod' expects true or false, got 'maybe'")
+        t |> equal(set_policy(cop, "dll_search_paths=x"),
+            "policy 'dll_search_paths' can't be set from text")
+        t |> equal(cop.stack, 65536u, "a refused value leaves the field as it was")
+        t |> equal(set_policy(cop, "max_heap_allocated=12x"),
+            "policy 'max_heap_allocated' expects an unsigned integer, got '12x'")
+        t |> equal(cop.max_heap_allocated, 5000000000ul, "... a 64-bit one too")
+        t |> equal(set_policy(cop, "max_heap_allocated=-1"),
+            "policy 'max_heap_allocated' expects an unsigned integer, got '-1'")
+        t |> equal(set_policy(cop, "max_infer_passes=4294967296"),
+            "policy 'max_infer_passes' expects a 32-bit integer, got '4294967296'")
+        t |> equal(set_policy(cop, "stack=4294967296"),
+            "policy 'stack' expects a 32-bit unsigned integer, got '4294967296'")
+        t |> equal(set_policy(cop, "stack="),
+            "policy 'stack' expects a 32-bit unsigned integer, got ''")
+        t |> equal(set_policy(cop, "force_inscope_pod=1"), "")
+        t |> success(cop.force_inscope_pod, "1 is true")
+        t |> equal(set_policy(cop, "force_inscope_pod=0"), "")
+        t |> success(!cop.force_inscope_pod, "0 is false")
+        var inscope items <- ["stack=4096", "no_such_policy", "max_infer_passes=9"]
+        t |> equal(set_policies(cop, items), "unknown policy 'no_such_policy'")
+        t |> equal(cop.stack, 4096u, "set_policies sets the items before the refused one")
+        t |> equal(cop.max_infer_passes, 7, "... and none after it")
+    }
+}
+
+[test(description = "log_inscope_pod names each array literal the pass built on the stack, each local and move it collected, and each site it left alone with every reason - the parameter, the elements, the callee's result, a generator, unsafe, a type that is not POD - each line once", timeout = 1200)]
+def test_log_inscope_pod(t : T?) {
+    let site = "in function '::main'"
+    let refused = "warning: stack array literal refused for"
+    let failed = "warning: POD optimization failed for"
+    let lines <- [
+        "Stack array literal applied to argument 'xs' of 'total' {site}",
+        "{refused} argument 'xs' of 'grow' {site}\n\tthe parameter is not constant",
+        "{refused} argument 'rows' of 'total_of_all' {site}\n\tthe elements own heap",
+        "\tthe result iterator<int&> may hold a reference to the array",
+        "\tfunction is generator",
+        "{failed} 'kept' in function '::beside_unsafe'\n\tfunction has unsafe",
+        "{failed} 'moved <- kept' in function '::beside_unsafe'\n\tfunction has unsafe",
+        "{failed} 'steps' in function '::holds_lambdas'\n\tlambda<int> is not POD",
+        "skipping POD optimization for single_return_via_move variable 'made'"
+    ]
+    using() $(var cop : CodeOfPolicies) {
+        t |> equal(set_policy(cop, "force_inscope_pod"), "")
+        t |> equal(set_policy(cop, "log_inscope_pod"), "")
+        var inscope access <- make_file_access("")
+        let fixture = "{get_das_root()}/tests/ast/_fixture_pod_log.das"
+        using() $(var mg : ModuleGroup) {
+            compile_file(fixture, access, unsafe(addr(mg)), cop) $(ok; _program; issues) {
+                t |> success(ok, "the fixture did not compile: {issues}")
+                let log = string(issues)
+                for (line in lines) {
+                    let first = find(log, line)
+                    t |> success(first >= 0, "no line '{line}' in:\n{log}")
+                    t |> equal(find(log, line, first + 1), -1, "'{line}' is logged once:\n{log}")
+                }
+            }
+        }
+    }
+}

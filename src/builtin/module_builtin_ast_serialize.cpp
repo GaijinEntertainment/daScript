@@ -3126,6 +3126,96 @@ namespace das {
         X(debug_infer_flag) X(temp_table_lint_warning) X(module_cache) X(keep_symbol_tables) X(promote_folded_int_constants) \
         X(max_framed_call_depth)
 
+    template <typename TT>
+    static const char * storePolicyNumber ( TT & field, const string & value, const char * expects ) {
+        char * end = nullptr;
+        errno = 0;
+        TT parsed = 0;
+        bool fits = false;
+        if constexpr ( is_signed<TT>::value ) {
+            auto wide = strtoll(value.c_str(), &end, 0);
+            fits = wide>=numeric_limits<TT>::min() && wide<=numeric_limits<TT>::max();
+            parsed = TT(wide);
+        } else {
+            auto wide = strtoull(value.c_str(), &end, 0);
+            fits = value.find('-')==string::npos && wide<=numeric_limits<TT>::max();
+            parsed = TT(wide);
+        }
+        if ( value.empty() || *end!=0 || errno==ERANGE || !fits ) return expects;
+        field = parsed;
+        return nullptr;
+    }
+
+    static const char * storePolicy ( bool & field, const string & value ) {
+        if ( value.empty() || value=="true" || value=="1" ) field = true;
+        else if ( value=="false" || value=="0" ) field = false;
+        else return "true or false";
+        return nullptr;
+    }
+
+    static const char * storePolicy ( int32_t & field, const string & value ) {
+        return storePolicyNumber(field, value, "a 32-bit integer");
+    }
+
+    static const char * storePolicy ( uint32_t & field, const string & value ) {
+        return storePolicyNumber(field, value, "a 32-bit unsigned integer");
+    }
+
+    static const char * storePolicy ( uint64_t & field, const string & value ) {
+        return storePolicyNumber(field, value, "an unsigned integer");
+    }
+
+    static const char * storePolicy ( string & field, const string & value ) {
+        field = value;
+        return nullptr;
+    }
+
+    static const char * storePolicy ( vector<string> &, const string & ) {
+        return "";
+    }
+
+    static string trimPolicyText ( const string & text ) {
+        auto first = text.find_first_not_of(" \t\r\n");
+        if ( first==string::npos ) return string();
+        return text.substr(first, text.find_last_not_of(" \t\r\n") - first + 1);
+    }
+
+    DAS_CC_API bool setCodeOfPolicy ( CodeOfPolicies & policies, const string & policy, string & error ) {
+        auto eq = policy.find('=');
+        string name = trimPolicyText(eq==string::npos ? policy : policy.substr(0, eq));
+        string value = eq==string::npos ? string() : trimPolicyText(policy.substr(eq+1));
+        bool known = false;
+        const char * expects = nullptr;
+    #define DAS_POLICY_FIELD_SET(f) if ( !known && name==#f ) { known = true; expects = storePolicy(policies.f, value); }
+        if ( name!="abi_stamp" ) {
+            DAS_MODULE_CACHE_POLICY_FIELDS(DAS_POLICY_FIELD_SET)
+        }
+    #undef DAS_POLICY_FIELD_SET
+        if ( !known ) {
+            error = "unknown policy '" + name + "'";
+        } else if ( expects && !*expects ) {
+            error = "policy '" + name + "' can't be set from text";
+        } else if ( expects ) {
+            error = "policy '" + name + "' expects " + expects + ", got '" + value + "'";
+        }
+        return known && !expects;
+    }
+
+    DAS_CC_API bool setProjectAndCommandLinePolicies ( CodeOfPolicies & policies, const FileAccessPtr & access,
+            const vector<string> & commandLinePolicies, string & error ) {
+        if ( access && !access->setProjectPolicies(policies, error) ) {
+            error = "project_policies: " + error;
+            return false;
+        }
+        for ( auto & policy : commandLinePolicies ) {
+            if ( !setCodeOfPolicy(policies, policy, error) ) {
+                error = "-policy: " + error;
+                return false;
+            }
+        }
+        return true;
+    }
+
     static bool cachedPoliciesMatch ( const CodeOfPolicies & a, const CodeOfPolicies & b ) {
     #define DAS_POLICY_FIELD_SAME(f) if ( !(a.f == b.f) ) return false;
         DAS_MODULE_CACHE_POLICY_FIELDS(DAS_POLICY_FIELD_SAME)

@@ -108,6 +108,12 @@ struct DastestArgs {
     @clarg_doc = "Base64 --run-env pair passed to isolated workers (repeatable)"
     worker_run_env : array<string>
 
+    @clarg_doc = "NAME=VALUE: one CodeOfPolicies field every test file compiles under, named as in C++ and set after dastest's own policies (repeatable); a bare NAME sets a bool to true"
+    policy : array<string>
+
+    @clarg_doc = "Base64 --policy pair passed to isolated workers (repeatable)"
+    worker_policy : array<string>
+
     @clarg_doc = "Run top-level benchmarks matching this name prefix"
     bench_names : array<string>
 

@@ -1797,7 +1797,37 @@ namespace das {
         // verifyAotReady();
     }
 
+    char * rtti_set_policy ( CodeOfPolicies & policies, const char * policy, Context * context, LineInfoArg * at ) {
+        string error;
+        if ( setCodeOfPolicy(policies, policy ? policy : "", error) ) return nullptr;
+        return context->allocateString(error, at);
+    }
+
+    char * rtti_set_policies ( CodeOfPolicies & policies, const TArray<char *> & items, Context * context, LineInfoArg * at ) {
+        string error;
+        auto item = (char **) items.data;
+        for ( auto last = item + items.size; item!=last; ++item ) {
+            if ( !setCodeOfPolicy(policies, *item ? *item : "", error) ) return context->allocateString(error, at);
+        }
+        return nullptr;
+    }
+
+    char * rtti_set_project_policies ( smart_ptr_raw<FileAccess> access, CodeOfPolicies & policies, Context * context, LineInfoArg * at ) {
+        string error;
+        if ( !access || access->setProjectPolicies(policies, error) ) return nullptr;
+        return context->allocateString(error, at);
+    }
+
     void Module_Ast::registerFunctions(ModuleLibrary & lib){
+        addExtern<DAS_BIND_FUN(rtti_set_policy)>(*this, lib, "set_policy",
+            SideEffects::modifyArgument, "rtti_set_policy")
+                ->args({"policies","policy","context","line"});
+        addExtern<DAS_BIND_FUN(rtti_set_policies)>(*this, lib, "set_policies",
+            SideEffects::modifyArgument, "rtti_set_policies")
+                ->args({"policies","items","context","line"});
+        addExtern<DAS_BIND_FUN(rtti_set_project_policies)>(*this, lib, "set_project_policies",
+            SideEffects::modifyArgumentAndExternal, "rtti_set_project_policies")
+                ->args({"access","policies","context","line"});
         addExtern<DAS_BIND_FUN(makeFileAccess)>(*this, lib, "make_file_access",
             SideEffects::modifyExternal, "makeFileAccess")
                 ->args({"project","context","at"});

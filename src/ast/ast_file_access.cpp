@@ -65,6 +65,7 @@ namespace das {
                 optionBlocked = context->findFunction("option_blocked");    // note, this one CAN be null
                 annotationAllowed = context->findFunction("annotation_allowed");    // note, this one CAN be null
                 podInScopeAllowed = context->findFunction("is_pod_in_scope_allowed"); // note, this one CAN be null
+                projectPolicies = context->findFunction("project_policies");
                 dynModulesFolderGet = context->findFunction("dyn_modules_folder");          // note, this one CAN be null
                 if ( !context->contextMutex ) context->contextMutex = new recursive_mutex;  // src/ast/ARCHITECTURE_COMPILE_MODULES.md#compile-workers
                 // get it ready
@@ -245,5 +246,26 @@ namespace das {
         auto exc = context->getException(); exc;
         DAS_ASSERTF(!exc, "exception failed in `pod_in_scope_allowed`: %s", exc);
         return cast<bool>::to(res);
+    }
+
+    bool ModuleFileAccess::setProjectPolicies ( CodeOfPolicies & policies, string & error ) const {
+        if (failed() || !projectPolicies) return true;
+        string list;
+        {
+            lock_guard<recursive_mutex> guard(*context->contextMutex);
+            vec4f res = context->evalWithCatch(projectPolicies, nullptr, nullptr);
+            auto exc = context->getException(); exc;
+            DAS_ASSERTF(!exc, "exception failed in `project_policies`: %s", exc);
+            if ( auto text = cast<const char *>::to(res) ) list = text;
+        }
+        for ( size_t at=0; at<list.size(); ) {
+            auto end = list.find_first_of(";\n", at);
+            if ( end==string::npos ) end = list.size();
+            auto item = list.substr(at, end-at);
+            bool blank = item.find_first_not_of(" \t\r")==string::npos;
+            if ( !blank && !setCodeOfPolicy(policies, item, error) ) return false;
+            at = end + 1;
+        }
+        return true;
     }
 }

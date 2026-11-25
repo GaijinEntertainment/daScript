@@ -1,0 +1,1 @@
+Sets on ``policies`` each of ``items`` in order - the ``name=value`` items ``set_policy`` takes - and stops at the first one refused: the items before it stay set. Returns an empty string when every item was set, and otherwise the reason the refused item gave.

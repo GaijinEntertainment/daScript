@@ -847,6 +847,7 @@ namespace das
         FunctionPtr setTempResult();
         FunctionPtr setCaptureString();
         FunctionPtr setTempStringResult();
+        bool isBuiltinGenericInstance ( const char * genericName ) const;
         FunctionPtr setNoReturn();
         FunctionPtr setNestsCompile();
         FunctionPtr setNoDiscard();
@@ -986,6 +987,7 @@ namespace das
                 bool    noReturn : 1;
                 bool    needRtti : 1;
                 bool    nestsCompile : 1;     // src/ast/ARCHITECTURE_COMPILE_MODULES.md#deadlock-prevention
+                bool    noCaptureString : 1;
             };
             uint32_t moreFlags2 = 0;
         };
@@ -1640,6 +1642,7 @@ namespace das
         bool        used = false;
     };
 
+
     class DAS_API Program : public ptr_ref_count {
     public:
         Program();
@@ -1680,6 +1683,7 @@ namespace das
         void astChanged() { accessFlagsValid = false; }
         bool verifyAndFoldContracts();
         bool inScopePodAnalysis(TextWriter & logs);
+        void logInScopePodOnce(TextWriter & logs, const LineInfo & at, const string & message);
         void markSymbolUse(bool builtInSym, bool forceAll, bool initThis, Module * macroModule, TextWriter * logs = nullptr);
         void markModuleSymbolUse(TextWriter * logs = nullptr);
         void markMacroSymbolUse(TextWriter * logs = nullptr);
@@ -1808,6 +1812,7 @@ namespace das
         CodeOfPolicies              policies;
         das_hash_set<const Module *>    usedTypedefModules;     // src/ast/ARCHITECTURE.md#program-scoped-symbol-state
         __forceinline bool isTypedefUsed ( const Module * mod ) const { return usedTypedefModules.find(mod) != usedTypedefModules.end(); }
+        das_hash_set<string>        inScopePodLogged;
         vector<tuple<Module *,string,string,bool,LineInfo>> allRequireDecl;
         das_hash_map<uint64_t,TypeDecl *> astTypeInfo;
         // compile-time inputs: (path, byte size, content hash, is source).
@@ -1852,6 +1857,8 @@ namespace das
     };
 
     // this one collectes dependencies and compiles with modules
+    DAS_CC_API bool setProjectAndCommandLinePolicies ( CodeOfPolicies & policies, const FileAccessPtr & access,
+        const vector<string> & commandLinePolicies, string & error );
     DAS_CC_API ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies(),
         ModuleCacheStream stream = ModuleCacheStream() );
@@ -1967,7 +1974,7 @@ namespace das
     };
 
     // src/ast/ARCHITECTURE_MODULE_SCAN.md#shared-module-vintage
-    #define DAS_ABI_VERSION 3
+    #define DAS_ABI_VERSION 4
     constexpr DAS_ABI_LOCAL uint64_t das_abi_vintage () {
         constexpr uint64_t sizes[] = {
             uint64_t(DAS_BUILD_ID), uint64_t(DAS_ABI_VERSION),

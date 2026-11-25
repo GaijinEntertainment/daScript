@@ -10,7 +10,9 @@ besides compute its result: `userScenario`, `modifyExternal` (which is also `acc
 `setSideEffects` moves it to `unsafeOperation`, and an unsafe call writes nothing by being unsafe.
 A pass reads it through `Function::hasObservableEffects` (or `observableEffects` when it needs the
 bits), never `sideEffectFlags` itself, so a bit added to `SideEffects` that is not an observable
-effect does not silently turn every pure check off.
+effect does not silently turn every pure check off. `[no_capture_string]` on a function clears
+its inferred `captureString` bit (`ast_unused.cpp`), so every consumer below then reads a function
+that carries it wrongly as one that keeps no string.
 
 `accessGlobal` also marks a function whose value depends on the process it runs in: one that
 takes a function's address (`@@fn`), or `reinterpret`s a pointer, function, lambda, block or

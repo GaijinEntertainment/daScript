@@ -95,6 +95,18 @@ DAS_JIT_BASELINE=x86-avx2 DAS_TUNE_MODE=fat daslang -lib dasllama_lib.das -outpu
 DAS_JIT_BASELINE=x86-avx2 DAS_TUNE_FORCE=<file.tune.json> daslang -lib dasllama_lib.das -output out/dasllama_lib
 ```
 
+Both backends compile the engine under `force_inscope_pod` - `-policy force_inscope_pod` on the
+`-lib` command, and after the `--` of the `-ctx` one - so a local container a function leaves
+behind is freed where its scope ends, not at a collection, and an array literal that is only read
+is built on the stack. The engine's sources carry no `options` line for it: the policy reaches
+every module of the compile. `-policy log_inscope_pod` beside it lists each local, loop source,
+move and array literal the pass rewrote, and each one it left alone with the reason; a module read
+from the module cache prints nothing, hence `-no-module-cache`:
+
+```sh
+daslang --disable-module dasVulkan -no-module-cache -policy force_inscope_pod -policy log_inscope_pod -lib dasllama_lib.das -output out/dasllama_lib
+```
+
 A built library reads no tune file and writes none: its kernels are the ones the build stamped.
 The three modes are `-lib` builds; the `-ctx` backend has no tune framework and runs the reference
 kernels.

@@ -57,6 +57,7 @@ static string hostOptions;          // argv up to "--": the compile's own option
 static vector<string> load_modules;
 static bool version2syntax = true;
 static bool trackAllocations = false;
+static vector<string> policyOverrides;
 static bool heapReportAtExit = false;
 // Resolved live-API port for the single-instance lock key. Populated from
 // the full argv via find_live_port_in_argv() before acquire_single_instance().
@@ -205,6 +206,11 @@ static CompileResult compile_script(const string & fn) {
     policies.ignore_shared_modules = true;
     policies.rtti = true;
     policies.track_allocations = trackAllocations;
+    string policyError;
+    if ( !setProjectAndCommandLinePolicies(policies, result.access, policyOverrides, policyError) ) {
+        result.errors = policyError + "\n";
+        return result;
+    }
 
     double t_compile = get_time_sec();
     // AST module cache: live recompiles the whole graph on every reload (shared modules are
@@ -762,6 +768,7 @@ static void print_help() {
     tout << "  -module-cache <path> - AST module cache: read when present, refreshed when a compile diverges; pays on every reload.\n"
             "                        Default ON (silent) at .cache/daslang/module_cache/<script>-<hash>.dascache\n"
             "  -no-module-cache     - no AST module cache at all\n";
+    tout << "  -policy <name>=<value> - set one CodeOfPolicies field for every (re)compile, after the project's project_policies; a bare <name> sets a bool to true; repeatable\n";
     tout << "  -dasroot <path>    - override DAS_ROOT\n";
     tout << "  -cwd               - change working directory to script's folder\n";
     tout << "  -v1syntax          - use v1 syntax (default: v2)\n";
@@ -915,6 +922,8 @@ static int daslang_live_main ( int argc, char * argv[] ) {
             moduleCacheFile = argv[++i];
         } else if (arg == "-no-module-cache") {
             noModuleCache = true;
+        } else if (arg == "-policy" && i + 1 < argc) {
+            policyOverrides.push_back(argv[++i]);
         } else if (arg == "-dasroot" && i + 1 < argc) {
             setDasRoot(argv[++i]);
         } else if (arg == "-cwd") {
