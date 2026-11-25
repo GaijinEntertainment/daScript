@@ -73,6 +73,18 @@ def public is_sweep_root_path(path : string) : bool {
 def public tier_runs(tier : string; full : bool) : bool =>
     tier == "fast" || (full && tier == "lane")
 
+//! a gate `--only` names runs whatever changed; others need a hit
+def public gate_reached(named : bool; changed, reach : array<string>) : bool =>
+    named || reach_hit(changed, reach)
+
+//! a lane goes to its own child process unless the run is `--serial`
+def public runs_in_child(tier : string; serial : bool) : bool =>
+    tier == "lane" && !serial
+
+//! `--serial`: the child runs its lane in process and starts no child
+def public lane_child_head(daslang, name : string) : array<string> =>
+    <- [daslang, "utils/internal/preflight/main.das", "--", "--only", name, "--serial"]
+
 //! trees the compile sweep leaves alone, each with why: a native module a CMake option builds, a resolution the
 //! plain compile cannot do, a platform the box is not, fixtures that are broken on purpose
 let public SWEEP_EXCLUDED <- {

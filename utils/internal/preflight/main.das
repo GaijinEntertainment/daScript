@@ -47,7 +47,7 @@ struct Config {
     @clarg_doc = "Diff base for changed-file detection (default: origin/master)"
     base : string = "origin/master"
 
-    @clarg_doc = "Comma-separated gate subset to run (see --list-gates); overrides tier selection"
+    @clarg_doc = "Gates to run, comma-separated, whatever the tier (--list-gates); lanes at once"
     only : string
 
     @clarg_doc = "Comma-separated gates to skip"
@@ -1657,7 +1657,8 @@ def gate_dasllama(ctx : PreflightCtx; suite : string) : GateResult {
 
 // ===== orchestration =====
 
-//! tiers: `fast` runs serially first on every run and a red stops the run; `lane` runs only under --full,
+//! tiers: `fast` runs serially first on every run and a red stops
+//! the run; `lane` runs under --full or when --only names it,
 //! every lane at once (their `cmake --build` steps in turn), so the
 //! wall is the longest lane; `module` never runs from a tier -
 //! `--only <gate>`
@@ -1741,10 +1742,10 @@ def want_gate(cfg : Config; info : GateInfo) : bool {
 
 def private lane_child_argv(ctx : PreflightCtx; cfg : Config;
                             name, build_lock : string) : array<string> {
-    var av <- [ctx.daslang, "utils/internal/preflight/main.das", "--",
-               "--only", name, "--base", cfg.base,
+    var av <- lane_child_head(ctx.daslang, name)
+    av |> push_from(["--base", cfg.base,
                "--daslang", ctx.daslang, "--build-dir", cfg.build_dir,
-               "--build-lock", build_lock]
+               "--build-lock", build_lock])
     if (cfg.jobs > 0) {
         av |> push("-j")
         av |> push("{cfg.jobs}")
@@ -1811,11 +1812,11 @@ def private run_lanes(ctx : PreflightCtx; cfg : Config; names : array<string>;
 
 [arch(at="README.md#docs-early")]
 def private docs_starts_early(ctx : PreflightCtx; cfg : Config) : bool {
-    let lanes_at_once = cfg.full && empty(cfg.only) && !cfg.serial
-    return false if (!lanes_at_once || get_platform_name() != "windows")
+    return false if (get_platform_name() != "windows")
     for (info in gate_table()) {
         continue if (info.name != "docs")
-        return want_gate(cfg, info) && reach_hit(ctx.changed_all, info.reach)
+        return (want_gate(cfg, info) && runs_in_child(info.tier, cfg.serial)
+            && gate_reached(!empty(cfg.only), ctx.changed_all, info.reach))
     }
     return false
 }
@@ -1951,17 +1952,16 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
         let docs_argv <- lane_child_argv(ctx, cfg, "docs", lanes_build_lock)
         early_docs = unsafe(spawn_process(docs_argv, "", noenv))
     }
-    let by_only = !empty(cfg.only)   // a gate named outright runs whatever changed - "working on imgui: run imgui"
     for (info in gate_table()) {
         continue if (!want_gate(cfg, info))
-        if (!by_only && !reach_hit(ctx.changed_all, info.reach)) {
+        if (!gate_reached(!empty(cfg.only), ctx.changed_all, info.reach)) {
             var r = GateResult(name = info.name, status = GateStatus.Skip,
                 detail = "nothing under {join(info.reach, ", ")} or the core changed vs {cfg.base}")
             report_gate(r, cfg.verbose)
             results |> emplace(r)
             continue
         }
-        if (info.tier == "lane" && !by_only && !cfg.serial) {
+        if (runs_in_child(info.tier, cfg.serial)) {
             // deferred to run with the lanes; docs may be running already
             let docs_running = info.name == "docs" && early_docs != null
             if (!docs_running) {
@@ -2046,23 +2046,23 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
         break if (cfg.fail_fast && any_fail)
     }
     if (!empty(lanes) || early_docs != null) {
-        var fast_red = false
-        for (r in results) {
-            fast_red ||= r.status == GateStatus.Fail
-        }
-        if (fast_red) {
+        let red <- [for (r in results); r.name; where r.status == GateStatus.Fail]
+        if (!empty(red)) {
             results |> reserve(length(results) + length(lanes))
             if (early_docs != null) {
                 unsafe(close_process(early_docs))
                 lanes |> push("docs")
             }
-            for (name in lanes) {   // the expensive lanes wait for a green fast tier
-                var r = GateResult(name = name, status = GateStatus.Skip, detail = "not run: the fast tier is red")
+            for (name in lanes) {
+                var r = GateResult(name = name, status = GateStatus.Skip,
+                    detail = "not run: {join(red, ", ")} failed")
                 report_gate(r, cfg.verbose)
                 results |> emplace(r)
             }
         } else {
-            to_log(LOG_INFO, "[RUN ] lanes at once: {join(lanes, ", ")}\n")
+            if (!empty(lanes)) {
+                to_log(LOG_INFO, "[RUN ] lanes at once: {join(lanes, ", ")}\n")
+            }
             var lane_results <- run_lanes(ctx, cfg, lanes, lanes_build_lock)
             rmdir(lanes_build_lock)
             if (early_docs != null) {

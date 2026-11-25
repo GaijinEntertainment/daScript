@@ -27,9 +27,11 @@ daslang utils/internal/preflight/main.das -- --full --serial     # the lanes one
 daslang utils/internal/preflight/main.das -- --only imgui
 daslang utils/internal/preflight/main.das -- --only dasllama-model-free
 
-# subset / introspection: --list-gates prints tier, reach and description
+# subset / introspection: --list-gates prints tier, reach and description. --only is the same run
+# with every gate it does not name left out: the named fast gates first, then the named lanes at once
 daslang utils/internal/preflight/main.das -- --list-gates
 daslang utils/internal/preflight/main.das -- --only docs,ci-das
+daslang utils/internal/preflight/main.das -- --only tests-interp,tests-jit,tests-aot
 daslang utils/internal/preflight/main.das -- --skip tests-aot --full
 
 # pre-push lint gate: the changed-set lint (rails and cost: skills/internal/preflight.md, the lint row)
@@ -101,7 +103,7 @@ nor a per-file flag. The verdict line counts the files of each kind.
 
 ## Build turns {#build-turn}
 
-The lanes of one `--full` run share one build lock: a folder named once per run in the temp
+The lanes of one run share one build lock: a folder named once per run in the temp
 dir and passed to each lane child as `--build-lock`. A lane starts its turn by creating the
 folder and ends it by removing the folder. A preflight started without `--build-lock` takes
 no turns. A lane that waits past the wait limit fails the step it was waiting for. Every
@@ -116,11 +118,10 @@ has its turn.
 
 ## The docs lane beside the fast tier {#docs-early}
 
-On Windows the docs lane of a `--full` run starts with the fast tier, not after it. It reads
+On Windows the docs lane starts with the fast tier, not after it. It reads
 nothing the fast tier checks, and its sphinx step is one process that takes no build turn, so
-its time is hidden behind the fast tier's. A red fast tier stops it. Off Windows sphinx fills
-every core, so the docs lane starts with the other lanes. A run with `--only` or `--serial`
-starts nothing early.
+its time is hidden behind the fast tier's. A red gate before the lanes stops it. Off Windows sphinx fills
+every core, so the docs lane starts with the other lanes. A `--serial` run starts nothing early.
 
 The full interpreter and AOT sweeps pass `--max-file-time` to `dastest`. The
 parallel cold JIT sweep defaults to 60 seconds because healthy files can cross
