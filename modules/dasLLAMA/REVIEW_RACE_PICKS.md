@@ -27,3 +27,10 @@ the race's output lines, one per candidate and each naming it, in the PR body or
 integer compiled into a kernel variant as a constant - between candidates that differ in that
 number alone times the chosen value and, on each side of it where the variant's emitter accepts a
 value, at least one such value, in that race.**
+
+**A diff that picks one candidate for several GPU backends off a race whose winner differs between
+backends picks one that leads on at least one backend and is level on every other, and puts beside
+the race's output lines each backend's noise - the largest gap between a candidate's times, summed
+over the race's shapes, in two rounds.** A candidate is level when no other's summed time beats it
+by more than that noise, and leads when it beats every other by more; a backend where the pick
+trails ships its own winner.

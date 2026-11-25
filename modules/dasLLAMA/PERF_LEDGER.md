@@ -10,6 +10,125 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-11-24, `direction-grade`) - the nv4 lane split measures out: an nv4 decode GEMV row past 96 blocks
+  at the whole subgroup against the grid formats' sixteen lanes, both discrete homes (RunPod RTX PRO 4500 Blackwell 32
+  GB).** The box and the unset flags are the nv4 device unit entry's of this date. Exe: the daslang binary built from
+  origin/master 8c75592c3c's C++, `-jit`, running this change's .das sources. `DASLLAMA_GPU=1 DASLLAMA_CUDA=1
+  bin/daslang -jit modules/dasLLAMA/harness/gemv_cuda_vs_vulkan.das -- --only nv4`: one process, both homes, synthetic
+  planes at rows of 96 and 104 blocks (each side of the row length where the split would start), the llama-8B token
+  step's shapes and the 27B's; an arm a lanes value - the rule's (16 at every one of these rows), 8, 16 and the whole
+  subgroup (`lanes 32`), so `rule 16` and `lanes 16` are one candidate timed twice a round; a round one Vulkan submit
+  and one CUDA launch chain of every arm in turn, 2 warmup rounds, each figure an arm's best of 20 rounds of 50
+  dispatches; the weights a ring of copies past 256 MB, two outputs alternated; no output compared (`timing-only`). A
+  home's `noise` is the largest gap between two rounds of one arm's time summed over the shapes. The run's lines:
+
+    superblock decode GEMV at rows of 96 and 104 blocks, the llama-8B shapes and the 27B's, the rule's lanes a row then 8 / 16 / 32, both homes
+    nv4 n 3072 d 4096 rule 16      vulkan     13.48 us (  539.88 GB/s) timing-only
+    nv4 n 3072 d 4096 rule 16      cuda wall     12.32 us (  590.72 GB/s) event     10.97 us (  663.24 GB/s) timing-only
+    nv4 n 3072 d 4096 lanes 8      vulkan     14.08 us (  516.88 GB/s) timing-only
+    nv4 n 3072 d 4096 lanes 8      cuda wall     12.12 us (  600.46 GB/s) event     10.65 us (  683.66 GB/s) timing-only
+    nv4 n 3072 d 4096 lanes 16     vulkan     13.54 us (  537.49 GB/s) timing-only
+    nv4 n 3072 d 4096 lanes 16     cuda wall     12.32 us (  590.72 GB/s) event     10.99 us (  662.08 GB/s) timing-only
+    nv4 n 3072 d 4096 lanes 32     vulkan     15.08 us (  482.60 GB/s) timing-only
+    nv4 n 3072 d 4096 lanes 32     cuda wall     13.20 us (  551.33 GB/s) event     11.93 us (  610.11 GB/s) timing-only
+    nv4 n 3328 d 4096 rule 16      vulkan     15.16 us (  520.06 GB/s) timing-only
+    nv4 n 3328 d 4096 rule 16      cuda wall     13.82 us (  570.48 GB/s) event     12.48 us (  631.80 GB/s) timing-only
+    nv4 n 3328 d 4096 lanes 8      vulkan     15.72 us (  501.53 GB/s) timing-only
+    nv4 n 3328 d 4096 lanes 8      cuda wall     13.00 us (  606.47 GB/s) event     11.55 us (  682.86 GB/s) timing-only
+    nv4 n 3328 d 4096 lanes 16     vulkan     15.02 us (  524.91 GB/s) timing-only
+    nv4 n 3328 d 4096 lanes 16     cuda wall     13.82 us (  570.48 GB/s) event     12.44 us (  633.69 GB/s) timing-only
+    nv4 n 3328 d 4096 lanes 32     vulkan     16.70 us (  472.10 GB/s) timing-only
+    nv4 n 3328 d 4096 lanes 32     cuda wall     14.62 us (  539.27 GB/s) event     13.25 us (  594.97 GB/s) timing-only
+    nv4 n 4096 d 4096 rule 16      vulkan     16.48 us (  588.80 GB/s) timing-only
+    nv4 n 4096 d 4096 rule 16      cuda wall     15.32 us (  633.39 GB/s) event     14.03 us (  691.75 GB/s) timing-only
+    nv4 n 4096 d 4096 lanes 8      vulkan     17.28 us (  561.54 GB/s) timing-only
+    nv4 n 4096 d 4096 lanes 8      cuda wall     15.38 us (  630.92 GB/s) event     13.93 us (  696.61 GB/s) timing-only
+    nv4 n 4096 d 4096 lanes 16     vulkan     16.42 us (  590.96 GB/s) timing-only
+    nv4 n 4096 d 4096 lanes 16     cuda wall     15.34 us (  632.56 GB/s) event     14.01 us (  692.73 GB/s) timing-only
+    nv4 n 4096 d 4096 lanes 32     vulkan     17.82 us (  544.53 GB/s) timing-only
+    nv4 n 4096 d 4096 lanes 32     cuda wall     15.82 us (  613.37 GB/s) event     14.53 us (  667.98 GB/s) timing-only
+    nv4 n 4096 d 14336 rule 16     vulkan     46.34 us (  732.67 GB/s) timing-only
+    nv4 n 4096 d 14336 rule 16     cuda wall     44.30 us (  766.41 GB/s) event     41.99 us (  808.47 GB/s) timing-only
+    nv4 n 4096 d 14336 lanes 8     vulkan     46.10 us (  736.48 GB/s) timing-only
+    nv4 n 4096 d 14336 lanes 8     cuda wall     47.38 us (  716.59 GB/s) event     44.99 us (  754.67 GB/s) timing-only
+    nv4 n 4096 d 14336 lanes 16    vulkan     46.08 us (  736.80 GB/s) timing-only
+    nv4 n 4096 d 14336 lanes 16    cuda wall     44.40 us (  764.68 GB/s) event     41.98 us (  808.78 GB/s) timing-only
+    nv4 n 4096 d 14336 lanes 32    vulkan     46.06 us (  737.12 GB/s) timing-only
+    nv4 n 4096 d 14336 lanes 32    cuda wall     43.56 us (  779.43 GB/s) event     41.20 us (  824.09 GB/s) timing-only
+    nv4 n 14336 d 4096 rule 16     vulkan     47.02 us (  722.29 GB/s) timing-only
+    nv4 n 14336 d 4096 rule 16     cuda wall     50.62 us (  670.92 GB/s) event     48.18 us (  704.96 GB/s) timing-only
+    nv4 n 14336 d 4096 lanes 8     vulkan     52.56 us (  646.16 GB/s) timing-only
+    nv4 n 14336 d 4096 lanes 8     cuda wall     53.86 us (  630.56 GB/s) event     51.63 us (  657.78 GB/s) timing-only
+    nv4 n 14336 d 4096 lanes 16    vulkan     47.42 us (  716.20 GB/s) timing-only
+    nv4 n 14336 d 4096 lanes 16    cuda wall     50.48 us (  672.79 GB/s) event     48.17 us (  705.03 GB/s) timing-only
+    nv4 n 14336 d 4096 lanes 32    vulkan     54.00 us (  628.93 GB/s) timing-only
+    nv4 n 14336 d 4096 lanes 32    cuda wall     54.14 us (  627.30 GB/s) event     51.52 us (  659.25 GB/s) timing-only
+    nv4 n 5120 d 5120 rule 16      vulkan     23.56 us (  643.48 GB/s) timing-only
+    nv4 n 5120 d 5120 rule 16      cuda wall     23.10 us (  656.29 GB/s) event     21.80 us (  695.48 GB/s) timing-only
+    nv4 n 5120 d 5120 lanes 8      vulkan     25.38 us (  597.34 GB/s) timing-only
+    nv4 n 5120 d 5120 lanes 8      cuda wall     24.08 us (  629.58 GB/s) event     22.65 us (  669.31 GB/s) timing-only
+    nv4 n 5120 d 5120 lanes 16     vulkan     23.64 us (  641.30 GB/s) timing-only
+    nv4 n 5120 d 5120 lanes 16     cuda wall     23.16 us (  654.59 GB/s) event     21.76 us (  696.67 GB/s) timing-only
+    nv4 n 5120 d 5120 lanes 32     vulkan     23.94 us (  633.27 GB/s) timing-only
+    nv4 n 5120 d 5120 lanes 32     cuda wall     21.64 us (  700.57 GB/s) event     20.32 us (  745.92 GB/s) timing-only
+    nv4 n 5120 d 17408 rule 16     vulkan     71.98 us (  715.93 GB/s) timing-only
+    nv4 n 5120 d 17408 rule 16     cuda wall     66.74 us (  772.14 GB/s) event     65.42 us (  787.74 GB/s) timing-only
+    nv4 n 5120 d 17408 lanes 8     vulkan     81.42 us (  632.93 GB/s) timing-only
+    nv4 n 5120 d 17408 lanes 8     cuda wall     77.80 us (  662.38 GB/s) event     76.21 us (  676.19 GB/s) timing-only
+    nv4 n 5120 d 17408 lanes 16    vulkan     72.04 us (  715.34 GB/s) timing-only
+    nv4 n 5120 d 17408 lanes 16    cuda wall     66.76 us (  771.91 GB/s) event     65.52 us (  786.53 GB/s) timing-only
+    nv4 n 5120 d 17408 lanes 32    vulkan     67.22 us (  766.63 GB/s) timing-only
+    nv4 n 5120 d 17408 lanes 32    cuda wall     65.06 us (  792.08 GB/s) event     63.69 us (  809.17 GB/s) timing-only
+    nv4 n 17408 d 5120 rule 16     vulkan     67.80 us (  760.26 GB/s) timing-only
+    nv4 n 17408 d 5120 rule 16     cuda wall     67.10 us (  768.19 GB/s) event     65.64 us (  785.25 GB/s) timing-only
+    nv4 n 17408 d 5120 lanes 8     vulkan     74.48 us (  692.07 GB/s) timing-only
+    nv4 n 17408 d 5120 lanes 8     cuda wall     73.64 us (  699.96 GB/s) event     71.69 us (  718.99 GB/s) timing-only
+    nv4 n 17408 d 5120 lanes 16    vulkan     67.64 us (  762.05 GB/s) timing-only
+    nv4 n 17408 d 5120 lanes 16    cuda wall     67.26 us (  766.36 GB/s) event     65.88 us (  782.37 GB/s) timing-only
+    nv4 n 17408 d 5120 lanes 32    vulkan     70.94 us (  726.61 GB/s) timing-only
+    nv4 n 17408 d 5120 lanes 32    cuda wall     66.26 us (  777.93 GB/s) event     64.78 us (  795.64 GB/s) timing-only
+    nv4 summed over the shapes, the rule's lanes, vulkan    301.82 us timing-only
+    nv4 summed over the shapes, lanes 8, vulkan    327.02 us timing-only
+    nv4 summed over the shapes, lanes 16, vulkan    301.80 us timing-only
+    nv4 summed over the shapes, lanes 32, vulkan    311.76 us timing-only
+    nv4 summed over the shapes, noise, vulkan    100.72 us timing-only
+    nv4 summed over the shapes, the rule's lanes, cuda wall    293.32 us timing-only
+    nv4 summed over the shapes, lanes 8, cuda wall    317.26 us timing-only
+    nv4 summed over the shapes, lanes 16, cuda wall    293.54 us timing-only
+    nv4 summed over the shapes, lanes 32, cuda wall    294.30 us timing-only
+    nv4 summed over the shapes, noise, cuda wall     14.02 us timing-only
+
+  A second run of the same line, its sums:
+
+    nv4 summed over the shapes, the rule's lanes, vulkan    301.88 us timing-only
+    nv4 summed over the shapes, lanes 8, vulkan    326.78 us timing-only
+    nv4 summed over the shapes, lanes 16, vulkan    301.86 us timing-only
+    nv4 summed over the shapes, lanes 32, vulkan    311.44 us timing-only
+    nv4 summed over the shapes, noise, vulkan     87.96 us timing-only
+    nv4 summed over the shapes, the rule's lanes, cuda wall    293.26 us timing-only
+    nv4 summed over the shapes, lanes 8, cuda wall    316.72 us timing-only
+    nv4 summed over the shapes, lanes 16, cuda wall    293.90 us timing-only
+    nv4 summed over the shapes, lanes 32, cuda wall    294.46 us timing-only
+    nv4 summed over the shapes, noise, cuda wall     11.08 us timing-only
+
+  The arms' best times summed by model, microseconds, with the whole subgroup against sixteen lanes, each run:
+
+    | shapes | run | Vulkan 16 lanes | Vulkan whole subgroup | | CUDA 16 lanes | CUDA whole subgroup | |
+    | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+    | a row of 96 blocks | 1 | 13.54 | 15.08 | +11.4% | 12.32 | 13.20 | +7.1% |
+    | a row of 96 blocks | 2 | 13.42 | 14.76 | +10.0% | 12.34 | 13.26 | +7.5% |
+    | a row of 104 blocks | 1 | 15.02 | 16.70 | +11.2% | 13.82 | 14.62 | +5.8% |
+    | a row of 104 blocks | 2 | 15.00 | 16.56 | +10.4% | 13.80 | 14.54 | +5.4% |
+    | the llama-8B shapes | 1 | 109.92 | 117.88 | +7.2% | 110.22 | 113.52 | +3.0% |
+    | the llama-8B shapes | 2 | 110.06 | 117.94 | +7.2% | 110.24 | 113.78 | +3.2% |
+    | the 27B shapes | 1 | 163.32 | 162.10 | -0.7% | 157.18 | 152.96 | -2.7% |
+    | the 27B shapes | 2 | 163.38 | 162.18 | -0.7% | 157.52 | 152.88 | -2.9% |
+
+  Summed over the shapes the whole subgroup leads on neither home - Vulkan 311.76 against 301.80 us, CUDA 294.30
+  against 293.54 in the first run - so nv4 keeps the grid split (`ARCHITECTURE_GPU_SHARED_GEMM.md#kq-gemv-lanes`). By
+  shape it trails at the rows of 96 and 104 blocks and at the llama-8B shapes on both homes, and leads at the 27B's by
+  under 3% on CUDA and under 1% on Vulkan: row length alone picks no winner.
+
 - **MEASURED (2026-11-24, `direction-grade`) - the block drafter's attention tile a (row, the query heads of a K/V head,
   key tile) a workgroup against a (row, head, key tile): the pair alone and the 27B's DFlash2 rounds on the discrete
   homes (RunPod RTX PRO 4500 Blackwell 32 GB).** The box, the reference and the unset flags are the nv4 device unit

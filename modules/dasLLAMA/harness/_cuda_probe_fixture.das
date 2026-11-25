@@ -36,26 +36,55 @@ struct RaceRow {
     cu_why : string
 }
 
-//! `warmups` dropped rounds, then `rounds` timed ones, each one submit of the Vulkan arm's `raw` and then one round of the
-//! CUDA arm's `launch`; an arm whose `why` is set does not run
-def race(rounds, warmups, dispatches : int; vk_why : string; var raw : VkCommandBuffer; cu_why : string; launch : block<(i : int) : void>) : RaceRow {
-    var row = RaceRow(vk_why = vk_why, cu_why = cu_why)
+//! a race of several arms: each arm's best round, and every timed round's microseconds a dispatch a home ([arm][round])
+struct RaceArms {
+    rows : array<RaceRow>
+    vk_rounds : array<array<double>>
+    cu_wall_rounds : array<array<double>>
+}
+
+//! `warmups` dropped rounds, then `rounds` timed ones; a round is, an arm in turn, one submit of the arm's Vulkan command
+//! (`raws`) and then one round of its CUDA `launch`; a home whose `why` is set does not run
+def race_arms(rounds, warmups, dispatches : int; vk_why : string; var raws : array<VkCommandBuffer>; cu_why : string; launch : block<(arm, i : int) : void>) : RaceArms {
+    let arms = length(raws)
+    var res <- RaceArms(rows <- [for (_a in range(arms)); RaceRow(vk = 1.0e30lf, cu_wall = 1.0e30lf, cu_event = 1.0e30lf, vk_why = vk_why, cu_why = cu_why)],
+        vk_rounds <- [for (_a in range(arms)); [for (_r in range(rounds)); 0.0lf]],
+        cu_wall_rounds <- [for (_a in range(arms)); [for (_r in range(rounds)); 0.0lf]])
     for (r in range(warmups + rounds)) {
-        let first = r == warmups
-        if (vk_why == "") {
-            let us = submit_avg_us(raw, 1, dispatches, 0)
-            if (r >= warmups) {
-                row.vk = first ? us : min(row.vk, us)
+        for (row, arm in res.rows, count()) {
+            let us = vk_why == "" ? submit_avg_us(raws[arm], 1, dispatches, 0) : 0.0lf
+            var wall = 0.0lf
+            var event = 0.0lf
+            if (cu_why == "") {
+                let t = cuda_time_chain(dispatches) $(i) {
+                    invoke(launch, arm, i)
+                }
+                wall = t.wall
+                event = t.event
             }
-        }
-        if (cu_why == "") {
-            let t = cuda_time_chain(dispatches, launch)
-            if (r >= warmups) {
-                row.cu_wall = first ? t.wall : min(row.cu_wall, t.wall)
-                row.cu_event = first ? t.event : min(row.cu_event, t.event)
-            }
+            continue if (r < warmups)
+            row.vk = min(row.vk, us)
+            row.cu_wall = min(row.cu_wall, wall)
+            row.cu_event = min(row.cu_event, event)
+            res.vk_rounds[arm][r - warmups] = us
+            res.cu_wall_rounds[arm][r - warmups] = wall
         }
     }
+    return <- res
+}
+
+//! one arm's race: each round one submit of the Vulkan arm's `raw` and then one round of the CUDA arm's `launch`
+def race(rounds, warmups, dispatches : int; vk_why : string; var raw : VkCommandBuffer; cu_why : string; launch : block<(i : int) : void>) : RaceRow {
+    var raws <- [raw]
+    var res <- race_arms(rounds, warmups, dispatches, vk_why, raws, cu_why) $(_arm, i) {
+        invoke(launch, i)
+    }
+    let row = res.rows[0]
+    raws |> clear()
+    unsafe {
+        delete raws
+    }
+    delete res
     return row
 }
 
