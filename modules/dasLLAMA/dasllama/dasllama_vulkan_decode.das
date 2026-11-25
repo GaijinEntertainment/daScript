@@ -4783,7 +4783,7 @@ def rd_snap_alloc {
         off += rd_ngram_ring_bytes()
     }
     g_rd.snap_row_bytes = off
-    let rows = g_rd.regions * int64(RDEC_DN_SNAPS)
+    let rows = g_rd.regions * int64(rdec_dn_snaps())
     g_rd.snap_par |> resize(rows)
     if (off > 0l) {
         g_rd.snap_dev = make_device_buf(off * rows)
@@ -4794,13 +4794,13 @@ def rd_snap_alloc {
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]   //! once per checkpoint stop, reached through the tier's registered seat
 def vk_rdec_dn_snap_save(slot : int64) : bool {
     rd_chain_settle()
-    return false if (g_rd == null || !g_rd.ready || !g_rd.hybrid || slot < 0l || slot >= int64(RDEC_DN_SNAPS))
+    return false if (g_rd == null || !g_rd.ready || !g_rd.hybrid || slot < 0l || slot >= int64(rdec_dn_snaps()))
     if (g_rd.snap_dev == 0ul) {
         rd_snap_alloc()
     }
     return false if (g_rd.snap_dev == 0ul)
     let r = g_rd.region
-    let row = r * int64(RDEC_DN_SNAPS) + slot
+    let row = r * int64(rdec_dn_snaps()) + slot
     let dst = row * g_rd.snap_row_bytes
     batch_cmd_one_shot() $(raw : VkCommandBuffer) {
         for (L in g_rd.layers) {
@@ -4825,13 +4825,13 @@ def private rd_ngram_ring_bytes() : int64 => g_rd.ngram_nrows * g_rd.hc_n * g_rd
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]
 def vk_rdec_dn_snap_ring(slot : int64; var host : float?) : bool {
     rd_chain_settle()
-    return false if (g_rd == null || !g_rd.ready || !g_rd.ngram || slot >= int64(RDEC_DN_SNAPS) || (slot >= 0l && g_rd.snap_dev == 0ul))
+    return false if (g_rd == null || !g_rd.ready || !g_rd.ngram || slot >= int64(rdec_dn_snaps()) || (slot >= 0l && g_rd.snap_dev == 0ul))
     let rb = rd_ngram_ring_bytes()
     var stage = make_host_buf(rb, false, [cached = true])
     if (slot < 0l) {
         readback_range(g_rd.plehist_dev, VHZ_DNSM, g_rd.region * rb, stage, host, rb)
     } else {
-        readback_range(g_rd.snap_dev, VHZ_DNSM, (g_rd.region * int64(RDEC_DN_SNAPS) + slot) * g_rd.snap_row_bytes + g_rd.snap_ring_off, stage, host, rb)
+        readback_range(g_rd.snap_dev, VHZ_DNSM, (g_rd.region * int64(rdec_dn_snaps()) + slot) * g_rd.snap_row_bytes + g_rd.snap_ring_off, stage, host, rb)
     }
     destroy_host_buf(stage)
     return true
@@ -4841,9 +4841,9 @@ def vk_rdec_dn_snap_ring(slot : int64; var host : float?) : bool {
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]   //! once per adoption, reached through the tier's registered seat
 def vk_rdec_dn_snap_load(slot : int64) : bool {
     rd_chain_settle()
-    return false if (g_rd == null || !g_rd.ready || !g_rd.hybrid || g_rd.snap_dev == 0ul || slot < 0l || slot >= int64(RDEC_DN_SNAPS))
+    return false if (g_rd == null || !g_rd.ready || !g_rd.hybrid || g_rd.snap_dev == 0ul || slot < 0l || slot >= int64(rdec_dn_snaps()))
     let r = g_rd.region
-    let row = r * int64(RDEC_DN_SNAPS) + slot
+    let row = r * int64(rdec_dn_snaps()) + slot
     let src = row * g_rd.snap_row_bytes
     batch_cmd_one_shot() $(raw : VkCommandBuffer) {
         for (L in g_rd.layers) {
@@ -5440,8 +5440,8 @@ def private dnd_flush_down(st : DnStep) {
 [cold_path, arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]   //! once per pooled checkpoint, reached through the tier's registered seat
 def vk_rdec_dn_peek(slot : int64; dsts : array<RdecDnDst>) : bool {
     rd_chain_settle()
-    return false if (g_rd == null || !g_rd.ready || !g_rd.hybrid || empty(dsts) || slot >= int64(RDEC_DN_SNAPS) || (slot >= 0l && g_rd.snap_dev == 0ul))
-    let row = g_rd.region * int64(RDEC_DN_SNAPS) + slot
+    return false if (g_rd == null || !g_rd.ready || !g_rd.hybrid || empty(dsts) || slot >= int64(rdec_dn_snaps()) || (slot >= 0l && g_rd.snap_dev == 0ul))
+    let row = g_rd.region * int64(rdec_dn_snaps()) + slot
     var bytes = 0l
     for (d in dsts) {
         return false if (d.l < 0l || d.l >= long_length(g_rd.layers) || !g_rd.layers[d.l].recurrent || (slot == -1l && !g_rd.layers[d.l].dn[g_rd.region].own.valid))

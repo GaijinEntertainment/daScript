@@ -175,6 +175,10 @@ struct public GpuTierEnv {
     @clarg_doc = "The whole-model driver's prompt window in rows: the prefill panels' size, and the rows a hyper-connection model's host expert step and the hot pool's window chain take at once; a longer prompt runs as sequential windows, each paying every routed layer's expert pass again. 0 (the default) lets the driver pick: 4096 where its plan fits with the wider window's scratch, else 2048. Rounded down to a multiple of 128, never under 128; the plan charges the panels at this count, so a wider window shortens the K/V mirror or the pool."
     gpu_pf_rows : int64 = 0l
 
+    @clarg_default_doc = "0"
+    @clarg_doc = "The recurrent-state checkpoint rows a mirror region keeps on the device, 1 to 4: the positions of a parked context a later request can take up without a prefill (a shared opening, a retried or edited last message). Each row is a whole recurrent state a stream. 0 = the plan's pick: 4, or the most it holds whole down to 1."
+    gpu_dn_snaps : int64 = 0l
+
     @clarg_doc = "Stream each routed layer's expert stack to the device for the prompt, where the routed experts serve on the host (a hyper-connection model, or a plain MoE's host layers) - on the Vulkan tier over its transfer queue, on the CUDA home over its copy stream: pinned device-layout mirrors of every routed layer at load, a device slot (a layer's stack, or under DASLLAMA_GPU_MOE_SPLIT the per-expert chain's ring of experts), the copies landing while the chain computes, the host summing what the meet hands it. 0 keeps the host's sums and the hot pool's window chain."
     gpu_pf_stream : bool = true
 

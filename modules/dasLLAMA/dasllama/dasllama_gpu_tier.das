@@ -1351,7 +1351,27 @@ def public rdec_chain_charged() : bool => g_rdec_chain_charged
 //! A region's recurrent checkpoints: `save` copies every recurrent layer's state slot and ring pair of the selected region into its
 //! checkpoint row `slot` (one of `RDEC_DN_SNAPS`), `load` copies row `slot` back into the slots and the region's ring parity with it;
 //! false where the driver holds no such row
-let public RDEC_DN_SNAPS = 4   //! the checkpoint rows a mirror region keeps (an LRU), each a whole recurrent state
+let public RDEC_DN_SNAPS = 4   //! the most checkpoint rows a mirror region keeps (an LRU), each a whole recurrent state
+var private g_rdec_dn_snaps = RDEC_DN_SNAPS   //! the rows a region keeps under the standing plan
+
+//! the checkpoint rows a region keeps: the plan's pick before a driver arms, the rows' stride in every driver's plane after
+def public rdec_dn_snaps() : int => g_rdec_dn_snaps
+
+def public set_rdec_dn_snaps(rows : int) {
+    g_rdec_dn_snaps = clamp(rows, 1, RDEC_DN_SNAPS)
+}
+
+//! The rows a region keeps out of the knob's count `asked` (0 = unasked) and `fits`, the plan's answer at a count: a named
+//! count, held to 1 .. `RDEC_DN_SNAPS`, stands whether the plan fits it or not; unasked, the most of `RDEC_DN_SNAPS` down to
+//! one that fits, and one where none does
+def public rdec_dn_snaps_pick(asked : int; fits : block<(rows : int) : bool>) : tuple<rows : int; fits : bool> {
+    var rows = asked > 0 ? clamp(asked, 1, RDEC_DN_SNAPS) : RDEC_DN_SNAPS
+    while (!invoke(fits, rows)) {
+        return (rows = rows, fits = false) if (asked > 0 || rows == 1)
+        rows--
+    }
+    return (rows = rows, fits = true)
+}
 typedef RdecDnSnapFn = function<(slot : int64) : bool>
 [unused_argument(slot)]
 def private rdec_unset_dn_snap(slot : int64) : bool => false

@@ -1056,7 +1056,7 @@ def private crd_snap_alloc(var r : CudRdec) {
         off += L.dn[0].slot_state_bytes + 2l * L.dn[0].ring_image_bytes
     }
     r.snap_row_bytes = off
-    let rows = r.regions * int64(RDEC_DN_SNAPS)
+    let rows = r.regions * int64(rdec_dn_snaps())
     r.snap_par |> resize(rows)
     if (off > 0l) {
         r.snap_dev = cud_dev_zeroed(off * rows)
@@ -3497,12 +3497,12 @@ def cud_rdec_commit_kick {
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]   //! once per checkpoint stop, reached through the tier's registered seat
 def cud_rdec_dn_snap_save(slot : int64) : bool {
     crd_state_settle()
-    return false if (g_crd == null || !g_crd.ready || !g_crd.hybrid || slot < 0l || slot >= int64(RDEC_DN_SNAPS))
+    return false if (g_crd == null || !g_crd.ready || !g_crd.hybrid || slot < 0l || slot >= int64(rdec_dn_snaps()))
     var r & = unsafe(*g_crd)
     crd_snap_alloc(r)
     return false if (r.snap_dev == 0ul)
     let reg = r.region
-    let row = reg * int64(RDEC_DN_SNAPS) + slot
+    let row = reg * int64(rdec_dn_snaps()) + slot
     let dst = r.snap_dev + uint64(row * r.snap_row_bytes)
     for (L in r.layers) {
         continue if (!L.recurrent)
@@ -3518,10 +3518,10 @@ def cud_rdec_dn_snap_save(slot : int64) : bool {
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]   //! once per adoption, reached through the tier's registered seat
 def cud_rdec_dn_snap_load(slot : int64) : bool {
     crd_state_settle()
-    return false if (g_crd == null || !g_crd.ready || !g_crd.hybrid || g_crd.snap_dev == 0ul || slot < 0l || slot >= int64(RDEC_DN_SNAPS))
+    return false if (g_crd == null || !g_crd.ready || !g_crd.hybrid || g_crd.snap_dev == 0ul || slot < 0l || slot >= int64(rdec_dn_snaps()))
     var r & = unsafe(*g_crd)
     let reg = r.region
-    let row = reg * int64(RDEC_DN_SNAPS) + slot
+    let row = reg * int64(rdec_dn_snaps()) + slot
     let src = r.snap_dev + uint64(row * r.snap_row_bytes)
     for (L in r.layers) {
         continue if (!L.recurrent)
@@ -3541,10 +3541,10 @@ def cud_rdec_dn_snap_load(slot : int64) : bool {
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]
 def cud_rdec_dn_peek(slot : int64; dsts : array<RdecDnDst>) : bool {
     crd_state_settle()
-    return false if (g_crd == null || !g_crd.ready || !g_crd.hybrid || empty(dsts) || slot >= int64(RDEC_DN_SNAPS) || (slot >= 0l && g_crd.snap_dev == 0ul))
+    return false if (g_crd == null || !g_crd.ready || !g_crd.hybrid || empty(dsts) || slot >= int64(rdec_dn_snaps()) || (slot >= 0l && g_crd.snap_dev == 0ul))
     let r & = unsafe(*g_crd)
     let reg = r.region
-    let row = reg * int64(RDEC_DN_SNAPS) + slot
+    let row = reg * int64(rdec_dn_snaps()) + slot
     for (d in dsts) {
         return false if (d.l < 0l || d.l >= long_length(r.layers) || !r.layers[d.l].recurrent || (slot == -1l && !r.layers[d.l].dn[reg].own.valid))
     }
@@ -5410,7 +5410,7 @@ def private crd_window_caps(r : CudRdec; w0 : int64; segs, wsegs : array<RdecPfS
         for (cap in g_crd_caps) {
             continue if (cap.seg != ws.seg || cap.row <= part_row0_in_seg || cap.row >= part_row0_in_seg + ws.npos)
             g_crd_cap_words |> push(uint(cap.row - part_row0_in_seg))
-            g_crd_cap_words |> push(uint(((ws.region * int64(RDEC_DN_SNAPS) + cap.slot) * r.snap_row_bytes) / 4l))
+            g_crd_cap_words |> push(uint(((ws.region * int64(rdec_dn_snaps()) + cap.slot) * r.snap_row_bytes) / 4l))
             n++
         }
         g_crd_wcaps |> push((n = n, rec = rec))
@@ -5620,7 +5620,7 @@ def private crd_prefill_windows(var r : CudRdec; cos_batch : array<float>; segs 
     if (r.hybrid) {
         crd_dn_end(r, segs)
         for (cap in g_crd_caps) {   // a captured row's ring parity is image 0: the capture tail wrote it there
-            r.snap_par[segs[cap.seg].region * int64(RDEC_DN_SNAPS) + cap.slot] = 0
+            r.snap_par[segs[cap.seg].region * int64(rdec_dn_snaps()) + cap.slot] = 0
         }
         g_crd_caps |> clear()
     }

@@ -1217,7 +1217,7 @@ def rdec_dn_snap_bytes(t : Model) : int64 {
     let c = t.config
     return 0l if (c.recr_mask == 0ul || !rdec_dn_snaps_installed())
     let dng = rdec_dn_geom(t)
-    return g_rdec_regions_want * int64(RDEC_DN_SNAPS) * recurrent_layer_count(c) * (dng.nvh * dng.ds * dng.ds + 2l * dng.cd * (dng.dconv - 1l)) * 4l
+    return g_rdec_regions_want * int64(rdec_dn_snaps()) * recurrent_layer_count(c) * (dng.nvh * dng.ds * dng.ds + 2l * dng.cd * (dng.dconv - 1l)) * 4l
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]
@@ -2039,7 +2039,7 @@ def private rdec_claim(var s : Session; r, cnt : int64) {
     g_rdec_regions[r].hw = cnt
     s.kv_ring_floor = rdec_ring_floor(cnt)
     g_rdec_regions[r].dn_pos = 0l
-    for (i in range(RDEC_DN_SNAPS)) {
+    for (i in range(rdec_dn_snaps())) {
         g_rdec_regions[r].snap_pos[i] = 0l
     }
     g_rdec_regions[r].head_cnt = 0l
@@ -5464,19 +5464,54 @@ def private resident_plan_carved(t : Model; rkdt : KVDtype; var seq_cap : int64&
     return (plan = plan, stream_need = need, ring = ring)
 }
 
+//! The checkpoint rows a region keeps at the standing prompt window: the knob's count, else the most of `RDEC_DN_SNAPS` down to
+//! one the plan holds whole - true where some count does; where none does the rows stay at one, the plan after it taking the room
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]
+def private resident_snaps_pick(t : Model; rkdt : KVDtype; seq_cap : int64) : bool {
+    set_rdec_dn_snaps(RDEC_DN_SNAPS)
+    return true if (t.config.recr_mask == 0ul)
+    let pick = rdec_dn_snaps_pick(int(g_env_gpu.gpu_dn_snaps)) $(rows : int) : bool {
+        set_rdec_dn_snaps(rows)   // the plan charges the rows the driver would keep
+        var cap_trial = seq_cap
+        let trial = resident_plan_carved(t, rkdt, cap_trial, true, false)
+        return trial.plan.fits && trial.plan.host_layers == 0l
+    }
+    set_rdec_dn_snaps(pick.rows)
+    return pick.fits
+}
+
+//! the rows a region of a recurrent model keeps said once the plan stands: the knob's count `asked` where one is named, with the
+//! bounds it is held to, else the rows the plan gave up
+def resident_snaps_say(asked : int64; recurrent : bool) {
+    return if (!recurrent)
+    if (asked > 0l) {
+        to_log(LOG_INFO, "dasLLAMA: resident driver - a region keeps {rdec_dn_snaps()} recurrent checkpoint rows as asked (DASLLAMA_GPU_DN_SNAPS={asked}, held to 1 .. {RDEC_DN_SNAPS}, whether the plan fits them or not; unset it, or set it to 0, for the most the plan holds)\n")
+    } elif (rdec_dn_snaps() < RDEC_DN_SNAPS) {
+        to_log(LOG_INFO, "dasLLAMA: resident driver - a region keeps {rdec_dn_snaps()} of {RDEC_DN_SNAPS} recurrent checkpoint rows, the most the plan holds at this context (DASLLAMA_GPU_DN_SNAPS names a count)\n")
+    }
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-stream-window")]
 def private resident_window_pick(t : Model; rkdt : KVDtype; var seq_cap : int64&) : tuple<plan : ResidentPlan; stream_need : int64; ring : bool> {
-    return resident_plan_carved(t, rkdt, seq_cap, true) if (!pf_window_rows_unasked())
+    if (!pf_window_rows_unasked()) {
+        resident_snaps_pick(t, rkdt, seq_cap)
+        resident_snaps_say(g_env_gpu.gpu_dn_snaps, t.config.recr_mask != 0ul)
+        return resident_plan_carved(t, rkdt, seq_cap, true)
+    }
     set_pf_window_rows_auto(PF_ROWS_WIDE)
+    resident_snaps_pick(t, rkdt, seq_cap)
     var cap_trial = seq_cap   //! the trial's own cap: the plan it tests is the real one (the ring on), said by nobody
     var carved = resident_plan_carved(t, rkdt, cap_trial, true, false)
     if (carved.plan.fits) {
+        resident_snaps_say(g_env_gpu.gpu_dn_snaps, t.config.recr_mask != 0ul)
         to_log(LOG_INFO, "dasLLAMA: resident driver - the prompt window is {pf_window_rows()} rows, the plan's pick (DASLLAMA_GPU_PF_ROWS names one; {PF_ROWS_DEFAULT} where the plan does not fit with this one's scratch)\n")
         carved = resident_plan_carved(t, rkdt, seq_cap, true)   //! the announcing pass at the window that fits: the plan's lines name its parts
         return carved
     }
     set_pf_window_rows_auto(PF_ROWS_DEFAULT)
     to_log(LOG_INFO, "dasLLAMA: resident driver - the prompt window is {pf_window_rows()} rows: the plan does not fit with the {PF_ROWS_WIDE}-row window's scratch on this card (DASLLAMA_GPU_PF_ROWS names one)\n")
+    resident_snaps_pick(t, rkdt, seq_cap)
+    resident_snaps_say(g_env_gpu.gpu_dn_snaps, t.config.recr_mask != 0ul)
     return resident_plan_carved(t, rkdt, seq_cap, true)
 }
 
@@ -6382,6 +6417,9 @@ def private rdec_caps_plan(var s : Session; seg, start_pos, r : int64) {
     if (!rdec_dn_snaps_installed()) {
         panic("dasLLAMA resident prefill: a checkpoint stop inside the window asked of a driver with no checkpoint rows")
     }
+    if (length(s.dn_captures) > rdec_dn_snaps()) {   // two stops on one row would leave it at neither's state
+        panic("dasLLAMA resident prefill: {length(s.dn_captures)} checkpoint stops inside one call, past the {rdec_dn_snaps()} rows a region keeps")
+    }
     g_rdec_caps |> reserve(length(g_rdec_caps) + length(s.dn_captures))
     for (cap in s.dn_captures) {
         let slot = rdec_snap_victim(g_rdec_regions[r])
@@ -6996,7 +7034,7 @@ def gpu_device_kv_adopt_(var s : Session; claim, npos : int64) : bool {
         rdec_claim(s, r, npos)
         g_rdec_regions[r].hw = reg.hw   //! the ring's slots past `npos` still hold the parked claim's rows
         s.kv_ring_floor = max(s.kv_ring_floor, npos > 0l ? rdec_ring_floor(reg.hw) : 0l)
-        for (i in range(RDEC_DN_SNAPS)) {
+        for (i in range(rdec_dn_snaps())) {
             if (reg.snap_pos[i] <= npos) {
                 g_rdec_regions[r].snap_pos[i] = reg.snap_pos[i]
                 g_rdec_regions[r].snap_used[i] = reg.snap_used[i]
@@ -7023,7 +7061,7 @@ def gpu_device_kv_adopt_(var s : Session; claim, npos : int64) : bool {
 
 //! the checkpoint row of `reg` that holds position `pos`, -1 where none does
 def private rdec_snap_at(reg : RdecRegion; pos : int64) : int {
-    for (i in range(RDEC_DN_SNAPS)) {
+    for (i in range(rdec_dn_snaps())) {
         return i if (pos > 0l && reg.snap_pos[i] == pos)
     }
     return -1
@@ -7032,7 +7070,7 @@ def private rdec_snap_at(reg : RdecRegion; pos : int64) : int {
 //! the row a new checkpoint of `reg` takes: an empty one, else the least recently touched
 def private rdec_snap_victim(reg : RdecRegion) : int {
     var slot = 0
-    for (i in range(RDEC_DN_SNAPS)) {
+    for (i in range(rdec_dn_snaps())) {
         return i if (reg.snap_pos[i] == 0l)
         if (reg.snap_used[i] < reg.snap_used[slot]) {
             slot = i
@@ -7059,6 +7097,9 @@ def gpu_device_kv_checkpoint_(s : Session) : bool {
     g_rdec_regions[r].snap_used[slot] = ++g_rdec_tick
     return true
 }
+
+//! the checkpoint rows a region keeps under the armed plan
+def gpu_device_kv_checkpoint_rows_() : int64 => int64(rdec_dn_snaps())
 
 //! The positions the checkpoint rows of the region `claim` names hold (empty where the claim is dead)
 def gpu_device_kv_checkpoints_(claim : int64) : array<int64> {
