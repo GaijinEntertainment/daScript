@@ -157,7 +157,7 @@ def private tile_cell_arms(t : T?; tag : string; fmt : int; var f : TileFixture;
 }
 
 //! one per-format tile cell: the table row's planes through `tile_cell_arms` - the cm2 l/m/s/e tiles and the KHR tile, or s, e and
-//! KHR on a per-32 format - against its oracle; a row with a `control` then reads the same planes apart under the sibling codebook
+//! KHR on a per-32 format - against its oracle; a row with a `control` then reads the same planes apart under its control decode
 def private fmt_tile_cell(t : T?; fmt : KqFmt) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
@@ -179,7 +179,7 @@ def private fmt_tile_cell(t : T?; fmt : KqFmt) {
             var y_other : array<float>
             y_other |> resize(f.rows * d)
             invoke(rows[at].control, f.wqh, f.wsh, f.xfh, recs, 2, f.n, d, y_other)
-            t |> success(mismatch_rel("", y_other, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref)) > 0, "the {name} planes read apart under the sibling codebook's oracle (the fixture tells the two forms apart)")
+            t |> success(mismatch_rel("", y_other, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref)) > 0, "the {name} planes read apart under the control's oracle (the fixture tells the two forms apart)")
             delete y_other
         }
         delete y_ref
@@ -459,10 +459,9 @@ def test_vkd_kq_batch_family(t0 : T?) {
             let rows = cnt0 + cnt1
             let totsb = 2 * d * nsb   // superblocks across both regions
             for (fmt in KQ_LEAF_FMTS) {
-                let sb_words = int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l)
                 let wswords = totsb * int(kq_dev_ssb_i(fmt) / 4l)
                 var p = Sdot4Planes(ws_bytes = int64(wswords) * 4l)
-                p.wqh <- hashed_words(totsb * sb_words, 1u, uint(fmt) * 131u)
+                p.wqh <- kq_dev_wq_plane(fmt, totsb, 1u, uint(fmt) * 131u)
                 p.wsh <- kq_ws_plane(fmt, wswords, 1u, uint(fmt) * 17u)
                 p.xqh <- hashed_words(rows * nsb * 64, 7u, 2u)
                 p.xsh <- row_fill(rows * nsb, 1, 0, 0.05, -0.3, 11)

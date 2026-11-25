@@ -1,9 +1,8 @@
 # dasLLAMA Measurement Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_MEASUREMENT.md`, `ARCHITECTURE_MEASUREMENT_RELEASE.md`,
-`ARCHITECTURE_MEASUREMENT_FAT_START.md`, `ARCHITECTURE_MEASUREMENT_TUNED_PERM.md`. Planned work: `followup_metal.md`, `followup_vulkan.md`,
-`followup_general.md`.
+docs: `ARCHITECTURE_MEASUREMENT.md` and its `ARCHITECTURE_MEASUREMENT_*.md` companions. Planned
+work: `followup_metal.md`, `followup_vulkan.md`, `followup_general.md`.
 
 **A rule here that governs a figure binds only a figure the change writes or changes - in the repo
 outside `site*/` (repo root), in a commit message, or in its PR body - never one a changed line
@@ -107,11 +106,12 @@ as the `-jit` script; a spawned or manual cell; for a modality `lcpp_bench.das` 
 command-line flag for, the `harness/` instrument, with its command line; for the browser build,
 the parrot example's measure rail (`examples/dasLLAMA/parrot`, the browser and its worker count
 named) or the node runner `examples/dasLLAMA/wasm/run_node.js` over the AOT host, with its command
-line; for a figure timed through the scheduler or the server, `harness/served_bench.das` with
-its command line, or an out-of-process replay named as the replay (its name, its request count),
-over a server whose flags the entry states.** A wall or rate any other instrument printed stays in
-that run's log; the entry carries what the instrument decided - served, declined, how many rows it
-counted.
+line; for a figure timed through the scheduler or the server, the `harness/` instrument whose
+clock timed it, with the command line that reproduces the run (the instrument's own, or its
+runner's), or an out-of-process replay named as the replay (its name, its request count) - either
+one with the flags of the serving run it timed stated in the entry.** A wall or rate any other
+instrument printed stays in that run's log; the entry carries what the instrument decided -
+served, declined, how many rows it counted.
 
 **A pair of `-jit` readings held against each other keeps each arm's absolute wall or rate
 beside the pair, wherever the diff states it - checked-in text, commit message or PR body.**

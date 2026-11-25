@@ -790,6 +790,10 @@ let MLX_SB = 2l        //! affine scale plane PER 32-BLOCK: half of the 64-group
 let MLX_PAIR_BYTES = 4l   //! one 64-group's (scale, bias) pair: two halves, scale first
 let NV4_QSB = 128l     //! NVFP4 quant plane: 128 nibble bytes a superblock, in the k4 tiling
 let NV4_SSB = 16l      //! NVFP4 scale plane: 16 UE4M3 bytes a superblock, one a 16-weight sub-block
+let NV4_UNIT_QUADS = 9u    //! NVFP4 device unit: a superblock's eight nibble quads in the file's pairing, then its scale quad
+let NV4_SCALE_QUAD = 8u    //! ... the scale quad's place in the unit
+let NV4_DEV_QSB = NV4_QSB + NV4_SSB   //! ... the unit's bytes: the device quant plane's stride a superblock
+let NV4_DEV_SSB = 4l       //! NVFP4 device scale plane: the per-tensor scale word a superblock
 //! a per-32 block's nibble bytes: elem j low in byte j, j + 16 high
 let B32_NIB_BYTES = int64(KQ_B32_QWORDS) * 4l
 //! q51's and q5032's qh word after the nibbles: elem k's bit 4 at k

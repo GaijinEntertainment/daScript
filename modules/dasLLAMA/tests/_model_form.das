@@ -40,6 +40,9 @@ struct ModelForm {
     //! the NextN draft seat unset for the load (`unset_rdec_draft`):
     //! the plan keeps the head off the device
     head_off : bool
+    //! the load asks the driver for a block drafter's round
+    //! (`set_gpu_resident_block_rounds_`)
+    block_rounds : bool
     //! the CUDA home's MMQ route pinned `CUDA_MMQ_OFF` for the load:
     //! the f16-fed cm2 tiles; no knob off the CUDA home
     mmq_off : bool
@@ -98,13 +101,14 @@ def device_form(ring : bool = true; gather : bool = true; regions : int64 = 0l; 
                 mmq_off : bool = false; host_ctx : int64 = 0l; fuse_bisect : int64 = -1l;
                 perop : bool = false; pool_slots : int64 = 0l; strict_ctx : bool = false;
                 cuda_window_fault : bool = false; mtp_head : string = "";
-                drops_device : bool = false) : ModelForm =>
+                drops_device : bool = false; block_rounds : bool = false) : ModelForm =>
     ModelForm(on_gpu = true, kv = KVDtype.f16, kv_asked = false, ring = ring, gather = gather,
         quant = QuantMode.q8, regions = regions, host = host, split_forms = split_forms, ctx = ctx,
         host_layers = host_layers, pf_stream = pf_stream, pf_window_rows = pf_window_rows,
         mtp_depth = mtp_depth, head_off = head_off, mmq_off = mmq_off, host_ctx = host_ctx,
         fuse_bisect = fuse_bisect, perop = perop, pool_slots = pool_slots, strict_ctx = strict_ctx,
-        cuda_window_fault = cuda_window_fault, mtp_head = mtp_head, drops_device = drops_device)
+        cuda_window_fault = cuda_window_fault, mtp_head = mtp_head, drops_device = drops_device,
+        block_rounds = block_rounds)
 
 //! a form on the Metal home: the file's blob twin (`blob_twin`: the q8 load turned into the blob the Metal drivers serve)
 //! under `MetalMode.when_available` - `required` where asked - or, `image`, its served image (`load_model_cached` under
@@ -194,7 +198,7 @@ def on_device_home(f : ModelForm) : bool => f.on_gpu && !f.on_metal
 //! context and planes
 def device_default(f : ModelForm) : bool => (on_device_home(f) && !f.kv_asked && f.ring && f.gather && f.regions == 0l && !f.host && !f.split_forms
     && f.ctx == 0l && f.mtp_depth == 0l && !f.head_off && !f.mmq_off && f.host_ctx == 0l && f.fuse_bisect < 0l
-    && !f.perop && f.pool_slots == 0l && !f.strict_ctx && !f.cuda_window_fault && empty(f.mtp_head))
+    && !f.perop && f.pool_slots == 0l && !f.strict_ctx && !f.cuda_window_fault && empty(f.mtp_head) && !f.block_rounds)
 
 //! which side of a block's default pair a form is (`main_side`)
 enum MainSide {
@@ -269,6 +273,10 @@ def private cpu_form_name(f : ModelForm) : string {
 def private metal_form_name(f : ModelForm) : string =>
     "the Metal form (the {f.metal_image ? "served image" : "blob twin"}, {metal_form_mode(f)})"
 
+//! what a form's load does about speculation, as `form_name` words it
+def private speculation_note(f : ModelForm) : string
+    => f.head_off ? ", the NextN head off the device" : (f.block_rounds ? ", a block drafter's round asked" : "")
+
 //! the form as its messages name it
 def form_name(f : ModelForm) : string {
     return cpu_form_name(f) if (!f.on_gpu)
@@ -284,7 +292,7 @@ def private device_form_name(f : ModelForm) : string {
     let experts = f.host_layers > 0l ? ", {f.host_layers} routed layers on the host{stream}" : ""
     let window = f.pf_window_rows > 0l ? ", {f.pf_window_rows}-row prompt windows" : ""
     let depth = f.mtp_depth > 0l ? ", depth {f.mtp_depth}" : ""
-    let head = f.head_off ? ", the NextN head off the device" : ""
+    let speculation = speculation_note(f)
     let mmq = f.mmq_off ? ", the MMQ route off" : ""
     let host_ctx = f.host_ctx > 0l ? ", {f.host_ctx}-position host sessions" : ""
     let bisect = f.fuse_bisect >= 0l ? ", fuse bisect {f.fuse_bisect}" : ""
@@ -294,7 +302,7 @@ def private device_form_name(f : ModelForm) : string {
     let pinned = empty(f.mtp_head) ? fault : "{fault}, the NextN head {base_name(f.mtp_head)}"
     let shape = "{f.ring ? "rings" : "flat"}, {f.gather ? "device gather" : "host embed"}"
     return "the per-op form ({f.kv} asked, the whole-model route off)" if (f.perop)
-    return "the device form ({f.kv} mirror, {shape}{regions}{planes}{fuse}{experts}{window}{depth}{head}{mmq}{host_ctx}{bisect}{heat}{whole}{pinned})"
+    return "the device form ({f.kv} mirror, {shape}{regions}{planes}{fuse}{experts}{window}{depth}{speculation}{mmq}{host_ctx}{bisect}{heat}{whole}{pinned})"
 }
 
 //! where a block's seconds went, a line a form: under `DAS_LOG_LEVEL=info`

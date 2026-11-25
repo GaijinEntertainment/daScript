@@ -204,7 +204,10 @@ for the grid formats and 16 for the k-lattice to 48; 16 to 96; past that the who
 k-lattice and 16 for the grid formats - and `gemv_enc` sizes the grid to match (a workgroup's
 subgroups each take subgroup_size / lanes rows). The grid formats are the codebook and grid decodes
 (iq2s, iq2xs, iq2xxs, iq3xxs, iq4xs, iq4nl, iq3s4, nv4, `gemv_grid_fmt`); iq3s takes the k-lattice split (K
-1408: 354 / 395 / 386 GB/s at 32 / 16 / 8 lanes). The push block carries the lanes (0 = the whole
+1408: 354 / 395 / 386 GB/s at 32 / 16 / 8 lanes). nv4 stays with the grid split past 96 blocks though
+its device unit decodes with no gather: on an RTX PRO 4500 the whole subgroup is slower at rows of 96
+and 104 blocks and at the llama-8B shapes on both discrete homes, and under 3% faster at the 27B's
+(`PERF_LEDGER.md`, the nv4 lane split entry). The push block carries the lanes (0 = the whole
 subgroup, the q8 GEMV's one form); the fold is an xor-shuffle butterfly over the row's lanes at 8 or
 16 and the whole-subgroup add otherwise, a dead row at zero, so the butterflies stay whole; the
 lane-to-block map sets the row's summation order, so a resident-vs-CPU bar reads a different noise

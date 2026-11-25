@@ -884,6 +884,11 @@ def config_mtp_resolved(cfg : ServerArgs; gpu : string) : bool {
     return mtp_default_resolved(streams, gpu, cfg.metal, catalog_mtp_platforms(cfg.model))
 }
 
+//! The block drafter a roster entry's slot speculates through at boot: its own, else `flag_drafter` (`--drafter`) where the
+//! entry is the default model. Non-private: test_server_flags.das gates it.
+def boot_slot_drafter(ent : ModelEntry; is_default : bool; flag_drafter : string) : string
+    => (!empty(ent.drafter) || !is_default) ? ent.drafter : flag_drafter
+
 //! A [[models]] entry's slot options at boot: its overrides over the
 //! sentinels, and its catalog row's MTP platforms. Non-private:
 //! test_server_flags.das gates it.
@@ -1320,9 +1325,11 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
                     gpu_is_discrete(gpu) && ent.backend != "cpu" ? slot_want : GpuTierWant())
                 continue
             }
+            let slot_drafter = boot_slot_drafter(ent, i == def_idx, g_cfg.drafter)
             if (gpu_is_discrete(gpu)) {
                 set_gpu_tier_want(i == gpu_idx ? slot_want : GpuTierWant())   // zero want: loads CPU-only
-                gpu_residency_ask(ent.streams > 0 ? int64(ent.streams) : streams, ectx, pick_kv_dtype(empty(ent.kv_dtype) ? g_cfg.kv_dtype : ent.kv_dtype))
+                gpu_residency_ask(ent.streams > 0 ? int64(ent.streams) : streams, ectx, pick_kv_dtype(empty(ent.kv_dtype) ? g_cfg.kv_dtype : ent.kv_dtype),
+                                  !empty(slot_drafter))
             }
             print("loading {ent.path} ...\n")
             if (!empty(g_cfg.mtp_accept)) {
@@ -1346,9 +1353,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
             let ctx_note = ectx > 0l ? "" : " (model default)"
             to_log(LOG_INFO, "dasllama-server: {empty(ent.name) ? base_name(ent.path) : ent.name} ctx {m.config.seq_len}{ctx_note}\n")
             var opts = boot_slot_opts(ent)
-            if (empty(opts.drafter) && i == def_idx) {
-                opts.drafter = g_cfg.drafter   // --drafter names the default model's
-            }
+            opts.drafter = slot_drafter
             add_model(m, ent.name, opts, ent.path)   // captures this load's arm outcome + marks onto the slot
             if (gpu_is_discrete(gpu) && ent.backend != "cpu") {
                 set_slot_gpu_want(ent.name, slot_want)   // the want switch-in re-arms with

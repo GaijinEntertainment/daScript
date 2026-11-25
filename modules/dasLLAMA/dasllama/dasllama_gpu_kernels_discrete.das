@@ -1251,6 +1251,10 @@ class KqGemvBase {
     def abstract blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4
     def abstract fold_reads_bsum : bool
     def abstract blk_contrib(wsb, blk, xsb : uint) : float
+
+    //! the scale a plane's blocks share and `blk_decode` leaves out (nv4's per-tensor one), of the plane whose first
+    //! superblock is `wsb0`: a region is one plane, so its rows read one word
+    def plane_site_scale(wsb0 : uint) : float => 1.0
 }
 
 //! the weight rows a lane group of the K-quant N-column leaves takes on both discrete homes (`KqGemvShellT`'s `RR`, a
@@ -1262,6 +1266,7 @@ let KQ_N_RR = 2
 class template KqGemvShellT : KqGemvBase {
     @template_constant RR : int = 1   //!< the weight rows a lane group of the N-column shell takes (1, 2 or 4): a block's activation loads serve them all
     @template_constant NCMAX : int = 8   //!< the columns the N-column shell's stamp carries (4 or 8): a narrower stamp holds fewer accumulators, so more of its groups run at once
+    @template_constant SITE_SCALE : bool = false   //!< the plane has a scale `blk_decode` leaves out: a shell multiplies a stored row by `plane_site_scale`
 
     //! fills wl / wh with the lo / hi int8 quads (x's lo / hi words), returns (A_lo, B_lo, A_hi, B_hi): the block adds axs x (A_lo dot_lo + B_lo bsum_lo + A_hi dot_hi + B_hi bsum_hi)
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 => float4(0.0)
@@ -1404,7 +1409,11 @@ class template KqGemvShellT : KqGemvBase {
         }
         let total = fold_lanes(acc, lanes_per_row)
         if (live && row_lane == 0u) {
-            y[pa.ybase + r * pa.d + row] = total
+            static_if (SITE_SCALE) {
+                y[pa.ybase + r * pa.d + row] = total * plane_site_scale(regions[r * 2u])
+            } else {
+                y[pa.ybase + r * pa.d + row] = total
+            }
         }
     }
 
@@ -1490,7 +1499,11 @@ class template KqGemvShellT : KqGemvBase {
                 if (uint(c) < pa.ncols) {
                     let total = fold_lanes(acc[k * NCMAX + c], lanes_per_row)
                     if (live && row_lane == 0u && row0 + uint(k) < pa.d) {
-                        y[pa.ybase + (pa.col0 + uint(c)) * pa.ystride + r * pa.d + row0 + uint(k)] = total
+                        static_if (SITE_SCALE) {
+                            y[pa.ybase + (pa.col0 + uint(c)) * pa.ystride + r * pa.d + row0 + uint(k)] = total * plane_site_scale(regions[r * 2u])
+                        } else {
+                            y[pa.ybase + (pa.col0 + uint(c)) * pa.ystride + r * pa.d + row0 + uint(k)] = total
+                        }
                     }
                 }
             }
@@ -1573,6 +1586,13 @@ class template KqGemvLeafT : KqGemvShellT {
                 }
                 g = fold_lanes(g, lanes_per_row)
                 u = fold_lanes(u, lanes_per_row)
+                static_if (SITE_SCALE) {
+                    if (live) {   // every lane of the row keeps the folded dots, so every lane takes the scales
+                        let rs = rg / max(1u, pa.d)
+                        g *= plane_site_scale(regions[rs * 2u])
+                        u *= plane_site_scale(regions3[rs * 2u])
+                    }
+                }
                 if (live && row_lane == 0u) {
                     y[pa.ybase + rg] = g   // the gate rows land in the family's y as well: the dot half's own witness
                 }
@@ -1620,10 +1640,17 @@ class template KqGemvLeafT : KqGemvShellT {
             } else {
                 var wl = uint4(0u)
                 var wh = uint4(0u)
-                let terms = blk_decode(pa.wblk0 + id * nsb + b / 8u, b % 8u, wl, wh)
-                let bsum = fold_reads_bsum()
-                emb_store16(o, wl, terms.x, bsum ? terms.y : 0.0)
-                emb_store16(o + 16u, wh, terms.z, bsum ? terms.w : 0.0)
+                static_if (SITE_SCALE) {   // the false arm is the shell as every other format's stamp compiles it
+                    let terms = blk_decode(pa.wblk0 + id * nsb + b / 8u, b % 8u, wl, wh) * plane_site_scale(pa.wblk0)
+                    let bsum = fold_reads_bsum()
+                    emb_store16(o, wl, terms.x, bsum ? terms.y : 0.0)
+                    emb_store16(o + 16u, wh, terms.z, bsum ? terms.w : 0.0)
+                } else {
+                    let terms = blk_decode(pa.wblk0 + id * nsb + b / 8u, b % 8u, wl, wh)
+                    let bsum = fold_reads_bsum()
+                    emb_store16(o, wl, terms.x, bsum ? terms.y : 0.0)
+                    emb_store16(o + 16u, wh, terms.z, bsum ? terms.w : 0.0)
+                }
             }
         }
     }
@@ -1755,10 +1782,13 @@ class template Iq4nlGemvT : Q40GemvT {
     def override fold_reads_bsum : bool => false
 }
 
-//! NVFP4: w = sc16 x MX4_LUT[q], sc16 a sub-block's UE4M3 scale at half under the plane's per-tensor scale (the device row's
-//! fifth word) - a 32-block's two halves under two scales off the row's byte pair 2g, 2g + 1; signed codes, so no bsum term
+//! NVFP4: w = sc16 x MX4_LUT[q], sc16 a sub-block's UE4M3 scale at half under the plane's per-tensor scale (the scale plane's
+//! word a superblock) - a superblock nine quads of the quant plane, a 32-block's quad its two sub-blocks' eight bytes each in
+//! the file's pairing (byte j element j low, j + 8 high), the ninth quad the sixteen scales, a block's pair at bytes 2g, 2g + 1;
+//! signed codes, so no bsum term
 [ |> template_struct_instance]
 class template Nv4GemvT : KqGemvLeafT {
+    override SITE_SCALE = true
     //! one quant word's eight nibble codes to signed int8 lanes of the doubled e2m1 magnitudes, the low nibbles' four in `lo`
     //! and the high nibbles' in `hi`: the SWAR formula here, a home with a byte permute overrides it (`Nv4GemvPrmtT`)
     def e2m1_split(w : uint; var lo, hi : uint&) {
@@ -1767,7 +1797,7 @@ class template Nv4GemvT : KqGemvLeafT {
     }
 
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
-        let wv = wq4[wsb * 8u + blk]
+        let wv = wq4[wsb * NV4_UNIT_QUADS + blk]
         var l0 = 0u
         var l1 = 0u
         var l2 = 0u
@@ -1780,14 +1810,15 @@ class template Nv4GemvT : KqGemvLeafT {
         e2m1_split(wv.y, l1, h1)
         e2m1_split(wv.z, l2, h2)
         e2m1_split(wv.w, l3, h3)
-        wl = uint4(l0, l1, l2, l3)
-        wh = uint4(h0, h1, h2, h3)
-        let sw = wsu[wsb * 5u + blk / 2u] >> ((blk & 1u) * 16u)
-        let site_scale = uint_bits_to_float(wsu[wsb * 5u + 4u])
-        return float4(ue4m3_half_f32(sw & 0xFFu) * site_scale, 0.0, ue4m3_half_f32((sw >> 8u) & 0xFFu) * site_scale, 0.0)
+        wl = uint4(l0, l1, h0, h1)   // elements 0-15: the first sub-block's low nibbles, then its high ones
+        wh = uint4(l2, l3, h2, h3)   // elements 16-31: the second sub-block's
+        let sw = wq4[wsb * NV4_UNIT_QUADS + NV4_SCALE_QUAD][int(blk >> 1u)] >> ((blk & 1u) * 16u)
+        return float4(ue4m3_half_f32(sw & 0xFFu), 0.0, ue4m3_half_f32((sw >> 8u) & 0xFFu), 0.0)
     }
 
     def override fold_reads_bsum : bool => false
+
+    def override plane_site_scale(wsb0 : uint) : float => uint_bits_to_float(wsu[wsb0])
 }
 
 //! Q3_K: q = 2-bit qs | hmask bit << 2, minus 4; signed per-16 sc x d
@@ -4832,6 +4863,11 @@ struct VkK4Blk {
     qs : int16[64]   //! a Q4_K superblock's 128 nibble bytes as lanes; scale row in ws
 }
 
+struct VkNv4Blk {
+    qs : int16[64]   //! an nv4 device unit's 128 nibble bytes as lanes, a 32-block's two sub-blocks eight bytes each in the file's pairing
+    sc : int16[8]    //! ... and its sixteen UE4M3 scale bytes
+}
+
 struct VkQ51Blk {
     qs : int16[10]   //! one Q5_1 32-block: 16 nibble bytes (element j low, j + 16 high) then the 4 qh bytes (bit e = element e's fifth bit); d | m live in ws as one word
 }
@@ -4989,7 +5025,7 @@ class template KqCm2BatchT : MoeCmBase {
         static_if (UE4LUT) {
             if (gl_LocalInvocationID.x < 128u) {
                 let code = gl_LocalInvocationID.x
-                ue4lut[code] = float16(ue4m3_half_f32(code) * uint_bits_to_float(ws[wblk0 * 5u + 4u]))
+                ue4lut[code] = float16(ue4m3_half_f32(code) * uint_bits_to_float(ws[wblk0]))
             }
         }
         static_if (IQ3GRID) {
@@ -6140,12 +6176,12 @@ class template Iq4nlCm2T : Q40Cm2T {
     override IQLUT = true
 }
 
-//! NVFP4 on the cm2 tile: the k4-tiled nibbles through the staged e2m1 table under the sixteen UE4M3 sub-block scales of
-//! the device row (four words, sub-block order) read through the staged scale table, which carries the site scale -
-//! 32-block g's low half reads byte 2g, its high half 2g + 1; iq4nl's decode shape, two table reads an element
+//! NVFP4 on the cm2 tile: the device unit's nibbles (the file's pairing) through the staged e2m1 table under the unit's own
+//! sixteen UE4M3 sub-block scales read through the staged scale table, which carries the site scale - 32-block g's low
+//! half reads scale byte 2g, its high half 2g + 1; two table reads an element
 [ |> template_struct_instance]
 class template Nv4Cm2T : KqCm2BatchT {
-    typedef BLK = VkK4Blk
+    typedef BLK = VkNv4Blk
     typedef ST = uint
     override DECV4 = true
     override IQLUT = true
@@ -6156,11 +6192,11 @@ class template Nv4Cm2T : KqCm2BatchT {
         static_if (KHR) {
             let g = e0 >> 5u
             let hh = (e0 >> 4u) & 1u
-            let w4 = wq4[blk * 8u + g]
+            let w4 = wq4[blk * NV4_UNIT_QUADS + g]
             let si = g * 2u + hh
-            let sc = float(ue4lut[int((ws[blk * 5u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0x7Fu)])
+            let sc = float(ue4lut[int((wq4[blk * NV4_UNIT_QUADS + NV4_SCALE_QUAD][int(si >> 2u)] >> ((si & 3u) * 8u)) & 0x7Fu)])
             for [unroll_full] (c in range(4)) {
-                let w = w4[c] >> (hh * 4u)
+                let w = w4[int(hh) * 2 + (c & 1)] >> uint((c >> 1) * 4)   // sub-block hh's elements 4c .. 4c + 3: its low nibbles, then its high ones
                 khr_put4(sbase + uint(c) * 2u, float4(sc * float(iq4lut[int(w & 0xFu)]), sc * float(iq4lut[int((w >> 8u) & 0xFu)]),
                     sc * float(iq4lut[int((w >> 16u) & 0xFu)]), sc * float(iq4lut[int((w >> 24u) & 0xFu)])))
             }
@@ -6168,28 +6204,26 @@ class template Nv4Cm2T : KqCm2BatchT {
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes")]
-    def decode(blk : VkK4Blk; bc, cib : uint2) : float16 {
+    def decode(blk : VkNv4Blk; bc, cib : uint2) : float16 {
         let g = cib.y >> 5u
         let e = cib.y & 31u
-        let bidx = g * 16u + (e & 15u)
-        let q = (uint(int(blk.qs[int(bidx >> 1u)])) >> ((bidx & 1u) * 8u + (e >> 4u) * 4u)) & 0xFu
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let bidx = g * 16u + (e >> 4u) * 8u + (e & 7u)   // element e of the block: sub-block e / 16, its byte e % 8, the high nibble from element 8 on
+        let q = (uint(int(blk.qs[int(bidx >> 1u)])) >> ((bidx & 1u) * 8u + ((e >> 3u) & 1u) * 4u)) & 0xFu
         let si = g * 2u + (e >> 4u)
-        let sc = float(ue4lut[int((ws[srow + (si >> 2u)] >> ((si & 3u) * 8u)) & 0x7Fu)])
+        let sc = float(ue4lut[int((uint(int(blk.sc[int(si >> 1u)])) >> ((si & 1u) * 8u)) & 0x7Fu)])
         return float16(sc * float(iq4lut[int(q)]))
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes")]
-    def decode_v4(blk : VkK4Blk; bc, cib : uint2) : half4 {
+    def decode_v4(blk : VkNv4Blk; bc, cib : uint2) : half4 {
         let g = cib.y >> 5u
         let e = cib.y & 31u
-        let li = int((g * 16u + (e & 15u)) >> 1u)
+        let li = int((g * 16u + (e >> 4u) * 8u + (e & 7u)) >> 1u)
         let l0 = uint(int(blk.qs[li])) & 0xFFFFu
         let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
-        let sh = (e >> 4u) * 4u
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let sh = ((e >> 3u) & 1u) * 4u
         let si = g * 2u + (e >> 4u)
-        let sc = float(ue4lut[int((ws[srow + (si >> 2u)] >> ((si & 3u) * 8u)) & 0x7Fu)])
+        let sc = float(ue4lut[int((uint(int(blk.sc[int(si >> 1u)])) >> ((si & 1u) * 8u)) & 0x7Fu)])
         return half4(float4(sc * float(iq4lut[int((l0 >> sh) & 0xFu)]), sc * float(iq4lut[int((l0 >> (sh + 8u)) & 0xFu)]),
             sc * float(iq4lut[int((l1 >> sh) & 0xFu)]), sc * float(iq4lut[int((l1 >> (sh + 8u)) & 0xFu)])))
     }
@@ -7306,6 +7340,170 @@ class template TowerSpecDftT {
             }
             let p = re * re + im * im
             pw[gid] = pa.mag != TOWER_SPEC_POWER ? sqrt(p) : p
+        }
+    }
+}
+
+//! the query heads a grouped attention tile workgroup scores: the heads of one K/V head (`grp` of them), four at most
+def gk_dflash_attn_qh(grp : uint) : uint => grp % 4u == 0u ? 4u : (grp % 2u == 0u ? 2u : 1u)
+
+//! whether a drafter of `grp` query heads a K/V head takes the grouped tile (`GkDflashAttnTileHeads`): a group of one
+//! head a workgroup shares no read, so it stays with the tile a head (`GkDflashAttnTile`)
+def public gk_dflash_attn_grouped(grp : int64) : bool => gk_dflash_attn_qh(uint(grp)) > 1u
+
+//! the tile launch's workgroups for `rows` rows of `n_heads` query heads, `grp` a K/V head, over `tiles` key tiles: the
+//! grouped tile's, and at a group of one head the tile a head's
+def public gk_dflash_attn_heads_wgs(rows, n_heads, grp, tiles : int64) : int64
+    => rows * (n_heads / int64(gk_dflash_attn_qh(uint(grp)))) * tiles
+
+[ |> template_struct_instance]
+class template GkDflashAttnTileHeads : GkWgReduce {
+    @ssbo @binding = 0 @role = "read" q : array<float>    //! [rows][nheads][hs]
+    @ssbo @binding = 1 @role = "read" kb : array<float>   //! the block's K, [rows][nheads / grp][hs]
+    @ssbo @binding = 2 @role = "read" vb : array<float>
+    @ssbo @binding = 3 @role = "read" rk : array<float>   //! the rings' K, a layer's at `koff`
+    @ssbo @binding = 4 @role = "read" rv : array<float>
+    @ssbo @binding = 5 @role = "write" tp : array<float>  //! [rows][nheads][tiles][2 + hs]: a tile's max, its weights' sum, its weighted V
+    @kargs pa : GkDflashAttnArgs
+    @workgroup qs : float[1024]   //! four heads of GK_DFLASH_HS, the array's literal: the workgroup's query heads
+    @workgroup sc : float[1024]   //! four heads of GK_DFLASH_ATTN_TILE: a head's weights, a lane a key
+    @workgroup va : float[1024]
+
+    //! row `t`'s `qh` query heads from `h0` staged in `qs`, a lane a channel
+    def tile_queries(t, h0, qh : uint) {
+        let i = gl_LocalInvocationID.x
+        if (i < pa.hs) {
+            for [unroll] (qi in range(4)) {
+                if (uint(qi) < qh) {
+                    qs[uint(qi) * 256u + i] = q[(pa.rbase + t) * pa.nheads * pa.hs + (h0 + uint(qi)) * pa.hs + i]
+                }
+            }
+        }
+        barrier()
+    }
+
+    //! K element `at` of the lane's key into `kv`: the ring's (`ring`) or the block's
+    def tile_k_into(ring : bool; at : uint; var kv : float&) {
+        if (ring) {
+            kv = rk[at]
+        } else {
+            kv = kb[at]
+        }
+    }
+
+    //! V channel `c` of the tile's key `jk` under K/V head offset `kh` into `v`: the ring's or the block's
+    def tile_v_into(jk, kvd, kh, c : uint; var v : float&) {
+        if (jk < pa.nctx) {
+            v = rv[pa.voff + ((pa.lo + jk) % max(1u, pa.w)) * kvd + kh + c]
+        } else {
+            v = vb[(pa.rbase + jk - pa.nctx) * kvd + kh + c]
+        }
+    }
+
+    //! head `qi`'s tile max and weights' sum off the lane's score `s`, alike on every thread; the lane's weight lands in `sc`
+    def tile_weights(s : float; qi : uint; var mall, tot : float&) {
+        wg_max_into(s, 0u, mall)
+        let p = s <= -1.0e38 ? 0.0 : exp(s - mall)
+        sc[qi * 256u + gl_LocalInvocationID.x] = p
+        wg_sum_into(p, 1u, tot)   // its barrier also lands every lane's weight before the value loop reads them across lanes
+    }
+
+    //! head `qi`'s partial row of the tile at `base`: its max, its weights' sum and the weighted V row off the stripes in `va`
+    def tile_land(qi, base, stripes : uint; mall, tot : float) {
+        let i = gl_LocalInvocationID.x
+        if (i == 0u) {
+            tp[base] = mall
+            tp[base + 1u] = tot
+        }
+        if (i < pa.hs) {
+            var sum = 0.0
+            var sx = 0u
+            while (sx < stripes) {
+                sum += va[qi * 256u + sx * pa.hs + i]
+                sx++
+            }
+            tp[base + 2u + i] = sum
+        }
+    }
+
+    [arch(at="../ARCHITECTURE_GPU_SHARED_DRAFTER.md#dflash-attn-tiles")]
+    def dflash_attn_tile_heads_body {
+        let tiles = max(1u, (pa.nctx + pa.rows + 255u) / 256u)
+        let grp = max(1u, pa.grp)
+        let qh = gk_dflash_attn_qh(grp)
+        let head_groups = max(1u, pa.nheads / max(1u, qh))
+        let tile = gl_WorkGroupID.x % tiles
+        let hr = gl_WorkGroupID.x / tiles
+        let h0 = (hr % head_groups) * qh
+        let t = hr / head_groups
+        let i = gl_LocalInvocationID.x
+        let hs = max(1u, pa.hs)
+        let kvd = (pa.nheads / grp) * hs
+        let kh = (h0 / grp) * hs
+        let qpos = int(pa.pos0 + t)
+        tile_queries(t, h0, qh)
+        let j = tile * 256u + i
+        let ring = j < pa.nctx
+        let kpos = ring ? int(pa.lo + j) : int(pa.pos0 + j) - int(pa.nctx)
+        let seen = j < pa.nctx + pa.rows && qpos - kpos < int(pa.w) && kpos - qpos < int(pa.w)
+        var dots, mall, tot, acc : float[4]
+        for [unroll] (qi in range(4)) {
+            dots[qi] = 0.0
+            mall[qi] = 0.0
+            tot[qi] = 0.0
+            acc[qi] = 0.0
+        }
+        if (seen) {
+            let kb0 = ring ? pa.koff + (uint(kpos) % max(1u, pa.w)) * kvd + kh : (pa.rbase + j - pa.nctx) * kvd + kh
+            var e = 0u
+            while (e < hs) {
+                var kv = 0.0
+                tile_k_into(ring, kb0 + e, kv)
+                for [unroll] (qi in range(4)) {
+                    if (uint(qi) < qh) {
+                        dots[qi] += qs[uint(qi) * 256u + e] * kv
+                    }
+                }
+                e++
+            }
+        }
+        for [unroll] (qi in range(4)) {
+            if (uint(qi) < qh) {
+                var head_max = 0.0
+                var head_tot = 0.0
+                tile_weights(seen ? dots[qi] * pa.scale : -3.0e38, uint(qi), head_max, head_tot)
+                mall[qi] = head_max
+                tot[qi] = head_tot
+            }
+        }
+        let stripes = max(1u, 256u / hs)
+        var k = i / hs
+        if (k < stripes) {
+            while (k < 256u) {
+                var weights : float[4]
+                var weight_sum = 0.0
+                for [unroll] (qi in range(4)) {
+                    weights[qi] = uint(qi) < qh ? sc[uint(qi) * 256u + k] : 0.0
+                    weight_sum += weights[qi]
+                }
+                if (weight_sum != 0.0) {   // a weight is never negative, so a key no head weighs sums to zero and is not read
+                    var v = 0.0
+                    tile_v_into(tile * 256u + k, kvd, kh, i % hs, v)
+                    for [unroll] (qi in range(4)) {
+                        acc[qi] += weights[qi] * v
+                    }
+                }
+                k += stripes
+            }
+        }
+        for [unroll] (qi in range(4)) {
+            va[uint(qi) * 256u + i] = acc[qi]
+        }
+        barrier()
+        for [unroll] (qi in range(4)) {
+            if (uint(qi) < qh) {
+                tile_land(uint(qi), ((t * pa.nheads + h0 + uint(qi)) * tiles + tile) * (hs + 2u), stripes, mall[qi], tot[qi])
+            }
         }
     }
 }

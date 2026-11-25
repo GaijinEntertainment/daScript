@@ -225,7 +225,7 @@ def private tower_fc_kq_plan(recs : array<Q8Region>; gseats : array<TowerGemmSea
             let fmt = int(seat.fmt)
             let bytes = dev_rows_bytes(seat.fmt, r.n, r.rows)
             let q0 = p.qbytes?[fmt] ?? 0l
-            ps = TowerFcSeat(fmt = seat.fmt, wblk0 = q0 / kq_qsb(seat.fmt))
+            ps = TowerFcSeat(fmt = seat.fmt, wblk0 = q0 / kq_dev_qsb(seat.fmt))
             p.qbytes[fmt] = q0 + bytes.q
             p.sbytes[fmt] = (p.sbytes?[fmt] ?? 0l) + bytes.s
         }
@@ -245,7 +245,7 @@ def private tower_fc_gather_kq_member(fc : TowerFc; recs : array<Q8Region>; gsea
         let kf = seat.fmt
         kq_gather_rows_dev(kf, plane_at(fc.kq, seat.qoff), plane_at(fc.ks, seat.soff), r.n, r.rows, r.rows,
             fc.kq_repacked, fc.kq_repacked ? active_kq_layout_mr(kq_schema_id(kf)) : 1l,
-            wq, ws, ps.wblk0 * kq_qsb(kf), ps.wblk0 * kq_dev_ssb(kf), no_site_words)
+            wq, ws, ps.wblk0 * kq_dev_qsb(kf), ps.wblk0 * kq_dev_ssb(kf), no_site_words)
     }
 }
 

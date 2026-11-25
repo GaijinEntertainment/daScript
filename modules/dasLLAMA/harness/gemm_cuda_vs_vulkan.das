@@ -151,7 +151,7 @@ def race_q8_tile(p : Planes; k, d, tc : int) : RaceRow {
 def kq_tile_planes(fmt, k, d, tc : int) : Planes {
     var p = Planes(rows = ROWS, map_off = 2 * 4)
     let nsb = k / 256
-    p.wq <- hashed_words(d * nsb * int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l), 1u, uint(fmt) * 77777u)
+    p.wq <- kq_dev_wq_plane(fmt, d * nsb, 1u, uint(fmt) * 77777u)
     p.ws <- kq_ws_plane(fmt, d * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 13u)
     p.xf <- ws_plane((ROWS + int(TILE_READ_SLACK)) * k / 2, 3u, 5u)
     var sr <- two_region_sched(ROWS, 0, 0, tc, (d + 127) / 128, 0)
@@ -197,10 +197,11 @@ def moe_planes(fmt, k, d, nreg, rows_per, ttile : int) : Planes {
     let sb = kq_sb(fmt)
     let nb = k / (sb ? 256 : 32)
     let blocks = d * nb
-    p.wq <- hashed_words(nreg * blocks * int(kq_qsb(f) / 4l), 1u, uint(fmt) * 77777u)
     if (sb) {
+        p.wq <- kq_dev_wq_plane(fmt, nreg * blocks, 1u, uint(fmt) * 77777u)
         p.ws <- kq_ws_plane(fmt, nreg * blocks * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 13u)
     } else {
+        p.wq <- hashed_words(nreg * blocks * int(kq_qsb(f) / 4l), 1u, uint(fmt) * 77777u)
         p.ws <- ws_plane((nreg * blocks * int(kq_ssb(f)) + 3) / 4, 1u, uint(fmt) * 13u)
     }
     p.xf <- ws_plane((p.rows + int(TILE_READ_SLACK)) * k / 2, 3u, 5u)
@@ -374,12 +375,12 @@ def fp4_mmq_report(shape : string; p : Planes; k, d : int) : int {
     dasllama_cuda_classes::enc_nv4_mmq(g_cud.stream, bufs, pc, wgs)
     cud_sync()
     let y <- buf_download(bufs[5], ROWS * d, type<float>)
-    let plane_scale = uint_bits_to_float(p.ws[4])   // the fixture's per-tensor factor, the scale rows' fifth word
+    let plane_scale = uint_bits_to_float(p.ws[0])
     var err = 0.0
     for (s in range(64)) {
         let tok = (s * 7919) % ROWS
         let row = (s * 104729 + 13) % d
-        let want = nv4_mmq_ref(p.wq, p.ws, feed, k, tok, row, plane_scale)
+        let want = nv4_mmq_ref(p.wq, feed, k, tok, row, plane_scale)
         let got = y[tok * d + row]
         err = max(err, abs(got - want) / max(1.0, max(abs(got), abs(want))))
     }

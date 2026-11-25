@@ -893,6 +893,13 @@ def set_gpu_resident_regions(n : int64) {
     set_gpu_resident_regions_(n)
 }
 
+def set_gpu_resident_block_rounds(on : bool) {
+    //! Tell the whole-model GPU driver the models loaded next take a block drafter (``attach_block_drafter``): a model with
+    //! its own NextN head then verifies the drafter's whole round on the device, for more device scratch - without the
+    //! ask its round stops at the head's depth. Off by default; a model with no head of its own needs no ask.
+    set_gpu_resident_block_rounds_(on)
+}
+
 def set_gpu_ctx_max(n : int64) {
     //! Cap the whole-model GPU driver's K/V context at ``n`` positions per region for the models
     //! loaded next (0 lifts it): a server's ``ctx``. The card's room still bounds it; a cap under the arming floor lowers

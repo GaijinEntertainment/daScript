@@ -253,7 +253,7 @@ def host_rows(twin : void?; var yp : float?; q : uint8 const?; s : uint8 const?;
                     acc += k->blk_contrib(wsb0 + uint(sb), uint(blk), uint(sb))
                 }
             }
-            yp[r] = acc
+            yp[r] = acc * k->plane_site_scale(wsb0)
         }
     }
 }

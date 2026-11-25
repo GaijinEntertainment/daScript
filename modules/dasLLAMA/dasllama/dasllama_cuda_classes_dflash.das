@@ -43,6 +43,15 @@ class CuDflashAttnTile : GkDflashAttnTile {
     }
 }
 
+//! that tile over the query heads of a K/V head (`GkDflashAttnTileHeads`)
+[cuda_dispatch(name = "dflash_attn_tile_heads_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuDflashAttnTileHeads : GkDflashAttnTileHeads {
+    [cuda_kernel(local_size_x = 256, name = "dflash_attn_tile_heads_cls_cuda")]
+    def run {
+        dflash_attn_tile_heads_body()
+    }
+}
+
 //! the attention's tiles joined a (row, head) (`GkDflashAttnMerge`)
 [cuda_dispatch(name = "dflash_attn_merge_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class CuDflashAttnMerge : GkDflashAttnMerge {

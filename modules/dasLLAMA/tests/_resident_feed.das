@@ -199,12 +199,14 @@ struct ResidentLevers {
     host_layers : int64
     pf_rows : int64
     fuse : int
+    block_rounds : bool
 }
 
 def resident_levers() : ResidentLevers {
     let pins = gpu_ctx_pins()
     var l = ResidentLevers(route = gpu_resident_route_lever(), regions = gpu_resident_regions_want(), ctx_max = pins.ctx_max, ctx_strict = pins.strict,
-                           host_layers = gpu_host_layers_pin(), pf_rows = pf_window_rows_pin(), fuse = -1)
+                           host_layers = gpu_host_layers_pin(), pf_rows = pf_window_rows_pin(), fuse = -1,
+                           block_rounds = gpu_resident_block_rounds_want())
     static_if (typeinfo builtin_module_exists(vulkan)) {
         l.fuse = g_vk_fuse
     }
@@ -217,6 +219,7 @@ def restore_resident_levers(l : ResidentLevers) {
     set_gpu_ctx_max(l.ctx_max)
     set_gpu_ctx_strict(l.ctx_strict)
     set_gpu_host_layers(l.host_layers)
+    set_gpu_resident_block_rounds_(l.block_rounds)
     set_pf_window_rows_pin(l.pf_rows)
     static_if (typeinfo builtin_module_exists(vulkan)) {
         g_vk_fuse = l.fuse

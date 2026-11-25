@@ -776,6 +776,8 @@ def private hybrid_mtp_rows(t : T?; var r : HybridMtpRows; var m : Model; form :
     } elif (form.head_off) {
         mtp_head_off_rows(r.head_off, m)
         reset_gpu_cpu_passes()   //! the head-off round passes as verify_rows and verify_window by design
+    } elif (form.block_rounds) {
+        mtp_block_rounds_cell(t, m)
     } elif (form.mtp_depth == 8l) {
         mtp_depth8_cell(t, m)
     } elif (form.mtp_depth == 1l) {
@@ -820,7 +822,8 @@ def private hybrid_mtp_rows(t : T?; var r : HybridMtpRows; var m : Model; form :
 def private hybrid_mtp_forms(var r : HybridMtpRows) : array<ModelForm> {
     var forms <- [device_form(regions = 1l, host = true), device_form(regions = 2l, host = true, ctx = REGIONS_RIG_CTX),
         device_form(regions = 1l, host = true, head_off = true), device_form(regions = 1l, host = true, mtp_depth = 8l),
-        device_form(regions = 1l, host = true, mtp_depth = 1l), device_form(regions = 1l, host = true, mtp_depth = 2l)]
+        device_form(regions = 1l, host = true, mtp_depth = 1l), device_form(regions = 1l, host = true, mtp_depth = 2l),
+        device_form(regions = 1l, host = true, block_rounds = true)]
     codec_forms(forms, r.cuda_counters, [KVDtype.q8_0, KVDtype.tq4], device_form(regions = 1l, host = true)) $(kv) => "the NextN head over a {kv} mirror"
     forms |> push(device_form(regions = 1l, host = true, ctx = MTP_SCHED_CTX))
     forms |> push(device_form(host = true))

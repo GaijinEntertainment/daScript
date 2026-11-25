@@ -10,6 +10,291 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-11-24, `direction-grade`) - the nv4 lane split measures out: an nv4 decode GEMV row past 96 blocks
+  at the whole subgroup against the grid formats' sixteen lanes, both discrete homes (RunPod RTX PRO 4500 Blackwell 32
+  GB).** The box and the unset flags are the nv4 device unit entry's of this date. Exe: the daslang binary built from
+  origin/master 8c75592c3c's C++, `-jit`, running this change's .das sources. `DASLLAMA_GPU=1 DASLLAMA_CUDA=1
+  bin/daslang -jit modules/dasLLAMA/harness/gemv_cuda_vs_vulkan.das -- --only nv4`: one process, both homes, synthetic
+  planes at rows of 96 and 104 blocks (each side of the row length where the split would start), the llama-8B token
+  step's shapes and the 27B's; an arm a lanes value - the rule's (16 at every one of these rows), 8, 16 and the whole
+  subgroup (`lanes 32`), so `rule 16` and `lanes 16` are one candidate timed twice a round; a round one Vulkan submit
+  and one CUDA launch chain of every arm in turn, 2 warmup rounds, each figure an arm's best of 20 rounds of 50
+  dispatches; the weights a ring of copies past 256 MB, two outputs alternated; no output compared (`timing-only`). A
+  home's `noise` is the largest gap between two rounds of one arm's time summed over the shapes. The run's lines:
+
+    superblock decode GEMV at rows of 96 and 104 blocks, the llama-8B shapes and the 27B's, the rule's lanes a row then 8 / 16 / 32, both homes
+    nv4 n 3072 d 4096 rule 16      vulkan     13.48 us (  539.88 GB/s) timing-only
+    nv4 n 3072 d 4096 rule 16      cuda wall     12.32 us (  590.72 GB/s) event     10.97 us (  663.24 GB/s) timing-only
+    nv4 n 3072 d 4096 lanes 8      vulkan     14.08 us (  516.88 GB/s) timing-only
+    nv4 n 3072 d 4096 lanes 8      cuda wall     12.12 us (  600.46 GB/s) event     10.65 us (  683.66 GB/s) timing-only
+    nv4 n 3072 d 4096 lanes 16     vulkan     13.54 us (  537.49 GB/s) timing-only
+    nv4 n 3072 d 4096 lanes 16     cuda wall     12.32 us (  590.72 GB/s) event     10.99 us (  662.08 GB/s) timing-only
+    nv4 n 3072 d 4096 lanes 32     vulkan     15.08 us (  482.60 GB/s) timing-only
+    nv4 n 3072 d 4096 lanes 32     cuda wall     13.20 us (  551.33 GB/s) event     11.93 us (  610.11 GB/s) timing-only
+    nv4 n 3328 d 4096 rule 16      vulkan     15.16 us (  520.06 GB/s) timing-only
+    nv4 n 3328 d 4096 rule 16      cuda wall     13.82 us (  570.48 GB/s) event     12.48 us (  631.80 GB/s) timing-only
+    nv4 n 3328 d 4096 lanes 8      vulkan     15.72 us (  501.53 GB/s) timing-only
+    nv4 n 3328 d 4096 lanes 8      cuda wall     13.00 us (  606.47 GB/s) event     11.55 us (  682.86 GB/s) timing-only
+    nv4 n 3328 d 4096 lanes 16     vulkan     15.02 us (  524.91 GB/s) timing-only
+    nv4 n 3328 d 4096 lanes 16     cuda wall     13.82 us (  570.48 GB/s) event     12.44 us (  633.69 GB/s) timing-only
+    nv4 n 3328 d 4096 lanes 32     vulkan     16.70 us (  472.10 GB/s) timing-only
+    nv4 n 3328 d 4096 lanes 32     cuda wall     14.62 us (  539.27 GB/s) event     13.25 us (  594.97 GB/s) timing-only
+    nv4 n 4096 d 4096 rule 16      vulkan     16.48 us (  588.80 GB/s) timing-only
+    nv4 n 4096 d 4096 rule 16      cuda wall     15.32 us (  633.39 GB/s) event     14.03 us (  691.75 GB/s) timing-only
+    nv4 n 4096 d 4096 lanes 8      vulkan     17.28 us (  561.54 GB/s) timing-only
+    nv4 n 4096 d 4096 lanes 8      cuda wall     15.38 us (  630.92 GB/s) event     13.93 us (  696.61 GB/s) timing-only
+    nv4 n 4096 d 4096 lanes 16     vulkan     16.42 us (  590.96 GB/s) timing-only
+    nv4 n 4096 d 4096 lanes 16     cuda wall     15.34 us (  632.56 GB/s) event     14.01 us (  692.73 GB/s) timing-only
+    nv4 n 4096 d 4096 lanes 32     vulkan     17.82 us (  544.53 GB/s) timing-only
+    nv4 n 4096 d 4096 lanes 32     cuda wall     15.82 us (  613.37 GB/s) event     14.53 us (  667.98 GB/s) timing-only
+    nv4 n 4096 d 14336 rule 16     vulkan     46.34 us (  732.67 GB/s) timing-only
+    nv4 n 4096 d 14336 rule 16     cuda wall     44.30 us (  766.41 GB/s) event     41.99 us (  808.47 GB/s) timing-only
+    nv4 n 4096 d 14336 lanes 8     vulkan     46.10 us (  736.48 GB/s) timing-only
+    nv4 n 4096 d 14336 lanes 8     cuda wall     47.38 us (  716.59 GB/s) event     44.99 us (  754.67 GB/s) timing-only
+    nv4 n 4096 d 14336 lanes 16    vulkan     46.08 us (  736.80 GB/s) timing-only
+    nv4 n 4096 d 14336 lanes 16    cuda wall     44.40 us (  764.68 GB/s) event     41.98 us (  808.78 GB/s) timing-only
+    nv4 n 4096 d 14336 lanes 32    vulkan     46.06 us (  737.12 GB/s) timing-only
+    nv4 n 4096 d 14336 lanes 32    cuda wall     43.56 us (  779.43 GB/s) event     41.20 us (  824.09 GB/s) timing-only
+    nv4 n 14336 d 4096 rule 16     vulkan     47.02 us (  722.29 GB/s) timing-only
+    nv4 n 14336 d 4096 rule 16     cuda wall     50.62 us (  670.92 GB/s) event     48.18 us (  704.96 GB/s) timing-only
+    nv4 n 14336 d 4096 lanes 8     vulkan     52.56 us (  646.16 GB/s) timing-only
+    nv4 n 14336 d 4096 lanes 8     cuda wall     53.86 us (  630.56 GB/s) event     51.63 us (  657.78 GB/s) timing-only
+    nv4 n 14336 d 4096 lanes 16    vulkan     47.42 us (  716.20 GB/s) timing-only
+    nv4 n 14336 d 4096 lanes 16    cuda wall     50.48 us (  672.79 GB/s) event     48.17 us (  705.03 GB/s) timing-only
+    nv4 n 14336 d 4096 lanes 32    vulkan     54.00 us (  628.93 GB/s) timing-only
+    nv4 n 14336 d 4096 lanes 32    cuda wall     54.14 us (  627.30 GB/s) event     51.52 us (  659.25 GB/s) timing-only
+    nv4 n 5120 d 5120 rule 16      vulkan     23.56 us (  643.48 GB/s) timing-only
+    nv4 n 5120 d 5120 rule 16      cuda wall     23.10 us (  656.29 GB/s) event     21.80 us (  695.48 GB/s) timing-only
+    nv4 n 5120 d 5120 lanes 8      vulkan     25.38 us (  597.34 GB/s) timing-only
+    nv4 n 5120 d 5120 lanes 8      cuda wall     24.08 us (  629.58 GB/s) event     22.65 us (  669.31 GB/s) timing-only
+    nv4 n 5120 d 5120 lanes 16     vulkan     23.64 us (  641.30 GB/s) timing-only
+    nv4 n 5120 d 5120 lanes 16     cuda wall     23.16 us (  654.59 GB/s) event     21.76 us (  696.67 GB/s) timing-only
+    nv4 n 5120 d 5120 lanes 32     vulkan     23.94 us (  633.27 GB/s) timing-only
+    nv4 n 5120 d 5120 lanes 32     cuda wall     21.64 us (  700.57 GB/s) event     20.32 us (  745.92 GB/s) timing-only
+    nv4 n 5120 d 17408 rule 16     vulkan     71.98 us (  715.93 GB/s) timing-only
+    nv4 n 5120 d 17408 rule 16     cuda wall     66.74 us (  772.14 GB/s) event     65.42 us (  787.74 GB/s) timing-only
+    nv4 n 5120 d 17408 lanes 8     vulkan     81.42 us (  632.93 GB/s) timing-only
+    nv4 n 5120 d 17408 lanes 8     cuda wall     77.80 us (  662.38 GB/s) event     76.21 us (  676.19 GB/s) timing-only
+    nv4 n 5120 d 17408 lanes 16    vulkan     72.04 us (  715.34 GB/s) timing-only
+    nv4 n 5120 d 17408 lanes 16    cuda wall     66.76 us (  771.91 GB/s) event     65.52 us (  786.53 GB/s) timing-only
+    nv4 n 5120 d 17408 lanes 32    vulkan     67.22 us (  766.63 GB/s) timing-only
+    nv4 n 5120 d 17408 lanes 32    cuda wall     65.06 us (  792.08 GB/s) event     63.69 us (  809.17 GB/s) timing-only
+    nv4 n 17408 d 5120 rule 16     vulkan     67.80 us (  760.26 GB/s) timing-only
+    nv4 n 17408 d 5120 rule 16     cuda wall     67.10 us (  768.19 GB/s) event     65.64 us (  785.25 GB/s) timing-only
+    nv4 n 17408 d 5120 lanes 8     vulkan     74.48 us (  692.07 GB/s) timing-only
+    nv4 n 17408 d 5120 lanes 8     cuda wall     73.64 us (  699.96 GB/s) event     71.69 us (  718.99 GB/s) timing-only
+    nv4 n 17408 d 5120 lanes 16    vulkan     67.64 us (  762.05 GB/s) timing-only
+    nv4 n 17408 d 5120 lanes 16    cuda wall     67.26 us (  766.36 GB/s) event     65.88 us (  782.37 GB/s) timing-only
+    nv4 n 17408 d 5120 lanes 32    vulkan     70.94 us (  726.61 GB/s) timing-only
+    nv4 n 17408 d 5120 lanes 32    cuda wall     66.26 us (  777.93 GB/s) event     64.78 us (  795.64 GB/s) timing-only
+    nv4 summed over the shapes, the rule's lanes, vulkan    301.82 us timing-only
+    nv4 summed over the shapes, lanes 8, vulkan    327.02 us timing-only
+    nv4 summed over the shapes, lanes 16, vulkan    301.80 us timing-only
+    nv4 summed over the shapes, lanes 32, vulkan    311.76 us timing-only
+    nv4 summed over the shapes, noise, vulkan    100.72 us timing-only
+    nv4 summed over the shapes, the rule's lanes, cuda wall    293.32 us timing-only
+    nv4 summed over the shapes, lanes 8, cuda wall    317.26 us timing-only
+    nv4 summed over the shapes, lanes 16, cuda wall    293.54 us timing-only
+    nv4 summed over the shapes, lanes 32, cuda wall    294.30 us timing-only
+    nv4 summed over the shapes, noise, cuda wall     14.02 us timing-only
+
+  A second run of the same line, its sums:
+
+    nv4 summed over the shapes, the rule's lanes, vulkan    301.88 us timing-only
+    nv4 summed over the shapes, lanes 8, vulkan    326.78 us timing-only
+    nv4 summed over the shapes, lanes 16, vulkan    301.86 us timing-only
+    nv4 summed over the shapes, lanes 32, vulkan    311.44 us timing-only
+    nv4 summed over the shapes, noise, vulkan     87.96 us timing-only
+    nv4 summed over the shapes, the rule's lanes, cuda wall    293.26 us timing-only
+    nv4 summed over the shapes, lanes 8, cuda wall    316.72 us timing-only
+    nv4 summed over the shapes, lanes 16, cuda wall    293.90 us timing-only
+    nv4 summed over the shapes, lanes 32, cuda wall    294.46 us timing-only
+    nv4 summed over the shapes, noise, cuda wall     11.08 us timing-only
+
+  The arms' best times summed by model, microseconds, with the whole subgroup against sixteen lanes, each run:
+
+    | shapes | run | Vulkan 16 lanes | Vulkan whole subgroup | | CUDA 16 lanes | CUDA whole subgroup | |
+    | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+    | a row of 96 blocks | 1 | 13.54 | 15.08 | +11.4% | 12.32 | 13.20 | +7.1% |
+    | a row of 96 blocks | 2 | 13.42 | 14.76 | +10.0% | 12.34 | 13.26 | +7.5% |
+    | a row of 104 blocks | 1 | 15.02 | 16.70 | +11.2% | 13.82 | 14.62 | +5.8% |
+    | a row of 104 blocks | 2 | 15.00 | 16.56 | +10.4% | 13.80 | 14.54 | +5.4% |
+    | the llama-8B shapes | 1 | 109.92 | 117.88 | +7.2% | 110.22 | 113.52 | +3.0% |
+    | the llama-8B shapes | 2 | 110.06 | 117.94 | +7.2% | 110.24 | 113.78 | +3.2% |
+    | the 27B shapes | 1 | 163.32 | 162.10 | -0.7% | 157.18 | 152.96 | -2.7% |
+    | the 27B shapes | 2 | 163.38 | 162.18 | -0.7% | 157.52 | 152.88 | -2.9% |
+
+  Summed over the shapes the whole subgroup leads on neither home - Vulkan 311.76 against 301.80 us, CUDA 294.30
+  against 293.54 in the first run - so nv4 keeps the grid split (`ARCHITECTURE_GPU_SHARED_GEMM.md#kq-gemv-lanes`). By
+  shape it trails at the rows of 96 and 104 blocks and at the llama-8B shapes on both homes, and leads at the 27B's by
+  under 3% on CUDA and under 1% on Vulkan: row length alone picks no winner.
+
+- **MEASURED (2026-11-24, `direction-grade`) - the block drafter's attention tile a (row, the query heads of a K/V head,
+  key tile) a workgroup against a (row, head, key tile): the pair alone and the 27B's DFlash2 rounds on the discrete
+  homes (RunPod RTX PRO 4500 Blackwell 32 GB).** The box, the reference and the unset flags are the nv4 device unit
+  entry's of this date. Exe: the daslang binary built from origin/master 8c75592c3c's C++, `-jit`, running the
+  `modules/dasLLAMA` sources of this change for the after arm and of its parent for the before arm (`modules/dasLLAMA`
+  tree e8ddfa24d318: the probe over the one tile kernel, a workgroup a (row, head, tile)). The pair alone, no model loaded
+  and no output compared (`timing-only`): `DASLLAMA_GPU=1 DASLLAMA_CUDA=1 bin/daslang -jit
+  modules/dasLLAMA/harness/dflash_attn_probe.das -- --rows <8|16> [--heads <n> --kv 8]` - synthetic planes, heads of
+  128, a window of 2048, 5 layers' rings read in turn, under the tile the drafter's driver takes at the geometry; the
+  tile launch's microseconds a layer at each ring fill, the best of five chains of 50 launches after one warm chain,
+  two passes of the line a tree (the merge launch reads 2.3 to 2.8 us a layer in every row). 32 query heads on 8
+  K/V heads is the 27B drafter's geometry and a workgroup of four heads, 16 on 8 a workgroup of two, and 24 on 8 a
+  group of three, which stays with the tile a head:
+
+    | query heads on K/V heads, rows | fill | before | before, second pass | after | after, second pass |
+    | :--- | ---: | ---: | ---: | ---: | ---: |
+    | 32 on 8, 8 rows | 0 | 12.3 | 12.2 | 13.7 | 13.7 |
+    | 32 on 8, 8 rows | 256 | 133.3 | 133.1 | 70.5 | 70.5 |
+    | 32 on 8, 8 rows | 512 | 189.2 | 189.7 | 105.4 | 105.6 |
+    | 32 on 8, 8 rows | 1024 | 307.7 | 306.7 | 110.5 | 110.5 |
+    | 32 on 8, 8 rows | 2048 | 544.4 | 542.2 | 197.6 | 197.7 |
+    | 32 on 8, 16 rows | 0 | 21.1 | 21.0 | 16.2 | 16.2 |
+    | 32 on 8, 16 rows | 256 | 193.0 | 192.5 | 105.4 | 105.9 |
+    | 32 on 8, 16 rows | 512 | 311.9 | 310.5 | 122.4 | 122.7 |
+    | 32 on 8, 16 rows | 1024 | 533.4 | 530.6 | 193.6 | 193.1 |
+    | 32 on 8, 16 rows | 2048 | 999.7 | 996.7 | 335.9 | 336.0 |
+    | 16 on 8, 8 rows | 0 | 9.0 | 9.0 | 12.8 | 12.9 |
+    | 16 on 8, 8 rows | 256 | 113.1 | 113.5 | 69.5 | 69.4 |
+    | 16 on 8, 8 rows | 512 | 135.5 | 135.1 | 104.5 | 103.0 |
+    | 16 on 8, 8 rows | 1024 | 190.1 | 190.1 | 109.3 | 109.5 |
+    | 16 on 8, 8 rows | 2048 | 332.4 | 331.7 | 194.9 | 194.7 |
+    | 24 on 8, 8 rows | 0 | 9.8 | 9.7 | 9.7 | 9.7 |
+    | 24 on 8, 8 rows | 256 | 125.6 | 125.2 | 125.0 | 124.6 |
+    | 24 on 8, 8 rows | 512 | 145.4 | 144.5 | 144.9 | 144.9 |
+    | 24 on 8, 8 rows | 1024 | 251.7 | 251.2 | 251.7 | 250.6 |
+    | 24 on 8, 8 rows | 2048 | 439.2 | 438.2 | 436.4 | 437.3 |
+
+  At a ring that holds context the grouped tile takes 1.3 to 3.0 times less than the tile a head; at an empty ring it
+  is up to 4 us a layer slower. The 24 on 8 rows are the one kernel on both sides.
+
+  The grouped tile forced at the group of three (`--rows 8 --heads 24 --kv 8 --grouped`), where a workgroup scores one
+  head, beside the tile a head there - the reading the driver's rule rests on (`gk_dflash_attn_grouped`): the
+  grouped tile is the slower at four of the five fills.
+
+    | fill | the tile a head | second pass | the grouped tile | second pass |
+    | ---: | ---: | ---: | ---: | ---: |
+    | 0 | 9.7 | 9.7 | 20.8 | 20.7 |
+    | 256 | 125.0 | 124.6 | 109.1 | 110.0 |
+    | 512 | 144.9 | 144.9 | 163.9 | 163.3 |
+    | 1024 | 251.7 | 250.6 | 252.6 | 252.5 |
+    | 2048 | 436.4 | 437.3 | 453.6 | 451.2 |
+
+  The served rounds (`out-of-process`): `bin/daslang -jit modules/dasLLAMA/harness/model_bench_run.das -- --gpu <home>
+  --out-dir <dir> --models-dir <models> --model Qwen3.8-27B-NVFP4-MTP-N4_0 --boot-seconds 2400 --only
+  dflash2,dflash2_nvfp4` (the runner starts the server and `harness/model_bench.das`, whose clock times a request),
+  in milliseconds a round - a request's generation time over its rounds, the reply's 512 tokens less its accepted
+  drafts - as the mean of three requests with the least and the most. Our round drafts the block's 7 and verifies 8
+  rows. The reference's columns are the nv4 device unit entry's run: at 3 drafts its `--spec-draft-n-max` default, at 7
+  the same server with `--spec-draft-n-max 7`. A round's cost repeats to a fraction of a percent, where a row's tok/s
+  moves with the reply's text, which differs between the two servers:
+
+    | home | drafter | context | before | after | | llama.cpp, 3 drafts | llama.cpp, 7 drafts |
+    | :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: |
+    | CUDA | Q8_0 | none | 34.61 (34.45 - 34.82) | 34.29 (34.12 - 34.44) | -0.9% | 29.85 (29.77 - 29.92) | 37.22 (37.01 - 37.36) |
+    | CUDA | Q8_0 | 4078 tokens | 39.45 (39.35 - 39.54) | 38.03 (37.97 - 38.07) | -3.6% | 30.28 (30.26 - 30.31) | 38.04 (37.96 - 38.12) |
+    | CUDA | NVFP4 | none | 34.16 (34.06 - 34.24) | 33.95 (33.90 - 34.04) | -0.6% | 29.04 (29.01 - 29.08) | 38.59 (37.85 - 39.96) |
+    | CUDA | NVFP4 | 4078 tokens | 38.97 (38.87 - 39.06) | 37.45 (37.33 - 37.62) | -3.9% | 29.60 (29.51 - 29.76) | 40.19 (39.77 - 40.64) |
+    | Vulkan | Q8_0 | none | 46.36 (45.56 - 46.77) | 45.63 (44.09 - 46.71) | -1.6% | 58.31 (58.03 - 58.83) |  |
+    | Vulkan | Q8_0 | 4078 tokens | 50.81 (50.39 - 51.19) | 49.57 (49.52 - 49.67) | -2.4% | 60.25 (59.86 - 60.60) |  |
+    | Vulkan | NVFP4 | none | 44.36 (43.89 - 44.78) | 43.92 (43.63 - 44.13) | -1.0% | 59.07 (58.75 - 59.24) |  |
+    | Vulkan | NVFP4 | 4078 tokens | 49.59 (49.23 - 49.96) | 47.88 (47.75 - 48.04) | -3.4% | 60.76 (60.17 - 61.64) |  |
+
+  What the tile leaves: a row still reads every key in view (the rows of a block do not share a tile), and the trunk's
+  verify rows' attention grows with the context beside it.
+
+- **MEASURED (2026-11-24, `direction-grade`) - the nv4 device unit and the block-rounds ask: the all-NVFP4 27B and the
+  NVFP4 35B served on both discrete homes against llama.cpp 4483b2b, the 27B before and after, and the verify rows'
+  device scratch (RunPod RTX PRO 4500 Blackwell 32 GB).** Box: the RunPod RTX PRO 4500 Blackwell 32 GB (`nvidia-smi`:
+  NVIDIA RTX PRO 4500 Blackwell, driver 595.112.07, 32623 MiB), AMD EPYC 7663, Ubuntu 24.04.1. Exe: the daslang binary
+  built from origin/master 1febab27ee's C++, running the `modules/dasLLAMA` and `utils/dasllama-server` .das sources of
+  this change (tree bcc10487e83f). Flags: `-jit` (every das figure here is a `-jit` script reading - `debug-jit`), the
+  home by the server's `--gpu cuda|vulkan`; `DAS_NO_HUGEPAGE_HINT`, `DAS_TUNE_POLICY`, `DASLLAMA_COOPMAT`,
+  `DASLLAMA_CUDA_MMQ`, `DASLLAMA_CUDA_PDL` and `DASLLAMA_VK_DECVEC` unset; the box's kernels unminted, so no figure here
+  is a board row.
+  Harness: `bin/daslang -jit modules/dasLLAMA/harness/model_bench_run.das -- --gpu <home> --out-dir <dir> --models-dir
+  <models> --model <entry> --boot-seconds 2400 --only pp,tg,nextn,dflash2,dflash2_nvfp4 --slot-dir <dir>` for our leg
+  and the same line with `--llama-server <llama.cpp>/build-<home>/bin/llama-server` for the reference's
+  (`harness/model_bench.json`'s entries: a server of 4 streams at context 32768, each row one stream; `tg128+N` decodes
+  128 tokens behind an N-token prompt, `tg512:<arm>` 512 tokens under a speculative arm). Each figure is the mean +- the
+  standard deviation of three reps, tok/s. The reference: llama.cpp 4483b2b98, `cmake -DCMAKE_BUILD_TYPE=Release
+  -DGGML_NATIVE=ON` with `-DGGML_CUDA=ON` (`build-cuda`) or `-DGGML_VULKAN=ON` (`build-vulkan`), served as
+  `<llama.cpp>/build-cuda/bin/llama-server -m <models>/Qwen3.8-27B-NVFP4-MTP-N4_0.gguf --port 8911 -ngl 99 -np 4 -c 131072 --temp 0`
+  (the drafter arms' `--spec-type` lines are the card's `cmd`). Model files: `Qwen3.8-27B-NVFP4-MTP-N4_0.gguf` (its own
+  NextN head; drafters `Qwen3.8-27B-DFlash2-Q8_0.gguf` and `Qwen3.8-27B-DFlash2-NVFP4.gguf`) and
+  `Qwen3.6-35B-A3B-NVFP4.gguf` (routed, no head; its two DFlash2 drafters). The 27B's NextN arm runs the box knob's depth
+  (1, unminted); its block-drafter arms run under the block-rounds ask (`set_gpu_resident_block_rounds`), which the
+  server makes where a slot names a drafter.
+
+    Qwen3.8-27B-NVFP4-MTP-N4_0, tok/s
+
+    | row | CUDA ours | CUDA llama.cpp | ours / theirs | Vulkan ours | Vulkan llama.cpp | ours / theirs |
+    | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+    | pp2048 | 3535.1 +- 3.2 | 2512.7 +- 13.0 | 1.41 | 1368.6 +- 2.4 | 1191.6 +- 304.3 | 1.15 |
+    | pp4096 | 3702.8 +- 2.5 | 2973.6 +- 20.0 | 1.25 | 1528.9 +- 1.8 | 1346.6 +- 9.2 | 1.14 |
+    | pp8192 | 3730.8 +- 3.8 | 3065.7 +- 32.6 | 1.22 | 1655.2 +- 3.4 | 1379.1 +- 7.7 | 1.20 |
+    | pp16384 | 3570.5 +- 4.6 | 3053.7 +- 27.3 | 1.17 | 1573.9 +- 3.9 | 1368.3 +- 25.0 | 1.15 |
+    | tg128 | 45.6 +- 0.0 | 46.7 +- 0.0 | 0.98 | 44.4 +- 0.0 | 28.0 +- 0.2 | 1.59 |
+    | tg128+2048 | 44.8 +- 0.0 | 46.2 +- 0.0 | 0.97 | 43.2 +- 0.0 | 27.4 +- 0.0 | 1.57 |
+    | tg128+4096 | 44.2 +- 0.0 | 45.7 +- 0.0 | 0.97 | 42.8 +- 0.0 | 27.0 +- 0.1 | 1.59 |
+    | tg128+8192 | 43.1 +- 0.0 | 45.1 +- 0.0 | 0.96 | 41.7 +- 0.0 | 26.7 +- 0.0 | 1.56 |
+    | tg128+16384 | 41.1 +- 0.0 | 43.6 +- 0.1 | 0.94 | 39.8 +- 0.0 | 26.1 +- 0.1 | 1.53 |
+    | tg512:nextn | 71.9 +- 0.5 | 103.8 +- 0.6 | 0.69 | 72.6 +- 0.6 | 53.7 +- 0.9 | 1.35 |
+    | tg512+4096:nextn | 66.6 +- 0.6 | 94.3 +- 5.0 | 0.71 | 65.8 +- 0.3 | 45.6 +- 0.4 | 1.44 |
+    | tg512:dflash2 | 136.6 +- 3.3 | 109.3 +- 2.8 | 1.25 | 101.2 +- 1.7 | 55.7 +- 0.2 | 1.82 |
+    | tg512+4096:dflash2 | 77.6 +- 7.3 | 94.7 +- 2.0 | 0.82 | 75.1 +- 2.7 | 48.2 +- 0.3 | 1.56 |
+    | tg512:dflash2_nvfp4 | 133.4 +- 8.4 | 112.8 +- 0.4 | 1.18 | 107.2 +- 1.2 | 55.3 +- 0.2 | 1.94 |
+    | tg512+4096:dflash2_nvfp4 | 80.9 +- 6.7 | 94.6 +- 3.6 | 0.86 | 73.2 +- 0.6 | 45.4 +- 0.6 | 1.61 |
+
+    Qwen3.6-35B-A3B-NVFP4, tok/s
+
+    | row | CUDA ours | CUDA llama.cpp | ours / theirs | Vulkan ours | Vulkan llama.cpp | ours / theirs |
+    | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+    | pp2048 | 9687.7 +- 47.2 | 5621.1 +- 60.8 | 1.72 | 6472.6 +- 29.3 | 3271.4 +- 12.3 | 1.98 |
+    | pp4096 | 10263.8 +- 42.5 | 6918.4 +- 122.2 | 1.48 | 6956.7 +- 17.8 | 3739.6 +- 32.8 | 1.86 |
+    | pp8192 | 10682.4 +- 10.1 | 7407.1 +- 32.7 | 1.44 | 7065.2 +- 6.4 | 3924.3 +- 17.7 | 1.80 |
+    | pp16384 | 10576.2 +- 4.4 | 7622.6 +- 53.1 | 1.39 | 6972.4 +- 3.6 | 3952.1 +- 13.2 | 1.76 |
+    | tg128 | 194.5 +- 0.1 | 134.2 +- 0.1 | 1.45 | 168.2 +- 0.0 | 99.8 +- 0.2 | 1.69 |
+    | tg128+2048 | 188.6 +- 0.0 | 133.2 +- 0.2 | 1.42 | 158.7 +- 0.1 | 98.7 +- 0.1 | 1.61 |
+    | tg128+4096 | 184.9 +- 0.0 | 131.6 +- 0.0 | 1.41 | 157.0 +- 0.1 | 97.5 +- 0.2 | 1.61 |
+    | tg128+8192 | 178.8 +- 0.1 | 129.8 +- 0.0 | 1.38 | 150.0 +- 0.1 | 96.8 +- 0.1 | 1.55 |
+    | tg128+16384 | 166.6 +- 0.1 | 125.5 +- 0.1 | 1.33 | 137.6 +- 0.0 | 94.4 +- 0.2 | 1.46 |
+    | tg512:dflash2 | 276.6 +- 5.0 | 208.1 +- 6.7 | 1.33 | 203.1 +- 11.1 | 130.9 +- 3.5 | 1.55 |
+    | tg512+4096:dflash2 | 210.2 +- 6.4 | 201.3 +- 5.7 | 1.04 | 183.1 +- 10.0 | 127.5 +- 4.6 | 1.44 |
+    | tg512:dflash2_nvfp4 | 258.5 +- 15.5 | 186.9 +- 3.3 | 1.38 | 199.5 +- 5.8 | 136.9 +- 3.0 | 1.46 |
+    | tg512+4096:dflash2_nvfp4 | 211.6 +- 3.3 | 170.5 +- 9.4 | 1.24 | 152.1 +- 0.5 | 118.5 +- 2.2 | 1.28 |
+
+  The before arm: the same box, exe, flags and harness line over origin/master d28d31b11f's `modules/dasLLAMA` and
+  `utils/dasllama-server` sources (the run's tree, e5f4a345ec, differs from them in `benchmarks/lcpp_bench.das` alone).
+  The prefill rows move with the device unit and the block-drafter rows with the ask; the decode and NextN rows hold
+  level.
+
+    Qwen3.8-27B-NVFP4-MTP-N4_0, tok/s, the sources before this change against this change's
+
+    | row | CUDA before | CUDA this change | after / before | Vulkan before | Vulkan this change | after / before |
+    | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+    | pp2048 | 2720.1 +- 1.2 | 3535.1 +- 3.2 | 1.30 | 1287.8 +- 1.8 | 1368.6 +- 2.4 | 1.06 |
+    | pp4096 | 3008.6 +- 4.7 | 3702.8 +- 2.5 | 1.23 | 1440.5 +- 3.1 | 1528.9 +- 1.8 | 1.06 |
+    | pp8192 | 3029.9 +- 4.0 | 3730.8 +- 3.8 | 1.23 | 1562.5 +- 5.8 | 1655.2 +- 3.4 | 1.06 |
+    | pp16384 | 2935.5 +- 2.7 | 3570.5 +- 4.6 | 1.22 | 1491.6 +- 1.6 | 1573.9 +- 3.9 | 1.06 |
+    | tg128 | 45.6 +- 0.0 | 45.6 +- 0.0 | 1.00 | 44.3 +- 0.0 | 44.4 +- 0.0 | 1.00 |
+    | tg128+2048 | 44.8 +- 0.0 | 44.8 +- 0.0 | 1.00 | 43.1 +- 0.0 | 43.2 +- 0.0 | 1.00 |
+    | tg128+4096 | 44.2 +- 0.0 | 44.2 +- 0.0 | 1.00 | 42.7 +- 0.0 | 42.8 +- 0.0 | 1.00 |
+    | tg128+8192 | 43.1 +- 0.2 | 43.1 +- 0.0 | 1.00 | 41.6 +- 0.0 | 41.7 +- 0.0 | 1.00 |
+    | tg128+16384 | 41.0 +- 0.0 | 41.1 +- 0.0 | 1.00 | 39.7 +- 0.2 | 39.8 +- 0.0 | 1.00 |
+    | tg512:nextn | 71.0 +- 1.0 | 71.9 +- 0.5 | 1.01 | 71.8 +- 0.3 | 72.6 +- 0.6 | 1.01 |
+    | tg512+4096:nextn | 66.3 +- 1.1 | 66.6 +- 0.6 | 1.00 | 65.1 +- 0.5 | 65.8 +- 0.3 | 1.01 |
+    | tg512:dflash2 | 63.6 +- 0.2 | 136.6 +- 3.3 | 2.15 | 63.7 +- 0.9 | 101.2 +- 1.7 | 1.59 |
+    | tg512+4096:dflash2 | 53.2 +- 1.8 | 77.6 +- 7.3 | 1.46 | 55.7 +- 1.3 | 75.1 +- 2.7 | 1.35 |
+    | tg512:dflash2_nvfp4 | 64.7 +- 0.2 | 133.4 +- 8.4 | 2.06 | 65.0 +- 0.6 | 107.2 +- 1.2 | 1.65 |
+    | tg512+4096:dflash2_nvfp4 | 57.8 +- 1.5 | 80.9 +- 6.7 | 1.40 | 56.7 +- 0.4 | 73.2 +- 0.6 | 1.29 |
+
+  The verify rows' device scratch on the 27B (a trunk with its own head, 4 regions, context 32768; the server's
+  `resident image` line on the CUDA home): 4017 MB with the head's two rows (the NextN arm's server), 5104 MB
+  with the block-rounds ask's nine (the DFlash2 arm's server) - a rollback copy of every recurrent layer's state a
+  verify row past the first.
+
 - **MEASURED (2026-11-14, `direction-grade`) - the final tree's token rows on both discrete homes against llama.cpp
   5676dfb: pp512, tg128, batched streams, the NextN head, the assistant drafter and the block drafter (RunPod RTX PRO 4500
   Blackwell 32 GB).** Box: the RunPod RTX PRO 4500 Blackwell 32 GB (`nvidia-smi`: NVIDIA RTX PRO 4500 Blackwell, driver

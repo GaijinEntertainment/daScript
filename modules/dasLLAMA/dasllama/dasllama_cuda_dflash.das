@@ -158,7 +158,7 @@ def private df_why(dr : DflashDrafter) : string {
     }
     delete sites
     return "a weight plane's decode GEMV did not compile on this device" if (!served)
-    let stamps = (ensure_dflash_conv_cls() && ensure_dflash_qkn_cls() && ensure_dflash_attn_tile_cls() && ensure_dflash_attn_merge_cls() && ensure_cls_ar() && ensure_cls_dn_rq()
+    let stamps = (ensure_dflash_conv_cls() && ensure_dflash_qkn_cls() && ensure_dflash_attn_tile_cls() && ensure_dflash_attn_tile_heads_cls() && ensure_dflash_attn_merge_cls() && ensure_cls_ar() && ensure_cls_dn_rq()
         && ensure_cls_q8k_rq() && ensure_q8_actrq_cls() && ensure_q8k_actrq_cls() && ensure_words_copy())
     return "a kernel of the pass did not compile on this device" if (!stamps)
     return ""
@@ -439,7 +439,12 @@ def private df_layer(var g : DflashCud; dr : DflashDrafter; var s : void?; ring 
     var pa = GkDflashAttnArgs(rows = uint(rows), pos0 = uint(pos), lo = uint(lo), nctx = uint(nctx), w = uint(dr.window), hs = uint(dr.hs),
         nheads = uint(dr.n_heads), grp = uint(dr.n_heads / dr.n_kv), scale = dr.attn_scale, rbase = 0u,
         koff = lbase, voff = lbase)
-    enc_dflash_attn_tile_cls(s, fixed_array(g.qn, g.kn, g.vb, ring.rk, ring.rv, g.tp), pa, dr.n_heads * rows * tiles)
+    let wgs = gk_dflash_attn_heads_wgs(rows, dr.n_heads, dr.n_heads / dr.n_kv, tiles)
+    if (gk_dflash_attn_grouped(dr.n_heads / dr.n_kv)) {
+        enc_dflash_attn_tile_heads_cls(s, fixed_array(g.qn, g.kn, g.vb, ring.rk, ring.rv, g.tp), pa, wgs)
+    } else {
+        enc_dflash_attn_tile_cls(s, fixed_array(g.qn, g.kn, g.vb, ring.rk, ring.rv, g.tp), pa, wgs)
+    }
     enc_dflash_attn_merge_cls(s, fixed_array(g.tp, g.att), pa, dr.n_heads * rows)
     df_rq(g, s, g.att, rows * qd, rows, dflash_site(l, 4))
     df_gemv(g, s, dflash_site(l, 4), g.o, rows)

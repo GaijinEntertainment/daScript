@@ -4198,7 +4198,7 @@ def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE03
         rm_grid_globals(te, fmt, LLVMGetGlobalParent(gc.impl))
     }
     let neon = te.dotKind == DOT_SDOT
-    let qsb = kq_qsb(fmt)
+    let qsb = kq_dev_qsb(fmt)
     let ssb = kq_dev_ssb(fmt)
     return rm_rows_walk(gc, te, qsb, ssb, true, 256, nt, 0) $(bi, _nblk, _paired, f) {   // nolint:STYLE037 - one register-coupled block body a format family
         let b = te.builder
@@ -4213,8 +4213,7 @@ def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE03
         }
         var dsc, dmn, w0, w1, site : LLVMOpaqueValue?
         if (nv4) {
-            var soff16 = LLVMBuildAdd(b, soff, te.types->ConstI64(16ul), "")
-            site = LLVMBuildBitCast(b, rm_u32_at(te, te.sg, soff16, ""), te.types.t_float, "site")
+            site = LLVMBuildBitCast(b, rm_u32_at(te, te.sg, soff, ""), te.types.t_float, "site")
         } elif (twoWord) {
             w0 = rm_u32_at(te, te.sg, soff, "w0")
             var soff4 = LLVMBuildAdd(b, soff, te.types->ConstI64(4ul), "")
@@ -4279,8 +4278,9 @@ def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE03
         let hiMask <- [for (i in range(16)); 16 + i]
         let cat <- [for (i in range(64)); i]
         var ssc : LLVMOpaqueValue? [16]   // nv4, [token x 4 + vector]: the sixteen strip scales at half x site x the token's scale, rv lanes a vector
+        let nv4Korder <- [for (i in range(32)); (i / 8 == 1 || i / 8 == 2) ? i ^ 24 : i]   // the file's pairing: a block's low nibbles are elements 0-7 and 16-23, its high ones 8-15 and 24-31
         if (nv4) {
-            var ue16 = load_vec(te, te.v16i8, te.sg, soff, "ue16")
+            var ue16 = load_vec(te, te.v16i8, te.wg, LLVMBuildAdd(b, qoff, te.types->ConstI64(uint64(NV4_QSB)), ""), "ue16")
             var siteXsv : LLVMOpaqueValue? [4]
             for (t in range(nt)) {
                 siteXsv[t] = splat_f32(te, LLVMBuildFMul(b, site, xsv[t], ""), "sxs{t}")
@@ -4306,6 +4306,9 @@ def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE03
                 } elif (k4 || k5 || q40 || iq4nl || iq4xs || iq3s4 || nv4) {
                     var noff = LLVMBuildAdd(b, qoff, te.types->ConstI64(uint64(16 * jj)), "")
                     c = rm_nib_codes(te, noff, "nib{jj}")
+                    if (nv4) {
+                        c = LLVMBuildShuffleVector(b, te.types, c, c, nv4Korder, "nibk{jj}")
+                    }
                     if (k5) {
                         var hoff5 = LLVMBuildAdd(b, qoff, te.types->ConstI64(uint64(128 + 4 * jj)), "")
                         var qh = rm_k5_qh(te, hoff5, "qh{jj}")

@@ -73,11 +73,12 @@ setting that race chose - adds an arm dispatching that kernel to the race, or na
 in the document that records the figure, the production run whose served rows measure it, in the
 same change.** A ranking holds only for the kernels its arms timed.
 
-**A diff that widens the gate admitting ranking inputs to a kernel whose ranking is decided times
-the ranked arms at a newly admitted input in the same change - at both ends of a newly admitted
+**A diff that widens the gate admitting ranking inputs to a kernel whose ranking is decided, in
+the same change, times the ranked arms at a newly admitted input - at both ends of a newly admitted
 range, and for a range with no upper bound at its lowest value and at the largest value any model
-`performance/model_specs.das` lists runs it at.** The widened gate otherwise applies the ranking at values it was never ranked
-at.
+`performance/model_specs.das` lists runs it at - or names, in the document that records the figure,
+the production run whose served rows measure each of those values it does not time.** The widened
+gate otherwise applies the ranking at values it was never ranked at.
 
 **A diff that decides the ranking of a prefill tile's timing arm over a variable region, or adds
 or changes such an arm whose ranking is decided, for a tile some dispatch can run at a token count
@@ -92,13 +93,12 @@ batch widths names those widths in it.**
 
 **A diff that decides the ranking of a race whose code the tree holds, or adds or changes an
 arm of a race whose ranking is decided, gives every dispatch an arm times an output buffer the
-chain's previous dispatch does not write - two buffers alternated between consecutive dispatches
-qualify - or ledgers the arm in
-`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity` (Metal) or the Vulkan arm ledger
-(`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`) as holding one output across its chain, naming
-the chain it reads, in the same change.** One shared output serializes the chain on its
-write-after-write hazard, so where production overlaps those dispatches the race ranks a shape
-production never runs.
+chain's previous dispatch does not write - two buffers alternated between dispatches qualify - or
+ledgers the arm as holding one output across its chain, naming the chain it reads, in the same
+change: in `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity` (Metal),
+`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe` (Vulkan), or beside its figure on another
+backend.** One shared output serializes the chain, so where production overlaps those dispatches
+the race ranks a shape production never runs.
 
 **A diff that decides the ranking of a race whose code the tree holds, or adds or changes an
 arm of a race whose ranking is decided, makes every arm place its barriers between the same
@@ -128,8 +128,10 @@ that timed it, and writes beside the figure the command line that ran it and the
 build it ran on.** A figure that cannot be re-run cannot be checked.
 
 **A diff that replaces or removes a race whose figure a document carries re-measures that figure
-with a race the tree holds, deletes the figure, or moves the old race under `harness/`, in the
-same change.** No reviewer can re-check a figure whose race is gone.
+with a race the tree holds, deletes the figure, moves the old race under `harness/`, or - where it
+changes the race in place, so the figure's command line still runs - keeps or writes beside the
+figure the commit of the race that timed it, in the same change.** No reviewer can re-check a
+figure whose race is gone.
 
 **A diff that ports an A/B lab's winning variant into a kernel deletes, in the same change, that
 variant's class and any `*_variants.das` code that exists only for it and is not a live arm.** An

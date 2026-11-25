@@ -1114,12 +1114,13 @@ def moe_gpu_gather_stack_mx4(t : Model; woff : int64; n, rows, slice_rows : int6
 //! The MoE stack's kq gather: `rows` rows of format `fmt` from the Model's planes at `woff` into the device layout, `wq` and
 //! `ws` grown to hold them; the nv4 rows' site-scale word read a slice off the model's table.
 def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
-                            repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
+                            repacked : bool; mr : int64; @exact_size var wq : array<uint8>; @exact_size var ws : array<uint8>) {
     let nsb = n / KQ_SUPERBLOCK_ELEMS
     let qsb = kq_qsb(fmt)
     let dssb = kq_ssb(fmt)
-    assert(rows * nsb * qsb <= 2147483647l, "GPU MoE kq stack exceeds the int32 gather-buffer rail")
-    wq |> grow_resize(rows * nsb * qsb)
+    let dev_qsb = kq_dev_qsb(fmt)
+    assert(rows * nsb * dev_qsb <= 2147483647l, "GPU MoE kq stack exceeds the int32 gather-buffer rail")
+    wq |> grow_resize(rows * nsb * dev_qsb)
     ws |> grow_resize(rows * nsb * kq_dev_ssb(fmt))
     var slice_site_words <- [for (sl in range64(fmt == KqFmt.nv4 ? rows / slice_rows : 0l)); float_bits_to_uint(site_scale(t.site_scale, fmt, woff + sl * slice_rows * n))]
     unsafe {
@@ -1130,15 +1131,39 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
     delete slice_site_words
 }
 
+//! nv4's device unit at `unit_out` and its site-scale word at `site_out`, off a superblock's k4-tiled quants and its gathered
+//! scale row (the UE4M3 bytes, then the site-scale word)
+[arch(at = "../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-planes")]
+def nv4_dev_unit(var unit_out, site_out : uint8?; k4_quants, scale_row : uint8 const?) {
+    unsafe {
+        for (g in range64(KQ_SB_ELEMS / KQ_B32_ELEMS)) {
+            for (j in range64(8l)) {
+                let a = uint(k4_quants[g * 16l + j])
+                let b = uint(k4_quants[g * 16l + j + 8l])
+                unit_out[g * 16l + j] = uint8((a & 15u) | ((b & 15u) << 4u))
+                unit_out[g * 16l + 8l + j] = uint8((a >> 4u) | (b & 0xF0u))
+            }
+        }
+        for (i in range64(NV4_SSB)) {
+            unit_out[NV4_QSB + i] = scale_row[i]
+        }
+        for (i in range64(NV4_DEV_SSB)) {
+            site_out[i] = scale_row[NV4_SSB + i]
+        }
+    }
+}
+
 //! The kq gather's core over raw planes: `rows` x `n` prepared K-quant rows at `qp` with their scale rows at `sp` (the CPU backend's
 //! grp<mr> interleave a `slice_rows` slice where `repacked`, else disk order) into the device layout at byte `dst_q` of `wq` and
 //! `dst_s` of `ws`; `slice_site_words` a slice's site-scale word (nv4's), empty elsewhere. The MoE stack gather and the towers gather through it.
 def kq_gather_rows_dev(fmt : KqFmt; qp, sp : uint8 const?; n, rows, slice_rows : int64; repacked : bool; mr : int64;
                        var wq : array<uint8>; var ws : array<uint8>; dst_q, dst_s : int64; slice_site_words : array<uint>) {
     let nsb = n / KQ_SUPERBLOCK_ELEMS
-    let qsb = kq_qsb(fmt)    // quant plane stride per superblock (disk == device for quants)
+    let qsb = kq_qsb(fmt)    // the plane's quant stride a superblock; the device's is dev_qsb
     let dssb = kq_ssb(fmt)   // disk/plane scale stride; device rows decode to kq_dev_ssb(fmt)
     let dev_ssb = kq_dev_ssb(fmt)
+    let dev_qsb = kq_dev_qsb(fmt)
+    let nv4 = fmt == KqFmt.nv4
     let two_word_row = kq_two_word_row(fmt)
     assert(n % KQ_SUPERBLOCK_ELEMS == 0l, "GPU kq gather: row length must be a superblock multiple")
     let nslices = int(rows / slice_rows)
@@ -1156,7 +1181,6 @@ def kq_gather_rows_dev(fmt : KqFmt; qp, sp : uint8 const?; n, rows, slice_rows :
                 for (row in range(rowb, rowe)) {
                     let rr = int64(row)
                     let ri = rr % slice_rows
-                    // the nv4 row's fifth word: its slice's site scale (a slice is one expert's plane)
                     let site_word = site_words != null ? site_words[(rr - ri) / slice_rows] : 0u
                     let sliceQ = (rr - ri) * qrow
                     let sliceS = (rr - ri) * srow
@@ -1164,8 +1188,11 @@ def kq_gather_rows_dev(fmt : KqFmt; qp, sp : uint8 const?; n, rows, slice_rows :
                     let g = ri / mr
                     let r = ri % mr
                     for (sbi in range64(nsb)) {
-                        var dq = wqp + rr * qrow + sbi * qsb
-                        var dsc = wsp + (rr * nsb + sbi) * dev_ssb
+                        let unit = rr * nsb + sbi
+                        var nv4_quants : uint8[int(NV4_QSB)]   // the arms below fill both; `nv4_dev_unit` lays the device unit off them
+                        var nv4_scale_row : uint8[int(KQ_DEV_SSB)]
+                        var dq = nv4 ? addr(nv4_quants[0]) : wqp + unit * dev_qsb
+                        var dsc = nv4 ? addr(nv4_scale_row[0]) : wsp + unit * dev_ssb
                         if (grouped) {
                             let gq = qp + sliceQ + g * mr * qrow + sbi * qsb * mr
                             let gs = sp + sliceS + g * mr * srow + sbi * dssb * mr
@@ -1317,6 +1344,9 @@ def kq_gather_rows_dev(fmt : KqFmt; qp, sp : uint8 const?; n, rows, slice_rows :
                                     dsc[12l + blk] = uint8(sm.y)
                                 }
                             }
+                        }
+                        if (nv4) {
+                            nv4_dev_unit(wqp + unit * dev_qsb, wsp + unit * dev_ssb, addr(nv4_quants[0]), addr(nv4_scale_row[0]))
                         }
                     }
                 }

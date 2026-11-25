@@ -1034,7 +1034,10 @@ against the dot in double, the poisoned lead element the control; `f32_rows_gate
 the float4 router stamps on the lattice, with and without the bias row, the element-walk stamps off it (dim 66, base 2, dim 515 on an odd base, the one-column
 walk past whole strides) - NaN past both row ends, exact against the dot in double, the poisoned lead element the control; `geglu_side_gate`, `ple_finish_gate` - the finish's `XSCALE` stamp (`GkPleFinish`), the finish without the
 prescale its control); the side rows' gather rides the token-table family, the misc file's embed gates. The misc file's `cls_select_gate` runs the selection kernel on the template both homes stamp (`GkClsSelect`) over the Vulkan cell's
-six rows at a 262144 and a 1000 vocab against `_sel_oracle.das`'s reading. Its `df_topk_gate` and `df_walk_gate` hold the
+six rows at a 262144 and a 1000 vocab against `_sel_oracle.das`'s reading. Its `df_attn_gate` holds the block attention's two stamps (`MetalDflashAttnTile`,
+`MetalDflashAttnMerge`) to `_dflash_oracle.das`'s softmax (`df_attn_fixture`) at the five shapes of the discrete homes' cell
+(`df_attn_case`: one tile, two, a head of 96, and K/V heads of one, two, four and six query heads), the softmax with no window the
+control. Its `df_topk_gate` and `df_walk_gate` hold the
 DFlash2 device selector to `_dflash_oracle.das`'s oracle (the fixture the CUDA home's walk cell, `test_cud_dflash_walk` in
 `test_cuda_tower_asr.das`, runs the same legs over through `_discrete_cells.das`'s `df_walk_case`; the Vulkan home's, `test_vkt_dflash_walk` in `test_vulkan_tower_kernels.das`, the same case; the discrete homes' top-k cells, `test_cud_dflash_topk` and `test_vkt_dflash_topk`, run this gate's five shapes through `df_topk_case`, and their pass-kernel cells, `test_cud_dflash_pass_kernels` and `test_vkt_dflash_pass_kernels`, the conv, norm-and-rope and block-attention cases) and to the engine's host twins (`dflash_top_k_row`, `dflash_walk`) id for id:
 the two-stage top-k (`MetalDflashTopkSlices`'s lists a slice against the oracle's list of each slice, `MetalDflashTopkMerge`'s rows
@@ -1618,7 +1621,8 @@ handed in, the activation plane and the device buffers built once - with the arm
 format's oracle passed in), which dispatches two workgroups past its schedule over sentinel map
 words (`SCHED_NONE`), the device-written schedules' upper-bound shape, and every arm's rows still
 match; each per-format cell is one row of `fmt_tile_rows` (its K, quant words a unit, scale-row form, seeds,
-arms, oracle and the sibling codebook's control) through `fmt_tile_cell`, and the q8 fmt-0 cells
+arms, oracle and its control - the sibling codebook's, nv4's the k4-tiled read of its own unit,
+`nv4f16_k4_control_oracle`) through `fmt_tile_cell`, and the q8 fmt-0 cells
 (`q8_tile_cell`, `q8_planes` for their planes) run the same loop at one arm each;
 `test_vkd_dec_combine_pair` holds the decode span's two combine classes - the routed sum, and the routed
 sum with the shared expert's row gated and ungated - to the CPU sum at a width off the workgroup
@@ -1663,7 +1667,8 @@ row at its gate, ungated, and no shared expert; the in-place residual moved off 
 f32 normed row and the f16 twin against one oracle) - every output under a sentinel fill before
 its dispatch, every bar with its own poison. `test_vkd_emb_gather_family` holds the token-table gather's
 `KqEmb<Fmt>` leaves (every `kq_sb` format) at four rows - three ids off a five-row table past a one-row lead, one
-`EMB_ID_HOST` row copying the host's staged row - against the class's own `blk_decode` lanes under the `blk_fold` terms,
+`EMB_ID_HOST` row copying the host's staged row - against the class's own `blk_decode` lanes under the `blk_fold` terms
+and the plane's site scale (`plane_site_scale`: nv4's scale-plane word, 1.0 elsewhere),
 and on the formats with a float witness each gathered row dotted with a Q8_K row against `kq_gemv_float_oracle` over the
 same table row; `test_vkd_emb_gather_q8_f32` holds the q8 stamp (`EmbGather`) against the CPU dequant and the f32 stamp
 (`EmbGatherF32`) against the table's rows, an `EMB_ID_HOST` row on both, each compare with its poisoned row. `test_vkd_gemv_lane_rule` pins the decode GEMV
@@ -2405,7 +2410,7 @@ bounds - a window past the planes read 30-72% off the chain.
 the speculative carry (its two-region form runs the recurrent segmented cells first, `_segment_cells.das`'s entry), its cells `_mtp_resident_cells.das`'s - one body a cell for both discrete homes, each cell's device rows
 asserting the CUDA driver's position counter rising (`mtp_cell_served`; the unhomed pass arm its control, the counter
 standing). Every device form keeps the planes on the host (the cells run the CPU head on the model) at the block's 4096-row
-context (`CARRY_RIG_CTX`): one region, two regions, the head kept off, depth 8, depth 1, depth 2, and the q8_0 and tq4 mirrors
+context (`CARRY_RIG_CTX`): one region, two regions, the head kept off, depth 8, depth 1, depth 2, the block-rounds ask, and the q8_0 and tq4 mirrors
 (a codec the environment keeps off a logged skip), one region at 512 positions (`MTP_SCHED_CTX`: the resident scheduler
 cells, `test_scheduler_mtp_resident_picks` and `test_scheduler_mtp_device_home`) and the driver's own regions (the
 self-speculative streams against the plain scheduler, `scheduler_mtp_cell`); each asserts the file carries its NextN head (`mtp_carrier_held`). Its q8
@@ -2537,7 +2542,10 @@ form loaded under the depth-8 knob (the form's `mtp_depth`, `set_mtp_depth` put 
 (`rdec_verify_rows`), past the N-column leaves' eight, and the greedy walk on it (`generate_mtp_greedy`,
 32 reply tokens on the counting prompt) emits the plain decode token for token, its drafts and verifies on
 the device and none passed as `verify_rows`; on the form loaded at depth 1 the driver prepares two and drafts one token a verify (`mtp_depth1_cell`, the
-control for the drafts-over-verifies bound). The sampled-selection cell (the depth-2 form) runs a sampled stream (temp 0.7,
+control for the drafts-over-verifies bound). The block-rounds cell (`mtp_block_rounds_cell`) runs on the form loaded under
+the block-rounds ask (the form's `block_rounds`, `set_gpu_resident_block_rounds_` put back by the levers) with no depth set: the
+driver prepares the widest verify (`MTP_MAX_ROWS`), and the head's own walk of 16 reply tokens emits the plain decode token for
+token, verified on the device, none passed as `verify_rows` - one body with the depth-8 cell (`wide_verify_cell`). The sampled-selection cell (the depth-2 form) runs a sampled stream (temp 0.7,
 top-p 0.9, seeded) at depth 2 (the driver's three verify rows asserted) twice over the counting prompt, the rows landed and the selection landed (`sampled_stream` of
 `_resident_feed.das`, `set_select_landing` put back): the rows-landed stream asks no selection, the selection serves every
 step of the other with no late landing, and the two agree token for token with the same drafts accepted - the streams share
@@ -2841,9 +2849,9 @@ and the deltanet family's chunked form where its stamp does not compile, which t
 allocation past any card's memory returning no plane and counting one failure (`test_cud_dev_zeroed_counts_a_failure`), the q8 GEMV and its rate, the MMQ int8 GEMM's leaves against their references - the Q8_0 one and
 the superblock ones without a min term (IQ4_XS and IQ4_NL through the codebook, Q4_0's nibbles less eight) per element
 against the block-scaled fold, the Q4_K one (its min terms f16-staged and folded sixteen blocks at a time over four
-superblocks) at the f16 tiles' bar, the NVFP4 one on the FP4 tensor rung (`test_cud_nv4_mmq`: the k4-tiled nv4 plane
+superblocks) at the f16 tiles' bar, the NVFP4 one on the FP4 tensor rung (`test_cud_nv4_mmq`: the nv4 device plane, its units in the file's pairing,
 against an FP4 feed in the (k, k + 8) pairing, every element e2m1 x UE4M3 on both sides, the token's row scale and the
-plane's factor over the sum) with its feed kernels (`test_cud_fp4_feeds`: a float plane's rows bit for bit the CPU feed
+plane's factor over the sum, at four superblocks a row and at one) with its feed kernels (`test_cud_fp4_feeds`: a float plane's rows bit for bit the CPU feed
 of `_fp4_feed.das`, the gate / up pair through the activation and the fused residual step within a count of strips
 that round the other way), and the per-32 ones (Q5_1, Q4_0, Q5_0, IQ4_NL off the 256 lattice) against the
 engine's own per-32 dequant dotted with the activation quants, Q5_1 at the f16 tiles' bar for its m - the cm2 l tile
@@ -2872,7 +2880,7 @@ piece; three m columns, the last partial, its tile running past the window into 
 row guard - the pieces' row counts asserted, and the m dispatch ahead of the s one, so an s tile's overrun lands on m rows), 2880-wide rows on the k tail, a 320-wide plane under the
 store's column guard, the m dispatch two sentinel workgroups past its bound, every bucket row against the e2m1 x UE8M0 reference
 on both sides (`mx4_fp4_mmq_ref`); its nv4 twin `test_cud_nv4_fp4_mmq_moe`: the same buckets over 768-wide superblock rows (no k
-tail), three expert planes each under its own site scale in its scale rows' fifth word, every row against the e2m1 x UE4M3 reference
+tail), three expert planes each under its own site scale in its scale plane's words, every row against the e2m1 x UE4M3 reference
 under its expert's factor (`nv4_mmq_ref` at the expert's row offset) - a tile reading another plane's factor, or storing a row past
 its bucket, reds a bucket; the MXFP4 feed kernels
 (`test_cud_mx4_feeds`: `mx4_rows` bit for bit the CPU feed, `mx4_actrows` under the clamped swiglu and its biased twin with each

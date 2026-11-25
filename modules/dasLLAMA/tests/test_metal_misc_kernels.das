@@ -233,6 +233,58 @@ def private df_topk_gate(t : T?; var dev, queue; leg : DfTopkLeg) {
     }
 }
 
+//! the block attention's two stamps (`MetalDflashAttnTile`, `MetalDflashAttnMerge`) against `_dflash_oracle.das`'s softmax at one
+//! shape of the discrete homes' cell: the panel's first block and its second, the softmax with no window the control, the rows
+//! ahead of the block and the slots past it at their sentinel
+def private df_attn_gate(t : T?; var dev, queue; hs, w, pos0, lo, nctx, nheads, grp : int) {
+    let tag = "dflash attn hs{hs} w{w} heads {nheads} / {grp}"
+    let rows = DF_ATTN_ROWS
+    let qd = nheads * hs
+    for (arm in range(2)) {
+        var inscope f <- df_attn_fixture(hs, w, pos0, lo, nctx, nheads, grp, arm)
+        with_metal_cell(dev, queue) $(var mc : MetalCell) {
+            var err : string
+            let kt = kernel_of(@@enc_dflash_attn_tile)
+            let km = kernel_of(@@enc_dflash_attn_merge)
+            var pso_t = mc |> keep_stamp(kt, err)
+            return if (!pso_ok(t, "{tag} tile", pso_t, err))
+            var pso_m = mc |> keep_stamp(km, err)
+            return if (!pso_ok(t, "{tag} merge", pso_m, err))
+            let lead = arm * rows * qd
+            let pq = mc |> in_(f.q)
+            let pkb = mc |> in_(f.kb)
+            let pvb = mc |> in_(f.vb, 0, df_attn_v_slack(f))
+            let prk = mc |> in_(f.rk)
+            let prv = mc |> in_(f.rv)
+            let partials = nheads * rows * f.tiles * (hs + 2)
+            let ptp = mc |> out_(partials, 0, partials)
+            let po = mc |> out_(lead + rows * qd, 0, 8)
+            var pa = f.pa
+            let wgs = int64(rows * nheads * f.tiles)
+            let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                invoke(kt.enc, enc, pso_t, mc.buf[pq], mc.buf[pkb], mc.buf[pvb], mc.buf[prk], mc.buf[prv], mc.buf[ptp], pa, wgs)
+                invoke(km.enc, enc, pso_m, mc.buf[ptp], mc.buf[po], pa, int64(nheads * rows))
+            }
+            return if (!ran)
+            var inscope o <- df_plane_and_past(mc, po, lead + rows * qd, NAN_SENTINEL)
+            var inscope tp_all <- mc |> plane_as(ptp, NAN_SENTINEL, 2 * partials)
+            var past_partials = 0
+            for (i in range(partials, 2 * partials)) {
+                past_partials += tp_all[i] == tp_all[i] ? 1 : 0
+            }
+            var inscope o_dev <- [for (i in range(rows * qd)); o.run[lead + i]]
+            var ahead_moved = 0
+            for (i in range(lead)) {
+                ahead_moved += o.run[i] == o.run[i] ? 1 : 0
+            }
+            check_rows(t, "{tag} block {arm} vs the windowed softmax over the ring and the block", o_dev, f.want, BAR_APPROX, qd, hs)
+            check_exceeds(t, "{tag} block {arm} control: the softmax with no window lands off the stamp's", o_dev, f.open, BAR_APPROX)
+            t |> equal(o.moved + ahead_moved, 0, "{tag} block {arm}: the rows ahead of the block and the slots past it keep their sentinel")
+            t |> equal(past_partials, 0, "{tag} block {arm}: no tile workgroup lands past the partials")
+        }
+    }
+}
+
 //! a walk stamp's input planes in a cell: the anchor, the selector rows, the candidates and their logits, and the codebooks' -
 //! the predecessor's quant and scale planes, then the successor's (`df_book_planes`), each side's in-word byte offset
 struct private DfWalkBinds {
@@ -3229,6 +3281,12 @@ def test_metal_misc_kernels(t : T?) {
                 for (leg in df_topk_legs()) {
                     df_topk_gate(t, dev, queue, leg)
                 }
+                df_attn_gate(t, dev, queue, 64, 44, 100, 60, 40, 4, 2)
+                df_attn_gate(t, dev, queue, 64, 300, 400, 101, 299, 4, 2)
+                df_attn_gate(t, dev, queue, 96, 300, 400, 101, 299, 4, 2)
+                df_attn_gate(t, dev, queue, 64, 300, 400, 101, 299, 8, 4)
+                df_attn_gate(t, dev, queue, 96, 44, 100, 60, 40, 3, 1)
+                df_attn_gate(t, dev, queue, 64, 300, 400, 101, 299, 12, 6)
                 df_walk_gate(t, dev, queue, KqFmt.q8, KqFmt.q8, 64, 300, 16)
                 df_walk_gate(t, dev, queue, KqFmt.k4, KqFmt.k6, 256, 300, 16)
                 df_walk_gate(t, dev, queue, KqFmt.k5, KqFmt.k4, 512, 200, 7)    //! two superblocks a row, the products under the 4096 a position stages

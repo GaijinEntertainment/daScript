@@ -196,7 +196,11 @@ at or below its own position, so row i reads the rows the same command stored be
 one above. The per-row planes hold `RD_NB_MAX` rows whatever the region count; where the driver
 homes a NextN head the verify takes up to the round's depth plus one of them, read at load
 (`get_mtp_depth`) - nine under the depth-8 knob (`test_gpu_resident_hybrid_mtp_depth8`) - so a verify
-of more rows than the load prepared passes to the CPU (`verify_rows`). The
+of more rows than the load prepared passes to the CPU (`verify_rows`). A block drafter attached to such a trunk drafts
+under the rows the load prepared, so its round stops at the head's depth unless the host asked for a block drafter's
+round before the load (`set_gpu_resident_block_rounds`, the facade's verb): the load then prepares the round's widest,
+`MTP_MAX_ROWS`, and each row past the head's holds one more rollback copy of every recurrent layer's state
+(`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`). A trunk with no head prepares the widest whatever the ask. The
 command records once per row count and attention form (`RDec.v_cmd`, `v_cmd_unsplit`) - and, on
 a hybrid, per region, since the rollback copies it carries bake the region's slot
 (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`) - the rows' form the furthest row's,

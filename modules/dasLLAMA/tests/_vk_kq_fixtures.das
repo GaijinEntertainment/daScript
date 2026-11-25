@@ -290,12 +290,47 @@ def one_region_words(cnt, wgs : int; wblk0 : int = 0) : array<uint> {
     return <- words
 }
 
-//! `ws_plane` under a format's device-row rule: an nv4 row's fifth word is one finite per-tensor scale a plane, as f32 bits (`../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale`), where a hashed word would read as a wild f32
-def kq_ws_plane(fmt : int; n : int; mul, add : uint) : array<uint> {
+//! the 4-bit code of element `e` (0 .. 255) of device unit `u` of an nv4 quant plane: 36 words a unit, a 32-block's two sub-blocks eight bytes each, a byte its element j low and j + 8 high
+def nv4_dev_code(wq : array<uint>; u, e : int) : uint {
+    let j = e % 16
+    let by = u * 144 + (e / 32) * 16 + ((e % 32) / 16) * 8 + j % 8
+    return (wq[by / 4] >> uint((by % 4) * 8 + (j / 8) * 4)) & 15u
+}
+
+//! the UE4M3 byte of sub-block `si` (0 .. 15) of device unit `u` of an nv4 quant plane: the unit's last four words
+def nv4_dev_scale(wq : array<uint>; u, si : int) : uint => (wq[u * 36 + 32 + si / 4] >> uint((si % 4) * 8)) & 0xFFu
+
+//! a word of four finite, non-zero UE4M3 codes in a narrow band of exponents, word `i` hashed under `seed`: every
+//! sub-block of a hashed unit carries weight, and a row's terms stay comparable
+def nv4_band_scale_word(i, seed : uint) : uint => (hash_word(i + seed) & 0x0F0F0F0Fu) | 0x30303030u
+
+//! the scale quads of `units` hashed nv4 device units: unit `u`'s quad word `j` is `word(u * 4 + j)` - finite bytes where
+//! a hashed word reads any code
+def nv4_scale_quads(var wq : array<uint>; units : int; word : block<(i : int) : uint>) {
+    for (u in range(units)) {
+        for (j in range(4)) {
+            wq[u * 36 + 32 + j] = invoke(word, u * 4 + j)
+        }
+    }
+}
+
+//! `units` device units of format slot `fmt`'s quant plane hashed at `i * mul + add`, an nv4 unit's scale quad `nv4_band_scale_word`s under `add`
+def kq_dev_wq_plane(fmt : int; units : int; mul, add : uint) : array<uint> {
+    let f = kq_fmt_of_slot(fmt)
+    var w <- hashed_words(units * int(kq_dev_qsb(f) / 4l), mul, add)
+    if (f == KqFmt.nv4) {
+        nv4_scale_quads(w, units) $(i) => nv4_band_scale_word(uint(i), add)
+    }
+    return <- w
+}
+
+//! `ws_plane` under a format's device-row rule: an nv4 scale plane is one finite per-tensor scale a superblock, as f32 bits (`../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale`), where a hashed word would read as a wild f32;
+//! `plane_sbs` past 0 gives each plane of that many superblocks its own scale, so a read of another plane's word misses the reference
+def kq_ws_plane(fmt : int; n : int; mul, add : uint; plane_sbs : int = 0) : array<uint> {
     var w <- ws_plane(n, mul, add)
     if (fmt == int(KqFmt.nv4)) {
-        for (sb in range(n / 5)) {
-            w[sb * 5 + 4] = float_bits_to_uint(1.25)
+        for (sb in range(n)) {
+            w[sb] = float_bits_to_uint(plane_sbs > 0 ? 1.25 + 0.5 * float((sb / plane_sbs) % 3) : 1.25)
         }
     }
     return <- w
@@ -382,6 +417,17 @@ def gemv_fix(nreg, d, units, wq_words : int; wq_seed : uint; var wsh : array<uin
         f.regs[r * 2] = uint(r * d * units)
     }
     return <- f
+}
+
+//! `gemv_fix` for superblock leaf format slot `fmt`: a unit's quant words by the device stride, an nv4 unit's scale quad finite
+def kq_gemv_fix(fmt : int; nreg, d, units : int; wq_seed : uint; var wsh : array<uint>; xunits, xq_words : int; xq_mul, xq_add : uint;
+                xs0, xs_step : float; xs_mod : int) : GemvFix {
+    let f = kq_fmt_of_slot(fmt)
+    var fx <- gemv_fix(nreg, d, units, int(kq_dev_qsb(f) / 4l), wq_seed, wsh, xunits, xq_words, xq_mul, xq_add, xs0, xs_step, xs_mod)
+    if (f == KqFmt.nv4) {
+        nv4_scale_quads(fx.wqh, nreg * d * units) $(i) => nv4_band_scale_word(uint(i), wq_seed)
+    }
+    return <- fx
 }
 
 //! the superblock decode GEMV family's kq members: the fourteen leaves past q8, in enum order

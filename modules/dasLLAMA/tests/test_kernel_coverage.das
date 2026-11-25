@@ -1412,9 +1412,9 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "kq_gemv_iq4nl_n4_cls_spv", "kq_gemv_nv4_n4_cls_spv", "kq_gemv_iq2s_n4_cls_spv", "kq_gemv_iq2xs_n4_cls_spv", "kq_gemv_iq2xxs_n4_cls_spv",
     // the DFlash2 block drafter's pass, top-k and selector walk serve only a drafter attached beside a target, and no census
     // row loads one; their coverage is test_vkt_dflash_pass_kernels, test_vkt_dflash_topk and test_vkt_dflash_walk in
-    // test_vulkan_tower_kernels.das, the stocked carriers the E2B block's drafter form in test_gpu_resident_gemma4_e2b.das and
-    // the dflash-27b-discrete arm of test_dflash_drafter.das
-    "dflash_conv_cls_spv", "dflash_qkn_cls_spv", "dflash_attn_tile_cls_spv", "dflash_attn_merge_cls_spv", "dflash_topk_slices_cls_spv", "dflash_topk_merge_cls_spv",
+    // test_vulkan_tower_kernels.das, the stocked carriers the E2B block's drafter form in test_gpu_resident_gemma4_e2b.das (the
+    // tile a head) and the dflash-27b-discrete arm of test_dflash_drafter.das (the grouped tile in the tile a head's place)
+    "dflash_conv_cls_spv", "dflash_qkn_cls_spv", "dflash_attn_tile_cls_spv", "dflash_attn_tile_heads_cls_spv", "dflash_attn_merge_cls_spv", "dflash_topk_slices_cls_spv", "dflash_topk_merge_cls_spv",
     "dflash_walk_cls_spv",
     // the fused gate-up GEMV's N stamps serve only the N-row token command, which the zoo's one-region load never engages
     // (the batched rows need a region a row; the stocked regions files - test_gpu_resident_qwen3.das and the

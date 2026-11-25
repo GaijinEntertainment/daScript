@@ -344,6 +344,19 @@ process; ``detach_block_drafter`` puts plain decode back:
    }
    detach_block_drafter()
 
+A trunk with a draft head of its own (a Qwen ``-MTP-`` file) prepares its
+device verify for that head's short round, and a block drafter attached to it
+drafts no further. ``set_gpu_resident_block_rounds(true)``, called before the
+load, has the device prepare the drafter's whole round instead. It takes more
+device memory, so we ask only when a drafter will be attached; a trunk with no
+head needs no ask:
+
+.. code-block:: das
+
+   set_gpu_resident_block_rounds(true)    // before load_model
+   // ... load_model runs here ...
+   set_gpu_resident_block_rounds(false)   // the next load: no ask
+
 Pass the drafter's file with ``--drafter`` ahead of the model's path; with
 none the section says so and skips.
 
