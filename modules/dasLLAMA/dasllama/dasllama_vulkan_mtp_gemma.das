@@ -539,7 +539,7 @@ def private vk_attach(t : Model; path : string) : string {
     delete g_vk_dr
     g_vk_dr <- dr
     gpu_resident_assist_set(true)
-    set_mtp_round_kind(MtpRoundKind.assistant)
+    set_mtp_round_kind(MtpRoundKind.assistant_discrete)
     g_vk_attached = true
     discrete_round_reset(g_vk_round)
     to_log(LOG_INFO, "dasLLAMA gemma drafter attached on the Vulkan resident driver: {path} ({g_vk_dr.n_layers} Q-only layers over target layers {g_vk_dr.kv_layer})\n")

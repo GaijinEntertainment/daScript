@@ -1595,14 +1595,15 @@ def register_batch_decode_override(name : string; fn : BatchDecodeOverrideFn) {
 //! registered under the same name (if any) activates alongside — a name with only the
 //! single-stream form keeps eval_batch_ on the CPU path. false = unknown name.
 def select_decode_override(name : string) : bool {
+    if (!empty(name) && !key_exists(g_decode_overrides, name)) {
+        to_log(LOG_ERROR, "dasLLAMA: unknown decode override `{name}`\n")
+        return false
+    }
+    set_mtp_home_discrete(false)   // the home that sets it selects first
     if (empty(name)) {
         g_decode_override_name = ""
         g_batch_decode_override_name = ""
         return true
-    }
-    if (!key_exists(g_decode_overrides, name)) {
-        to_log(LOG_ERROR, "dasLLAMA: unknown decode override `{name}`\n")
-        return false
     }
     g_decode_override = g_decode_overrides[name]
     g_decode_override_name = name
@@ -6467,16 +6468,26 @@ var private g_mtp_batch_cls = true
 let MTP_MAX_ROWS = 9l
 //! the deepest draft chain a discrete home captures: a round's rows less the seed
 let DRAFT_K_MAX = MTP_MAX_ROWS - 1l
-//! Which speculative round serves: the native NextN head (qwen) or the assistant drafter (gemma-4).
+//! Which speculative round serves: the native NextN head (qwen), the assistant drafter (gemma-4), or that drafter on a
+//! discrete home's resident driver, whose verify rides the N-row token command
 enum public MtpRoundKind {
     nextn
     assistant
+    assistant_discrete
 }
+
+//! the assistant round's depth on a discrete home: no box knob races it there, and three leads one, two and four on the RTX
+//! PRO 4500's two homes and the Radeon 8060S
+let MTP_DEPTH_ASSISTANT_DISCRETE = 3l
+//! a NextN head's round depth on a discrete home, and through its verify rows a block drafter's on a trunk with a head: no box
+//! knob races it there, and three leads one on every carrier measured on the RTX PRO 4500's two homes and the Radeon 8060S
+let MTP_DEPTH_NEXTN_DISCRETE = 3l
 var private g_mtp_depth = 1l
 var private g_mtp_depth_explicit = false
 var private g_mtp_depth_nextn = 1l        //! box knob `runtime.mtp_depth_nextn`
 var private g_mtp_depth_assistant = 1l    //! box knob `runtime.mtp_depth_assistant`
 var private g_mtp_round_kind = MtpRoundKind.nextn
+var private g_mtp_home_discrete = false   //! a discrete home's resident driver serves the decode (`set_mtp_home_discrete`)
 
 var private @scratch g_mtp_pos_try : array<int64>   // rounds that drafted position i (0-based)
 var private @scratch g_mtp_pos_hit : array<int64>   // ... and accepted it
@@ -6561,10 +6572,26 @@ def set_mtp_round_kind(k : MtpRoundKind) {
 
 def get_mtp_round_kind() : MtpRoundKind => g_mtp_round_kind
 
+//! A discrete home's resident driver holds the decode it just selected: a NextN round drafts that home's depth until the
+//! next `select_decode_override`, which clears it.
+def set_mtp_home_discrete(on : bool) {
+    g_mtp_home_discrete = on
+}
+
+//! what `set_mtp_home_discrete` last wrote
+def mtp_home_discrete() : bool => g_mtp_home_discrete
+
+//! The depth a NextN round drafts on a discrete home: the explicit depth where one is set, else that home's own. The resident
+//! driver sizes its verify rows off it at the arm, before it holds the decode.
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-depth-knob")]
+def mtp_depth_nextn_discrete() : int64 => g_mtp_depth_explicit ? g_mtp_depth : MTP_DEPTH_NEXTN_DISCRETE
+
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-depth-knob")]
 def get_mtp_depth() : int64 {
     if (g_mtp_depth_explicit) return g_mtp_depth
-    return g_mtp_round_kind == MtpRoundKind.assistant ? g_mtp_depth_assistant : g_mtp_depth_nextn
+    if (g_mtp_round_kind == MtpRoundKind.assistant_discrete) return MTP_DEPTH_ASSISTANT_DISCRETE
+    if (g_mtp_round_kind == MtpRoundKind.assistant) return g_mtp_depth_assistant
+    return g_mtp_home_discrete ? MTP_DEPTH_NEXTN_DISCRETE : g_mtp_depth_nextn
 }
 
 //! One batched classifier pass over the whole MTP verify window instead of a per-row GEMV each —

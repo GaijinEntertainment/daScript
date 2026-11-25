@@ -1002,7 +1002,7 @@ def private resident_routed_layers(t : Model) : int64 => t.config.n_layers + (re
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
 def private rdec_verify_rows_want(t : Model) : int64 {
     return 0l if (!rdec_verify_installed())
-    return (g_rdec_block_rounds_want ? MTP_MAX_ROWS : get_mtp_depth() + 1l) if (resident_head_on(t))
+    return (g_rdec_block_rounds_want ? MTP_MAX_ROWS : mtp_depth_nextn_discrete() + 1l) if (resident_head_on(t))
     //! a trunk with no head of its own: a block drafter attached past the load asks rows with no head row, to the round's widest
     return (t.config.n_layer_nextn == 0l && rdec_verify_plain()) ? MTP_MAX_ROWS : 0l
 }
@@ -3190,6 +3190,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     // prefill + decode select together — the device prefill fills the mirror the decode reads
     select_prefill_override("vulkan")
     select_decode_override("vulkan")
+    set_mtp_home_discrete(true)
     let regions = g_rdec_regions_want > 1l ? " x {g_rdec_regions_want} regions (set_gpu_resident_regions in process: each region takes a share of the mirror's context)" : ""
     let slab_say = slabs.n_slabs > 1l ? " in {slabs.n_slabs} mirror slabs" : ""
     let rounds = g_rdec_block_rounds_want && resident_head_on(t) ? ", {MTP_MAX_ROWS} verify rows for a block drafter's round (set_gpu_resident_block_rounds)" : ""
@@ -3778,7 +3779,8 @@ def discrete_gemma_rounds(t : Model; var sessions : array<Session?>; toks : arra
                           draft : block<(r, seed, anchor, k : int64; h : array<float>; var out : array<int64>) : void>) : int64 {
     let c = t.config
     let n = long_length(sessions)
-    let k = clamp(k_req, 1l, DRAFT_K_MAX)
+    let row_drafts = max(gpu_resident_assist_rows() - 1l, 1l)   // a stream's [token, drafts] are rows of one N-row command
+    let k = clamp(k_req, 1l, min(DRAFT_K_MAX, row_drafts))
     st.cold |> clear()
     st.cold |> reserve(n)
     let td = ref_time_ticks()
@@ -6991,7 +6993,9 @@ def gpu_device_sessions_() : int64 => g_rdec_active ? long_length(g_rdec_regions
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-mtp-device-home")]
 def gpu_resident_mtp_device_home_(t : Model) : bool {
-    return false if (!g_rdec_active || rdec_verify_rows() < 2l || (t.config.recr_mask != 0ul && !rdec_rollback_installed()))
+    return false if (!g_rdec_active || (t.config.recr_mask != 0ul && !rdec_rollback_installed()))
+    return rdec_token_n_rows() >= 2l if (g_rdec_assist)   // the assistant's draft is its own command and its verify rides the N-row token command
+    return false if (rdec_verify_rows() < 2l)
     return true if (g_rdec_head_armed)
     return false if (!rdec_verify_plain())
     rdec_block_caps_sync(t)
