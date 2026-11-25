@@ -97,6 +97,9 @@ value other than true joining its option's name, a `.` in a value spelled `_`:
 `uncategorized_stack_4096.das`, `uncategorized_unit_test_1_23.das`. The plain
 `uncategorized.das` carries an empty signature, so any plain test can join it.
 
+Ledgered: a file of one server route's tests takes `options _dasllama_internal` whole when one of
+its tests holds the route's answer against the engine fact the route reports.
+
 ## Every test states its claim {#test-description}
 
 Every `[test]` in a suite carries `description = "..."`: one sentence stating what the test proves, in

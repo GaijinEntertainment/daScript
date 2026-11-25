@@ -36,7 +36,8 @@ not run - quote the line whole where a run is evidence.
 
 - `DASLLAMA_DISABLE_MODULES=dasVulkan` (or `dasCUDA`, a comma list) leaves a GPU module out of every child and of
   every process a test starts: a box working on one GPU home compiles that home's kernel classes alone. The fleet
-  sets it a home; a run under it says so on its `MODULES` line, ahead of its first child.
+  sets it a home; a run under it says so on its `MODULES` line, ahead of its first child. With dasCUDA left out the
+  run drops the CUDA-only files (`CUDA_ONLY_EXCLUDE`), which do not compile without it, each on an `EXCLUDED` line.
 - `DASLLAMA_SCRATCH_DIR=<folder on a local disk>` is the children's temp folder - for a box whose own temp folder is
   a network volume.
 - On Linux a media run's children keep their heap; the runner sets it, nothing to do.
@@ -62,9 +63,16 @@ nothing - `--changed` names it; run that suite with `--arm` scoped to the change
 examples' smoke tests, which no other run plans.
 
 **The fleet** (`harness/pod_fleet.das -- up | sync | run | status | times | down`) is two pods, one a GPU home: the
-Vulkan home runs every file but the CUDA-only ones (`CUDA_ONLY_EXCLUDE`), the CUDA home its pass's, each with the
-other home's module left out. `run` is the
-per-PR run, `run --full` an arc's final one; `down` deletes the pods once the session's runs are done.
+Vulkan home runs every file but the CUDA-only ones, the CUDA home its pass's, each with the other home's module
+left out. The fleet passes the Vulkan home `--exclude` of the CUDA-only files whatever the caller's `--env` says, so
+no CUDA file runs on both homes; its runner drops them as well under the module's absence. `run` is the
+per-PR run, `run --full` an arc's final one. The pod a session works on stays up for the arc and is the fleet's Vulkan
+home in every run: its compile records, JIT outputs and passes are on its own disk, so each run on it starts warm,
+where a fresh pod compiles everything again. The CUDA home's pod is made for a run (`up --pods 1`, which seats a new
+pod at the home with none) and deleted after it (`down --home cuda`, the Vulkan pod staying); the working pod is
+deleted when the arc's pod work ends (`down`). The volume's models tree is laid out as the tests open it, each file
+at its `model_specs.das` name - the TTS files and their oracle folders at its top, as `performance/fetch_models.das`
+writes them - and each pod's folder of links mirrors it.
 
 **A test that loads a model** loads it once a form in its area, on the area's one block for the file
 (`tests/REVIEW_LOAD_ONCE.md`); a model-free test fits the 30 s wall, and `tests/REVIEW_FILES.md` says which tests may

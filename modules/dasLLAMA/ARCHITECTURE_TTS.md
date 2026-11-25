@@ -49,16 +49,18 @@ The text front end's charters - `dasllama_textnorm.das`, `dasllama_textnorm_ru.d
   compaction (`compact_rows`), the onset fade (`fade_in`) and the trailing-pause trim (`end_on_pause`). A weight is an ONNX-layout array plus the served layout
   `conv1d_prepare` / `linear_prepare` mint for the consumer the reader names (`served_rows`,
   `rows_only`, `vec_only`), the unread one dropped - or the file's own K-quant planes
-  (`linear_take_kq`), the kq lane beside f32 and q8; beside every weight array sits its `TtsSpan` into the
+  (`linear_take_kq`), the kq lane beside f32 and q8 - a half-float conv or vector layer kept as halves where the target
+  converts them in hardware, as floats elsewhere (`ARCHITECTURE_CPU_KERNELS_TILES.md#half-rows-by-target`); beside every weight array sits its `TtsSpan` into the
   model's blob, and `weights_walk` is the one walk that moves weights into a staging blob or
   binds them as borrowed views over a served plane (`dasllama_common.das`'s `release_plane` is the
-  one teardown). One home: the block home holds the operators, and it names no family type.
-- **`dasllama_tts_slab.das`** - the shared slab writer both GPU tower drivers build their TTS
-  slabs through: the writer struct and allocator, the q8 and K-quant dequant into f32 rows over the
-  job pool, the conv, linear and norm row writers, the block slot writers (an LSTM transposed or not by
-  `lstm_transposed`), the two-pass build, every slab key, `tts_style_rows`, the Pocket cache admissions
-  (frames, prompt), the voice record and the prompt's residency record, and the decoder shape walks, generic over the driver's record and `tts_note_*`
-  hooks. Element offsets only - a driver turns them into its own binding offsets - and no device call.
+  one teardown), and how a loaded carrier came by its image (`tts_image_origin`). One home: the block
+  home holds the operators, and it names no family type.
+- **`dasllama_tts_slab.das`** - the slab writer the TTS driver bakes its slabs through: the writer struct and
+  allocator, the q8 and K-quant dequant into f32 rows over the job pool, the conv, linear and norm row writers,
+  the block slot writers (an LSTM's f32 recurrence transposed to [H][4H]), the stored planes the writer leaves
+  out with their site tags, the two-pass build, the Pocket seats' admissions, the voice record and the prompt's
+  residency record, and the decoder shape walks, generic over the driver's record and `tts_note_*` hooks.
+  Element offsets only - a driver turns them into its own binding offsets - and no device call.
 - **`dasllama_styletts2.das`** - the StyleTTS2-lineage model both families share, and the writer of the
   file that stores a lane's weights (`ARCHITECTURE_TTS_FORMATS.md#tts-stored-file`): the weight
   map of the converted GGUF (conv geometry rides as `styletts2.conv.<weight>` metadata, so the
@@ -71,12 +73,11 @@ The text front end's charters - `dasllama_textnorm.das`, `dasllama_textnorm_ru.d
   (`TtsTimings`) and `StyleTts2Trace` collecting the stage tensors the parity rail compares.
   The served carrier rides the image rail (`ARCHITECTURE_TTS.md#tts-image-rail`) and every synthesis reuses one activation
   carrier (`ARCHITECTURE_TTS_MEMORY.md#tts-scratch-carrier`). The chain carries the `ARCHITECTURE_MEDIA.md#tower-gpu-hook` hook record
-  (`St2GpuDriver`, `register_styletts2_gpu`, `styletts2_gpu_stats(seat)`): seven seats - PL-BERT,
-  the text encoder, the duration encoder, the duration head, prosody, the decode seat (the
-  decoder through the source, the generator and the inverse STFT) and the generator seat the CPU
-  chain reaches after a declined decode - each fed the stage's inputs and answering with its
+  (`St2GpuDriver`, `register_styletts2_gpu`, `styletts2_gpu_stats(seat)`): six seats - PL-BERT,
+  the text encoder, the duration encoder, the duration head, prosody and the decode seat (the
+  decoder through the source, the generator and the inverse STFT) - each fed the stage's inputs and answering with its
   rows or declining; the trace rail keeps the CPU chain, and engage is read from the counters.
-  The Metal and the Vulkan tower drivers each fill every seat on both lanes (`ARCHITECTURE_GPU_TOWER.md#tower-tts-chain`, `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain`). The carrier also holds each family's DATA - the `KittenFamily` /
+  The TTS driver fills every seat on every GPU home and both lanes (`ARCHITECTURE_GPU_TOWER_TTS.md#tts-st2-seats`). The carrier also holds each family's DATA - the `KittenFamily` /
   `KokoroFamily` records of `dasllama_tts_types.das`, read from the GGUF's `kitten.*` /
   `kokoro.symbol_*` / `kokoro.voice_langs` metadata by `stage_family_data` - because the image meta serializes them and a
   `.dlim` load has no GGUF to read them from (`ARCHITECTURE_TTS.md#tts-image-rail`); the family LOGIC that interprets those
@@ -260,6 +261,14 @@ layout fingerprint refuses a struct-shape change by name; a served-layout change
 shape is invisible to it, which is why such a change bumps `IMAGE_VERSION` and why a rows conv
 served from an image older than its layout panics by name rather than indexing an empty array.
 
+A loaded carrier says how it came by its image: `tts_image_origin` (`dasllama_tts_blocks.das`) reads,
+off a `StyleTts2Model` or a `PocketModel`, `mapped` - the image is a `.dlim` the rail mapped, where a
+mint (`mint_styletts2`, `mint_pocket`) and a load with the rail or its save off build theirs in memory
+- and `tag`, the tag the image was baked under, read from the image's own header: the lane, a GPU
+flavor's suffix after it. A Pocket image's lane is the pin in force at its mint - `pocket-native`
+with none, `pocket-q8` or `pocket-f32` under one - which the model's `q8` flag cannot say of a file
+that stores Q8_0 tensors. No field of either carrier records it: the image does.
+
 ### The sine source keeps the reference's operation order {#tts-phase-law}
 
 The harmonic source's phase reaches 1e5 radians in float32, where one ulp is a hundredth of a
@@ -268,7 +277,7 @@ operation order - the cumulative sum, the resampler's arithmetic, the multiply b
 index - reproduces its phase, so `sine_source` and `resize_linear_window` keep it exactly and the
 scalar sine stays on libm. The GPU route keeps the same order on the device: its source kernels
 compile without fast math, the torch law's double accumulator runs as a two-float sum, and the
-sine reduces its argument in exact pieces (`ARCHITECTURE_GPU_TOWER.md#tower-tts-chain`).
+sine reduces its argument in exact pieces (`ARCHITECTURE_GPU_TOWER_TTS.md#tts-st2-seats`).
 
 ### The rig scores against what a person says {#tts-rig-scoring}
 

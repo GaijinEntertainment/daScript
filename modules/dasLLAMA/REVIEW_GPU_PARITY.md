@@ -6,12 +6,12 @@ Planned work: `followup_metal.md`, `followup_vulkan.md`, `followup_general.md`.
 
 A GPU-served run is a run in which the GPU computed every output row the compare reads.
 
-Parity evidence is a compare with a GPU-served run on one side and, on the other, a side that is
-not GPU-served, where the CPU chain (the same model's forward on the CPU kernels) or an in-test
-scalar reference (the test's own CPU code for the same math) computed at least one row - one
-token's, frame's or stage's floats or ids - the compare reads, whatever the diff calls it; a
-kernel-unit cell's compare - a test cell that dispatches a `[vk_dispatch]`, `[metal_dispatch]` or
-`[cuda_dispatch]` class itself - counts.
+Parity evidence is a compare with a GPU-served run on one side and, on the other, a side that is not
+GPU-served, where the CPU chain (the same model's forward on the CPU kernels) or an in-test scalar
+reference (the test's own CPU code for the same math) computed at least one row - one token's,
+frame's or stage's floats or ids - the compare reads, whatever the diff calls it; a kernel-unit
+cell's compare - a compare in a test cell that itself dispatches a class declared by an annotation
+whose name ends `_dispatch` (`[*_dispatch]`) - counts.
 
 Driver-against-itself evidence is a compare of the outputs of two GPU-served runs of one model,
 whichever drivers served them.
@@ -37,9 +37,8 @@ on the device); for the per-op tier (single operations on the device, the rest o
 and its layers, with any text after them - never one saying the rail, or any layer of it, stays
 on the CPU: a line reading `declined`, `stopped at layer`, `leaves` or `on the CPU`.
 
-**A diff that cites as parity evidence a compare whose GPU side is a `[vk_dispatch]`,
-`[metal_dispatch]` or `[cuda_dispatch]` class the cell dispatches itself applies the `tests/`
-subfolder's `REVIEW_KERNEL_CELLS.md` too.**
+**A diff that cites a kernel-unit cell's compare as parity evidence applies the `tests/` subfolder's
+`REVIEW_KERNEL_CELLS.md` too.**
 
 **A diff that cites as parity evidence a compare whose GPU-served run and its other side (the CPU
 chain or the in-test scalar reference) did not take identical fixed inputs - the same tokens,

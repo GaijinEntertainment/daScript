@@ -31,8 +31,8 @@ anchor.
   its codec family (sec. below).
 - **`dasllama_repack.das`** - every disk-order -> compute-order kernel-LAYOUT transform (grp
   interleaves, disk-order extractors, panel unpacks, the f32 conv weights' tap orders
-  `repack_conv_out_tap_in` / `repack_conv_in_tap_out`, the transducer's f16 halves
-  `repack_lstm_gates_f16` / `repack_joint_cols_f16`), any format, any platform. A transform here
+  `repack_conv_out_tap_in` / `repack_conv_in_tap_out`, the transducer's gate and joint orders
+  `repack_lstm_gates` / `repack_joint_cols`), any format, any platform. A transform here
   takes plain arrays or pointers: the file read before it and the cache the result lands in stay
   with their family. Number sources
   (tune stamps, bake overrides) stay with their owners and pass plain parameters in.
@@ -66,7 +66,7 @@ anchor.
   transform, the CPU repack walkers, the GPU tier gathers, the per-region q8->Metal-34B
   un-repack (`q8_region_to_metal_blob`, the ASR-decoder driver's upload form), the GGUF Q8_0 blocks'
   split into the quant and f16 scale planes (`q8_repack`, the Vulkan assistant drafter's upload form), the VAD's
-  device weight slab (`vad_build_slab` and its offsets record `VadSlabOffs`), and the refusal
+  device weight slab (`vad_build_slab` and its offsets record `VadSlabOffs`), a K-quant leaf's Metal bind offsets (`kq_bind_offs`), and the refusal
   half (`can this model take the blob form`) split out so the image writer can commit without
   loading.
 - **`dasllama_tokenizer.das`** - the tokenizer facade: backend selection off the GGUF metadata and
@@ -198,7 +198,7 @@ A StyleTTS2 carrier's quantized lanes are minted from its f32 file at the image 
 carries: Q8_0 at default levers, the recipe's Q4_K and Q6_K groups beside Q8_0 where a load asks the recipe lane
 (`ARCHITECTURE_TTS_FORMATS.md#tts-recipe`) - or they are the tensors of a file that stores the lane's weights, served
 forms a load mints nothing from (`ARCHITECTURE_TTS_FORMATS.md#tts-stored-file`); a Pocket file's own Q4_K, Q8_0 and F16-table tensors are served forms
-(`ARCHITECTURE_POCKET.md#pocket-q8-file`), and the TTS GPU seats read every one of them widened into an f32 slab.
+(`ARCHITECTURE_POCKET.md#pocket-q8-file`), and the TTS GPU seats read every one of them as stored, a kernel member widening it (`ARCHITECTURE_GPU_TOWER_TTS.md#tts-st2-seats`).
 Every `load_big` call names the form it
 fills - the plane's tag, or the `KqFmt` member a conversion serves - so the conversion reads at the call;
 `REVIEW.das`'s `check_load_big_format` reds a call with no format, and licenses no names.
@@ -252,7 +252,7 @@ repack walks that plane's region alone (`shexp_plane_q8`).
   transpose `transpose_ct` ([C][T] to [T][C]), the `[tuned]` fp32
   loop-hint families (`dot`, `axpy`, the elementwise set, `f32_batch_tile`) and the fp32 batch walk
   (`matmul_batch_core`, `batch_tile_block`, generic over the f32 and bf16 weight lattices - `bf16_batch_tile`
-  widens each halfword by the exact shift); every other kernel lives in a tier file.
+  widens each halfword by the exact shift) and the f32 tile family's test bar (`gemm_f32_sum_bar`); every other kernel lives in a tier file.
 - **`dasllama_math_default.das`** - the portable backend, always registered, always correct,
   out-ranked by any platform tier - the per-32 rail's portable kernels and scalar leaves, which
   seat every backend's unset per-32 slot (`#per-32-rail`) - and the ONE body of every Q8*Q8 and
@@ -269,10 +269,10 @@ repack walks that plane's region alone (`shexp_plane_q8`).
 - **`dasllama_math_accelerate.das`** - the Accelerate/BNNS float tier (AMX on M1-M3, SME on M4+),
   for genuinely-float planes only. BLAS-for-quant is ruled out structurally
   (`ARCHITECTURE_INVARIANTS.md#inherited-invariants`).
-- **`dasllama_math_gen.das`** / **`dasllama_gemm_gen.das`** / **`dasllama_gemm_schema.das`** /
-  **`dasllama_gemm_register.das`** - the generated GEMM tier: the runtime registration, the tile
-  generator, the layout/perm schema shared by generator and runtime, and the `[tune]` family
-  registration. A hand-written tile that the generator could emit belongs in the generator.
+- **`dasllama_math_gen.das`** / **`dasllama_gemm_gen.das`** / **`dasllama_gemm_gen_f32.das`** /
+  **`dasllama_gemm_schema.das`** / **`dasllama_gemm_register.das`** - the generated GEMM tier: the runtime
+  registration, the tile generator, the f32 GEMM family's generator (`ARCHITECTURE_CPU_KERNELS_TILES.md#f32-gemm-tile-family`),
+  the layout/perm schema shared by generator and runtime, and the `[tune]` family registration. A hand-written tile that the generator could emit belongs in the generator.
   The bf16 tile's operand builders - the activation widen (`xbf16_build`, its `bf16_bits`
   narrow, the f32 plane's `xbf16_build_f32`), the row-dequant reference panel
   (`kq_panel_rows_bf16`), the native bf16 plane's k-pair panel (`bf16w_panel_build`) and the
@@ -280,8 +280,8 @@ repack walks that plane's region alone (`shexp_plane_q8`).
   `dasllama_math_gen.das` beside the walk that runs them once per batch call, in its JIT
   partition (`ARCHITECTURE_CPU_KERNELS.md#jit-partition-inlining`). The JIT cache keys a
   generated kernel by its stub's hash and its perm's arguments, never by the generator's text,
-  so `REVIEW.das`'s `check_gemm_gen_stamp` pins one hash over `dasllama_gemm_gen.das` and
-  `dasllama_gemm_schema.das` with their comments and blank lines cut: a code edit to either is red until the stamp
+  so `REVIEW.das`'s `check_gemm_gen_stamp` pins one hash over `dasllama_gemm_gen.das`,
+  `dasllama_gemm_gen_f32.das` and `dasllama_gemm_schema.das` with their comments and blank lines cut: a code edit to either is red until the stamp
   moves, and the finding asks for the `LLVM_JIT_CODEGEN_VERSION` bump that re-keys the cached
   kernels. The check licenses no names.
 - **`dasllama_tune.das`** - the per-box loop-hint tuner (`[tuned]` / `[dasllama_grid]`) and the

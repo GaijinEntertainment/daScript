@@ -117,13 +117,13 @@ type's one gain, the load's direct upload, a per-call buffer never collects.
 The property sits on the allocation: `make_device_buf`'s `per_call` flag, spelled
 `make_call_buf` / `try_call_buf` / `soft_call_buf` (`dasllama_vulkan_common.das`), the drivers'
 `vt_call_buf` (tower), `wd_call_buf` and `rv_call_buf` (ASR decoders), and `make_stack_shell`'s
-`per_call` for the pool and stream slots. Every `ts_rows_alloc` row buffer carries it, the TTS
-slabs included: `ts_upload` refills rows of any kind, so the record cannot tell a slab from a slot.
+`per_call` for the pool and stream slots. Every buffer of the TTS driver carries it, the
+slabs and stored planes included: the Vulkan rail hands that driver one allocator (`rail_tts_alloc`) and one
+host fill (`rail_tts_put`), which refills rows of any kind, so the record cannot tell a slab from a slot.
 
 `REVIEW.das`'s `check_per_call_buffers` holds it over `dasllama_vulkan_*.das`: a host upload
 (`upload_region_at`, `upload_region`) is a per-call fill, and every allocation its target buffer
-field can come from - followed through field aliases, `TsRows(dev = s.devs[slot])` and
-`k_slabs |> push(mir.a)` alike, matched by field name across the files - carries a `*_call_buf`
+field can come from - followed through field aliases, `k_slabs |> push(mir.a)` among them, matched by field name across the files - carries a `*_call_buf`
 allocator. The check licenses three shapes: an upload in a `[cold_path]` function (a load-time
 fill), an upload in the function that allocates the buffer (the fill lands before any device
 touch), and an upload into a parameter of the uploading function (a wrapper; its callers'

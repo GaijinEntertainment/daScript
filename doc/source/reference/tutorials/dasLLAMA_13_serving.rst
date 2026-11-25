@@ -227,8 +227,9 @@ beside it moves routed layers' experts to the host first - instead of quietly
 shortening the mirror, and the load log says which happened; the server sets
 it for every explicit ``--ctx``. ``gpu_ctx_pins`` reads both pins back, so a
 rig restores what it found. ``set_gpu_kv_dtype`` picks the codec the driver
-holds the cache in, which is the codec its sessions are made in: ``f16`` by
-default, ``q8_0`` about half those bytes and ``tq4`` about a quarter - room a
+holds the cache in, which is the codec its sessions are made in:
+``default_kv_dtype`` where none is asked (``f16`` on a CPU with hardware half
+floats), ``q8_0`` about half those bytes and ``tq4`` about a quarter - room a
 longer context takes. ``gpu_kv_dtype_pin`` reads back what was asked and
 whether anyone asked at all, and ``reset_gpu_kv_dtype`` takes the ask away, so
 the environment decides again. ``set_gpu_host_layers`` serves the first *n*

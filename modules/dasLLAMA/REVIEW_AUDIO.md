@@ -6,9 +6,11 @@ docs: `ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_MEDIA_ASR.md`. Planned work: `follo
 
 An ASR family file is a `dasllama/` file holding one speech-recognition family's CPU model. An
 ASR model file is an ASR family file or `dasllama/dasllama_rnnt.das`, the transducer decode those
-families share. An audio-rail file is `dasllama/dasllama_tower.das`, `dasllama/dasllama_audio.das`,
-`dasllama/dasllama_audio_io.das`, `dasllama/dasllama_audio_embedder.das`,
-`dasllama/dasllama_asr_types.das`, `dasllama/dasllama_vad.das`, or an ASR model file.
+families share. An audio-rail file is a file `dasllama/dasllama_tower*.das` matches any of whose
+functions runs an audio encoder or a speech-recognition decoder, `dasllama/dasllama_audio_tower.das`,
+`dasllama/dasllama_audio.das`, `dasllama/dasllama_audio_io.das`,
+`dasllama/dasllama_audio_embedder.das`, `dasllama/dasllama_asr_types.das`,
+`dasllama/dasllama_vad.das`, or an ASR model file.
 
 The union carriers are `dasllama/dasllama_asr.das` and `dasllama/dasllama_audio_embedder.das`,
 which route each of their public functions to one family. A licensed namer is a file that drives a
@@ -62,8 +64,8 @@ declaration, or on the parameter of every callee that grows it - is a defect.**
 
 **A debug or profiling code path in an audio-rail file whose work is not inside a `[cold_path]`
 function is a defect.** Such a path is a function or branch that runs only while a debug or
-profiling knob (an environment variable, a setter or a flag) is on, and whose work the result
-does not need.
+profiling knob - a switch a default run leaves off: an environment variable, a setter or a flag -
+is on, and whose work the result does not need.
 
 **Never implement a transform inside an ASR model file - take the mel frontend's transform
 table from `dasllama/dasllama_audio.das` (`build_dft_twiddles`, or `build_fft_plan` +

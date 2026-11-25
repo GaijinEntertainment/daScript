@@ -109,12 +109,11 @@ prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin and the N-row f
 - **The weights-epoch drop reaches the two tiers through different seams.** `bump_weights_epoch`'s
   listener seat (`register_weights_epoch_listener`) has two subscribers: `_common`'s `metal_weights_drop`,
   which runs the registered reload preps (`register_reload_prep`; the decode driver registers
-  `discard_pre_encoded_steps`, the tower `tw_weights_drop`, dropping its TTS slabs), quiesces, and releases
-  the address-keyed region caches; and the Vulkan TTS driver's `ts_forget`, dropping its slabs and the Pocket
-  state - both TTS drivers listen because a TTS slab's key is weight addresses a reload reuses. Vulkan's LLM
+  `discard_pre_encoded_steps`, the tower `tw_weights_drop`, the Metal TTS seat file its `tts_forget`), quiesces, and
+  releases the address-keyed region caches; and each discrete home's TTS seat file, whose `tts_forget` over its rail drops
+  the slabs, stored planes and Pocket state that home holds (a no-op where another home holds them) - every TTS seat file
+  drops them because a TTS slab's key is an address a reload reuses. Vulkan's LLM
   reload story stays the unmap notify (`set_moe_gpu_unmap_notify`) - a different seam for a different ownership model.
-- **`vulkan_tts_stats` / `vulkan_tts_declines` have no Metal twin**: the Vulkan TTS driver counts its encodes
-  and its declines by reason in its own pair, where Metal's TTS seats report through `metal_tower_stats` beside `styletts2_gpu_stats`.
 - **The Vulkan block-codec decode attention quantizes the query to q8_0 blocks; Metal's keeps it f32**
   (`DaAttnT`'s `KVBLK` stamps, `ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-block-codecs`, against `MetalSqAttnDQuantT`):
   Vulkan scores a K word against a query word in one packed integer dot, the CPU chain's own query quantization, so

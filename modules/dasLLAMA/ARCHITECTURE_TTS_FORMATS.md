@@ -43,10 +43,9 @@ The file decides the lane. `styletts2_stored_lane` reads it before the load, `st
 lane it was asked for, and a q8 pin or a recipe ask is announced as not applied. A quantized tensor is taken as its
 planes - the disk block split, then the backend's repack (`q8_matrix_read`, `conv1d_read_quant`) - with no float
 between the file and the kernel, and a tensor of floats is served as floats: the load mints nothing. The planes of
-a stored file are therefore the lane's own: the K-quant planes and the Q8_0 quants byte for byte, each Q8_0 scale
-the half its block holds where the in-memory lane keeps the float. That half moves the waveform and not the speech
-- the harmonic source's phase (`ARCHITECTURE_TTS.md#tts-phase-law`) turns a rounding in F0 into a shift of every
-later sample - so a stored file is scored by the rig on the file itself, never held to the lane's samples. The
+a stored file are therefore the lane's own, byte for byte: the K-quant planes, the Q8_0 quants, and each Q8_0
+scale, which the in-memory mint keeps as the half a block stores (`q8_matrix_mint`) - the value a file and every GPU
+plane hold it in, so one lane reads one set of weights from a file of floats, from a stored file and on a device. The
 writer captures the planes at the sites that mint them, in disk order, so the file cannot store a matrix the
 reader's sites do not take. A layout number this build does not read, a quantized tensor in a file that declares no
 layout, a type a site does not take, and the writer over a file that already stores its weights are each refused by

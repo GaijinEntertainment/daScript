@@ -3,14 +3,14 @@
 Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document
 carries what a tower driver is and the registrations its hooks come through, the three routes
 that serve tower attention on Metal, the
-one-command-buffer encode chain each family the Metal tower driver serves gets, and the StyleTTS2
-synthesis chain. The GPU backend role table these sections build on - the tower driver's role row
+one-command-buffer encode chain each family the Metal tower driver serves gets, and what the Metal
+home answers at the TTS driver's site hooks. The GPU backend role table these sections build on - the tower driver's role row
 included - stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
 - `ARCHITECTURE_GPU_TOWER_FC.md` - the FastConformer chain's rotary, LayerNorm-conv form, the
   one GigaAM serves through.
-- `ARCHITECTURE_GPU_TOWER_POCKET.md` - the Metal tower driver's three Pocket TTS seats: the
-  codec, the frame loop and the text prompt.
+- `ARCHITECTURE_GPU_TOWER_TTS.md` - the TTS driver's StyleTTS2 and Pocket seats, one text over every GPU
+  home's rail.
 - `ARCHITECTURE_GPU_TOWER_VULKAN.md` - the Vulkan tower's row classes and attention routes, the tower
   encode chains on the discrete homes, and the whisper ASR decoder on the discrete homes.
 - `ARCHITECTURE_GPU_TOWER_RAIL.md` - the rail the Vulkan and CUDA homes' chain bodies dispatch
@@ -25,7 +25,8 @@ hook seats - stage slots the CPU chain calls and the driver fills. Every hook a 
 through is registered by an `[init]` of that tower's driver files: a seat, a drop hook, or a
 reload or weights-epoch listener. The registrations run in `dasllama_metal_tower_register` (the
 Metal tower), `dasllama_vulkan_tower_register` (the Vulkan tower), `dasllama_vulkan_tts_register`
-(the Vulkan TTS driver, the Vulkan tower's TTS seats), `dasllama_cuda_tower_register` (the CUDA
+and `dasllama_cuda_tts_register` (each discrete home's TTS seats, shells over the shared driver
+`dasllama_tower_tts`), `dasllama_cuda_tower_register` (the CUDA
 tower) and `dasllama_cuda_tower_audio_register` (the CUDA home's audio installer), so the hooks a
 function can reach are the ones those register. The vision and audio seats follow the GPU home: the
 Vulkan tower's `vulkan_tower_install_vision`, `vulkan_tower_install_audio` and the ASR decoder's
@@ -210,84 +211,59 @@ command buffer: a CPU image's encode then runs whole on the CPU, and a Metal-fla
 (`tower_cpu_refuse`).
 `metal_tower_stats().convs` counts the encodes whose front ran on the device.
 
-### The tower driver's StyleTTS2 synthesis chain {#tower-tts-chain}
+### The Metal home's speech seats {#tower-tts-chain}
 
-The whole StyleTTS2 synthesis of the kitten and kokoro families rides the tower driver as seven
-seats of the family's hook record (`ARCHITECTURE_MEDIA.md#tower-gpu-hook`): PL-BERT, the text encoder,
-the duration encoder, the duration head, prosody, the decode seat and the generator seat. Each
-seat is one command buffer of the encode chain's shape (`ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`) over a per-part weight slab the driver builds once
-and keys on a fold of the part's weight addresses - the address of the form each conv serves, the
-q8 quants or the f32 operand - and of the q8 lane's active repack layout, so a reload serving
-another lane or another layout keys differently; the addresses stand for the model because a
-reload never reuses them before the weights epoch drops every slab, which shutdown does too. Every
-family attaches its slab through one guard and one rebuild (`st2_slab_current`, `st2_slab_rebuild`):
-a slab whose key matches stays resident and the call returns on the guard; otherwise the cold
-rebuild runs the family's drop, then the family's writer twice through the shared host writer
-(`dasllama_tts_slab.das`, the one the Vulkan seats build from; its keys, shape walks and row
-layouts are the same here - each Metal part writer runs the shared part writer and maps its record
-onto the Metal slots, adapted to byte offsets with the GEMM's uniforms hung on each, and the writer
-lays an LSTM recurrence untransposed (`lstm_transposed` false), as the Metal recurrence kernel reads it) - the
-measuring pass writes into a probe slab to size the host copy, the second fills the resident -
-and the copy uploads, the drop running again when the upload fails. The measuring pass hangs no
-device handle - uniforms and buffers are created on the fill pass alone - so the probe slab is
-deleted without the release walk. A slab releases through one walk over its
-fields by type (`st2_release_any`): a conv slot's and a Pocket linear's pooled uniforms, a buffer
-the slab owns, the elements of an array of them and the fields of a struct of them go back to their
-homes, so a slot field a slab gains frees itself. The walk releases and never deletes;
-`st2_slab_free` then deletes the slab whole, which frees every array once, nested ones included,
-and zeroes the fields the walk reached by value (a buffer field is released through a copy of its
-pointer). The decode seat takes the aligned features, F0 and N up and runs the front convs, the
-AdaIN residual blocks, the harmonic source, the generator and the inverse STFT as ONE command
-buffer, the samples back; the generator seat behind it - reached only by the CPU chain a
-declined decode falls into - runs the generator through conv_post as one command buffer and reads
-conv_post's rows back for the CPU's inverse STFT (`styletts2_istft`). The CPU chain is the specification, dispatch for dispatch, and every
-seat serves both weight lanes: the q8 lane's stacked quants are read row by row out of the
-active repack's interleave (`q8_plane_row_f32`) and dequantized into the slab with their f32
-scales - the CPU q8 lane's weights exactly, the distance left being that lane's per-32 activation
-quantization, which the f32 seat does not do - and a K-quant linear (the Pocket small
-form's codec transformer) row by row through the active K-quant layout's group gather, its tail
-rows superblock by superblock, so the lane policy does not flip for the tower.
+The StyleTTS2 seats of the kitten and kokoro families and the Pocket family's seats on this home are the
+shared TTS driver's bodies (`dasllama_tower_tts`, `ARCHITECTURE_GPU_TOWER_TTS.md#tts-st2-seats` and
+`ARCHITECTURE_GPU_TOWER_TTS.md#tts-pocket-seats`) over the home's rail: the gates, the slabs and scratch, the
+dispatch sequences and the readbacks are that one text, and the CPU chain is its specification. The home adds
+four files. The rail (`dasllama_metal_rail`: `MtRail`) carries the buffer, upload, readback and zero primitives and
+runs a seat's chain as one command buffer of the home's queue (`rail_tts_shot`; under the profile ledger one a mark). The lens
+(`dasllama_metal_dispatch`: `[metal_rail_dispatch]`) reads a stamp's members through the scan the Vulkan and CUDA
+lenses read and generates its `ensure_<name>()`, its census row under the stamp's name, its rail overload
+`enc_<name>(rl, roles, pc, ...)` and `rail_ensure_<name>(rl)`, a pipeline a stamp built on first use; the overload
+binds the seats at the stamp's slots and dispatches (`mtl_rail_dispatch`), a member that views another member's
+buffer (`@role = "alias"`) on a slot of its own, since two members cannot share a binding in this home's shading
+language. The primitives of the schedule-fed and the f16 tiles (`rail_mm_kq`, `rail_mm16`, `rail_site_groups`)
+panic on this rail: it answers false at `rail_tts_cm2_on` and `rail_tts_f16_on`, so no body reaches them. The stamps (`dasllama_metal_classes_tts`) are the common templates of `dasllama_gpu_kernels_common` under
+this home's emitter, the source kernels compiled without fast math. The seat file (`dasllama_metal_tts`) holds
+the rail, a seat function a stage, the home's `TtsHome` - its name, the tower knob and arm, a decline's words - and
+the two families' flavors for `TowerDev.metal`.
 
-Every conv is the f32 tile GEMM over the slab - each conv dense as [cout padded to 64 x k*cin
-padded to 32] with column j = tap*cin + ci and its bias row beside it. A conv whose channel
-count is a multiple of 8 runs the GEMM's gathering instance (the `CONV` stamps, one a direction -
-`MetalSt2ConvMm` gathers a forward conv, `MetalSt2ConvTrMm` a transposed one): the X loader
-reads each row's 8-run of k through the conv's geometry, so no im2col is materialized; the noise convs (22 channels) take the im2col kernel in 32-aligned row chunks,
-each chunk's column buffer under a 64 MB ceiling (`ST2_IM2COL_CHUNK_MAX_BYTES`).
-The GEMM template stamps again as the f32-EXACT twins (`MetalF32ExactMm`, `MetalSt2ConvExactMm`,
-`MetalSt2ConvTrExactMm`: float tiles, twice the threadgroup memory) and the FRONT END - the five seats before the decoder - runs on
-it, because its outputs round to integer durations and its F0 drives a phase (the f16-staged
-stamp moved one raw duration in a sentence across a half; on the exact stamp the durations
-agree token for token and every front-end stage reads within 3e-6 of the CPU's). The ALBERT
-attention is its own f32 row kernel, one simdgroup a query row with the lanes over the keys
-(the online softmax merged across the lanes). The decoder and generator keep the f16-staged
-stamp (the decoder rows read within 7e-3 of the CPU's on kitten-nano, 5e-4 on kokoro; the
-seam form of the generator alone within 1.2e-3).
+The driver asks the rail before each dense site, and this home answers where its own tiles outrun the shared
+kernels (`dasllama_metal_sites`); a `false` leaves the site to the shared route, which is every answer on the
+discrete homes.
 
-The harmonic source is the CPU's `sine_source` on the device, operation for operation (`ARCHITECTURE_TTS.md#tts-phase-law`): the three source kernels compile without fast math and stamp once a
-law (`MetalSt2Src*Torch`, `MetalSt2Src*Onnx`), the resample taps and mixes the stamp's law - the
-torch law's double source coordinate as one fma, the ONNX law's seven-term trilinear mix - the
-cumulative phase the torch stamp's double accumulator (a two-float sum in the CPU's frame order,
-every add's exact error carried) or the ONNX stamp's plain float sum in that order, and the sine
-of a phase in the hundred thousands of radians reduces it by 2 pi in four exact-product pieces.
-The noise rows the sines read are the captured stream uploaded, or the driver's own draw hashed
-into the same rows by a fill kernel (`MetalSt2SrcNoise`, a counter-keyed normal per sample and
-harmonic, within 1e-5 of its CPU twin under the default fast math) - the sines kernel reads one
-buffer either way. The STFT's pad law is its stamp's too
-(`MetalSt2StftReflect`, `MetalSt2StftEdge`). The mirror holds to a few ulps, not bit for bit: Metal contracts a
-product-sum into an fma where the CPU rounds twice, and its sine is the fast form. The mixed
-signal reads within 4e-7 of the CPU's; a phase off by one f32 ulp would read at the percent level.
-A chunk past 2^23 samples declines, where the torch law's tap coordinate parts from the CPU's double form. The BiLSTMs run one direction a threadgroup (the input
-gates from the GEMM, the recurrence through threadgroup memory; `MetalSt2Lstm` has no
-specialization path - `hidden` travels in `St2LstmArgs` as the gate-block stride into its
-threadgroup gate array, capped by `ST2_LSTM_MAX_HIDDEN`); AdaIN and its activation are
-one fused row pass after a per-channel stats reduction; the style's fc rides up per site in
-one buffer the CPU fills as the chain encodes.
+- **A conv and a dense layer** (`rail_tts_conv`, `rail_tts_mm`) ride the home's tile ladders - the f32 tile GEMM
+  and its conv-gathering stamps (`MetalSt2ConvMm` a forward conv, `MetalSt2ConvTrMm` a transposed one, the X
+  loader reading a row's 8-run of k through the conv's geometry, so no im2col is materialized), their f32-exact
+  twins (float tiles, twice the threadgroup memory) where the chain asks exact, and the stored-plane tile over a
+  quantized or half-float leaf (`MetalSt2StoredMmT`: a format a stamp, the leaf widened in the kernel as the CPU
+  reader widens it) - then the bias row. The tile reads whole 32-row tiles and writes the leaf's padded width, so
+  a call whose rows carry an offset, a narrower output or no room for the whole tiles lands in the rail's own
+  rows and is copied. A conv's f32 rows or half-float leaf rides the tile only where the tile takes its shape -
+  the inputs on its 8 lattice (32 over a stored transposed lift), the outputs on the 64 lattice - and y holds the
+  whole 32-row tiles the tile writes. A quant leaf in the shared layout leaves the hook at once. A home-layout
+  quant leaf off that shape panics: the bake's own-layout rule put it there. The dense sites run the float tile,
+  since they feed the durations and the phases; their f32 rows or half-float leaf ride it only where x and y need
+  no copy - at offset 0, at the leaf's own widths, with room for the whole tiles.
+- **The AdaIN column statistics** (`rail_tts_colstats`) are one pass, a threadgroup a channel, up to
+  `MTL_COLSTATS_MAX_T` rows; past it a threadgroup's walk of a whole column loses to the shared block passes.
+- **A Q8_0 LSTM recurrence** (`rail_tts_lstm_q8`) runs the home's recurrence stamp over the leaf's blocks
+  (`MetalSt2LstmQ8`, one direction a threadgroup, `hidden` the gate-block stride in `St2LstmArgs`).
+- **No schedule-fed conv tile** (`rail_tts_cm2_on` false): every conv rides the exact or the f16-staged ladder.
 
-The declines: `knob`, `shape` (a width off the 64 lattice, a head over 128 wide, an LSTM over
-the threadgroup's lanes, a source branch whose length disagrees with the upsampled stream, a
-residual conv that changes the length, more than eight generator stages), `device` (init or
-the slab allocation), `gpu_error`. Engage is each seat's `served` counter beside
-`metal_tower_stats` (one encode per seat per chunk); the parity instruments are the per-stage
-cells on identical inputs on the f32 lane (`tests/CLAUDE.md`, the kitten file) and the served
-synthesis across the knob.
+A leaf's device layout follows its site. The flavored model's bake tags every stored leaf with its site
+(`TtsStoredSite`), and a leaf at a hooked site is staged in this home's layout (`ts_gather_member_metal`): a
+Q8_0 plane as 34-byte blocks row-major (`q8_region_to_metal_blob`), a K-quant plane as its quants in disk order
+from an even superblock under its scale plane in the Metal form (`metal_kq_scale_form`). A quantized leaf in the
+home's layout is always served by the hook, since no shared stamp reads that layout; a leaf at any other site
+keeps the layout the discrete homes read. The Pocket frame loop's row GEMV is the shared template with the
+home's row dot for a Q8_0 and a Q4_K leaf in its layout (`MtPkGemvStoredT`, its `OWN` constant a stamp, the
+driver reaching them through the `rail_tts_pk_own` hook), sixteen rows a workgroup; a Q5_K or Q6_K leaf of that
+loop stays in the shared layout under the shared dot's stamp of its member.
+
+The declines are the shared driver's (`TowerDecline`), counted there a home; engage is
+`tts_home_stats(TowerDev.metal).encodes`, one a seat a call. The parity instruments are the per-stage cells on identical
+inputs (`tests/_tts_parity.das`), the served synthesis across the knob, and the stamps' cells
+(`tests/test_metal_tts_kernels.das`, their case bodies the discrete homes' own).

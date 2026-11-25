@@ -4,13 +4,11 @@
 `modules/dasMetal/ARCHITECTURE.md`. Shared emitter rules: `modules/REVIEW_SHADER_EMITTERS.md` -
 apply that list with this one.
 
-**Weakening the census check is a defect.** The check runs both directions: every kind in
-`declared_msl_census` is emitted by some fixture, and every kind any fixture emits is declared
-there. A kind is the construct label the emitter records at emit time. Dropping either
-direction's assertion in `uncategorized.das` weakens the check, and so does dropping a kind
-from `declared_msl_census` or a fixture's census from `all_msl_censuses` (both in
-`_msl_common.das`). Emitted text cannot be read back into constructs, so the census is the
-only measure of coverage.
+**Weakening the census check - the two-way assertion in `uncategorized.das` that the kinds the
+fixtures emit are the kinds `declared_msl_census` (`_msl_common.das`) declares - is a defect; so
+is dropping from `all_msl_censuses` (`_msl_common.das`) the census of a fixture that still
+exists.**
+Emitted text cannot be read back into constructs, so the census is the only measure of coverage.
 
 **A diff that adds a fixture outside `_fail_closed/` - a `[metal_kernel]` kernel this folder
 declares, whose emit records a `<name>_census` global - adds that census to `all_msl_censuses`

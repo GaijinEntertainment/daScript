@@ -52,3 +52,48 @@ CPU load and of no other form gives that load as `cpu_cells_form` and runs the c
 
 **A diff that compares two forms of a block - two loads of its file under different load-time
 knobs or load mode - makes the compare after the call returns, on what the call's body collected.**
+
+**A diff that adds or changes a TTS block's form loader (`styletts2_form`, `pocket_form`,
+`_tts_parity.das`) or its form check (`styletts2_form_is`, `pocket_form_is`) keeps the check
+asserting, on every form, how the form came by its image (`tts_image_origin`,
+`../dasllama/dasllama_tts_blocks.das`) - an image form a `.dlim` the image rail mapped wherever the
+run's rail maps one, a minted form an image built in memory - and, on a Pocket form, the lane tag
+that image was minted under.** The model's lane flags cannot tell a minted form from a mapped one,
+nor a pin to the file's own lane from no pin - only the image's origin and the mint's lane tag can.
+
+**A cell asserting on a TTS or tower (a media encoder) model's CPU run - its weight layout, a
+synthesis, an encode or a decode - and asserting nothing about which image a load picked, loads a
+model holding its host weights: any load under `with_cpu_flavor`, a family's `stage_*` staging
+minted in memory, or `pocket_minted(path, PkMint.cpu)` / `pocket_minted(path, PkMint.both)` - never
+a load outside `with_cpu_flavor` that can map an image, and never a `stage_*_served` staging after
+`set_serving_gpu_tower(false, family)` (`_gpu_knobs.das`).** The runner runs a batch's files in one
+process, so an unpinned load maps the device image whenever another file of the batch registered a
+GPU driver, and that image holds no host weights for the CPU run.
+
+**A diff after which a `[test]` in a file of any `run.das` suite loads outside a block a stocked
+model file of a family it did not load before - a `.gguf` carrier, its shards or an mmproj, or
+outside the `llm` area a `.bin` pack of a family `CLAUDE.md`'s family filter list holds a token
+for - calls in that `[test]` `family_on(t, name)` (`_model_tier.das`) once for each family it
+loads, each call ahead of that family's first load and the test returning where any call returns
+false.** An untagged test runs under every `--family` filter, each load of another family's file
+skipping inside it by that file's row; a test that returns on a false call runs only under a filter
+naming every family it loads.
+
+**A `family_on(t, name)` call a diff adds or changes passes the token `CLAUDE.md`'s family filter
+list holds for the family whose file the load the call gates opens.**
+
+**A diff that weakens `check_family_tags` (`REVIEW.das`), which holds a block of a file no
+`model_families()` row holds to a `family_on` call, or adds to its `FAMILY_FREE` list a file a
+family's loader reads, is a defect - tag the block with `family_on` or give the file a
+`model_families()` row.**
+
+**A diff after which a `[test]` loads a `.gguf` carrier, its shards or an mmproj of a family
+`CLAUDE.md`'s family filter list holds no token for adds the family's entry to that list in the same
+change.**
+
+**A diff that makes a test load a language-model `.gguf`, or a speech, voice-activity or
+translation carrier, whose name no `model_families()` row (`_model_categories.das`) holds adds the
+row in the same change, under the family's token in `CLAUDE.md`'s family filter list; a tower, a
+fixture, and a file that cells tagged with another family also load get no row.**
+`model_available` skips another family's file by that row; a file with no row loads under every
+`--family` filter.

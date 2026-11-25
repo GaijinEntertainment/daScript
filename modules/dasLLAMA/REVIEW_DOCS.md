@@ -11,11 +11,9 @@ function a `followup_*.md` entry asks to shorten or split, lands the shortening 
 same change, or drops the suppression.** A loop replacing hand-copied code shortens; merging
 near-copies onto one template does not.
 
-**A diff that adds a file under `dasllama/` adds that file's charter entry - text naming the file
-and saying what it holds, on a line of its own or inside another line or table cell - to an
-`ARCHITECTURE_*.md` companion in the same change, never to `ARCHITECTURE.md`.**
-`ARCHITECTURE.md#file-charters`'s routing block names the companion holding each file's charter
-entry.
+**A diff that adds a file under `dasllama/` adds, in the same change, its charter line - text naming
+the file and what it holds, as a line, a list item or a table row - to the companion section the
+routing block of `ARCHITECTURE.md#file-charters` sends that file to, never to `ARCHITECTURE.md`.**
 
 **A `followup_*.md` row's number, and an item's label inside a row, never changes and is never
 reused: a row a diff adds takes a number higher than every number its file has carried, and an

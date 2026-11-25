@@ -26,13 +26,20 @@ fire it and are ruled acceptable, each with its reason.
 
 - **The TTS facade cells** - the `image` form of a voice file's block (`styletts2_form`, `pocket_form` in
   `tests/_tts_parity.das`), loaded once for the cells of `tests/test_tts_kitten.das`, `tests/test_tts_kokoro.das`
-  and `tests/test_tts_pocket.das` that read the facade's own load, `test_kokoro_ru_facade` among them, and
-  the two cells of `test_kitten_stored_file` that load a stored file through `load_styletts2` (its lane choice under a
-  pin is their subject; they wipe the images they mint beside their temp files). They
+  and `tests/test_tts_pocket.das` that read the facade's own load, `test_kokoro_ru_facade` among them,
+  kitten nano's `image_cpu` form - that load under `with_cpu_flavor`, for the cells that hold the CPU chain behind
+  the facade's model (`test_kitten_decode_hook`, and the streaming, scratch-release and chunk-cap cells of
+  `tests/_tts_facade_cells.das`) - and the two cells of `test_kitten_stored_file` that load a stored file through
+  `load_styletts2` (its lane choice under a pin is their subject; they wipe the images they mint beside their temp
+  files). They
   load through the facade's `load_tts_model`, which bakes the family's `.dlim` beside the model when `DASLLAMA_IMAGE` is unset, so each mints an
   image per carrier. The reason: the facade's own load path is the cells' subject - for the Russian cell the packs it
   picks by the voices' declared languages - and they run under the suite child's identity - on the tuned arm the box's
   own, with no policy override - so the image they mint is the one the image suite's `kitten` arm and the serving rig read.
+  The `image_cpu` form's reason: its cells run on every box, a box with no GPU device among them, where the block
+  loads no minted CPU form of the lane an unpinned load serves (the q8 form is a skipped cell without its `@dev`
+  form); under `with_cpu_flavor` the load bakes the unpinned lane's CPU-flavor image, the one a box with no GPU home
+  serves.
 - **The Metal MTP rails** - the fixtures of `tests/test_metal_mtp_parity.das` that load their served twin through
   `load_model_cached`, and the Metal form of each 26B trunk's block in `tests/test_mtp_gemma_drafter.das`
   (`metal_form(image = true)`: the Q4_K_M target for the served arms and the regular DFlash drafter's Metal arm, the

@@ -1,7 +1,7 @@
 # Captured fixtures for the control-page suite
 
 Every file here - JSON, SSE, and the one captured WAV - came off a REAL
-dasllama-server run, except the rows marked hand-composed, so the page is
+dasllama-server run, except any row marked hand-composed, so the page is
 tested against the wire shapes the server actually emits. If an endpoint's
 schema changes, re-capture rather than edit.
 
@@ -56,7 +56,7 @@ Then capture (`B=http://127.0.0.1:18132`):
 | `config.json` | `curl $B/config` |
 | `exchange.json` | `curl $B/exchange` (a box with a fresh local tune -> the local-unshared state) |
 | `bench_idle.json` / `bench_done.json` | `curl $B/bench` before / after a run of the in-process mode - the roster server above (an in-tree `-jit` server, so the result reads `"exec":"jit"`; on an M1 Max the default slot serves on Metal, and the result says so) started with no `lcpp_bin`, `curl -X POST $B/bench`, then the GET once `state` reads `done` (a second or two on `smol`). The model path inside `ref_cmd` is the one edit, normalized like every other fixture's |
-| `bench_done_batched.json` | HAND-COMPOSED, not captured: `bench_done.json`'s shape with the batched row's three keys (`ours_tgb`, `tgb_sd`, `npl`) and its log lines, in the numbers a 5060 Ti box read for Llama-3.2-1B Q8_0, and `ref_cmd` carrying the `llama-batched-bench` line after the `;` the server writes where the row ran. Any slot serving two streams or more produces the row now (the streams host-cached where no whole-model driver homes them), so `bench_done.json`'s next capture on the roster server carries these keys too; this fixture pins what the page does with them |
+| `bench_done_batched.json` | the same in-process run as `bench_done.json`, on the roster server above: `curl -X POST $B/bench`, then the GET once `state` reads `done`. A slot serving two streams or more adds the batched row's three keys (`ours_tgb`, `tgb_sd`, `npl`), its `tg128@4` log lines, and the `llama-batched-bench` line after the `;` in `ref_cmd` - the roster's `streams = 4` slot does. The model path inside `ref_cmd` is the one edit, normalized like every other fixture's |
 | `bench_failed.json` | the A/B mode: the same roster server started with `lcpp_bin` set to any path - a top-level key, above the `[[models]]` tables, or TOML files it under the last table (a source-tree daslang is what makes the mode `ab`), `curl -X POST $B/bench`, then the GET once it fails. An in-tree A/B run ALWAYS fails (lcpp_bench refuses `-jit` script runs - it measures released exes only), which is exactly the state `bench_failed` pins |
 | `exchange_matches.json` (hits) | run the test_exchange_client-style fake exchange on 18131, launch the server with `DASLLAMA_EXCHANGE_URL=http://127.0.0.1:18131`, then `curl $B/exchange/matches` - the hits pass through the server's real transform. `exchange_matches_unreachable.json` = same call with nothing on 18131 |
 | `images.json` | `curl $B/v1/images` |
@@ -87,7 +87,7 @@ Catalog/setup fixtures (same server, booted with NO model for the setup ones):
 | File | Command |
 |---|---|
 | `stats_setup.json` | `curl $B/v1/stats` on a no-model (setup mode) boot |
-| `catalog_idle.json` | `bin/daslang -jit utils/dasllama-server/tests/fixtures/capture_catalog.das -- --presence <dir> catalog_idle.json` (repo root) over a scratch dir holding SYMLINKS to exactly what the fixture must read present: the entries and companions the committed fixture shows present, plus `kitten-nano.gguf` and every pack of `TTS_FRONT_END_PACKS` (`../../model_catalog.das`), so the speech card's enable state is captured rather than derived: the card offers the enable only with every listed pack present. Symlink, never copy - a personal model library does not belong in a fixture, and neither does a second copy of one |
+| `catalog_idle.json` | `bin/daslang -jit utils/dasllama-server/tests/fixtures/capture_catalog.das -- --presence <dir> catalog_idle.json` (repo root) over a scratch dir holding SYMLINKS to exactly what the fixture must read present: the entries and companions the committed fixture shows present, plus `kitten-nano.gguf` and the two English packs `tts_g2p.bin` + `tts_postag.bin`, and NOT the Russian pack `tts_g2p_ru.bin`, so the speech card's enable state is captured rather than derived: the card offers the enable once the packs the model's row names (`packs`) are present, and the fixture holds a listed pack the model does not read. Symlink, never copy - a personal model library does not belong in a fixture, and neither does a second copy of one |
 | `catalog_empty.json` | the same rail with `--presence <dir> catalog_empty.json` over an EMPTY scratch dir: every entry, the ASR tower and the whole speech set absent - the document the download offers are read from |
 | `catalog_downloading.json` + `catalog_done.json` | `bin/daslang -jit utils/dasllama-server/tests/fixtures/capture_catalog.das` (repo root) - boots a setup server on a scratch dir, downloads the smallest card FOR REAL, snapshots `/catalog` mid-flight and after it lands, normalizes paths, deletes the scratch download |
 | `catalog_refusal.json` | `POST $B/catalog/download` for a second entry while one runs (the 409 body) |

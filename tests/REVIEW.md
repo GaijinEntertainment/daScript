@@ -29,14 +29,18 @@ module cache folder (`.cache/daslang/module_cache/`) lives in `module_cache/`, o
 `utils/<tool>/tests/module_cache/` (repo root) of the tool it tests, and answers to
 `module_cache/REVIEW.md` wherever under this folder the diff puts it.**
 
-**A `[test]` without `standalone` that a diff adds goes into the folder's file of its topic
-and fence signature (the file's program-changing `options`,
-`ARCHITECTURE.md#fence-signature`).**
+**A `[test]` without `standalone` that a diff adds goes into the file of its topic and fence
+signature (the file's program-changing `options`, `ARCHITECTURE.md#fence-signature`) in the
+folder the diff adds it to.**
+
+**A diff that adds a program-changing option (`ARCHITECTURE.md#fence-signature`) to an existing
+test file moves the tests that do not need it to a file of the file's former fence signature, or
+names in the PR body why the whole file takes it, in the same change.**
 
 **A run file (a `.das` file whose name and every directory on whose path do not start with
 `_`, other than `REVIEW.das`; `ARCHITECTURE.md#run-file`, `ARCHITECTURE.md#file-classes`) a diff
-creates for a `[test]` holds a topic or fence signature no other file in the folder holds, or
-holds tests that carry `standalone` (`ARCHITECTURE.md#file-shape`).**
+creates for a `[test]` holds a topic or fence signature no other file in the run file's own
+folder holds, or holds tests that carry `standalone` (`ARCHITECTURE.md#file-shape`).**
 
 **A diff that adds a `[test]` to one of a folder's uncategorized files, making three or more
 tests there on one topic, moves those tests into a category file, new or existing, in the same
@@ -75,8 +79,9 @@ directory inside `<dir>`, or passes it `-no-module-cache` or `-module-cache <dir
 runs with none of `-exe`, `-compile-only`, `-documentation`, `-ser`, `-deser`,
 `--das-wait-debugger` and `-use-aot` (such a run compiles through the front-end module cache),
 and passes a `-jit` child `-jit-no-cache` or `-output <dir>/...` - where `<dir>` is
-`test_temp_dir()` or a `create_temp_directory` directory.** A child writes its front-end module cache and its JIT DLL cache relative to its
-working directory otherwise, which is the tree two concurrent runs share.
+`test_temp_dir()` or a `create_temp_directory` directory.** A child writes its front-end module
+cache and its JIT DLL cache relative to its working directory otherwise, which is the tree two
+concurrent runs share.
 
 **A diff that adds or changes a test under `tests/language/` that reads a file by a path built
 from `get_das_root()` skips on `get_running_platform_name() == "emscripten"`, or hands
@@ -93,18 +98,17 @@ in - the JIT never takes that path - so losing that coverage fails no CI job.
 **A diff that changes a `.das` file under `tests/` (repo root) that `test_aot` compiles - one an
 `AOT_*_FILES` variable of `tests/aot/CMakeLists.txt` holds after its filters, or a top-level
 file of a `DAS_AOT_SUITES` folder no variable covers, neither marked `options no_aot` nor named
-`failed_*`, `cant_*` or `invalid_*` - names in the PR body the run that showed `test_aot` pass:
-a local `daslang utils/internal/preflight/main.das -- --full` (repo root), a
-`--target run_tests_aot` build, or a link to a `nightly` workflow run whose Nightly Tests step
-passed (`ARCHITECTURE.md#test-aot`).** Per-PR CI builds only the AOT subset binary (the
-test_aot_subset target), which compiles `tests/language` alone against a smaller set of `daslib`
-modules, so the PR's own checks do not prove `test_aot`.
+`failed_*`, `cant_*` or `invalid_*` - names in the PR body the run that showed `test_aot` pass
+on the diff's head commit: `utils/internal/preflight/main.das` (repo root) run with `--full` in
+a build configured with `DAS_LLVM_DISABLED=OFF`, a `--target run_tests_aot` build so
+configured, or a link to a `.github/workflows/nightly.yml` (repo root) run whose Nightly Tests
+step passed (`ARCHITECTURE.md#test-aot`).** Per-PR CI does not build `test_aot`, and a build with
+LLVM disabled filters LLVM-dependent files out of it.
 
 **A diff that adds or changes a `.das` file under `tests/` (repo root) whose name starts with none
-of `_`, `failed_`, `cant_`, `invalid_`, that `test_aot` does not compile, or compiles and does not
-run, states what would stop an AOT build compiling or running the file, or, when nothing would, why
-an AOT build of it tests nothing: in the file for `options no_aot`; beside the `DAS_AOT_SUITES` list
-for a file whose folder that list leaves out or that sits in a subfolder; beside the `AOT_*_FILES`
-filter in `aot/CMakeLists.txt` or the `--use-aot` skip in `.das_test` otherwise
-(`ARCHITECTURE.md#test-aot`).** Without a stated reason no later diff can tell whether the opt-out
-is still needed.
+of `_`, `failed_`, `cant_`, `invalid_`, and that `test_aot` does not compile or does not run
+(`ARCHITECTURE.md#test-aot`), writes beside what keeps the file out - its `options no_aot`, the
+`DAS_AOT_SUITES` list (a folder it leaves out, or a subfolder of a folder it lists), an
+`AOT_*_FILES` filter in `aot/CMakeLists.txt`, or the `--use-aot` skip in `.das_test` - what would
+stop an AOT build compiling or running the file, or, when nothing would, why an AOT build of it
+tests nothing.** Without a stated reason no later diff can tell whether the opt-out is still needed.

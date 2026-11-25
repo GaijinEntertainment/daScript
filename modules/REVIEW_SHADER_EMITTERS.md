@@ -87,16 +87,16 @@ instantiation of a template kernel) whose A operand is float.** A float operand 
 its native fast path, and `float_a_ok=true` turns the MSL emitter's refusal of a float `matmul2d` A
 operand off for every variant of the kernel.
 
-**A diff that adds a global-rooted-array access, changes its index, moves it out from under a
-guard that kept it inside its region, or moves it into a compiled variant it was not in, keeps
-its index inside the region - the elements the buffer's allocation sizes for that dispatch, not
-the dispatch's own bound - or inside slack, an allocation past the region's end that the kernel's
-module-root `ARCHITECTURE*.md` names.** A global-rooted-array access loads or stores an element of
-a module global, a `@workgroup` array or a `self.<member>` resource, in a kernel body or any `def`
-it reaches through calls; a tensor load or store accesses every element it covers. A compiled
-variant is a kernel's instantiation under one emitter; adding a variant, moving an access onto a
-shared template, or removing or widening a `static_if` or `@template_gate` moves accesses into new
-variants.
+**A diff that adds a global-rooted-array access to a kernel a dispatch launches, changes its
+index, moves it out from under a guard keeping it in its region, or moves it into a compiled
+variant it was not in, keeps its index inside the region - the elements the buffer's allocation
+sizes for that dispatch, not the dispatch's bound - or inside slack, an allocation past the
+region's end the kernel's module-root `ARCHITECTURE*.md` names.** A global-rooted-array access
+loads or stores an element of a module global, a `@workgroup` array or a `self.<member>`
+resource, in a kernel body or any `def` it reaches; a tensor load or store accesses every
+element it covers. A compiled variant is a kernel's instantiation under one emitter; adding a
+variant, moving code onto a shared template, or removing or widening a `static_if` or
+`@template_gate` moves accesses into new variants.
 
 **A load or store of an element of a module global, a `@workgroup` array or a `self.<member>`
 resource counts as inside its region, with no index checked against the allocation, when a guard

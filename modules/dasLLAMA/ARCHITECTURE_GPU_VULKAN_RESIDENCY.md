@@ -27,7 +27,7 @@ the plan sums its bytes and the upload reserves it and places it in order (`plac
 the F32-on-disk beta / alpha rows (f32 on the device; a quantized file's beta and alpha are planes of the list in their tags'
 formats) and the optional f32 embedding are the terms beside it. KV is reserved BEFORE weights and never
 grows: on a discrete card the two compete directly, and evicting weights to grow KV would mean
-re-uploading gigabytes. The mirror's codec is f16 by default (`resident_mirror_dtype`): the
+re-uploading gigabytes. The mirror's codec is f16 by default (`resident_mirror_dtype`; q8_0 where sessions default to it, `ARCHITECTURE_CPU_KERNELS_TILES.md#half-rows-by-target`): the
 flash-attention arms read f16 rows natively, and an f16 row is half an f32 row; a block codec the caller
 asks for (q8_0, tq4: `ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-block-codecs`) is about half or a quarter of that again, and `DASLLAMA_VK_KV32=1`
 arms f32 mirrors as an A/B instrument. Only sessions of the armed codec are served. A decline carries a reason, and where the numbers allow one it carries

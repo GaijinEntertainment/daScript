@@ -43,13 +43,16 @@ moves, renames or removes a `[hot_path]`, `[cold_path]`, `[no_alloc]`, `[no_env]
 annotation; adds or changes a test, harness, benchmark or performance-rig function that reaches a
 function carrying `[hot_path]`, `[no_alloc]`, `[no_env]` or `[no_io]`.**
 
-**A diff that adds an allocation, changes an allocation's size formula, or adds, changes or drops a `resize`
-or an `@exact_size` on a buffer; that adds or changes a module global (an `[EnvConfig]` field is a declared
-environment variable, not a global), a call to a function-typed one, or the `[init]` that sets one; that adds
-or changes code a job runs in a forked context or code reachable from a `team_parallel_*` or
-`maybe_parallel_for*` body; that adds or changes a model family's arm of an engine load function, a file mapping, or what a load or
-a session keeps on the host; or that changes which load, mint or convert function a `utils/dasllama-convert/`
-file calls, wherever the diff puts it, applies `REVIEW_MEMORY.md` (beside this file) too.**
+**A diff that adds an allocation, changes an allocation's size formula, or adds, changes or drops
+a `resize` or an `@exact_size` on a buffer, wherever it puts it, applies `REVIEW_MEMORY.md` too.**
+
+**A diff that adds or changes a module global (not an `[EnvConfig]` field), a call to a
+function-typed one, its `[init]`, code a forked-context job runs, or code a `team_parallel_*` or
+`maybe_parallel_for*` body reaches, wherever it puts it, applies `REVIEW_MEMORY.md` too.**
+
+**A diff that adds or changes a model family's arm of an engine load function, a file mapping, or
+what a load or a session keeps on the host, or changes which load, mint or convert function a
+`utils/dasllama-convert/` file calls, wherever it puts it, applies `REVIEW_MEMORY.md` too.**
 
 **A change to what enters `performance/records/`, to a model file's provenance - its source url,
 byte size, sha256 or conversion recipe, wherever it is declared - or to WHICH model file a recorded
@@ -68,12 +71,14 @@ gives it a `MODULE_AREAS` row naming those areas and, where those areas include 
 in the same change.** A module with no row runs every standing area; one with `llm` and no witness
 row runs every model-free `llm` file and the `LLM_CORE_WITNESSES` list: safe, and slower each PR.
 
-**A diff after which a test file of a standing area runs an existing module's code, where that module's
-`MODULE_AREAS` row reaches the file through none of its areas and its `MODULE_WITNESSES` row does not name
-it - so `tests/run.das -- --changed` does not plan the file for that module - adds in the same change the
-file's area to the module's `MODULE_AREAS` row, or, for an `llm` file where that row holds `llm`, the file
-to its `MODULE_WITNESSES` row, adding that row where none exists.** A test file that starts loading an LLM
-GGUF runs the `dasllama/dasllama_arch_*.das` file registering that GGUF's `general.architecture`.
+**A diff after which a test file of a standing area (every `tests/run.das` area but `examples`) runs an
+existing module's code, where that module's `MODULE_AREAS` row reaches the file through none of its
+areas and its `MODULE_WITNESSES` row does not name it, adds the file's area to that `MODULE_AREAS` row,
+or, for an `llm` file where that row holds `llm`, the file to its `MODULE_WITNESSES` row (adding the row
+where none exists), in the same change.** Any change counts - code added to or moved into the module, or
+an edit to the test file or a module it requires; `tests/run.das -- --changed` plans no unlisted file. A
+test file that starts loading an LLM GGUF runs the `dasllama/dasllama_arch_*.das` file registering that
+GGUF's `general.architecture`.
 
 **A `[test]` file with a `require dasllama/...` line of its own, wherever the diff puts it, and
 every `dasllama/` change answer to this folder's `tests/REVIEW.md`; every PR touching this module
@@ -98,18 +103,17 @@ reference - another backend's run, an external dump, or the CPU path.**
 tests asserting the format's exact wire text, its rendered template output, and a server case gated
 on the family's smallest GGUF at or under `MODEL_TIER_CEILING_BYTES` (`dasllama/dasllama_gguf.das`).**
 
-**A change to a GPU kernel, a dispatch class (a class a `[metal_dispatch]`, `[vk_dispatch]` or
-`[cuda_dispatch]` declares), a K/V mirror (the device copy of the K/V cache a GPU decode reads and
-writes), a GPU driver file - a `dasllama/dasllama_{gpu,metal}*.das` or `dasllama/dasllama_*{vulkan,cuda}*.das`
-file, or any other `dasllama/` file whose code serves only GPU backends, one or several: kernel bodies,
-code that records, launches or dispatches their work, its shape and size math - or a `kv_*`
-function such a file calls, wherever the diff puts it, applies `REVIEW_GPU.md`.**
+**A change to a GPU kernel, a dispatch class (a class any `[*_dispatch]` annotation declares), a K/V
+mirror (the device copy of the K/V cache a GPU decode reads and writes), a GPU driver file - a
+`dasllama/dasllama_{gpu,metal}*.das` or `dasllama/dasllama_*{vulkan,cuda}*.das` file, or any other
+`dasllama/` file whose code serves only GPU backends, one or several: kernel bodies, code that records,
+launches or dispatches their work, its shape and size math - or a `kv_*` function such a file calls,
+wherever the diff puts it, applies `REVIEW_GPU.md`.**
 
 **A call that creates, enables or tears down device-home serving (`create_device_session`,
 `set_device_kv`, `moe_gpu_drop_model`), or a call or definition of a `set_*` / `reset_*` function
-or an `install_moe_gpu_resident_*` declaration in `dasllama/dasllama_core.das`, `dasllama/dasllama_env.das`,
-or a `dasllama/dasllama_{gpu,metal}*.das` or `dasllama/dasllama_*{vulkan,cuda}*.das` file, wherever
-the diff puts it, applies `REVIEW_GPU.md`.**
+or an `install_moe_gpu_resident_*` declaration in `dasllama/dasllama_core.das` or
+`dasllama/dasllama_env.das`, wherever the diff puts it, applies `REVIEW_GPU.md`.**
 
 **A GPU kernel timing race (two kernels timed against each other to pick one - not a data race), a
 knockout (an arm that skips a stage to measure that stage's cost) or a hand-binding arm (one that
@@ -149,10 +153,10 @@ prompt or schedules such a stream applies `REVIEW_VISION.md`.**
 **A change to how a prefill driver serves, declines, or passes to the CPU a media span - the rows
 of one image or audio turn inside a single model call - applies `REVIEW_VISION.md`.**
 
-**A change to a file `dasllama/dasllama_tower*.das` matches - encoder-tower code no single backend
-owns, never a backend's tower driver - applies `REVIEW_AUDIO.md` and `REVIEW_VISION.md`.**
+**A change to a file `dasllama/dasllama_tower*.das` matches whose code serves an audio or vision
+encoder applies `REVIEW_AUDIO.md` and `REVIEW_VISION.md`.**
 
-**A change to a `dasllama/` file that `dasllama/dasllama_tts*.das` matches, to
+**A change to a `dasllama/` file that `dasllama/dasllama_*tts*.das` matches, to
 `dasllama/dasllama_styletts2.das`, to a TTS family file (a `dasllama/dasllama_<family>.das` holding
 one voice model's code) or to a text front-end file - one `dasllama/dasllama_{textnorm,postag,g2p,textscan}*.das`
 matches, or any other `dasllama/` file holding one stage, in any language, of the pass that turns
@@ -186,8 +190,7 @@ dequantizes weights into an f16 panel on the device) or a format's twin pick.**
 maintainer's ruling that rows measured before it can no longer be compared with rows after it.**
 Every recorded row, tune sidecar and exchange entry carries the release, so a bump voids them all.
 
-**A change that invalidates only images never bumps `DASLLAMA_RELEASE` - it applies
-`REVIEW_IMAGE.md`.**
+**A change that invalidates only images never bumps `DASLLAMA_RELEASE` - it applies `REVIEW_IMAGE.md`.**
 
 **A diff that does any of these applies `REVIEW_OVERRIDES.md` (beside this file) too: adds or
 changes a `dasllama/` function that reaches, or reports on, another module's hook (a function-typed
@@ -210,11 +213,10 @@ site that must stay f32 for another reason is ledgered on its file's charter lin
 the companion `ARCHITECTURE.md#file-charters` routes to, saying what the file holds); a call-site
 comment does not discharge this.
 
-**One decision - the result of a predicate, a lookup or a parse - computed twice anywhere along a
-call chain under this folder, in a caller, a helper it calls or a callee, is a defect: compute it
-once and pass it; a guard that a `[cold_path]` callee repeats from every one of its callers stays
-in the callers and leaves the callee.** An edit to one copy leaves the other answering by the rule
-the edit replaced.
+**One decision - the result of a predicate, a lookup or a parse - computed twice anywhere along a call
+chain under this folder, in a caller, a helper it calls or a callee, is a defect: compute it once and
+pass it; a guard that a `[cold_path]` callee repeats from every one of its callers stays in the callers
+and leaves the callee.** An edit to one copy leaves the other answering by the rule the edit replaced.
 
 **Logic or a named constant that two definitions in one folder, in one file or two, both use and that
 neither the language nor the test contract forces them to restate (a test's CPU reference copy of the
@@ -277,10 +279,9 @@ checked-in text of this module compares with this module's own; an output-parity
 does not make it one), or names that build, its binaries or symbols, wherever the diff puts it -
 and the commit message or PR body of such a diff - applies `REVIEW_UPSTREAM.md`.**
 
-**A diff that adds a step, a file to touch, a table, fixture or probe entry, or a gate to the work
-a `HOW_TO_*.md` covers, where that HOW_TO does not name it, names it there in the same change.** A
-how-to is the next author's whole brief: a step missing there is a step the next author skips
-without knowing.
+**A diff that adds a step, a file to touch, a table, fixture or probe entry, or a gate to the work a
+`HOW_TO_*.md` covers, where that HOW_TO does not name it, names it there in the same change.** A how-to
+is the next author's whole brief: a step missing there is a step the next author skips without knowing.
 
 **Legal attribution - a third party's copyright line, licence name, or licence text - lives in
 a model card (the provenance-and-licence page or `.LICENSE` file beside a released model or pack)
@@ -290,11 +291,10 @@ dependency; anywhere else in checked-in text - docs, comments, or string data - 
 
 **A diff that writes a CPU feature name in a `[tune_perm]` `requires=` argument that
 the `CpuFeatures` bitfield (`modules/dasLLVM/daslib/llvm_cpu_class.das`, repo root) does not
-carry adds its bit there in the same change.** The `features` fingerprint saved with every sidecar is this box's
-pass/fail over that list, so a name outside it is never recorded and a box adopting a shipped
-profile re-runs the tuning the profile was meant to save.
+carry adds its bit there in the same change.** A sidecar's `features` fingerprint records the box's
+pass/fail over that bitfield alone, so a box adopting a shipped profile re-runs the tuning the profile carries.
 
-**A diff that names a `[tune]` family's generated `<fn>_variants()` registry in a file under
-`dasllama/` puts that reference inside a `static_if (typeinfo module_exists(llvm_tune))` branch
-whose other branch compiles without it.** The tune framework generates those registries only when
-dasLLVM is built, so a build without it - the doc lane - fails to compile the engine module.
+**A diff that names a `[tune]` family's generated `<fn>_variants()` registry in a file under `dasllama/`
+puts that reference inside a `static_if (typeinfo module_exists(llvm_tune))` branch whose other branch
+compiles without it.** The tune framework generates those registries only when dasLLVM is built, so a
+build without it - the doc lane - fails to compile the engine module.

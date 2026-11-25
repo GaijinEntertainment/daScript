@@ -9,18 +9,15 @@ rotary input and its planes.
 
 ### The ASR facade picks a family from the file, in one order {#asr-carrier-sniff}
 
-`load_asr_model` reads a path in a fixed order: a `.dlim` routes on its baked family tag
-(`<family>-q8` or the exact lane's tag); a ggml bin routes on its magic, then on its vocabulary
-size (whisper at 51864-51866, parakeet's SPM vocabularies at 1k and 8k); a GGUF routes on
-`gguf_file_arch` when the file is the whole model (`gigaam`, `parakeet`); any other GGUF is a decoder that
-needs its mmproj, and the one-argument overload panics `pass its mmproj too`. The two-argument
-overload routes on the mmproj - its magic (canary's encoder) or a GGUF mmproj's
-`clip.audio.projector_type` - with the GGUF as the decoder. The arch read comes before the panic, so a one-file GGUF family loads through the
-one-argument call; `asr_needs_mmproj(path)` answers the same question for a caller choosing which
-overload to call (`examples/dasLLAMA/transcribe.das`). The bake tool picks the family in the same
-order (`utils/dasllama-convert/convert_sniff.das`'s `sniff_asr_kind`). The lane the load passes is the caller's: the fp32 knobs
-(`set_asr_fp32`, `set_asr_tower_fp32`) force the exact lane, else the family's lane policy
-answers (`ARCHITECTURE_MEDIA.md#tower-weight-lane`).
+`load_asr_model` reads a path in a fixed order: a `.dlim` routes on its baked family tag (`<family>-q8` or the exact lane's tag); a ggml bin
+routes on its magic, then on its vocabulary size (whisper at 51864-51866, parakeet's SPM vocabularies at 1k and 8k); a GGUF routes on
+`gguf_file_arch` when the file is the whole model (`gigaam`, `parakeet`); any other GGUF is a decoder that needs its mmproj, and the
+one-argument overload panics `pass its mmproj too`. The two-argument overload routes on the mmproj - its magic (canary's encoder) or a GGUF
+mmproj's `clip.audio.projector_type` - with the GGUF as the decoder. The arch read comes before the panic, so a one-file GGUF family loads
+through the one-argument call; `asr_needs_mmproj(path)` answers the same question for a caller choosing which overload to call
+(`examples/dasLLAMA/transcribe.das`). The bake tool picks the family in the same order (`utils/dasllama-convert/convert_sniff.das`'s
+`sniff_asr_kind`). The lane the load passes is the caller's: the fp32 knobs (`set_asr_fp32`, `set_asr_tower_fp32`) force the exact lane, else
+the family's lane policy answers (`ARCHITECTURE_MEDIA.md#tower-weight-lane`).
 
 ### A family is specified by the upstream graph, dumped stage by stage {#asr-oracle}
 
@@ -235,18 +232,20 @@ Every GPU home serves the lane on its own image, the seats handed to its chain b
 
 ### The transducer decode step is one team publish over half-precision weights {#rnnt-decode-step}
 
-`rnnt_greedy` decodes a TDT head (a duration table, its logits behind the tokens') and a plain
-RNN-T head (no table: a blank advances one frame, a token stays up to `max_symbols`) off an
-`RnntNet` - offsets into the family's f32 plane - and encoder rows the family projected through
-the joint's encoder half, a GEMM its own weight lane serves. A step is a few hundred thousand
-multiply-adds a lane, so the bytes it reads and the times it meets the team set its time. Both
-lanes decode off HALVES the image stores, baked at staging (`rnnt_bake`) - the LSTM stack and the joint's
-prediction projection (`wh`, gate rows repacked i, f, o, g, the biases summed into `bias`), the
-joint net transposed into logit blocks (`joint_wt`: a block of `RNNT_JOINT_BLOCK` logits holds
-its input columns back to back, so a lane walks its block forward; a lane's slice of a whole-row
-column table is short runs a column apart, which the prefetcher does not follow); `dasllama_repack`
-holds both layouts; an f32 slab beside them holds the token table and the biases (`rnnt_dev_layout`). The halves read
-through `dot_f16` and `axpy_f16`: a parakeet token's predictor reads 13 MB where f32 was 26.
+`rnnt_greedy` decodes a TDT head (a duration table, its logits behind the tokens') and a plain RNN-T
+head (no table: a blank advances one frame, a token stays up to `max_symbols`) off an `RnntNet` -
+offsets into the family's f32 plane - and encoder rows the family projected through the joint's
+encoder half, a GEMM its own weight lane serves. A step is a few hundred thousand multiply-adds a
+lane, so the bytes it reads and the times it meets the team set its time. Both lanes decode off
+HALVES the image stores (floats where the target converts halves in software,
+`ARCHITECTURE_CPU_KERNELS_TILES.md#half-rows-by-target`), baked at staging (`rnnt_bake`) - the LSTM stack
+and the joint's prediction projection (`wh`, gate rows repacked i, f, o, g, the biases summed into
+`bias`), the joint net transposed into logit blocks (`joint_wt`: a block of `RNNT_JOINT_BLOCK`
+logits holds its input columns back to back, so a lane walks its block forward; a lane's slice of a
+whole-row column table is short runs a column apart, which the prefetcher does not follow);
+`dasllama_repack` holds both layouts; an f32 slab beside them holds the token table and the biases
+(`rnnt_dev_layout`). The halves read through `dot_f16` and `axpy_f16`: a parakeet token's predictor
+reads 13 MB where f32 was 26.
 
 `rnnt_step` runs a step as ONE `team_parallel_stages` publish: a layer's gate dots (the input's
 and the hidden's dot of a row summed in one pass), its gate math, the next layer's pair, the

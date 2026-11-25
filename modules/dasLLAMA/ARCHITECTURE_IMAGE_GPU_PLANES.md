@@ -80,7 +80,10 @@ forms, the padded panels, the f16 halves - into a `TowerDevBuild` (`tower_dev_pu
 page, so a mapped piece wraps as a device buffer with no copy), and writes the planes the driver reads as stored beside the
 block, the planes the bake consumed dropped. The attach finds each piece by name (`tower_dev_find`) and binds it: zero-copy on
 Metal, a byte-for-byte upload on Vulkan and on CUDA (the two discrete homes gather the same row-major q8 layout through
-`tower_bake_q8`, each under its own piece prefix - `vk.<family>` / `cu.<family>` - and its own image tag).
+`tower_bake_q8`, each under its own piece prefix - `vk.<family>` / `cu.<family>` - and its own image tag). A family whose
+staging holds its weights as span arrays - the TTS families - bakes while the staging still owns them (`tower_bake_block`): the
+bake lists in `TowerDevBuild.spent` the arrays its block replaces, and the staging walk drops them, so the image holds each
+weight once.
 
 A family declares its flavor seat once, `[tower_flavor(family = "<family>", model = "<Model>")]` on its
 `<Family>Flavor` record (`dasllama_tower_flavor`): the macro gives the record its `backend`, its `serves`

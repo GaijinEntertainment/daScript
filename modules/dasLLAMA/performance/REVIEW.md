@@ -14,13 +14,16 @@ artifact on a quiet box with no remote-desktop session instead.**
 **A diff that changes a `kernels` entry of a `defaults/<class>.tune-defaults.json` profile
 names, in the PR body, the box that ran the tune - a box of that CPU class, a box of a class
 above it run under `DAS_JIT_BASELINE=<class>` when the body says no box of the class was at hand
-(`../HOW_TO_GET_SIDECAR.md`, the class minted under a pin), or any box for `wasm-simd128` - and
-quotes the tuner line naming the new value as the entry's winner, from that box's
+(`../HOW_TO_GET_SIDECAR.md`, the class minted under a pin), a box of a lower class when no box of
+the class or above it was at hand and the PR body names the class, the lower class and the entry it
+copies, and a `../followup_general.md` row owes the class's own mint, or any box for `wasm-simd128` -
+and quotes the tuner line naming the new value as the entry's winner, from that box's
 `../benchmarks/modules/.daspkg.log`, from the pinned mint's `../harness/dasllama_tuner.das`
 output, or, for `wasm-simd128`, from the output of the `DAS_TUNE_MODE=tune` node runs of
-`../harness/wasm_mint/run.cjs`; a changed entry no quoted line
-backs is a defect - re-mint the profile on such a box.** A `kernels`
-entry names the variant the tuner timed fastest there; an entry written by hand was never timed.
+`../harness/wasm_mint/run.cjs`; a changed entry no quoted line backs is a defect - re-mint the
+profile on such a box.** A `kernels` entry names the variant the tuner timed fastest there; an
+entry written by hand was never timed. A lower class's winner uses only features every class above
+it has, so it runs there, only not tuned for it.
 
 **A diff that writes a `sha` on a `das` row (a run row whose `engine` is `das`) whose
 `dasllama_version` is below `DASLLAMA_RELEASE`, the `engine_sha` of a sidecar archive no
@@ -55,8 +58,8 @@ exe `daspkg release` writes under `_rig/`) built at that `sha`, and names that e
 `cmd` - re-mint otherwise.**
 
 **A `das` row a diff writes to `records/<box>.json` names the backend its run used; a row the
-bench stamps `vulkan` from a run under `DASLLAMA_CUDA=1` is a defect** - the bench stamps every
-device-tier row `vulkan`, so a CUDA rate lands in the Vulkan leg and reads as the Vulkan home's.
+bench stamps `vulkan` from a run under `DASLLAMA_CUDA=1` is a defect** - a row stamped with another
+home's name lands its rate in that home's leg and reads as that home's.
 
 **A diff that writes a reference-engine row (a run row whose `engine` is not `das`) carrying a
 `sha` stamps it with the standing ref pin (`DEFAULT_REF_SHA`, `../benchmarks/setup_lcpp_ref.das`)
@@ -160,13 +163,16 @@ defect - `--fetch` downloads only.** Each has its own home: a conversion recipe 
 under `--convert`, a timing runs under `gen_bench_records.das` or a
 `../benchmarks/lcpp_bench.das` cell, and a tune sidecar is written under a `--tune` run.
 
-**A diff that adds a row or a `companions` entry carrying a `recipe` and no `sha256`, or changes
-such a row's or entry's `recipe`, records, in the PR description, the conversion command as run
+**A diff that adds a row or a `companions` entry carrying a `recipe` and no `sha256`, under a
+local file name no row or entry carried before, or changes such a row's or entry's `recipe`,
+records, in the PR description, the conversion command as run
 and the produced file's identity - its byte size, or a `file_identity` hash.** `fetch_models`
-reports such a row or entry `ok` on presence alone, so its run cannot tell a re-mint from the stale file the old recipe made.
+reports such a row or entry `ok` on presence alone, so its run cannot tell a re-mint from the
+stale file the old recipe made.
 
-**A diff that adds a row or a `companions` entry to `model_specs.das` or `profile_common.das`, or
-changes such a row's or entry's `bytes`, `sha256` or `recipe`, records in the PR description one
+**A diff that adds to `model_specs.das` or `profile_common.das` a row or a `companions` entry
+whose local file name, `bytes`, `sha256` or `recipe` no row or entry carried before, or changes
+such a row's or entry's `bytes`, `sha256` or `recipe`, records in the PR description one
 `fetch_models.das -- -o <name>` run per such row or entry (`<name>` its local file name), on a box
 holding its model file, ending `0 pending, 0 failed` with the row or entry `ok`.**
 

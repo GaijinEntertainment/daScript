@@ -47,9 +47,11 @@ GPU kernel class's `@template_constant`s and the pins of `tests/test_kqformat.da
 it against the format's block length in `tests/test_kqformat.das` in the same change** - the lens
 accepts no name there.
 
-**A diff that writes a per-format quantity of a `KqFmt` member as a bare literal in a GPU kernel
-body is a defect - read it through a `@template_constant` declared on the shared base of its
-class family, or on the class when it has none.**
+**A diff that adds a bare literal standing for a per-format quantity of a `KqFmt` member to a GPU
+kernel body whose emitted kernel source the diff changes is a defect - read it through a
+`@template_constant` declared on the shared base of its class family, or on the class when it has
+none.** A body moved with its emitted source identical is proven unchanged and keeps its literals;
+a rewrite in the same diff would hide a changed one.
 
 **A diff that declares, on a GPU kernel class, a `@template_constant` holding a per-format
 quantity of a `KqFmt` member pins its value against the format's `kq_desc` row in

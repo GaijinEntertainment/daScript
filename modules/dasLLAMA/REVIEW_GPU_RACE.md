@@ -5,27 +5,34 @@ docs: `ARCHITECTURE_GPU_RACE_SHAPES.md`, `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.m
 `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work:
 `followup_metal.md`, `followup_vulkan.md`, `followup_general.md` (the CUDA rows).
 
-This list reviews timing arms - code that dispatches a kernel to measure it rather than to serve
-a call: a race (two candidates for one computation, timed in one process), a knockout (a timing
-that skips a stage to measure its cost; the branch that reads a stage-drop knob - a knob whose
-runs do not serve correct output - is arm code, whoever sets it), or an overhead measurement (one
-chain timed with and without an interposed stage). A same-build knob A/B - two runs under an
-environment override, both serving correct output - is not an arm; its knob answers to
-`REVIEW_OVERRIDES.md`, and a tower's knob to `REVIEW_TOWER.md` too. A two-candidate figure is a
-recorded timing comparing two candidates
-for one computation - from a race, a same-build knob A/B, or one run on each of two builds; the
-knob itself still answers to its engine's checklist. A data race between
-serving dispatches is not this list's subject. An arm's ranking is decided once a checked-in document or a committed box profile records
-the arm's figure or names the arm as the shipped form, and always where the race's winner is a
-crown - a verdict each box's tune sidecar records. A ranking input is any value the ranking's
-selection reads - a shape dimension, a layer kind, or a device or driver feature such as an
-extension, a subgroup size, or the decode path the driver runs. An A/B lab is a timing script that picks between spellings of
-one compute. A live arm is one that is undecided, dispatches the shipped kernel class's generated
-source, is a knockout whose stage-drop constant or knob sits in a shipped class or a lab, is a
-retained-reference arm (one ledgered as a retained reference in
-`ARCHITECTURE_GPU_RACE_SHAPES.md#tensor-gemm-shapes-that-measured-out-m5` or the Vulkan arm
-ledger - `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`), or is a kernel variant the shipped code picks
-between at run time.
+This list reviews timing arms. Its terms:
+
+- A timing arm: code that dispatches a kernel to measure it, not to serve a call - a race, a
+  knockout or an overhead measurement. A data race between serving dispatches is not this list's
+  subject.
+- A race: two candidates for one computation, timed in one process, either of which the run could
+  adopt. A knockout: a timing that skips a stage to measure its cost, the branch reading a
+  stage-drop knob (a knob whose runs do not serve correct output) included. An overhead
+  measurement: one chain timed with and without an interposed stage.
+- A same-build knob A/B (two runs under an environment override, both serving correct output) is
+  no arm: its knob answers to `REVIEW_OVERRIDES.md`, a tower's to `REVIEW_TOWER.md` too.
+- A decided ranking: a checked-in document or committed box profile records the arm's figure or
+  names it shipped, or the race's winner is a crown (a verdict each box's tune sidecar records). A
+  diff decides a ranking when it adds the record that makes the ranking decided.
+- A ranking input: any value the ranking's selection reads - a shape dimension, a layer kind, a
+  device or driver feature.
+- An A/B lab: a timing script that picks between spellings of one compute.
+- A live arm: an undecided arm, one dispatching the shipped class's generated source, a knockout
+  whose stage-drop constant or knob sits in a shipped class or a lab, a retained-reference arm, or a
+  variant the shipped code picks between at run time.
+- A retained-reference arm: one ledgered as a retained reference in
+  `ARCHITECTURE_GPU_RACE_SHAPES.md#tensor-gemm-shapes-that-measured-out-m5` or the Vulkan arm ledger.
+- The Vulkan arm ledger: the GEMM probe's arms in
+  `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe` and the decode rulers' in
+  `ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig`.
+
+**A diff that changes a term above changes it in
+`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#timing-race-vocabulary` too, in the same change.**
 
 **Weakening `check_race_bind_numbers` (`REVIEW.das`) - the gate that reads a `kn_buffer(enc, n)`
 arm's slots against the class declaration - is a defect.** A hand-binding arm is a timing arm that
@@ -87,9 +94,8 @@ time its kernel at one region on such a multiple and at one off it.** Only the c
 takes the tile's partial-tile store path.
 
 **A diff that adds or changes an
-`ARCHITECTURE_GPU_RACE_SHAPES.md#tensor-gemm-shapes-that-measured-out-m5` or Vulkan arm ledger
-(`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`) entry for a kernel ranked only at power-of-two
-batch widths names those widths in it.**
+`ARCHITECTURE_GPU_RACE_SHAPES.md#tensor-gemm-shapes-that-measured-out-m5` or Vulkan arm ledger entry
+for a kernel ranked only at power-of-two batch widths names those widths in it.**
 
 **A diff that decides the ranking of a race whose code the tree holds, or adds or changes an
 arm of a race whose ranking is decided, gives every dispatch an arm times an output buffer the
@@ -122,10 +128,6 @@ clock charges the clock's ramp-up to the arm that ran it.
 **A diff that decides the ranking of a race whose code the tree holds, or adds or changes a
 timed encoder in an arm of a race whose ranking is decided, makes each timed encoder issue its
 dispatches back to back.** An encoder that leaves gaps between its dispatches times an idle clock.
-
-**A diff that records a two-candidate figure lands in the tree, in the same change, the program
-that timed it, and writes beside the figure the command line that ran it and the commit of each
-build it ran on.** A figure that cannot be re-run cannot be checked.
 
 **A diff that replaces or removes a race whose figure a document carries re-measures that figure
 with a race the tree holds, deletes the figure, moves the old race under `harness/`, or - where it

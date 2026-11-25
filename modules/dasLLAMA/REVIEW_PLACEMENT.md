@@ -81,9 +81,10 @@ function moves the chain with it.**
 **A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`.**
 
 **A kernel-side helper - a free `def` outside any class that a kernel body calls - that one
-home's kernels splice lands in that home's kernel files: `dasllama/dasllama_metal_kernels*.das`
-for Metal, `dasllama/dasllama_vulkan_classes*.das` for Vulkan, `dasllama/dasllama_cuda_classes*.das`
-for CUDA.**
+home's kernels splice lands in that home's kernel files: `dasllama/dasllama_metal_kernels*.das` or
+`dasllama/dasllama_metal_classes*.das` for Metal, with a `gk_subgroup_*` lane primitive in
+`dasllama/dasllama_metal_rail.das`; `dasllama/dasllama_vulkan_classes*.das` for Vulkan;
+`dasllama/dasllama_cuda_classes*.das` for CUDA.**
 
 **A kernel-side helper that the Vulkan and the CUDA kernels splice and the Metal kernels do not
 lands once in `dasllama/dasllama_gpu_kernels_discrete.das` - never as a copy per home.**
@@ -107,17 +108,20 @@ already-decoded f32 row is not a codec primitive.
 **A pre-tokenizer split lands in `dasllama/dasllama_pretok.das`; a merge algorithm in its
 tokenizer's own file (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
 
-**A GPU kernel body under `dasllama/` - the arithmetic loop a dispatch class (a class a
-`[metal_dispatch]`, `[vk_dispatch]` or `[cuda_dispatch]` declares, not stamped from a template
-declared in another file) picks one variant of - that one home stamps lands in that home's kernel
-files: `dasllama/dasllama_metal_kernels*.das` for Metal, `dasllama/dasllama_vulkan_classes*.das`
-for Vulkan, `dasllama/dasllama_cuda_classes*.das` for CUDA.**
+**A GPU kernel body under `dasllama/` that one home stamps - the arithmetic loop of a class any
+`[*_dispatch]` annotation declares, when that class is not stamped from a template another file
+declares, directly or through a template derived from it - lands in that home's kernel files:
+`dasllama/dasllama_metal_kernels*.das` or `dasllama/dasllama_metal_classes*.das` for Metal,
+`dasllama/dasllama_vulkan_classes*.das` for Vulkan, `dasllama/dasllama_cuda_classes*.das` for
+CUDA.**
 
-**A class stamped from a template declared in another file lands in its home's kernel files (the
-three globs above), or in a
-file whose role row in `ARCHITECTURE_GPU.md#gpu-backends` names that template's stamps; a diff that
-stamps one in another file of the role table adds that template's stamps to the file's row, and a
-file in no row of the role table never holds one.**
+**A class stamped from a template declared in another file, directly or through a template derived
+from it, lands in its home's kernel files - `dasllama/dasllama_metal_kernels*.das` or
+`dasllama/dasllama_metal_classes*.das` for Metal, `dasllama/dasllama_vulkan_classes*.das` for
+Vulkan, `dasllama/dasllama_cuda_classes*.das` for CUDA - or in a file whose role row in
+`ARCHITECTURE_GPU.md#gpu-backends` names that template's stamps; a diff that stamps one in another
+file of the role table adds that template's stamps to the file's row, and a file in no row of the
+role table never holds one.**
 
 **A `class template` two homes stamp never sits in one home's kernel files: it lands in
 `dasllama/dasllama_gpu_kernels_discrete.das` when the Vulkan and the CUDA homes stamp it and Metal
@@ -126,16 +130,18 @@ stamp it, whether or not the CUDA home does
 (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`).** Weakening `REVIEW.das`'s
 `check_shared_template_homes` is a defect.
 
-**A CPU kernel body under `dasllama/` lands in a tier file, `dasllama/dasllama_math_<tier>.das`,
-never in `dasllama/dasllama_math.das`.** A CPU kernel body is a function whose loop turns a weight
-format's packed bytes (block-quantized bytes with their scales, not an f16 or bf16 element plane)
-into a dot product or a dequantized f32 row, a `[tune]` variant, a function a
+**A CPU kernel body under `dasllama/` - a function whose loop reads a weight format's packed bytes
+(block-quantized bytes with their scales, not an f16, bf16 or f32 element plane) into a dot product
+or a dequantized f32 row, a `[tune]` variant of one, a function with such operands that a
 `register_kernel_backend` call or a `KernelBackend` field default names, or a scalar body those
-call.
+call - lands in a tier file, `dasllama/dasllama_math_<tier>.das`, never in
+`dasllama/dasllama_math.das`.**
+
+**A CPU math function under `dasllama/` that is no CPU kernel body and whose operands are all f32
+lands in `dasllama/dasllama_math.das`.**
 
 **A CPU kernel body that a `register_kernel_backend` call in a tier file other than the one holding
-it names, or that two
-tier files' calls name, lands in `dasllama/dasllama_math_default.das`.**
+it names, or that two tier files' calls name, lands in `dasllama/dasllama_math_default.das`.**
 
 **A branch - one arm of an `if` or a `match` - that only one model family takes, in a file whose
 charter line names no concern of that family, lands in that family's own file

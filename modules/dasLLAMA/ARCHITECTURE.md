@@ -87,8 +87,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   trimmed lane, the walk's decline
 - `ARCHITECTURE_IMAGE_LEDGER.md` - the image rail's ledgered cases: the assistant drafter's non-image lane and the suite
   cells that mint a model image by design
-- `ARCHITECTURE_CELL_BARS.md` - the kernel cells' bars re-derived from a measured cause: the StyleTTS2 source's noise draw
-  floor and the inverse STFT's envelope bar
+- `ARCHITECTURE_CELL_BARS.md` - the kernel cells' bars re-derived from a measured cause, each home's own: the StyleTTS2
+  source's noise draw and mixed signal, and the inverse STFT's envelope bar
 - `ARCHITECTURE_IMAGE_GPU_PLANES.md` - the planes a mint bakes for a GPU route: the dev-W f16 panel plane, the tower
   twin-W plane, a GPU-flavored tower image's device block and the Metal whisper image's decode step baked onto the CPU
 - `ARCHITECTURE_IMAGE.md` - the prepared-image rail, the lattice-only
@@ -99,16 +99,14 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_GPU_RACE_SHAPES.md` - the tensor-GEMM and fused-attention shapes that measured
   out, the retained reference arms beside them, and the sanctioned float-A stamps.
 - `ARCHITECTURE_GPU_TOWER.md` - the Metal tower attention routes, the Metal tower driver's
-  encode chains, and the StyleTTS2 synthesis chain.
+  encode chains, and what the Metal home answers at the TTS driver's site hooks.
 - `ARCHITECTURE_GPU_TOWER_FC.md` - the Metal FastConformer chain's second form, the one GigaAM serves
   through: the rotary position form and the LayerNorm conv-module norm.
-- `ARCHITECTURE_GPU_TOWER_POCKET.md` - the Metal tower driver's Pocket TTS seats: the codec, the
-  frame loop and the text prompt.
 - `ARCHITECTURE_GPU_TOWER_VULKAN.md` - the Vulkan tower's row classes and attention routes, the
   tower encode chains on the discrete homes, and the whisper ASR decoder on the discrete homes.
-- `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md` - the StyleTTS2 synthesis seats and the Pocket codec,
-  frames and prompt seats on the Vulkan tower: the shared weight slab, the f32-exact front end, the source
-  and the generator, the seats' scratch and declines.
+- `ARCHITECTURE_GPU_TOWER_TTS.md` - the TTS driver's seats on the Vulkan, the CUDA and the Metal home: the
+  StyleTTS2 synthesis seats and the Pocket encode, voice, codec, frames and prompt seats, the baked weight slab
+  and its stored members, the site hooks, the seats' scratch and declines.
 - `ARCHITECTURE_GPU_TOWER_VULKAN_FC.md` - the Vulkan FastConformer chain's rotary form (GigaAM): the rope
   tables, the padded attention route, the LayerNorm conv stamp, the conv front.
 - `ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md` - the vision chains on the discrete homes: the stems, blocks, taps
@@ -273,12 +271,12 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_CPU_KERNELS.md` - the sub-block-packed k3/k6 planes, the grid formats' panel and
   row-group decodes, the VBMI symbol lattice, the tier that selects on the target rather than the
   host, the score dot classic prefill shares with decode, the module-scope visibility a lifted
-  worker lambda needs of its kernel, the two interleaves a grp<mr> repack is made of, the bf16
-  tile that keeps its sum in the matrix unit, the JIT partition a hot leaf instantiates in, and the
-  batch tile's lattice (`ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice`) and the bf16 weight
-  plane's matrix-unit family (`ARCHITECTURE_CPU_KERNELS.md#bf16-weight-tile-family`); the q8 chain's
-  activation forms against the reference's
+  worker lambda needs of its kernel, the two interleaves a grp<mr> repack is made of, the JIT partition a
+  hot leaf instantiates in; the q8 chain's activation forms against the reference's
   (`ARCHITECTURE_CPU_KERNELS.md#q8-activation-forms`); the 16-bit activation image the disk-order K-quant and q8 batch GEMMs read on wasm and on x86 without AVX2 (`ARCHITECTURE_CPU_KERNELS.md#x16-rows`).
+- `ARCHITECTURE_CPU_KERNELS_TILES.md` - the CPU tile families: the bf16 tile that keeps its sum in the matrix
+  unit, the batch tile's lattice (`ARCHITECTURE_CPU_KERNELS_TILES.md#f32-batch-tile-lattice`), the generated f32
+  GEMM family, the half-float weight rows and the bf16 weight plane's matrix-unit family.
 
 - `ARCHITECTURE_TTS.md` - the TTS block home's two layouts, tap stacking, the padded concat width, the served carrier
   on the image rail, the sine source's operation order, and the rig's scoring.

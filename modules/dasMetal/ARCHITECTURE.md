@@ -132,7 +132,9 @@ Three behavioral layers + enforcement gates:
   `"param.builtin.thread_position_in_grid"`, `"op.mul.f32"`, ...). A meta-test unions the
   census across all fixtures and asserts equality with the declared supported set, both
   directions. Census-record and emit are fused in one helper so they cannot drift; the
-  golden-snapshot layer catches emissions that bypass it.
+  golden-snapshot layer catches emissions that bypass it. The declared set is
+  `declared_msl_census` and the fixtures' censuses are the list `all_msl_censuses`, both in
+  `tests/msl/_msl_common.das`; the two-way assertion is in `tests/msl/uncategorized.das`.
 - **Gate C - fail-closed sync.** The `tests/msl/_fail_closed/` fixture list and the
   `check_rejects` assert list in `uncategorized_no_aot.das` (keyed by fixture name; the
   needle text is the suite's to judge) are both hand-maintained;

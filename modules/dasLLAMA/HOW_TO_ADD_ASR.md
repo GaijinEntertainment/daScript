@@ -232,13 +232,17 @@ The test folder's documents track its files (`ARCHITECTURE_ENGINE.md#test-folder
   stage, another clip's dump). Hold a running difference through `nan_wide_diff`, never
   `max(m, abs(a - b))`, which
   `check_running_max_nan` fails. Every cell that reads the oracle's dumps joins the pinned set in
-  `tests/REVIEW_PINNED_GATES.md` in the same change, as named cells or as one file entry naming
+  `tests/REVIEW_PINNED_GATES.md` (a cell of a `test_*_kernels*.das` file in its kernel-gate companion
+  `tests/REVIEW_PINNED_KERNEL_GATES.md`) in the same change, as named cells or as one file entry naming
   what it pins.
 - **The family's block** (`ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once`): each model file loads
   once in the area, through one `with_model_once` block whose call names `"audio"` and the file
   as string literals on its first line. Write a `<family>_form` loader - each copy a cell needs
   (exact, q8, a device lane, a poisoned copy) a form of it - and list it in `LOADERS`
-  (`tests/REVIEW.das`); a twin's compare runs after the block, on the values its forms kept.
+  (`tests/REVIEW.das`); a twin's compare runs after the block, on the values its forms kept. Add
+  the family's row to `model_families()` (`tests/_model_categories.das`), its stems matching each
+  file the block loads, or put a `family_on` call ahead of the block: `check_family_tags`
+  (`tests/REVIEW.das`) fails a block whose file no family row holds and no `family_on` call tags.
 - **The runner** `tests/run.das`: the file in the stocked list and in `area_tests("audio")`, the
   family module's `MODULE_AREAS` row (`audio`), a `MODULE_AREAS` row (`audio`) for each new module of
   section 10 - the group's chain module and its CUDA seat - and the family's image arm in

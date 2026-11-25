@@ -7,8 +7,7 @@ board with (`#measurement-vocabulary`), and where a between-release kernel chang
 
 ### The measurement checklist's vocabulary {#measurement-vocabulary}
 
-`REVIEW_MEASUREMENT.md` defines each term in place, and its rules apply them as written there; each bullet here
-states the same boundary.
+`REVIEW_MEASUREMENT.md` keeps a short form of each term; each bullet here states the term's full boundary.
 
 - **Figure** - any number a run produced: a rate, a wall, a count, a byte size, or a ratio or
   percentage of two such numbers, produced by the runs its sides came from. An error or agreement
@@ -18,7 +17,8 @@ states the same boundary.
   alters. A test suite's pass, fail and skip tally, the count of kernels a compare of two dumps of
   emitted kernel code finds identical or different, and a `provenance` value read in its
   `performance/defaults/<class>.tune-defaults.json` profile or tune sidecar are not figures; that
-  value copied into other text is one.
+  value copied into other text is one. A file's identity - its byte size or any hash of its content
+  (`sha256`, `file_identity`) - is not a figure; a ratio of two sizes, or a size compared to one, is.
 - **Served turn** - one request a serving path answers end to end: a chat or completion turn, or a
   facade `transcribe` / `synthesize` / `translate` call, whether or not an app runs it as one stage
   of a larger turn.
@@ -73,14 +73,18 @@ states the same boundary.
   backend and holds its model; a figure owed for new code when a rig leg or a documented command
   reaches that code's input. A figure owed for a route that no rig leg drives and no `PROFILE.md`
   section documents a command for is one no box can mint.
-- **Board box** - a box with a `performance/records/<box>.json`.
+- **Board box** - a box with a `performance/records/<box>.json`. **The author's board boxes** are
+  the board boxes whose rows the PR's author minted at the last release re-mint.
 - **Release re-mint** - a diff that runs `performance/gen_bench_records.das` with a release's exe on
   one or more board boxes and writes their rows into `performance/records/<box>.json`.
 - **`held` entry** - a `performance/records/annotations.json` entry carrying a board row's `gguf`,
   `box`, `engine`, `backend`, `flavor` and `workload`, whose `held` field names the follow-up ledger
   row that keeps the row off the board.
-- **A PR's kind** - final or intermediate, by the line its body's Validation section opens with; a final
-  PR's change is its arc's whole diff (`tests/REVIEW_RUNS.md`).
+- **A PR's kind** - the line its body's Validation section opens with: `Kind: final PR of the <arc>
+  arc.` makes it a final PR, and every other PR - another opening, or a body with no Validation
+  section - is an intermediate one. A final PR's change is the union of the diffs of its arc's PRs,
+  its own included; on a final PR, "a diff" in a rule of the measurement checklist is that change,
+  and "its PR body" is the body of any PR of its arc.
 
 ### Board rows land at a release boundary {#board-rows-release-boundary}
 

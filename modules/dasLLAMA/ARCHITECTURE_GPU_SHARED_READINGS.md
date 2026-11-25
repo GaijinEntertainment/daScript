@@ -117,8 +117,8 @@ its in-process alternate on both homes:
 | the same, the bf16 stamps on the router's Metal shell (`MetalRouterGemvT`; Metal before: the stamps off `GkRouterGemv` directly), the decode column's stamp / the blocked stamp at 1 and 4 columns | 46.00 / 77.40 / 79.91 | 45.14 / 77.90 / 80.49 | - | - |
 | shared gate: its own GEMV, then the routed combine and the gated add | 3.08 + 2.93 | - | - | - |
 | shared gate as the router's row `ne`, the combine's `SH` arm | - | 0 + 2.01 | - | - |
-| Pocket row GEMV, 1024 x 1024 | 9.67 | 9.79 | 5.4-5.8 | 5.2-5.7 |
-| Pocket row GEMV, LayerNorm + SiLU | 12.79 | 12.99 | 6.14 | 6.14 |
+| Pocket row GEMV, 1024 x 1024 | - | - | 5.4-5.8 | 5.2-5.7 |
+| Pocket row GEMV, LayerNorm + SiLU | - | - | 6.14 | 6.14 |
 | gated attention's deinterleave + sigmoid epilogue, 8 heads of 256, 1 row (4 rows) | 2.19 (2.23) | 0 | - | - |
 | select, 128 experts k 8, the down scales (Metal before: the select, then its scale pass) | 3.89 | 3.30 | 6.14 | 6.14 |
 | gemma-4 MoE tail, dim 2816 k 8, 1 row (Metal before: the combine, three norms, the add, the add-norm) | 17.29 | 11.98 | 10.41 | 10.44 |

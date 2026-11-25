@@ -115,8 +115,11 @@ synthesis less its front end, the phoneme references take the fixture's `ps_espe
 Pocket reads the text on both sides. Each side records one `tts:g2p<N>@<voice>` test, its `ms` the
 best walls summed and `audio_s` the seconds spoken. The das cell's `--ngl` serves every chunk on the
 Metal tower and reds where a seat fell back (`tts_seat_verdict`); its CPU row pins the tower off
-on Metal and stamps `vulkan` on a Vulkan build whose TTS seats served every chunk. The references:
-kokoro's `KModel` on the torch device (`cpu`, `mps`, `cuda` beside a `vulkan` row), KittenTTS's
+on Metal and, off Apple, stamps the discrete home whose TTS seats served every chunk (`vulkan`, or
+`cuda` under `DASLLAMA_CUDA=1`; `tts_row_backend`). The sweep's Vulkan and CUDA legs (`--legs
+vulkan`, `--legs cuda`, each alone under `DASLLAMA_GPU=1`) run that CPU row and red where it stamps
+another backend. The references: kokoro's `KModel` on the torch device (`cpu`, `mps`, `cuda` beside
+a `vulkan` or `cuda` row), KittenTTS's
 ONNX files on the onnxruntime CPU provider with the package's tokenizer, style rows and speed prior,
 Kyutai's `pocket-tts` on the CPU (one torch thread, the package's pin), all pinned to the
 `model_specs.das` recipes' revisions from the in-repo `tts` venv; and on the metal leg mlx-audio's

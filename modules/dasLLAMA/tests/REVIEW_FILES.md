@@ -18,12 +18,15 @@ arms - `--arm`, or the `image` suite arms a `--changed` or `--area` plan owns (`
 `run.das`) - never in a `model-free`, `gpu-kernels` or `stocked` run.
 
 **A `[test]` that reaches no stocked artifact once a diff adds it, moves it, or moves cells out of
-it goes into a `model-free` file - into a `gpu-kernels` file where it compiles a kernel on a Vulkan or CUDA device - never a
-`stocked` one; a diff that weakens the model-free/stocked check of `test_run_suites.das` is a
-defect.** A stocked file runs only where the models are stocked, so a model-free test inside it
-stops running on every other box; a device's first compile of a kernel is the driver's time,
-which the model-free suite's test wall does not admit; `test_run_suites.das` reds a model-free or
-`gpu-kernels` file whose text reaches a model file.
+it goes into a `model-free` file - a `gpu-kernels` file where it compiles a kernel on a Vulkan or
+CUDA device, an `--arm` suite's file where it compiles one on the Metal device or, its cells gated
+through `arm_on`, its claim holds only under that suite's arm - never a `stocked` one.** A stocked
+file runs only where models are stocked, an `--arm` file only where a run names its arms, so a
+model-free test in either leaves the per-PR run; a device's first kernel compile is driver time
+the model-free test wall does not admit.
+
+**A diff that weakens the model-free/stocked check of `test_run_suites.das`, which reds a
+model-free or `gpu-kernels` file whose text reaches a model file, is a defect.**
 
 **A diff that adds a child process running a `.das` program of this folder adds it as a verb of
 the test child - a `_child_<verb>.das` module `_child_root.das` dispatches, spawned through
@@ -34,9 +37,9 @@ gate is a defect.** The runner builds the test child once a run as an exe, so a 
 start, where a root of its own is an engine compile inside its test's wall.
 
 **A diff that adds, renames, merges or removes a test file, or moves a cell to another file, keeps
-every `--only` / `--exclude` token written in `CLAUDE.md` (beside this file) or `../CLAUDE.md` matching every file that now
-holds a test the token reached before, or corrects the token there in the same change.** A
-token that stops matching drops its files from the run without a red.
+every `--only` / `--exclude` token written in `CLAUDE.md` (beside this file) or `../CLAUDE.md`
+matching every file that now holds a test the token reached before, or corrects the token there in
+the same change.** A token that stops matching drops its files from the run without a red.
 
 **A diff that registers a test file of this folder in a `CMakeLists.txt` other than in a per-PR
 lane of `../CMakeLists.txt` is a defect - list it in a `run.das` suite instead.** A second list
@@ -70,9 +73,9 @@ its module and JIT caches, so the file compiles that program once instead of onc
 `check_child_binary_flags` (`REVIEW.das`) does not read - a binary path held in a variable or taken
 from the command line - builds that command with `daslang_argv` or puts `child_disable_flags()`
 right after the binary (`_daslang_argv.das`); an entry a diff adds to `BINARY_UNFLAGGED` starts a
-program whose require closure names no GPU module, optional requires included; a diff that weakens the check is a defect.** A child without
-the run's `--disable-module` flags compiles another module set than the run's records hold and
-reparses the engine inside its test's wall.
+program whose require closure names no GPU module, optional requires included; a diff that weakens
+the check is a defect.** A child without the run's `--disable-module` flags compiles another module
+set than the run's records hold and reparses the engine inside its test's wall.
 
 **A `standalone` reason here that says the test loads a model is a defect - the test goes to
 its topic's file.** A cell frees its model before it returns.
