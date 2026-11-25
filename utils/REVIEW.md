@@ -1,32 +1,25 @@
 # Utils Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.**
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
+`ARCHITECTURE.md`.
 
-A tool is a directory holding a program and the files only that program uses. A directory holds
-a program when the entry file of the program sits in it, or in a child folder of it when the
-directory has a `README.md`. A directory anywhere in the repo is a tool when `CMakeLists.txt`
-(beside this file) or the `CMakeLists.txt` at the repo root builds or ships a program it holds,
-or when `CMakeLists.txt` (beside this file) runs a `DAS_UTILS_TO_TEST` suite against that
-program. A directory under this folder is also a tool when its `.das_package` declares a program
-with `release_main` or `release_program`, or when a CMake target or a `.github/workflows/` step
-(repo root) runs a program it holds as the program the command starts. A change under `common/`
-(beside this file) is a change to every tool that requires it.
-
-An arm is one test case that a test runner executes and reports pass or fail for on its own,
-in any language: a `dastest` `[test]` function and each `t |> run(...)` case inside that
-function are arms, and so is each `test(...)` case of a JavaScript runner (`node:test`,
-Playwright). An arm's load-bearing assertions are the ones that prove the change, never an
-assertion that runs only when the arm skips.
-
-A CI row is a workflow step whose command runs the arm, directly or through a process it
-spawns. A pull-request lane is a CI job that runs on every pull request. An assertion no CI row
-can run is one that needs something no pull-request lane's runner image provides - a GPU, a host
-tool the image does not carry, a network service, a credential, a model or data file neither the
-repo checkout nor the build provides - that list is closed; whether a
-row already runs the arm does not decide it. An arm that skips unless something the build can
-produce is present - a target, an exe, a generated file - has assertions a CI row can run. An
-arm that skips unless a host tool is present has assertions a CI row can run when a pull-request
-lane's runner image carries that tool. One arm can hold assertions of both kinds.
+Terms. A tool is a directory holding a program - its entry file sits in the directory, or in a child
+folder of it when the directory has a `README.md` - and the files only that program uses, when
+`CMakeLists.txt` (beside this file) or the repo root `CMakeLists.txt` builds or ships the program, when
+`CMakeLists.txt` (beside this file) runs a `DAS_UTILS_TO_TEST` suite against it, or, for a directory
+under this folder, when its `.das_package` declares the program with `release_main` or
+`release_program` or a CMake target or `.github/workflows/` step (repo root) starts it as its command's
+program (`ARCHITECTURE.md#tools`). A change to a tool is a change to one of its sources: a file under its
+directory, a `common/` module it requires, or a module named in the `RULE_MODULES` list of its
+directory's `REVIEW.das` (`ARCHITECTURE.md#tool-sources`). An arm is one test case a runner reports pass
+or fail for on its own - a `dastest` `[test]` and each `t |> run(...)` case in it, a compile-fail
+fixture with an `expect` line, a JavaScript runner's `test(...)` case; its load-bearing assertions are
+the ones that prove the change, never one that runs only when the arm skips (`ARCHITECTURE.md#arms`). A
+CI row is a workflow step that runs the arm, directly or through a process it spawns; a pull-request
+lane is a CI job run on every pull request. An assertion no CI row can run needs one of these and
+nothing else: a GPU, a host tool no pull-request image carries, a network service, a credential, or a
+model or data file neither the checkout nor the build provides. One arm can hold assertions of both
+kinds, and each rule below binds the assertions of its own kind (`ARCHITECTURE.md#ci-rows`).
 
 **A changed file that belongs to a tool, wherever the tool sits, is reviewed with that tool's
 own `REVIEW.md`, where one exists, as well as with this checklist.**

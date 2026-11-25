@@ -7,10 +7,10 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_CAPI.md`, `ARCHITECTURE_CURSOR.md`, `ARCH
 `ARCHITECTURE_RST.md`, `ARCHITECTURE_SHADER.md`, `ARCHITECTURE_SQL_LINQ.md`,
 `ARCHITECTURE_STYLE_LINT.md`, `ARCHITECTURE_SYNTAX.md`. A diff touching the linq family -
 `linq*.das`, `sql_*.das` - applies `REVIEW_LINQ.md` too. A diff that changes compile-time
-AST-building code - a class deriving an
-`Ast*Annotation` or `Ast*Macro`, an `AstVisitor` a macro or an annotation runs at compile time
-(the `aot_cpp.das` visitors included), a `[macro_function]`, or any function that calls
-`qmacro*`, `apply_template`, `macro_error`, or `macro_sticky_error` - applies
+AST-building code - a class deriving an `Ast*Annotation` or `Ast*Macro`; an `AstVisitor` a macro
+or an annotation runs at compile time whose visit method creates an AST node or returns a node
+other than the one it received; any `AstVisitor` in `aot_cpp.das`; a `[macro_function]`; or any
+function that calls `qmacro*`, `apply_template`, `macro_error`, or `macro_sticky_error` - applies
 `REVIEW_MACROS.md` too. A diff touching `daspkg.das` - the functions a `.das_package` manifest
 body calls - applies `utils/daspkg/REVIEW.md` (repo root) too. A diff touching
 `shader_lingua_franca.das` or `shader_emit_common.das` - the declarations and helpers the shader
@@ -58,12 +58,11 @@ survives into the sibling construct's exit path and unbalances it.
 **A diff that adds or changes a daslib fact a second site must agree with - code or a `//!`
 contract here, or what a C++ name `aot_cpp.das` writes into generated code does or returns -
 where no lint, compile error or test that every flagless `dastest` run over `tests/` (repo
-root) executes fails on a mismatch, records the pair in an `ARCHITECTURE*.md` of this folder,
-naming both sides by symbol name.** The second site may be outside this repository. A property
-every member of a set must hold is not a pair; two named sites that must list the same members
-are.
-
-A second site is code, a generated file or an outside consumer, never a document restating the fact.
+root) executes fails when either side changes alone, records the pair in an `ARCHITECTURE*.md`
+of this folder, naming both sides by symbol name.** A second site is code, a generated file or
+an outside consumer, never a document restating the fact; it may be outside this repository. A
+property every member of a set must hold is not a pair; two named sites that must list the same
+members are.
 
 **A diff that records a pair puts it in the section that holds its daslib file (for a C++ name, the
 emitter file that writes it), or in a new section of `ARCHITECTURE.md` or a companion when no

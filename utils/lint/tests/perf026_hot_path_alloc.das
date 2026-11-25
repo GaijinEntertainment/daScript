@@ -26,7 +26,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // sink several frames deep is still reported — anchored on the deepest line
 // written in the root's own file, not on the daslib internal that allocates.
 
-expect 31208:12
+expect 31208:20
 
 require daslib/perf_lint
 require strings
@@ -247,4 +247,296 @@ def good_pool_shapes(var fl : FreeList; k : int) : int {
     unsafe {
         return g_resident[k]
     }
+}
+
+// 18. a callee with a @scratch parameter is still walked:
+//     only sizing of a reused destination is exempt in it, so
+//     a pure sizing helper (delete-then-reserve included) stays
+//     quiet and a working function's own allocation is reported
+def overwrite_room(@scratch var a : array<float>; need : int64) {
+    if (long_length(a) < need) {
+        delete a
+        a |> reserve(need)
+    }
+    a |> resize_no_init(need)
+}
+
+[no_alloc]
+def good_pure_sizing_helper(var sc : Scratch; n : int64) {
+    overwrite_room(sc.reused, n)
+}
+
+def fill_out(x : array<float>; @scratch var out : array<float>) {
+    out |> resize(length(x))
+    var tmp : array<float>
+    tmp |> push(1.0)                    // PERF026, in a @scratch-param callee
+    out[0] = tmp[0]
+}
+
+[no_alloc]
+def bad_working_function_with_scratch_param(var sc : Scratch) {
+    fill_out(sc.fresh, sc.reused)
+}
+
+// 19. an explicit delete of a @scratch field is sizing too:
+//     it frees the buffer the owner regrows - in every form
+//     delete lowers to: an array or table (builtin`finalize`),
+//     a structure (finalize), a fixed array (builtin`finalize_dim`)
+struct Rows {
+    v : array<int>
+}
+
+struct DeleteForms {
+    @scratch tab : table<int; int>
+    @scratch rows : Rows
+    @scratch fixed : array<int>[2]
+}
+
+[no_alloc]
+def good_delete_of_scratch_field(var sc : Scratch) {
+    delete sc.reused
+}
+
+[no_alloc]
+def good_delete_of_scratch_table(var d : DeleteForms) {
+    delete d.tab
+}
+
+[no_alloc]
+def good_delete_of_scratch_struct(var d : DeleteForms) {
+    delete d.rows
+}
+
+[no_alloc]
+def good_delete_of_scratch_fixed_array(var d : DeleteForms) {
+    delete d.fixed
+}
+
+[no_alloc]
+def bad_delete_of_unmarked_field(var sc : Scratch) {
+    delete sc.fresh                     // PERF026
+}
+
+// a finalizer the user wrote is still walked: freeing its own
+// fields is the delete, anything else in it is held to the root
+struct OwnFields {
+    v : array<int>
+}
+
+def finalize(var x : OwnFields) {
+    delete x.v
+}
+
+struct Grows {
+    v : array<int>
+}
+
+def finalize(var x : Grows) {
+    var tmp : array<int>
+    tmp |> push(1)                      // PERF026, in a user finalizer
+    delete x.v
+}
+
+struct Leaf {
+    v : int
+}
+
+struct OwnsPointer {
+    p : Leaf?
+}
+
+def finalize(var x : OwnsPointer) {
+    unsafe {
+        delete x.p
+    }
+}
+
+struct UserFinalized {
+    @scratch own : OwnFields
+    @scratch grows : Grows
+    @scratch ptr : OwnsPointer
+}
+
+[no_alloc]
+def good_delete_through_own_field_finalizer(var u : UserFinalized) {
+    delete u.own
+}
+
+[no_alloc]
+def good_delete_through_pointer_field_finalizer(var u : UserFinalized) {
+    delete u.ptr
+}
+
+[no_alloc]
+def bad_delete_through_allocating_finalizer(var u : UserFinalized) {
+    delete u.grows
+}
+
+struct InnerGrows {
+    v : array<int>
+}
+
+def finalize(var x : InnerGrows) {
+    var tmp : array<int>
+    tmp |> push(1)                      // PERF026, under a generated finalizer
+    delete x.v
+}
+
+struct OuterGrows {
+    inner : InnerGrows
+}
+
+struct ThroughRef {
+    items : array<int>
+}
+
+def finalize(var x : ThroughRef) {
+    var p & = unsafe(x.items)
+    delete p
+}
+
+struct Chain {
+    v : array<int>
+    next : Chain?
+}
+
+struct Reused {
+    @scratch outer : OuterGrows
+    @scratch through_ref : ThroughRef
+    @scratch chain : Chain
+    @scratch rows : array<OwnFields>
+    @scratch by_key : table<int; OwnFields>
+}
+
+[no_alloc]
+def bad_alloc_under_generated_finalizer(var r : Reused) {
+    delete r.outer
+}
+
+[no_alloc]
+def good_self_free_through_reference(var r : Reused) {
+    delete r.through_ref
+}
+
+[no_alloc]
+def good_elements_free_themselves(var r : Reused) {
+    delete r.rows
+    delete r.by_key
+}
+
+[no_alloc]
+def good_recursive_type_frees_itself(var r : Reused) {
+    unsafe {
+        delete r.chain
+    }
+}
+
+// 20. a reference bound through a ternary carries the mark
+//     only when both branches do
+struct TwoScratch {
+    @scratch a : array<float>
+    @scratch b : array<float>
+    @pool p : array<float>
+    plain : array<float>
+}
+
+[no_alloc]
+def good_ternary_ref(var s : TwoScratch; c : bool; n : int) {
+    var x & = c ? s.a : s.b
+    x |> resize(n)
+}
+
+[no_alloc]
+def good_ternary_ref_scratch_or_pool(var s : TwoScratch; c : bool; n : int) {
+    var x & = c ? s.a : s.p
+    x |> resize(n)
+}
+
+[no_alloc]
+def bad_ternary_ref_one_unmarked(var s : TwoScratch; c : bool; n : int) {
+    var x & = c ? s.a : s.plain
+    x |> resize(n)                                          // PERF026
+}
+
+[no_alloc]
+def bad_ternary_ref_unmarked_left(var s : TwoScratch; c : bool; n : int) {
+    var x & = c ? s.plain : s.a
+    x |> resize(n)                                          // PERF026
+}
+
+// 23. a class pointer frees through its class finalizer, reached
+//     by the class's dispatch: its own fields are the delete,
+//     a derived override included; anything else is reported
+class CleansItself {
+    items : array<int>
+    def operator delete {
+        delete self.items
+    }
+}
+
+class CleansMore : CleansItself {
+    more : array<int>
+    def operator delete {
+        delete self.more
+        delete super.self
+    }
+}
+
+class GrowsOnDelete {
+    items : array<int>
+    def operator delete {
+        var tmp : array<int>
+        tmp |> push(1)                  // PERF026, in a class finalizer
+        delete self.items
+    }
+}
+
+struct ClassHolder {
+    @scratch own : CleansItself?
+    @scratch derived : CleansMore?
+    @scratch grows : GrowsOnDelete?
+}
+
+[no_alloc]
+def good_delete_class_pointer(var h : ClassHolder) {
+    unsafe {
+        delete h.own
+    }
+}
+
+[no_alloc]
+def good_delete_derived_class_pointer(var h : ClassHolder) {
+    unsafe {
+        delete h.derived
+    }
+}
+
+[no_alloc]
+def bad_delete_class_pointer_that_allocates(var h : ClassHolder) {
+    unsafe {
+        delete h.grows
+    }
+}
+
+// 24. a function value in a class's data field is followed like a
+//     struct's: only declared methods match by member name
+def alloc_through_hook(var a : array<float>) {
+    a |> push(6.)                       // PERF026, through the class field
+}
+
+class HasHook {
+    hook : function<(var a : array<float>) : void>
+}
+
+var g_hooked : HasHook?
+
+[init]
+def hooked_boot {
+    g_hooked = new HasHook()
+    g_hooked.hook = @@alloc_through_hook
+}
+
+[no_alloc]
+def bad_class_data_field_dispatch(var a : array<float>) {
+    invoke(g_hooked.hook, a)
 }

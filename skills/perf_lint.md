@@ -87,11 +87,21 @@ pointers is emptied on every exit of the function that fills it: LINT034 reports
 pointer still in it on return.
 
 A sizing call whose destination reaches a `@scratch` declaration is not descended into - a struct
-field, a by-ref helper parameter, or a module global (`var @scratch g : array<T>`; the annotation
-goes AFTER `var`, before it is a syntax error). The mark covers the sizing set
-(`resize`/`reserve`/`push*`/`emplace`/`insert`/`erase`/`pop`/`clear`) and **table indexing**
-(`t[k]` inserts on a miss), and it follows local reference bindings (`var lst & = s.bufs[b]`
-carries the mark).
+field, a local, a by-ref helper parameter, or a module global (`var @scratch g : array<T>`; the
+annotation goes AFTER `var`, before it is a syntax error). The mark covers the sizing set
+(`resize`/`resize_no_init`/`reserve`/`ensure_capacity`/`push*`/`emplace`/`insert`/`erase`/`pop`/
+`clear` and the `scratch_*` one-shots), `delete` of the buffer (every finalizer the delete reaches
+is still walked, generated or written, through fields, elements and pointees: what each one frees
+of its own object is the delete, and anything else in it is held to the contract), and **table
+indexing** (`t[k]` inserts on a miss), and it follows local reference bindings
+(`var lst & = s.bufs[b]` carries the mark; `var x & = c ? s.a : s.b` carries it when every branch
+is `@scratch` or `@pool`).
+
+The mark exempts those operations on that buffer and nothing else. A function that takes a
+`@scratch` parameter is still walked: a pure sizing helper reads clean because nothing in it
+allocates but the sizing of its marked parameter, while a working function that fills a caller's
+buffer is held to the contract for everything else it does - a fresh local it grows, a log line, a
+`getenv`.
 
 ### `@pool` - declaring a container that owns what it holds
 
@@ -141,8 +151,11 @@ Not a runtime flag: the annotation changes nothing about how the array grows - i
 reserve-first spelling a checked contract at every site that touches the buffer.
 
 On a hot path a `@scratch @exact_size` buffer sizes through a helper whose own parameter is `@scratch` too (an
-`ensure_capacity` then `resize` body, which also satisfies PERF032): a helper with an unmarked parameter is descended
-into, so the example's `reserve_resize` called on such a buffer reports PERF026 at its `reserve`.
+`ensure_capacity` then `resize` body, which also satisfies PERF032). Every helper is walked, and a helper's
+parameter carries an exemption only when the parameter itself is `@scratch` or `@pool` - the caller's mark does
+not cross the call - so the example's `reserve_resize`, whose parameter is only `@exact_size`, reports PERF026
+at its `reserve`. A reference bound through a ternary is `@exact_size` when either branch is: the contract binds
+whichever buffer arrives.
 
 ### Escape hatches, in order of preference
 

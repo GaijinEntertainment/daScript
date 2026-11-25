@@ -10,12 +10,13 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // reserve or ensure_capacity of the same receiver earlier in the function; sizing it through
 // a helper that reserves (reserve_resize and kin) is transparent.
 
-expect 31208:9
+expect 31208:12
 
 require daslib/perf_lint
 
 struct State {
     @exact_size buf : array<float>
+    @exact_size buf2 : array<float>
     plain : array<float>
     @exact_size not_an_array : int      // PERF032 - not an array
 }
@@ -46,6 +47,23 @@ def bad_reserve_after(var st : State; n : int) {
 
 def bad_param(@exact_size var a : array<float>&; n : int) {
     a |> resize(n)                      // PERF032 - annotated parameter
+}
+
+def bad_through_ternary(var st : State; c : bool; n : int) {
+    var x & = c ? st.buf : st.buf2
+    x |> resize(n)                      // PERF032 - a ternary reference of two @exact_size arrays
+}
+
+// @exact_size is an obligation: one marked branch is enough,
+// in either order
+def bad_through_ternary_one_exact(var st : State; c : bool; n : int) {
+    var x & = c ? st.buf : st.plain
+    x |> resize(n)                      // PERF032 - the exact branch on the left
+}
+
+def bad_through_ternary_one_exact_right(var st : State; c : bool; n : int) {
+    var x & = c ? st.plain : st.buf
+    x |> resize(n)                      // PERF032 - the exact branch on the right
 }
 
 def bad_decl_type() {
@@ -121,6 +139,9 @@ def main() {
     bad_global(3)
     bad_reserve_after(st, 3)
     bad_param(st.buf, 3)
+    bad_through_ternary(st, true, 3)
+    bad_through_ternary_one_exact(st, true, 3)
+    bad_through_ternary_one_exact_right(st, true, 3)
     bad_decl_type()
     bad_param_type(1)
     good_scratch_reserve(st, 3)
