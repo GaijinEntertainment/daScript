@@ -206,6 +206,23 @@ def test_slow_tier_kind_contract(t : T?) {
     }
 }
 
+[test(description = "The Vulkan alternate-stamp set in a runtime section applies as written, a section without it leaves the set standing, and the setter refuses a negative set")]
+def test_vk_alt_stamps_apply(t : T?) {
+    var terr = ""
+    let path = path_join(temp_directory(terr), "dasllama_test_box_profile_vk_alt.json")
+    let prior = vk_alt_stamps()
+    t |> success(fwrite(path, "\{\"runtime\":\{\"vk_alt_stamps\":5\}\}"), "the profile written")
+    apply_box_profile_runtime(path)
+    t |> equal(vk_alt_stamps(), 5l, "vk_alt_stamps applied")
+    t |> success(fwrite(path, "\{\"runtime\":\{\"vk_split_k_tgs\":{vk_split_k_tgs()}\}\}"), "a profile without the set written")
+    apply_box_profile_runtime(path)
+    t |> equal(vk_alt_stamps(), 5l, "control: a section without the set leaves it standing")
+    set_vk_alt_stamps(-1l)
+    t |> equal(vk_alt_stamps(), 5l, "a negative set is refused by the setter")
+    set_vk_alt_stamps(prior)
+    remove(path)
+}
+
 [test(description = "The Metal, Vulkan and CUDA prefill knobs in a runtime section apply as written, a zero floor, panel or cvt row count is refused while a zero knee applies, and each setter refuses a negative knee")]
 def test_metal_prefill_knobs_apply(t : T?) {
     var terr = ""
@@ -413,7 +430,7 @@ def test_apply_status_describes_the_last_checked_apply(t : T?) {
 }
 
 // The speculative depth: the box knobs decide per round kind until an explicit set wins.
-[test(description = "The profile mtp_depth_nextn and mtp_depth_assistant knobs set the draft depth per round kind, an explicit set_mtp_depth wins over both, and clearing it hands the knobs back")]
+[test(description = "The profile mtp_depth_nextn and mtp_depth_assistant knobs set the draft depth per round kind, an assistant round on a discrete home drafts three whatever the knob says, an explicit set_mtp_depth wins over all, clearing it hands the knobs back, and a refused decode override leaves the discrete home's flag as it stood")]
 def test_mtp_depth_knobs_apply_per_round_kind(t : T?) {
     var terr = ""
     let dir = temp_directory(terr)
@@ -424,14 +441,37 @@ def test_mtp_depth_knobs_apply_per_round_kind(t : T?) {
     apply_box_profile_runtime(path)
     t |> equal(get_mtp_depth_assistant(), 2l, "assistant knob applied")
     t |> equal(get_mtp_depth_nextn(), 1l, "nextn knob applied")
+    let home_discrete = mtp_home_discrete()
+    set_mtp_home_discrete(false)
     set_mtp_round_kind(MtpRoundKind.nextn)
     t |> equal(get_mtp_depth(), 1l, "a NextN round drafts the nextn depth")
     set_mtp_round_kind(MtpRoundKind.assistant)
     t |> equal(get_mtp_depth(), 2l, "an assistant round drafts the assistant depth")
+    set_mtp_round_kind(MtpRoundKind.assistant_discrete)
+    t |> equal(get_mtp_depth(), MTP_DEPTH_ASSISTANT_DISCRETE, "an assistant round on a discrete home drafts its own depth, whatever the box knob says")
+    t |> equal(MTP_DEPTH_ASSISTANT_DISCRETE, 3l, "... which is three")
+    set_mtp_round_kind(MtpRoundKind.nextn)
+    set_mtp_home_discrete(true)
+    t |> equal(get_mtp_depth(), MTP_DEPTH_NEXTN_DISCRETE, "a NextN round on a discrete home drafts that home's depth, whatever the box knob says")
+    t |> equal(mtp_depth_nextn_discrete(), MTP_DEPTH_NEXTN_DISCRETE, "... the depth the resident driver sizes its verify rows off")
+    t |> equal(MTP_DEPTH_NEXTN_DISCRETE, 3l, "... which is three")
+    set_mtp_round_kind(MtpRoundKind.assistant)
+    t |> equal(get_mtp_depth(), 2l, "an assistant round there keeps the assistant knob")
+    set_mtp_round_kind(MtpRoundKind.nextn)
+    set_mtp_depth(2l)
+    t |> equal(get_mtp_depth(), 2l, "an explicit depth wins over the discrete home's")
+    t |> equal(mtp_depth_nextn_discrete(), 2l, "... at the driver's arm too")
+    clear_mtp_depth()
+    t |> success(!select_decode_override("no such override"), "an unknown decode override is refused")
+    t |> success(mtp_home_discrete(), "... and the refused selection leaves the home's flag as it stood")
+    set_mtp_home_discrete(false)
+    t |> equal(get_mtp_depth(), 1l, "control: the home given back, the NextN round drafts the nextn knob")
+    set_mtp_round_kind(MtpRoundKind.assistant)
     set_mtp_depth(3l)
     t |> equal(get_mtp_depth(), 3l, "an explicit depth wins over the knobs")
     clear_mtp_depth()
     t |> equal(get_mtp_depth(), 2l, "clearing the explicit depth hands the knobs back")
+    set_mtp_home_discrete(home_discrete)
     remove(path)
     restore_defaults()
 }

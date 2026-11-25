@@ -746,6 +746,208 @@ def test_dflash_walk_codebook_scale(t : T?) {
 def private shape_drafter() : DflashDrafter =>
     DflashDrafter(dim = 256l, hidden = 512l, n_heads = 2l, n_kv = 1l, hs = 128l, nblock = 16l, window = 2048l)
 
+[test(description = "The drafter ring's layout puts the windowed layers first and the dense layers after them at the ring's dense slots; a dense layer's span runs from the context's first valid position; a ring short of a position grows to twice its slots or to the position; a reserve widens a new ring; with the dense reading off every layer is windowed and no ring is ever short.")]
+def test_dflash_ring_layout(t : T?) {
+    var dr <- shape_drafter()
+    dr.n_layers = 5l
+    dr.dense <- [false, true, false, false, true]
+    let dense_was = dflash_dense_knob()
+    let reserve_was = dflash_dense_reserve()
+    set_dflash_dense(true)
+    set_dflash_dense_reserve(0l)
+    dflash_ring_layout(dr)
+    let kvd = dr.n_kv * dr.hs
+    let w = dr.window
+    let cap = 5000l
+    t |> equal(dr.n_win, 3l, "three of the five layers are windowed")
+    t |> equal(dflash_ring_off(dr, 0l, cap), 0l, "the first windowed layer opens the ring")
+    t |> equal(dflash_ring_off(dr, 2l, cap), w * kvd, "the second windowed layer follows it, the dense layer between them set aside")
+    t |> equal(dflash_ring_off(dr, 3l, cap), 2l * w * kvd, "... and the third")
+    t |> equal(dflash_ring_off(dr, 1l, cap), 3l * w * kvd, "the first dense layer sits past every windowed layer")
+    t |> equal(dflash_ring_off(dr, 4l, cap), (3l * w + cap) * kvd, "the second dense layer a dense layer's slots further")
+    t |> equal(dflash_ring_elems(dr, cap), (3l * w + 2l * cap) * kvd, "the ring ends past the last dense layer")
+    t |> equal(dflash_ring_slots(dr, 0l, cap), w, "a windowed layer holds its window")
+    t |> equal(dflash_ring_slots(dr, 4l, cap), cap, "a dense layer holds the ring's dense slots")
+    let win = dflash_layer_span(dr, 0l, 3000l, 2040l, 16l)
+    t |> success(win.lo == 3000l && win.nctx == 2040l, "a windowed layer attends the pass's span ({win.lo} + {win.nctx})")
+    let dense = dflash_layer_span(dr, 1l, 3000l, 2040l, 16l)
+    t |> success(dense.lo == 16l && dense.nctx == 5024l, "a dense layer attends from the first valid position to the same end ({dense.lo} + {dense.nctx})")
+    t |> success(!dflash_ring_short(dr, 2048l, 2048l), "a ring of 2048 dense slots holds positions under 2048")
+    t |> success(dflash_ring_short(dr, 2048l, 2049l), "... and is short of one more")
+    t |> equal(dflash_ring_grown(dr, 2048l, 2049l), 4096l, "a short ring doubles")
+    t |> equal(dflash_ring_grown(dr, 2048l, 9000l), 9000l, "... or takes the position asked where that is further")
+    t |> equal(dflash_ring_first(dr), w, "a new ring's dense layers hold the window")
+    set_dflash_dense_reserve(8192l)
+    dflash_ring_layout(dr)
+    set_dflash_dense_reserve(0l)
+    t |> equal(dflash_ring_first(dr), 8192l, "a reserve of 8192 widens a new ring")
+    t |> equal(dflash_ring_grown(dr, 0l, 10l), 8192l, "... and is what a ring's first growth takes")
+    set_dflash_dense(false)
+    dflash_ring_layout(dr)
+    t |> equal(dr.n_win, 5l, "the dense reading off, every layer is windowed")
+    t |> equal(dflash_ring_off(dr, 4l, cap), 4l * w * kvd, "... each a window after the one before")
+    t |> success(!dflash_ring_short(dr, 2048l, 1000000l), "... and no ring is short of any position")
+    reset_dflash_dense()
+    dr.dense[1] = true
+    dr.dense[4] = true
+    dflash_ring_layout(dr, true)
+    t |> equal(dr.n_win, 3l, "unset, the dense reading is on for a device arm's pass")
+    dflash_ring_layout(dr, false)
+    t |> equal(dr.n_win, 5l, "... and off for the CPU arm's")
+    restore_dflash_dense(dense_was)
+    set_dflash_dense_reserve(reserve_was)
+    delete dr
+}
+
+[test(description = "A drafter ring's growth names one move a layer, the last layer first: a dense layer's old slots from its old first element to its new one, a windowed layer in place; a ring of three dense layers grown in place from 4 slots to 8 by those moves keeps every layer's rows; a device plane's bytes are the ring's halves, the rows a home joins past it and the 64-slot slack.")]
+def test_dflash_ring_moves(t : T?) {
+    var dr = DflashDrafter(n_kv = 1l, hs = 2l, window = 4l, n_layers = 4l)
+    dr.dense <- [true, false, true, true]
+    let dense_was = dflash_dense_knob()
+    let reserve_was = dflash_dense_reserve()
+    set_dflash_dense(true)
+    set_dflash_dense_reserve(0l)
+    dflash_ring_layout(dr)
+    restore_dflash_dense(dense_was)
+    set_dflash_dense_reserve(reserve_was)
+    var inscope moves : array<int64>
+    dflash_ring_moves(dr, 4l, 8l) $(from, to, n) {
+        moves |> push(from)
+        moves |> push(to)
+        moves |> push(n)
+    }
+    // a slot is two elements and the one windowed layer's four slots open the ring: the dense layers start at element 8, eight
+    // elements apart in the old ring and sixteen in the new
+    let want = fixed_array(24l, 40l, 8l, 16l, 24l, 8l, 0l, 0l, 8l, 8l, 8l, 8l)
+    t |> equal(length(moves), 12, "a growth names a move for each of the four layers")
+    for (i in range(min(length(moves), 12))) {
+        t |> equal(moves[i], want[i], "move {i / 3} from the last layer down, number {i % 3} of (from, to, elements)")
+    }
+    var inscope ring : array<int64>
+    ring |> resize(dflash_ring_elems(dr, 8l))
+    for (i in range64(dflash_ring_elems(dr, 4l))) {
+        ring[i] = i + 1l
+    }
+    dflash_ring_moves(dr, 4l, 8l) $(from, to, n) {
+        return if (from == to)
+        var i = n - 1l
+        while (i >= 0l) {
+            ring[to + i] = ring[from + i]
+            i--
+        }
+    }
+    var lost = 0
+    for (l in range64(dr.n_layers)) {
+        for (i in range64(dflash_ring_slots(dr, l, 4l) * 2l)) {
+            lost += ring[dflash_ring_off(dr, l, 8l) + i] == dflash_ring_off(dr, l, 4l) + i + 1l ? 0 : 1
+        }
+    }
+    t |> equal(lost, 0, "grown in place by the moves, every layer's rows sit at its new place")
+    t |> equal(dflash_ring_elems(dr, 8l), 56l, "the grown ring: a window of 4 slots and three dense layers of 8, two elements a slot")
+    t |> equal(dflash_ring_bytes(dr, 8l, 0l), 368l, "a device plane with no joined rows: the 56 elements and 64 slack slots as halves")
+    t |> equal(dflash_ring_bytes(dr, 8l, 16l), 432l, "... and with a block of 16 rows joined past the context: 16 slots more")
+    delete dr
+}
+
+[test(description = "The CPU arm's ring reach makes a ring at the window's slots, moves nothing on a reach inside them, and grows its dense layers in place on a reach past them: a ring of one windowed and three dense layers, every element numbered, goes from 4 dense slots to 8 with each layer's rows at its new first element in both planes - the second and the third dense layer moved up")]
+def test_dflash_ring_reach_grows_in_place(t : T?) {
+    var dr = DflashDrafter(n_kv = 1l, hs = 2l, window = 4l, n_layers = 4l)
+    dr.dense <- [true, false, true, true]
+    let dense_was = dflash_dense_knob()
+    let reserve_was = dflash_dense_reserve()
+    set_dflash_dense(true)
+    set_dflash_dense_reserve(0l)
+    dflash_ring_layout(dr)
+    restore_dflash_dense(dense_was)
+    set_dflash_dense_reserve(reserve_was)
+    var inscope rk, rv : array<float>
+    var cap = dflash_ring_reach(dr, rk, rv, 0l, 4l)
+    t |> equal(cap, 4l, "the first reach makes a ring whose dense layers hold the window's 4 slots")
+    t |> equal(length(rk), 32, "... sixteen slots of two elements over the four layers")
+    t |> equal(length(rv), 32, "... in the V plane too")
+    return if (length(rk) != 32 || length(rv) != 32)
+    for (i in range(32)) {
+        rk[i] = float(i + 1)
+        rv[i] = -float(i + 1)
+    }
+    cap = dflash_ring_reach(dr, rk, rv, cap, 4l)
+    t |> success(cap == 4l && length(rk) == 32, "a reach for a position the ring holds grows nothing ({cap} slots, {length(rk)} elements)")
+    cap = dflash_ring_reach(dr, rk, rv, cap, 5l)
+    t |> equal(cap, 8l, "a reach one position past the 4 slots doubles the dense layers")
+    t |> equal(length(rk), 56, "... to a window of 4 slots and three dense layers of 8, two elements a slot")
+    t |> equal(length(rv), 56, "... in the V plane too")
+    return if (length(rk) != 56 || length(rv) != 56)
+    // by hand, two elements a slot: the windowed layer's 4 slots open the ring at element 0 and stay. The dense layers held 8
+    // elements each from elements 8, 16 and 24; grown to 16 elements each they start at 8, 24 and 40
+    let was = fixed_array(0, 8, 16, 24)
+    let now = fixed_array(0, 8, 24, 40)
+    var lost = 0
+    var first_lost = -1
+    for (ly in range(4)) {
+        for (i in range(8)) {
+            let want = float(was[ly] + i + 1)
+            if (rk[now[ly] + i] != want || rv[now[ly] + i] != -want) {
+                first_lost = first_lost < 0 ? now[ly] + i : first_lost
+                lost++
+            }
+        }
+    }
+    t |> equal(lost, 0, "each layer's 8 elements sit at its new first element in both planes ({lost} of 32 off, the first at element {first_lost})")
+    delete dr
+}
+
+[test(description = "A discrete home's land seam over a held pass that no verify came for waits the home's queue once, lands the device walk's picks as the round's drafts and lets the pass go; a wait that fails lands nothing and keeps the pass; a pass the verify seat landed is let go with no wait and no second landing; a count that is not the held pass's, and a home with no drafter, are refused with no wait")]
+def test_dflash_held_land(t : T?) {
+    var dr : DflashDrafter
+    var inscope host <- [900u, 11u, 22u, 0xFFFFFFFFu]   // the walk's landing: the anchor's word, then a pick a word, all ones an unfilled slot
+    var inscope drafts <- [-7l, -7l, -7l, -7l]
+    var waits = 0
+    var held = DflashHeldPass(nd = 3l, tok = 5l, walked = true)
+    unsafe {
+        let drp = addr(dr)
+        let hostp = addr<void?>(host[0])
+        var ms = dflash_held_land(held, drp, hostp, drafts, 3l) $ {
+            waits++
+            return false
+        }
+        t |> success(ms < 0.0lf && waits == 1, "a wait that fails answers a negative after one wait ({ms}, {waits})")
+        t |> success(drafts[1] == -7l && drafts[2] == -7l && drafts[3] == -7l, "... and lands nothing")
+        t |> success(held.nd == 3l && !held.landed, "... and keeps the pass held")
+        ms = dflash_held_land(held, drp, hostp, drafts, 3l) $ {
+            waits++
+            return true
+        }
+        t |> success(ms == 0.0lf && waits == 2, "a held pass no verify landed waits the queue once ({ms}, {waits - 1})")
+        t |> success(drafts[0] == -7l && drafts[1] == 11l && drafts[2] == 22l && drafts[3] == -1l,
+            "... and lands the walk's three picks past the anchor: 11, 22 and the unfilled slot as -1 ({drafts[1]}, {drafts[2]}, {drafts[3]})")
+        t |> success(held.nd == 0l && !held.walked && !held.landed, "... and lets the pass go")
+        held = DflashHeldPass(nd = 3l, tok = 5l, walked = true)
+        drafts[1] = -7l
+        t |> success(dflash_held_drafts(held, drp, hostp, drafts, 3l) && drafts[1] == 11l && held.landed, "the verify seat lands a held pass")
+        t |> success(!dflash_held_drafts(held, drp, hostp, drafts, 3l), "... once")
+        drafts[1] = -7l
+        ms = dflash_held_land(held, drp, hostp, drafts, 3l) $ {
+            waits++
+            return true
+        }
+        t |> success(ms == 0.0lf && waits == 2, "a pass the verify seat landed is let go with no wait ({ms}, {waits - 2} more)")
+        t |> success(drafts[1] == -7l && held.nd == 0l, "... and is not landed a second time")
+        held = DflashHeldPass(nd = 3l, tok = 5l, walked = true)
+        ms = dflash_held_land(held, drp, hostp, drafts, 2l) $ {
+            waits++
+            return true
+        }
+        t |> success(ms < 0.0lf && waits == 2 && held.nd == 3l, "a count that is not the held pass's is refused with no wait, the pass kept")
+        let no_drafter : DflashDrafter const? = null
+        ms = dflash_held_land(held, no_drafter, hostp, drafts, 3l) $ {
+            waits++
+            return true
+        }
+        t |> success(ms < 0.0lf && waits == 2 && held.nd == 3l, "a home with no drafter is refused with no wait")
+    }
+    delete dr
+}
+
 [test(description = "`dflash_device_shape_why` takes a drafter the row kernels stage - a head of 256, a window and block filling the staged keys exactly - and names, by its own clause, bias rows, a head past 256 or odd, a window and block past the staged keys, a block past the planes' rows, and each row width off the Q8_0 block")]
 def test_dflash_device_shape_why(t : T?) {
     let hs_max = int64(GK_DFLASH_HS)

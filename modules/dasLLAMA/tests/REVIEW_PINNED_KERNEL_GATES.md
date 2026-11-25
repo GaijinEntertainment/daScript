@@ -92,8 +92,9 @@ holding:
 - `test_vulkan_kernels.das`'s `test_vkd_router_gemv_bf16` cell must hold the bf16 router-form rows against the CPU dot
   at a row base and an output base, the two-base form and the norm-folded form.
 - `test_vulkan_kernels.das`'s `test_vkd_router_gemv_cols` cell must hold the router GEMV over x rows as columns
-  against the one-row dispatch bit for bit and the CPU dot, the bf16 rows' halfword stamp at an odd dim among its
-  arms.
+  against the one-row dispatch bit for bit - at the approx bar where `vk_rounds_alike` is false, a device whose compiler
+  rounds a shader at a time (`../ARCHITECTURE_GPU_SHARED_ROWS.md#token-table-gather`) - and the CPU dot, the bf16 rows'
+  halfword stamp at an odd dim among its arms.
 - `test_vulkan_kernels_gemm.das`'s `test_vkd_f32_khr_batch` cell must hold the staged KHR tile over f32 rows against
   the CPU oracle with each weight rounded to f16, whole and in two k chunks through the reduce.
 - `test_vulkan_kernels.das`'s `test_vkd_kq_gemv_k4_gu` cell must hold the fused gate + up + act + requant on Q4_K,
@@ -102,19 +103,26 @@ holding:
   `test_vkd_q5032_gemv` and `test_vkd_mx4_gemv` cells must hold the format's GEMV against its scalar dot, and its
   summed twin (`per32_sum_rows_cell`) over one, two and four token rows - every row its slots' dots under their
   weights, a poisoned last row the control, a wider dispatch's rows bit for bit the narrower one's.
+- `test_vulkan_kernels_gemm.das`'s `test_vkd_mmq_tiles`, `test_vkd_mmq_feed` and `test_vkd_mmq_inv` cells must hold the
+  int8 tiles against the f16 oracles and the feeds and the row map against their host forms, each with its
+  poisoned-element control, and `test_vkd_mmq_device_check` the device check passing on an AMD KHR device.
 - `test_vulkan_kernels_gemm.das`'s `test_vkd_q51_cm2_batch`, `test_vkd_mx4_cm2_batch`, `test_vkd_iq4nl32_cm2_batch`,
-  `test_vkd_iq3s4_cm2_batch`, `test_vkd_f16_gemm_khr`, `test_vkd_f16_gemm_s`, `test_vkd_kq_batch_family` and
-  `test_vkd_nv4_cm2_batch` cells - the census's evidence for the classes no zoo row dispatches - must hold each class
+  `test_vkd_iq3s4_cm2_batch`, `test_vkd_f16_gemm_khr`, `test_vkd_f16_gemm_s`, `test_vkd_kq_batch_family`,
+  `test_vkd_khr_rot_tiles` and `test_vkd_nv4_cm2_batch` cells - the census's evidence for the classes no zoo row dispatches - must hold each class
   against its CPU oracle at the bar the cell sets, with the cell's poisoned-element control.
 - `test_vulkan_kernels_attn.das`'s `test_vkd_fa_cm2`, `test_vkd_fa_khr`, `test_vkd_fa_khr_h256_softcap`,
-  `test_vkd_fa_khr_h256_gated`, `test_vkd_da_attn`, `test_vkd_da_attn_rqk` and `test_vkd_da_attn_bw` cells - the
+  `test_vkd_fa_khr_h256_gated`, `test_vkd_fa_khr_tfirst`, `test_vkd_fa_khr_small_twins`, `test_vkd_da_attn`,
+  `test_vkd_da_attn_rqk`, `test_vkd_da_attn_tile` and `test_vkd_da_attn_bw` cells - the
   census's evidence for the classes no zoo row dispatches - must hold each class against its CPU oracle at the bar the
   cell sets, with the cell's poisoned-element control.
 - `test_vulkan_kernels.das`'s `test_vkd_mx4_gemv_gu`, `test_vkd_gemv_ncol`, `test_vkd_q8_gemv_gu_n`,
   `test_vkd_q8_gemv_pleact`, `test_vkd_act_family`, `test_vkd_moe_routing`, `test_vkd_dn_family`, `test_vkd_hc_seams`,
   `test_vkd_hc_rows`, `test_vkd_ple_side`, `test_vkd_moe_gather_row`, `test_vkd_combine_row` and
   `test_vkd_emb_gather_family` cells - the census's evidence for the classes no zoo row dispatches - must hold each
-  class against its CPU oracle at the bar the cell sets, with the cell's poisoned-element control.
+  class against its CPU oracle at the bar the cell sets, with the cell's poisoned-element control; `test_vkd_gemv_ncol`
+  must also hold every column of the N-column stamps to the one-column class bit for bit - within the float bar on the
+  rotated twins' leg (`../ARCHITECTURE_GPU_SHARED_GEMM.md#ncol-rotated-walk`) and where the one-column slot serves its
+  load-ahead alternate at another subgroup width (`../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps`).
 - `test_vulkan_tower_kernels.das`'s `test_vkt_fa_bidir`, `test_vkt_tower_rows`, `test_vkt_tower_ln_rows`,
   `test_vkt_tower_f16_feeds`, `test_vkt_tower_vision_rows`, `test_vkt_tower_win_rows`, `test_vkt_tower_tail_rows`,
   `test_vkt_tower_front_movers`, `test_vkt_tower_front_mel`, `test_vkt_tower_ga_mel`,
@@ -123,6 +131,9 @@ holding:
   `test_vkt_ctc_pick`, `test_vkt_nmt`, `test_vkt_nmt_attn`, `test_vkt_dflash_pass_kernels`, `test_vkt_dflash_topk` and
   `test_vkt_dflash_walk` cells - the census's evidence for the tower, transducer-decode, CTC-pick, translation and
   block-drafter classes - must hold each class against its CPU oracle at the bar the cell sets, with the cell's
-  poisoned-element control.
+  poisoned-element control; `test_vkt_wdec_fused_rq` must also hold each fused stamp to the separate pass's Q8_0 bytes
+  and scales exactly, and `test_vkt_tower_vision_rows` the position add to the CPU form bit for bit - where
+  `vk_rounds_alike` is false, the first within a quant step with the scales at the approx bar and the second at the
+  approx bar (`../ARCHITECTURE_GPU_SHARED_ROWS.md#token-table-gather`).
 - `test_vulkan_kv_codec_kernels.das`'s `test_vkc_q8_da_attn` and `test_vkc_tq4_da_attn` cells must hold the codec
   attention arms (`codec_attn_arms`) against the CPU attention over the codec's rows, each arm with its controls.

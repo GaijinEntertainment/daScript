@@ -22,6 +22,7 @@ require ?vulkan vulkan
 require ?vulkan vulkan/vulkan_boost
 require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_vulkan_classes
+require ?vulkan dasllama/dasllama_gpu_knee   // vk_alt_stamps: the load-ahead cell toggles the served set
 require dasllama/dasllama_gpu_math   // softcap_exp - the softcap cells' oracle
 require ?vulkan dasllama/dasllama_vulkan_prefill
 require ?vulkan dasllama/dasllama_vulkan_decode   // da_nsplit - the decode attention's key-split pick the tile-pick cell pins
@@ -43,7 +44,8 @@ require _discrete_cells   // nolint:STYLE030,LINT019 — I8_SENTINEL_BITS and th
 //! requants and combines, the rope and K/V stores, the routing and schedules, the router GEMV's stamps (f32, bf16 word
 //! pairs, bf16 halfwords at an odd dim), the per-layer-embedding classes and the device roster; the GEMM tiles are
 //! `test_vulkan_kernels_gemm.das`, the attention classes `test_vulkan_kernels_attn.das`. Skips: every cell without
-//! dasVulkan or a Vulkan device; the cm2 arms off a coopmat2 device created in cm2 mode; a class rail a device declines.
+//! dasVulkan or a Vulkan device; the cm2 arms off a coopmat2 device created in cm2 mode; the slot legs of the rotated
+//! residual GEMV's cell and of the load-ahead GEMV's under a `DASLLAMA_VK_ALT_STAMPS` pin; a class rail a device declines.
 
 let private NAN_HALF = 0x7E00   //! the sentinel half no kernel writes: a NaN
 let private NAN_HALF_PAIR = 0x7E007E00u   //! ... in both lanes of a word
@@ -259,7 +261,7 @@ def test_vkd_readonly_stamp(t0 : T?) {
     }
 }
 
-[test(description = "In the kept SPIR-V of the flash stamps at heads 64 to 512 the KHR arm alone declares its four Workgroup tiles and the KHR capability, the cm2 arm none and only NV cooperative-matrix capabilities")]
+[test(description = "In the kept SPIR-V of the flash stamps at heads 64 to 512 the KHR arm alone declares its four Workgroup tiles and the KHR capability, the cm2 arm none and only NV cooperative-matrix capabilities; under a shared-memory cap below the KHR tile's footprint a head's slot builds its small-tile twin, and a head with no twin declines")]
 def test_vkd_fa_stamp_words(t0 : T?) {
     t0 |> run("the folded flash template's stamps: the KHR arm's shared-memory tiles exist on its stamps alone, and each arm asks for its own cooperative-matrix capability") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -280,11 +282,13 @@ def test_vkd_fa_stamp_words(t0 : T?) {
             var khr_ok = true
             for (hs in head_sizes) {
                 cm2_ok = cm2_ok && (!cm2_on || fa_stamp_ensure(false, hs, false, false, false, false))
-                khr_ok = khr_ok && (!khr_on || fa_stamp_ensure(true, hs, false, false, false, false))
+                let khr_name = "fa_khr_h{hs}_cls_spv"
+                let builds = g_gpu.max_wg_bytes >= FA_KHR_WG_BYTES || vkd_slot_kernel(khr_name) != khr_name   // its own tiles under the cap, or its twin's
+                khr_ok = khr_ok && (!khr_on || fa_stamp_ensure(true, hs, false, false, false, false) == builds)
             }
             g_vkd_spv_keep = false   // off before any assert, so a red cell keeps nothing past this one
             t |> success(cm2_ok, "every cm2 flash stamp engages on an fa-capable device")
-            t |> success(khr_ok, "every KHR flash stamp engages on a coopmat device")
+            t |> success(khr_ok, "every KHR flash stamp the shared-memory cap holds - its own tiles or its twin's - engages on a coopmat device, and one it holds neither of declines")
             for (hs in head_sizes) {
                 if (cm2_on) {
                     var cm2 <- kept_stamp_shape("fa_cm2_h{hs}_cls_spv")
@@ -292,8 +296,8 @@ def test_vkd_fa_stamp_words(t0 : T?) {
                     t |> success(has_nv_coopmat_cap(cm2.caps), "the cm2 h{hs} stamp asks for the NV cooperative-matrix capabilities")
                     delete cm2
                 }
-                if (khr_on) {
-                    var khr <- kept_stamp_shape("fa_khr_h{hs}_cls_spv")
+                if (khr_on && key_exists(g_vkd_spv_kept, vkd_slot_kernel("fa_khr_h{hs}_cls_spv"))) {
+                    var khr <- kept_stamp_shape(vkd_slot_kernel("fa_khr_h{hs}_cls_spv"))
                     t |> equal(4, khr.wg_vars, "the KHR h{hs} stamp declares its four shared-memory tiles")
                     t |> success(key_exists(khr.caps, SPV_CAP_COOPMAT_KHR), "the KHR h{hs} stamp asks for the KHR cooperative-matrix capability")
                     t |> success(!has_nv_coopmat_cap(khr.caps), "the KHR h{hs} stamp asks for no NV cooperative-matrix capability: the cm2 typedefs it inherits emit nothing")
@@ -495,6 +499,134 @@ def test_vkd_lens_kernel_prefix_gate(t0 : T?) {
             t |> success(find(bad.out, "names 2 [spirv_kernel] methods") >= 0, "the refusal counts the matches: {bad.out}")
             let good = spawn_kernel_prefix_fixture("run_a", "ok")
             t |> equal(0, good.rc, "the exact name compiles: {good.out}")
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! one stand-in fixture: the second class's extra `[vk_dispatch]` arguments, its @workgroup floats, its output binding, its push
+//! struct, whether its kernel writes its input and declares `local_size_x_id`, and the refusal its compile must carry ("" = compiles)
+struct private StandInCase {
+    tag : string
+    ann : string
+    wg : int
+    bind : int
+    args : string
+    writes_in : bool
+    own_id : bool
+    needle : string
+}
+
+//! spawns a compile of a two-class [vk_dispatch] program: the primary `st_primary` (64 floats of @workgroup stage, bindings 0
+//! and 1, the push struct StArgs) and a second class shaped by `c`
+def private spawn_stand_in_fixture(c : StandInCase) : tuple<rc : int; out : string> {
+    let own = c.own_id ? ", local_size_x_id = 0" : ""
+    let poke = c.writes_in ? "            xs[i] = 0.0" : ""
+    let src = join([
+        "options gen2",
+        "options _dasllama_internal = true",
+        "",
+        "require dasllama/dasllama_lint public",
+        "require spirv/spirv_shader",
+        "require vulkan",
+        "require vulkan/vulkan_boost",
+        "require dasllama/dasllama_vulkan_common",
+        "require dasllama/dasllama_vulkan_dispatch",
+        "",
+        "struct StArgs \{",
+        "    n : uint",
+        "\}",
+        "",
+        "struct StArgs2 \{",
+        "    n : uint",
+        "\}",
+        "",
+        "[vk_dispatch(name = \"st_primary\", grid = \"n/64\", params = \"n : int64\")]",
+        "class StPrimary \{",
+        "    @ssbo @binding = 0 xs : array<float>",
+        "    @ssbo @binding = 1 ys : array<float>",
+        "    @push_constant pa : StArgs",
+        "    @workgroup stage : float[64]",
+        "",
+        "    [spirv_kernel(local_size_x = 64, name = \"st_primary_spv\")]",
+        "    def run \{",
+        "        let i = gl_GlobalInvocationID.x",
+        "        let lane = gl_LocalInvocationID.x & 31u",
+        "        if (i < pa.n) \{",
+        "            stage[lane] = xs[i]",
+        "        \}",
+        "        barrier()",
+        "        if (i < pa.n) \{",
+        "            ys[i] = stage[lane] * 2.0",
+        "        \}",
+        "    \}",
+        "\}",
+        "",
+        "[vk_dispatch(name = \"st_second\", grid = \"n/64\", params = \"n : int64\"{c.ann})]",
+        "class StSecond \{",
+        "    @ssbo @binding = 0 xs : array<float>",
+        "    @ssbo @binding = {c.bind} ys : array<float>",
+        "    @push_constant pa : {c.args}",
+        "    @workgroup stage : float[{c.wg}]",
+        "",
+        "    [spirv_kernel(local_size_x = 64{own}, name = \"st_second_spv\")]",
+        "    def run \{",
+        "        let i = gl_GlobalInvocationID.x",
+        "        let lane = gl_LocalInvocationID.x & 31u",
+        "        if (i < pa.n) \{",
+        "            stage[lane] = xs[i]",
+        "        \}",
+        "        barrier()",
+        "        if (i < pa.n) \{",
+        "            ys[i] = stage[lane] * 2.0",
+        poke,
+        "        \}",
+        "    \}",
+        "\}",
+        "",
+        "[export]",
+        "def main() \{",
+        "    print(\"ok\\n\")",
+        "\}"], "\n")
+    return spawn_compile_only(src, "vk_stand_in_{c.tag}", 180.0)
+}
+
+[test(description = "A compile-only child whose vk_dispatch class misuses subgroup, alt_of, alt_bit or wg_twin_of fails with the refusal that names the misuse - another subgroup value, own with no specialized width, a primary not declared above, a footprint past the primary's or not under it, other bindings, another push struct, another access, a bit outside the served set - while an alternate and a twin that repeat their primary's dispatch surface compile", timeout = 1200)]
+def test_vkd_lens_stand_in_gates(t0 : T?) {
+    t0 |> run("[vk_dispatch] refuses a stand-in that does not repeat its primary, and compiles one that does") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let alt = ", alt_of = \"st_primary\", alt_bit = 5"
+            let twin = ", wg_twin_of = \"st_primary\""
+            // the primary stages 64 floats, 256 B: an alternate may stage as much, a twin must stage less
+            var inscope cases <- [
+                StandInCase(tag = "alt_ok", ann = alt, wg = 64, bind = 1, args = "StArgs", needle = ""),
+                StandInCase(tag = "twin_ok", ann = twin, wg = 32, bind = 1, args = "StArgs", needle = ""),
+                StandInCase(tag = "subgroup", ann = ", subgroup = \"wide\"", wg = 64, bind = 1, args = "StArgs", needle = "subgroup = \"wide\" - the one value is \"own\""),
+                StandInCase(tag = "own_width", ann = ", subgroup = \"own\"", wg = 64, bind = 1, args = "StArgs",
+                    needle = "subgroup = \"own\" needs a [spirv_kernel] declaring local_size_x with local_size_x_id = 0"),
+                StandInCase(tag = "alt_missing", ann = ", alt_of = \"st_missing\", alt_bit = 5", wg = 64, bind = 1, args = "StArgs",
+                    needle = "not an alternate of 'st_missing' - 'st_missing' names no [vk_dispatch] class declared above it in this module"),
+                StandInCase(tag = "alt_footprint", ann = alt, wg = 128, bind = 1, args = "StArgs",
+                    needle = "not an alternate of 'st_primary' - its @workgroup footprint (512 B) passes the primary's (256 B)"),
+                StandInCase(tag = "alt_binds", ann = alt, wg = 64, bind = 2, args = "StArgs", needle = "it binds [0,2], the primary [0,1]"),
+                StandInCase(tag = "alt_push", ann = alt, wg = 64, bind = 1, args = "StArgs2", needle = "its push struct is 'StArgs2', the primary's 'StArgs'"),
+                StandInCase(tag = "alt_access", ann = alt, wg = 64, bind = 1, args = "StArgs", writes_in = true, needle = "its kernel body's access differs from the primary's"),
+                StandInCase(tag = "alt_bit", ann = ", alt_of = \"st_primary\", alt_bit = 63", wg = 64, bind = 1, args = "StArgs",
+                    needle = "alt_bit = 63 is not a bit of the served set (0..62)"),
+                StandInCase(tag = "twin_missing", ann = ", wg_twin_of = \"st_missing\"", wg = 32, bind = 1, args = "StArgs",
+                    needle = "wg_twin_of 'st_missing' names no [vk_dispatch] class declared above it in this module"),
+                StandInCase(tag = "twin_footprint", ann = twin, wg = 64, bind = 1, args = "StArgs",
+                    needle = "not a twin of 'st_primary' - its @workgroup footprint (256 B) is not under the primary's (256 B)")]
+            for (c in cases) {
+                let r = spawn_stand_in_fixture(c)
+                if (empty(c.needle)) {
+                    t |> equal(0, r.rc, "{c.tag}: a stand-in that repeats its primary's dispatch surface compiles: {r.out}")
+                } else {
+                    t |> success(r.rc != 0, "{c.tag}: the stand-in must not compile")
+                    t |> success(find(r.out, c.needle) >= 0, "{c.tag}: the refusal reads `{c.needle}`: {r.out}")
+                }
+            }
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -1155,6 +1287,94 @@ def test_vkd_cls_ar_row0(t0 : T?) {
             delete x2
             delete y2
             delete r
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! `body` under a shared-memory cap of at most `cap` bytes: every class pipeline rebuilds under it, and under the device's
+//! own again on the way out; the cells wait their fences, so the device is idle at both rebuilds
+def private with_wg_cap(cap : uint; body : block<() : void>) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let own = g_gpu.max_wg_bytes
+        let keep = g_vkd_spv_keep
+        g_gpu.max_wg_bytes = min(own, cap)
+        g_vkd_spv_keep = true
+        vkd_pipes_rebuild()
+        invoke(body)
+        g_gpu.max_wg_bytes = own
+        g_vkd_spv_keep = keep
+        vkd_pipes_rebuild()
+    }
+}
+
+[test(description = "Under a 32768 B shared-memory cap the cls_ar pipe slot builds from its small-slab twin, whose rows at the twin's widest row (8064) match the CPU residual step within the approx bar and, where the device builds the 8192-float stamp, equal that stamp's bit for bit")]
+def test_vkd_ar_small_slab_twin(t0 : T?) {
+    t0 |> run("the small-slab twin serves the residual step under the cap, at the widest row it stages") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_cls_ar()) {
+                t |> skip("no Vulkan device, or the cls_ar pipeline failed to build")
+                return
+            }
+            let dim = int(RDEC_AR_SMALL_DIM)
+            let rows = 2
+            let total = dim * rows
+            let eps = 1e-5
+            let ascale = 1.44
+            var fx <- ar_fixture(total, dim)
+            var x <- fx.x
+            var a <- fx.a
+            var w <- fx.w
+            let args = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale)
+            let builds_wide = g_gpu.max_wg_bytes >= ROW_SLAB_WG_BYTES
+            var wide <- cls_ar_run(x, a, w, args, rows)   // the 8192-float stamp where the device builds it, the twin again where it does not
+            var twin : tuple<y : array<float>; x : array<float>>
+            var twin_built = false
+            with_wg_cap(ROW_SLAB_SMALL_WG_BYTES) {
+                g_vkd_spv_kept |> erase("cls_ar_spv")
+                g_vkd_spv_kept |> erase("cls_ar_s_spv")
+                verify(ensure_cls_ar(), "the cls_ar slot must build under the cap")
+                delete twin
+                twin <- cls_ar_run(x, a, w, args, rows)
+                twin_built = key_exists(g_vkd_spv_kept, "cls_ar_s_spv") && !key_exists(g_vkd_spv_kept, "cls_ar_spv")
+            }
+            t |> success(twin_built, "under the cap the slot built the twin's words (cls_ar_s_spv) and not the class's own")
+            var x_cpu, y_cpu : array<float>
+            x_cpu |> resize(total)
+            y_cpu |> resize(total)
+            for (i in range(total)) {
+                x_cpu[i] = (x[i] + a[i]) * ascale
+            }
+            for (r in range(rows)) {
+                var inscope xr, yr : array<float>
+                xr |> resize(dim)
+                yr |> resize(dim)
+                for (i in range(dim)) {
+                    xr[i] = x_cpu[r * dim + i]
+                }
+                rmsnorm(yr, xr, w, int64(dim), eps)
+                for (i in range(dim)) {
+                    y_cpu[r * dim + i] = yr[i]
+                }
+            }
+            t |> success(mismatch_approx(twin.y, y_cpu) == 0 && mismatch_approx(twin.x, x_cpu) == 0,
+                "the twin's normed rows and residual rows match the CPU step ({mismatch_approx(twin.y, y_cpu)} / {mismatch_approx(twin.x, x_cpu)} of {total} off)")
+            y_cpu[total - 1] += 0.5
+            t |> success(mismatch_approx(twin.y, y_cpu) == 1, "control: the bar reds the poisoned last column of the last row, the slab's far end")
+            if (builds_wide) {
+                t |> success(mismatch_exact(twin.y, wide.y) == 0 && mismatch_exact(twin.x, wide.x) == 0,
+                    "the twin's rows are the 8192-float stamp's bit for bit ({mismatch_exact(twin.y, wide.y)} / {mismatch_exact(twin.x, wide.x)} of {total} diverge)")
+            } else {
+                to_log(LOG_INFO, "test_vkd_ar_small_slab_twin: the device's cap ({int(g_gpu.max_wg_bytes)} B) builds no 8192-float stamp - the bit-for-bit leg needs a device that does\n")
+            }
+            delete x
+            delete a
+            delete w
+            delete wide
+            delete twin
+            delete x_cpu
+            delete y_cpu
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -2784,7 +3004,7 @@ def private gemv_ar_planes(var cp; fx : GemvArFixture; d : int) : int[10] {   //
     return fixed_array(pwq, pws, pxq, pxs, py, pxr, pwn, poq, pos, pcnt)
 }
 
-def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; abias : bool = false) {
+def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; abias : bool = false; rot : bool = false) {
     let nblk_out = d / 32
     var fx <- q8_gemv_ar_fixture(n, d)
     let eps = 1.0e-6
@@ -2794,12 +3014,16 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; ab
     var cnt_after : array<uint>
     with_cell_planes() $(var cp : CellPlanes) {
         let pl = gemv_ar_planes(cp, fx, d)
-        var s_cls = cp |> cls_set(pl, @@set_q8_gemv_ar_cls)
+        var s_cls = rot ? cp |> cls_set(pl, @@set_q8_gemv_ar_rot_cls) : cp |> cls_set(pl, @@set_q8_gemv_ar_cls)
         var pc = GemvArArgs(n = uint(n), d = uint(d), wblk = 0u, xblk = 0u, add_on = 1u, woff = uint(d), pwoff = 0u,
             pre_on = pre_on ? 1u : 0u, no_norm = raw ? 1u : 0u, eps = eps, ascale = ascale, abias_on = abias ? 1u : 0u, aboff = uint(2 * d))
         let rpw = 4l * g_gpu.rows_per_wg
         cp |> cell_record() $(rw : VkCommandBuffer; var h : VkHaz) {
-            enc_q8_gemv_ar_cls(rw, h, s_cls, pc, (int64(d) + rpw - 1l) / rpw)
+            if (rot) {
+                enc_q8_gemv_ar_rot_cls(rw, h, s_cls, pc, (int64(d) + rpw - 1l) / rpw)
+            } else {
+                enc_q8_gemv_ar_cls(rw, h, s_cls, pc, (int64(d) + rpw - 1l) / rpw)
+            }
         }
         delete xr_cls
         xr_cls <- cp |> plane_run(pl[5])
@@ -2843,7 +3067,7 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; ab
         }
     }
     let off = q8_blocks_off(oq, os, normed, nblk_out)
-    let tag = "n {n} d {d} pre {pre_on ? 1 : 0} raw {raw ? 1 : 0} bias {abias ? 1 : 0}"
+    let tag = "n {n} d {d} pre {pre_on ? 1 : 0} raw {raw ? 1 : 0} bias {abias ? 1 : 0}{rot ? " rotated" : ""}"
     t |> success(badx == 0, "q8 gemv+ar {tag}: the residual row matches the oracle ({badx} of {d} off)")
     t |> success(pbadx == d, "q8 gemv+ar {tag}: the residual bar reds an oracle row pushed a tenth off ({pbadx} of {d} red)")
     t |> success(off.scales == 0, "q8 gemv+ar {tag}: the block scales match ({off.scales} of {nblk_out} off)")
@@ -2877,6 +3101,49 @@ def test_vkd_q8_gemv_ar(t0 : T?) {
             q8_gemv_ar_run(t, 512, 2816, false, false, 1.0)   // the same width on the plain step (the four-column arm's tail)
             q8_gemv_ar_run(t, 896, 896, false, false, 1.0)    //! Qwen2.5-0.5B's wo step: a width off the four-column round's 1024, so the round's clamped loads pull the last block's line ahead of its writes - the re-read must be coherent
             q8_gemv_ar_run(t, 4864, 896, false, false, 1.0)   // ... and its down step: 152 blocks, whole passes then a guarded tail
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test(description = "The q8 GEMV + residual step's rotated alternate matches the CPU chain at rows of whole passes (K 2048 and K 6144), of whole passes then a guarded tail, and under one pass, and under its bit the class's slot builds the alternate's words, its own with the bit off")]
+def test_vkd_q8_gemv_ar_rot(t0 : T?) {
+    t0 |> run("the rotated q8 GEMV + residual step == the CPU chain, and serves the q8_gemv_ar_cls slot under its bit") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_gemv_ar_cls() || !ensure_q8_gemv_ar_rot_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            q8_gemv_ar_run(t, 2048, 1024, false, false, 1.0, false, true)   // whole passes at K 2048, the rows' walks all apart
+            q8_gemv_ar_run(t, 6144, 1536, true, true, 1.0, false, true)     // an E-series down step at its own width
+            q8_gemv_ar_run(t, 4864, 896, false, false, 1.0, false, true)    // whole passes then a guarded tail
+            q8_gemv_ar_run(t, 256, 1536, true, true, 1.0, false, true)      // under one pass on a 32-lane subgroup: nothing to rotate
+            if (vk_alt_pinned()) {
+                t |> skip("DASLLAMA_VK_ALT_STAMPS pins the set: the slot legs cannot toggle it")
+                return
+            }
+            let saved = vk_alt_stamps()
+            let rules = vk_alt_device_rules_()
+            set_vk_alt_device_rules_(false)   // the legs toggle the bit themselves: an AMD device's own rule would hold it on
+            set_vk_alt_stamps(saved | (1l << int64(VK_ALT_Q8_AR_ROT)))
+            vkd_pipes_rebuild()
+            verify(ensure_q8_gemv_ar_cls(), "the slot must build under the bit")
+            t |> equal(vkd_slot_kernel("q8_gemv_ar_cls_spv"), "q8_gemv_ar_rot_cls_spv", "under the bit the slot serves the rotated alternate")
+            set_vk_alt_stamps(saved & ~(1l << int64(VK_ALT_Q8_AR_ROT)))
+            vkd_pipes_rebuild()
+            verify(ensure_q8_gemv_ar_cls(), "the slot must build with the bit off")
+            t |> equal(vkd_slot_kernel("q8_gemv_ar_cls_spv"), "q8_gemv_ar_cls_spv", "control: with the bit off the slot is its own stamp")
+            set_vk_alt_stamps(saved)
+            set_vk_alt_device_rules_(true)
+            t |> equal(vk_alt_served(), saved | vk_alt_device_set(), "the served set is the box's and the device's own rule bits ({vk_alt_device_set()})")
+            if (g_gpu.vendor == VK_VENDOR_AMD) {
+                t |> success((vk_alt_served() & (1l << int64(VK_ALT_Q8_AR_ROT))) != 0l, "an AMD device serves the rotated alternate by its rule, whatever set the box stores")
+            } else {
+                t |> equal(vk_alt_device_set() & (1l << int64(VK_ALT_Q8_AR_ROT)), 0l, "control: this device's own rules carry no rotated-GEMV bit")
+            }
+            set_vk_alt_device_rules_(rules)
+            vkd_pipes_rebuild()
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -2932,10 +3199,17 @@ def private q8_gemv_ar_twin_run(t; n, d : int; pre_on : bool; ascale : float) {
         to_log(LOG_INFO, "q8 gemv+ar twin {tag}: first residual mismatch at {first}: epilogue {xr_epi_h[first]} row kernel {xr_row_h[first]}\n")
     }
     t |> success(badx == 0, "q8 gemv+ar twin {tag}: the epilogue's residual row == the row kernel's ({badx} of {d} off)")
-    let bads = mismatch_exact(os_epi_h, os_row_h)
-    t |> success(bads == 0, "q8 gemv+ar twin {tag}: the epilogue's block scales == the row kernel's ({bads} of {nblk_out} off)")
-    let badq = mismatch_qbytes(oq_epi_h, oq_row_h, 0)
-    t |> success(badq == 0, "q8 gemv+ar twin {tag}: the epilogue's quants == the row kernel's ({badq} of {d} off)")
+    //! the scales and the quants follow the row's reduce, which two shaders of a device that rounds a shader at a time
+    //! (`vk_rounds_alike`) land an ulp apart: the scales at the approx bar and the quants a step there, bit for bit elsewhere
+    let alike = vk_rounds_alike()
+    let bads = alike ? mismatch_exact(os_epi_h, os_row_h) : mismatch_approx(os_epi_h, os_row_h)
+    t |> success(bads == 0, "q8 gemv+ar twin {tag}: the epilogue's block scales {alike ? "==" : "sit at the approx bar of"} the row kernel's ({bads} of {nblk_out} off)")
+    var os_poison := os_row_h
+    os_poison[nblk_out - 1] = os_poison[nblk_out - 1] * 1.25 + 0.25
+    t |> equal(alike ? mismatch_exact(os_epi_h, os_poison) : mismatch_approx(os_epi_h, os_poison), bads + 1, "q8 gemv+ar twin {tag}: the scales' compare reds one poisoned scale")
+    delete os_poison
+    let badq = mismatch_qbytes(oq_epi_h, oq_row_h, alike ? 0 : 1)
+    t |> success(badq == 0, "q8 gemv+ar twin {tag}: the epilogue's quants {alike ? "==" : "sit within a step of"} the row kernel's ({badq} of {d} off)")
     delete fx
     delete xr_epi_h
     delete xr_row_h
@@ -2945,7 +3219,7 @@ def private q8_gemv_ar_twin_run(t; n, d : int; pre_on : bool; ascale : float) {
     delete os_row_h
 }
 
-[test(description = "The q8 GEMV epilogue residual step equals the cls_ar_rq_b row kernel fed the same y row bit for bit on the residual row, scales and quants, sandwich and plain steps at gemma widths")]
+[test(description = "The q8 GEMV epilogue residual step equals the cls_ar_rq_b row kernel fed the same y row bit for bit on the residual row, scales and quants - the scales at the approx bar and the quants within a step on a device that rounds a shader at a time - sandwich and plain steps at gemma widths")]
 def test_vkd_q8_gemv_ar_row_twin(t0 : T?) {
     t0 |> run("q8 GEMV epilogue's residual step == the row kernel fed the same y row, bit for bit (the sandwich step and the plain step)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -2971,6 +3245,7 @@ struct NformPlane {
     words : int
     cmp : bool = true
     head : int
+    approx : bool   //! the plane's words are floats held at the approx bar and not word for word: a device that rounds a shader at a time (`vk_rounds_alike`)
 }
 
 //! the output planes of one form as the blocks bind them: plane p's device buffer and its bytes
@@ -2990,7 +3265,7 @@ struct NformPlanes {
 def private plane_floats(w : array<uint>) : array<float> => <- [for (x in w); uint_bits_to_float(x)]
 
 //! the words of `ncols` live columns of a plane off between the forms; a live column the N form never wrote - every word still the sentinel - counts whole
-def private nform_plane_mismatch(one, nf : array<uint>; ncols, head, words : int) : int {
+def private nform_plane_mismatch(one, nf : array<uint>; ncols, head, words : int; approx : bool = false) : int {
     var bad = 0
     for (c in range(ncols)) {
         let nbase = head + c * words
@@ -3006,7 +3281,13 @@ def private nform_plane_mismatch(one, nf : array<uint>; ncols, head, words : int
             continue
         }
         for (i in range(words)) {
-            if (nf[nbase + i] != one[obase + i]) {
+            if (approx) {
+                let a = uint_bits_to_float(nf[nbase + i])
+                let b = uint_bits_to_float(one[obase + i])
+                if (!(abs(a - b) <= APPROX_REL * max(abs(a), abs(b)))) {
+                    bad++
+                }
+            } elif (nf[nbase + i] != one[obase + i]) {
                 bad++
             }
         }
@@ -3022,14 +3303,14 @@ def private nform_cols_compare(t : T?; tag : string; ncols, ncol_max : int; plan
     for (p in range(length(planes))) {
         let pl = planes[p]
         if (pl.cmp) {
-            let bad = nform_plane_mismatch(r.one[p], r.nf[p], ncols, pl.head, pl.words)
-            t |> success(bad == 0, "{tag}: {pl.name} over the live columns are the one form's word for word ({bad} of {ncols * pl.words} words off)")
+            let bad = nform_plane_mismatch(r.one[p], r.nf[p], ncols, pl.head, pl.words, pl.approx)
+            t |> success(bad == 0, "{tag}: {pl.name} over the live columns are the one form's {pl.approx ? "at the approx bar" : "word for word"} ({bad} of {ncols * pl.words} words off)")
             if (!poisoned) {
                 poisoned = true
                 let at = pl.head + (ncols - 1) * pl.words + pl.words / 2
                 let kept = r.nf[p][at]
-                r.nf[p][at] = kept ^ 0x55u
-                t |> equal(nform_plane_mismatch(r.one[p], r.nf[p], ncols, pl.head, pl.words), 1, "{tag}: the word-exact bar on {pl.name} reds one poisoned word")
+                r.nf[p][at] = pl.approx ? kept ^ 0x00400000u : kept ^ 0x55u   // a float's top mantissa bit moves it a quarter or more; a word's low bits move it at all
+                t |> equal(nform_plane_mismatch(r.one[p], r.nf[p], ncols, pl.head, pl.words, pl.approx), 1, "{tag}: the bar on {pl.name} reds one poisoned word")
                 r.nf[p][at] = kept
             }
         }
@@ -3348,6 +3629,103 @@ def test_vkd_q8_gemv_pair(t0 : T?) {
     }
 }
 
+//! the q8 decode GEMV's rows over `f`'s planes through the class slot's surface, or through the load-ahead class's own
+def private q8_gemv_rows(f : GemvFix; nb, d, nreg : int; ahead : bool) : array<float> {
+    var y : array<float>
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        verify(ahead ? ensure_q8_gemv_ahead_cls() : ensure_q8_gemv_cls(), "the q8 GEMV pipeline must build")
+        let rows = nreg * d
+        let wgs = (int64(rows) + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg
+        with_cell_planes() $(var cp : CellPlanes) {
+            gemv_cell_planes(cp, f, rows)
+            var pc = GemvArgs(n = uint(nb * 32), d = uint(d), nreg = uint(nreg), ybase = 0u)
+            if (ahead) {
+                var s_ahead = cp |> cls_set(GEMV_PLANES, @@set_q8_gemv_ahead_cls)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_q8_gemv_ahead_cls(raw, h, s_ahead, pc, wgs)
+                }
+            } else {
+                var s_cls = cp |> cls_set(GEMV_PLANES, @@set_q8_gemv_cls)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_q8_gemv_cls(raw, h, s_cls, pc, wgs)
+                }
+            }
+            delete y
+            y <- plane_run(cp, 5)
+        }
+    }
+    return <- y
+}
+
+[test(description = "The q8 decode GEMV's load-ahead class matches the q8 GEMM oracle within the approx bar at rows of 16, 40 and 232 blocks - under one pass, whole passes, and a row through the four-pass step, the two-pass step and a partial pass - and is the class stamp's rows bit for bit where the tier pins no subgroup width; with its bit in the served set the q8_gemv_cls slot builds from the class's words and dispatches its rows bit for bit, and with the bit off from its own")]
+def test_vkd_q8_gemv_ahead(t0 : T?) {
+    t0 |> run("the load-ahead q8 GEMV == the CPU oracle, and serves the q8_gemv_cls slot under its bit") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_gemv_cls() || !ensure_q8_gemv_ahead_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let saved = vk_alt_stamps()
+            let rules = vk_alt_device_rules_()
+            let keep = g_vkd_spv_keep
+            let pinned = vk_alt_pinned()   // DASLLAMA_VK_ALT_STAMPS shadows the knob: the served legs cannot toggle the set
+            let d = 3
+            let nreg = 2
+            let rows = nreg * d
+            for (nb in fixed_array(16, 40, 232)) {
+                var wsh <- [for (i in range(rows * nb / 2)); ws_word(uint(i))]
+                var f <- gemv_fix(nreg, d, nb, 8, 55u, wsh, nb, 8, 17u, 9u, 0.25, 0.125, 5)
+                var y_ref : array<float>
+                y_ref |> resize(rows)
+                var rec <- [0u, 0u, 1u, 0u]
+                q8_gemm_oracle(f.wqh, f.wsh, f.xqh, f.xsh, rec, 1, nb * 32, rows, y_ref)
+                delete rec
+                var y_ahead <- q8_gemv_rows(f, nb, d, nreg, true)
+                let bad = mismatch_approx(y_ahead, y_ref)
+                t |> success(bad == 0, "{nb} blocks: the load-ahead rows match the CPU oracle ({bad} of {rows} rows off)")
+                var y_poison := y_ahead
+                y_poison[rows - 1] += 1.0 + 2.0 * logits_maxabs(y_ref)
+                t |> success(mismatch_approx(y_poison, y_ref) == 1, "{nb} blocks, control: the bar reds a poisoned last row")
+                delete y_poison
+                if (!pinned) {
+                    g_vkd_spv_keep = true
+                    set_vk_alt_device_rules_(false)   // the legs toggle the bit themselves: an AMD device's own rule would hold it on
+                    set_vk_alt_stamps(0l)
+                    vkd_pipes_rebuild()   // the slot's next ensure builds again, whatever set it was last built under
+                    g_vkd_spv_kept |> erase("q8_gemv_cls_spv")
+                    var y_own <- q8_gemv_rows(f, nb, d, nreg, false)
+                    t |> success(key_exists(g_vkd_spv_kept, "q8_gemv_cls_spv"), "{nb} blocks, control: with the bit off the slot builds its own words")
+                    if (g_gpu.sg_pin == 0u) {
+                        t |> equal(mismatch_exact(y_ahead, y_own), 0, "{nb} blocks: at one subgroup width the load-ahead rows are the class stamp's bit for bit")
+                    } else {
+                        t |> equal(mismatch_approx(y_ahead, y_own), 0, "{nb} blocks: across the pinned and the device's own width the rows agree within the approx bar")
+                    }
+                    set_vk_alt_stamps(1l << int64(VK_ALT_Q8_GEMV))
+                    g_vkd_spv_kept |> erase("q8_gemv_cls_spv")
+                    g_vkd_spv_kept |> erase("q8_gemv_ahead_cls_spv")
+                    var y_served <- q8_gemv_rows(f, nb, d, nreg, false)
+                    t |> success(key_exists(g_vkd_spv_kept, "q8_gemv_ahead_cls_spv") && !key_exists(g_vkd_spv_kept, "q8_gemv_cls_spv"),
+                        "{nb} blocks: with the bit on the slot builds the alternate's words and not its own")
+                    t |> equal(mismatch_exact(y_served, y_ahead), 0, "{nb} blocks: ... and dispatches the load-ahead class's rows bit for bit")
+                    set_vk_alt_stamps(saved)
+                    set_vk_alt_device_rules_(rules)
+                    g_vkd_spv_keep = keep
+                    delete y_own
+                    delete y_served
+                }
+                delete y_ahead
+                delete y_ref
+                delete f
+            }
+            if (pinned) {
+                t |> skip("DASLLAMA_VK_ALT_STAMPS pins the set: the slot legs cannot toggle it")
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 //! the per-32 formats' columns against the engine's scalar dots: column c's activation row (the quants and scales c x nb
 //! blocks in) dotted with every weight row, landing at c x d + row
 def private blk32_ncol_oracle(f : KqFmt; wqh, wsh, xqh : array<uint>; xsh : array<float>; n, d, ncol_max : int) : array<float> {
@@ -3370,13 +3748,20 @@ def private blk32_ncol_oracle(f : KqFmt; wqh, wsh, xqh : array<uint>; xsh : arra
     return <- y_ref
 }
 
+//! the N-column cell's legs: the class's own stamps, the q8 row-pair stamps, the rotated twins
+enum private NcolLeg {
+    plain
+    paired
+    rotated
+}
+
 //! one format's N-column decode GEMV against its one-column class over a synthetic [n x d] plane and twelve activation
 //! rows of distinct content: the one-column class once per row (its region naming that row's activation blocks, its
 //! `ybase` that row's y), held to the CPU oracle; then the N class at 1 to 8 columns and the tiled encoder at 9 and 12 (`ystride` = d), every
 //! column bit for bit against the one-column row - the N form walks a lane's blocks in the one-column's order and folds
 //! the lanes the same way (`gemv_shell_n` against `gemv_shell`, `Q8GemvNT` against `Q8Gemv`), so the sums land in one
 //! order - the sentinel past the columns it wrote untouched; the q8 plane runs again with the row-pair stamps engaged
-//! (`g_q8_n2_min_n` at 0 over the even d, restored after); a poisoned element per bar
+//! (`g_q8_n2_min_n` at 0 over the even d, restored after), and a format with rotated twins once more under them at the float bar; a poisoned element per bar
 def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let fmt = int(f)
@@ -3384,6 +3769,10 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
         let q8 = f == KqFmt.q8
         let blk32 = !q8 && kq_block32(f)
         let xblk = kq_block32(f) ? n / 32 : n / 256
+        let rules = vk_alt_device_rules_()
+        set_vk_alt_device_rules_(false)   // the columns are held to the class's own one-row stamp: a device's own rule would seat the load-ahead alternate in that slot
+        verify(gemv_cls_ensure(fmt), "the one-column class must build again under the set without the device's rules")   // a changed set stales the slot; its next ensure builds
+        let one_alt = q8 && vk_alt_bit(VK_ALT_Q8_GEMV)   // a stored or pinned set still seats it, at another subgroup width: the rows then agree within the float bar, not word for word
         let xq_col = kq_block32(f) ? xblk * 8 : xblk * 64
         let ncol_max = 12   //! past the leaves' eight: 9 and 12 run through `gemv_enc`'s column tiles
         var wqh, wsh : array<uint>
@@ -3416,12 +3805,17 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
         }
         var y_one : array<uint>
         let n2_min_prior = g_q8_n2_min_n
-        for (paired in fixed_array(false, true)) {
-            continue if (paired && !q8)
+        for (leg in fixed_array(NcolLeg.plain, NcolLeg.paired, NcolLeg.rotated)) {
+            let paired = leg == NcolLeg.paired
+            let rotated = leg == NcolLeg.rotated   // the rotated twins: a column's sum is the class's terms in another order, so the float bar
+            continue if ((paired && !q8) || (rotated && !(q8 || gemv_n_rot_fmt(fmt))))
             g_q8_n2_min_n = paired ? 0u : 0xFFFFFFFFu
-            let form = paired ? "{name} row-pair" : name
+            g_gemv_n_rot_any = rotated
+            let form = paired ? "{name} row-pair" : (rotated ? "{name} rotated" : name)
+            let twin = q8 ? (uint(n) < Q8_N_ROT_OWN_UNDER ? "q8_gemv_n4o_cls_spv" : "q8_gemv_n4r_cls_spv") : "kq_gemv_{name}_n4r_cls_spv"
+            let twin0 = rotated ? vk_kernel_coverage_of(twin) : 0l
             t |> success(gemv_cls_ensure_n(fmt), "{form}: the N-column class rail engages")
-            var planes <- nform_cols_cell(t, form, [1, 2, 3, 4, 5, 6, 7, 8, 9, 12], ncol_max, [NformPlane(name = "the y rows", words = d)], 32u,   //! every count: the odd ones leave dead columns on the wider stamps
+            var planes <- nform_cols_cell(t, form, [1, 2, 3, 4, 5, 6, 7, 8, 9, 12], ncol_max, [NformPlane(name = "the y rows", words = d, approx = one_alt || rotated)], 32u,   // every count: the odd ones leave dead columns on the wider stamps
                 $(c : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
                     var inscope pair <- [0u, uint(c * xblk)]
                     upload_region_at(rgd, 0l, unsafe(addr<uint8 const?>(pair[0])), 8l)
@@ -3443,11 +3837,16 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
                     }
                     delete pair
                 })
+            if (rotated) {
+                t |> success(vk_kernel_coverage_of(twin) > twin0, "{form}: the four-column twin `{twin}` dispatched")
+            }
             delete y_one
             y_one <- planes.one[0]
             delete planes
         }
+        g_gemv_n_rot_any = false
         g_q8_n2_min_n = n2_min_prior
+        set_vk_alt_device_rules_(rules)
         var y_ref <- blk32 ? blk32_ncol_oracle(f, wqh, wsh, xqh, xsh, n, d, ncol_max) : gemv_ncol_oracle(f, wqh, wsh, xqh, xsh, n, d, ncol_max)
         var y_onef <- plane_floats(y_one)
         let bad_o = mismatch_approx(y_onef, y_ref)
@@ -3464,7 +3863,7 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
     }
 }
 
-[test(description = "For every format the discrete homes stamp, the N-column decode GEMV at 1 to 12 columns equals its one-column class column by column bit for bit, q8 row-pair stamps included, the one-column rows within 2e-3 of the oracle")]
+[test(description = "For every format the discrete homes stamp, the N-column decode GEMV at 1 to 12 columns equals its one-column class column by column bit for bit, q8 row-pair stamps included, and the rotated twins within the float bar, the one-column rows within 2e-3 of the oracle")]
 def test_vkd_gemv_ncol(t0 : T?) {
     t0 |> run("every format's N-column decode GEMV == its one-column class") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -6144,7 +6543,7 @@ def test_vkd_kv16_writers(t0 : T?) {
     }
 }
 
-[test(description = "The q8 token-table gather equals the CPU dequant then embed scale bit for bit (the folded-scale order reading apart) and the f32 gather the scaled table rows, an EMB_ID_HOST row copying the staged host row")]
+[test(description = "The q8 token-table gather equals the CPU dequant then embed scale bit for bit, at the approx bar on a device that rounds a shader at a time (the folded-scale order reading apart) and the f32 gather the scaled table rows, an EMB_ID_HOST row copying the staged host row")]
 def test_vkd_emb_gather_q8_f32(t0 : T?) {
     t0 |> run("the q8 and f32 token-table gathers == the CPU dequant and rows, an EMB_ID_HOST row the host's staged row") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -6202,8 +6601,10 @@ def test_vkd_emb_gather_q8_f32(t0 : T?) {
                     y_ref[r * dim + col] = (float(int(q)) * float(wsh16[ib])) * scale   //! the host embed's order: the row's dequant, then the embed scale (`embed_row`, `scale_inplace`)
                 }
             }
-            let bad = mismatch_exact(y_cls, y_ref)
-            t |> success(bad == 0, "q8 token-table gather matches the CPU dequant and the host row ({bad} of {npos * dim} off)")
+            //! bit for bit where the device rounds as the CPU does; within the approx bar where its compiler re-associates the dequant and the scale
+            let alike = vk_rounds_alike()
+            let bad = alike ? mismatch_exact(y_cls, y_ref) : mismatch_approx(y_cls, y_ref)
+            t |> success(bad == 0, "q8 token-table gather matches the CPU dequant and the host row ({bad} of {npos * dim} off{alike ? "" : ", at the approx bar"})")
             var folded = 0   //! the order control: the scale folded into the block scale first rounds apart on this fixture
             var dev_folded = 0
             for (r in range(npos)) {
@@ -6221,7 +6622,7 @@ def test_vkd_emb_gather_q8_f32(t0 : T?) {
             t |> success(folded > 0, "the q8 gather's order control: the scale folded into the block scale lands {folded} elements off the host's order")
             var y_poison := y_cls   // the compare's control
             y_poison[(npos - 2) * dim] += 0.5
-            t |> success(mismatch_exact(y_poison, y_ref) > 0, "the compare reds a host row moved by a half")
+            t |> success((alike ? mismatch_exact(y_poison, y_ref) : mismatch_approx(y_poison, y_ref)) > 0, "the compare reds a host row moved by a half")
             delete y_poison
             if (ensure_emb_gather_f32_cls()) {   //! the f32 stamp over an F32/F16/BF16 table's exact rows: a distinct pattern, so a crossed binding cannot pass
                 var wfh : array<float>
@@ -6767,7 +7168,8 @@ def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float; gate : MoeGat
 }
 
 //! the bucket schedule against its CPU twin, word for word over the whole planes (three empty experts, a sentinel fill)
-def private moe_sched_arm(t : T?; ne : int = MR_NE; s_only : bool = false) {
+//! `ordered`: the stamp that places a bucket's rows in slot-row order, its row map the CPU twin's word for word
+def private moe_sched_arm(t : T?; ne : int = MR_NE; s_only : bool = false; ordered : bool = false) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let nk = 4 * MR_NPOS * MR_K
         let wt_gu = 3
@@ -6793,7 +7195,7 @@ def private moe_sched_arm(t : T?; ne : int = MR_NE; s_only : bool = false) {
                 base1 = bases[0], stride1 = bases[1], base3 = bases[2], stride3 = bases[3], base2 = bases[4], stride2 = bases[5],
                 s_only = s_only ? 1u : 0u)
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                moe_sched_enc(int64(ne), raw, h, sc, pc)
+                moe_sched_enc(int64(ne), raw, h, sc, pc, ordered)
             }
             delete ginv
             ginv <- cp |> plane_as(pinv, type<uint>, nk)
@@ -6808,6 +7210,11 @@ def private moe_sched_arm(t : T?; ne : int = MR_NE; s_only : bool = false) {
         }
         sched_maps_check(t, idx, ginv, gbex) $(e) => (start = bucket_start(idx, e), rows = bucket_rows(idx, e))
         delete gbex
+        if (ordered) {
+            t |> success(mismatch_qbytes(ginv, winv, 0) == 0, "the ordered stamp's row map is the CPU twin's word for word: every bucket's rows sit in slot-row order ({nk} slot rows)")
+            winv[nk - 1] ^= 1u
+            t |> success(mismatch_qbytes(ginv, winv, 0) > 0, "order control: one row of the twin's map moved reds the compare")
+        }
         t |> success(mismatch_qbytes(g1, w1, 0) == 0, "the gate plane's s and m records, maps and sentinel tails match the CPU twin word for word ({length(w1)} words)")
         t |> success(mismatch_qbytes(g3, w3, 0) == 0, "the up plane's schedule matches")
         t |> success(mismatch_qbytes(g2, w2, 0) == 0, "the down plane's schedule matches (its own tile counts and tails)")
@@ -7212,7 +7619,7 @@ def private router_cols_arm(t : T?; ncols : int; norm_on, bf16 : bool; hw : bool
             upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
             upload_region_at(nd, 0l, addr<uint8 const?>(nh[0]), n_bytes)
         }
-        var planes <- nform_cols_cell(t, form, [ncols], ncol_max, [NformPlane(name = "the logits", words = ne, head = obase)], 2u,
+        var planes <- nform_cols_cell(t, form, [ncols], ncol_max, [NformPlane(name = "the logits", words = ne, head = obase, approx = !vk_rounds_alike())], 2u,
             $(c : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
                 upload_region_at(xd1, 0l, unsafe(addr<uint8 const?>(xh[c * dim])), x1_bytes)
                 var sc1 = router_set(bf16, fixed_array(wd, xd1, o.bufs[0], nd), fixed_array(w_bytes, x1_bytes, o.bytes[0], n_bytes), hw)
@@ -7333,7 +7740,7 @@ def test_vkd_ple_bf16_cvt(t0 : T?) {
     }
 }
 
-[test(description = "The router GEMV over 3, 8 and 12 x rows as columns equals the one-row dispatch bit for bit on the f32, bf16 and odd-dim bf16 halfword stamps, with and without fused rms, and the CPU dot within its envelope bar")]
+[test(description = "The router GEMV over 3, 8 and 12 x rows as columns equals the one-row dispatch bit for bit - at the approx bar on a device that rounds a shader at a time - on the f32, bf16 and odd-dim bf16 halfword stamps, with and without fused rms, and the CPU dot within its envelope bar")]
 def test_vkd_router_gemv_cols(t0 : T?) {
     t0 |> run("the router GEMV over x rows as columns == the one-row dispatch a row at a time, bit for bit, and the CPU dot") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -7374,6 +7781,9 @@ def test_vkd_moe_routing(t0 : T?) {
             t |> success(moe_sched_ensure(512l), "the 512-thread schedule stamp engages")
             moe_sched_arm(t, 512)   //! past 256 experts: the 512-thread stamp, experts past 256 routed
             moe_sched_arm(t, MR_NE, true)   //! the Q8-fed chain's s-only schedule: every bucket a run of 32-row tiles, no m piece
+            t |> success(moe_sched_ensure(int64(MR_NE), true) && moe_sched_ensure(512l, true), "the ordered schedule stamps engage")
+            moe_sched_arm(t, MR_NE, false, true)   // a bucket's rows in slot-row order: two rounds of 256 slot rows
+            moe_sched_arm(t, 512, false, true)     // ... and on the 512-thread stamp
             moe_ar_comb_arm(t, true, true, false)
             moe_ar_comb_arm(t, false, true, false)
             moe_ar_comb_arm(t, false, false, false)

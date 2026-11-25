@@ -1917,7 +1917,7 @@ def private rows8_y_ref(ref : DenseRef; ndim, ys, live : int) : DenseRef => <- s
 //! The k4 or q8 rows8 kernel over `tiles` row tiles of eight: the prep fills every tile's table and sums in one dispatch, then
 //! the stamp - its grid weight tile x tiles + row tile - writes all 8 `tiles` rows of y at row stride `ys` (the site's rows, or
 //! wider: the gap past each row stays the fill), against the dense reference over the f16-rounded panel, whose rows differ tile
-//! to tile; skips where the layout probe says the form is another generation's
+//! to tile; the stamp is the one of the layout the box's matrix unit has (quads or pairs); skips where neither probe passes
 def private rows8_gate(t : T?; var dev, queue; k4 : bool; kdim, ndim, ys, tiles : int) {
     let tag = "rows8 {k4 ? "k4" : "q8"} k={kdim} n={ndim} ys={ys} tiles={tiles}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
@@ -1925,8 +1925,10 @@ def private rows8_gate(t : T?; var dev, queue; k4 : bool; kdim, ndim, ys, tiles 
         let kp = kernel_of(@@enc_rows8_prep_c)
         var ppso = mc |> keep_stamp(kp, err)
         return if (!pso_ok(t, tag, ppso, err))
-        if (!rows8_probe_ok(t, mc, err)) {
-            t |> skip("{tag}: the matrix unit's cooperative layout is not the rows8 kernels' on this box - the engine keeps the form off")
+        let quad = rows8_probe_ok(t, mc, err)
+        let pair = !quad && rows8_probe_ok(t, mc, err, true)
+        if (!quad && !pair) {
+            t |> skip("{tag}: the matrix unit's cooperative layout is not this stamp's on this box - the engine keeps the form off")
             return
         }
         let rows = 8 * tiles
@@ -1952,7 +1954,7 @@ def private rows8_gate(t : T?; var dev, queue; k4 : bool; kdim, ndim, ys, tiles 
         let ntg = int64(ndim / 16 * tiles)
         let reach = int64((rows - 1) * ys + ndim)
         if (k4) {
-            let kg = kernel_of(@@enc_rows8_k4_c)
+            let kg = pair ? kernel_of(@@enc_rows8_k4p_c) : kernel_of(@@enc_rows8_k4_c)
             var gpso = mc |> keep_stamp(kg, err)
             return if (!tensor_pso_or_skip(t, tag, gpso, dev, err))
             let nb = kdim / 256
@@ -1972,7 +1974,7 @@ def private rows8_gate(t : T?; var dev, queue; k4 : bool; kdim, ndim, ys, tiles 
             var inscope yref <- rows8_y_ref(ref, ndim, ys, rows)
             check_buf(t, tag, mc.buf[by], yref.want, env_bar(2e-4, yref.env), Shape(row_width = ys), yref.env)
         } else {
-            let kg = kernel_of(@@enc_rows8_q8_c)
+            let kg = pair ? kernel_of(@@enc_rows8_q8p_c) : kernel_of(@@enc_rows8_q8_c)
             var gpso = mc |> keep_stamp(kg, err)
             return if (!tensor_pso_or_skip(t, tag, gpso, dev, err))
             var inscope blob : array<uint8>
@@ -1991,8 +1993,38 @@ def private rows8_gate(t : T?; var dev, queue; k4 : bool; kdim, ndim, ys, tiles 
     }
 }
 
+//! The q8 few-row GEMM on the 8x8 simdgroup matrix over `toks` token rows of an f32 panel, y at row stride `ys`, against the dense
+//! reference over the same panel; the rows of the tokens past `toks` and the gap past each row's `ndim` keep the y fill
+def private rows8_mma_gate(t : T?; var dev, queue; kdim, ndim, ys, toks : int) {
+    let tag = "rows8 mma q8 k={kdim} n={ndim} ys={ys} toks={toks}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kg = kernel_of(@@enc_rows8_mma_q8_c)
+        var gpso = mc |> keep_stamp(kg, err)
+        return if (!pso_ok(t, tag, gpso, err))
+        var inscope xf : array<float>
+        xf |> resize(toks * kdim)
+        q8_x_fill(toks * kdim, xf)
+        var inscope blob : array<uint8>
+        var inscope wdeq : array<float>
+        q8_blob_fill(ndim, kdim / 32, blob, wdeq)
+        var inscope ref <- dense_ref_rows(wdeq, xf, toks, kdim, ndim)
+        let bw = mc |> in_plain(blob)
+        let bx = mc |> in_(xf)
+        let by = mc |> out_words(8 * ys, -1000.0)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            var ka = Rows8MmaArgs(k = uint(kdim), rows = uint(ndim), toks = uint(toks), ys = uint(ys))
+            invoke(kg.enc, enc, gpso, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bx], mc.buf[by], 0ul, ka, int64(ndim / 16))
+        }
+        return if (!ran)
+        var inscope yref <- strided_ref(ref, ndim, ys, 8, -1000.0)
+        check_buf(t, tag, mc.buf[by], yref.want, env_bar(2e-4, yref.env), Shape(row_width = ys), yref.env)
+    }
+}
+
 //! a split-plane format's rows8 kernel: k6's (kq 6) or iq4xs's (kq 44); `fmt` untyped: the stamps sit behind the optional das_metal require
-def private rows8_split_kernel(fmt) {
+def private rows8_split_kernel(fmt; pair : bool = false) {
+    return kernel_of(@@enc_rows8_k6p_c) if (fmt == 6 && pair)
     return kernel_of(@@enc_rows8_k6_c) if (fmt == 6)
     return kernel_of(@@enc_rows8_iq4xs_c)
 }
@@ -2009,15 +2041,17 @@ def private rows8_split_gate(t : T?; var dev, queue; fmt, kdim, ndim, ys : int; 
         var err : string
         let kh = kernel_of(@@enc_half_rows)
         let kn = stamp_of(@@enc_rms_bhx)
-        let kg = rows8_split_kernel(fmt)
+        let quad = rows8_probe_ok(t, mc, err)
+        let pair = !quad && fmt == 6 && rows8_probe_ok(t, mc, err, true)   // the pair layout's arm: k6's
+        if (!quad && !pair) {
+            t |> skip("{tag}: the matrix unit's cooperative layout is not this stamp's on this box - the engine keeps the form off")
+            return
+        }
+        let kg = rows8_split_kernel(fmt, pair)
         var hpso = mc |> keep_stamp(kh, err)
         var npso = mc |> keep_stamp(kn, err)
         var gpso = mc |> keep_stamp(kg, err)
         return if (!tensor_pso_or_skip(t, tag, gpso, dev, err) || !pso_ok(t, tag, hpso, err) || !pso_ok(t, tag, npso, err))
-        if (!rows8_probe_ok(t, mc, err)) {
-            t |> skip("{tag}: the matrix unit's cooperative layout is not the rows8 kernels' on this box - the engine keeps the form off")
-            return
-        }
         let nb = kdim / 256
         let nsb = ndim * nb
         var inscope kq, ks : array<uint8>
@@ -2489,6 +2523,11 @@ def test_metal_gemm_kernels(t : T?) {
                     rows8_k4_fed_gate(t, dev, queue, 3840, 128, 128 + wide, 8)
                     rows8_k4_fed_gate(t, dev, queue, 512, 64, 64 + wide, 5)
                     rows8_gate(t, dev, queue, false, 5120, 96, 96 + wide, 1)   // the [beta | alpha] site's 96 rows: six threadgroups
+                    for (toks in [8, 5, 3, 1]) {   // the simdgroup-matrix form at every token count: a dead token's rows stay as they were
+                        rows8_mma_gate(t, dev, queue, 512, 64, 64 + wide, toks)
+                    }
+                    rows8_mma_gate(t, dev, queue, 3840, 128, 128 + wide, 8)
+                    rows8_mma_gate(t, dev, queue, 5120, 96, 96 + wide, 4)
                     for (tiles in [2, 4]) {   //! the row tiles: sixteen and thirty-two rows on one weight pass
                         rows8_gate(t, dev, queue, true, 512, 64, 64 + wide, tiles)
                         rows8_gate(t, dev, queue, false, 512, 64, 64 + wide, tiles)

@@ -137,11 +137,60 @@ def private stream_lever_cases {
     stream_levers_say()
 }
 
+let private KNOB_PIECES_CAP = 128l   //! the far row's key pieces at most, as the CUDA driver hands `cuda_attn_knobs_say`
+
+//! every knob line of `gpu` and `vk` over a model that has what each knob moves (`reach`), or has none of it
+def private knob_lines(gpu : GpuTierEnv; vk : VulkanEnv; reach : bool) {
+    let n = reach ? 1l : 0l
+    rdec_tail_cut_say(gpu, reach)
+    resident_snaps_say(gpu.gpu_dn_snaps, reach)
+    vk_attn_knobs_say(vk, 3l * n, 2l * n, false)
+    vk_fa_wide_say(vk, reach)
+    cuda_attn_knobs_say(vk, 4l * n, 3l * n, 2l * n, KNOB_PIECES_CAP)
+    cuda_moe_fp4_rows_say(vk, 5l * n)
+    dflash_tile_knob_say("vulkan", "DASLLAMA_VK_ATTN_TILE", vk.vk_attn_tile, reach)
+    dflash_tile_knob_say("cuda", "DASLLAMA_CUDA_ATTN_TILE", vk.cuda_attn_tile, reach)
+}
+
+//! the discrete homes' kernel-form knobs and the checkpoint rows, read off knob structs the case builds - the child's own
+//! environment plays no part: every knob at its default says nothing; moved, each says its line once on a model that has what
+//! it moves and nothing on one that has not; the CUDA tile form off silences its far count and pieces; the Vulkan tile form
+//! asked says so on a cm2 device alone
+def private knob_cases {
+    var gpu = GpuTierEnv()
+    var vk = VulkanEnv()
+    mark("knobs_default")
+    knob_lines(gpu, vk, true)
+    gpu.gpu_pf_tail_cut = false
+    gpu.gpu_dn_snaps = 9l
+    vk.vk_attn_tile = 0l
+    vk.vk_attn_tile_far = 0l
+    vk.vk_fa_wide = 0l
+    vk.cuda_attn_tile_far = 64l
+    vk.cuda_attn_tile_pieces = 200l
+    vk.cuda_moe_fp4_rows = 4l
+    vk.cuda_fa_wide = 0l
+    mark("knobs_moved")
+    knob_lines(gpu, vk, true)
+    mark("knobs_moved_no_reach")
+    knob_lines(gpu, vk, false)
+    vk.cuda_attn_tile = 0l
+    mark("knobs_cuda_tile_off")
+    cuda_attn_knobs_say(vk, 4l, 3l, 0l, KNOB_PIECES_CAP)
+    dflash_tile_knob_say("cuda", "DASLLAMA_CUDA_ATTN_TILE", vk.cuda_attn_tile, true)
+    vk.vk_attn_tile = 1l
+    mark("knobs_vk_tile_on_cm2")
+    vk_attn_knobs_say(vk, 3l, 0l, true)
+    mark("knobs_vk_tile_on_khr")
+    vk_attn_knobs_say(vk, 3l, 0l, false)
+}
+
 def public child_override_announce() {
     ring_cases()
     embed_cases()
     sidecar_cases()
     stream_lever_cases()
+    knob_cases()
     metal_cases()
     mark("end")
     print("ROOT_DONE\n")

@@ -665,6 +665,39 @@ def test_gpu_said_once(t : T?) {
     }
 }
 
+[test(description = "`rdec_dn_snaps_pick` unasked keeps the most checkpoint rows from `RDEC_DN_SNAPS` down that the plan fits - two where two fit and four do not - and one where none fits; a named count is tried once and stands whether it fits or not, held to `RDEC_DN_SNAPS` at most")]
+def test_rdec_dn_snaps_pick(t : T?) {
+    t |> run("the plan's room picks the rows a region keeps; a named count stands") @(t : T?) {
+        var tried : array<int>
+        let two = rdec_dn_snaps_pick(0) $(rows : int) : bool {
+            tried |> push(rows)
+            return rows <= 2
+        }
+        t |> success(two.rows == 2 && two.fits, "a plan with room for two rows and not four keeps two (rows {two.rows}, fits {two.fits})")
+        t |> equal(tried, [4, 3, 2], "... tried from the most down, ending at the first count that fits")
+        let four = rdec_dn_snaps_pick(0) $(rows : int) : bool {
+            return rows <= RDEC_DN_SNAPS
+        }
+        t |> success(four.rows == RDEC_DN_SNAPS && four.fits, "control: a plan with room for every row keeps them all (rows {four.rows})")
+        let bare = rdec_dn_snaps_pick(0) $(rows : int) : bool {
+            return rows > RDEC_DN_SNAPS
+        }
+        t |> success(bare.rows == 1 && !bare.fits, "a plan with room for no row keeps one and answers that it does not fit (rows {bare.rows}, fits {bare.fits})")
+        tried |> clear()
+        let named = rdec_dn_snaps_pick(3) $(rows : int) : bool {
+            tried |> push(rows)
+            return rows <= 2
+        }
+        t |> success(named.rows == 3 && !named.fits, "a named count the plan does not fit stands (rows {named.rows}, fits {named.fits})")
+        t |> equal(tried, [3], "... and is the one count tried")
+        let over = rdec_dn_snaps_pick(9) $(rows : int) : bool {
+            return rows <= RDEC_DN_SNAPS
+        }
+        t |> success(over.rows == RDEC_DN_SNAPS && over.fits, "a named count past the most is held to it (rows {over.rows})")
+        delete tried
+    }
+}
+
 //! an unset seat with no CPU form panics naming the module that installs it
 [test(description = "Calling the unset N-row token command or per-layer PLE planes seat panics with text naming `require dasllama/dasllama_math_vulkan`, the module that installs them")]
 def test_unset_seats_name_their_module(t : T?) {
@@ -708,6 +741,19 @@ let private GATHER_TAIL = " for the prefill window, the one-row step, the N-row 
 let private GATHER_OFF = "dasLLAMA metal batch decode: the batched rows take the rows the host embeds, not the device gather off their ids, as asked (set_metal_batch_gather)"
 let private G4_UNFUSED = "dasLLAMA metal decode: the gemma-4 MoE tail runs its unfused chain, not the one-step form, as asked (set_metal_moe_g4_unfused)"
 let private NO_SIDECAR_RESOLVER = "dasLLAMA: no assistant drafter sidecar resolver is registered - require dasllama/dasllama_mtp_gemma (dasllama/dasllama_transformer requires it)"
+let private TAIL_CUT_OFF = "dasLLAMA: DASLLAMA_GPU_PF_TAIL_CUT=0 - every prompt row walks every layer of the shared-K/V tail (unset it, or set it to 1, to stop a row nobody reads at the last layer that stores K/V rows)"
+let private DN_SNAPS_9 = "dasLLAMA: resident driver - a region keeps 4 recurrent checkpoint rows as asked (DASLLAMA_GPU_DN_SNAPS=9, held to 1 .. 4, whether the plan fits them or not; unset it, or set it to 0, for the most the plan holds)"
+let private VK_TILE_OFF = "dasLLAMA vulkan tier: DASLLAMA_VK_ATTN_TILE=0 - the rows of one session attend on the row form on 3 layers (unset it, or set it to -1, for the tile form where the device's prefill flash is the KHR arm)"
+let private VK_TILE_ON = "dasLLAMA vulkan tier: DASLLAMA_VK_ATTN_TILE=1 - the rows of one session attend on the decode tile form on 3 layers (unset it, or set it to -1, for the tile form where the device's prefill flash is the KHR arm)"
+let private VK_FAR_OFF = "dasLLAMA vulkan tier: DASLLAMA_VK_ATTN_TILE_FAR=0 - the one-row step past the wide position attends on the row form's wide pieces on 2 flat layers (unset it, or set it to 1, for the decode tile form)"
+let private VK_WIDE_OFF = "dasLLAMA vulkan tier: DASLLAMA_VK_FA_WIDE=0 - the prefill flash pass at a head of 256 runs the 64-row stamps (unset it, or set it to 1, for the wide cm2 stamps)"
+let private VK_DFLASH_TILE_OFF = "dasLLAMA vulkan dflash: DASLLAMA_VK_ATTN_TILE=0 - the block drafter's dense layers attend on the scalar tiles (unset it for the flash tile's decode form)"
+let private CUDA_TILE_OFF = "dasLLAMA cuda tier: DASLLAMA_CUDA_ATTN_TILE=0 - the rows of one session and the far row attend on the row form on 4 layers (unset it, or set it to 1, for the decode tile form)"
+let private CUDA_FAR_64 = "dasLLAMA cuda tier: DASLLAMA_CUDA_ATTN_TILE_FAR=64 - the one-row step attends on the decode tile form from 64 keys on 3 flat layers (unset it, or set it to -1, for the driver's count by the device)"
+let private CUDA_PIECES_200 = "dasLLAMA cuda tier: DASLLAMA_CUDA_ATTN_TILE_PIECES=200 - the far row splits a K/V head's q tile into 128 key pieces, held to 128 at most (unset it, or set it to 0, for the driver's pick by the keys an SM serves)"
+let private CUDA_WIDE_OFF = "dasLLAMA cuda tier: DASLLAMA_CUDA_FA_WIDE=0 - the prefill flash pass at a head of 512 or 256 runs the narrower tiles every home shares on 2 layers (unset it, or set it to 1, for the wide tile)"
+let private CUDA_FP4_4 = "dasLLAMA cuda tier: DASLLAMA_CUDA_MOE_FP4_ROWS=4 - the N-row step feeds the FP4 expert chain from 4 rows on 5 routed layers (unset it, or set it to -1, for the driver's rule over the experts the rows touch)"
+let private CUDA_DFLASH_TILE_OFF = "dasLLAMA cuda dflash: DASLLAMA_CUDA_ATTN_TILE=0 - the block drafter's dense layers attend on the scalar tiles (unset it for the flash tile's decode form)"
 let private FUSE_OFF = "dasLLAMA metal decode: every decode sandwich seam runs the split chain (the branch's post norm, the add, the next norm) on the one-row step and every batched row step, as asked (set_metal_decode_fuse, DASLLAMA_METAL_FUSE=0)"
 
 //! the announce root under `fuse` for DASLLAMA_METAL_FUSE ("" unset), at the info floor the ringed and gather lines print at
@@ -754,6 +800,22 @@ def test_override_announces(t : T?) {
         }
         let back = case_lines(out, "stream_levers_restored")
         t |> success(find(back, "resident driver - the") < 0, "every lever put back, no line:\n{back}")
+    }
+    t |> run("the discrete homes' kernel-form knobs and the checkpoint rows announce by env spelling where they move a form the model has, and say nothing at their defaults, on a model without the form, or where another knob leaves them no effect") @(t : T?) {
+        let quiet = case_lines(out, "knobs_default")
+        t |> success(find(quiet, "DASLLAMA_") < 0, "every knob at its default, no line:\n{quiet}")
+        let moved = case_lines(out, "knobs_moved")
+        for (line in [TAIL_CUT_OFF, DN_SNAPS_9, VK_TILE_OFF, VK_FAR_OFF, VK_WIDE_OFF, VK_DFLASH_TILE_OFF, CUDA_FAR_64, CUDA_PIECES_200, CUDA_WIDE_OFF, CUDA_FP4_4]) {
+            t |> equal(count(moved, line), 1, "the moved knob's line once:\n{line}\nin\n{moved}")
+        }
+        let bare = case_lines(out, "knobs_moved_no_reach")
+        t |> success(find(bare, "DASLLAMA_") < 0, "a model with nothing a knob moves, no line:\n{bare}")
+        let cuda_off = case_lines(out, "knobs_cuda_tile_off")
+        t |> equal(count(cuda_off, CUDA_TILE_OFF), 1, "the CUDA tile form off says so:\n{cuda_off}")
+        t |> equal(count(cuda_off, CUDA_DFLASH_TILE_OFF), 1, "... at the drafter's attach too:\n{cuda_off}")
+        t |> success(find(cuda_off, "DASLLAMA_CUDA_ATTN_TILE_FAR") < 0 && find(cuda_off, "DASLLAMA_CUDA_ATTN_TILE_PIECES") < 0, "... and its far count and pieces, which then move nothing, say nothing:\n{cuda_off}")
+        t |> equal(count(case_lines(out, "knobs_vk_tile_on_cm2"), VK_TILE_ON), 1, "the Vulkan tile form asked on a cm2 device says so:\n{case_lines(out, "knobs_vk_tile_on_cm2")}")
+        t |> success(find(case_lines(out, "knobs_vk_tile_on_khr"), "DASLLAMA_VK_ATTN_TILE") < 0, "... and nothing on a KHR device, where the unset knob serves it too")
     }
     let metal = find(out, "CASE metal_gather_off") >= 0
     static_if (typeinfo builtin_module_exists(das_metal)) {
