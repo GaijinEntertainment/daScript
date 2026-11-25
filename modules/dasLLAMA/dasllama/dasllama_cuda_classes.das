@@ -4381,6 +4381,59 @@ class CuFaKhrH512F16 : FaH512T {
     }
 }
 
+//! the decode form of the head-512 KHR flash tile (`FaH512T`, `FaT`'s DEC): the rows of one session and a K/V head's query heads as the
+//! tile's rows, a key piece a workgroup, the pieces left for the decode attention's combine-only dispatch
+[cuda_dispatch(name = "fa_khr_dec_h512_cls", kernel = "run", family = "fa_khr_dec_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaKhrDecH512 : FaH512T {
+    override DEC = true
+    override KHR = true
+    typedef OT = float
+
+    [cuda_kernel(local_size_x = 128, name = "fa_khr_dec_h512_cls_cuda")]
+    def run {
+        fa_body()
+    }
+}
+
+//! the decode form of the KHR flash tile at the 256 head (`FaH256T`)
+[cuda_dispatch(name = "fa_khr_dec_h256_cls", kernel = "run", family = "fa_khr_dec_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaKhrDecH256 : FaH256T {
+    override DEC = true
+    override KHR = true
+    typedef OT = float
+
+    [cuda_kernel(local_size_x = 128, name = "fa_khr_dec_h256_cls_cuda")]
+    def run {
+        fa_body()
+    }
+}
+
+//! the decode form of the KHR flash tile at the 128 head (`FaH128T`): the block drafter's dense layers
+[cuda_dispatch(name = "fa_khr_dec_h128_cls", kernel = "run", family = "fa_khr_dec_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaKhrDecH128 : FaH128T {
+    override DEC = true
+    override KHR = true
+    typedef OT = float
+
+    [cuda_kernel(local_size_x = 128, name = "fa_khr_dec_h128_cls_cuda")]
+    def run {
+        fa_body()
+    }
+}
+
+//! the decode form of the KHR flash tile at the 64 head (`FaH64T`): a one-row step's far keys on a Llama-class layer
+[cuda_dispatch(name = "fa_khr_dec_h64_cls", kernel = "run", family = "fa_khr_dec_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaKhrDecH64 : FaH64T {
+    override DEC = true
+    override KHR = true
+    typedef OT = float
+
+    [cuda_kernel(local_size_x = 128, name = "fa_khr_dec_h64_cls_cuda")]
+    def run {
+        fa_body()
+    }
+}
+
 //! the small f16 x f16 GEMM on the cm2 128 x 128 tile (`F16GemmCm2T`): the E-series pre-step's projection over the window's rows,
 //! whole and at the panel's row 0 at its one site
 [cuda_dispatch(name = "f16_gemm_cm2_cls", grid = "wgs", params = "wgs : int64")]

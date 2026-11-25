@@ -2875,6 +2875,7 @@ struct DaAttnArgs {
     qrow : uint     //! a row's stride in q (the projection row's width)
     cntoff : uint   //! the split form's arrival counters, a word a (row, kv head, slab) group, at this word offset of the partials binding: zero between dispatches
     ring : uint     //! a sliding layer's ring rows: key `c` reads its `kv_ring_row` slot; 0 = the flat slab
+    comb : uint     //! 1 = the combine-only dispatch: a workgroup a (row, head) - `da_attn_comb_wgs` - combines the head's `nsplit` pieces another kernel left (`FaT`'s DEC stamps) and attends nothing
 }
 
 //! a (head, split) partial's floats in the partials plane: the running max, the denom, then the hs accumulators
@@ -2890,6 +2891,17 @@ def da_slab_is_g2(kv_mul : int64) : bool => kv_mul <= 2l
 
 //! the slab's q heads at a group width: the kernel's `G` and the host's workgroup count derive from this one expression
 def da_slab_heads(kv_mul : int64) : int64 => da_slab_is_g2(kv_mul) ? 2l : int64(DA_G)
+
+//! the combine-only dispatch's workgroups a row: one a head
+def da_attn_comb_wgs(n_heads : int64) : int64 => n_heads
+
+let DA_COMB_PIECES = 256l   //! the most pieces a head the combine-only dispatch takes: a thread a piece shares its weight
+
+//! `pieces` for a combine-only dispatch, or a panic past what it takes
+def da_attn_comb_pieces(pieces : int64) : uint {
+    panic("dasLLAMA decode attention: {pieces} pieces a head is past the combine dispatch's {DA_COMB_PIECES}") if (pieces > DA_COMB_PIECES)
+    return uint(pieces)
+}
 
 //! the decode attention's workgroups a row: one a (kv head, slab of the group's q heads, key split)
 def da_attn_row_wgs(n_heads, kv_mul, nsplit : int64) : int64 {
@@ -3058,24 +3070,83 @@ class template DaAttnT {
         var m = seed_m(h)
         var sp = 0u
         while (sp < nsplit) {
-            m = max(m, part[hb + sp * stride])
-            sp++
+            var pm : float[8]
+            for [unroll] (k in range(8)) {
+                pm[k] = part[hb + min(sp + uint(k), nsplit - 1u) * stride]
+            }
+            for [unroll] (k in range(8)) {
+                m = max(m, pm[k])
+            }
+            sp += 8u
         }
         var l = seed_l(h, m)
         var o = 0.0
         var o2 = 0.0
+        let d1 = min(tid, hs - 1u)
+        let d2 = min(tid + 256u, hs - 1u)
         sp = 0u
         while (sp < nsplit) {
-            let pb = hb + sp * stride
-            let wgt = exp(part[pb] - m)
-            l += part[pb + 1u] * wgt
-            if (tid < hs) {
-                o += part[pb + 2u + tid] * wgt
+            var pmx, pl, po, po2 : float[8]
+            for [unroll] (k in range(8)) {
+                let pb = hb + min(sp + uint(k), nsplit - 1u) * stride
+                pmx[k] = part[pb]
+                pl[k] = part[pb + 1u]
+                po[k] = part[pb + 2u + d1]
+                po2[k] = part[pb + 2u + d2]
             }
-            if (wide) {
-                o2 += part[pb + 2u + tid + 256u] * wgt
+            for [unroll] (k in range(8)) {
+                let wgt = sp + uint(k) < nsplit ? exp(pmx[k] - m) : 0.0
+                l += pl[k] * wgt
+                o += po[k] * wgt
+                o2 += po2[k] * wgt
             }
+            sp += 8u
+        }
+        let linv = 1.0 / l
+        finish_head(h, hflat, hs, qb, qstride, tid, o * linv, o2 * linv, wide)
+    }
+
+    //! the combine-only dispatch's end: `combine_head` with the pieces' maxes and weights read once for the workgroup, a thread a
+    //! piece, so a thread's walk is one load a piece
+    def combine_pieces(h, hflat, hs, nsplit, stride, qb, qstride, tid : uint; wide : bool) {
+        let hb = hflat * nsplit * stride
+        if (tid < nsplit) {
+            sc[tid] = part[hb + tid * stride]
+            sc[256u + tid] = part[hb + tid * stride + 1u]
+        }
+        barrier()
+        var m = seed_m(h)
+        var sp = 0u
+        while (sp < nsplit) {
+            m = max(m, sc[sp])
             sp++
+        }
+        barrier()
+        if (tid < nsplit) {
+            sc[tid] = exp(sc[tid] - m)
+        }
+        barrier()
+        var l = seed_l(h, m)
+        var o = 0.0
+        var o2 = 0.0
+        let d1 = min(tid, hs - 1u)
+        let d2 = min(tid + 256u, hs - 1u)
+        sp = 0u
+        while (sp < nsplit) {
+            var po, po2 : float[8]
+            for [unroll] (k in range(8)) {
+                let pb = hb + min(sp + uint(k), nsplit - 1u) * stride
+                po[k] = part[pb + 2u + d1]
+                po2[k] = part[pb + 2u + d2]
+            }
+            for [unroll] (k in range(8)) {
+                let live = sp + uint(k) < nsplit
+                let wgt = live ? sc[min(sp + uint(k), nsplit - 1u)] : 0.0
+                l += live ? sc[256u + sp + uint(k)] * wgt : 0.0
+                o += po[k] * wgt
+                o2 += po2[k] * wgt
+            }
+            sp += 8u
         }
         let linv = 1.0 / l
         finish_head(h, hflat, hs, qb, qstride, tid, o * linv, o2 * linv, wide)
@@ -3094,8 +3165,21 @@ class template DaAttnT {
         store_row(hflat, hs, tid, og, og2, wide)
     }
 
-    [spirv_inline, arch(at="../ARCHITECTURE_GPU_SHARED_ATTN.md#vk-decode-attn-split"), arch(at="../ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-block-codecs")]
-    def da_attn_body {   // nolint:STYLE037,STYLE038 — the online-softmax pass over a slab of heads, one shape for every head width and form
+    [spirv_inline]
+    def da_attn_body {
+        if (pa.comb != 0u) {
+            let hs = pa.hs
+            let heads = pa.kvd / hs * pa.kv_mul
+            let row = gl_WorkGroupID.x / heads
+            let h = gl_WorkGroupID.x % heads
+            combine_pieces(h, row * heads + h, hs, max(pa.nsplit, 1u), da_attn_part_stride(hs), row * pa.qrow, pa.qstride == 0u ? hs : pa.qstride, gl_LocalInvocationID.x, hs > 256u)
+        } else {
+            da_attn_keys()
+        }
+    }
+
+    [arch(at="../ARCHITECTURE_GPU_SHARED_ATTN.md#vk-decode-attn-split"), arch(at="../ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-block-codecs")]
+    def da_attn_keys {   // nolint:STYLE037,STYLE038 — the online-softmax pass over a slab of heads, one shape for every head width and form
         let hs = pa.hs
         let nsplit = max(pa.nsplit, 1u)
         let rowwg = max(pa.rowwg, 1u)
@@ -3821,6 +3905,22 @@ def fa_stamp_wgs(khr : bool; nheads, rows : int64; wide : bool = false) : int64 
     let qrows_per_wg = khr ? 16l : (wide ? 128l : 64l)
     return nheads * ((rows + qrows_per_wg - 1l) / qrows_per_wg)
 }
+
+//! the DEC stamps' workgroups a key piece: a (K/V head, tile of sixteen (row, query head) pairs) each, over `rows` rows of
+//! `kv_mul` query heads a K/V head
+def fa_dec_groups(kv_heads, rows, kv_mul : int64) : int64 => kv_heads * ((rows * kv_mul + 15l) / 16l)
+
+//! `pieces` held to a sliding layer's `window`: no more than its 64-key steps (0 = a flat layer, every piece stands)
+def fa_dec_window_pieces(pieces, window : int64) : int64 {
+    return pieces if (window == 0l)
+    let steps = max(window / 64l, 1l)
+    return min(pieces, steps)
+}
+
+//! the DEC stamps' key pieces a (K/V head, q tile): the pieces that bring a launch to `budget` workgroups at `groups` a piece
+//! - a home's wave or SM count under its own factor - one at least, `cap` at most, and held to a sliding layer's `window`
+def fa_dec_pieces(budget, groups, cap : int64; window : int64 = 0l) : int64
+    => fa_dec_window_pieces(clamp(budget / max(groups, 1l), 1l, cap), window)
 
 //! the flash pass over the f16 K/V shadows: one template, HS x KHR
 [ |> template_struct_instance]

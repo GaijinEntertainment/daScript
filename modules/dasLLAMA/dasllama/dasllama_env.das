@@ -621,6 +621,12 @@ struct public VulkanEnv {
     @clarg_doc = "The workgroups the decode attention counts as one wave of the device, in place of the device's own count (0 = the device's: its SM count, or an AMD device's active compute units, or 16 on a device that reports neither): the token command splits a head's keys into pieces to fill two waves, and the N-row command into the pieces its rows leave of one"
     vk_attn_wave : int64 = 0l
 
+    @clarg_doc = "The decode attention's tile form - the verify's and the peel's rows, the rows of one session, scored with a K/V head's query heads as one flash tile and each K and V row read once: 1 serves it on every layer and device that takes it, 0 never, -1 where the device's prefill flash is the KHR cooperative-matrix arm"
+    vk_attn_tile : int64 = -1l
+
+    @clarg_doc = "The Vulkan one-row command's wide twin (the form past the wide position) attends on the decode tile form on a flat layer of head 512 or 256 wherever the device has the tile's stamps: each K and V row read once for every query head of its K/V head, where the row form reads them once a group of query heads. 0 = the row form's wide pieces."
+    vk_attn_tile_far : int64 = 1l
+
     @clarg_doc = "The Vulkan home's prefill flash pass at a head of 256 on its wide cm2 stamps - 128 query rows of a head a workgroup, the keys walked once for all of them (the deltanet hybrids' attention, gemma-3's global layers): a whole pass with no softcap. 0 = the 64-row stamps."
     vk_fa_wide : int64 = 1l
 
@@ -650,6 +656,18 @@ struct public VulkanEnv {
 
     @clarg_doc = "The CUDA home's window chain on the MMQ GEMMs: the int8 one (`q8_mmq` and the leaves of Q4_K, IQ4_XS, Q4_0, IQ4_NL, Q5_0, Q5_1), the activations requantized to Q8_0 blocks between the GEMMs, as the token step's feeds are; and NVFP4's FP4 tensor leaf (`nv4_mmq`, W4A4: the activations quantized to e2m1 per token); a routed layer's MXFP4 or NVFP4 expert stacks ride the same rung fed from the expert schedule (`mx4_fp4_mmq_moe` / `nv4_fp4_mmq_moe`, the gathered rows as the stacks' FP4 feed; 0 keeps them on the cm2 s and e tiles). 1 = every plane whose format's leaf beat the cm2 tiles in the measured cards' windows, where its shape fits the tile (the output width a multiple of 128, the reduction of 256), runs on that leaf, the other planes on the f16-fed cm2 tiles; 2 = every leaf, the ones the cards split or lost on too (Q5_0, Q5_1) - a new card's own measurement; 0 = the cm2 tiles everywhere (A/B instrument). The FP4 leaf needs compute capability 120; below it an nv4 plane stays on the tiles under every value. The first window reads the value once and keeps it. The load log names the pick, and the value with the setter that gave it (`set_cuda_mmq_pin` under a test's pin)."
     cuda_mmq : int64 = 1l
+
+    @clarg_doc = "The CUDA home's decode attention tile form - the verify's rows, the rows of one session, scored with a K/V head's query heads as one flash tile and each K and V row read once, past the unsplit position, on every layer that takes it (an f16 mirror, a head of 512 or 256, no softcap, no sinks, enough rows to fill its tiles); the block drafter's dense layer rides the same form: 0 = never"
+    cuda_attn_tile : int64 = 1l
+
+    @clarg_doc = "The key count from which the CUDA home's one-row token step attends on the decode tile form on a flat layer the tile's stamps serve: the row form reads the K and V rows once a group of query heads, the tile form once for all of them, so the tile form wins where the keys are many (gemma-4's global layers after a long prompt). -1 (the default) lets the driver pick by the device: 128 from 64 SMs up, 2048 under. 0 = the row form at every position."
+    cuda_attn_tile_far : int64 = -1l
+
+    @clarg_doc = "The key pieces the CUDA home's far row splits a (K/V head, q tile) into, 128 at most. 0 = the driver's pick by the keys an SM serves: a block every second SM, a block an SM, two. A probe's knob."
+    cuda_attn_tile_pieces : int64 = 0l
+
+    @clarg_doc = "The rows from which the CUDA home's N-row step (a verify, a batched step) feeds a routed layer's MXFP4 or NVFP4 expert stacks through the window's FP4 chain - the activations quantized to e2m1, where the one-row step feeds Q8_0. -1 (the default) is the driver's rule over the experts the rows touch; 0 = never, the rows on the one-row step's feed. A test's `set_cuda_moe_fp4_rows` pins over it."
+    cuda_moe_fp4_rows : int64 = -1l
 
     @clarg_doc = "The CUDA home's prefill flash pass at a head of 512 or 256 on its wide tile - 48 query rows of a head a block at 512 and 96 at 256, the keys walked once for all of them, the K and V rows of a step staged in shared memory (gemma-4's global layers, the deltanet hybrids' attention). 0 = the narrower tiles every home shares."
     cuda_fa_wide : int64 = 1l

@@ -2673,6 +2673,88 @@ def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink, f16, bidir
     }
 }
 
+//! the decode form of the KHR flash tile at the 512 head (`FaH512T`): the rows of one session and a K/V head's query heads as the tile's rows, a
+//! key piece a workgroup, the pieces left for the decode attention's combine-only dispatch
+[vk_dispatch(name = "fa_khr_dec_h512_cls", kernel = "run", family = "fa_khr_dec_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrDecH512 : FaH512T {
+    override DEC = true
+    override KHR = true
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrDecH512` off `FaH512T` with the P x V stash at half the head: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_dec_h512_cls_s", wg_twin_of = "fa_khr_dec_h512_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrDecH512S : FaH512T {
+    override DEC = true
+    override PVHALF = true
+    override KHR = true
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! the decode form of the KHR flash tile at the 256 head (`FaH256T`)
+[vk_dispatch(name = "fa_khr_dec_h256_cls", kernel = "run", family = "fa_khr_dec_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrDecH256 : FaH256T {
+    override DEC = true
+    override KHR = true
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrDecH256` off `FaH256T` with the q tile and the P x V stash at the 256 head's size: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_dec_h256_cls_s", wg_twin_of = "fa_khr_dec_h256_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrDecH256S : FaH256T {
+    override DEC = true
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! the decode form of the KHR flash tile at the 128 head (`FaH128T`): the block drafter's dense layers
+[vk_dispatch(name = "fa_khr_dec_h128_cls", kernel = "run", family = "fa_khr_dec_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrDecH128 : FaH128T {
+    override DEC = true
+    override KHR = true
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! `FaKhrDecH128` off `FaH128T` with the q tile and the P x V stash at the small size: the stamp its pipe slot builds where the shared-memory cap is under its own footprint
+[vk_dispatch(name = "fa_khr_dec_h128_cls_s", wg_twin_of = "fa_khr_dec_h128_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrDecH128S : FaH128T {
+    override DEC = true
+    override QPV_WORDS = 2048u
+    override KHR = true
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
 //! every flash stamp's stem, four a form - cm2 f32, KHR f32, cm2 f16, KHR f16 - over the forms h64, h128, h256, h512, gated h256,
 //! capped h256, the h64 sink, the h64 and h128 bidirectional twins, h96 (cm2 alone) and the wide h256 pair, plain and gated (cm2
 //! alone); `-` where a form has no such stamp

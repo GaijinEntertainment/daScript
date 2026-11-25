@@ -2726,6 +2726,9 @@ struct RLayer {
     s_kv_store : VkDescriptorSet    //! a block codec's store of the staged rows into the mirror
     s_unrot : VkDescriptorSet       //! tq4: the attention rows out of the rotated basis
     s_attn : VkDescriptorSet        // decode attention class set
+    s_attn_tile : VkDescriptorSet   //! the flash tile's decode form over the layer's mirror, its pieces in the attention's partials plane
+    attn_tile : bool                //! the layer's rows of one session attend on the tile form (`rd_attn_tile_ok`)
+    attn_tile_far : bool            //! a flat layer whose one row past the wide position attends on the tile form (`rd_attn_tile_far_ok`)
     s_quant_at : VkDescriptorSet
     s_wo : VkDescriptorSet
     s_gu_n : VkDescriptorSet        //! the fused gate-up GEMV's N-row set over the rows' planes (`Q8GemvGuNT`'s stamps), where `gate_up_fused`
