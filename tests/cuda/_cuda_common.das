@@ -1288,6 +1288,21 @@ class Intrin {
             mma_acc_set(hf, k, float(k))
         }
         coopmatStore(hf, o16, 768, 16, 0)
+        f16_rows_scaled(lane, r, mt)
+    }
+
+    [spirv_inline]
+    def f16_rows_scaled(lane, r, mt : uint) {
+        var ha : coopmatA_f16_16x16
+        var hb : coopmatB_f16_16x16
+        ldmatrix(ha, unsafe(addr(sa16[(r + 8u * (mt & 1u)) * 2u + (mt >> 1u)])))
+        ldmatrix_trans(hb, unsafe(addr(sb16[(r + 8u * (mt & 1u)) * 2u + (mt >> 1u)])))
+        var hh : coopmatAcc_f16_16x16
+        hh = coopmatMulAdd(ha, hb, hh)   // nolint:STYLE011 - MulAdd seeds from its own zero-filled tile
+        mma_acc_scale_rows(hh, packHalf2x16(float2(0.5)), packHalf2x16(float2(2.0)))
+        for [unroll] (k in range(8)) {
+            o16[1024u + mma_acc_row(lane, k) * 16u + mma_acc_col(lane, k)] = mma_acc_get(hh, k)
+        }
     }
 }
 
@@ -1511,6 +1526,7 @@ def public declared_cuda_census : table<string> {   // nolint:STYLE038 - one fla
         "call.ldmatrix_trans.B.f16",
         "call.mma_acc_get",
         "call.mma_acc_set",
+        "call.mma_acc_scale_rows",
         "call.mma_acc_row",
         "call.mma_acc_col",
         "call.mma_scale_acc",
