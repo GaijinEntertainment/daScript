@@ -1496,11 +1496,12 @@ def make_think_stream_(tmpl : ChatTemplate; thinking : bool) : ThinkStream {
                        state = TS_START)
 }
 
-//! The reply matcher for `c`'s NEXT turn: armed on a thinking turn (`think_turn_active_`) and on
-//! an instruct turn of a family whose channel markers are guarded stops (`stop_nothink`) - the
-//! tolerated leading thought splits like any other.
+//! The reply matcher for `c`'s NEXT turn: armed on a thinking turn (`think_turn_active_`), on an instruct turn of a
+//! family whose channel markers are guarded stops (`stop_nothink`) - the tolerated leading thought splits like any
+//! other - and on every turn of a Harmony family, whose reply opens its channels at any reasoning level.
 def make_think_stream_(c : ChatSession) : ThinkStream {
-    var ts = make_think_stream_(c.tmpl, think_turn_active_(c) || !empty(c.stop_ids_nothink))
+    let harmony = c.tmpl.think_mode == ThinkMode.channel_switch && c.think_vocab
+    var ts = make_think_stream_(c.tmpl, think_turn_active_(c) || !empty(c.stop_ids_nothink) || harmony)
     open_think_if_prompted_(c, ts)
     return ts
 }

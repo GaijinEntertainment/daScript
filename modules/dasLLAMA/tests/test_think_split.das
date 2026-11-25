@@ -432,7 +432,7 @@ def test_split_unarmed(t : T?) {
     }
 }
 
-[test(description = "The gpt-oss splitter handles the live wire with the end control token suppressed, classifies a segment after the final channel by its own header, and drops a bare trailing re-header as framing")]
+[test(description = "The gpt-oss splitter handles the live wire with the end control token suppressed, classifies a segment after the final channel by its own header, drops a bare trailing re-header as framing, and arms for a session with thinking off while its vocab carries the markers")]
 def test_split_gptoss_no_end(t : T?) {
     t |> run("analysis -> final with the <|end|> control token suppressed (live wire)") @(t : T?) {
         var ct <- arch_chat("gpt-oss")
@@ -452,5 +452,19 @@ def test_split_gptoss_no_end(t : T?) {
             "<|channel|>final<|message|>Done.<|start|>assistant",
             "", "Done.")
         delete ct
+    }
+    t |> run("a session with thinking off still splits the channels; a vocab without the markers leaves it unarmed") @(t : T?) {
+        var c = ChatSession(tmpl <- arch_chat("gpt-oss"))
+        c.think_vocab = true
+        set_thinking_(c, false)
+        var ts = make_think_stream_(c)
+        var r = ""
+        var cnt = ""
+        think_feed_(ts, "<|channel|>analysis<|message|>Just answer.<|start|>assistant<|channel|>final<|message|>Paris", r, cnt)
+        t |> equal(r, "Just answer.", "the analysis channel is reasoning with thinking off")
+        t |> equal(cnt, "Paris", "the final channel alone is content")
+        c.think_vocab = false
+        t |> success(make_think_stream_(c).mode == ThinkMode.none, "no markers in the vocab: pass-through")
+        delete c
     }
 }
