@@ -74,3 +74,29 @@ a null pointer is undefined behavior, not a raise); `ExprAsVariant`, `ExprAssert
 (its target is unknown) always raise. Only a pass that deletes
 an evaluation asks, and only through `droppable`, which wants `noSideEffects` and no `mayRaise` together. CSE does not: it reuses the first
 evaluation, which still raises.
+
+## Sinking a pure local into the branch that reads it {#sink-pure-let}
+
+`optimizationSink` (`ast_sink.cpp`) moves a `let` of one variable into the `if` right after it, when
+that `if` reads the variable in one arm only and nothing after the `if` reads it. The local is then
+computed only on the path that uses it. The common case is an inlined check: the inliner binds the
+message argument to a local ahead of the body's `if`, so a check that passes still builds its
+message; once sunk, it builds it only when it fails.
+
+Moving an evaluation later, and onto one path, is the same question as deleting it on the others, so
+the pass asks `droppable` of the initializer: no side effect, and no raise, since a raise that
+happens today on every path must not vanish on the paths that no longer evaluate it. The `if`
+condition must be `droppable` too: the initializer now runs after it, and a condition that writes
+what the initializer reads would change its value. A reference local, an `inscope` or collected
+local (its cleanup sits in the block's final list) and a move out of storage (the move zeroes the
+source at a different time) stay where they are. No arm can declare the moved local's name: infer
+refuses a local that shadows another, and the optimizer's own locals carry unique names. `options
+disable_sink` turns the pass off.
+
+The pass is one visitor. A block's pre-visit finds its let-if pairs and registers each `if`'s arms,
+which are blocks themselves; the walk counts every use of a candidate's variable, and the uses inside
+each of its arms; and the block's post-visit moves a let whose uses all sit in one arm - none in the
+condition, the other arm or after the `if`. A local lives in its own block, so by the post-visit
+every use of it has been counted. It runs no side-effect walk of its own: it
+reads the flags that walk left at the start of dead-store elimination, the pass right before it.
+A node built since then is never `droppable`, so a stale flag can only keep a let in place.

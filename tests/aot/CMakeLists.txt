@@ -367,6 +367,19 @@ FILE(GLOB AOT_TYPEMACRO_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "
 list(FILTER AOT_TYPEMACRO_FILES EXCLUDE REGEX "/_")
 SET(AOT_TYPEMACRO_MODULE_FILES tests/typemacro/_template_struct_instance_mod.das)
 
+FILE(GLOB AOT_OPTIMIZATION_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/optimization/*.das")
+list(FILTER AOT_OPTIMIZATION_FILES EXCLUDE REGEX "/_")
+SET(AOT_OPTIMIZATION_MODULE_FILES
+    tests/optimization/_inline_constant_expression_helper.das
+    tests/optimization/_inline_counter_helper.das
+    tests/optimization/_inline_generic_helper.das
+    tests/optimization/_inline_scope_helper.das
+    tests/optimization/_inline_unoptimized_scope_helper.das
+    tests/optimization/_inline_unsafe_helper.das
+    tests/optimization/_never_inline_module.das
+    tests/optimization/_optimized_body_helper.das
+)
+
 FILE(GLOB AOT_LANGUAGE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/language/*.das")
 # Exclude module files (they are compiled via DAS_AOT_LIB below)
 list(FILTER AOT_LANGUAGE_FILES EXCLUDE REGEX "/_")
@@ -413,19 +426,11 @@ SET(AOT_LANGUAGE_MODULE_FILES
     tests/language/_distinct_fixture.das
     tests/language/_glob.das
     tests/language/_helper_foo.das
-    tests/language/_inline_constant_expression_helper.das
-    tests/language/_inline_counter_helper.das
-    tests/language/_inline_generic_helper.das
-    tests/language/_inline_scope_helper.das
-    tests/language/_inline_unoptimized_scope_helper.das
-    tests/language/_inline_unsafe_helper.das
     tests/language/_invoke_cmres_global_helper.das
     tests/language/_lambda_vis_inner.das
     tests/language/_lambda_vis_mid.das
-    tests/language/_never_inline_module.das
     tests/language/_operators_derived.das
     tests/language/_operators_parent.das
-    tests/language/_optimized_body_helper.das
     tests/language/_private_property_helper.das
     tests/language/_string_clone_init_helper.das
     tests/language/_struct_alias_facade.das
@@ -457,7 +462,7 @@ set(DAS_AOT_SUITES
     jobque json jsonrpc language linq lint long_array_table loops lpipe lsp
     macro_boost macro_call match math mcp md_boost module_cache module_tests network option promote quote
     reader_macro regex rtti safe_addr soa spoof strings stbimage table_packed template
-    tests type_lattice type_traits typemacro uri with_boost delegate)
+    tests type_lattice type_traits typemacro uri with_boost delegate optimization)
 foreach(_s IN LISTS DAS_AOT_SUITES)
     string(TOUPPER ${_s} _u)
     # suites with an irregular dir / a filter / a curated list define AOT_<UC>_FILES above;
@@ -483,7 +488,7 @@ foreach(_s IN LISTS DAS_AOT_SUITES)
     list(APPEND TEST_AOT_ALL_DAS ${AOT_${_u}_FILES})
 endforeach()
 
-set(DAS_AOT_MODULE_SUITES daslib dasgltf dastest decs glsl language linq macro_boost math quote stbimage typemacro)
+set(DAS_AOT_MODULE_SUITES daslib dasgltf dastest decs glsl language linq macro_boost math optimization quote stbimage typemacro)
 foreach(_s IN LISTS DAS_AOT_MODULE_SUITES)
     string(TOUPPER ${_s} _u)
     add_custom_target(test_aot_${_s}_modules)
@@ -623,20 +628,23 @@ DAS_AOT_PCH(test_aot)
 # test binary that measures correctness, not performance.
 
 ### AOT subset target — the per-PR CI gate
-# tests/language only (+ dastest/testing.das and the language fixture modules; a fast-math
-# build adds tests/math).
+# tests/language and tests/optimization (+ dastest/testing.das and their fixture modules; a
+# fast-math build adds tests/math).
 # Part of the default build on every lane, Debug included: a fast compile+link
 # gate (~230 TUs, no LTO). The full suite builds and runs on the nightly cron.
 add_executable(test_aot_subset ${DAS_DASCRIPT_MAIN_SRC}
     ${TESTING_AOT_GENERATED_SRC}
     ${LANGUAGE_AOT_GENERATED_SRC}
     ${LANGUAGE_MODULES_AOT_GENERATED_SRC}
+    ${OPTIMIZATION_AOT_GENERATED_SRC}
+    ${OPTIMIZATION_MODULES_AOT_GENERATED_SRC}
     ${SUBSET_DASLIB_MODULES_AOT_GENERATED_SRC}
 )
 TARGET_LINK_LIBRARIES(test_aot_subset libDaScriptAot ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(test_aot_subset libDaScriptAot
     test_aot_testing
     test_aot_language test_aot_language_modules
+    test_aot_optimization test_aot_optimization_modules
     test_aot_subset_daslib_modules
 )
 target_include_directories(test_aot_subset PRIVATE ${TEST_AOT_INCLUDE_DIRS})

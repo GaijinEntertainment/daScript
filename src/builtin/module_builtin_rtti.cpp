@@ -1042,6 +1042,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(fast_math)>("fast_math");
             addField<DAS_BIND_MANAGED_FIELD(disable_dse)>("disable_dse");
             addField<DAS_BIND_MANAGED_FIELD(disable_cse)>("disable_cse");
+            addField<DAS_BIND_MANAGED_FIELD(disable_sink)>("disable_sink");
             addField<DAS_BIND_MANAGED_FIELD(disable_inline)>("disable_inline");
             addField<DAS_BIND_MANAGED_FIELD(disable_auto_inline)>("disable_auto_inline");
             addField<DAS_BIND_MANAGED_FIELD(auto_inline_functions)>("auto_inline_functions");

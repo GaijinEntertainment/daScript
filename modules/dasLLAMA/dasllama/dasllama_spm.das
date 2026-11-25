@@ -6,7 +6,7 @@ module dasllama_spm shared public
 
 require dasllama/dasllama_lint public
 require daslib/fio
-require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs
+require daslib/array_boost
 require dasllama/dasllama_gguf
 require dasllama/dasllama_bpe
 require strings
@@ -332,7 +332,8 @@ def unigram_unk_score(tk : SpmTokenizer) : float {
     return lo - UNIGRAM_UNK_PENALTY
 }
 
-def private spm_piece_of(d : array<uint8> const#; i, n : int) : string {
+[temp_string_result]
+def private spm_piece_of(d : array<uint8> | #; i, n : int) : string {
     return "" if (n <= 0)
     unsafe {
         return string(temp_array(addr<uint8?>(d[i]), n, type<uint8>))
@@ -340,7 +341,7 @@ def private spm_piece_of(d : array<uint8> const#; i, n : int) : string {
 }
 
 // the next codepoint boundary after byte position i
-def private cpt_end(d : array<uint8> const#; i, n : int) : int {
+def private cpt_end(d : array<uint8> | #; i, n : int) : int {
     var j = i + 1
     while (j < n && (int(d[j]) & 0xC0) == 0x80) {
         j++
@@ -351,7 +352,7 @@ def private cpt_end(d : array<uint8> const#; i, n : int) : int {
 // the Viterbi lattice over byte positions: best[j] the highest score reaching j, back_len /
 // back_id the piece that got there; ties go to the earliest candidate (the reference's strict >);
 // a byte piece or a reserved control piece never matches text, as in the reference's trie
-def private unigram_lattice(tk : SpmTokenizer; d : array<uint8> const#; unk_id : int64; reserved : array<int64>;
+def private unigram_lattice(tk : SpmTokenizer; d : array<uint8> | #; unk_id : int64; reserved : array<int64>;
                             var best : array<float>; var back_len : array<int>; var back_id : array<int64>) {
     let n = length(d)
     let unk_score = unigram_unk_score(tk)
@@ -402,8 +403,17 @@ def unigram_encode(tk : SpmTokenizer; text : string; unk_id : int64; byte_fallba
     if (unk_id < 0l || unk_id >= long_length(tk.vocab)) {
         panic("dasLLAMA spm: unigram encode with no unknown piece (id {unk_id} of {length(tk.vocab)})")
     }
-    let input = tk.add_space_prefix ? " {text}" : text
-    peek_data(input) $(d : array<uint8> const#) {
+    var inscope d : array<uint8>
+    d |> reserve(length(text) + 1)
+    if (tk.add_space_prefix) {
+        d |> push(uint8(' '))
+    }
+    peek_data(text) $(t : array<uint8> const#) {
+        for (b in t) {
+            d |> push(b)
+        }
+    }
+    {
         var inscope best : array<float>
         var inscope back_len : array<int>
         var inscope back_id : array<int64>
@@ -421,6 +431,7 @@ def unigram_encode(tk : SpmTokenizer; text : string; unk_id : int64; byte_fallba
             rev_len |> push(back_len[p])
             p -= back_len[p]
         }
+        ids |> reserve(length(d))
         var k = length(rev) - 1
         while (k >= 0) {
             if (rev[k] == unk_id && byte_fallback) {

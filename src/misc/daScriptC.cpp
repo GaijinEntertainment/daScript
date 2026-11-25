@@ -938,6 +938,7 @@ int das_policies_set_bool ( das_policies * policies, das_bool_policy flag, int v
         case DAS_POLICY_NO_INFER_TIME_FOLDING:  p->no_infer_time_folding = v; break;
         case DAS_POLICY_FAST_MATH:              p->fast_math = v; break;
         case DAS_POLICY_DISABLE_DSE:            p->disable_dse = v; break;
+        case DAS_POLICY_DISABLE_SINK:           p->disable_sink = v; break;
         case DAS_POLICY_DISABLE_CSE:            p->disable_cse = v; break;
         case DAS_POLICY_DISABLE_INLINE:         p->disable_inline = v; break;
         case DAS_POLICY_DISABLE_AUTO_INLINE:    p->disable_auto_inline = v; break;

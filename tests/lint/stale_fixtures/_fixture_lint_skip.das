@@ -2,7 +2,7 @@ options gen2
 // lint-skip-file: subject conflicts with lint policies (fixture)
 // The deliberate finding below must never be reported - the directive
 // above opts the whole file out (canonical user:
-// tests/language/dead_branch_folding.das).
+// tests/optimization/dead_branch_folding.das).
 
 def dead_store_bait {
     var x = 1
