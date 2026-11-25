@@ -21,6 +21,11 @@ def test_model_form_knobs(t : T?) {
         "the control: a region count or an asked codec is a load knob")
     t |> success(!device_default(device_form(strict_ctx = true)), "the context asked whole is a load knob")
     t |> success(!device_default(device_form(cuda_window_fault = true)), "the window-fault seat is a load knob")
+    t |> success(!device_default(device_form(cuda_head_warm_fault = true)), "the head-warm fault seat holds through its form: no default form")
+    let chain_fault = device_form(regions = 1l, cuda_mmq_fault = true)
+    t |> success(!device_default(device_form(cuda_mmq_fault = true)), "the FP4-chain fault seat holds through its form: no default form")
+    t |> success(find(form_name(chain_fault), "the FP4-chain fault seat") >= 0 && find(form_name(device_form(regions = 1l)), "fault seat") < 0,
+        "the form names its seat, a form with none names none (the control): {form_name(chain_fault)}")
     t |> success(!device_default(device_form(mtp_head = "x.gguf")), "a NextN head pin is a load knob")
     t |> success(is_lane_form(dev), "the default form loads off the device lane where the rail is on")
     t |> success(!is_lane_form(device_form(cuda_window_fault = true)), "the window-fault seat's load streams the file: no lane")

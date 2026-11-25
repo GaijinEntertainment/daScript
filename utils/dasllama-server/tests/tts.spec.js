@@ -272,12 +272,34 @@ test('the offer card points at the config field when no catalog answers', async 
     await expect(page.locator('#tts-offer')).toContainText('tts field');
 });
 
-test('an empty models dir offers the front-end packs before any model', async ({ page }) => {
+const smallestPackReader = doc => bySize(speechModels(doc).filter(m => m.packs.length))[0];
+
+test('an empty models dir offers the next model\'s front-end packs before any model', async ({ page }) => {
     const doc = fx('catalog_empty');
-    const packs = speechPacks(doc);
+    const next = smallestPackReader(doc);
+    const packs = speechPacks(doc).filter(p => next.packs.includes(p.file));
+    expect(packs.length).toBeGreaterThan(0);
+    // a listed pack the next model does not read stays off the button
+    expect(packs.length).toBeLessThan(speechPacks(doc).length);
     const { posts } = await openControl(page, { catalog: doc });
     const b = page.locator('#tts-offer button');
-    // one button, not three: every speech model loads the packs, so they come first
+    await expect(b).toHaveCount(1);
+    await expect(b).toHaveText('download the front-end packs (' + sizeMB(packs.reduce((a, p) => a + p.bytes, 0)) + ')');
+    await b.click();
+    expect(lastJson(posts.filter(p => p.path === '/catalog/download')))
+        .toEqual({ tower: 'tts', file: packs[0].file });
+});
+
+test('a Russian-voiced model next on an empty box is offered the pack it reads', async ({ page }) => {
+    const doc = JSON.parse(JSON.stringify(fx('catalog_empty')));
+    const english = smallestPackReader(doc);
+    const other = speechModels(doc).find(m => m.packs.some(f => !english.packs.includes(f)));
+    expect(other).toBeTruthy();
+    other.bytes = 1;
+    expect(smallestPackReader(doc).file).toBe(other.file);
+    const packs = speechPacks(doc).filter(p => other.packs.includes(p.file));
+    const { posts } = await openControl(page, { catalog: doc });
+    const b = page.locator('#tts-offer button');
     await expect(b).toHaveCount(1);
     await expect(b).toHaveText('download the front-end packs (' + sizeMB(packs.reduce((a, p) => a + p.bytes, 0)) + ')');
     await b.click();
@@ -353,6 +375,45 @@ test('a model that reads no packs enables speech with the packs absent; one that
     await page.locator('#tts-offer button', { hasText: 'enable speech' }).click();
     await expect(page.locator('#cat-note')).toContainText('speech wired (' + modelName(alone.file) + ')');
     expect(lastJson(posts.filter(p => p.path === '/config')).tts).toBe(doc.models_dir + '\\' + alone.file);
+});
+
+test('a model enables with a pack it does not read absent; the same row naming that pack is offered it alone', async ({ page }) => {
+    const idle = fx('catalog_idle');
+    const model = speechModels(idle).find(m => m.present);
+    const unread = speechPacks(idle).find(p => !p.present);
+    // the capture as taken is the case: the model's packs on disk, a pack it does not read absent
+    expect(unread).toBeTruthy();
+    expect(model.packs).not.toContain(unread.file);
+    await openControl(page, { catalog: idle });
+    await expect(page.locator('#tts-offer button', { hasText: 'enable speech' })).toHaveCount(1);
+    await expect(page.locator('#tts-offer button', { hasText: 'download the front-end packs' })).toHaveCount(0);
+    const doc = JSON.parse(JSON.stringify(idle));
+    doc.tts.find(i => i.file === model.file).packs.push(unread.file);
+    const { posts } = await openControl(page, { catalog: doc });
+    await expect(page.locator('#tts-offer button', { hasText: 'enable speech' })).toHaveCount(0);
+    const b = page.locator('#tts-offer button');
+    await expect(b).toHaveCount(1);
+    await expect(b).toHaveText('download the front-end packs (' + sizeMB(unread.bytes) + ')');
+    await b.click();
+    expect(lastJson(posts.filter(p => p.path === '/catalog/download')))
+        .toEqual({ tower: 'tts', file: unread.file });
+});
+
+test('a model on disk short of its packs is offered the packs it reads, not every pack', async ({ page }) => {
+    const idle = fx('catalog_idle');
+    const model = speechModels(idle).find(m => m.present);
+    const doc = withPacksAbsent(idle);
+    const reads = speechPacks(doc).filter(p => model.packs.includes(p.file));
+    expect(reads.length).toBeGreaterThan(0);
+    expect(reads.length).toBeLessThan(speechPacks(doc).length);
+    const { posts } = await openControl(page, { catalog: doc });
+    const b = page.locator('#tts-offer button');
+    await expect(b).toHaveCount(1);
+    await expect(b).toHaveText('download the front-end packs (' + sizeMB(reads.reduce((a, p) => a + p.bytes, 0)) + ')');
+    await expect(page.locator('#tts-offer')).toContainText(modelName(model.file) + ' is downloaded');
+    await b.click();
+    expect(lastJson(posts.filter(p => p.path === '/catalog/download')))
+        .toEqual({ tower: 'tts', file: reads[0].file });
 });
 
 test('several downloaded models become a picker that defaults to the smallest', async ({ page }) => {

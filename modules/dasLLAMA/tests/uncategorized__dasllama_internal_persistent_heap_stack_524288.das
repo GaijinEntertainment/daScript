@@ -17,6 +17,9 @@ require _kv_prefix_cells   // the context file's cells on a synthetic Config
 require _tower_twin   // twin_rows_held: a twin's held verdict on synthetic rows
 require _compares   // probe_fails: the held verdict's failed asserts counted
 require strings   // find: a refusal's words
+require dasllama/dasllama_gpu_rail   // RailProfSums, rail_prof_lines: the homes' one profile report
+require daslib/enum_trait   // every RailProfRole walked against the ledger's width
+require dasllama/dasllama_env   // g_env_gpu: the knob the ledger reads with the pin off
 require math
 
 // The SPIR-V dump differ (harness/vk_spv_diff.das) - the identity gate every kernel fold's
@@ -318,4 +321,31 @@ def test_prefix_context_file(t : T?) {
     t |> run("a save picks the checkpoints its tokens open with, shortest first, whatever order the cache holds them in") @(t : T?) {
         context_pick_cell(t, c, path_join(test_temp_dir(), "dasllama_ctx_pick.bin"))
     }
+}
+
+[test(description = "The homes' one profile report charges a stamp to its role, prints the chain's line under the home's tag and a line a stamped role in role order with its share, leaves an unstamped role out, keeps the reported ledger as the last, and every profile role fits the ledger's width")]
+def test_rail_prof_report(t : T?) {
+    var s : RailProfSums
+    rail_prof_add(s, RailProfRole.tts_lstm, 50.0lf)
+    rail_prof_add(s, RailProfRole.tts_gemm, 30.0lf)
+    rail_prof_add(s, RailProfRole.tts_gemm, 20.0lf)
+    var inscope lines <- rail_prof_lines(s, "cuda", "decode", 3l, 128l, 900)
+    t |> equal(length(lines), 3)
+    let head = "cuda tower decode gpu: 3 blocks x 128 rows, 3 stamps"
+    t |> equal(lines[0], "{head}, 100 us on the device, 900 us host wall")
+    t |> equal(lines[1], "  tts_gemm: 50 us over 2 stamps (50%)")
+    t |> equal(lines[2], "  tts_lstm: 50 us over 1 stamps (50%)")
+    var inscope none <- rail_prof_lines(RailProfSums(), "vk", "albert", 1l, 1l, 0)
+    t |> equal(length(none), 1)   // control: an empty ledger prints its chain line alone
+    rail_prof_report(s, "cuda", "decode", 3l, 128l, 900)
+    t |> equal(rail_prof_last().stamps, 3)
+    t |> equal(rail_prof_last().n[int(RailProfRole.tts_gemm)], 2)
+    for (r in type<RailProfRole>) {
+        t |> success(int(r) < RAIL_PROF_ROLES, "{r} fits the ledger's {RAIL_PROF_ROLES} roles")
+    }
+    let was = set_rail_prof_pin(true)
+    t |> success(rail_prof_on(), "the pin turns the ledger on")
+    set_rail_prof_pin(false)
+    t |> equal(rail_prof_on(), g_env_gpu.gpu_prof)   // the pin off, the knob decides
+    set_rail_prof_pin(was)
 }

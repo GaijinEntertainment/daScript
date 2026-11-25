@@ -730,8 +730,8 @@ var g_init_failed = false
 var g_vk_upload_us = 0l
 var g_vk_upload_bytes = 0l
 
-//! DASLLAMA_GPU_PROF=1: per-piece batch-chain timing to log
-def vk_prof : bool => g_env_gpu.gpu_prof
+//! DASLLAMA_GPU_PROF=1 (or the ledger's pin): per-piece batch-chain timing to log
+def vk_prof : bool => rail_prof_on()
 
 def dev_raw : VkDevice => boost_value_to_vk(g_gpu.device)
 
@@ -1287,10 +1287,10 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
         VkExtEntry(name = "VK_KHR_shader_integer_dot_product", present = integer_dot_product_supported(phys),
             rides = "the sdot4 integer tiles and the quant dot kernels; the tier is disabled without it"),
         VkExtEntry(name = "VK_KHR_cooperative_matrix", present = has_cm,
-            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), the h128 attention twin (at subgroup 32), the tower driver's KHR route (the vision, whisper-class and rotary FastConformer (GigaAM) bidirectional flash tiles, the qwen25v f16 GEMM off cm2 and the audio fronts' f16 GEMMs - the conv stems, the qwen3a, canary and GigaAM fronts), the TTS seats' f16 tile off cm2 (the StyleTTS2 decoder and generator convs, at subgroup 32), and the per-layer-embedding window projection's f16 tile off cm2 (at subgroup 32, dim and rows 16-multiples), and the window chain's chunked deltanet scan (at subgroup 32); without it the sdot4 tiles and the chunked attention serve, a resident MoE's routed block rides the Q8-fed chain, the tower driver declines `device` off cm2, the TTS decoder convs ride the f32 tile, the per-layer-embedding window projection rides the router GEMV, and the deltanet scan runs a token at a time"),
+            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), the h128 attention twin (at subgroup 32), the tower driver's KHR route (the vision, whisper-class and rotary FastConformer (GigaAM) bidirectional flash tiles, the qwen25v f16 GEMM off cm2 and the audio fronts' f16 GEMMs - the conv stems, the qwen3a, canary and GigaAM fronts), the TTS seats' f16 tile off cm2 (the StyleTTS2 decoder and generator convs, at subgroup 32), the TTS seats' stored conv leaves on the KHR quant tiles off cm2 (the 128 column), and the per-layer-embedding window projection's f16 tile off cm2 (at subgroup 32, dim and rows 16-multiples), and the window chain's chunked deltanet scan (at subgroup 32); without it the sdot4 tiles and the chunked attention serve, a resident MoE's routed block rides the Q8-fed chain, the tower driver declines `device` off cm2, the TTS decoder convs and the seats' stored conv leaves ride the f32-exact tile, the per-layer-embedding window projection rides the router GEMV, and the deltanet scan runs a token at a time"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 (workgroup scope, flexible dimensions, tensor addressing, block loads, bufferDeviceAddress)",
             present = has_cm2,
-            rides = "the cm2 decode-in-load prefill tiles, the served default, and the per-layer-embedding window projection's f16 tile (dim a multiple of the small f16 GEMM's eight 64-deep chunks, else the router GEMV); without it the KHR tiles serve, the projection on the KHR f16 tile where that fits and on the router GEMV where none does (DASLLAMA_COOPMAT picks a mode by name)"),
+            rides = "the cm2 decode-in-load prefill tiles, the served default, the TTS seats' stored conv leaves on those tiles (the 128 column), and the per-layer-embedding window projection's f16 tile (dim a multiple of the small f16 GEMM's eight 64-deep chunks, else the router GEMV); without it the KHR tiles serve, the projection on the KHR f16 tile where that fits and on the router GEMV where none does (DASLLAMA_COOPMAT picks a mode by name)"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 reductions, conversions and per-element operations",
             present = has_cm2 && cooperative_matrix2_fa_supported(phys),
             knob = "DASLLAMA_COOPMAT", off = resolve_coopmat_mode(has_cm, has_cm2, int64(sgw.width)) != COOPMAT_CM2,
@@ -4188,7 +4188,6 @@ def cmd_close(raw : VkCommandBuffer; h : VkHaz; tag : string) {
     cmd_close(raw)
 }
 
-let private VT_PROF_ROLES = 64   //! the role sums' width: past `RailProfRole`'s count (`dasllama_gpu_rail`)
 var private g_vt_prof_roles : RailProfRole[int(PFQ_CAP)]
 
 def vt_pt(raw : VkCommandBuffer; role : RailProfRole) {
@@ -4198,23 +4197,14 @@ def vt_pt(raw : VkCommandBuffer; role : RailProfRole) {
     }
 }
 
+//! the query pool's stamps past the baseline charged to their roles, then the ledger's report under the home's tag
 [cold_path]
 def vt_prof_report(chain : string; nl, npos : int64; wall_us : int) {
-    var sum : double[VT_PROF_ROLES]
-    var cnt : int[VT_PROF_ROLES]
-    var tot = 0.0lf
+    var s : RailProfSums
     for (i in urange(1u, g_pfq_n)) {
-        let us = pfq_us(i)
-        tot += us
-        sum[int(g_vt_prof_roles[i])] += us
-        cnt[int(g_vt_prof_roles[i])]++
+        rail_prof_add(s, g_vt_prof_roles[i], pfq_us(i))
     }
-    to_log(LOG_INFO, "vk tower {chain} gpu: {nl} blocks x {npos} rows, {int(g_pfq_n) - 1} stamps, {int(tot)} us on the device, {wall_us} us host wall\n")
-    for (r in type<RailProfRole>) {
-        if (cnt[int(r)] > 0) {
-            to_log(LOG_INFO, "  {r}: {int(sum[int(r)])} us over {cnt[int(r)]} stamps ({int(sum[int(r)] * 100.0lf / max(tot, 1.0lf))}%)\n")
-        }
-    }
+    rail_prof_report(s, "vk", chain, nl, npos, wall_us)
 }
 
 //! `rec` recorded into `raw` between the ledger's baseline stamp and its close, submitted and waited; the report follows the wait

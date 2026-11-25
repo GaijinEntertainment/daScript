@@ -67,7 +67,7 @@ struct ServerArgs {
     @clarg_doc = "Weight serving mode: fp32 | q8 (default); file-format spellings q8_0 | q4_0 | q4_k | q5_k | q6_k | mxfp4 | f16 | bf16 select q8, where those planes serve natively; q4 = legacy requant tier"
     quant : string
 
-    @clarg_doc = "KV cache codec: f32 | f16 | q8_0 | tq4 (rotated 4-bit; needs pow2 head_size) (default f16); under --gpu vulkan the whole-model driver holds its cache in the same codec for f16, q8_0 and tq4"
+    @clarg_doc = "KV cache codec: auto | f32 | f16 | q8_0 | tq4 (rotated 4-bit; needs pow2 head_size) (default auto: f16, or q8_0 on a CPU with no hardware half-float convert); under --gpu vulkan the whole-model driver holds its cache in the same codec for f16, q8_0 and tq4"
     kv_dtype : string
 
     @clarg_doc = "Metal (GPU) serving mode: off | auto | required (default off). auto = GPU when a path's gates pass, CPU fallback otherwise; required = a call the GPU cannot serve is a hard failure"
@@ -980,7 +980,7 @@ def build_config_surface(cfg : ServerArgs; save_path : string) : string {
         port = cfg.port > 0 ? cfg.port : 8080,
         host = bind_host(cfg.host),
         quant = empty(cfg.quant) ? "q8" : cfg.quant,
-        kv_dtype = empty(cfg.kv_dtype) ? "f16" : cfg.kv_dtype,
+        kv_dtype = empty(cfg.kv_dtype) ? "{default_kv_dtype()}" : cfg.kv_dtype,
         metal = empty(cfg.metal) ? "off" : cfg.metal,
         gpu = cfg.gpu,
         gpu_layers = gpu_is_discrete(gpu) ? int(gpu_detail_layers(cfg)) : cfg.gpu_layers,
@@ -1349,7 +1349,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
             if (ectx > 0l) {
                 m.config.seq_len = min(m.config.seq_len, ectx)
             }
-            clamp_ctx_to_device_room(m, ent.name, pick_kv_dtype(!empty(ent.kv_dtype) ? ent.kv_dtype : (empty(g_cfg.kv_dtype) ? "f16" : g_cfg.kv_dtype)))
+            clamp_ctx_to_device_room(m, ent.name, pick_kv_dtype(!empty(ent.kv_dtype) ? ent.kv_dtype : g_cfg.kv_dtype))
             let ctx_note = ectx > 0l ? "" : " (model default)"
             to_log(LOG_INFO, "dasllama-server: {empty(ent.name) ? base_name(ent.path) : ent.name} ctx {m.config.seq_len}{ctx_note}\n")
             var opts = boot_slot_opts(ent)

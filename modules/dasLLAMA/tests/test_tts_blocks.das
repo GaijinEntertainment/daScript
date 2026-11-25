@@ -14,6 +14,7 @@ require _kq_fixtures   // the salted k4 planes and the leaf per row: the Q8_K ro
 require _compares   // check / check_count at the dot-envelope bar
 require _kernel_oracles   // layernorm_ref, attention_bidir_ref, gelu_form_ref: the BERT cells' double forms
 require daslib/jobque_boost
+require daslib/f16_cvt   // f32_to_f16 / f16_to_f32: the half-float conv cell rounds its weights to halves
 require daslib/defer
 require daslib/rtti   // this_context().last_exception: a refusal read as text
 require strings
@@ -706,7 +707,85 @@ def private slab_linear_cases_kq(t : T?) {
         }
         let name = "slab linear kq {nin}x{nout}{repack ? "" : " disk-order"}"
         t |> equal(off, 0, "{name}: the slab holds the planes' own rows")
+        t |> success(slot.widened && slot.stored == 0, "{name}: the slot is marked widened")
         t |> success(all_finite(want) && down > 0, "{name}: the rows one down differ (the compare's control): {down}")
+    }
+}
+
+//! the members a GPU seat stages as stored, as the slab writer's mask
+let SLAB_STAGED = (1u << uint(KqFmt.q8)) | (1u << uint(KqFmt.k4)) | TTS_STORED_HALVES
+
+def private slab_put(var w : TtsSlabWriter; c : TtsConv1d) : TtsConvSlot => tts_slab_conv(w, c)
+
+def private slab_put(var w : TtsSlabWriter; l : TtsLinear) : TtsConvSlot => tts_slab_linear(w, l)
+
+//! a conv's or a dense layer's slot off the slab writer under the stored mask `mask`
+def private slab_slot(leaf; mask : uint) : TtsConvSlot {
+    var slot : TtsConvSlot
+    var built <- tts_slab_build_stored(slot, $(var w : TtsSlabWriter; var s : TtsConvSlot) {
+        s = slab_put(w, leaf)
+    }, mask)
+    unsafe {
+        delete built
+    }
+    return slot
+}
+
+//! `slot` is a stored plane (`stored`), else rows of the slab, widened or not (`widened`)
+def private slot_is(t : T?; name : string; slot : TtsConvSlot; stored, widened : bool) {
+    let held = stored ? "stays out of the slab" : "is rows of the slab"
+    t |> equal(slot.stored != 0, stored, "{name}: the leaf {held}")
+    t |> equal(slot.widened, widened, "{name}: the slot is {widened ? "" : "not "}marked widened")
+}
+
+def private slab_widened_marks(t : T?) {
+    var r = TtsRng()
+    rng_seed(r, 0x51ab3ul)
+    for (cin in [64l, 66l]) {
+        var inscope c0 <- make_conv(r, cin, 64l, 3l, 1l, 1l, 1l, false, true)
+        var inscope cf <- prepared(c0, true)
+        var inscope ch := c0
+        ch.served_rows = true
+        conv1d_prepare(ch, false, false, false, true)
+        t |> success(conv1d_host_halves(ch) && !conv1d_host_halves(cf),
+            "cin {cin}: one conv of halves, one of floats")
+        let lattice = cin % 8l == 0l
+        slot_is(t, "conv of floats, cin {cin}", slab_slot(cf, SLAB_STAGED), stored = false, widened = false)
+        slot_is(t, "conv of halves, cin {cin}", slab_slot(ch, SLAB_STAGED), stored = lattice, widened = !lattice)
+        slot_is(t, "conv of halves, cin {cin}, none staged", slab_slot(ch, 0u), stored = false, widened = true)
+        var inscope ck <- prepared_kq(c0, KqFmt.k4, false)
+        t |> success(ck.kq_fmt == kq_schema_id(KqFmt.k4) && !ck.kq_repacked && !ck.q8 && !conv1d_host_halves(ck),
+            "cin {cin}: one Q4_K conv in disk order, no Q8_0 matrix and no halves beside its planes")
+        slot_is(t, "Q4_K conv, cin {cin}", slab_slot(ck, SLAB_STAGED), stored = lattice, widened = !lattice)
+        slot_is(t, "Q4_K conv, cin {cin}, none staged", slab_slot(ck, 0u), stored = false, widened = true)
+        var inscope cr <- prepared_kq(c0, KqFmt.k4, true)
+        let layout = cr.kq_repacked ? "repacked" : "in disk order (the backend carries no kq)"
+        slot_is(t, "Q4_K conv, cin {cin}, {layout}", slab_slot(cr, SLAB_STAGED),
+            stored = lattice && !cr.kq_repacked, widened = !lattice || cr.kq_repacked)
+    }
+    var inscope q0 <- make_conv(r, 128l, 128l, 3l, 1l, 1l, 1l, false, true)
+    var inscope cq <- prepared(q0, true, true)
+    t |> success(cq.q8, "the Q8_0 conv holds its quant matrix")
+    slot_is(t, "Q8_0 conv", slab_slot(cq, SLAB_STAGED), stored = true, widened = false)
+    slot_is(t, "Q8_0 conv, no member staged", slab_slot(cq, 0u), stored = false, widened = true)
+    for (nin in [64l, 36l]) {
+        var inscope lf = TtsLinear(nin = nin, nout = 24l)
+        rand_fill(r, lf.w, nin * 24l, 1.0)
+        var inscope lh := lf
+        linear_prepare(lh, false, false, false, true, true)
+        t |> success(linear_host_halves(lh) && !linear_host_halves(lf),
+            "nin {nin}: one layer of halves, one of floats")
+        let lattice = nin % 32l == 0l
+        slot_is(t, "layer of floats, nin {nin}", slab_slot(lf, SLAB_STAGED), stored = false, widened = false)
+        slot_is(t, "layer of halves, nin {nin}", slab_slot(lh, SLAB_STAGED), stored = lattice, widened = !lattice)
+    }
+    for (repack in [true, false]) {
+        var inscope lk = TtsLinear(nin = 256l, nout = 24l)
+        var kq, ks : array<uint8>
+        build_kq_region(4, kq, ks, 24l, 256l, 0x51ED270Bu)
+        linear_take_kq(lk, 4, kq, ks, repack)
+        let name = "K-quant dense layer{lk.kq_repacked ? ", repacked" : ", disk order"}"
+        slot_is(t, name, slab_slot(lk, SLAB_STAGED), stored = !lk.kq_repacked, widened = lk.kq_repacked)
     }
 }
 
@@ -1167,11 +1246,33 @@ def private split_diff(name : string; a, b : array<float>) : SplitCase {
     return res
 }
 
-def private split_conv_case(name : string; cin, cout, k, stride, pad, dil : int64; q8 : bool; axis : SplitAxis; transposed : bool = false) : SplitCase {
+//! the weight lane a split case mints its conv in
+enum private ConvLane {
+    f32
+    q8
+    kq
+    halves
+}
+
+//! a raw conv prepared for the rows form over half floats, its weights on the f16 lattice first: the narrow is then exact
+def private prepared_halves(c : TtsConv1d) : TtsConv1d {
+    var p := c
+    for (v in p.w) {
+        v = f16_to_f32(f32_to_f16(v))
+    }
+    p.served_rows = true
+    conv1d_prepare(p, false, false, false, true)
+    return <- p
+}
+
+//! a rows conv minted on `lane` (`fmt` the K-quant member under `ConvLane.kq`), at one lane and at many: the outputs' differing
+//! elements, a million more where the lane never minted - the leg would have pinned another kernel
+def private split_conv_case(name : string; lane : ConvLane; cin, cout, k, stride, pad, dil : int64; axis : SplitAxis; transposed : bool = false;
+                            fmt : KqFmt = KqFmt.q8) : SplitCase {
     var r = TtsRng()
-    rng_seed(r, 0x5b17ul + uint64(k * 100l + dil))
+    rng_seed(r, 0x5b17ul + uint64(k * 100l + dil) + (uint64(int(lane)) << 16ul))
     var inscope c0 <- make_conv(r, cin, cout, k, stride, pad, dil, transposed, true)
-    var inscope cr <- prepared(c0, true, q8)
+    var inscope cr <- lane == ConvLane.kq ? prepared_kq(c0, fmt, true) : lane == ConvLane.halves ? prepared_halves(c0) : prepared(c0, true, lane == ConvLane.q8)
     let t_in = T_ROWS
     var inscope x_ct : array<float>
     rand_fill(r, x_ct, cin * t_in, 2.0)
@@ -1185,30 +1286,45 @@ def private split_conv_case(name : string; cin, cout, k, stride, pad, dil : int6
         conv1d_rows(cr, x_rows, t_in, many)
     }
     var res = split_diff("{name} @ {axis_name(axis)}", one, many)
-    if (q8 && !cr.q8) {
-        res.diffs += 1000000   // the q8 lane never minted, so this leg pinned the f32 kernel
-    }
+    let minted = (lane == ConvLane.q8 ? cr.q8 : lane == ConvLane.kq ? cr.kq_fmt != 0 : lane == ConvLane.halves ? conv1d_host_halves(cr) : true)
+    res.diffs += minted ? 0 : 1000000
     return res
 }
 
-def private split_conv_kq_case(name : string; fmt : KqFmt; cin, cout, k, pad : int64; axis : SplitAxis; stride : int64 = 1l; transposed : bool = false) : SplitCase {
+//! the dense layer at one lane and at many, the outputs' differing elements: `linear_rows` over the f32 rows, or under `halves`
+//! `linear_vec` over a layer prepared over half floats
+def private split_linear_case(nin, nout : int64; axis : SplitAxis; halves : bool = false) : SplitCase {
     var r = TtsRng()
-    rng_seed(r, 0x5b19ul + uint64(k))
-    var inscope c0 <- make_conv(r, cin, cout, k, stride, pad, 1l, transposed, true)
-    var inscope cr <- prepared_kq(c0, fmt, true)
-    let t_in = T_ROWS
-    var inscope x_ct : array<float>
-    rand_fill(r, x_ct, cin * t_in, 2.0)
-    var inscope x_rows : array<float>
-    transpose_ct(x_ct, cin, t_in, x_rows)
+    rng_seed(r, 0x5b1aul + uint64(nin) + (halves ? 0x10000ul : 0ul))
+    let t = halves ? 1l : T_ROWS
+    var inscope l = TtsLinear(nin = nin, nout = nout)
+    rand_fill(r, l.w, nout * nin, 1.0 / sqrt(float(nin)))
+    rand_fill(r, l.b, nout, 0.5)
+    if (halves) {
+        linear_prepare(l, true, false, false, true, true)
+    } else {
+        linear_prepare(l)
+    }
+    var inscope x : array<float>
+    rand_fill(r, x, t * nin, 2.0)
     var inscope one, many : array<float>
     at_split(axis, true) {
-        conv1d_rows(cr, x_rows, t_in, one)
+        if (halves) {
+            linear_vec(l, x, one)
+        } else {
+            linear_rows(l, x, t, one)
+        }
     }
     at_split(axis, false) {
-        conv1d_rows(cr, x_rows, t_in, many)
+        if (halves) {
+            linear_vec(l, x, many)
+        } else {
+            linear_rows(l, x, t, many)
+        }
     }
-    return split_diff("{name} @ {axis_name(axis)}", one, many)
+    var res = split_diff("{halves ? "linear_vec halves" : "linear_rows"} {nin}x{nout} @ {axis_name(axis)}", one, many)
+    res.diffs += halves && !linear_host_halves(l) ? 1000000 : 0
+    return res
 }
 
 def private split_adain_case(c : int64; axis : SplitAxis) : SplitCase {
@@ -1255,26 +1371,6 @@ def private split_attention_case(axis : SplitAxis) : SplitCase {
         attention_rows(q, k, v, t, hidden, heads, many)
     }
     return split_diff("attention_rows @ {axis_name(axis)}", one, many)
-}
-
-def private split_linear_case(nin, nout : int64; axis : SplitAxis) : SplitCase {
-    var r = TtsRng()
-    rng_seed(r, 0x5b1aul + uint64(nin))
-    let t = T_ROWS
-    var inscope l = TtsLinear(nin = nin, nout = nout)
-    rand_fill(r, l.w, nout * nin, 1.0 / sqrt(float(nin)))
-    rand_fill(r, l.b, nout, 0.5)
-    linear_prepare(l)
-    var inscope x : array<float>
-    rand_fill(r, x, t * nin, 2.0)
-    var inscope one, many : array<float>
-    at_split(axis, true) {
-        linear_rows(l, x, t, one)
-    }
-    at_split(axis, false) {
-        linear_rows(l, x, t, many)
-    }
-    return split_diff("linear_rows {nin}x{nout} @ {axis_name(axis)}", one, many)
 }
 
 def private split_bert_layer_case(axis : SplitAxis) : SplitCase {
@@ -1498,24 +1594,196 @@ def private split_arms(t : T?; axis : SplitAxis) {
         t |> success(narrow < wide, "{ax}: {narrow} lane(s) against {wide} - equal counts compare nothing")
     }
     t |> run("the rows convs land the same bits at one lane and at many ({ax})") @(t : T?) {
-        report_split(t, split_conv_case("conv k3 pad1 d1", 64l, 64l, 3l, 1l, 1l, 1l, false, axis))
-        report_split(t, split_conv_case("conv k7 pad9 d3", 64l, 64l, 7l, 1l, 9l, 3l, false, axis))
-        report_split(t, split_conv_case("conv k4 pad4", 64l, 64l, 4l, 1l, 4l, 1l, false, axis))
-        report_split(t, split_conv_case("conv q8 k3 pad1 d1", 128l, 128l, 3l, 1l, 1l, 1l, true, axis))
-        report_split(t, split_conv_kq_case("conv k4 k3 pad1", KqFmt.k4, 128l, 128l, 3l, 1l, axis))
-        report_split(t, split_conv_case("convT q8 k4 stride 2", 128l, 64l, 4l, 2l, 1l, 1l, true, axis, true))
-        report_split(t, split_conv_kq_case("convT k6 k12 stride 6", KqFmt.k6, 256l, 32l, 12l, 3l, axis, 6l, true))
-        report_split(t, split_conv_kq_case("convT k4 k4 stride 2", KqFmt.k4, 128l, 64l, 4l, 1l, axis, 2l, true))
+        report_split(t, split_conv_case("conv k3 pad1 d1", ConvLane.f32, 64l, 64l, 3l, 1l, 1l, 1l, axis))
+        report_split(t, split_conv_case("conv k7 pad9 d3", ConvLane.f32, 64l, 64l, 7l, 1l, 9l, 3l, axis))
+        report_split(t, split_conv_case("conv k4 pad4", ConvLane.f32, 64l, 64l, 4l, 1l, 4l, 1l, axis))
+        report_split(t, split_conv_case("conv q8 k3 pad1 d1", ConvLane.q8, 128l, 128l, 3l, 1l, 1l, 1l, axis))
+        report_split(t, split_conv_case("conv k4 k3 pad1", ConvLane.kq, 128l, 128l, 3l, 1l, 1l, 1l, axis, false, KqFmt.k4))
+        report_split(t, split_conv_case("convT q8 k4 stride 2", ConvLane.q8, 128l, 64l, 4l, 2l, 1l, 1l, axis, true))
+        report_split(t, split_conv_case("convT k6 k12 stride 6", ConvLane.kq, 256l, 32l, 12l, 6l, 3l, 1l, axis, true, KqFmt.k6))
+        report_split(t, split_conv_case("convT k4 k4 stride 2", ConvLane.kq, 128l, 64l, 4l, 2l, 1l, 1l, axis, true, KqFmt.k4))
+        report_split(t, split_conv_case("conv halves k3 pad1", ConvLane.halves, 128l, 128l, 3l, 1l, 1l, 1l, axis))
+        report_split(t, split_conv_case("convT halves k4 stride 2", ConvLane.halves, 128l, 64l, 4l, 2l, 1l, 1l, axis, true))
     }
     t |> run("adain, attention and the dense layer land the same bits ({ax})") @(t : T?) {
         report_split(t, split_adain_case(64l, axis))
         report_split(t, split_adain_case(66l, axis))
         report_split(t, split_attention_case(axis))
         report_split(t, split_linear_case(768l, 3072l, axis))
+        report_split(t, split_linear_case(768l, 3072l, axis, true))
     }
     t |> run("the BERT layer lands the same bits ({ax})") @(t : T?) {
         report_split(t, split_bert_layer_case(axis))
         report_split(t, split_gelu_rows_case(axis))
+    }
+}
+
+//! a dense conv over rows in double, from its ONNX-layout weights by the conv's definition: y [t_out][cout], the forward
+//! conv's weights [cout][cin][k], a transposed one's [cin][cout][k]
+def private conv_rows_double(c : TtsConv1d; x_rows : array<float>; t_in : int64) : array<float> {
+    let t_out = conv1d_out_len(c, t_in)
+    var acc : array<double>
+    acc |> resize(t_out * c.cout)
+    for (t in range64(t_out)) {
+        for (co in range64(c.cout)) {
+            acc[t * c.cout + co] = empty(c.b) ? 0.0lf : double(c.b[co])
+        }
+    }
+    for (ti in range64(c.transposed ? t_in : t_out)) {
+        for (kk in range64(c.k)) {
+            let p = c.transposed ? ti * c.stride + kk * c.dilation - c.pad_l : ti * c.stride - c.pad_l + kk * c.dilation
+            continue if (p < 0l || p >= (c.transposed ? t_out : t_in))
+            for (co in range64(c.cout)) {
+                for (ci in range64(c.cin)) {
+                    if (c.transposed) {
+                        acc[p * c.cout + co] += double(c.w[ci * (c.cout * c.k) + co * c.k + kk]) * double(x_rows[ti * c.cin + ci])
+                    } else {
+                        acc[ti * c.cout + co] += double(c.w[co * (c.cin * c.k) + ci * c.k + kk]) * double(x_rows[p * c.cin + ci])
+                    }
+                }
+            }
+        }
+    }
+    var y <- [for (v in acc); float(v)]
+    delete acc
+    return <- y
+}
+
+//! a rows conv served from half floats against the same conv over those halves widened: the outputs differing in bits, and
+//! the weight rows differing; `poison` zeroes one half of the plane first (the control)
+def private halves_conv_off(cin, cout, k, stride, pad, dil : int64; transposed, poison : bool) : tuple<out : int; rows : int; held : bool; first : int; finite : bool; ref : float> {
+    var r = TtsRng()
+    rng_seed(r, 0xa11ul + uint64(k * 10l + stride))
+    var inscope c0 <- make_conv(r, cin, cout, k, stride, pad, dil, transposed, true)
+    for (v in c0.w) {
+        v = f16_to_f32(f32_to_f16(v))   // a file's F16 tensor widened: the narrow below is then exact
+    }
+    var inscope cf <- prepared(c0, true)
+    var inscope ch <- prepared_halves(c0)
+    let held = conv1d_host_halves(ch) && empty(ch.wk) && empty(ch.wtr)
+    if (poison) {
+        if (transposed) {
+            let at = long_length(ch.wtrh) / 2l + 1l
+            ch.wtrh[at] = uint8(uint(ch.wtrh[at]) ^ 0x10u)
+        } else {
+            ch.wkh[1] = uint8(uint(ch.wkh[1]) ^ 0x10u)
+        }
+    }
+    var inscope x : array<float>
+    rand_fill(r, x, cin * T_ROWS, 2.0)
+    var inscope yf, yh : array<float>
+    conv1d_rows(cf, x, T_ROWS, yf)
+    conv1d_rows(ch, x, T_ROWS, yh)
+    var inscope want <- conv_rows_double(c0, x, T_ROWS)
+    var inscope live <- [for (e in range64(long_length(want))); yh[(e / cout) * ch.cout_s + e % cout]]   // the rows' first cout columns: the served width pads past them
+    var off = (out = 0, rows = 0, held = held, first = -1, finite = all_finite(yf) && all_finite(yh), ref = logits_maxdiff(live, want) / logits_maxabs(want))
+    for (a, b, i in yf, yh, count()) {
+        continue if (a == b)
+        off.out++
+        if (off.first < 0) {
+            off.first = i
+        }
+    }
+    var inscope rf, rh : array<float>
+    rf |> resize(k * cin)
+    rh |> resize(k * cin)
+    for (co in range64(cout)) {
+        conv1d_weight_row(cf, co, rf, 0l)
+        conv1d_weight_row(ch, co, rh, 0l)
+        for (a, b in rf, rh) {
+            off.rows += a != b ? 1 : 0
+        }
+    }
+    return off
+}
+
+[test(description = "The tower slab's writer marks a slot widened where it reads a leaf held as quants or halves back into the slab as float rows - a conv of halves or of Q4_K quants off the 8 lattice, a dense layer of halves off the 32 lattice, a repacked K-quant conv or layer, any such leaf with no member staged - and leaves a leaf staged as stored and a leaf of floats unmarked")]
+def test_slab_widened_marks(t : T?) {
+    with_dasllama_jobque_() {
+        t |> run("the slab writer marks the leaves it widens, and no other") @(t : T?) {
+            slab_widened_marks(t)
+        }
+    }
+}
+
+[test(description = "A rows conv prepared over half floats - forward at stride 1 and 2, transposed - holds the half plane alone, and its outputs and weight rows are, bit for bit, the f32 rows conv's over the same halves widened; one flipped half moves both")]
+def test_rows_convs_over_halves(t : T?) {
+    with_dasllama_jobque_() {
+        for (cfg in fixed_array((cin = 24l, cout = 20l, k = 5l, stride = 1l, pad = 2l, dil = 1l, tr = false),
+                                (cin = 16l, cout = 32l, k = 7l, stride = 2l, pad = 3l, dil = 1l, tr = false),
+                                (cin = 32l, cout = 16l, k = 4l, stride = 2l, pad = 1l, dil = 1l, tr = true))) {
+            let name = "{cfg.tr ? "transposed" : "forward"} k{cfg.k} stride {cfg.stride}"
+            let off = halves_conv_off(cfg.cin, cfg.cout, cfg.k, cfg.stride, cfg.pad, cfg.dil, cfg.tr, false)
+            t |> success(off.held, "{name}: the conv holds its half plane and no f32 rows plane")
+            to_log(LOG_INFO, "{name}: {off.out} outputs off the f32 conv's, the first at {off.first}; {off.rows} weight-row elements off\n")
+            t |> success(off.ref < 1.0e-5, "{name}: outputs within 1e-5 of the peak of the conv in double over the widened halves ({off.ref})")
+            t |> equal(off.out, 0, "{name}: outputs off the f32 conv over the widened halves")
+            t |> equal(off.rows, 0, "{name}: weight-row elements off the f32 conv's")
+            let ctl = halves_conv_off(cfg.cin, cfg.cout, cfg.k, cfg.stride, cfg.pad, cfg.dil, cfg.tr, true)
+            t |> success(ctl.finite && ctl.out > 0 && ctl.rows > 0 && ctl.ref > 1.0e-5, "{name} control: one flipped half moves the outputs ({ctl.out}, the first at {ctl.first}; finite; {ctl.ref} of the peak off the double conv) and a weight row ({ctl.rows})")
+        }
+    }
+}
+
+//! `linear_vec` over a layer's half rows against the same layer over those halves widened: the worst output difference over
+//! the float outputs' peak, the weight-row elements differing, and whether the layer holds its halves alone; `poison` flips
+//! a bit of the last weight first (the control)
+def private halves_linear_off(nin, nout : int64; poison : bool) : tuple<out : float; rows : int; held : bool; at : int; finite : bool; ref : float> {
+    var r = TtsRng()
+    rng_seed(r, 0x11aul + uint64(nin))
+    var inscope fl = TtsLinear(nin = nin, nout = nout)
+    rand_fill(r, fl.w, nin * nout, 0.2)
+    for (v in fl.w) {
+        v = f16_to_f32(f32_to_f16(v))   // a file's F16 tensor widened: the narrow below is then exact
+    }
+    rand_fill(r, fl.b, nout, 0.1)
+    var inscope hl = TtsLinear(nin = nin, nout = nout)
+    hl.w := fl.w
+    hl.b := fl.b
+    linear_prepare(hl, true, false, false, true, true)
+    let held = linear_host_halves(hl) && empty(hl.w) && long_length(hl.wh) == 2l * nin * nout
+    if (poison) {
+        let at = long_length(hl.wh) - 1l   // the last weight's sign and exponent byte
+        hl.wh[at] = uint8(uint(hl.wh[at]) ^ 0x10u)
+    }
+    var inscope x : array<float>
+    rand_fill(r, x, nin, 2.0)
+    var inscope yf, yh : array<float>
+    linear_vec(fl, x, yf)
+    linear_vec(hl, x, yh)
+    let worst = span_maxdiff(yh, yf, 0, 0, length(yf))
+    var inscope xd <- [for (v in x); double(v)]
+    var inscope wd <- dlinear(fl, xd, 1l)
+    var inscope want <- [for (v in wd); float(v)]
+    var off = (out = worst.diff / logits_maxabs(yf), rows = 0, held = held, at = worst.at, finite = all_finite(yf) && all_finite(yh),
+        ref = logits_maxdiff(yh, want) / logits_maxabs(want))
+    var inscope rf, rh : array<float>
+    rf |> resize(nin)
+    rh |> resize(nin)
+    for (o in range64(nout)) {
+        linear_weight_row(fl, o, rf, 0l)
+        linear_weight_row(hl, o, rh, 0l)
+        for (a, b in rf, rh) {
+            off.rows += a != b ? 1 : 0
+        }
+    }
+    return off
+}
+
+[test(description = "A vector layer prepared over half floats holds the half plane alone, `linear_vec` over it is the float layer's output over the widened halves to 1e-5 of the peak, its weight rows read back bit for bit, and one flipped bit of a half moves both")]
+def test_linear_vec_over_halves(t : T?) {
+    with_dasllama_jobque_() {
+        for (shape in fixed_array((nin = 48l, nout = 20l), (nin = 512l, nout = 96l))) {
+            let name = "{shape.nout}x{shape.nin}"
+            let off = halves_linear_off(shape.nin, shape.nout, false)
+            t |> success(off.held, "{name}: the layer holds two bytes a weight and no float rows")
+            to_log(LOG_INFO, "{name}: the largest output difference {off.out} of the peak, at output {off.at}\n")
+            t |> success(off.ref < 1.0e-5, "{name}: outputs within 1e-5 of the peak of the dot in double over the widened halves ({off.ref})")
+            t |> success(off.out < 1.0e-5, "{name}: outputs within 1e-5 of the peak of the float layer's over the widened halves ({off.out}, at output {off.at})")
+            t |> equal(off.rows, 0, "{name}: weight-row elements off the float layer's")
+            let ctl = halves_linear_off(shape.nin, shape.nout, true)
+            t |> success(ctl.finite && ctl.out > 1.0e-5 && ctl.ref > 1.0e-5 && ctl.rows == 1, "{name} control: one flipped bit moves the outputs ({ctl.out}, at output {ctl.at}; finite; {ctl.ref} of the peak off the double dot) and one weight ({ctl.rows})")
+        }
     }
 }
 
@@ -1529,6 +1797,20 @@ def test_conv1d_dims_of(t : T?) {
         let tr = conv1d_dims_of(dims, true, 2l)
         t |> equal(tr.cin, 20l, "transposed: cin = dims[2]")
         t |> equal(tr.cout, 16l, "transposed: cout = dims[1] * groups")
+    }
+}
+
+//! a carrier's image fields alone: what `tts_image_origin` reads
+struct private FxCarrier {
+    image_map : void?
+    image_bytes : uint64
+}
+
+[test(description = "`tts_image_origin` of a carrier that holds no image answers no mapping and no tag, reading no image header")]
+def test_image_origin_without_an_image(t : T?) {
+    t |> run("a carrier with no image has no origin to read") @(t : T?) {
+        let origin = tts_image_origin(FxCarrier())
+        t |> success(!origin.mapped && empty(origin.tag), "mapped {origin.mapped}, tag '{origin.tag}'")
     }
 }
 

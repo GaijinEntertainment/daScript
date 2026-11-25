@@ -2181,6 +2181,12 @@ def image_backing_borrow(base : void?) {
 //! The carriers that borrow the host image at `base` now; 0 for a pointer no carrier borrows.
 def image_backing_borrowers(base : void?) : int => g_image_borrowed?[ptr_key(base)] ?? 0
 
+def image_backing_mapped(map : void?) : bool {
+    //! Whether `map` is a file mapping its carrier owns - not a chunk, not memory its host holds: the one backing whose pages can
+    //! be let go and read back off the file.
+    return map != null && !key_exists(g_image_chunks, ptr_key(map)) && !key_exists(g_image_borrowed, ptr_key(map))
+}
+
 //! Let go of a carrier's image backing - a chunk, a mapping, or memory its host holds — the ONE
 //! release. Every weight carrier's finalizer routes here; nothing else may call ``fmap_close`` on an image.
 def image_backing_release(map : void?; bytes : uint64) {
@@ -2971,6 +2977,7 @@ def private dlim_cpu_source_impl(var c : DlimCpuConfig) {
     c.kq_q51_native = g_kq_q51_native
     c.iq3s_lut = iq3s_serve_lut()
     c.rope_override = rope_override_spelling()
+    c.rows_f32 = active_rows_f32()
 }
 
 def private dlim_metal_source_impl(var c : DlimMetalConfig) : bool {
@@ -3695,10 +3702,18 @@ def kv_codec_serving_why(c : Config; dt : KVDtype) : string {
     return ""
 }
 
+[arch(at="../ARCHITECTURE_CPU_KERNELS_TILES.md#half-rows-by-target")]
+def default_kv_dtype_() : KVDtype => active_rows_f32() ? KVDtype.q8_0 : KVDtype.f16
+
 //! The codec a request for `dt` is served at on `c`: `dt` where it serves, else q8_0 where that serves, else f16; `why` names
-//! the step down ("" = served as asked). The session, pool and device-session constructors and the GPU drivers' mirrors all
-//! resolve a codec through this, so a request and the mirror it meets agree
+//! the step down ("" = served as asked, and for `auto`, which asks for whatever serves). The session, pool and device-session
+//! constructors and the GPU drivers' mirrors all resolve a codec through this, so a request and the mirror it meets agree
 def kv_codec_served(c : Config; dt : KVDtype; var why : string&) : KVDtype {
+    if (dt == KVDtype.automatic) {
+        why = ""
+        let want = default_kv_dtype_()
+        return empty(kv_codec_serving_why(c, want)) ? want : KVDtype.f16
+    }
     why = kv_codec_serving_why(c, dt)
     return dt if (empty(why))
     return KVDtype.q8_0 if (empty(kv_codec_geometry_why(c, KVDtype.q8_0)))
@@ -4250,8 +4265,8 @@ def mm_fblob(var y : array<float>; t : Model; woff : int64; x : array<float>; n,
     matmul(y, t.fblob, woff, x, n, d)
 }
 
-// Batched fp32 matmul against the aux blob: Y [npos x d] token-major from X [npos x n], through the
-// tile walk, which rounds in its lanes (ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice).
+// Batched fp32 matmul against the aux blob: Y [npos x d] token-major from X [npos x n].
+[arch(at="../ARCHITECTURE_CPU_KERNELS_TILES.md#f32-batch-tile-lattice")]
 def mm_fblob_b(var y : array<float>; t : Model; woff : int64; x : array<float>; n, d, npos : int64) {
     matmul_batch(y, t.fblob, woff, x, n, d, npos)
 }
@@ -4827,7 +4842,7 @@ def private kv_grow_block_table(var s : Session; np : int64) {
 //! keeps rows of its own a row - never past the model's context; no driver bounds nothing.
 def device_kv_max_rows_(t : Model; kdt, vdt : KVDtype) : int64 {
     let total = kv_row_total(t)
-    return min(t.config.seq_len, gpu_kv_room_rows(kv_row_bytes(kdt, total) + kv_row_bytes(vdt, total)))
+    return min(t.config.seq_len, gpu_kv_room_rows(kv_row_bytes(kv_codec_for(t.config, kdt), total) + kv_row_bytes(kv_codec_for(t.config, vdt), total)))
 }
 
 //! true when layer l reads another layer's KV (no rows of its own — Q-only attention)

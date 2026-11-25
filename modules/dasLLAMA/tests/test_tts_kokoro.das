@@ -31,9 +31,10 @@ require _scratch_dir   // scratch_path, scratch_file: the stress-model probe's d
 // skip without `tts_ctx_ru.gguf` under models_dir(), and the mixed-script cell reads the English
 // packs for its Latin words), the model-free probe for that file in a scratch directory, and a facade smoke cell that speaks one sentence
 // through the front end's own inventory. The facade and GPU cells also need the front-end
-// packs (`tts_g2p.bin`, `tts_postag.bin`) beside the model; the GPU cells run on Metal or Vulkan,
-// skip where no device serves or the driver registers no seat for the stage, and red where a
-// present seat declines a stage. Each voice file loads once a form, through its one `with_model_once`
+// packs (`tts_g2p.bin`, `tts_postag.bin`) beside the model; the GPU cells run on the Metal, Vulkan or
+// CUDA home: where no device serves, a lane's `@dev` form, the CPU form whose leg is read only beside
+// it and the f32 form's served-synthesis leg are skipped cells, and a present seat that declines a
+// stage or is not registered is a red. Each voice file loads once a form, through its one `with_model_once`
 // block; the directory front end's cell holds its own load.
 
 def private oracle_dir() : string => path_join(models_dir(), "tts_oracle/kokoro")
@@ -229,28 +230,33 @@ def test_kokoro_oracle(t : T?; m : TtsModel; form : string; var rows : St2LaneRo
 
 // a lane form's cell of the served synthesis
 [cold_path]
-def test_kokoro_synthesis_metal(t : T?; var m : TtsModel; form, path : string) {
+def test_kokoro_synthesis_metal(t : T?; var m : TtsModel; form, path : string; var rows : St2LaneRows) {
     styletts2_synthesis_cell(t, m, form, path, "kokoro: the synthesis on the Metal tower vs the CPU chain",
-        "The tower serves the generator, and the words still land.", "af_heart")
+        "The tower serves the generator, and the words still land.", "af_heart", rows)
 }
 
 // Kokoro-82M, one block: the image form carries the facade's cells, the lane forms the served synthesis across the tower
-// knob and the parity rail.
-[test(description = "kokoro-82m.gguf loads once a form. Its image form through the facade declares en-us and en-gb, lists 28 voices each in a declared language (8 British), adds no chunk mark, and speaks a sentence as 1 to 10 seconds of finite audio peaking above 0.05; it phonemizes a line to exact en-us and en-gb strings whose symbols all survive tokenization, and bf_emma's synthesis of three lines has exactly the British string's sample count each, which differs from the American one on at least one; it carries the Japanese pack but caps does not offer it, and `tts_voice_lang` refuses jf_alpha naming the voice and the ja it speaks, and refuses an absent voice with no language named. Its lane forms on the GPU tower hold the f32 reference lane against the CPU, then serve every seat once a chunk on the served and recipe lanes above the 0.05 peak floor within a twentieth of the CPU chain's sample count; against the PyTorch reference with captured noise every case's token ids and sample count match and each traced stage holds 1e-4 of the oracle's peak, with poisoned controls, the q8 and recipe lanes' decode on the tower within their bars")]
+// knob and the parity rail - a lane's CPU form its CPU leg, its `@dev` form its tower leg, the two held after the block.
+[test(description = "kokoro-82m.gguf loads once a form. Its image form through the facade declares en-us and en-gb, lists 28 voices each in a declared language (8 British), adds no chunk mark, and speaks a sentence as 1 to 10 seconds of finite audio peaking above 0.05; it phonemizes a line to exact en-us and en-gb strings whose symbols all survive tokenization, and bf_emma's synthesis of three lines has exactly the British string's sample count each, which differs from the American one on at least one; it carries the Japanese pack but caps does not offer it, and `tts_voice_lang` refuses jf_alpha naming the voice and the ja it speaks, and refuses an absent voice with no language named. Its lane forms, each lane's CPU image and the image the box's GPU home serves, hold the f32 reference lane on the GPU tower against the CPU, then serve every seat once a chunk on the served lane, the recipe lane and the recipe lane with its upsamplers pinned Q5_K, above the 0.05 peak floor within a twentieth of the CPU chain's sample count, launching the stamps of each stored format a lane holds and of no other and the f32 tiles at fewer dense sites than the f32 lane's image, which launches no quant format's stamp, the home's dense dispatches over widened rows one a chunk per off-lattice noise conv and none with the tower off; against the PyTorch reference with captured noise every case's token ids and sample count match and each traced stage holds 1e-4 of the oracle's peak, with poisoned controls, each seat's stage on the tower within its bar of the CPU stage and the q8 and recipe lanes' decode on the tower within theirs")]
 def test_kokoro_82m(t : T?) {
     let path = path_join(models_dir(), "kokoro-82m.gguf")
     var inscope rows = St2LaneRows()
     with_dasllama_jobque_() {
-        with_model_once(t, "tts", "kokoro-82m.gguf", styletts2_lane_forms(true), @@styletts2_form) $(var m; form) {
+        var inscope forms <- styletts2_lane_forms(t, "kokoro-82m.gguf", ["image"], true)
+        let ran = with_model_once(t, "tts", "kokoro-82m.gguf", forms, @@styletts2_form) $(var m; form) {
             styletts2_form_is(t, m, path_join(models_dir(), "kokoro-82m.gguf"), form)
             if (form == "image") {
                 test_kokoro_facade(t, m, path)
                 test_kokoro_dialects(t, m, path)
                 test_kokoro_voice_refusals(t, m, path)
             } else {
-                test_kokoro_synthesis_metal(t, m, form, path)
+                test_kokoro_synthesis_metal(t, m, form, path, rows)
                 test_kokoro_oracle(t, m, form, rows)
             }
+        }
+        if (ran) {
+            styletts2_synthesis_held(t, "kokoro: the synthesis on the Metal tower vs the CPU chain", "kokoro-82m.gguf", "af_heart", rows)
+            styletts2_parity_held(t, "against the PyTorch reference, captured noise", rows)
         }
     }
 }
@@ -395,6 +401,7 @@ def private test_directory_front_end(t : T?) {
 // the mixed-script cell's last steps and the pack cell drop that model and read by the pack alone.
 [test(description = "kokoro-ru.gguf loads once: with tts_ctx_ru.gguf beside the voices the context model picks a homograph's reading by its sentence and a mark in the text outranks it; over Russian text with Latin words before, between and after two homographs the facade marks every Russian word with the context pass's pick over the normalized text, and without the context model reads the pack's marking of the spliced text; the file asks only for the Russian stress pack, declares ru for both voices from the file, normalizes and phonemizes to exact strings with English words spliced, and sveta's synthesis has the pack-default string's exact sample count; a directory's front end, asked outside any job queue, still reads by the context model")]
 def test_kokoro_ru_facade(t : T?) {
+    return if (!family_on(t, "kokoro"))   // the directory front end's load reads files no row holds
     let path = path_join(models_dir(), "kokoro-ru.gguf")
     with_dasllama_jobque_() {
         with_model_once(t, "tts", "kokoro-ru.gguf", ["image"], @@styletts2_form) $(var m; form) {

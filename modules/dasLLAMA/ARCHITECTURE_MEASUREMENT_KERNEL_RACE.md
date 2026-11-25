@@ -26,15 +26,21 @@ dispatches - a data race - is not its subject. Its terms:
 - **Timing arm** (arm) - one timed run of a race, a knockout or an overhead measurement: code
   that dispatches a kernel to measure it rather than to serve a call. A same-build knob A/B -
   two runs of the serving code under an environment override, both serving correct output - is
-  not an arm; its knob is serving code, reviewed under `REVIEW_GPU_VULKAN.md` or
-  `REVIEW_TOWER.md`.
+  not an arm; its knob is serving code, reviewed under `REVIEW_OVERRIDES.md`, a tower's knob under
+  `REVIEW_TOWER.md` too.
 - **Chain** - the dispatches an arm times.
 - **Ranking input** - a value a ranking's selection reads: a shape dimension (a head width, a
   batch width, a row count, a lane split, a tile's own width, the workgroups one row dispatches
-  relative to the device's compute-unit count) or a layer kind (dense, MoE, per-layer-embedding).
-- **Decided ranking** - an arm's ranking is decided while a checked-in document, box profile or
-  sidecar records the arm's figure or names the arm as the shipped form. Decided is a state of
-  the tree; a diff decides a ranking when it adds that record.
+  relative to the device's compute-unit count), a layer kind (dense, MoE, per-layer-embedding),
+  or a device or driver feature (an extension, a subgroup size, the decode path the driver runs).
+- **Decided ranking** - an arm's ranking is decided while a checked-in document or a committed box
+  profile records the arm's figure or names the arm as the shipped form, and always where the
+  race's winner is a crown, a verdict each box's tune sidecar records. Decided is a state of the
+  tree; a diff decides a ranking when it adds that record.
+- **A/B lab** - a timing script that picks between spellings of one compute.
+- **Live arm** - an arm that is undecided, dispatches the shipped kernel class's generated source,
+  is a knockout whose stage-drop constant or knob sits in a shipped class or a lab, is a
+  retained-reference arm, or is a kernel variant the shipped code picks between at run time.
 - **Retained-reference arm** - an arm ledgered as a retained reference: in
   `ARCHITECTURE_GPU_RACE_SHAPES.md#tensor-gemm-shapes-that-measured-out-m5` for Metal, in the
   Vulkan arm ledger for Vulkan.

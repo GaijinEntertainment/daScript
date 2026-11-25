@@ -42,9 +42,9 @@ embed when that gate returns true, so a gate true where the prefill path decline
 device gather for nothing, and the CPU embeds the rows after all (`embed_backfill_rows`).
 
 A call into the tier is a call of a function a `dasllama/dasllama_*vulkan*.das` or
-`dasllama/dasllama_gpu*.das` file declares, or a call in a generic body both discrete GPU homes
-instantiate (`dasllama/dasllama_tower_chains*.das`, `dasllama/dasllama_asr_dec_chains.das`,
-`dasllama/dasllama_tower_rail.das`) that resolves to such a function in the Vulkan instantiation.
+`dasllama/dasllama_gpu*.das` file declares, or a call, in a generic function that takes a GPU home's
+rail (the struct of primitives one GPU home supplies) as an argument, that resolves to such a function
+in the Vulkan instantiation.
 
 **A Vulkan-tier serving gate that decides at load - a predicate or per-layer loop whose true branch
 dispatches through a call into the tier, wherever the diff puts it, and whose false branch or
@@ -72,9 +72,13 @@ installs, makes that function test `gpu_want_arms_tier()` first and decline with
 `vk_moe_init` reads no knob, so a caller that skips the test serves on a box whose `DASLLAMA_GPU`
 says no.
 
-**A serving hook - a hook slot the CPU chain calls to hand work to the GPU - in a Vulkan driver
-file (`dasllama/dasllama_vulkan_*.das`) that keeps a `VkDeclineCounter` counts a decline on a false `gpu_want_arms_tier()` under its decline enum's
-`device` member, with `VK_DECLINE_WORDS_DEVICE` as the reason text.**
+**A serving hook - a hook slot the CPU chain calls to hand work to the GPU - that a Vulkan driver
+file (`dasllama/dasllama_vulkan_*.das`) installs and whose declines a `GpuDeclineCounter`
+(`VkDeclineCounter`) records, wherever that counter lives, counts a decline on a false
+`gpu_want_arms_tier()` in that counter under the reason key `"device"`, with `VK_DECLINE_WORDS_DEVICE`
+as `note`'s `words` argument.** The tests and
+stats readers that check a no-device decline read the delta of the `device` key in `counts`; a
+decline under another key passes them unseen.
 
 **A diff that changes what a device limit or extension decides for the tier - which path, tile or
 column serves, how much it arms, whether it declines - adds that limit or extension to `vk_ext_roster`

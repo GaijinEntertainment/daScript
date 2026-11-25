@@ -664,7 +664,7 @@ def qwen3a_asr_caps(omni : bool) : AsrCaps {
 //! The facade's session arm: language validation (Qwen3-ASR only accepts "auto"), a fresh
 //! decoder session, and the tower's encoder scratch.
 def create_qwen3a_asr_session(dec : Model; t : Qwen3aTower; lang : string; omni : bool;
-                              kv : KVDtype = KVDtype.f16) : Qwen3aAsrSession {
+                              kv : KVDtype = KVDtype.automatic) : Qwen3aAsrSession {
     if (!omni && lang != "auto") {
         panic("dasLLAMA asr: Qwen3-ASR detects the language itself - create the session with lang=\"auto\"")
     }

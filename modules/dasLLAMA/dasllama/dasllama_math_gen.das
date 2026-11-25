@@ -4861,7 +4861,7 @@ def bf16w_batch_serves(n, d, ntok : int64) : bool {
 //! the bf16-weight batch GEMM through the stamped tile family, units of `tileform` groups over whole
 //! `tokstep` blocks, every tail through the widen walk over the same bf16-rounded activations; false
 //! where the family declines or the shape is off its lattice (n % 32, d under 16, ntok under a tile)
-[hot_path, arch(at = "../ARCHITECTURE_CPU_KERNELS.md#bf16-weight-tile-family")]
+[hot_path, arch(at = "../ARCHITECTURE_CPU_KERNELS_TILES.md#bf16-weight-tile-family")]
 def bf16w_batch(var yp : float?; wp : uint16 const?; xp : float const?; n, d, ntok : int64) : bool {
     if (!bf16w_batch_serves(n, d, ntok)) return false
     let form = int64(bf16w_tileform_gen())
@@ -5186,7 +5186,7 @@ def q8x16_batch_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp :
 //! The batch GEMM over an f16 weight plane [d x n]: Y [ntok x d] token-major. Each lane widens a four-row group of the
 //! plane into its walk panel and runs the f32 tile and the f32 `dot` over it, so every output is the f32 batch walk's over
 //! the widened plane - the widen is exact - and the plane is read at half the bytes.
-[hot_path, arch(at = "../ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice")]
+[hot_path, arch(at = "../ARCHITECTURE_CPU_KERNELS_TILES.md#f32-batch-tile-lattice")]
 def matmul_f16_batch(var yp : float?; wp : uint16 const?; xp : float const?; n, d, ntok : int64) {
     let row_tiles = int((d + 3l) / 4l)
     let rch = matmul_chunks(row_tiles, get_q8_batch_chunks_per_job(), n * d * ntok)

@@ -26,7 +26,8 @@ of the PR body. The recipe and what each group's pick rests on are
    direction, or a lookup table. Each form has one quant layout (step 2), and a group whose form
    has none yet needs the form before the format.
 2. **Whether the group reads or writes the signal.** A conv whose input or output is the audio
-   itself - the generator's noise convs, `conv_post`, the Pocket codec's convs - stays f32
+   itself - the generator's noise convs, `conv_post`, the Pocket codec's convs - stays unquantized:
+   f32, or the halves a file stores it in
    (`ARCHITECTURE_TTS_FORMATS.md#tts-recipe`, `ARCHITECTURE_POCKET.md#pocket-q8-file`). Decide this
    before the measurement, and let the measurement confirm it.
 3. **The lattice.** A Q8_0 matrix needs its reduction width on 32 (a vector linear and an LSTM
@@ -47,7 +48,11 @@ A weight leaf - `TtsConv1d`, `TtsLinear`, `TtsLstm` - holds each served form as 
 format id, whether the planes are in the backend's layout, the padded row width), a line for each
 in the leaf's `serialize`, the field count beside it, `finalize` and `weights_walk`
 (`ARCHITECTURE_TTS.md#tts-image-rail`). Quants and K-quant plane pairs ride the int8 plane, floats
-the float plane; `weight_slot` routes by the array's element type.
+the float plane; `weight_slot` routes by the array's element type. A tensor a file stores F16 and
+no quant form covers - a codec conv's rows (`wkh`, `wtrh`), a vector linear's (`wh`) - rides the
+int8 plane as its halves, two bytes a value, and the leaf drops the floats: `rows_narrow` at the
+leaf's prepare, on the unpinned lane, where `active_rows_f32` is false
+(`ARCHITECTURE_CPU_KERNELS_TILES.md#half-rows-by-target`).
 
 - A field with no `serialize` line trips the leaf's field-count `verify` at the first mint.
 - A named table of weights walks through `table_slot`, which mints no key the table does not
@@ -103,20 +108,52 @@ report counts it.
 
 ## 4. Let the GPU seats read the form
 
-Files: `dasllama/dasllama_tts_blocks.das` (`conv1d_weight_row`, `q8_matrix_row`),
-`dasllama/dasllama_tts_slab.das`.
+Files: `dasllama/dasllama_tts_slab.das` (the writer), `dasllama/dasllama_tts_blocks.das`
+(`conv1d_weight_row`, `q8_matrix_row`), `dasllama/dasllama_tower_tts.das` (the driver every GPU home seats:
+`ts_gather_member`, and `ts_gather_member_metal` for the Metal home's own layout),
+`dasllama/dasllama_gpu_kernels_common.das` (the stored members), `dasllama/dasllama_metal_sites.das` (the Metal
+home's tile ladders).
 
-The GPU seats lay a part's weights into one slab through the host writer, a row at a time, and
-every conv goes through `conv1d_weight_row`, which reads a row from whichever form the conv holds
-(`ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain`). A new form adds its arm there - or, for a
-leaf the writer reads directly, in the writer - the form's term in the part's `tts_*_ok` check,
-and its plane's address, format and layout in the part's slab key.
+A GPU seat reads a leaf in the form the carrier holds it. The host writer (`tts_slab_build_stored`)
+lays a part's f32 rows into one slab - norms, biases, a leaf held as floats - and records a stored
+plane (`TtsStoredPlane`) for each leaf whose form is in the caller's `stored_mask`; the flavor's bake
+then gathers that plane into the device layout its site reads and a kernel member widens it as the CPU
+reader does (`ARCHITECTURE_GPU_TOWER_TTS.md#tts-st2-seats`; the Metal home's own layout,
+`ARCHITECTURE_GPU_TOWER.md#tower-tts-chain`).
+A new form adds, on every home that serves the group:
 
+1. its bit in the driver's stored mask (`TS_STORED_MASK`), its member (`TS_ST_*`, a `ts_st_of` overload on its tag) and its gather
+   into the shared device layout (`ts_gather_member`);
+2. its member of the kernels that read the group - the exact tile (`F32GemmT` under `WSTORED`, a stamp named
+   `kq_f32_gemm_<fmt>_cls` on every home, which `ts_mm_stored`'s generated arms reach), the
+   decoder convs' cm2 tile on the homes that have one, the LSTM recurrence, the Pocket row GEMV
+   (its `WFMT` arm in `TtsPkGemvStoredT`, a stamp of every kind on every home, the format out of
+   `tts_pkst_enc`'s skip words and the stamps in `tts_pkst_ensure`) - each with a kernel cell against the rows the CPU reader widens the same
+   plane to;
+2a. on the Metal home, where a site its own tile serves reads the form: the form's stamps under the names the
+   tile ladders generate (`enc_kq_st2_<fmt>_*`; `mtl_stored_mm`, `mtl_kq_conv`: the format out of
+   `MTL_ST2_SKIP`), its own-layout gather (`ts_gather_member_metal`) and, for the
+   Pocket frame loop, its bit in `TS_OWN_GEMV` with the home's row dot (`MtPkGemvStoredT`, an `OWN` arm, its
+   stamps in `mtl_pk_own_ensure` and the format out of `MTL_PKOWN_SKIP`, the skip words `rail_tts_pk_own`'s arms generate from); a change to
+   the own layout's bytes moves `TS_BLOCK_METAL`. A form with no arm there stays in the shared layout
+   under the shared stamps;
+3. its arm in `conv1d_weight_row` - the read-back into f32 slab rows for a leaf off a member's
+   lattice - or, for a leaf the writer reads directly, in the writer; and, for a form that is
+   neither Q8_0, a K-quant member nor halves, its term in the slot's widened mark
+   (`TtsConvSlot.widened`, set in `tts_slab_conv` and `tts_slab_linear_rows`);
+4. the form's term in the part's `tts_*_ok` check, and - where the form changes a device-block piece's
+   bytes - the block's layout version (`TS_BLOCK_PLANES`).
+
+- A form staged as f32 rows where a member could read it holds a second copy of the weights on the
+  device and serves weights the file does not store: stage it stored. The home counts every dense
+  dispatch over such rows (`tts_home_stats(dev).widened`), and the stored-format cells hold that
+  count exact, so a leaf widened by mistake reds them.
 - A form the check refuses sends the whole carrier to the CPU chain with no error, at several
   times the seat's real-time factor (`PERF_LEDGER.md`'s "TTS weight formats" entry): read the
   factor after every change to a leaf, and give the lane a form in `tests/_tts_parity.das` - its name
-  in `styletts2_lane_forms`, its in-memory mint in `styletts2_form`, its bar in `tts_parity_decode`, the
-  GPU decode cell: the one gate that compares the seat's read of the form against the CPU chain.
+  in `styletts2_lane_forms`, its in-memory mints in `styletts2_form` (the lane's CPU image and its `@dev` form), its
+  bar in `parity_case`, the decode seat's legs (`tts_parity_legs`): the one gate that compares the seat's read of the
+  form against the CPU chain.
 
 ## 5. Measure, then set the default
 

@@ -24,16 +24,20 @@ options _dasllama_internal = true
 // home's run: a home's run that outgrows its pod cuts tests, never
 // adds a pod. The homes' logs land on the volume
 // (/workspace/logs/fleet/<run>/), so any pod reads them all. The
-// fleet file holds the pods this tool made and nothing else: `down`
-// deletes those alone.
+// fleet file holds the pods this tool made, each with the home `up`
+// gave it, and nothing else: `down` deletes those alone, every one
+// or one home's (`--home`), and `up` gives a new pod a home that has
+// none.
 //
 //   daslang modules/dasLLAMA/harness/pod_fleet.das -- up
+//   daslang modules/dasLLAMA/harness/pod_fleet.das -- up --pods 1   # the home with no pod's
 //   daslang modules/dasLLAMA/harness/pod_fleet.das -- run  # per PR
 //   daslang modules/dasLLAMA/harness/pod_fleet.das -- run --full               # an arc's final run: no size tier for files no category holds
 //   daslang modules/dasLLAMA/harness/pod_fleet.das -- run --args "--suite model-free" --env "DASLLAMA_GPU=1"
 //   daslang modules/dasLLAMA/harness/pod_fleet.das -- status
 //   daslang modules/dasLLAMA/harness/pod_fleet.das -- times                    # where the last run's test time went: the files and the cells
-//   daslang modules/dasLLAMA/harness/pod_fleet.das -- down
+//   daslang modules/dasLLAMA/harness/pod_fleet.das -- down --home cuda   # the Vulkan pod stays
+//   daslang modules/dasLLAMA/harness/pod_fleet.das -- down               # every pod
 
 require daslib/cmp
 require daslib/clargs
@@ -42,7 +46,7 @@ require daslib/strings_boost
 require daslib/strings_convert
 require strings
 require dasllama/dasllama_env
-require ../tests/_model_categories.das   // CUDA_PASS_ONLY, CUDA_ONLY_EXCLUDE: what each home's run keeps
+require ../tests/_model_categories.das   // CUDA_PASS_ONLY, VULKAN_FREE_ONLY, CUDA_ONLY_EXCLUDE
 require ../tests/_daslang_argv.das   // disable_module_flags: the prewarm's flags for the modules a home leaves out
 require ../../../utils/common/text_lines.das   // non_empty_lines: a remote read's own line
 require math   // min: the times report's top cut
@@ -78,6 +82,8 @@ struct FleetArgs {
     args : string = "--changed --base origin/master"
     @clarg_doc = "status, times: the run to read (default: the fleet file's last run)"
     run : string
+    @clarg_doc = "down: the GPU home whose pod goes, vulkan or cuda - the other's stays; none = every pod"
+    home : string
     @clarg_doc = "the fleet file - the pods this tool made, and its last run"
     fleet : string = "~/.dasllama/fleet.json"
     @clarg_doc = "the runpodctl binary"
@@ -92,6 +98,7 @@ struct FleetPod {
     ip : string
     port : int
     index : int
+    home : string   //! the GPU home `up` made the pod for; "" in a fleet file older than the field
 }
 
 struct Fleet {
@@ -141,18 +148,42 @@ def args_refusal(args : string) : string {
     return ""
 }
 
-//! each home's pod: its seat in the fleet's order, whatever the pods'
-//! indices (a partial `down` leaves them sparse), -1 for a home with
-//! no pod, and whether its run holds the fleet's one model-free suite
-//! - the last seated home's: the CUDA home where it has a pod, else
-//! the lone pod's. Non-private: the pod-fleet tests
-//! (tests/test_pod_fleet.das) hold it
+//! each home's seat (its pod, else the next unseated one; -1: none) and whether it runs the model-free suite (CUDA's, else a lone pod's)
 def home_plan(fleet : Fleet) : array<tuple<home : string; seat : int; model_free : bool>> {
     let homes <- fleet_homes()
-    let n = length(fleet.pods)
-    let last = min(n, length(homes)) - 1
-    return <- [for (i, home in iter_range(homes), homes); (home = home, seat = i < n ? i : -1, model_free = i == last)]
+    var seats <- [for (home in homes); find_index_if(fleet.pods) $(p) => p.home == home]
+    for (pod, at in fleet.pods, count()) {
+        let free = find_index(seats, -1)
+        if (empty(pod.home) && free >= 0) {
+            seats[free] = at
+        }
+    }
+    var last = -1
+    for (seat, i in seats, count()) {
+        if (seat >= 0) {
+            last = i
+        }
+    }
+    return <- [for (i, home in iter_range(homes), homes);
+        (home = home, seat = seats[i], model_free = i == last)]
 }
+
+//! the refusal of a `--home` that names no GPU home, or ""; an empty `--home` names every home
+def home_refusal(home : string) : string {
+    return "" if (empty(home) || has_value(fleet_homes(), home))
+    return "pod_fleet: --home takes {join(fleet_homes(), " or ")}, not '{home}'"
+}
+
+//! the pod ids `down` deletes - every pod of the fleet file, or the one seated at `home` - its own ids alone: no pod this tool did not make
+def down_ids(fleet : Fleet; home : string) : array<string> {
+    return <- [for (pod in fleet.pods); pod.id] if (empty(home))
+    return <- [for (s in home_plan(fleet)); fleet.pods[s.seat].id;
+        where s.home == home && s.seat >= 0]
+}
+
+//! the homes `up` gives its new pods, in fleet order: those no pod of the fleet file is seated at
+def unseated_homes(fleet : Fleet) : array<string> =>
+    <- [for (s in home_plan(fleet)); s.home; where s.seat < 0]
 
 //! the shape of a `runpodctl pod create --wait -o json` record this tool reads; every other key is ignored
 struct PodSsh {
@@ -384,8 +415,9 @@ def batched_args(args : string) : string {
     return "{args} --batch {FLEET_BATCH}"
 }
 
-//! the run.das arguments `args` with the `--exclude` tokens `tokens` added: one `--exclude`, the tokens comma-joined to
-//! the caller's where `args` carry one. Non-private: the pod-fleet tests read it
+//! the run.das arguments `args` with the `--exclude` tokens `tokens` added: one `--exclude`,
+//! the tokens comma-joined to the caller's where `args` carry one. Non-private: the pod-fleet
+//! tests read it
 def excluded_args(args, tokens : string) : string {
     var inscope words <- split(args, " ")
     for (word, at in words, count()) {
@@ -445,8 +477,9 @@ def home_disabled_modules(env, home : string; paired : bool) : string {
 //! run of the given command under DASLLAMA_CUDA=1 and kept to its
 //! pass's files (`--only` CUDA_PASS_ONLY), a two-pod fleet's Vulkan
 //! home's leaving out the CUDA-only files (`--exclude`
-//! CUDA_ONLY_EXCLUDE, its model-free slice too), on both homes FLEET_BATCH
-//! files a child (`batched_args`): the children's logs in the
+//! CUDA_ONLY_EXCLUDE, its model-free slice too) whatever the caller's
+//! `--env` keeps, so a CUDA-only file runs on the CUDA home alone; on
+//! both homes FLEET_BATCH files a child (`batched_args`): the children's logs in the
 //! home's folder of the run on the volume (TMPDIR), the runner's own
 //! log `<home>.log` beside it, RUN-EXIT=<rc> as its last line. First
 //! the home's volume cache comes onto the pod (`cache_in_command`), so
@@ -501,13 +534,13 @@ def run_command(cfg : FleetArgs; run, home : string; model_free : bool) : string
     let only = home == "cuda" ? " --only {CUDA_PASS_ONLY}" : ""
     let full = cfg.full ? " DASLLAMA_PARITY_FULL=1" : ""
     let runner = "./bin/daslang -jit -module-cache .cache/daslang/module_cache/dastest.dascache {RUNNER}"
-    let paired_vulkan = paired && home == "vulkan"   //! leaves out the CUDA-only files, whose module it leaves out
+    let paired_vulkan = paired && home == "vulkan"   // the CUDA home runs the CUDA-only files
     let batched = batched_args("{cfg.args}{only}")
     let given = paired_vulkan ? excluded_args(batched, CUDA_ONLY_EXCLUDE) : batched
     let given_is_it = runs_model_free(cfg.args)
     let skip = (split(cfg.args, " ") |> has_value("--rerun")) ? " --rerun" : ""   //! the caller's `--rerun` is the fleet's model-free suite's too
     let paired_vulkan_only = (model_free ? ""   //! the paired Vulkan home's slice
-        : " --only {VULKAN_FREE_ONLY} --exclude {CUDA_ONLY_EXCLUDE}")
+        : excluded_args(" --only {VULKAN_FREE_ONLY}", CUDA_ONLY_EXCLUDE))
     let mf_run = (given_is_it ? " mf=0;"
         : " {runner} --suite model-free{paired_vulkan_only}{skip} --await-models {state}; mf=$?;")
     let mf_exit = "echo MODEL-FREE-EXIT=$\{mf:-none\}"
@@ -670,21 +703,22 @@ def private drop_pods(cfg : FleetArgs; var fleet : Fleet; ids : array<string>; t
     return all_gone
 }
 
-//! pod `index` of `up`, made again while its cgroup allotment
+//! pod `index` of `up`, for `home`, made again while its cgroup allotment
 //! comes in under `--min-cores` or its fresh memory under
 //! `--min-gbs`, POD_TRIES pods in all. A short
 //! pod stands until the tries end, so the next try is made
 //! beside it and not in the slot it would free. 0 when one is
 //! kept, 1 when none is made (the pods before it stand), 2 when
 //! every try came in short or a short pod outlived its delete
-def private make_pod(cfg : FleetArgs; var fleet : Fleet; index, want : int; pub : string) : int {
+def private make_pod(cfg : FleetArgs; var fleet : Fleet; index, want : int;
+                     home, pub : string) : int {
     var readings, short_ids : array<string>
     readings |> reserve(POD_TRIES)
     short_ids |> reserve(POD_TRIES)
     fleet.pods |> reserve(length(fleet.pods) + 1)
     for (attempt in range(POD_TRIES)) {
         let tried = "POD {index}/{want} (try {attempt + 1}/{POD_TRIES})"
-        to_log(LOG_INFO, "{tried}: creating on {cfg.gpu} in {cfg.datacenter}\n")
+        to_log(LOG_INFO, "{tried}: the {home} home's, creating on {cfg.gpu} in {cfg.datacenter}\n")
         let made = run_capture(create_argv(cfg, index, pub), 900.0)
         var rec : PodRecord
         let at = find(made.out, "\{")
@@ -694,7 +728,7 @@ def private make_pod(cfg : FleetArgs; var fleet : Fleet; index, want : int; pub 
             return drop_pods(cfg, fleet, short_ids, "POD") ? 1 : 2
         }
         let pod = FleetPod(id = rec.id, name = rec.name, ip = rec.ssh.ip, port = rec.ssh.port,
-            index = index)
+            index = index, home = home)
         fleet.pods |> push(pod)
         save_fleet(home_path(cfg.fleet), fleet)
         to_log(LOG_INFO, "{tried}: {rec.id} at {rec.ssh.ip}:{rec.ssh.port}\n")
@@ -719,8 +753,9 @@ def private make_pod(cfg : FleetArgs; var fleet : Fleet; index, want : int; pub 
 }
 
 //! `up`: `--pods` more pods join the fleet, their indices after the
-//! pods already in it, each copying the tree once made; a fleet past
-//! one pod a home is refused
+//! pods already in it, each for a home no pod is seated at (`unseated_homes`) and copying the
+//! tree once made; a fleet past one pod a home is refused. The pods already in it keep their
+//! seats: a pod the fleet file records no home of is recorded at the one `home_plan` seats it at
 def private verb_up(cfg : FleetArgs; var fleet : Fleet) : int {
     let refused = fleet_refusal(length(fleet.pods), cfg.pods)
     if (!empty(refused)) {
@@ -732,11 +767,17 @@ def private verb_up(cfg : FleetArgs; var fleet : Fleet) : int {
         to_log(LOG_ERROR, "pod_fleet: no public key at {home_path(cfg.key)}.pub\n")
         return 2
     }
+    for (seat in home_plan(fleet)) {
+        if (seat.seat >= 0) {
+            fleet.pods[seat.seat].home = seat.home
+        }
+    }
+    let homes <- unseated_homes(fleet)
     let first = length(fleet.pods)
     let first_index = next_pod_index(fleet)
     let want = first_index + cfg.pods - 1
-    for (index in range(first_index, want + 1)) {
-        let got = make_pod(cfg, fleet, index, want, pub)
+    for (index, home in range(first_index, want + 1), homes) {
+        let got = make_pod(cfg, fleet, index, want, home, pub)
         return 1 if (got == 2)
         break if (got == 1)
     }
@@ -832,12 +873,20 @@ def private verb_status(cfg : FleetArgs; fleet : Fleet) : int {
     return read.rc == 0 ? 0 : 1
 }
 
+//! `down`: the fleet file's pods deleted, never stopped - every one, or the pod of `--home` alone
 def private verb_down(cfg : FleetArgs; var fleet : Fleet) : int {
-    if (empty(fleet.pods)) {
-        to_log(LOG_INFO, "pod_fleet: no pod to delete\n")
+    let refused = home_refusal(cfg.home)
+    if (!empty(refused)) {
+        to_log(LOG_ERROR, "{refused}\n")
+        return 2
+    }
+    let ids <- down_ids(fleet, cfg.home)
+    if (empty(ids)) {
+        let which = empty(cfg.home) ? "" : " - the {cfg.home} home has none"
+        to_log(LOG_INFO, "pod_fleet: no pod to delete{which}\n")
         return 0
     }
-    return drop_pods(cfg, fleet, [for (pod in fleet.pods); pod.id], "DOWN") ? 0 : 1
+    return drop_pods(cfg, fleet, ids, "DOWN") ? 0 : 1
 }
 
 [export]

@@ -462,10 +462,11 @@ def private metal_lossless_cell(t : T?; trunk, drafter : string; fmts, trunk_fmt
 
 //! the 27B trunk's CPU cells on the CPU form `m`, each under its arm, the Metal mode off (put back): the sampled acceptances
 //! and the lossless walk of each drafter file, the K-quant and NVFP4 files' planes held to their disk types
+[cold_path]
 def private dflash_27b_cpu_cells(t : T?; var m : Model) {
     with_cpu_drafter_scope(m) {
         unsafe {   //! the cells capture the loaded trunk by reference
-            t |> run("On the 27B trunk with the Q8_0 DFlash2 drafter on the CPU arm, the exact-accept sampled speculative walk equals the plain seeded sampled walk with drafts accepted, honors a stop id, and both rejection walks accept some drafts and reject some") @capture(& m)(t : T ?) {
+            t |> run("On the 27B trunk with the Q8_0 DFlash2 drafter on the CPU arm, the exact-accept sampled speculative walk spends one draw a judged row with drafts accepted and opens on the plain seeded sampled walk's first id, honors a stop id, and both rejection walks accept some drafts and reject some") @capture(& m)(t : T ?) {
                 return if (!arm_on(t, "dflash-27b-sampled-cpu") || !model_available(t, path_join(_model_tier::models_dir(), DRAFTER_FILE)))
                 sampled_modes_walk(t, m, DRAFTER_FILE, false, "sampled cpu")
             }
@@ -493,13 +494,14 @@ def private dflash_27b_discrete_cells(t : T?; m : Model) {
 
 //! the 27B trunk's Metal cells on its Metal form `m` (the blob twin, required), each under its arm and with its drafter file:
 //! the sampled acceptances, the lossless gate of each drafter file, the joint streams
+[cold_path]
 def private dflash_27b_metal_cells(t : T?; var m : Model) {
     unsafe {   //! the cells capture the loaded trunk by reference
-        t |> run("On the Metal device arm over the 27B GGUF trunk, the sampled DFlash walks hold the CPU arm's exact and rejection contracts, drawn drafts end on the device selector, and verify-ahead off or the soft pick off reproduce the same stream") @capture(& m)(t : T ?) {
+        t |> run("On the Metal device arm over the 27B GGUF trunk, the exact-accept sampled walk spends one draw a judged row and equals the plain seeded sampled walk token for token with drafts accepted, honors a stop id, both rejection walks accept some drafts and reject some, drawn drafts end on the device selector, and verify-ahead off or the soft pick off reproduce the same stream") @capture(& m)(t : T ?) {
             let drafter = path_join(_model_tier::models_dir(), DRAFTER_FILE)
             return if (!arm_on(t, "dflash-27b-sampled-metal") || !model_available(t, drafter))
             on_metal_trunk() {
-                sampled_modes_walk(t, m, DRAFTER_FILE, true, "sampled metal")
+                sampled_modes_walk(t, m, DRAFTER_FILE, device = true, tag = "sampled metal", tokens_hold = true)
             }
         }
         t |> run("On the Metal device arm over the 27B GGUF trunk the greedy DFlash walk is lossless; device accept and selector match the host's drafts and accept count, replays commit unwaited on the tape, the CPU arm accepts the same count, and depth pins hold") @capture(& m)(t : T ?) {
@@ -569,7 +571,7 @@ def test_on_metal_trunk(t : T?) {
     }
 }
 
-[test(description = "On the planar Qwen3.8-27B Q4_K_M trunk on the CPU arm, with the Q8_0 DFlash2 drafter the exact-accept sampled speculative walk equals the plain seeded sampled walk with drafts accepted, honors a stop id, and both rejection walks accept some drafts and reject some, and the greedy speculative walks of the Q8_0, Q4_K_M and NVFP4 drafters emit the plain greedy walk's ids token for token with drafts accepted, the K-quant and NVFP4 files' planes tagged with their disk types; on the serving discrete home's drafter form each drafter's greedy walk on the device arm is the plain walk's on the same device, every pass ending on the device's top-k and walk, the host's walk and selector drafting the same ids; on the Metal form, the file's blob twin under the required mode, the sampled walks hold the CPU arm's exact and rejection contracts with drawn drafts on the device selector, each drafter file's greedy walk on the device arm is lossless with its formats' sites encoded by the pass, device and host accept and selector agreeing, replays unwaited on the tape and the CPU arm on the device's captures accepting the same count, depth pins hold, and two streams through the scheduler ride the verify seat's joint groups, each the plain scheduler's token for token; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked-prefill arm; each form loads once")]
+[test(description = "On the planar Qwen3.8-27B Q4_K_M trunk on the CPU arm, with the Q8_0 DFlash2 drafter the exact-accept sampled speculative walk spends one draw a judged row with drafts accepted and opens on the plain seeded sampled walk's first id, honors a stop id, and both rejection walks accept some drafts and reject some, and the greedy speculative walks of the Q8_0, Q4_K_M and NVFP4 drafters emit the plain greedy walk's ids token for token with drafts accepted, the K-quant and NVFP4 files' planes tagged with their disk types; on the serving discrete home's drafter form each drafter's greedy walk on the device arm is the plain walk's on the same device, every pass ending on the device's top-k and walk, the host's walk and selector drafting the same ids; on the Metal form, the file's blob twin under the required mode, the exact sampled walk holds the CPU arm's draws and equals the plain seeded sampled walk token for token, the rejection walks accept some drafts and reject some with drawn drafts on the device selector, each drafter file's greedy walk on the device arm is lossless with its formats' sites encoded by the pass, device and host accept and selector agreeing, replays unwaited on the tape and the CPU arm on the device's captures accepting the same count, depth pins hold, and two streams through the scheduler ride the verify seat's joint groups, each the plain scheduler's token for token; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked-prefill arm; each form loads once")]
 def test_dflash_27b_trunk(t : T?) {
     return if (!family_on(t, "qwen35"))
     if (!dflash_27b_arms_on()) {
@@ -599,6 +601,7 @@ def test_dflash_27b_trunk(t : T?) {
 }
 
 //! the three acceptances on the Metal home's device arm over the served `trunk` with the Q8_0 drafter
+[cold_path]
 def private sampled_metal_cell(t : T?; trunk : string; tag : string) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         return if (empty(trunk) || !model_available(t, path_join(_model_tier::models_dir(), DRAFTER_FILE)))
@@ -610,7 +613,7 @@ def private sampled_metal_cell(t : T?; trunk : string; tag : string) {
     }
 }
 
-[test(description = "The sampled DFlash walks on the Metal device arm hold over the 27B affine mlx 4-bit snapshot trunk: exact equals the plain sampled walk, rejection walks accept and reject, and device and host draws give the same stream")]
+[test(description = "The sampled DFlash walks on the Metal device arm hold over the 27B affine mlx 4-bit snapshot trunk: exact spends one draw a judged row with drafts accepted and opens on the plain sampled walk's first id, rejection walks accept and reject, and device and host draws give the same stream")]
 def test_dflash_27b_mlx_sampled(t : T?) {
     if (!arm_on(t, "dflash-27b-mlx-sampled") || !family_on(t, "qwen35")) {
         return
@@ -704,7 +707,7 @@ def private joint_streams_leg(t : T?; m : Model) {
     }
 }
 
-[test(description = "On gemma-4-E2B's Metal home with its DFlash2 drafter attached through the facade, a two-turn greedy chat's replies and a greedy completion's ids are the plain model's token for token (a driver-against-itself compare, the drafted chat's steps counted on the device), the drafted walks accepting drafts; two streams through the scheduler ride joint rounds, each the plain scheduler's token for token; the stream with a stop id ends on that id's first occurrence; on the same load the sampled DFlash walks hold the 27B Metal cell's exact and rejection contracts, drawn drafts ending on the device selector, and verify-ahead off or the soft pick off reproduce the same stream")]
+[test(description = "On gemma-4-E2B's Metal home with its DFlash2 drafter attached through the facade, a two-turn greedy chat's replies and a greedy completion's ids are the plain model's token for token (a driver-against-itself compare, the drafted chat's steps counted on the device), the drafted walks accepting drafts; two streams through the scheduler ride joint rounds, each the plain scheduler's token for token; the stream with a stop id ends on that id's first occurrence; on the same load the exact sampled DFlash walk spends one draw a judged row with drafts accepted and opens on the plain sampled walk's first id, both rejection walks accept some drafts and reject some, drawn drafts end on the device selector, and verify-ahead off or the soft pick off reproduce the same stream")]
 def test_dflash_e2b_facade_streams(t : T?) {
     if (!arm_on(t, "dflash-e2b-facade") || !family_on(t, "gemma4e")) {
         return
@@ -776,9 +779,10 @@ def test_dflash_e2b_facade_streams(t : T?) {
 }
 
 //! the 27B's sampled Metal cell on the E2B pair, on the facade cell's load: the three sampled acceptances on the Q8_0 file
+[cold_path]
 def private e2b_metal_twins(t : T?; var m : Model) {
     unsafe {   //! the cell captures the loaded trunk by reference
-        t |> run("gemma-4-E2B, the sampled DFlash walks on the Metal device arm: exact == the plain sampled walk, a stop id, the rejection walks accept some and reject some, the device selector, verify-ahead and soft pick give the same stream") @capture(& m)(t : T ?) {
+        t |> run("gemma-4-E2B, the sampled DFlash walks on the Metal device arm: the exact walk spends one draw a judged row and opens on the plain sampled walk's first id, a stop id, the rejection walks accept some and reject some, the device selector, verify-ahead and soft pick give the same stream") @capture(& m)(t : T ?) {
             sampled_modes_walk(t, m, E2B_DRAFTER_FILE, true, "E2B sampled metal")
         }
     }

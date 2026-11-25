@@ -42,7 +42,9 @@ carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `da
 - **`dasllama_tower_image.das`** - a GPU-flavored tower image's mint and staged load (`#tower-dev-block`): the flavor pick
   (`tower_dev_flavor`), the CPU refusal of a GPU image (`tower_cpu_refuse`), the flavor tags (`register_tower_dev_tags`),
   the mint that bakes a driver's device block over the CPU form and copies every unconsumed plane beside it
-  (`tower_dev_image`, `tower_mint_dev`, `tower_mint_flavor`) and the staged load that takes a flavor
+  (`tower_dev_image`, `tower_mint_dev`, `tower_mint_flavor`), a span carrier's bake of its block while the staging owns the
+  weights (`tower_bake_block`) with the load's check that an image's block is the registered driver's (`tower_block_current`),
+  and the staged load that takes a flavor
   (`load_staged_image_dev`), the q8 gather both discrete homes bake their blocks with (`tower_gather_q8_regions`,
   `tower_bake_q8`: the regions in the row-major device layout under a driver's piece prefix), the lane picks every
   family's load and staging read (`#tower-weight-lane`: `tower_dev_halfword`, the halfword lane on every GPU
@@ -81,7 +83,8 @@ carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `da
   `dasllama_rnnt.das`. Shared tower pieces go up into `dasllama_tower`, not sideways between families.
   `dasllama_gigaam.das` is GigaAM v3 (Russian, one-file GGUF): the rotary Conformer encoder with its CTC or RNN-T head.
 - **`dasllama_rnnt.das`** - the transducer home: the LSTM prediction network, the joint and the
-  greedy loop, serving parakeet's TDT (duration logits) and GigaAM's RNN-T (none) alike, the
+  greedy loop, serving parakeet's TDT (duration logits) and GigaAM's RNN-T (none) alike - its weight rows halves, or floats
+  read through `dot` where the target converts halves in software (`ARCHITECTURE_CPU_KERNELS_TILES.md#half-rows-by-target`) - the
   device hook its `rnnt_decode` asks first (the ASR-decoder drivers fill it), and the device
   seats' host form both drivers call (`rnnt_dev_*`).
 - **`dasllama_vad.das`** - Silero-VAD weights and per-stream state. A chunk is a sequential step

@@ -90,6 +90,18 @@ directory - `tts_g2p.bin` when it is there, else `tts_g2p_en_us.bin`. The GGUFs 
 load and keeps the result beside the file as a prepared image, so the f32 file is also the
 reference lane.
 
+### Reference files for the parity tests
+
+Four unquantized conversions of Pocket TTS English. The engine's parity tests read them as the
+reference the served forms are compared against; dasLLAMA serves none of them.
+
+| file | what | bytes | sha256 |
+|---|---|---|---|
+| `pocket-tts-en.gguf` | Pocket TTS English (`english_2026-04`), every tensor f16 | 219418112 | `7f6b978e6738938a03b6a9e76c4a81b56ab8ad6bbbd201bc58b7928c12f7dfcc` |
+| `pocket-tts-en-18m.gguf` | the 18.2M model (`english_18m_2026-10`), every tensor as the f32 bundle stores it | 112111872 | `4d3ca593407e8f09359ec2125db48c46c4ebdd40c91794c63aab1c3ea10ec049` |
+| `pocket-tts-en-7m.gguf` | the 6.9M model (`english_7m_2026-10`), the same form | 66866368 | `c3610765abde17fc1e821d8d0f7609d03a622362f6961d08074b1d064f2e6292` |
+| `pocket-tts-en-2m-f32.gguf` | the 1.9M model (`english_2m_2026-10`), the same form | 47102208 | `bcc4126ef3c9f6a7c992137ebe16e05d64105fad1d67d13bededc29fbd82d66c` |
+
 ## Use
 
 ```

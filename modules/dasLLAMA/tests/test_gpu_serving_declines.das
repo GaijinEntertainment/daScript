@@ -30,6 +30,7 @@ require dasllama/dasllama_image   // save_model_image / load_model_image / image
 require dasllama/dasllama_arch_llama   // the arch the trimmed lane's shell names, registered for its map
 require dasllama/dasllama_ple   // ple_check_table, ple_gather_row: the per-layer embedding table's host reads on a trimmed lane
 require daslib/fio
+require daslib/defer   // defer() { reset_rows_f32() } - a rows pin never outlives its cell
 require strings
 require daslib/strings_boost
 require daslib/enum_trait   // the format-set drift guard walks the whole KqFmt enum
@@ -1065,6 +1066,8 @@ def test_resident_mirror_codec_ask(t : T?) {
         let upper = kv_dtype_named("Q8_0")
         t |> success(upper.known && upper.dt == KVDtype.q8_0, "an upper-case spelling names the codec")
         t |> success(kv_dtype_named("tq4").dt == KVDtype.tq4 && kv_dtype_named("f32").dt == KVDtype.f32 && kv_dtype_named("f16").known, "every codec has its spelling")
+        let auto_dt = kv_dtype_named("Auto")
+        t |> success(auto_dt.known && auto_dt.dt == KVDtype.automatic && kv_dtype_named("automatic").dt == KVDtype.automatic, "`auto` and `automatic` name the machine's pick, known")
         let bogus = kv_dtype_named("bogus")
         t |> success(!bogus.known && bogus.dt == KVDtype.f16, "a spelling that names no codec reads f16, marked unknown")
         t |> equal(kv_dtype_of(int(KVDtype.tq4)), KVDtype.tq4, "an ordinal names its codec")
@@ -1968,6 +1971,48 @@ def test_kv_codec_serving_rule(t : T?) {
         t |> equal(kv_codec_served(m.config, KVDtype.q8_0, why), KVDtype.f16, "and so does q8_0")
         delete m
     }
+}
+
+[test(description = "`KVDtype.automatic` is f16 where half rows are served as halves and q8_0 where they are served as floats (the rows pin stands in for a CPU with no hardware convert); a 48-wide head keeps f16 with no step-down reason; a default session and pool land on the resolved codec, and the mirror's unpinned ask is the same codec")]
+def test_kv_codec_auto(t : T?) {
+    reset_rows_f32()
+    defer() {
+        reset_rows_f32()
+    }
+    var m <- shell(2l, 0ul)
+    m.config.seq_len = 8l
+    m.config.dim = 64l
+    var why = "unset"
+    set_rows_f32(false)
+    t |> equal(default_kv_dtype_(), KVDtype.f16, "halves served as halves: auto names f16")
+    t |> equal(kv_codec_served(m.config, KVDtype.automatic, why), KVDtype.f16, "and a model serves it")
+    t |> success(empty(why), "naming no step down")
+    set_rows_f32(true)
+    t |> equal(default_kv_dtype_(), KVDtype.q8_0, "halves served as floats: auto names q8_0")
+    t |> equal(kv_codec_served(m.config, KVDtype.automatic, why), KVDtype.q8_0, "a 32-wide head serves it")
+    t |> equal(kv_codec_for(m.config, KVDtype.automatic), KVDtype.q8_0, "the constructors' resolve agrees")
+    var pool <- create_kv_pool_(m.config, 4l, KVDtype.automatic, KVDtype.automatic)
+    t |> success(pool.kdt == KVDtype.q8_0 && pool.vdt == KVDtype.q8_0, "a pool asked at auto holds q8_0 pages")
+    delete pool
+    let pin0 = gpu_kv_want_pin()
+    reset_gpu_kv_want()
+    if (g_env_vulkan.vk_kv32 == 0l && empty(g_env_gpu.gpu_kv)) {
+        t |> equal(resident_mirror_dtype(), KVDtype.q8_0, "the mirror's unpinned ask names the sessions' default")
+        t |> equal(resident_mirror_dtype_of(m), KVDtype.q8_0, "and a model serves it")
+        set_rows_f32(false)
+        t |> equal(resident_mirror_dtype(), KVDtype.f16, "and follows it back to f16 (the control)")
+        set_rows_f32(true)
+    } else {
+        t |> skip("the environment names the mirror's codec (DASLLAMA_GPU_KV / DASLLAMA_VK_KV32) - the unpinned ask needs both unset")
+    }
+    restore_gpu_kv_want(pin0)
+    m.config.head_size = 48l
+    why = "unset"
+    t |> equal(kv_codec_served(m.config, KVDtype.automatic, why), KVDtype.f16, "a 48-wide head holds no block: auto keeps f16")
+    t |> success(empty(why), "with no step-down reason - nothing was asked")
+    t |> equal(kv_codec_served(m.config, KVDtype.q8_0, why), KVDtype.f16, "where a named q8_0 steps down")
+    t |> success(!empty(why), "and says why (the control)")
+    delete m
 }
 
 [test(description = "`vk_baked_host_layers` reads a lane's host-layer split as the `host_split` marker entry's woff, and answers -1 for a plan minted before the marker or an empty plan")]

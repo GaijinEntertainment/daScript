@@ -103,8 +103,7 @@ test('an in-process result shows the served row, the comparison line, and no rat
     await expect(page.locator('#bench-record-row')).toBeHidden();   // no record: nothing to submit from a self-measure
 });
 
-test('an in-process result on a slot whose device homes streams shows the batched column', async ({ page }) => {
-    // hand-composed (fixtures/README.md): the capture box homes no device streams
+test('an in-process result on a slot serving several streams shows the batched column', async ({ page }) => {
     const b = fx('bench_done_batched');
     expect(b.result.npl).toBe(4);
     await openControl(page, { bench: b });

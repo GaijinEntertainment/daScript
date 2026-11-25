@@ -13,12 +13,94 @@ require math
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gpu_math
 require dasllama/dasllama_env
+require dasllama/dasllama_tower   // TowerDev
 require dasllama/dasllama_cuda_common public
 require dasllama/dasllama_cuda_classes public
 
-//! the profile ledger's mark after a launch: none on this home
-[unused_argument(rl, role)]
-def rail_pt(rl : CutRail; role : RailProfRole) {}
+let private CUT_PROF_CAP = 2048   //! a shot's stamps; a mark past it is dropped, as the Vulkan pool's
+
+//! the ledger of a profiled shot: a timed event a stamp, recorded on the rail's stream, and the
+//! role each names
+struct private CutProf {
+    on : bool
+    n : int
+    evs : array<void?>
+    roles : array<RailProfRole>
+}
+
+var private g_cut_prof : CutProf
+var private g_cut_prof_said = false
+
+[cold_path]
+def private cut_prof_refused(what : string) {
+    panic("dasLLAMA cuda rail: {what} - {cuda_last_error()}")
+}
+
+[cold_path]
+def private cut_prof_grow {
+    let ev = cuda_event_create()
+    if (ev == null) {
+        cut_prof_refused("a profile event could not be made")
+    }
+    g_cut_prof.evs |> push(ev)
+    g_cut_prof.roles |> push(RailProfRole.ln)
+}
+
+[cold_path]
+def private cut_prof_stamp(stream : void?; role : RailProfRole) {
+    if (g_cut_prof.n == length(g_cut_prof.evs)) {
+        cut_prof_grow()
+    }
+    g_cut_prof.roles[g_cut_prof.n] = role
+    if (!cuda_event_record(g_cut_prof.evs[g_cut_prof.n], stream)) {
+        cut_prof_refused("a profile stamp did not record")
+    }
+    g_cut_prof.n++
+}
+
+def rail_pt(rl : CutRail; role : RailProfRole) {
+    //! the profile ledger's mark after a launch: a timed event on the rail's stream, the span since
+    //! the last charged to `role`
+    if (g_cut_prof.on && g_cut_prof.n < CUT_PROF_CAP) {
+        cut_prof_stamp(rl.stream, role)
+    }
+}
+
+[unused_argument(rl)]
+def rail_tts_prof(rl : CutRail) : bool => rail_prof_on()
+
+//! the ledger's events released ahead of the device
+[cold_path]
+def private cut_prof_drop {
+    for (ev in g_cut_prof.evs) {
+        cuda_event_destroy(ev)
+    }
+    g_cut_prof.evs |> clear()
+    g_cut_prof.roles |> clear()
+    g_cut_prof.n = 0
+    g_cut_prof.on = false
+}
+
+[init]
+def dasllama_cuda_rail_register {
+    cud_on_shutdown(@@cut_prof_drop)
+}
+
+//! the stamps' spans read once the last stamp landed: each stamp's event elapsed from the one
+//! before, charged to its role
+[cold_path]
+def private cut_prof_report(chain : string; nl, npos : int64; t0 : int64) {
+    g_cut_prof.on = false
+    if (!cuda_event_synchronize(g_cut_prof.evs[g_cut_prof.n - 1])) {
+        cut_prof_refused("{chain}: a seat's chain failed on the device")
+    }
+    var s : RailProfSums
+    for (i in range(1, g_cut_prof.n)) {
+        let ms = cuda_event_elapsed_ms(g_cut_prof.evs[i - 1], g_cut_prof.evs[i])
+        rail_prof_add(s, g_cut_prof.roles[i], double(ms) * 1000.0lf)
+    }
+    rail_prof_report(s, "cuda", chain, nl, npos, get_time_usec(t0))
+}
 
 //! the Q8_0-feed arm runs on this rail: never, every q8 GEMM rides the cm2 feed
 [unused_argument(rl)]
@@ -112,6 +194,24 @@ def set_cuda_tower_fork(on : bool) : bool {
 
 def cuda_tower_fork_on : bool => g_cud_rail_fork_on
 
+var private g_cud_tts_shot_pdl = false   //! a TTS seat's shot keeps the home's PDL mode (`set_cuda_tts_shot_pdl`)
+
+def set_cuda_tts_shot_pdl(on : bool) : bool {
+    //! Test A/B seat: a TTS seat's shot under the home's programmatic dependent launch (`on`) or in plain stream
+    //! order; answers the setting it replaced
+    let was = g_cud_tts_shot_pdl
+    g_cud_tts_shot_pdl = on
+    if (on != was) {
+        let how = (on
+            ? "under programmatic dependent launch where the home has it on (sm_90 and up, DASLLAMA_CUDA_PDL not 0), in plain stream order elsewhere"
+            : "in plain stream order")
+        to_log(LOG_INFO, "dasLLAMA cuda tts: set_cuda_tts_shot_pdl({on}) - a TTS seat's shot launches {how} (the default: plain stream order)\n")
+    }
+    return was
+}
+
+def cuda_tts_shot_pdl_on : bool => g_cud_tts_shot_pdl
+
 [arch(at = "../ARCHITECTURE_GPU_TOWER_RAIL.md#rail-primitives")]
 def rail_fork(var rl : CutRail) {
     rl.main = rl.stream
@@ -146,4 +246,102 @@ def rail_join(var rl : CutRail) {
         cuda_stream_wait_event(rl.main, g_cud.side.joins[i])
     }
     rl.branched = 0u
+}
+
+//! the home a rail is of
+[unused_argument(rl)]
+def rail_tts_dev(rl : CutRail) : TowerDev => TowerDev.cuda
+
+//! the home's name in the TTS driver's log lines
+[unused_argument(rl)]
+def rail_tts_tag(rl : CutRail) : string => "cuda"
+
+//! the recurrence stamp's block holds its lanes on every card this home arms
+[unused_argument(rl)]
+def rail_tts_lstm_ok(rl : CutRail) : bool => true
+
+//! the conv sites' schedule-fed cm2 tiles serve on this home
+[unused_argument(rl)]
+def rail_tts_cm2_on(rl : CutRail) : bool => true
+
+//! the f16 GEMM serves on every card this home arms
+[unused_argument(rl)]
+def rail_tts_f16_on(rl : CutRail) : bool => true
+
+[unused_argument(rl)]
+def rail_tts_f16_ensure(rl : CutRail) : bool => ensure_f16_gemm_cm2_w_cls()
+
+//! `bytes` on the device, 0 with `oom` set where the allocation failed
+[unused_argument(rl)]
+def rail_tts_alloc(rl : CutRail; var oom : bool&; bytes : int64) : uint64 => cud_dev_zero(oom, bytes)
+
+[unused_argument(rl)]
+def rail_tts_free(rl : CutRail; var dev : uint64&) {
+    return if (dev == 0ul)
+    cuda_mem_free(dev)
+    dev = 0ul
+}
+
+//! `bytes` of host memory at `src` onto the buffer from byte `off`, on the home's stream
+[unused_argument(rl)]
+def rail_tts_put(rl : CutRail; dev : uint64; off : int64; src : void?; bytes : int64) {
+    cuda_memcpy_htod(dev + uint64(off), src, uint64(bytes), g_cud.stream)
+}
+
+var private g_cud_tts_take_fault = false   //! a cell's seam: the take's copy reads as failed
+
+def set_cuda_tts_take_fault_(on : bool) : bool {
+    //! test seam: the next takes' copy reads as failed, so the take's error arm runs; answers the
+    //! setting it replaced
+    let was = g_cud_tts_take_fault
+    g_cud_tts_take_fault = on
+    return was
+}
+
+//! `bytes` of plane `b` from byte `off` into `dst`: the copy queued behind the stream's work, then
+//! one sync, so `dst` holds the rows on return whatever memory it is
+[unused_argument(rl)]
+def rail_tts_take(rl : CutRail; b : RailBuf; off : int64; var dst : float?; bytes : int64) {
+    let copied = (cuda_memcpy_dtoh(dst, b.dev + uint64(off), uint64(bytes), g_cud.stream)
+        && !g_cud_tts_take_fault)
+    if (!copied || !cud_sync()) {
+        panic("dasLLAMA cuda tts: a seat's chain or its readback failed on the device - "
+            + "{cuda_last_error()}")
+    }
+}
+
+//! `bytes` the host writes in place and a launch reads; `dev` 0 where the block could not be made
+[unused_argument(rl)]
+def rail_tts_mapped_make(rl : CutRail; bytes : int64) : RailMapped {
+    var oom = false
+    let m = cud_mapped_make(oom, bytes)
+    return RailMapped(host = m.host, dev = oom ? 0ul : m.dev, bytes = oom ? 0l : bytes)
+}
+
+[unused_argument(rl)]
+def rail_tts_mapped_free(rl : CutRail; var m : RailMapped) {
+    var cm = CudMapped(host = m.host, dev = m.dev)
+    cud_mapped_free(cm)
+    m = RailMapped()
+}
+
+//! `rec` on the home's stream, on the f32 lane; under the profile ledger a baseline stamp leads it
+[arch(at = "../ARCHITECTURE_GPU_TOWER_TTS.md#tts-st2-seats")]
+def rail_tts_shot(var rl : CutRail; chain : string; nl, npos : int64; rec : block<() : void>) {
+    rail_begin(rl, RailLane.f32)
+    rl.stream = g_cud.stream
+    let pdl = cuda_launch_pdl()
+    cuda_set_launch_pdl(pdl && g_cud_tts_shot_pdl)
+    if (rail_tts_prof(rl)) {
+        rail_prof_say(g_cut_prof_said, "cuda", "records a timed event after every mark on the home's stream")
+        let t0 = ref_time_ticks()
+        g_cut_prof.n = 0
+        g_cut_prof.on = true
+        cut_prof_stamp(rl.stream, RailProfRole.ln)
+        invoke(rec)
+        cut_prof_report(chain, nl, npos, t0)
+    } else {
+        invoke(rec)
+    }
+    cuda_set_launch_pdl(pdl)
 }

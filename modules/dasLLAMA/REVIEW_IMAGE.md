@@ -84,12 +84,13 @@ decides that, not the load.**
 tag is registered through `register_image_family_tag` or `register_image_flavor_tag`; building that
 path any other way, or using an unregistered tag, is a defect.**
 
-**A family whose plane bytes no box property shapes - no backend pin, no tune state, no lane
-width - registers its tag config-free: `register_image_family_tag(tag, config_free = true)`, or
-`register_image_flavor_tag(tag, lane)`, whose default is config-free; a family whose bytes any such
-property shapes passes `config_free = false` to either.** A config-bound identity on a property-free
-family bakes one image per tune state and reaps the others on every switch; a config-free
-identity on a property-shaped family serves the wrong bytes under a changed property.
+**A family registers its tag config-free - `register_image_family_tag(tag, config_free = true)`,
+or `register_image_flavor_tag(tag, lane)`, whose default is config-free - when every box property
+(a backend pin, a tune state, a lane width, the target's row form) that shapes its plane bytes is
+spelled in the config-free identity (`image_config_for`), and passes `config_free = false` to either
+otherwise.** A config-bound identity on a family that no unspelled property
+shapes bakes one image per tune state and reaps the others on every switch; a config-free identity
+on a family an unspelled property shapes serves the wrong bytes once that property changes.
 
 **A diff that changes what an image at an UNCHANGED path contains - a moved byte, a re-meaning of a
 serialized field, a serializer body change - and adds or drops no field of the struct THAT image's

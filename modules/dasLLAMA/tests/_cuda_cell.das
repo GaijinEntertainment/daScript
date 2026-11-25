@@ -69,6 +69,10 @@ def io_(var cp : CuPlanes; a : array<float>; base : int = 0; slack : int = 0) : 
     return cp |> add_plane(buf_upload(laid, g_cud.stream), long_length(laid) * 4l, base, length(a), NAN_SENTINEL_BITS)
 }
 
+//! this home's bar of `bars`: the stamps marked `fastmath = false` compile without NVRTC's fast math, the rest with it
+[unused_argument(cp)]
+def home_bar(cp : CuPlanes; bars : HomeBars) : Bar => bars.cuda
+
 //! the launches of `tag` completed on the stream, asserted
 def cu_launched(t : T?; tag : string) {
     t |> success(cud_sync(), "{tag}: the launches complete ({cuda_last_error()})")
@@ -94,6 +98,9 @@ def plane_as(cp : CuPlanes; p : int; elem : auto(TT); n : int; at : int = 0) : a
 
 //! plane `p`'s live run read back as floats
 def plane_run(cp : CuPlanes; p : int) : array<float> => <- cp |> plane_as(p, type<float>, cp.run[p])
+
+//! plane `p` whole as floats: the slots before its base, its run and its slack
+def plane_whole(cp : CuPlanes; p : int) : array<float> => <- buf_download(cp.dev[p], int(cp.bytes[p] / 4l), type<float>)
 
 //! `a` over plane `p` from its base, between two launches: a rerun's poisoned or rescaled input
 def plane_upload(cp : CuPlanes; p : int; a : array<auto(TT)>) {

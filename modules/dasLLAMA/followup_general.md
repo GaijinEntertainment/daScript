@@ -2059,7 +2059,7 @@
     name) and the bake-trim rule's "the three" names nothing; in `REVIEW_GPU_KERNEL_CLASSES.md` the PR-body kind
     statement is a duty in disguise; in `REVIEW_GPU_RACE.md` the output-buffer rule's ledger exception, the two warm-up
     rules, and "variable region", "crown" and "ranking-input branch" undefined; in `tests/REVIEW_KERNEL_CELLS.md` the
-    bit-identity rule's head against its tail and the definitions wall; in `tests/REVIEW_PINNED_GATES.md` the kept-in-
+    bit-identity rule's head against its tail and the definitions wall; in `tests/REVIEW_PINNED_GATES.md` (the parent, not its kernel-gate companion) the kept-in-
     step rule split in three with its census arm (automated in `REVIEW.das`) deleted, the tolerance rule's binding, and
     two `REVIEW.das` checks (every pinned entry resolves, every pinned file sits in a `run.das` suite); in the repo's
     `src/builtin/REVIEW.md` the serializer rules into a routed companion, the bind-flavor rule's exception sentence,
@@ -2115,17 +2115,17 @@
     naming the clean-cpu `llama-bench` `benchmarks/setup_lcpp_ref.das` builds at `DEFAULT_REF_SHA` (its sibling
     `llama-batched-bench` times the reference's `tg128@4`), no other environment setting.
 
-222. **The Vulkan board measures the LLM workload alone.** `gen_bench_records` runs its Vulkan leg on `doLlm` only: the
-    ASR, TTS and image-chat passes carry Metal and CPU legs and no Vulkan one, and no GPU reference is paired for them off
-    Apple (the Metal legs pair whisper-cli's and mtmd's Metal builds, NeMo on MPS and mlx-audio). The engine serves those
-    workloads on Vulkan - the whisper, parakeet, canary and gemma4a towers, the ASR decoder and the TTS driver each hold
-    their parity cells - so the release-17 pod board (RTX PRO 4500) carries six LLM pairs and no audio or image row.
-    Done = a Vulkan leg on the asr, tts and image passes, each das cell paired with the reference's own GPU build (a
-    whisper.cpp and an mtmd Vulkan build at `-ngl 99`, NeMo and the TTS packages on CUDA) through `asr_gpu_pair_tool` and
-    the TTS seats' roster, `gpu_leg_refusal` admitting them, `test_gen_records_args.das` holding the pairing, and the
-    pod board re-measured with those rows - `DASLLAMA_GPU=1 bin/daslang modules/dasLLAMA/performance/gen_bench_records.das
-    -- --legs vulkan -w all --ref-vulkan <the vulkan flavor's llama-bench>` on a dasVulkan build on the RunPod RTX PRO
-    4500 pod, `WHISPER_CPP`, `MTMD_BIN` and `NEMO_PY` naming those Vulkan and CUDA reference builds.
+222. **The Vulkan board measures the LLM workload alone.** `gen_bench_records` runs its Vulkan leg on the LLM and TTS
+    passes only (the TTS rows are row 321's): the ASR and image-chat passes carry Metal and CPU legs and no Vulkan one, and
+    no GPU reference is paired for them off Apple (the Metal legs pair whisper-cli's and mtmd's Metal builds, NeMo on MPS
+    and mlx-audio). The engine serves those workloads on Vulkan - the whisper, parakeet, canary and gemma4a towers and the
+    ASR decoder each hold their parity cells - so the release-17 pod board (RTX PRO 4500) carries six LLM pairs and no
+    audio or image row. Done = a Vulkan leg on the asr and image passes, each das cell paired with the reference's own GPU
+    build (a whisper.cpp and an mtmd Vulkan build at `-ngl 99`, NeMo on CUDA) through `asr_gpu_pair_tool`,
+    `gpu_leg_refusal` admitting them, `test_gen_records_args.das` holding the pairing, and the pod board re-measured with
+    those rows - `DASLLAMA_GPU=1 bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --legs vulkan -w all
+    --ref-vulkan <the vulkan flavor's llama-bench>` on a dasVulkan build on the RunPod RTX PRO 4500 pod, `WHISPER_CPP`,
+    `MTMD_BIN` and `NEMO_PY` naming those Vulkan and CUDA reference builds.
 
 223. **NeMo's Canary-Qwen `generate` on MPS answers a 3-token stub, and why is unknown.** The Metal reference row of
     Canary-Qwen 2.5B (`benchmarks/asr/canary_qwen_bench.py --device mps`, nemo 3.1.0 / torch 2.12.1, the same HF snapshot
@@ -2551,21 +2551,12 @@
     interpreter's browser build measured before and after it into `PERF_LEDGER.md`, and a relaxed-SIMD build arm raced
     beside it where a browser serves it.
 
-279. **The GPU TTS seats run on a dequantized copy of the weights, not the carrier's own planes.** Metal and Vulkan build
-    every StyleTTS2 (kitten, kokoro) and Pocket device slab at attach by widening the weights into padded f32 rows
-    (`tts_slab_build`, `tts_slab_conv` / `tts_slab_linear` in `dasllama_tts_slab.das`: q8 through `q8_plane_row_f32`,
-    K-quants through `tsw_put_kq`); Vulkan dequantizes every Pocket linear the same way and adds an f16 copy of the
-    StyleTTS2 decoder, and Metal's Pocket frames widen the K-quant linears to f32 and requantize them to Q8_0
-    (`pk_blob_q8`). So the TTS kernels read a converted copy about four times the q8 weights - `REVIEW_KQ_FORMATS.md`: "a diff
-    that makes a site read a weight format through a converted copy ... is a defect" - and no TTS family can have a per-backend `.dlim`: its device planes are built at every attach,
-    and baked as they are they would quadruple the file. Done = with the CUDA home's TTS seats, the TTS kernels on CUDA,
-    Metal and Vulkan read the carrier's q8 and K-quant planes in their device forms (the tower tiles' q8 and kq families),
-    the attach keeps only what the image bakes, and each TTS family mints its Metal, Vulkan and CUDA image, bound on load
-    with no conversion like every other tower's. The StyleTTS2 recipe lane's K-quant convs, its Q8_0 LSTMs and its
-    Q8_0 transposed convs ride the same widen (`conv1d_weight_row`, `q8_matrix_row`, `kq_matrix_row`), so the device
-    holds the f32 size of a lane whose image is a fifth of it (`kokoro-82m.gguf`: a 74.5 MB recipe image, a 355 MB
-    f32 one), and on a discrete home the host keeps its quant planes beside the slab for the CPU chain a declined
-    stage falls to.
+279. **A few TTS leaves off the stored members' lattices still reach the device as widened f32 rows.** Every other
+    stored leaf is read as stored, and each family mints its Metal, Vulkan and CUDA image; a conv whose inputs sit off 8
+    (32 for a transposed one) or a Q8_0 recurrence whose hidden width sits off 32 is read back into the slab as f32
+    rows (`ARCHITECTURE_GPU_TOWER_TTS.md#tts-st2-seats`, `tts_home_stats(dev).widened`): the StyleTTS2 generator's two
+    noise convs (22 inputs) and a Pocket clip encode's first conv (one input). Done = those leaves read in a stored
+    form, and the cells' widened counts zero.
 
 283. **A split GGUF NextN head does not attach to a safetensors snapshot trunk.** `DASLLAMA_MTP_HEAD` / `set_mtp_head_path`
     ride the GGUF loader path alone: a snapshot load (`ARCHITECTURE_ENGINE_FORMATS_MLX.md`) synthesizes its GGUF meta and
@@ -2925,16 +2916,10 @@
     tensors are copied out of. Done = the TTS mints and that writer writing each plane as its reader
     produces it, through a source opened with `gguf_source_begin`, the staging carrier holding spans and scalars
     alone.
-313. **Pocket's codec convs load as f32 from a file that stores them F16.** Every Pocket file stores the codec's
-    conv weights as halfwords and every lane widens them at load: 29 MB of f32 on the 100M model, 16 MB on the 18M,
-    15 MB on the 2M (`pocket-tts-en-kq.gguf`, `pocket-tts-en-18m-q8.gguf`, `pocket-tts-en-2m.gguf`: the rank-3 F16
-    tensors' element counts times four) - 15, 8 and 7.7 MB more than the file's bytes, 28% of the 2M model's native image. The convs
-    multiply through `gemm_f32_jo`, so serving the halfwords takes a GEMM kernel over F16 weights, stamped a CPU
-    class; a per-call widen into the scratch carrier keeps an f32 copy of the largest conv alive between
-    syntheses and is not that. Done = `TtsConv1d` holding an F16 weight plane on the native lane, the rows convs
-    multiplying it with no f32 copy that outlives the call, the samples bit-equal to the f32 lane's, the GPU
-    seats' slab read taking the form, and the codec's real-time factor on an x86 and an arm64 box beside the f32
-    kernel's.
+313. **The Pocket codec's real-time factor on halves has no reading beside the f32 kernel's.** The unpinned lane
+    serves the codec convs as the file's halves with no f32 copy (`TtsConv1d.wkh`, `test_tts_pocket.das`'s codec cell);
+    no x86 or arm64 reading of the codec's real-time factor on that form sits beside the f32 kernel's. Done = the
+    codec's real-time factor on an x86 and an arm64 box on both forms, in `PERF_LEDGER.md`.
 314. **The server's speech worker runs the CPU chain at a third of the facade's rate, and the recipe lane further
     behind.** On the M5 with the seats off (`DASLLAMA_METAL_TOWER=0`) a served kitten-nano request takes 241.9 ms for
     5.32 s of speech where the facade's line takes 105.6 to 110.3 ms for 7.14 s, and the recipe lane's image serves
@@ -2953,3 +2938,40 @@
     `records/m5.json` (metal/tuned, cpu/tuned, cpu/accel) hold for these two files were measured on the files they
     replace. Done = `gen_bench_records.das -- --workload tts` over the two files on each of the four boxes in the next
     release re-mint, each row's last board figure beside the new one in that re-mint's `PERF_LEDGER.md` entry.
+317. **The f32 GEMM family's seat is borrowed on three classes and pinned on two.** `gemm_f32_tile_gen` carries a seat
+    raced on the class's own hardware in `arm-i8mm` (the M5 Max), `x86-vnni512` (a Ryzen 7 PRO 8700GE) and
+    `wasm-simd128` (that box, the wasm64 tuner under node), and a seat raced as the class on the Ryzen
+    (`DAS_JIT_BASELINE=<class>`, `HOW_TO_GET_SIDECAR.md` section 10) in `x86-avx2` and `x86-avx`. `x86-amx` carries the
+    `x86-vnni512` entry and `arm-sve` the `arm-neon` entry - a lower class's each, `arm-i8mm` sitting between the
+    second pair: no box of either class is at hand. `arm-neon` carries the `arm-i8mm` winner until its race as the
+    class on the M5 lands, and `arm-sve` holds that same entry beside it. The family lands the same bits on every seat
+    (`ARCHITECTURE_CPU_KERNELS_TILES.md#f32-gemm-tile-family`), so a borrowed or pinned seat costs speed alone. Each
+    profile changed by that one row; the other seats stay as shipped. Done = the `arm-neon` pinned race seated, `arm-sve`
+    carrying its winner, and the release re-mint races the family on a box of each class and exports each profile whole.
+318. **The Pocket text table is gathered on the host under every GPU home.** A chunk's prompt rows are the host's embedding
+    gather (`pocket_prompt_embed`) uploaded to the prompt seat, so a GPU image carries the text table in its CPU form
+    beside the device block - the one Pocket weight a device image still holds for the host
+    (`ARCHITECTURE_GPU_TOWER_TTS.md#tts-pocket-seats`). Done = the table staged as stored in the device block, the rows
+    gathered by a device stamp at the token ids the host uploads, the host copy gone from a GPU image, and the prompt
+    seat's rows held to the CPU gather's on each home.
+319. **Every GPU home's TTS seats are required into every LLM program of its build.**
+    `dasllama_transformer.das` requires `dasllama/dasllama_vulkan_tts` under `?vulkan`,
+    `dasllama/dasllama_cuda_tts` under `?cuda` and `dasllama/dasllama_metal_tts` under `?das_metal` beside the tower
+    and ASR-decoder drivers, so a program that never speaks compiles the TTS seats' classes and the driver's instance -
+    a cold-compile cost on every such build. The lever is a registration seam the TTS facade pulls in, so only a
+    program that requires `dasllama_tts` carries a TTS driver.
+321. **The discrete homes' speech cells carry no board row.** `gen_bench_records.das`'s TTS pass runs a das cell on the
+    Vulkan leg (`--legs vulkan` under `DASLLAMA_GPU=1`) and on the CUDA leg (`--legs cuda` under `DASLLAMA_GPU=1
+    DASLLAMA_CUDA=1`), each beside the family's package on torch CUDA where that package serves the GPU, and no board box
+    holds their rows: the seats' readings are the `tts_synth` walls of the dated `PERF_LEDGER.md` entry on the CUDA
+    speech seats' carveout and launch order. Done = the release re-mint runs `DASLLAMA_GPU=1 bin/daslang
+    modules/dasLLAMA/performance/gen_bench_records.das -- --legs vulkan -w tts`, and the same with `DASLLAMA_CUDA=1` and
+    `--legs cuda`, on the RunPod RTX PRO 4500 pod (a build carrying dasVulkan and dasCUDA, the `tts` venv's torch on
+    CUDA), and the pod's records carry each catalog model's `vulkan` and `cuda` TTS rows.
+322. **The fat exe's `lcpp_bench` sanity lines wait for the release.** A PR between releases that alters the Metal
+    kernel library (`dasllama/dasllama_metal_kernels.das`), `performance/profile_common.das` or a `dasllama/` module
+    `benchmarks/lcpp_bench.das` requires directly copies no `sanity:` or `tune gate:` line of an `lcpp_bench` run of the
+    fat exe (`daspkg release --fat <class>`), so a fat exe built from a tree that differs from the last release's in
+    those files has no first-start kernel sanity check read. Done = the release re-mint builds the fat exe of
+    each class it ships, runs `lcpp_bench` on it on a box of that class, and copies each run's `sanity:` lines and
+    `tune gate:` line into its PR body, or says the run printed none.

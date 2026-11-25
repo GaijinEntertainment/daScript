@@ -809,6 +809,97 @@ def private router_f32_gate(t : T?; var dev, queue; m, mp, kdim, ne : int) {
     }
 }
 
+//! activations off the f16 lattice: a half-staged tile over them lands outside the f32 bar
+def private off_lattice_x(n : int) : array<float> => <- [for (i in range(n)); 0.093 * float((i * 5 + 1) % 41) - 1.87 + 2.1e-4 * float(i % 13)]
+
+//! The stored-plane tile's dense stamps over Q8_0 blocks (`sx`: `seat_of` a stamp, `run` its dispatch): float tiles at the
+//! f32 bar against the dot in double over the blocks' own dequant.
+def private st2_q8_dense_gate(t : T?; var dev, queue; sx; m, mp, kdim, ndim : int;
+                              run : block<(enc : MetalComputeEncoder?; bw, bx, by, bk, bn : MetalBuffer?) : void>; halves : bool = false) {
+    let tag = "st2 stored exact {halves ? "f16" : "q8"} m={m}/{mp} k={kdim} n={ndim}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        var pso = mc |> keep_stamp(sx, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope blob : array<uint8>
+        var inscope wdeq : array<float>
+        q8_blob_fill(ndim, kdim / 32, blob, wdeq, 200)
+        var inscope hrows : array<float16>
+        if (halves) {   // the plane as halves [ndim][kdim]: the reference reads them widened
+            for (i in range(ndim * kdim)) {
+                wdeq[i] = float(float16(0.011 * float((i * 7 + 3) % 53) - 0.29))
+            }
+            hrows |> push_from([for (v in wdeq); float16(v)])
+        }
+        var inscope xf <- off_lattice_x(mp * kdim)
+        for (i in range(m * kdim, mp * kdim)) {
+            xf[i] = 0.0
+        }
+        var inscope ref <- strided_ref(dense_ref_rows(wdeq, xf, m, kdim, ndim), ndim, ndim, mp, 0.0)
+        let bw = halves ? (mc |> in_plain(hrows)) : (mc |> in_plain(blob))
+        let bx = mc |> in_(xf)
+        let by = mc |> out_words(mp * ndim, -1000.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bn = mc |> in_plain([uint(ndim)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(sx, pso) {
+                invoke(run, enc, mc.buf[bw], mc.buf[bx], mc.buf[by], mc.buf[bk], mc.buf[bn])
+            }
+        }
+        return if (!ran)
+        let bar = Bar(kind = BarKind.envelope, rel = 2e-6, abs_floor = 1e-5, poison = ref.env[0] * 0.1 + 1.0, poison_at = 0)
+        check_buf(t, tag, mc.buf[by], ref.want, bar, Shape(row_width = ndim), ref.env)
+    }
+}
+
+//! ... over a K-quant member's planes (`seat`: `seat_of` the member's exact stamp, `run` its dispatch): at the f32 bar against the
+//! dot in double over the engine's own plane-row dequant; the member's half-staged dense stamp over the same operands is the
+//! control that must miss the bar.
+def private st2_kq_exact_gate(t : T?; var dev, queue; seat; fmt, m, kdim, ndim : int;
+                              run : block<(enc : MetalComputeEncoder?; bks, bkq, bx, by, bk, bn : MetalBuffer?; doff : uint64) : void>) {
+    let tag = "st2 stored exact k{fmt} m={m} k={kdim} n={ndim}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let f = kq_fmt_of_id(fmt, "st2_kq_exact_gate")
+        let sx = seat
+        let sh = kq_mm_base_stamp(f)
+        var pso_x = mc |> keep_stamp(sx, err)
+        return if (!pso_ok(t, tag, pso_x, err))
+        var pso_h = mc |> keep_stamp(sh, err)
+        return if (!pso_ok(t, tag, pso_h, err))
+        let nb = kdim / 256
+        let nsb = ndim * nb
+        var inscope kq, ks : array<uint8>
+        kq_fill_planes(fmt, nsb, kq, ks)
+        var inscope xf <- off_lattice_x(m * kdim)
+        var inscope ref <- dense_ref_env(m, kdim, ndim, xf) $(j; var wrow) {
+            kq_row_ref(fmt, j * nb, nb, nsb, kq, ks, wrow)
+        }
+        let bks = mc |> in_plain(ks)
+        let bkq = mc |> in_plain(kq)
+        let bx = mc |> in_(xf)
+        let by = mc |> out_words(m * ndim, -1000.0)
+        let byh = mc |> out_words(m * ndim, -1000.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bn = mc |> in_plain([uint(ndim)])
+        let doff = kq_split_doff(fmt, nsb)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(sx, pso_x) {
+                invoke(run, enc, mc.buf[bks], mc.buf[bkq], mc.buf[bx], mc.buf[by], mc.buf[bk], mc.buf[bn], doff)
+            }
+            stamp_run(sh, pso_h) {
+                invoke(sh.enc, enc, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bx], mc.buf[byh], 0ul, mc.buf[bk], mc.buf[bn], int64(m), int64(ndim))
+            }
+        }
+        return if (!ran)
+        let bar = Bar(kind = BarKind.envelope, rel = 2e-6, abs_floor = 1e-5, poison = ref.env[0] * 0.1 + 1.0, poison_at = 0)
+        check_buf(t, tag, mc.buf[by], ref.want, bar, Shape(row_width = ndim), ref.env)
+        var inscope gh <- plane_run(mc, byh)
+        let miss = check_count(gh, ref.want, bar, ref.env)
+        t |> success(miss > 0, "{tag}: the half-staged stamp over the same planes misses the f32 bar ({miss} elements outside)")
+    }
+}
+
 def private bf16_mulmm_gate(t : T?; var dev, queue; tensor : bool; m, kdim, ndim : int; halfx : bool = false; mt : int = 32) {
     let tag = "bf16_mulmm{tensor ? "_t" : ""}{halfx ? " halfx" : ""} mt{mt} m={m} k={kdim} n={ndim}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
@@ -2553,6 +2644,27 @@ def test_metal_gemm_kernels(t : T?) {
                 f32_mulmm_gate(t, dev, queue, false, 100, 128, 3840, 3840) // gemma4uv proj + M-pad rows pinned 0
                 router_f32_gate(t, dev, queue, 40, 64, 2048, 256)          // the 35B-A3B router: 256 experts over 2048, a 40-row window
                 router_f32_gate(t, dev, queue, 96, 96, 512, 64)            // the 64-wide tile's lower bound, no pad rows
+                st2_q8_dense_gate(t, dev, queue, seat_of(stamp_of(@@enc_st2_q8_exact_mm)), 40, 64, 512, 128) $(enc, bw, bx, by, bk, bn) {   // a padded window
+                    enc_st2_q8_exact_mm(enc, bw, 0ul, bw, bx, by, 0ul, bk, bn, 64l, 128l)
+                }
+                st2_q8_dense_gate(t, dev, queue, seat_of(stamp_of(@@enc_st2_q8_exact_mm)), 64, 64, 1024, 3072) $(enc, bw, bx, by, bk, bn) {   // the Pocket backbone's qkv shape
+                    enc_st2_q8_exact_mm(enc, bw, 0ul, bw, bx, by, 0ul, bk, bn, 64l, 3072l)
+                }
+                st2_q8_dense_gate(t, dev, queue, seat_of(stamp_of(@@enc_st2_f16_exact_mm)), 40, 64, 512, 128, $(enc, bw, bx, by, bk, bn) {
+                    enc_st2_f16_exact_mm(enc, bw, 0ul, bx, by, 0ul, bk, bn, 64l, 128l)
+                }, true)
+                st2_kq_exact_gate(t, dev, queue, seat_of(stamp_of(@@enc_kq_st2_k4_exact_mm)), 4, 64, 512, 128) $(enc, bks, bkq, bx, by, bk, bn, doff) {
+                    enc_kq_st2_k4_exact_mm(enc, bks, doff, bks, 0ul, bkq, 0ul, bx, by, 0ul, bk, bn, 64l, 128l)
+                }
+                st2_kq_exact_gate(t, dev, queue, seat_of(stamp_of(@@enc_kq_st2_k4_exact_mm)), 4, 32, 1024, 3072) $(enc, bks, bkq, bx, by, bk, bn, doff) {
+                    enc_kq_st2_k4_exact_mm(enc, bks, doff, bks, 0ul, bkq, 0ul, bx, by, 0ul, bk, bn, 32l, 3072l)
+                }
+                st2_kq_exact_gate(t, dev, queue, seat_of(stamp_of(@@enc_kq_st2_k5_exact_mm)), 5, 64, 512, 128) $(enc, bks, bkq, bx, by, bk, bn, doff) {
+                    enc_kq_st2_k5_exact_mm(enc, bks, doff, bks, 0ul, bkq, 0ul, bx, by, 0ul, bk, bn, 64l, 128l)
+                }
+                st2_kq_exact_gate(t, dev, queue, seat_of(stamp_of(@@enc_kq_st2_k6_exact_mm)), 6, 64, 512, 128) $(enc, bks, bkq, bx, by, bk, bn, doff) {
+                    enc_kq_st2_k6_exact_mm(enc, bks, doff, bks, 0ul, bkq, 0ul, bx, by, 0ul, bk, bn, 64l, 128l)
+                }
                 // the batched-decode q8 GEMM family: dense + fused-QKV ys stride, both twins
                 q8_gemm_b_gate(t, dev, queue, false, 64, 128, 64, 64)
                 q8_gemm_b_gate(t, dev, queue, false, 64, 128, 64, 128)

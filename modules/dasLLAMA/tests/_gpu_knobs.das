@@ -24,8 +24,8 @@ require ?cuda dasllama/dasllama_cuda_asr_dec_fc   // cuda_ctc_stats: the CTC hea
 require ?cuda dasllama/dasllama_cuda_asr_dec   // cuda_wdec_stats, set_cuda_wdec: the whisper decoder on the CUDA home
 require dasllama/dasllama_gpu_tier   // gpu_want_cuda: the home the tier holds
 
-//! the tower families a cell names its seats by: every vision family (their seats follow the GPU home), the TTS seats (the Vulkan
-//! tower's under either home), and each audio family of the engine's `TowerAudioFamily`
+//! the tower families a cell names its seats by: every vision family and the TTS seats (their seats follow the GPU home), and
+//! each audio family of the engine's `TowerAudioFamily`
 enum TowerFamily {
     vision
     tts
@@ -71,8 +71,9 @@ def cuda_tower_asked() : bool {
     }
 }
 
-//! family `fam`'s seats serve on the CUDA home: under the CUDA ask, a vision family or a `CUDA_AUDIO_FAMILIES` row turned on
-def tower_family_cuda(fam : TowerFamily) : bool => cuda_tower_asked() && (fam == TowerFamily.vision || (CUDA_AUDIO_FAMILIES?[fam] ?? false))
+//! family `fam`'s seats serve on the CUDA home: under the CUDA ask, a vision family, the TTS seats or a `CUDA_AUDIO_FAMILIES` row turned on
+def tower_family_cuda(fam : TowerFamily) : bool
+    => cuda_tower_asked() && (fam == TowerFamily.vision || fam == TowerFamily.tts || (CUDA_AUDIO_FAMILIES?[fam] ?? false))
 
 def gpu_knobs() : GpuKnobs {
     var k = GpuKnobs()

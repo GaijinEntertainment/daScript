@@ -301,6 +301,23 @@ def cell_launch(var cp : CellPlanes; t : T?; tag : string; blk : block<(var rl :
     free_transient_cmd(raw)
 }
 
+//! this home's bar of `bars`
+[unused_argument(cp)]
+def home_bar(cp : CellPlanes; bars : HomeBars) : Bar => bars.vulkan
+
+//! the Vulkan device up, else the cell skipped
+def vk_up(t : T?) : bool {
+    return true if (vk_moe_init())
+    t |> skip("no Vulkan device")
+    return false
+}
+
+//! `built`, asserted: the stamps a cell dispatches compiled on the device
+def stamps_built(t : T?; built : bool; what : string) : bool {
+    t |> success(built, "{what} compile on the Vulkan device")
+    return built
+}
+
 //! every plane destroyed and forgotten, the staging kept: the next leg of a case lays its own
 def cell_clear(var cp : CellPlanes) {
     for (dev in cp.dev) {

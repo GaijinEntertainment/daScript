@@ -291,6 +291,17 @@ def moved_off(a, b : array<float>; k : int; bar : Bar) : bool
     => bar.exact ? a[k] != b[k] : abs(a[k] - b[k]) > bar.rel * abs(b[k]) + bar.abs_floor
 let BAR_APPROX = Bar(rel = APPROX_REL)
 
+//! One compare's bar on each home - its arithmetic differs (Metal's precise transcendentals, NVRTC's fast math, each
+//! driver's reassociation) - read through the rig's `home_bar`, so a case body shared by the homes holds each to its own.
+struct HomeBars {
+    metal : Bar = Bar()
+    vulkan : Bar = Bar()
+    cuda : Bar = Bar()
+}
+
+//! `b` on every home
+def home_bars(b : Bar) : HomeBars => HomeBars(metal = b, vulkan = b, cuda = b)
+
 //! The coopmat tiles' bar over the expectation `want`: 2e-2 of the larger magnitude floored at 1, or 4e-3 of `want`'s largest
 //! magnitude - an f16 operand tile rounds every product - the poisoned expectation one plus twice that magnitude off.
 def cm_bar(want : array<float>) : Bar {
@@ -339,6 +350,18 @@ def private bar_at(bar : Bar; g, w, scale : auto(WT); env : array<auto(ET)>; i :
     return WT(env[i])
 }
 
+//! what `bar`'s `rel` multiplies at element `i`: the expectation's largest magnitude `scale` on `rel_of_max`, the element's
+//! envelope on `envelope`, else the larger magnitude floored at 1
+def private rel_scale(bar : Bar; g, w, scale : auto(WT); env : array<auto(ET)>; i : int) : WT {
+    let kind = bar_kind(bar)
+    if (kind == BarKind.rel_of_max) {
+        return scale
+    } elif (kind == BarKind.envelope && i < length(env)) {
+        return WT(env[i])
+    }
+    return max(WT(1), max(abs(g), abs(w)))
+}
+
 //! `g` inside bar `b` of `w`; a NaN on either side never is
 def private inside(exact : bool; g, w, b : auto(WT)) : bool {
     return false if (is_nan(g) || is_nan(w))
@@ -347,7 +370,8 @@ def private inside(exact : bool; g, w, b : auto(WT)) : bool {
 
 //! A cell's verdict on `got` against `want` (float or double) at `bar`: every element inside it and the two of one length (a
 //! NaN on either side, and every element past the shorter one's end, is off); the largest difference logged with its element
-//! (`shape`) and the bar there, or on the exact bar the count and the first differing element; the poisoned expectation
+//! (`shape`) and the bar there, and the relative reading - the largest difference over what the bar's `rel` multiplies there
+//! (`rel_scale`), the tightest `rel` that passes - or on the exact bar the count and the first differing element; the poisoned expectation
 //! landing outside. The count off.
 def check(t : T?; tag : string; got : array<float>; want : array<auto(WT)>; bar : Bar; shape : Shape) : int {
     let none : array<WT -const>
@@ -407,9 +431,15 @@ def check_count(got : array<float>; want : array<auto(WT)>; bar : Bar; env : arr
 //! A control's verdict under `tag`: every element of `got` and `want` finite, and `check_count` of them at `bar` above 0 - a NaN
 //! counts as off there, so it would pass a control that read it unchecked
 def check_exceeds(t : T?; tag : string; got : array<float>; want : array<auto(WT)>; bar : Bar) {
+    let none : array<WT -const>
+    check_exceeds(t, tag, got, want, bar, none)
+}
+
+//! `check_exceeds` on an `envelope` or `per_element` bar: `env` holds each element's envelope or its own bar
+def check_exceeds(t : T?; tag : string; got : array<float>; want : array<auto(WT)>; bar : Bar; env : array<auto(ET)>) {
     let finite = all_finite(got) && all(want, $(w) => !is_nan(w) && abs(w) < WT(INFINITE_DIFF))
     t |> success(finite, "{tag}: every element the control reads is finite")
-    let outside = check_count(got, want, bar)
+    let outside = check_count(got, want, bar, env)
     var worst = 0.0
     for (g, w in got, want) {
         worst = max(worst, nan_wide_diff(g, float(w)))
@@ -428,12 +458,17 @@ def check(t : T?; tag : string; got : array<float>; want : array<auto(WT)>; bar 
     var worst = WT(0)
     var worst_at = 0
     var worst_bar = WT(0)
+    var worst_rel = WT(0)
     var logged = 0
     for (i in range(n)) {
         let g = WT(got[i])
         let w = want[i]
         let b = bar_at(bar, g, w, scale, env, i)
         let d = (is_nan(g) || is_nan(w)) ? WT(INFINITE_DIFF) : abs(g - w)
+        let sc = rel_scale(bar, g, w, scale, env, i)
+        if (sc > WT(0)) {
+            worst_rel = max(worst_rel, d / sc)
+        }
         if (!inside(exact, g, w, b)) {
             first = min(first, i)
             if (!exact && logged < 6) {
@@ -452,7 +487,7 @@ def check(t : T?; tag : string; got : array<float>; want : array<auto(WT)>; bar 
     if (length(got) != length(want)) {
         to_log(LOG_ERROR, "{tag}: the kernel holds {length(got)} elements, the reference {length(want)}\n")
     }
-    let verdict = exact ? "{bad} of {total} elements differ, the first at {element_at(first, shape)}" : "{bad} of {total} elements outside the bar, the largest difference {worst} at {element_at(worst_at, shape)} against a bar there of {worst_bar}"
+    let verdict = exact ? "{bad} of {total} elements differ, the first at {element_at(first, shape)}" : "{bad} of {total} elements outside the bar, the largest difference {worst} at {element_at(worst_at, shape)} against a bar there of {worst_bar}, the relative reading {worst_rel}"
     to_log(LOG_INFO, "{tag}: {verdict}\n")
     t |> success(bad == 0, "{tag}: {verdict}")
     let at = bar.poison_at < 0 ? n - 1 : bar.poison_at

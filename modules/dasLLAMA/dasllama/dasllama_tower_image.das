@@ -148,6 +148,22 @@ def tower_flavor_registered(f; dev : TowerDev; who : string) {
     }
 }
 
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def tower_bake_block(f; var st; var spent : table<uint64>; who : string) {
+    tower_flavor_registered(f, st.e.dev_backend, who)
+    var inscope b : TowerDevBuild
+    if (!invoke(f.bake, st.e, b)) {
+        panic("dasLLAMA {who}: the {st.e.dev_backend} driver could not bake the model - its seats decline a model the load handed them")
+    }
+    for (a in b.spent) {
+        spent |> insert(a)
+    }
+    tower_place_block(st, b)
+}
+
+//! `m`'s device block is the one the registered driver lays out (`layout`): a CPU image carries none
+def tower_block_current(m; layout : uint64) : bool => m.dev_backend == TowerDev.none || m.dev_layout == layout
+
 //! the model's flavor set where it carries the device block: on the model, else on the nested tower that does
 def private tower_mark_dev(var e; dev : TowerDev) {
     static_if (typeinfo safe_has_field < dev_backend > (e)) {

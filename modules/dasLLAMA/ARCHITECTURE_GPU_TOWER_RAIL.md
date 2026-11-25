@@ -22,18 +22,19 @@ residual rows, the feeds, the attention panels, the FFN rows, the stems' planes,
 every CUDA plane) - so a chain body names a plane once, by role, and the home it runs on binds it its own way
 (`dasllama_gpu_rail`, with `rail_buf`, the seat at a role on either rail).
 
-Each dispatch lens generates the rail's stamp overload beside the raw one: `[vk_dispatch]` and
-`[cuda_dispatch]` both emit `enc_<name>(rl, roles, pc, wgs)`, where `roles` is the stamp's
-bindings as `TowerBuf` roles in binding order; the signature is one builder both lenses call
-(`lens_rail_overload`, `dasllama_dispatch_scan`), and each lens hands it its own body. On Vulkan the overload builds the set over the
-rail's seats at those roles through the global cached-set table (`vkd_cached_set`, keyed by the
-plane tuple, so a set is built once a residency and never kept on a resident), pushes the args and
-dispatches under the hazard rail (`vkd_rail_dispatch`); on CUDA it launches over the seats'
-addresses on the rail's stream (`cud_rail_launch`). The roles list is a fixed array whose length
-the generic reads at compile time, so no per-stamp helper exists on either home: a chain body
-calling `enc_tower_ln_cls(rl, fixed_array(TowerBuf.x, TowerBuf.xb, TowerBuf.norms), pc, npos)`
-compiles against either rail, and a stamp one home lacks is a compile error at the body, not a
-decline at run time.
+Each dispatch lens generates the rail's stamp overload beside the raw one: `[vk_dispatch]` and `[cuda_dispatch]` both emit
+`enc_<name>(rl, roles, pc, wgs)`, where `roles` is the stamp's bindings as `TowerBuf` roles in binding order; the signature is one
+builder both lenses call (`lens_rail_overload`, `dasllama_dispatch_scan`), and each lens hands it its own body. On Vulkan the
+overload builds the set over the rail's seats at those roles through the global cached-set table (`vkd_cached_set`, keyed by the
+plane tuple, so a set is built once a residency and never kept on a resident), pushes the args and dispatches under the hazard rail
+(`vkd_rail_dispatch`); on CUDA it launches over the seats' addresses on the rail's stream (`cud_rail_launch`). The roles list is a
+fixed array whose length the generic reads at compile time, so no per-stamp helper exists on either home: a chain body calling
+`enc_tower_ln_cls(rl, fixed_array(TowerBuf.x, TowerBuf.xb, TowerBuf.norms), pc, npos)` compiles against either rail, and a stamp one
+home lacks is a compile error at the body, not a decline at run time. Beside it each lens generates `rail_ensure_<name>(rl)`, the
+stamp's `ensure_<name>()` picked by the rail's type: both homes spell the plain ensure alike, so a body generic over the rail builds
+its classes through the rail form. A chain whose planes are the call's own rows - the TTS driver's slabs and scratch slots - seats
+them a dispatch at a time: `rail_seats(rl, fixed_array(a, b, c))` (`dasllama_gpu_rail`) seats the `RailBuf`s at the rail's first
+roles and returns those roles.
 
 What a stamp overload cannot spell is a rail primitive, one name with one argument shape on both homes. A primitive whose
 body is the same text on both homes is written once, generic over the rail (`dasllama_tower_rail`): the f32 tile
@@ -51,7 +52,7 @@ the site's pick splits k the tile writes the `sk` planes), the site's rows and w
 the KHR tile on the rail's `gemm_khr` on Vulkan, else the cm2 stamp at the column the home's pick gives the rows), the
 GEMV's grid and N-column leaf (`rail_gemv_wgs`, `rail_q8_gemv_n`), the bidirectional flash tile over a head count
 (`rail_fa`, its workgroups the home's), the plane copy and zero (`rail_copy`, `rail_zero`), the profile mark (`rail_pt`: the
-Vulkan ledger's timestamp, nothing on CUDA), and the arm question `rail_mulmm` - true on a Vulkan rail off the f16 feed,
+Vulkan ledger's timestamp, CUDA's timed event inside a TTS shot), and the arm question `rail_mulmm` - true on a Vulkan rail off the f16 feed,
 false on CUDA - under which a chain body keeps the Q8_0-feed arm the mul_mm tiles need. A chain body carries that arm whole,
 so the one text serves a card without cooperative matrices too, and a Vulkan seat may put its chain on the mul_mm tiles on
 any card; every stamp the arm names compiles on both homes, the requant feed's (`TowerClampRq`) included, though a CUDA rail
@@ -68,7 +69,10 @@ allocation of the encode is done, and calls the shared body inside one command b
 (`vt_rail_one_shot`, Vulkan) or straight on the stream (CUDA). The body is the family's dispatch sequence once, generic over
 the rail type, in `dasllama_tower_chains`. A generic resolves calls in its own module's scope: the shared primitive module
 re-exports the Vulkan home's rail module (optional, the home may be absent), and each call the CUDA home overloads is
-`_::name(rl, ...)`, resolved where the CUDA home instantiates the body for `CutRail`, so no chain module pulls CUDA in.
+`_::name(rl, ...)`, resolved where the CUDA home instantiates the body for `CutRail`, so no chain module nor the TTS driver pulls CUDA in.
+
+The Metal home has a rail too (`MtRail`, `[metal_rail_dispatch]`) for the chains it takes from the shared text - the TTS
+driver's - with the same four generated names a stamp (`ARCHITECTURE_GPU_TOWER.md#tower-tts-chain`).
 
 ### The plane roles and the site table {#rail-sites}
 
@@ -94,21 +98,17 @@ one site's schedule. A GEMM tile reads a record at its index from the bound plan
 GEMM site counts from byte 0 (`rail_kq_map` refuses a bind past it); the GEMV site alone binds past
 the start, its records viewed out of the plane one at a time.
 
-`RailSite` names the GEMM sites: the block sites (`d`, `ff`, `qkv`, and `fc2`, whose pick may split k
-over the `sk` planes), the conv module's `d2`, the rel table's projection `rel`, a projector tail's
-`tail1` and `tail2`, the stem's `conv2`, a front's `front1` to `front3`, a decoder's `cross` over the
-encoder rows, and the q8 GEMV records' `gemv`. Each home's rail holds a pick a site - `sites :
-VtTile[RAIL_SITES]` on Vulkan (the mul_mm variant or the cm2 token column, and the k split), `sites :
-CutPick[RAIL_SITES]` on CUDA - and every rail holds a `RailSiteBind` a site (`binds`): the planes the
-site's GEMM binds by role (the weight quants and scales, the schedule and its `meta_off`, the f16 feed
-`xh`, the Q8_0 feed `xq` and `xs`) and the weight format its tile decodes (`fmt`). A seat's rail begin
-puts every site on the block sites' planes and the q8 format (`rail_binds_reset`); the seat then
-picks the sites its chain dispatches and binds a site whose planes differ - a front's GEMM over its
-own feed, the cross site over the encoder rows' feed, a kq site over its member's planes. The tile
-(`rail_mm_kq`) reads both: the site's pick decoding the bound format, over the bound planes, at
-record `rid`'s map; a lane whose format differs record to record (gigaam's kq lane) binds the site
-again before the record. The site's split, rows and workgroups and the split's reduce read the pick
-of the site named.
+`RailSite` names the GEMM sites: the block sites (`d`, `ff`, `qkv`, and `fc2`, whose pick may split k over the `sk` planes), the conv
+module's `d2`, the rel table's projection `rel`, a projector tail's `tail1` and `tail2`, the stem's `conv2`, a front's `front1` to
+`front3`, a decoder's `cross` over the encoder rows, and the q8 GEMV records' `gemv`. Each home's rail holds a pick a site - `sites :
+VtTile[RAIL_SITES]` on Vulkan (the mul_mm variant or the cm2 token column, and the k split), `sites : CutPick[RAIL_SITES]` on CUDA -
+and every rail holds a `RailSiteBind` a site (`binds`): the planes the site's GEMM binds by role (the weight quants and scales, the
+schedule and its `meta_off`, the f16 feed `xh`, the Q8_0 feed `xq` and `xs`) and the weight format its tile decodes (`fmt`). A seat's
+rail begin puts every site on the block sites' planes and the q8 format (`rail_binds_reset`); the seat then picks the sites its chain
+dispatches and binds a site whose planes differ - a front's GEMM over its own feed, the cross site over the encoder rows' feed, a kq
+site over its member's planes. The tile (`rail_mm_kq`) reads both: the site's pick decoding the bound format, over the bound planes,
+at record `rid`'s map; a lane whose format differs record to record (gigaam's kq lane) binds the site again before the record. The
+site's split, rows and workgroups and the split's reduce read the pick of the site named.
 
 ### The GEMM, GEMV, copy and zero primitives {#rail-primitives}
 

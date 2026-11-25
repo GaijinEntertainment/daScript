@@ -28,6 +28,7 @@
 		"dot_q8tq4kv" : "vec16",
 		"f32_batch_tile" : "vec4_u4",
 		"gelu_erf" : "vec16",
+		"gemm_f32_tile_gen" : "width128_mr4_nv4_kstep1",
 		"gemm_f32_uk_4x16" : "vec4_u4",
 		"iq2sq8_gemv_gen" : "mr8",
 		"iq2sq8_rm_gemv_gen" : "mr4_accs2",

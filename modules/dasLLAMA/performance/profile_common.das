@@ -1303,14 +1303,51 @@ def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog 
     ]
 }
 
+//! Two entries of one name as one: each of url, bytes, sha256 and recipe one side leaves empty comes from the other, so a
+//! url + sha entry wins whichever row names it first. `differ` lists the fields the two state differently, "" when they
+//! agree.
+def prov_merge(a, b : ProvEntry) : tuple<merged : ProvEntry; differ : string> {
+    var differ : array<string>
+    if (!empty(a.url) && !empty(b.url) && a.url != b.url) {
+        differ |> push("url")
+    }
+    if (a.bytes != 0l && b.bytes != 0l && a.bytes != b.bytes) {
+        differ |> push("bytes")
+    }
+    if (!empty(a.sha256) && !empty(b.sha256) && a.sha256 != b.sha256) {
+        differ |> push("sha256")
+    }
+    var merged = a
+    merged.url = empty(a.url) ? b.url : a.url
+    merged.bytes = a.bytes == 0l ? b.bytes : a.bytes
+    merged.sha256 = empty(a.sha256) ? b.sha256 : a.sha256
+    merged.recipe = empty(a.recipe) ? b.recipe : a.recipe
+    return (merged = merged, differ = join(differ, ", "))
+}
+
+def private prov_add_companion(var out : array<ProvEntry>; var at : table<string; int>; c : ProvEntry) {
+    let i = at?[c.name] ?? -1
+    if (i < 0) {
+        at |> insert(c.name, length(out))
+        out |> push(c)
+        return
+    }
+    let m = prov_merge(out[i], c)
+    if (!empty(m.differ)) {
+        panic("provenance: two rows name {c.name} with different {m.differ}")
+    }
+    out[i] = m.merged
+}
+
 //! Every provenance-carrying file of [[model_specs]] + [[asr_catalog]] the two filters admit: a spec's own pin where
 //! `spec_on` takes the row, the companions `companion_on` takes beside it, then every ASR carrier and companion.
+//! A companion two rows name is one entry, [[prov_merge]]d; two that state different pins panic by name.
 def private provenance_walk(spec_on : block<(s : ModelSpec) : bool>; companion_on : block<(s : ModelSpec; c : ProvEntry) : bool>) : array<ProvEntry> {
     var inscope specs <- model_specs()
     var inscope aspecs <- asr_catalog()
     var out : array<ProvEntry>
     out |> reserve(length(specs) + length(aspecs) + 16)   // + a few companions per pinned spec
-    var inscope seen : table<string>   //! a companion two rows pin (each row's cell consumes it) is one entry: the first row's
+    var inscope at : table<string; int>
     for (s in specs) {
         continue if (!invoke(spec_on, s))
         if (!empty(s.url) || !empty(s.recipe)) {
@@ -1318,9 +1355,8 @@ def private provenance_walk(spec_on : block<(s : ModelSpec) : bool>; companion_o
                 bytes = s.bytes, sha256 = s.sha256, recipe = s.recipe, quantize = s.quantize))
         }
         for (c in s.companions) {
-            if (invoke(companion_on, s, c) && !(seen |> key_exists(c.name))) {
-                seen |> insert(c.name)
-                out |> push(c)
+            if (invoke(companion_on, s, c)) {
+                prov_add_companion(out, at, c)
             }
         }
     }
@@ -1329,10 +1365,7 @@ def private provenance_walk(spec_on : block<(s : ModelSpec) : bool>; companion_o
             out |> push(a.prov)
         }
         for (c in a.companions) {
-            if (!(seen |> key_exists(c.name))) {
-                seen |> insert(c.name)
-                out |> push(c)
-            }
+            prov_add_companion(out, at, c)
         }
     }
     return <- out
@@ -2054,6 +2087,14 @@ def tts_seat_verdict(calls, served : array<int>) : string {
         every = every && s == c
     }
     return !any_served ? "none" : (every ? "all" : "partial")
+}
+
+def tts_row_backend(gpu : bool; verdict : string; cuda_served : bool) : string {
+    //! a TTS das row's backend: metal on the Metal arm, under an `all` verdict the discrete home that served
+    //! (cuda or vulkan), else cpu
+    return "metal" if (gpu)
+    return "cpu" if (verdict != "all")
+    return cuda_served ? "cuda" : "vulkan"
 }
 
 //! The one test key both engines record a TTS cell under: the sentence count and the voice.

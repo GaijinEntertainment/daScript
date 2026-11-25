@@ -40,14 +40,19 @@ def mb(bytes : int64) : int => int(bytes / 1000000l)
 //
 // A Session is one generation stream: the attention KV cache plus scratch buffers.
 // The KV cache is sized to config.seq_len AT create_session TIME. It stores
-// codec-encoded bytes, not floats: f16 by default (2 bytes per value; KVDtype.q8_0
-// halves that, tq4 goes further). Models ship with big native contexts (Llama-3's
+// codec-encoded bytes, not floats: f16 is 2 bytes per value,
+// KVDtype.q8_0 halves that, tq4 goes further. The default is
+// KVDtype.automatic, and default_kv_dtype() says what it names here:
+// f16, or q8_0 on a CPU that converts half floats in software. Models
+// ship with big native contexts (Llama-3's
 // native seq_len is 131072 => gigabytes of KV per session), so cap seq_len to the
 // context you actually need BEFORE creating sessions.
 
 def section_kv_cache(var m : Model) {
     let c = m.config
-    let native_kv = 2l * c.n_layers * c.seq_len * c.kv_dim * 2l   // K + V planes at the default f16 codec, 2 bytes per value
+    // K + V planes at the f16 codec, 2 bytes per value
+    let native_kv = 2l * c.n_layers * c.seq_len * c.kv_dim * 2l
+    print("the default K/V codec on this machine: {default_kv_dtype()}\n")
     print("native ctx {c.seq_len} -> KV cache would be ~{mb(native_kv)} MB per session\n")
     m.config.seq_len = min(m.config.seq_len, CTX)
     var s = create_session(m)

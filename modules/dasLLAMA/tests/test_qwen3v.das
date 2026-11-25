@@ -565,7 +565,7 @@ def test_qwen3v_omni(t : T?) {
 def private qwen3vl_4b_decoder(t : T?; var emb : VisionEmbedder) {
     unsafe {
         t |> run("the Qwen3-VL 4B decoder under the qwen3v deepstack tower") @capture(& emb)(t : T ?) {
-            return if (!vision_chat_gate(t, "", "Qwen3VL-4B-Instruct-Q8_0.gguf", 0))
+            return if (!vision_chat_gate(t, "qwen3", "Qwen3VL-4B-Instruct-Q8_0.gguf", 0))
             with_cpu_and_gpu_model(t, "vision", "Qwen3VL-4B-Instruct-Q8_0.gguf", HOST_CTX_4B, [cpu_cells_form(QuantMode.q8)]) $(var m; form) {
                 vision_chat_cell(t, "the Qwen3-VL 4B image turn: deepstack wide rows through the chat, then the caption", m, form, false, emb, @@test_vision_chat_deepstack)
                 vision_chat_cell(t, "pre-encoded wide rows through add_user_image_rows_ reproduce the embedder walk", m, form, false, emb, @@test_vision_chat_rows_seam)

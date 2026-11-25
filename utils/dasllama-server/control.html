@@ -2115,7 +2115,7 @@ $("b-speak").addEventListener("click", () => {
 const FIELDS = [
     { k: "port", t: "int", primary: true },
     { k: "quant", t: "sel", o: ["q8", "fp32", "q4", "q8_0", "q4_0", "q4_k", "q5_k", "q6_k", "mxfp4", "f16", "bf16"] },
-    { k: "kv_dtype", t: "sel", o: ["f16", "f32", "q8_0", "tq4"] },
+    { k: "kv_dtype", t: "sel", o: ["auto", "f16", "f32", "q8_0", "tq4"] },
     { k: "ctx", t: "int" }, { k: "max_tokens", t: "int" },
     { k: "streams", t: "int" },
     { k: "threads", t: "int" }, { k: "team_dispatch", t: "sel", o: ["hybrid", "team", "inline"] },
@@ -2319,7 +2319,7 @@ function renderGpu(status) {
 // Each row is one served model. Blank cells = the ModelEntry inherit sentinels, OMITTED on save
 // so the TOML stays name+path per model unless something is genuinely overridden.
 const QUANT_OPTS = ["", "q8", "fp32", "q4", "q8_0", "q4_0", "q4_k", "q5_k", "q6_k", "mxfp4", "f16", "bf16"];
-const KV_OPTS = ["", "f16", "f32", "q8_0", "tq4"];
+const KV_OPTS = ["", "auto", "f16", "f32", "q8_0", "tq4"];
 let roster = [];         // {name, path, backend, ctx, quant, kv_dtype, streams, chunk, page_rows, prefix, mtp, rope_scaling, rope_scale, yarn_orig_ctx, image_mmproj, audio_mmproj, drafter, def, adv}
 const ROPE_OPTS = ["", "yarn", "linear", "none"];
 let gpuStatus = null;    // /config status.gpu — decline reason for the effective badge hover
@@ -3288,12 +3288,8 @@ function ttsEnableArm(strip, label, present, kept) {
     strip.append(b, label);
 }
 
-// the download ladder over /catalog's `tts` list: a model on disk that can speak - a Pocket file
-// stands alone, a phoneme family reads the two front-end packs beside it - goes straight to the
-// enable; otherwise the packs first (every phoneme family loads them), then the models. The rail
-// runs one download at a time, so an absent pack pair is one button and the card re-offers what
-// is still missing. False back = the catalog has no tts list to offer from, and the caller says
-// so instead.
+// the download ladder over /catalog's `tts` list. False back = the catalog has no tts list to
+// offer from, and the caller says so instead.
 function ttsOfferArm(strip, dl, kept) {
     const items = (catState && catState.tts) || [];
     if (!items.length) return false;
@@ -3305,20 +3301,28 @@ function ttsOfferArm(strip, dl, kept) {
         return true;
     }
     const missingPacks = items.filter(i => i.pack && !i.present);
+    // a named pack with no row is one the route found on disk
+    const absentPacksOf = m => m.needs_packs ? missingPacks.filter(p => (m.packs || []).includes(p.file)) : [];
     const models = items.filter(i => !i.pack);
-    const present = models.filter(m => m.present && (!m.needs_packs || !missingPacks.length))
-        .sort((a, b) => a.bytes - b.bytes);
-    if (present.length) {
-        ttsEnableArm(strip, label, present, kept);
+    const bySize = (a, b) => a.bytes - b.bytes;
+    const onDisk = models.filter(m => m.present);
+    const ready = onDisk.filter(m => !absentPacksOf(m).length).sort(bySize);
+    if (ready.length) {
+        ttsEnableArm(strip, label, ready, kept);
         return true;
     }
-    if (missingPacks.length) {
-        const bytes = missingPacks.reduce((a, p) => a + p.bytes, 0);
+    const waiting = onDisk.sort(bySize)[0];
+    const next = waiting || models.filter(m => (m.packs || []).length).sort(bySize)[0];
+    const wanted = next ? absentPacksOf(next) : [];
+    if (wanted.length) {
+        const bytes = wanted.reduce((a, p) => a + p.bytes, 0);
         const b = miniButton("download the front-end packs (" + fmtSize(bytes) + ")",
-            () => startTtsDownload(missingPacks[0].file));
-        b.title = "the text normalizer and grapheme-to-phoneme tables every phoneme family loads";
+            () => startTtsDownload(wanted[0].file));
+        b.title = "the text normalizer and grapheme-to-phoneme tables " + ttsName(next.file) + " reads beside it";
         b.disabled = dlBusy(dl);
-        label.textContent = "add speech synthesis — /v1/audio/speech and the speech studio above";
+        label.textContent = waiting
+            ? ttsName(waiting.file) + " is downloaded — it speaks once these packs sit beside it"
+            : "add speech synthesis — /v1/audio/speech and the speech studio above";
         strip.append(b, label);
         return true;
     }

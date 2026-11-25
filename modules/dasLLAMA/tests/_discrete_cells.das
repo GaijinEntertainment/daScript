@@ -38,6 +38,8 @@ require ?cuda dasllama/dasllama_cuda_classes_blocks
 require ?cuda dasllama/dasllama_cuda_classes_asr
 require ?cuda dasllama/dasllama_cuda_classes_dflash
 require ?cuda _cuda_cell
+require ?das_metal dasllama/dasllama_metal_classes_tts
+require ?das_metal _metal_cell
 require _compares
 require _kernel_oracles
 require _attn_oracle

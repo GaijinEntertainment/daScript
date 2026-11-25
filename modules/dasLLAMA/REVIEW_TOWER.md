@@ -2,19 +2,21 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_GPU_TOWER.md`, `ARCHITECTURE_GPU_TOWER_VULKAN.md`,
-`ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md`, `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`,
+`ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md`, `ARCHITECTURE_GPU_TOWER_TTS.md`,
 `ARCHITECTURE_MEDIA.md`. Planned work: `followup_metal.md`,
 `followup_vulkan.md`.
 
-A tower driver file is `dasllama/dasllama_metal_tower.das`, `dasllama/dasllama_vulkan_tower.das`,
-`dasllama/dasllama_vulkan_tts.das` or a `dasllama/dasllama_cuda_tower*.das` file. An ASR-decoder
-driver file is a `dasllama/dasllama_metal_asr_dec*.das`, `dasllama/dasllama_vulkan_asr_dec*.das` or
-`dasllama/dasllama_cuda_asr_dec*.das` file. A tower is one backend's (Metal, Vulkan or CUDA) driver
-set that runs a family's encoder or synthesis stages through hooks - stage seats the CPU chain calls,
-drop hooks, reload or weights-epoch listeners - that its tower driver files register, from an `[init]`
-or from an install function an `[init]` hands `register_gpu_home`, directly or through the functions
-that install calls (`ARCHITECTURE_GPU_TOWER.md#tower-reach`). A hook an ASR-decoder driver file
-registers the same way is an ASR-decoder seat of its backend's tower.
+A tower driver file is a `dasllama/` file that registers a seat for a family's encoder or synthesis stage - a
+hook slot the CPU chain calls in place of that stage - from an `[init]` or from an install function an `[init]`
+hands `register_gpu_home`, or a `dasllama/` file holding a generic function that takes a GPU home's rail as an
+argument and that such a file instantiates. An
+ASR-decoder driver file is a `dasllama/dasllama_metal_asr_dec*.das`, `dasllama/dasllama_vulkan_asr_dec*.das` or
+`dasllama/dasllama_cuda_asr_dec*.das` file. A tower is one backend's (Metal, Vulkan or CUDA) driver set that runs
+a family's encoder or synthesis stages through hooks - stage seats the CPU chain calls, drop hooks, reload or
+weights-epoch listeners - that its tower driver files register, from an `[init]` or from an install function an
+`[init]` hands `register_gpu_home`, directly or through the functions that install calls
+(`ARCHITECTURE_GPU_TOWER.md#tower-reach`). A hook an ASR-decoder driver file registers the same way is an
+ASR-decoder seat of its backend's tower.
 
 A diff reaches a tower when a function it touches is one of those hooks, calls one directly, or is
 reachable from one through any chain of calls, or when it touches a kernel class or builder a driver
@@ -41,7 +43,8 @@ run, the category holding its decoder cell) and `test_qwen3v_4b` in
 `tests/test_whisper.das`, `tests/test_audio.das`, `tests/test_audio_embedder.das`, `tests/test_vad.das`,
 `test_rnnt_device_twin` in `tests/test_rnnt.das` and `test_gigaam_carriers_e2e_rnnt` and
 `test_gigaam_carrier_rnnt` in `tests/test_gigaam.das`; the TTS seat tests; `test_metal_prefill_kernels`
-in `tests/test_metal_prefill_kernels.das`, the gate of the kernels the tower chains share; and the
+in `tests/test_metal_prefill_kernels.das`, the gate of the kernels the tower chains share;
+`tests/test_metal_tts_kernels.das`, the gate of the TTS seats' kernels and profile ledger; and the
 audio-tower run, `tests/test_model_image.das` with the `mtower` arm and no `--family` filter
 (`DASLLAMA_TEST_FAMILY` unset), with `metal_tower_stats()`'s encode count rising across the run.** A
 family filter skips other families' cells; a shared path or borrowed kernel reaches the ASR decoder
@@ -61,18 +64,18 @@ and `test_whisper_turbo` in `tests/test_whisper.das`, `test_qwen2audio_carrier`,
 `tests/test_vulkan_tts_pocket_kernels.das`, and the TTS seat tests; each cell of those `[test]`s that
 runs a stage on the tower sees the counter of every hook the cell covers rise.**
 
-**A diff reaching the CUDA tower runs, on a build carrying dasCUDA on a machine with a CUDA
-device and with `DASLLAMA_GPU=1` and `DASLLAMA_CUDA=1` set, `test_gemma4v_e2b` in
-`tests/test_gemma4v.das`, `test_gemma3v_tower` in `tests/test_gemma3v.das`, `test_qwen3v_4b` in
-`tests/test_qwen3v.das`, `test_qwen25v_tower` in `tests/test_qwen25v.das`, `test_gemma4uv_embedder`
-in `tests/test_gemma4uv.das`, and the audio files `tests/test_audio.das`,
-`tests/test_audio_embedder.das`, `tests/test_whisper.das`, `tests/test_cuda_tower_whisper_chain.das`,
-`tests/test_gigaam.das`, `tests/test_rnnt.das` and `tests/test_vad.das`, and the CUDA tower kernel
-gates `tests/test_cuda_tower_front.das`, `tests/test_cuda_tower_blocks.das` and
-`tests/test_cuda_tower_asr.das`; each twin and device-twin cell of the run sees the counter of every
-hook the cell covers rise; the cells of `test_gemma4v_e2b` and `test_gemma4uv_embedder` that compare
-against the encode dumps of the reference build (the third-party engine this module's figures compare with) run, and one
-that skips for a missing dump counts as not run.**
+**A diff reaching the CUDA tower runs, on a build carrying dasCUDA on a machine with a CUDA device and with
+`DASLLAMA_GPU=1` and `DASLLAMA_CUDA=1` set, `test_gemma4v_e2b` in `tests/test_gemma4v.das`,
+`test_gemma3v_tower` in `tests/test_gemma3v.das`, `test_qwen3v_4b` in `tests/test_qwen3v.das`,
+`test_qwen25v_tower` in `tests/test_qwen25v.das`, `test_gemma4uv_embedder` in `tests/test_gemma4uv.das`, and
+the audio files `tests/test_audio.das`, `tests/test_audio_embedder.das`, `tests/test_whisper.das`,
+`tests/test_cuda_tower_whisper_chain.das`, `tests/test_gigaam.das`, `tests/test_rnnt.das` and
+`tests/test_vad.das`, the TTS seat tests, and the CUDA kernel gates `tests/test_cuda_tower_front.das`,
+`tests/test_cuda_tower_blocks.das`, `tests/test_cuda_tower_asr.das` and `tests/test_cuda_tts_kernels.das`;
+each twin and device-twin cell of the run sees the counter of every hook the cell covers rise; the cells of
+`test_gemma4v_e2b` and `test_gemma4uv_embedder` that compare against the encode dumps of the reference build
+(the third-party engine this module's figures compare with) run, and one that skips for a missing dump counts
+as not run.**
 
 **A change to a Vulkan or CUDA ASR-decoder driver file, to a kernel class it dispatches, or to a
 function it calls that another file defines runs `test_whisper_vulkan_wdec_lifetime`
@@ -128,10 +131,10 @@ scratch buffers and schedule table), directly or through `vt_ln_ready`; on CUDA 
 chain's x buffer; a path that rebuilds the weights or scratch on its own drops those rows unread,
 and the CPU block loop then reads stale rows.
 
-**A diff that adds or changes a route in a tower driver file, an ASR-decoder driver file or a chain
-body they run (`dasllama/dasllama_*_chains*.das`) puts every kernel class or builder that route
-dispatches in the route's ensure chain - the pipeline builds the route checks before it serves.** A
-class outside the chain dispatches into a null pipeline when its build failed.
+**A diff that adds or changes a route a tower or ASR-decoder seat serves - one dispatch path the seat can take -
+puts every kernel class or builder that route dispatches, wherever the dispatching function sits, in the route's
+ensure chain, the pipeline builds the route checks before it serves.** A class outside the chain dispatches into a
+null pipeline when its build failed.
 
 **A diff that adds or changes a family's flavor pick - the `*_serves_model` function a GPU driver
 registers, which the load calls before staging to choose the family's CPU image (the `.dlim` whose

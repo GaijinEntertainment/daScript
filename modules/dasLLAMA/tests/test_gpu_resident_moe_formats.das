@@ -16,7 +16,8 @@ options _dasllama_internal = true
 // form's feeds answer every cell. Skips: a file not
 // minted (the 35B NVFP4 not stocked - it is downloaded, not minted), DASLLAMA_PARITY_FULL unset for the large tier, no armed
 // Vulkan tier, the knob cells where the plan found no room for the pool, the expert-cache cell under
-// DASLLAMA_IMAGE=0 (it reads the lane). Run the format cells under DASLLAMA_IMAGE=0: a dozen carriers would mint a dozen
+// DASLLAMA_IMAGE=0 (it reads the lane), the NVFP4 cut's FP4-chain fault cell (the CUDA home's alone) where the card sits
+// under the FP4 rung or DASLLAMA_CUDA_MMQ=0 stands the route down. Run the format cells under DASLLAMA_IMAGE=0: a dozen carriers would mint a dozen
 // images beside them (the image rail's own coverage is the image suites'), and the planes in RAM reach the same kernels.
 
 require dastest/testing_boost public
@@ -33,6 +34,10 @@ require _cpu_gpu_model   // with_cpu_and_gpu_model, the forms, FeedRows
 require _format_census   // census_cell: the cut's every site in its own format
 require _kv_codec_cells   // codec_env_why: the block's f16 mirror ask
 require daslib/strings_boost   // split: a fixture's census sites
+require dasllama/dasllama   // create_session: the fault form's refused window
+require dasllama/dasllama_cuda_decode   // cuda_window_planes_held: the FP4-chain fault form's planes
+require daslib/rtti   // this_context().last_exception: the refused window's text
+require strings   // find: the refusal's words
 
 let private QWEN15_MOE_EXPERTS = 60l   //! the carrier's routed experts a layer (Qwen1.5-MoE-A2.7B): a pool at or past it never fills
 let private SHARE_CELL_SLOTS = 16l     //! the share cell's pool: a quarter of the experts, so a step's misses outrun the free slots
@@ -511,11 +516,44 @@ struct private Nv4CutRows {
     kv : KVDtype
 }
 
+//! the FP4 expert chain's planes are sized where the routed block's stacks are, on the CUDA home: under the FP4-chain
+//! fault seat (the fault form, `cuda_mmq_fault`) the driver arms, holds no window chain, and a prompt window refuses by name
+def private fp4_chain_fault_cell(t : T?; var m : Model) {
+    unsafe {
+        t |> run("{NV4_CUT.file}: an FP4 expert chain whose planes found no room leaves the driver armed, and a prompt window refuses by name") @capture(& m)(t : T ?) {
+            if (!cuda_fp4_chain_served()) {
+                t |> skip("the card sits under the FP4 rung, or DASLLAMA_CUDA_MMQ=0 stands the route down: no routed stack rides the FP4 expert chain, so the seat has no planes to refuse")
+                return
+            }
+            t |> success(moe_gpu_resident_active(), "under the seat the whole-model driver still arms (the load log names any decline)")
+            t |> success(!cuda_window_planes_held(), "... holding no window chain: the FP4 expert chain's planes are part of it")
+            var inscope prompt <- resident_prompt(40l)
+            var inscope toks <- resident_feed(2l)
+            var s <- create_session(m, mirror_kv_dtype())
+            var why = ""
+            try {
+                var rows <- feed_logits(m, s, prompt, toks)
+                delete rows
+            } recover {
+                why = this_context().last_exception
+            }
+            t |> success(find(why, "found no room on the device when the driver armed") >= 0, "a prompt window refuses by name: '{why}'")
+            delete s
+        }
+    }
+}
+
 //! one form's share: on the device the cut's blocks, the admission,
 //! the census, each prompt's feed - the meet handing the host experts,
 //! the rare rail reading the window's rows and the fed steps' picks off
-//! the device planes; on the CPU the same prompts on the device's codec
-def private nv4_cut_rows(t : T?; var r : Nv4CutRows; m : Model; form : ModelForm) {
+//! the device planes; on the CPU the same prompts on the device's codec;
+//! the fault form's share is its refusal cell alone, and the form after
+//! it holds the window chain again
+def private nv4_cut_rows(t : T?; var r : Nv4CutRows; var m : Model; form : ModelForm) {
+    if (form.cuda_mmq_fault) {
+        fp4_chain_fault_cell(t, m)
+        return
+    }
     if (!form.on_gpu) {
         return if (form.kv != r.kv || empty(r.gpu))
         r.cpu |> reserve(length(r.prompts))
@@ -525,6 +563,9 @@ def private nv4_cut_rows(t : T?; var r : Nv4CutRows; m : Model; form : ModelForm
         return
     }
     r.kv = form.kv
+    if (gpu_want_cuda()) {
+        r.h |> held_fact(cuda_window_planes_held(), "the fault seat lifted, the next load holds its window chain before any prompt (the fault form's control)")
+    }
     cut_held(r.h, m, NV4_CUT_BLOCKS)
     let host_layers = moe_fixture_admitted(r.h, m, NV4_CUT)
     return if (host_layers < 0l)
@@ -548,12 +589,15 @@ def test_moe_formats_NVFP4_30B_cut(t : T?) {
     if (!empty(why)) {
         r.h |> held_skip("the cut's f16 mirror: {why}")
     } else {
+        if (gpu_want_cuda()) {   //! the fault form first: the form after it is the load that finds the seat lifted
+            forms |> push(device_form(regions = 1l, host_layers = NV4_CUT.host_layers_ask, cuda_mmq_fault = true) |> asking(KVDtype.f16))
+        }
         forms |> push(device_form(regions = 1l, host_layers = NV4_CUT.host_layers_ask) |> asking(KVDtype.f16))
     }
     let pins = pin_stream(MOE_HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
     var ran = false
     with_cuda_mmq_winners() {
-        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-30B-A3B-7L-NVFP4-pure-local.gguf", MOE_CUT_CTX, forms) $(m, form) {
+        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-30B-A3B-7L-NVFP4-pure-local.gguf", MOE_CUT_CTX, forms) $(var m, form) {
             nv4_cut_rows(t, r, m, form)
         }
     }

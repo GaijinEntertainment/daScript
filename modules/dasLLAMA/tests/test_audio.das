@@ -472,7 +472,7 @@ def private ultravox_1b_tower(t : T?; tw : AudioTower) {
     }
 }
 
-[test(description = "mmproj-ultravox-1b-f32.gguf loads once: its exact lane's CPU image is a stack-8 projector with proj_dim 2048 read from mm2 and 187 tokens a chunk, and its CPU encode of a constant mel matches llama-mtmd-debug token 0, mean and max")]
+[test(description = "mmproj-ultravox-1b-f32.gguf loads once: its exact lane's CPU image is a stack-8 projector with proj_dim 2048 read from mm2 and 187 tokens a chunk, and its CPU encode of a constant mel matches llama-mtmd-debug token 0, mean and max - on a build that carries a GPU home with no tier armed too, where the projector tail's seat declines without touching a device")]
 def test_ultravox_tower(t : T?) {
     return if (!family_on(t, "ultravox"))
     with_model_once(t, "audio", "mmproj-ultravox-1b-f32.gguf", ["image_f32"], @@aud_stage_key, @@aud_stage, @@aud_form) $(var h; form) {

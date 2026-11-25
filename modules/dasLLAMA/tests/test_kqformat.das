@@ -20,6 +20,7 @@ require strings
 require dasllama/dasllama_gemm_schema   // the int-id delegation under test
 require ?vulkan dasllama/dasllama_vulkan_common   // DAT_KEY_FMTS, the decode block's layer-key radix
 require daslib/enum_trait   // the radix guard walks the whole KqFmt enum
+require daslib/rtti   // this_context().last_exception: a refusal read as text
 
 [test(description = "With dasVulkan, every `KqFmt` member's int id sits strictly under `DAT_KEY_FMTS`, so the decode block's layer key never hands one layer another layer's mirror")]
 def test_kqfmt_under_dat_key_radix(t : T?) {
@@ -619,6 +620,75 @@ def test_kq_tile_stamped(t : T?) {
     t |> success(kq_tile_stamped(k6, "q8/b k4", a, STAMPED_TAILS), "without `!b32` the superblock member keeps its tails (the control)")
     t |> success(kq_tile_stamped(q8, "q8/b k4", a, STAMPED_TAILS), "a pair word keeps the member's other tail")
     t |> success(!kq_tile_stamped(k4, "q8/b k4", a, STAMPED_TAILS), "... and the member word still drops it")
+}
+
+//! the members a fixture stamp arms: Q8_0 and Q4_K, and with tails Q8_0's `a` alone
+let private FX_STAMP_SKIP = "k5 k6 q40 q51 iq4xs k3 iq3s iq3xxs iq4nl k2 iq2s iq2xs iq2xxs mx4 iq4nl32 iq3s4 q4032 q5032 nv4 q8/b"
+
+def private note_q8_fx_cls(var hit : int&) {
+    hit = int(KqFmt.q8)
+}
+
+def private note_kq_fx_k4_cls(var hit : int&) {
+    hit = int(KqFmt.k4)
+}
+
+def private note_q8_fx_a(var hit : int&) {
+    hit = int(KqFmt.q8) * 10
+}
+
+def private note_kq_fx_k4_a(var hit : int&) {
+    hit = int(KqFmt.k4) * 10
+}
+
+def private note_kq_fx_k4_b(var hit : int&) {
+    hit = int(KqFmt.k4) * 10 + 1
+}
+
+//! the member arm a fixture `kq_tile_stamp` over `FX_STAMP_SKIP` runs for format slot `fmt`
+def private fx_stamp_arm(fmt : int) : int {
+    var hit = -1
+    kq_tile_stamp(fmt, FX_STAMP_SKIP, "fx") <| $() {
+        tile_note_cls(hit)
+    }
+    return hit
+}
+
+//! ... and the (member, tail) arm of the tailed form
+def private fx_stamp_tail_arm(fmt, tail : int) : int {
+    var hit = -1
+    kq_tile_stamp(fmt, FX_STAMP_SKIP, "fx", tail, STAMPED_TAILS) <| $() {
+        tile_note(hit)
+    }
+    return hit
+}
+
+//! what `arm` panics with, "" where it returns
+def private stamp_refusal(arm : block<() : int>) : string {
+    var why = ""
+    try {
+        invoke(arm)
+    } recover {
+        why = this_context().last_exception |> rtrim
+    }
+    return why
+}
+
+[test(description = "`kq_tile_stamp` runs the arm of the format slot it is handed, and of the tail under the tailed form, and panics naming the slot on a member its skip words drop and naming the tail and the member on a pair its words drop")]
+def test_kq_tile_stamp_refuses_an_unarmed_slot(t : T?) {
+    let q8 = int(KqFmt.q8)
+    let k4 = int(KqFmt.k4)
+    let k5 = int(KqFmt.k5)
+    t |> equal(fx_stamp_arm(q8), q8, "the Q8_0 slot runs the Q8_0 arm")
+    t |> equal(fx_stamp_arm(k4), k4, "the Q4_K slot runs the Q4_K arm")
+    let slot = stamp_refusal() <| $ => fx_stamp_arm(k5)
+    t |> success(find(slot, "format slot {k5} has no tile arm") >= 0, "a slot the words drop panics naming it: '{slot}'")
+    t |> equal(stamp_refusal() <| $ => fx_stamp_arm(k4), "", "an armed slot panics nothing (the control)")
+    t |> equal(fx_stamp_tail_arm(q8, 0), q8 * 10, "Q8_0's first tail runs")
+    t |> equal(fx_stamp_tail_arm(k4, 1), k4 * 10 + 1, "Q4_K's second tail runs")
+    let pair = stamp_refusal() <| $ => fx_stamp_tail_arm(q8, 1)
+    t |> success(find(pair, "tail 1 has no tile arm for q8") >= 0, "a pair the words drop panics naming the tail and the member: '{pair}'")
+    t |> equal(stamp_refusal() <| $ => fx_stamp_tail_arm(k4, 0), "", "an armed pair panics nothing (the control)")
 }
 
 [test(description = "`metal_kq_scale_form_bytes` names the bytes `metal_kq_scale_form` leaves of a scale plane, for every superblock format: the 16-byte strip of k4 and k5, the split form of the others that move, and the plane as it is for the ones that serve as they are")]

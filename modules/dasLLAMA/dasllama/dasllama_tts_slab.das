@@ -21,14 +21,155 @@ require dasllama/dasllama_rope
 //! k*cin padded to 32] with column j = tap*cin + ci and its bias row beside it, every norm as a scale
 //! and a shift row, an LSTM direction as its input linear and its dense recurrence - written by one
 //! writer that runs twice (a measuring pass sizes the host copy, the second fills it); the slot records
-//! carry element offsets a device driver turns into its own binding offsets; the keys fold the parts'
-//! weight addresses and the q8 lane's repack layout, so a reload or another lane keys differently.
+//! carry element offsets a device driver turns into its own binding offsets.
 
 struct TtsSlabWriter {
     @exact_size host : array<float>   //! sized once from the measure pass; the write pass only bumps `n`
     n : int64
     measure : bool
-    lstm_transposed : bool = true   //! an LSTM recurrence written transposed to [H][4H] (the Vulkan kernel's read), else as the model stores it (Metal's)
+    stored_mask : uint              //! the `KqFmt` members (a bit a member) the driver stages as stored: such a leaf's rows stay out of the slab, and its planes are recorded
+    @exact_size stored : array<TtsStoredPlane>   //! the planes recorded so far this pass, a slot's `stored` the 1-based index here
+    spent : array<uint64>           //! the data address of every weight array the fill pass read: what a device image's staging drops (`TowerDevBuild.spent`)
+}
+
+//! `a`'s address recorded as spent, which a baking staging drops; a temporary's is harmless: no model array shares it meanwhile
+def private tsw_spend(var w : TtsSlabWriter; a : array<auto(T)>) {
+    if (!w.measure && !empty(a)) {
+        w.spent |> push(intptr(unsafe(addr(a[0]))))
+    }
+}
+
+def private tsw_spend_conv(var w : TtsSlabWriter; c : TtsConv1d) {
+    tsw_spend(w, c.w)
+    tsw_spend(w, c.wt)
+    tsw_spend(w, c.wk)
+    tsw_spend(w, c.wtr)
+    tsw_spend(w, c.wkh)
+    tsw_spend(w, c.wtrh)
+    tsw_spend(w, c.wq)
+    tsw_spend(w, c.wqs)
+    tsw_spend(w, c.kq)
+    tsw_spend(w, c.ks)
+}
+
+def private tsw_spend_linear(var w : TtsSlabWriter; l : TtsLinear) {
+    tsw_spend(w, l.w)
+    tsw_spend(w, l.wt)
+    tsw_spend(w, l.wh)
+    tsw_spend(w, l.wq)
+    tsw_spend(w, l.wqs)
+    tsw_spend(w, l.kq)
+    tsw_spend(w, l.ks)
+}
+
+let TTS_STORED_HALVES = 1u << 31u   //! `stored_mask`'s bit for a leaf held as half floats
+
+//! the site that reads a stored plane: a conv's GEMM, a dense layer's, or another reader (a recurrence)
+enum TtsStoredSite {
+    other
+    conv
+    lin
+    lstm   //!< an LSTM direction's recurrence
+}
+
+//! what a stored plane holds: a quant matrix in `fmt`, or half floats in one of the leaves' three layouts
+enum TtsStoredKind {
+    quant
+    half_rows   //!< a dense layer's [rows][k], as the device reads it
+    half_conv   //!< a forward conv's rows-form B operand [taps][cin][cout_s]
+    half_lift   //!< a transposed conv's B operand [cin][taps * cout]
+}
+
+//! A plane a slab left out of its rows: the leaf's own quants or halves, which the driver stages as stored - never a widened copy
+struct TtsStoredPlane {
+    kind : TtsStoredKind
+    fmt : KqFmt          //!< a quant matrix's format: Q8_0, or the K-quant member
+    rows : int64         //!< the quant matrix's rows ...
+    k : int64            //!< ... each `k` wide, whole decode units
+    pad_rows : int64     //!< zero rows the driver stages past them: a dense tile reads its N on the 64 lattice
+    q : uint8 const?     //!< the quants: Q8_0's int8 plane in the load's layout, or the member's quant plane in disk order; a half plane's halves
+    s : uint8 const?     //!< the scales: Q8_0's f32 a block, or the member's scale plane
+    cin : int64          //!< a half conv's geometry: its inputs ...
+    taps : int64         //!< ... its kernel ...
+    cout : int64         //!< ... its outputs ...
+    cout_s : int64       //!< ... and a forward conv's B operand's column stride
+    site : TtsStoredSite //!< its reader; a conv's quant plane carries `cin`, `taps` and `cout` too ...
+    transposed : bool    //!< ... and whether the plane is a transposed conv's lift
+}
+
+//! a stored half plane as a tile's [rows][k] at zeroed `dst`: a dense layer's as is, a conv's W[co][tap*cin+ci], a lift's [tap*cout+co][ci]
+def tts_stored_half_rows(p : TtsStoredPlane; var dst : uint16?) {
+    unsafe {
+        let src = reinterpret<uint16 const?>(p.q)
+        if (p.kind == TtsStoredKind.half_rows) {
+            memcpy(dst, src, uint64(p.rows * p.k * 2l))
+        } elif (p.kind == TtsStoredKind.half_conv) {
+            for (tap in range64(p.taps)) {
+                for (ci in range64(p.cin)) {
+                    let col = tap * p.cin + ci
+                    for (co in range64(p.cout)) {
+                        dst[co * p.k + col] = src[col * p.cout_s + co]
+                    }
+                }
+            }
+        } else {
+            for (ci in range64(p.cin)) {
+                for (tap in range64(p.taps)) {
+                    for (co in range64(p.cout)) {
+                        dst[(tap * p.cout + co) * p.k + ci] = src[(ci * p.taps + tap) * p.cout + co]
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! record `p` where the driver stages its member (`stored_mask`); its 1-based index, 0 where the member stays f32 rows
+def private tsw_store(var w : TtsSlabWriter; p : TtsStoredPlane) : int {
+    return 0 if ((w.stored_mask & (p.kind == TtsStoredKind.quant ? 1u << uint(p.fmt) : TTS_STORED_HALVES)) == 0u)
+    w.stored |> push(p)
+    return length(w.stored)
+}
+
+//! a conv's stored quant plane - a forward conv's with cin on 8, a lift's on 32, a K-quant pair in disk order; 0: its rows go to the slab
+def private tts_conv_stored(var w : TtsSlabWriter; c : TtsConv1d) : int {
+    return 0 if (w.stored_mask == 0u || c.cin % (c.transposed ? 32l : 8l) != 0l)
+    let rows = conv1d_quant_rows(c)
+    let pad = c.transposed ? 0l : round_up(c.cout, 64l) - c.cout
+    if (conv1d_host_halves(c)) {
+        unsafe {
+            return tsw_store(w, TtsStoredPlane(kind = c.transposed ? TtsStoredKind.half_lift : TtsStoredKind.half_conv, rows = rows, k = round_up(conv1d_quant_k(c), 32l),
+                pad_rows = pad, q = addr<uint8 const?>(c.transposed ? c.wtrh[0] : c.wkh[0]), cin = c.cin, taps = c.k, cout = c.cout, cout_s = c.cout_s, site = TtsStoredSite.conv, transposed = c.transposed))
+        }
+    }
+    return 0 if ((!c.q8 && c.kq_fmt == 0) || (c.kq_fmt != 0 && c.kq_repacked))
+    unsafe {
+        if (c.q8) {
+            return 0 if (c.q8_k % 32l != 0l)
+            return tsw_store(w, TtsStoredPlane(fmt = KqFmt.q8, rows = rows, k = c.q8_k, pad_rows = pad, q = addr<uint8 const?>(c.wq[0]), s = addr<uint8 const?>(c.wqs[0]),
+                cin = c.cin, taps = c.k, cout = c.cout, site = TtsStoredSite.conv, transposed = c.transposed))
+        }
+        return tsw_store(w, TtsStoredPlane(fmt = kq_fmt_of_id(c.kq_fmt, "a tts slab conv"), rows = rows, k = c.kq_k, pad_rows = pad, q = addr<uint8 const?>(c.kq[0]), s = addr<uint8 const?>(c.ks[0]),
+            cin = c.cin, taps = c.k, cout = c.cout, site = TtsStoredSite.conv, transposed = c.transposed))
+    }
+}
+
+//! ... of a dense layer's quant matrix [nout][nin]
+def private tts_linear_stored(var w : TtsSlabWriter; l : TtsLinear) : int {
+    return 0 if (w.stored_mask == 0u)
+    let pad = round_up(l.nout, 64l) - l.nout
+    if (linear_host_halves(l)) {
+        return 0 if (l.nin % 32l != 0l)
+        return tsw_store(w, TtsStoredPlane(kind = TtsStoredKind.half_rows, rows = l.nout, k = l.nin, pad_rows = pad, q = unsafe(addr<uint8 const?>(l.wh[0])), site = TtsStoredSite.lin))
+    }
+    return 0 if ((!l.q8 && l.kq_fmt == 0) || (l.kq_fmt != 0 && l.kq_repacked))
+    unsafe {
+        if (l.q8) {
+            return 0 if (l.nin % 32l != 0l)
+            return tsw_store(w, TtsStoredPlane(fmt = KqFmt.q8, rows = l.nout, k = l.nin, pad_rows = pad, q = addr<uint8 const?>(l.wq[0]), s = addr<uint8 const?>(l.wqs[0]), site = TtsStoredSite.lin))
+        }
+        return tsw_store(w, TtsStoredPlane(fmt = kq_fmt_of_id(l.kq_fmt, "a tts slab linear"), rows = l.nout, k = l.nin, pad_rows = pad, q = addr<uint8 const?>(l.kq[0]), s = addr<uint8 const?>(l.ks[0]), site = TtsStoredSite.lin))
+    }
 }
 
 //! `count` floats at the next 16-byte boundary (every item is a float4 read for some kernel); the element offset
@@ -52,6 +193,9 @@ struct TtsConvSlot {
     cout_p : int64
     kdim_p : int64
     gathers : bool
+    cout : int64    //! the layer's live outputs: a transposed conv's lift holds `cout` rows a tap
+    stored : int    //! the leaf's planes are the writer's stored plane `stored - 1` and `woff` names no rows; 0 = the rows at `woff`
+    widened : bool  //! the rows at `woff` are a leaf held as quants or halves, read back as floats
 }
 
 //! a norm's scale row at `gwoff` and shift row at `gboff`; `aux_off` an alpha row beside them (the Snake blocks)
@@ -59,13 +203,16 @@ struct TtsNormSlot {
     gwoff : int64
     gboff : int64
     aux_off : int64
+    fc : TtsConvSlot   //! an adaptive norm's style projection (`tts_slab_style`); unset on a plain norm
 }
 
 struct TtsLstmSlot {
     fx : TtsConvSlot    //! the forward direction's input linear [4H][nin] with its bias
     bx : TtsConvSlot
-    fhh : int64         //! the forward direction's recurrence, [H][4H] under `lstm_transposed`, else as stored
+    fhh : int64         //! the forward direction's recurrence, transposed to [H][4H]
     bhh : int64
+    fh_stored : int     //! the recurrence's own Q8_0 plane [4H][H] is the writer's stored plane `fh_stored - 1` and `fhh` names no rows; 0 = the rows
+    bh_stored : int
 }
 
 struct TtsBlockSlots {
@@ -111,6 +258,7 @@ struct TtsTextSlab {
 struct TtsPredSlab {
     bert_enc : TtsConvSlot
     de_lstm : array<TtsLstmSlot>
+    ln_fc : array<TtsConvSlot>   //! the duration encoder's AdaLN style projections, one a `lns` entry
     dur_lstm : TtsLstmSlot
     dur_proj : TtsConvSlot
     sh_lstm : TtsLstmSlot
@@ -139,7 +287,7 @@ struct TtsDecSlab {
     window : int64
 }
 
-[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
+[arch(at = "../ARCHITECTURE_GPU_TOWER_TTS.md#tts-st2-seats")]
 def private tsw_put_q8(var w : TtsSlabWriter; q : array<int8>; qs : array<float>; rows, cols, w0, stride : int64) {
     return if (w.measure)
     let lay = active_q8_repack_layout(g_active_needs_repack)
@@ -157,7 +305,7 @@ def private tsw_put_q8(var w : TtsSlabWriter; q : array<int8>; qs : array<float>
     }
 }
 
-[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
+[arch(at = "../ARCHITECTURE_GPU_TOWER_TTS.md#tts-st2-seats")]
 def private tsw_put_kq(var w : TtsSlabWriter; l : TtsLinear; w0, stride : int64) {
     return if (w.measure)
     var inscope @exact_size row : array<float>
@@ -170,8 +318,8 @@ def private tsw_put_kq(var w : TtsSlabWriter; l : TtsLinear; w0, stride : int64)
     }
 }
 
-//! n floats of src into the slab, zeros past its length (a window the model does not carry); the element offset
-def tts_slab_raw(var w : TtsSlabWriter; src : array<float>; n : int64) : int64 {
+//! `tts_slab_raw` for a row host code reads too (an input row the facade stages a call): the model keeps the array
+def tts_slab_kept(var w : TtsSlabWriter; src : array<float>; n : int64) : int64 {
     let at = tsw_alloc(w, n)
     for (i in range64(min(n, long_length(src)))) {
         tsw_put(w, at + i, src[i])
@@ -179,10 +327,24 @@ def tts_slab_raw(var w : TtsSlabWriter; src : array<float>; n : int64) : int64 {
     return at
 }
 
+//! n floats of src into the slab, zeros past its length (a window the model does not carry); the element offset
+def tts_slab_raw(var w : TtsSlabWriter; src : array<float>; n : int64) : int64 {
+    tsw_spend(w, src)
+    return tts_slab_kept(w, src, n)
+}
+
 def tts_slab_conv(var w : TtsSlabWriter; c : TtsConv1d) : TtsConvSlot {
+    tsw_spend_conv(w, c)
     let kc = c.k * c.cin
-    var s = TtsConvSlot(cout_p = round_up(c.cout, 64l), kdim_p = round_up(kc, 32l), gathers = c.cin % 8l == 0l)
+    var s = TtsConvSlot(cout_p = round_up(c.cout, 64l), kdim_p = round_up(kc, 32l), gathers = c.cin % 8l == 0l, cout = c.cout)
+    s.stored = tts_conv_stored(w, c)
+    if (s.stored != 0) {
+        s.woff = -1l
+        s.boff = tts_slab_raw(w, c.b, s.cout_p)
+        return s
+    }
     s.woff = tsw_alloc(w, s.cout_p * s.kdim_p)
+    s.widened = c.q8 || c.kq_fmt != 0 || conv1d_host_halves(c)
     if (c.q8 && !c.transposed) {
         tsw_put_q8(w, c.wq, c.wqs, c.cout, kc, s.woff, s.kdim_p)
     } elif (!w.measure) {   //! any other form the conv holds, a K-quant matrix and a transposed conv's lift among them, a row at a time
@@ -194,9 +356,11 @@ def tts_slab_conv(var w : TtsSlabWriter; c : TtsConv1d) : TtsConvSlot {
     return s
 }
 
-def tts_slab_linear(var w : TtsSlabWriter; l : TtsLinear) : TtsConvSlot {
+//! a dense layer's rows widened into the slab, whatever form it holds
+def private tts_slab_linear_rows(var w : TtsSlabWriter; l : TtsLinear) : TtsConvSlot {
     var s = TtsConvSlot(cout_p = round_up(l.nout, 64l), kdim_p = round_up(l.nin, 32l), gathers = false)
     s.woff = tsw_alloc(w, s.cout_p * s.kdim_p)
+    s.widened = l.q8 || l.kq_fmt != 0 || linear_host_halves(l)
     if (l.q8) {
         tsw_put_q8(w, l.wq, l.wqs, l.nout, l.nin, s.woff, s.kdim_p)
     } elif (l.kq_fmt != 0) {
@@ -210,39 +374,73 @@ def tts_slab_linear(var w : TtsSlabWriter; l : TtsLinear) : TtsConvSlot {
     return s
 }
 
-[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
-def private tts_slab_lstm_dir(var w : TtsSlabWriter; l : TtsLstm; var xs : TtsConvSlot; var hh : int64&) {
-    var inscope lin = TtsLinear(nin = l.nin, nout = 4l * l.hidden, q8 = l.q8)
-    lin.w := l.w_ih
-    lin.wq := l.wq_ih
-    lin.wqs := l.wqs_ih
-    lin.b := l.b
-    xs = tts_slab_linear(w, lin)
+def tts_slab_linear(var w : TtsSlabWriter; l : TtsLinear) : TtsConvSlot {
+    tsw_spend_linear(w, l)
+    let stored = tts_linear_stored(w, l)
+    return tts_slab_linear_rows(w, l) if (stored == 0)
+    var s = TtsConvSlot(woff = -1l, cout_p = round_up(l.nout, 64l), kdim_p = round_up(l.nin, 32l), gathers = false, stored = stored)
+    s.boff = tts_slab_raw(w, l.b, s.cout_p)
+    return s
+}
+
+[arch(at = "../ARCHITECTURE_GPU_TOWER_TTS.md#tts-st2-seats")]
+def private tts_slab_lstm_dir(var w : TtsSlabWriter; l : TtsLstm; var xs : TtsConvSlot; var hh : int64&; var hh_stored : int&) {
     let hd = l.hidden
+    tsw_spend(w, l.w_ih)
+    tsw_spend(w, l.w_hh)
+    tsw_spend(w, l.wq_ih)
+    tsw_spend(w, l.wqs_ih)
+    tsw_spend(w, l.wq_hh)
+    tsw_spend(w, l.wqs_hh)
+    tsw_spend(w, l.b)
+    var stored = 0
+    if (l.q8 && w.stored_mask != 0u && l.nin % 32l == 0l) {
+        unsafe {
+            stored = tsw_store(w, TtsStoredPlane(fmt = KqFmt.q8, rows = 4l * hd, k = l.nin, pad_rows = round_up(4l * hd, 64l) - 4l * hd,
+                q = addr<uint8 const?>(l.wq_ih[0]), s = addr<uint8 const?>(l.wqs_ih[0]), site = TtsStoredSite.lin))
+        }
+    }
+    if (stored != 0) {   // the input gates' own Q8_0 plane: the layer's, not a copy a temporary would hold
+        xs = TtsConvSlot(woff = -1l, cout_p = round_up(4l * hd, 64l), kdim_p = round_up(l.nin, 32l), gathers = false, stored = stored)
+        xs.boff = tts_slab_raw(w, l.b, xs.cout_p)
+    } else {
+        var inscope lin = TtsLinear(nin = l.nin, nout = 4l * hd, q8 = l.q8)
+        lin.w := l.w_ih
+        lin.wq := l.wq_ih
+        lin.wqs := l.wqs_ih
+        lin.b := l.b
+        xs = tts_slab_linear_rows(w, lin)
+    }
+    if (l.q8 && w.stored_mask != 0u && hd % 32l == 0l) {
+        unsafe {
+            hh_stored = tsw_store(w, TtsStoredPlane(fmt = KqFmt.q8, rows = 4l * hd, k = hd, pad_rows = 0l, q = addr<uint8 const?>(l.wq_hh[0]), s = addr<uint8 const?>(l.wqs_hh[0]),
+                site = TtsStoredSite.lstm))
+        }
+        if (hh_stored != 0) {
+            hh = -1l
+            return
+        }
+    }
     hh = tsw_alloc(w, 4l * hd * hd)
     return if (w.measure)
-    var inscope @exact_size row : array<float>
-    row |> reserve_resize(hd)
-    for (o in range64(4l * hd)) {   //! the recurrence's row o from its f32 matrix or its Q8_0 one, written as stored or transposed to [H][4H]
-        if (l.q8) {
-            q8_matrix_row(l.wq_hh, l.wqs_hh, true, hd, 4l * hd, o, row, 0l)
-        }
+    for (o in range64(4l * hd)) {
         for (i in range64(hd)) {
-            let v = l.q8 ? row[i] : l.w_hh[o * hd + i]
-            w.host[hh + (w.lstm_transposed ? i * 4l * hd + o : o * hd + i)] = v
+            w.host[hh + i * 4l * hd + o] = l.w_hh[o * hd + i]
         }
     }
 }
 
 def tts_slab_lstm(var w : TtsSlabWriter; l : TtsBiLstm) : TtsLstmSlot {
     var s : TtsLstmSlot
-    tts_slab_lstm_dir(w, l.fwd, s.fx, s.fhh)
-    tts_slab_lstm_dir(w, l.bwd, s.bx, s.bhh)
+    tts_slab_lstm_dir(w, l.fwd, s.fx, s.fhh, s.fh_stored)
+    tts_slab_lstm_dir(w, l.bwd, s.bx, s.bhh, s.bh_stored)
     return s
 }
 
 //! a norm's scale and shift rows (ones and zeros when it carries none)
 def tts_slab_norm_rows(var w : TtsSlabWriter; n : TtsNorm; c : int64) : TtsNormSlot {
+    tsw_spend(w, n.w)
+    tsw_spend(w, n.b)
     let g0 = tsw_alloc(w, 2l * c)
     for (i in range64(c)) {
         tsw_put(w, g0 + i, empty(n.w) ? 1.0 : n.w[i])
@@ -251,9 +449,21 @@ def tts_slab_norm_rows(var w : TtsSlabWriter; n : TtsNorm; c : int64) : TtsNormS
     return TtsNormSlot(gwoff = g0, gboff = g0 + c)
 }
 
+//! an adaptive norm's fc(style) slot, gamma [c] then beta [c], gamma bias + 1 under `ln_form` (AdaLN): the GEMM's row is the norm's
+def tts_slab_style(var w : TtsSlabWriter; fc : TtsLinear; c : int64; ln_form : bool) : TtsConvSlot {
+    let s = tts_slab_linear(w, fc)
+    if (ln_form) {
+        for (i in range64(c)) {
+            tsw_put(w, s.boff + i, (i < long_length(fc.b) ? fc.b[i] : 0.0) + 1.0)
+        }
+    }
+    return s
+}
+
 def tts_slab_norm(var w : TtsSlabWriter; a : TtsAdaIn; alpha : TtsWeight; c : int64) : TtsNormSlot {
     var s = tts_slab_norm_rows(w, a.norm, c)
     s.aux_off = tts_slab_raw(w, alpha.a, c)
+    s.fc = tts_slab_style(w, a.fc, c, false)
     return s
 }
 
@@ -276,6 +486,8 @@ def tts_slab_block(var w : TtsSlabWriter; b : St2GenResBlock) : TtsBlockSlots {
 def tts_slab_res(var w : TtsSlabWriter; b : St2AdainResBlk) : TtsResSlots {
     var s = TtsResSlots(n1 = tts_slab_norm_rows(w, b.norm1.norm, b.dim_in_s), n2 = tts_slab_norm_rows(w, b.norm2.norm, b.dim_out),
         c1 = tts_slab_conv(w, b.conv1), c2 = tts_slab_conv(w, b.conv2))
+    s.n1.fc = tts_slab_style(w, b.norm1.fc, b.dim_in_s, false)
+    s.n2.fc = tts_slab_style(w, b.norm2.fc, b.dim_out, false)
     if (b.learned_sc) {
         s.c1x1 = tts_slab_conv(w, b.conv1x1)
     }
@@ -320,6 +532,10 @@ def tts_pred_write(var w : TtsSlabWriter; p : St2Predictor; var s : TtsPredSlab)
     s.de_lstm |> reserve(length(p.lstms))
     for (l in p.lstms) {
         s.de_lstm |> push(tts_slab_lstm(w, l))
+    }
+    s.ln_fc |> reserve(length(p.lns))
+    for (ln in p.lns) {
+        s.ln_fc |> push(tts_slab_style(w, ln.fc, ln.fc.nout / 2l, true))
     }
     s.dur_lstm = tts_slab_lstm(w, p.lstm)
     s.dur_proj = tts_slab_linear(w, p.duration_proj)
@@ -370,9 +586,10 @@ def tts_dec_write(var w : TtsSlabWriter; d : St2Decoder; var s : TtsDecSlab) {
     s.window = tts_slab_raw(w, d.window.a, d.stft_bwd_re.k)
 }
 
-//! the part's writer run twice (a measuring pass, then the fill); the host floats come back to upload, empty when the part carries nothing
-def tts_slab_build(var slots : auto(SS); write : block<(var w : TtsSlabWriter; var s : SS) : void>; lstm_transposed : bool = true) : array<float> {
-    var inscope w = TtsSlabWriter(measure = true, lstm_transposed = lstm_transposed)
+//! `tts_slab_build` without the leaves of `stored_mask`'s members: the slab, the left-out planes in slot order, the arrays read
+def tts_slab_build_stored(var slots : auto(SS); write : block<(var w : TtsSlabWriter; var s : SS) : void>;
+                          stored_mask : uint) : tuple<host : array<float>; stored : array<TtsStoredPlane>; spent : array<uint64>> {
+    var w = TtsSlabWriter(measure = true, stored_mask = stored_mask)   // both its arrays move out below
     var probe : SS
     invoke(write, w, probe)
     unsafe {
@@ -381,63 +598,19 @@ def tts_slab_build(var slots : auto(SS); write : block<(var w : TtsSlabWriter; v
     w.host |> reserve_resize(w.n)
     w.n = 0l
     w.measure = false
+    w.stored |> clear()
     invoke(write, w, slots)
-    return <- w.host
+    return <- (host <- w.host, stored <- w.stored, spent <- w.spent)
 }
 
-//! the q8 lane's repack layout, folded into every slab key: the same quants under another layout dequantize differently
-def tts_lane_key() : uint64 {
-    return 1ul if (!g_active_needs_repack)
-    let lay = active_q8_repack_layout(true)
-    return hash_combine64(hash_combine64(uint64(lay.mr), uint64(lay.kgroup)), uint64(lay.wbias))
-}
-
-def tts_conv_key(c : TtsConv1d) : uint64 {
+//! the part's writer run twice (a measuring pass, then the fill); the host floats come back to upload, empty when the part carries nothing
+def tts_slab_build(var slots : auto(SS); write : block<(var w : TtsSlabWriter; var s : SS) : void>) : array<float> {
+    var built <- tts_slab_build_stored(slots, write, 0u)
     unsafe {
-        if (c.q8) {
-            return intptr(addr(c.wq[0]))
-        }
-        if (c.kq_fmt != 0) {   //! the plane's format and the active layout its rows are read through
-            return hash_combine64(hash_combine64(intptr(addr(c.kq[0])), uint64(c.kq_fmt)), uint64(active_kq_layout_mr(c.kq_fmt)))
-        }
-        if (!empty(c.w)) {
-            return intptr(addr(c.w[0]))
-        }
-        if (!empty(c.wt)) {
-            return intptr(addr(c.wt[0]))
-        }
-        return c.transposed ? intptr(addr(c.wtr[0])) : intptr(addr(c.wk[0]))
+        delete built.stored
+        delete built.spent
     }
-}
-
-def private tts_key_fold(var key : uint64&; c : TtsConv1d) {
-    key = hash_combine64(key, tts_conv_key(c))
-}
-
-def private tts_key_block(var key : uint64&; b : St2GenResBlock) {
-    for (c in b.convs1) {
-        tts_key_fold(key, c)
-    }
-    for (c in b.convs2) {
-        tts_key_fold(key, c)
-    }
-}
-
-def private tts_key_res(var key : uint64&; b : St2AdainResBlk) {
-    tts_key_fold(key, b.conv1)
-    tts_key_fold(key, b.conv2)
-}
-
-def tts_lin_key(l : TtsLinear) : uint64 {
-    unsafe {
-        if (l.q8) {
-            return intptr(addr(l.wq[0]))
-        }
-        if (l.kq_fmt != 0) {   //! the plane's format and the active layout its rows are gathered through: a reload under another layout writes other rows
-            return hash_combine64(hash_combine64(intptr(addr(l.kq[0])), uint64(l.kq_fmt)), uint64(active_kq_layout_mr(l.kq_fmt)))
-        }
-        return !empty(l.w) ? intptr(addr(l.w[0])) : intptr(addr(l.wt[0]))
-    }
+    return <- built.host
 }
 
 def tts_arr_key(a : array<float>) : uint64 {
@@ -447,68 +620,14 @@ def tts_arr_key(a : array<float>) : uint64 {
     }
 }
 
-def tts_dec_key(d : St2Decoder) : uint64 {
-    var key = 7ul + tts_lane_key()
-    for (c in d.ups) {
-        tts_key_fold(key, c)
-    }
-    for (c in d.noise_convs) {
-        tts_key_fold(key, c)
-    }
-    for (b in d.noise_res) {
-        tts_key_block(key, b)
-    }
-    for (b in d.resblocks) {
-        tts_key_block(key, b)
-    }
-    tts_key_fold(key, d.conv_post)
-    tts_key_fold(key, d.asr_res)
-    tts_key_res(key, d.encode)
-    for (b in d.decode) {
-        tts_key_res(key, b)
-    }
-    return key
-}
-
-def tts_pred_key(p : St2Predictor) : uint64 {
-    var key = hash_combine64(hash_combine64(11ul, tts_lane_key()), tts_lin_key(p.bert_encoder))
-    for (l in p.lstms) {
-        key = hash_combine64(key, tts_lstm_key(l.fwd))
-    }
-    key = hash_combine64(key, tts_lstm_key(p.lstm.fwd))
-    key = hash_combine64(key, tts_lstm_key(p.shared_lstm.fwd))
-    for (b in p.f0) {
-        tts_key_res(key, b)
-    }
-    for (b in p.n) {
-        tts_key_res(key, b)
-    }
-    return key
-}
-
-def tts_albert_key(a : St2Albert) : uint64 {
-    var key = hash_combine64(hash_combine64(13ul, tts_lane_key()), tts_lin_key(a.map_in))
-    key = hash_combine64(key, tts_lin_key(a.q))
-    key = hash_combine64(key, tts_lin_key(a.ffn))
-    return hash_combine64(key, tts_arr_key(a.word_emb.a))
-}
-
-def tts_text_key(te : St2TextEncoder) : uint64 {
-    var key = hash_combine64(hash_combine64(17ul, tts_lane_key()), tts_arr_key(te.emb.a))
-    for (c in te.cnn) {
-        tts_key_fold(key, c)
-    }
-    return hash_combine64(key, tts_lstm_key(te.lstm.fwd))
-}
-
 //! a conv the slab can lay: dense, holding its weight in an f32 layout or a quant matrix (`conv1d_weight_row` reads every form)
 def tts_conv_ok(c : TtsConv1d) : bool {
-    let held = c.q8 ? !empty(c.wq) : (c.kq_fmt != 0 ? !empty(c.kq) : (!empty(c.w) || !empty(c.wt) || !empty(c.transposed ? c.wtr : c.wk)))
+    let held = conv1d_held(c)
     return c.groups == 1l && c.k >= 1l && c.cin >= 1l && c.cout >= 1l && c.stride >= 1l && c.dilation >= 1l && held
 }
 
 def tts_lin_ok(l : TtsLinear) : bool =>
-    l.nin >= 1l && l.nout >= 1l && (l.q8 ? !empty(l.wq) : (l.kq_fmt != 0 ? !empty(l.kq) : (!empty(l.w) || !empty(l.wt))))
+    l.nin >= 1l && l.nout >= 1l && linear_held(l)
 
 //! a linear the dense GEMM stamps serve: `nin` a multiple of 32, since the stamps read X's K columns to the padded width and the row buffers carry no zeroed pad
 def tts_gemm_lin_ok(l : TtsLinear) : bool => tts_lin_ok(l) && l.nin % 32l == 0l
@@ -526,21 +645,14 @@ def tts_lstm_ok(l : TtsBiLstm; nin, max_hidden : int64) : bool {
 // a direction holds both matrices whole - f32, or Q8_0 - and its bias
 def private tts_lstm_dir_held(l : TtsLstm; nin : int64) : bool {
     let hd = l.hidden
-    return false if (long_length(l.b) < 4l * hd)
-    return l.q8 ? (long_length(l.wq_hh) >= 4l * hd * hd && long_length(l.wq_ih) >= 4l * hd * nin) : (long_length(l.w_hh) >= 4l * hd * hd && long_length(l.w_ih) >= 4l * hd * nin)
-}
-
-//! an LSTM direction's identity for a slab key: where its recurrence sits, in whichever form it is held
-def tts_lstm_key(l : TtsLstm) : uint64 {
-    return tts_arr_key(l.w_hh) if (!l.q8)
-    unsafe {
-        return intptr(addr(l.wq_hh[0]))
-    }
+    return false if (tts_held(l.b, l.b_span) < 4l * hd)
+    return (tts_held(l.wq_hh, l.wq_hh_span) >= 4l * hd * hd && tts_held(l.wq_ih, l.wq_ih_span) >= 4l * hd * nin) if (l.q8)
+    return tts_held(l.w_hh, l.w_hh_span) >= 4l * hd * hd && tts_held(l.w_ih, l.w_ih_span) >= 4l * hd * nin
 }
 
 def tts_res_ok(b : St2AdainResBlk) : bool {
     return (tts_conv_ok(b.conv1) && tts_conv_ok(b.conv2) && (!b.learned_sc || tts_conv_ok(b.conv1x1))
-        && (!b.upsample || (b.pool.k >= 1l && long_length(b.pool.w) >= b.pool.cin * b.pool.k)))
+        && (!b.upsample || (b.pool.k >= 1l && tts_held(b.pool.w, b.pool.w_span) >= b.pool.cin * b.pool.k)))
 }
 
 //! every conv and linear a part's slab writes, checked before the writer reads them: a seat's own shape gate covers its stage, the slab covers the whole part
@@ -680,7 +792,7 @@ def tts_source_shape(d : St2Decoder; cfg : SineSourceCfg; f2 : int64) : TtsSourc
     let im & = unsafe(d.stft_fwd_im)
     return sh if (re.cin != 1l || re.cout != d.bins || re.transposed || im.k != re.k || im.cout != d.bins || im.cin != 1l || im.transposed
         || re.pad_l != 0l || re.pad_r != 0l || re.dilation != 1l || im.pad_l != 0l || im.pad_r != 0l || im.dilation != 1l || im.stride != re.stride
-        || d.source_linear.nin != cfg.n_harm || d.source_linear.nout != 1l || empty(d.source_linear.b) || empty(re.w) || empty(im.w))
+        || d.source_linear.nin != cfg.n_harm || d.source_linear.nout != 1l || tts_held(d.source_linear.b, d.source_linear.b_span) == 0l || tts_held(re.w, re.w_span) == 0l || tts_held(im.w, im.w_span) == 0l)
     sh.spec_frames = conv1d_out_len(re, sh.samples + 2l * ST2_STFT_PAD)
     sh.ok = sh.spec_frames >= 1l
     return sh
@@ -693,8 +805,8 @@ def tts_res_shape(var sh : auto(SH); b : St2AdainResBlk; t : int64) : int64 {
         || (b.learned_sc && (!tts_conv_ok(b.conv1x1) || b.conv1x1.cout != b.dim_out || b.conv1x1.cin != b.dim_in_s)))
     var t1 = t
     if (b.upsample) {
-        return -1l if (b.pool.groups != b.pool.cin || b.pool.cin != b.pool.cout || !b.pool.transposed || empty(b.pool.w) || b.pool.cin != b.dim_in_s)
-        t1 = conv1d_out_len(b.pool, t)
+        return -1l if (b.pool.groups != b.pool.cin || b.pool.cin != b.pool.cout || !b.pool.transposed || tts_held(b.pool.w, b.pool.w_span) == 0l || b.pool.cin != b.dim_in_s)
+        t1 = st2_blk_rows(b, t)
         return -1l if (t1 != 2l * t)
     }
     return -1l if (conv1d_out_len(b.conv1, t1) != t1 || conv1d_out_len(b.conv2, t1) != t1 || (b.learned_sc && conv1d_out_len(b.conv1x1, t1) != t1)
@@ -712,7 +824,7 @@ def tts_gen_block_shape(var sh : auto(SH); b : St2GenResBlock; t, c : int64) : b
         let c1 & = unsafe(b.convs1[j])
         let c2 & = unsafe(b.convs2[j])
         return false if (!tts_conv_ok(c1) || !tts_conv_ok(c2) || c1.cin != c || c1.cout != c || c2.cin != c || c2.cout != c
-            || conv1d_out_len(c1, t) != t || conv1d_out_len(c2, t) != t || long_length(b.alpha1[j].a) < c || long_length(b.alpha2[j].a) < c
+            || conv1d_out_len(c1, t) != t || conv1d_out_len(c2, t) != t || tts_held(b.alpha1[j].a, b.alpha1[j].span) < c || tts_held(b.alpha2[j].a, b.alpha2[j].span) < c
             || !_::tts_note_conv(sh, c1, t, false) || !_::tts_note_conv(sh, c2, t, false))
     }
     return _::tts_note_block(sh, b, t, c)
@@ -730,10 +842,7 @@ def tts_gen_shape(d : St2Decoder; c, t, har_frames, max_stages : int64; var sh :
         let up & = unsafe(d.ups[i])
         let nc & = unsafe(d.noise_convs[i])
         return false if (!tts_conv_ok(up) || !tts_conv_ok(nc) || up.cin != cc || nc.cin != d.noise_convs[0].cin)
-        var t2 = conv1d_out_len(up, tt)
-        if (i == nst - 1l) {
-            t2++
-        }
+        let t2 = conv1d_out_len(up, tt) + st2_stage_pad(d, i)
         let c2 = up.cout
         return false if (c2 % 64l != 0l || nc.cout != c2 || conv1d_out_len(nc, har_frames) != t2 || !tts_gen_block_shape(sh, d.noise_res[i], t2, c2))
         for (j in range64(d.n_kernels)) {
@@ -758,8 +867,8 @@ def tts_decode_shape(d : St2Decoder; text_c : int64; source : SineSourceCfg; fra
     return false if (frames < 1l || f2 < 1l || text_c % 32l != 0l || !sh.ss.ok || !tts_dec_ok(d) || d.f0_conv.cin != 1l || d.n_conv.cin != 1l
         || d.f0_conv.cout != 1l || d.n_conv.cout != 1l || conv1d_out_len(d.f0_conv, f2) != frames || conv1d_out_len(d.n_conv, f2) != frames
         || d.asr_res.cin != text_c || d.asr_res.cout % 64l != 0l || conv1d_out_len(d.asr_res, frames) != frames || d.encode.dim_in != text_c + 2l
-        || bwd.cin != d.bins || bwd.cout != 1l || !bwd.transposed || empty(bwd.wt) || d.stft_bwd_im.k != bwd.k
-        || (d.istft_envelope && long_length(d.window.a) < bwd.k) || (noise.captured && long_length(noise.normal) < sh.ss.samples * source.n_harm)
+        || bwd.cin != d.bins || bwd.cout != 1l || !bwd.transposed || tts_held(bwd.wt, bwd.wt_span) == 0l || d.stft_bwd_im.k != bwd.k
+        || (d.istft_envelope && tts_held(d.window.a, d.window.span) < bwd.k) || (noise.captured && long_length(noise.normal) < sh.ss.samples * source.n_harm)
         || long_length(noise.uniform) < source.n_harm || !_::tts_note_decoder(sh, d) || !_::tts_note_conv(sh, d.f0_conv, frames, false)
         || !_::tts_note_conv(sh, d.n_conv, frames, false) || !_::tts_note_conv(sh, d.asr_res, frames, false))
     _::tts_note_rows(sh, frames, max(text_c, d.encode.dim_in_s))
@@ -773,21 +882,8 @@ def tts_decode_shape(d : St2Decoder; text_c : int64; source : SineSourceCfg; fra
         sh.dec_width = b.dim_out
     }
     return false if (!tts_gen_shape(d, sh.dec_width, sh.dec_rows, sh.ss.spec_frames, max_stages, sh))
-    sh.n_out = conv1d_out_len(bwd, sh.t_post) - 2l * ST2_STFT_PAD
+    sh.n_out = st2_wave_samples(d, sh.t_post)
     return sh.n_out >= 1l
-}
-
-//! fc(style) as a norm's rows at `dst`: gamma [c] then beta [c], gamma + 1 under `ln_form` (an AdaLN site); `tmp` the fc's scratch
-def tts_style_rows(fc : TtsLinear; s : array<float>; c : int64; ln_form : bool; @scratch @exact_size var tmp : array<float>; var dst : float?) {
-    linear_vec(fc, s, tmp)
-    unsafe {
-        memcpy(dst, addr(tmp[0]), 2l * c * 4l)
-        if (ln_form) {
-            for (i in range64(c)) {
-                dst[i] = dst[i] + 1.0
-            }
-        }
-    }
 }
 
 //! a row of `n` zeros - an allocation alone, since the fill pass's host starts zeroed (`tts_slab_build`); the element offset
@@ -818,6 +914,8 @@ struct TtsPkFramesSlab {
     std_mean : int64      //! emb_std then emb_mean, one row of 2 x latent_dim
     bos : int64
     zero : int64          //! a zero row as wide as the backbone, the residual seams' bias
+    spk : TtsConvSlot     //! the speaker projection: a voice's latent frames into the backbone's rows
+    bos_voice : int64     //! the row before a voice's rows [d]; zeros where the model carries none
 }
 
 //! a transformer layer's slots written: the two norms, the four linears, the layer scale rows where the layer carries them
@@ -861,6 +959,62 @@ def tts_pk_codec_write(var w : TtsSlabWriter; mm : PocketMimi; rope_rows : int64
     s.dec_out = tts_slab_conv(w, mm.dec_out)
 }
 
+//! the codec encoder's slots (a clip into its latent frames): the first conv, each stage's residual pair and strided conv,
+//! the last conv, the transformer's layers and rope tables, the downsampler
+struct TtsPkEncSlab {
+    enc_in : TtsConvSlot
+    res1 : array<TtsConvSlot>
+    res2 : array<TtsConvSlot>
+    downs : array<TtsConvSlot>
+    enc_out : TtsConvSlot
+    layers : array<TtsPkLayerSlots>
+    downsample : TtsConvSlot
+    zero : int64
+    rope_cos : int64
+    rope_sin : int64
+    rope_rows : int64
+}
+
+def tts_pk_enc_write(var w : TtsSlabWriter; mm : PocketMimi; rope_rows : int64; var s : TtsPkEncSlab) {
+    s.zero = tts_slab_zero(w, max(mm.enc_tf.d, 32l))
+    s.rope_rows = rope_rows
+    s.rope_cos = tts_pk_rope_rows(w, mm.enc_tf, rope_rows, s.rope_sin)
+    s.enc_in = tts_slab_conv(w, mm.enc_in)
+    s.res1 |> reserve(length(mm.enc_res))
+    s.res2 |> reserve(length(mm.enc_res))
+    s.downs |> reserve(length(mm.enc_down))
+    for (b in mm.enc_res) {
+        s.res1 |> push(tts_slab_conv(w, b.conv1))
+        s.res2 |> push(tts_slab_conv(w, b.conv2))
+    }
+    for (c in mm.enc_down) {
+        s.downs |> push(tts_slab_conv(w, c))
+    }
+    s.enc_out = tts_slab_conv(w, mm.enc_out)
+    s.layers |> reserve(length(mm.enc_tf.layers))
+    for (l in mm.enc_tf.layers) {
+        s.layers |> push(tts_pk_layer_write(w, l, mm.enc_tf.d))
+    }
+    s.downsample = tts_slab_conv(w, mm.downsample)
+}
+
+//! the codec encoder fits the device stream: forward convs, strided ones dividing rows, the transformer's width, a `frame_steps` stride
+def tts_pk_enc_ok(mm : PocketMimi; hs, max_keys : int64; hs_min : int64 = -1l) : bool {
+    let tf & = unsafe(mm.enc_tf)
+    return false if (!tts_pk_tf_ok(tf, hs, hs_min) || tf.context < 1l || tf.context > max_keys)
+    for (l in tf.layers) {
+        return false if (!tts_pk_layer_ok(l, tf))
+    }
+    return false if (!tts_pk_conv_ok(mm.enc_in) || mm.enc_in.transposed || mm.enc_in.stride != 1l || length(mm.enc_res) != length(mm.enc_down))
+    for (b, c in mm.enc_res, mm.enc_down) {
+        return false if (!tts_pk_conv_ok(b.conv1) || !tts_pk_conv_ok(b.conv2) || b.conv1.transposed || b.conv2.transposed || b.conv1.stride != 1l || b.conv2.k != 1l
+            || !tts_pk_conv_ok(c) || c.transposed || c.k < c.stride)
+    }
+    let ds & = unsafe(mm.downsample)
+    return (tts_pk_conv_ok(mm.enc_out) && !mm.enc_out.transposed && mm.enc_out.stride == 1l && mm.enc_out.cout == tf.d
+        && tts_pk_conv_ok(ds) && !ds.transposed && ds.cin == tf.d && ds.stride == mm.frame_steps && ds.k == 2l * mm.frame_steps)
+}
+
 def tts_pk_frames_write(var w : TtsSlabWriter; m : PocketModel; var s : TtsPkFramesSlab) {
     let d = m.backbone.d
     let ld = m.latent_dim
@@ -894,61 +1048,9 @@ def tts_pk_frames_write(var w : TtsSlabWriter; m : PocketModel; var s : TtsPkFra
         tsw_put(w, sm + ld + j, m.emb_mean.a[j])
     }
     s.std_mean = sm
-    s.bos = tts_slab_raw(w, m.bos_emb.a, ld)
-}
-
-def private tts_pk_layer_key(var key : uint64&; l : PocketLayer) {
-    key = hash_combine64(key, tts_lin_key(l.in_proj))
-    key = hash_combine64(key, tts_lin_key(l.out_proj))
-    key = hash_combine64(key, tts_lin_key(l.ffn1))
-    key = hash_combine64(key, tts_lin_key(l.ffn2))
-    key = hash_combine64(key, tts_arr_key(l.norm1.w))
-    key = hash_combine64(key, tts_arr_key(l.scale1.a))
-}
-
-def tts_pk_codec_key(mm : PocketMimi) : uint64 {
-    var key = hash_combine64(hash_combine64(19ul, tts_lane_key()), tts_conv_key(mm.quant_proj))
-    key = hash_combine64(key, tts_arr_key(mm.upsample.w))
-    for (l in mm.dec_tf.layers) {
-        tts_pk_layer_key(key, l)
-    }
-    tts_key_fold(key, mm.dec_in)
-    for (c in mm.dec_up) {
-        tts_key_fold(key, c)
-    }
-    for (b in mm.dec_res) {
-        tts_key_fold(key, b.conv1)
-        tts_key_fold(key, b.conv2)
-    }
-    tts_key_fold(key, mm.dec_out)
-    return key
-}
-
-def tts_pk_frames_key(m : PocketModel) : uint64 {
-    var key = hash_combine64(hash_combine64(23ul, tts_lane_key()), tts_lin_key(m.input_linear))
-    key = hash_combine64(hash_combine64(hash_combine64(key, uint64(m.cond_dim)), uint64(int(m.head.flow))), m.z_proj.nout > 0l ? tts_lin_key(m.z_proj) : 0ul)
-    key = hash_combine64(hash_combine64(key, uint64(m.backbone.kv_heads)), uint64(m.backbone.attn_dim))
-    key = hash_combine64(hash_combine64(hash_combine64(key, uint64(m.backbone.d)), uint64(m.backbone.heads)), uint64(m.latent_dim))
-    key = hash_combine64(hash_combine64(key, uint64(m.backbone.period)), uint64(long_length(m.backbone.layers)))
-    for (l in m.backbone.layers) {
-        tts_pk_layer_key(key, l)
-    }
-    key = hash_combine64(key, tts_arr_key(m.out_norm.w))
-    key = hash_combine64(key, tts_lin_key(m.out_eos))
-    let h & = unsafe(m.head)
-    key = hash_combine64(key, tts_lin_key(h.cond_embed))
-    key = hash_combine64(key, tts_arr_key(h.time_const.a))
-    key = hash_combine64(key, tts_lin_key(h.input_proj))
-    for (b in h.blocks) {
-        key = hash_combine64(key, tts_arr_key(b.ln.w))
-        key = hash_combine64(key, tts_lin_key(b.adaln))
-        key = hash_combine64(key, tts_lin_key(b.mlp1))
-        key = hash_combine64(key, tts_lin_key(b.mlp2))
-    }
-    key = hash_combine64(key, tts_lin_key(h.final_adaln))
-    key = hash_combine64(key, tts_lin_key(h.final_linear))
-    key = hash_combine64(key, tts_arr_key(m.emb_std.a))
-    return hash_combine64(key, tts_arr_key(m.bos_emb.a))
+    s.bos = tts_slab_kept(w, m.bos_emb.a, ld)
+    s.spk = tts_slab_linear(w, m.speaker_proj)
+    s.bos_voice = tts_slab_raw(w, m.bos_voice.a, d)
 }
 
 //! a codec conv the im2col route serves: dense, not itself quantized, a transposed conv's taps past its stride (the padding the one-shot row count assumes)
@@ -960,7 +1062,7 @@ def tts_pk_layer_dims_ok(l : PocketLayer; tf : PocketTransformer) : bool {
     let ffn = tf.ffn
     return (l.in_proj.nin == d && l.in_proj.nout == tts_pk_qkv_width(tf) && l.out_proj.nin == tf.attn_dim && l.out_proj.nout == d
         && l.ffn1.nin == d && l.ffn1.nout == ffn && l.ffn2.nin == ffn && l.ffn2.nout == d
-        && long_length(l.norm1.w) == d && long_length(l.norm2.w) == d)
+        && tts_held(l.norm1.w, l.norm1.w_span) == d && tts_held(l.norm2.w, l.norm2.w_span) == d)
 }
 
 def tts_pk_layer_ok(l : PocketLayer; tf : PocketTransformer) : bool =>
@@ -990,7 +1092,7 @@ def tts_pk_codec_ok(mm : PocketMimi; hs, max_keys : int64; hs_min : int64 = -1l)
         return false if (!tts_pk_layer_ok(l, tf))
     }
     let up & = unsafe(mm.upsample)
-    return false if (!up.transposed || up.groups != up.cin || up.cin != up.cout || up.cin != d || mm.frame_steps != up.stride || empty(up.w)
+    return false if (!up.transposed || up.groups != up.cin || up.cin != up.cout || up.cin != d || mm.frame_steps != up.stride || tts_held(up.w, up.w_span) == 0l
         || !tts_pk_conv_ok(mm.quant_proj) || mm.quant_proj.cout != d || !tts_pk_conv_ok(mm.dec_in) || mm.dec_in.cin != d
         || length(mm.dec_up) != length(mm.ratios) || length(mm.dec_res) != length(mm.ratios))
     for (i, c in iter_range(mm.dec_up), mm.dec_up) {
@@ -1013,9 +1115,9 @@ def tts_pk_frames_ok(m : PocketModel; hs, max_nin : int64; lin_ok : block<(l : T
     let has_z = pocket_has_z(m)
     return false if (!tts_pk_tf_ok(tf, hs) || d > max_nin || n > max_nin || tf.ffn > max_nin || ld > max_nin || cd < 1l || cd > max_nin || cd % 4l != 0l
         || (has_z ? (m.z_proj.nin != d || m.z_proj.nout != cd || !invoke(lin_ok, m.z_proj)) : cd != d)
-        || (h.flow == PocketFlow.lsd ? long_length(h.time_const.a) != n : !empty(h.time_const.a))
-        || ld < 4l || ld % 4l != 0l || n < 1l || empty(h.blocks) || long_length(m.emb_std.a) != ld
-        || long_length(m.emb_mean.a) != ld || long_length(m.bos_emb.a) != ld || long_length(m.out_norm.w) != d
+        || (h.flow == PocketFlow.lsd ? tts_held(h.time_const.a, h.time_const.span) != n : tts_held(h.time_const.a, h.time_const.span) != 0l)
+        || ld < 4l || ld % 4l != 0l || n < 1l || empty(h.blocks) || tts_held(m.emb_std.a, m.emb_std.span) != ld
+        || tts_held(m.emb_mean.a, m.emb_mean.span) != ld || tts_held(m.bos_emb.a, m.bos_emb.span) != ld || tts_held(m.out_norm.w, m.out_norm.w_span) != d
         || !invoke(lin_ok, m.input_linear) || m.input_linear.nin != ld || m.input_linear.nout != d || !invoke(lin_ok, m.out_eos) || m.out_eos.nin != cd || m.out_eos.nout != 1l)
     for (l in tf.layers) {
         return false if (!tts_pk_layer_dims_ok(l, tf) || !invoke(lin_ok, l.in_proj) || !invoke(lin_ok, l.out_proj) || !invoke(lin_ok, l.ffn1) || !invoke(lin_ok, l.ffn2))

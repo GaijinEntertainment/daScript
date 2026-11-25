@@ -5,37 +5,47 @@ docs: `ARCHITECTURE_GPU_ASYMMETRIES.md`, `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md`,
 `ARCHITECTURE_GPU_TOWER_VULKAN.md`. Planned work: `followup_metal.md`, `followup_vulkan.md`,
 `followup_general.md`.
 
+A GPU driver file is a `dasllama/dasllama_{gpu,metal}*.das` or
+`dasllama/dasllama_*{vulkan,cuda}*.das` file, or any other `dasllama/` file whose code serves only
+GPU backends, one or several. A value is model-derived when it derives from a loaded model's
+weights; names, sizes or points at device content built from that model; or is any figure a call
+that served that model recorded, whoever reads it - a rate later calls size work by, a profile
+ledger, the decline reasons already logged for it.
+
 **A diff that adds to a GPU driver file a model-derived module-level variable, or a field of one,
 which a later call reads before that call writes it, returns it to its no-model value in the same
-change, inside its backend's discharge - the functions a model unload and reload run, named per
-backend in this checklist.** A value is model-derived when it derives from a loaded model's
-weights; or names, sizes or points at device content built from that model; or measures how a
-call served that model (a rate later calls size work by), the decline reasons already logged for
-it included. Unload and reload run only the discharge; a reset elsewhere survives the swap.
+change, inside the discharge of each backend that runs the file's code - the functions a model
+unload and reload run, named per backend in this checklist.** Unload and reload run only the
+discharge; a reset elsewhere survives the swap.
 
-**In a Vulkan file (`dasllama/dasllama_*vulkan*.das`, `dasllama/dasllama_gpu*.das`), a diff puts
-the model-swap reset of a model-derived variable in `moe_gpu_model_marks_restore_` or
-`moe_gpu_drop_model_` (`dasllama/dasllama_gpu_resident.das`), in a `register_vk_drop_hook`
-listener, or in a function one of these reaches through calls, a function run from a list of
-registered functions included.**
+**In a Vulkan file (`dasllama/dasllama_*vulkan*.das`), a diff puts the model-swap reset of a
+model-derived variable in `moe_gpu_model_marks_restore_` or `moe_gpu_drop_model_`
+(`dasllama/dasllama_gpu_resident.das`), in a `register_vk_drop_hook` listener, or in a function one
+of these reaches through calls, a function run from a list of registered functions included.**
 
 **In a Metal file (`dasllama/dasllama_metal*.das`), a diff puts the model-swap reset of a
 model-derived variable in a function the file registers with `register_reload_prep`
-(`dasllama/dasllama_metal_common.das`), or in a function that one reaches through calls, a
-function run from a list of registered functions included.**
+(`dasllama/dasllama_metal_common.das`), or in a function that one reaches through calls, a function
+run from a list of registered functions included.**
 
 **In a CUDA file (`dasllama/dasllama_*cuda*.das`), a diff puts the model-swap reset of a
 model-derived variable in `cud_drop_model` (`dasllama/dasllama_cuda_decode.das`), in a
 `register_cud_drop_hook` listener, or in a function one of these reaches through calls, a function
 run from a list of registered functions included.**
 
-**A module-level variable in a Vulkan driver file (`dasllama/dasllama_*vulkan*.das`,
-`dasllama/dasllama_gpu*.das`) whose value derives from, or names, sizes or points at device content
-built from, a TTS model - any model that turns text into audio - or a voice loaded into one, and
-which a later call reads before that call writes it, also discharges in a listener the file
-registers with `register_weights_epoch_listener` (`dasllama/dasllama_common.das`), in the same
-change that adds it.** A TTS model's reload runs no Vulkan model drop, only `bump_weights_epoch`,
-which runs every listener registered with `register_weights_epoch_listener`.
+**In a GPU driver file that none of `dasllama/dasllama_*vulkan*.das`, `dasllama/dasllama_metal*.das`
+and `dasllama/dasllama_*cuda*.das` matches, a diff puts the model-swap reset of a model-derived
+variable, for each backend that runs the file's code, in a function or listener this checklist
+names as that backend's discharge, or in a function one of these reaches through calls, a function
+run from a list of registered functions included.**
+
+**A model-derived module-level variable of a TTS model - any model that turns text into audio - or
+of a voice loaded into one, in a GPU driver file whose code the Vulkan backend runs, which a later
+call reads before that call writes it, also discharges in a listener the file registers with
+`register_weights_epoch_listener` (`dasllama/dasllama_common.das`), in the same change that adds
+it.** A TTS model's reload runs no
+Vulkan model drop, only `bump_weights_epoch`, which runs every listener registered with
+`register_weights_epoch_listener`.
 
 **A diff that changes or removes a function that returns a model-derived module-level variable of a
 GPU driver file to its no-model value - or the registration that makes a model unload or reload run

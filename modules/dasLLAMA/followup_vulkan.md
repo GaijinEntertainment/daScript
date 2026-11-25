@@ -1653,12 +1653,6 @@ module) is independent and can land any time - it is pure structure.
     folded into the flash tile's load on the padded route and K and V staged in workgroup memory on
     the f32 window route (it reads them off the compact rows). The instrument is `lcpp_bench
     --image` on the E2B / gemma-3-4b / Qwen3-VL-4B / Qwen2.5-Omni-3B pairs beside their CPU rows.
-114. **The Vulkan TTS driver is required into every Vulkan-build LLM program.**
-    `dasllama_transformer.das` requires `dasllama/dasllama_vulkan_tts` under `?vulkan` beside the
-    tower and ASR-decoder drivers, so a program that never speaks compiles the TTS seats' classes -
-    a cold-compile cost on every Vulkan build; the Metal tower's TTS half rides the same precedent
-    through `dasllama_metal_tower`. The lever is a registration seam the TTS facade pulls in, so
-    only a program that requires `dasllama_tts` carries a TTS driver.
 113. **MoltenVK compiles MSL with fast math unless `MVK_CONFIG_FAST_MATH_ENABLED=0`.**
     `vk_arm_moltenvk_env` forces discrete bindings and sets nothing else, so on a Mac under MoltenVK
     the `precise` kernels' NoContraction decorations reach a Metal library compiled fast-math, and
@@ -1685,13 +1679,6 @@ module) is independent and can land any time - it is pure structure.
     carrying the extension at another shape passes the gate and fails at pipeline creation or
     computes wrong. Done = the gate walks the device's cooperative-matrix properties for the shape
     and declines by name without it.
-109. **A TTS model unloaded without a reload keeps its Vulkan slabs.** No unload event reaches the
-    Vulkan TTS driver: its slabs and the Pocket state drop on the LLM model drop's sweep and on a
-    weights-epoch bump (`ts_forget`), so a TTS model a process unloads and does not replace leaves
-    its slabs and scratch resident - the Pocket frames slab and the kokoro decoder's scratch among
-    them, their sizes the `PERF_LEDGER.md` Vulkan TTS seats entry's - until an LLM drop or the next
-    reload. Done = the TTS facade's unload notifies the driver, or the slab keys count their model
-    and a stale key's slab drops on the next seat call.
 108. **The Pocket codec's scratch runs at sample rate.** The transposed upsample convs' im2col
     columns are laid out per output sample and every slot is sized to the chunk, so a chunk's codec
     seat holds device slots to the gigabyte - the one-shot column slot's size at the 512-frame cap
@@ -1850,24 +1837,6 @@ module) is independent and can land any time - it is pure structure.
     `[hot_path]`, so the allocation lint never walks them. The ncol cell dispatches the one-column class before the N class, so a grid N leaf that skipped
     `stage_grid` would read the grid the previous dispatch left in workgroup memory (a poisoning
     dispatch between them, or the N class first, pins the call).
-
-115. **The TTS kernel pairs still under two shells, and what each fold costs.** The kernels both GPU
-    homes run as one `class template` (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`) cover the Pocket
-    row copy, rope and attention, the duration sums, the whole harmonic source, the STFT pair, AdaIN,
-    the depthwise rows conv, the residual add-and-scale, Axpy and Concat. What stays twice, by kind:
-    (a) the same output under a different thread-to-work split - `TtsElemT` /
-    `TtsGeluTanh` (Vulkan four elements an invocation, Metal one a thread), the reflect pad (two
-    `TtsPkRows` copies against `MetalSt2Reflect1`), the column statistics (four dispatches against
-    one), the Pocket row GEMV (`TtsPkGemvT`'s float4 lane against `MetalPkGemvT`'s strided lane, five
-    stamps) - each folds onto one body and is profiled on both boxes, two bodies kept only where the
-    profile parts; (b) a different algorithm - the LSTM direction (each home's slab writer lays `w_hh`
-    out its own way) and the ALBERT attention (a two-pass softmax against an online one) - which stay
-    two. Vulkan's four fused frame-loop GEMV stamps
-    (`LnQkv`, `AddScale`, `Add`, `LnGelu`) have no Metal twin: once the GEMV template is shared, Metal
-    gains them and the five-dispatch layer. The seat chains the two drivers write per backend are the
-    other half of the same picture and a separate arc: the host flow of every TTS seat - the stage
-    ping-pong, the concat when the width differs, the head-block loop - is identical and could run
-    once over an encoder interface, about 450 lines.
 
 118. **Two vulkan-lane arms still bake from RAM with the planar families kept.** The streaming mint
     (`ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint`) serves the cold load; a planar image already

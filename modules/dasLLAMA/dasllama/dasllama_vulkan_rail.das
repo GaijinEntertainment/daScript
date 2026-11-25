@@ -11,6 +11,7 @@ module dasllama_vulkan_rail shared public
 require dasllama/dasllama_lint public
 require math
 require dasllama/dasllama_env
+require dasllama/dasllama_tower   // TowerDev
 require dasllama/dasllama_vulkan_common public
 require dasllama/dasllama_vulkan_classes public
 
@@ -128,4 +129,112 @@ def rail_zero(var rl : VtRail; dst : TowerBuf; off, bytes : int64) {
     let bd = rail_buf(rl, dst)
     vhz_dep(rl.raw, rl.h, 0u, bd.bit, true)
     cmd_fill_zero(rl.raw, bd.dev, bd.off + off, bytes)
+}
+
+//! the home a rail is of
+[unused_argument(rl)]
+def rail_tts_dev(rl : VtRail) : TowerDev => TowerDev.vulkan
+
+//! the home's name in the TTS driver's log lines
+[unused_argument(rl)]
+def rail_tts_tag(rl : VtRail) : string => "vk"
+
+//! the class-build wall the home has paid so far, in usec: a seat's ensure log reads its share
+[unused_argument(rl)]
+def rail_tts_build_us(rl : VtRail) : int => g_vkd_pipe_build_us
+
+[unused_argument(rl)]
+def rail_tts_prof(rl : VtRail) : bool => vk_prof()
+
+//! a buffer of `bytes` binds whole: the device's storage range holds it
+[unused_argument(rl)]
+def rail_tts_bind_ok(rl : VtRail; bytes : int64) : bool => vk_range_ok(bytes)
+
+//! the widest binding the device takes, in bytes
+[unused_argument(rl)]
+def rail_tts_bind_cap(rl : VtRail) : int64 => vk_max_storage_range()
+
+//! the recurrence stamp's workgroup is four invocations a lane; a device whose compute limit is under that declines the LSTM seats
+[unused_argument(rl)]
+def rail_tts_lstm_ok(rl : VtRail) : bool => g_gpu.dry || g_gpu.max_wg_invocations >= 4l * int64(TTS_LSTM_LANES)
+
+//! the conv sites' schedule-fed cm2 tiles serve on this home
+[unused_argument(rl)]
+def rail_tts_cm2_on(rl : VtRail) : bool => true
+
+//! the f16 GEMM serves on this device: a seat's wide convs over a half leaf ride it
+[unused_argument(rl)]
+def rail_tts_f16_on(rl : VtRail) : bool => f16_gemm_on()
+
+//! the f16 GEMM's class built for the arm the device takes
+[unused_argument(rl)]
+def rail_tts_f16_ensure(rl : VtRail) : bool => f16_gemm_ensure(f16_gemm_khr())
+
+//! `bytes` on the device, 0 with `oom` set where the allocation failed
+[unused_argument(rl)]
+def rail_tts_alloc(rl : VtRail; var oom : bool&; bytes : int64) : uint64 => soft_call_buf(oom, bytes)
+
+[unused_argument(rl)]
+def rail_tts_free(rl : VtRail; var dev : uint64&) {
+    release_device_buf(dev)
+}
+
+//! `bytes` of host memory at `src` onto the buffer from byte `off`
+[unused_argument(rl)]
+def rail_tts_put(rl : VtRail; dev : uint64; off : int64; src : void?; bytes : int64) {
+    upload_region_at(dev, off, unsafe(reinterpret<uint8 const?>(src)), bytes)
+}
+
+var private g_vr_take : HostBuf   //! the readback buffer every TTS seat reads through; grow-only until the driver forgets
+var private g_vr_take_bytes = 0l
+
+[unused_argument(rl)]
+def rail_tts_take_drop(rl : VtRail) {
+    if (g_vr_take.buf != 0ul) {
+        destroy_host_buf(g_vr_take)
+    }
+    g_vr_take = HostBuf()
+    g_vr_take_bytes = 0l
+}
+
+//! the readback buffer holds `bytes`; false where it could not grow
+[cold_path]
+def rail_tts_take_ready(rl : VtRail; bytes : int64) : bool {
+    return true if (g_vr_take_bytes >= bytes)
+    rail_tts_take_drop(rl)
+    g_vr_take = make_host_buf(bytes, false, [cached = true, soft = true])
+    return false if (g_vr_take.buf == 0ul)
+    g_vr_take_bytes = bytes
+    return true
+}
+
+//! the readback buffer's size in bytes
+[unused_argument(rl)]
+def rail_tts_take_bytes(rl : VtRail) : int64 => g_vr_take_bytes
+
+//! `bytes` of plane `b` from byte `off` into `dst`, on its own submit behind the plane's writers
+[unused_argument(rl)]
+def rail_tts_take(rl : VtRail; b : RailBuf; off : int64; var dst : float?; bytes : int64) {
+    readback_range(b.dev, b.bit, off, g_vr_take, dst, bytes)
+}
+
+//! `bytes` the host writes in place and a dispatch binds; `dev` 0 where the buffer could not be made
+[unused_argument(rl)]
+def rail_tts_mapped_make(rl : VtRail; bytes : int64) : RailMapped {
+    let hb = make_host_buf(bytes, true, [soft = true])
+    return RailMapped(host = hb.mapped, dev = hb.buf, mem = hb.mem, bytes = hb.buf != 0ul ? bytes : 0l)
+}
+
+[unused_argument(rl)]
+def rail_tts_mapped_free(rl : VtRail; var m : RailMapped) {
+    if (m.dev != 0ul) {
+        destroy_host_buf(HostBuf(buf = m.dev, mem = m.mem, mapped = m.host, bytes = m.bytes))
+    }
+    m = RailMapped()
+}
+
+//! `rec`'s dispatches through `rl` recorded into one submit on the f32 lane, under the ledger's chain `chain` of `nl` layers over `npos` rows
+def rail_tts_shot(var rl : VtRail; chain : string; nl, npos : int64; rec : block<() : void>) {
+    vt_rail_begin(rl, RailLane.f32, true, false, f16_gemm_khr())
+    vt_rail_one_shot(rl, chain, nl, npos, rec)
 }

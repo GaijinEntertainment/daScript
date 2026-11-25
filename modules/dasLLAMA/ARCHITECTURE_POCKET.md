@@ -39,15 +39,16 @@ The TTS block home, facade and phoneme families are `ARCHITECTURE_TTS.md`.
   `linear_rows`, `layernorm_rows_into`, `rope_rows`, `attention_causal_rows` over a `TtsKvCache`,
   `gelu`, `layer_scale_rows`; the codec on `conv1d_rows`, `conv1d_rows_transposed_depthwise` and
   `elu_rows`. The codec decoder, the
-  frame loop and the text prompt are the three seats of the family's hook record (`PocketGpuDriver`,
-  `register_pocket_gpu`, `pocket_gpu_stats`; `ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-codec` and
-  `ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames`): a registered driver gets the first refusal of `pocket_decode_latents`, of the
+  frame loop and the text prompt are three seats of the family's hook record, a cloning model's voice encoder
+  and the voice state the other two (`PocketGpuDriver`, `register_pocket_gpu`, `pocket_gpu_stats`,
+  `pocket_encode_gpu_stats`; `ARCHITECTURE_GPU_TOWER_TTS.md#tts-pocket-seats`): a registered driver gets the first refusal of
+  `pocket_encode_latents`, of the voice state's rows, of `pocket_decode_latents`, of the
   prompt's rows into the caches (`prompt_rows`, over the embedding rows `pocket_prompt_embed` gathers on
   either rail) and of the loop inside `pocket_synthesize` once those rows sit there, and the CPU form
   serves a decline; a served loop's wall reads as the backbone's timing, its head timing zero. A prompt's
   residual is read by nothing after its last layer's keys and values, so the CPU chain runs the prompt and
   the voice state through `transformer_rows` under `kv_only_last` - every layer whole but the last, which ends at its cache append.
-  Both drivers run the served loop's host side through `pocket_frames_batched` (the batch of
+  The driver runs the served loop's host side through `pocket_frames_batched` (the batch of
   frames a submit carries, the noise draws, the end-of-speech check) at the one batch knob
   `set_pocket_frame_batch` / `pocket_frame_batch()`.
   One language per file:
@@ -55,9 +56,8 @@ The TTS block home, facade and phoneme families are `ARCHITECTURE_TTS.md`.
   reports; every roster voice speaks that language. The 2026-10 small English models
   (`english_18m_2026-10`, `english_7m_2026-10`, `english_2m_2026-10` and their reward-tuned
   `_refl_` twins) are files of this family like any other; what sets them apart is metadata the
-  reader folds into the same assembly. Every GPU seat serves them on both homes - the codec
-  (`ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-codec`), the frames and the prompt
-  (`ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames`).
+  reader folds into the same assembly. Every GPU seat serves them on every home
+  (`ARCHITECTURE_GPU_TOWER_TTS.md#tts-pocket-seats`).
 
 ## Mechanisms
 
@@ -175,7 +175,11 @@ takes a period after them - and the short-input padding), split after every run 
 sentence-mark ids `.`, `!`, `...`, `?` except a decimal point (the two ids before the boundary
 decode to a digit and the period, the period decoded with the id after it keeps a digit right
 behind it - "3. 14 people" is a sentence end), an over-long sentence re-split after its `,`,
-`;`, `:` ids, the pieces decoded and regrouped under the 50-token budget. A file minted before
+`;`, `:` ids, the pieces decoded and regrouped under the 50-token budget. A piece no mark splits stays whole
+under a warning, as the reference keeps it, up to 200 tokens (`POCKET_HARD_TOKENS`); past that it is cut at its
+spaces into runs of at most 200 (`hard_split`) - the one place the chunker leaves the reference's rule, so that
+no chunk outgrows what a GPU home's seats hold: a chunk's frames beside a sixty-second voice fit the frame loop's
+2048-key stage, and its frames the codec's 4096 rope rows. A file minted before
 the converter wrote the replacement keys reads these rules with its table empty, and its
 tokens fixture is minted `--no-replace` to say so. The
 reference splits abbreviations ("Dr." ends a sentence) and joins segments with spaces
@@ -188,28 +192,29 @@ another language takes the text as it is, which is what its reference does in ev
 ### A Pocket file serves from its prepared image {#pocket-image}
 
 `stage_pocket` reads the GGUF into `PocketStaging` on the lane it is asked, every load-time form
-minted there - the kernels' layouts and repacks, the head's baked
-timestep constant, the roster's frames - and `weights_walk` moves each weight into the staging
-planes with its `TtsSpan` recorded: floats into `blob`, Q8_0 quants, K-quant plane pairs and an F16
-table's halfwords into `qblob`. `load_pocket` maps the sibling `.dlim` under the lane's tag or bakes it from that staging,
-through the engine's one carrier loader, as the StyleTTS2 carrier does
+minted there - the kernels' layouts and repacks, the head's baked timestep constant, the roster's
+frames - and `weights_walk` moves each weight into the staging planes with its `TtsSpan` recorded:
+floats into `blob`, Q8_0 quants, K-quant plane pairs, an F16 table's halfwords and, on the unpinned
+lane, the codec convs' and the F16 flow head's halves (`ARCHITECTURE_CPU_KERNELS_TILES.md#half-rows-by-target`) into `qblob`.
+`load_pocket` maps the sibling `.dlim` under the lane's tag or bakes it from that staging, through
+the engine's one carrier loader, as the StyleTTS2 carrier does
 (`ARCHITECTURE_TTS.md#tts-image-rail`): `DASLLAMA_IMAGE=0` mints in memory, `mint_pocket` is the
 suites' off-rail control, `bake_pocket_image` the converter's arm. A staged read is q8 and native
-both on (the unpinned lane), q8 alone, or neither: native without q8 is no lane and is refused. Three lanes, each its own image:
-`pocket-native`, the unpinned default - a file's own quants, K-quant planes included, repacked
-for the box's backend, so the tag is config-bound; `pocket-q8`, the q8 pin, config-bound the same
-way; `pocket-f32`, the reference lane, under a config-free tag. The meta carries the scalars, the
-driver rules, the spans, the roster's names and the tokenizer's vocabulary (`serialize_spm`), so an
-image serves without its GGUF, and a `.dlim` path maps the lane it was baked on whatever the pin
-asks. `pocket_serves_file` reads a file's family from its head - a GGUF's architecture, an image's
-lane tag - and the facade routes a path by it. A host that holds an image's bytes hands them over
-instead (`load_pocket(base, bytes)`, the facade's `load_tts_model(base, bytes)`;
-`ARCHITECTURE_IMAGE.md#image-borrowed-memory`): the family needs no pack, so the bytes are the
-whole model, where a phoneme family's image reads its packs from its directory and opens from a
-path. A roster voice is a borrowed view over the mapped
-plane, in the same table as the voices a run registers, which the model owns: both free through
-`release_plane`, and the walk binds a roster voice in the one table its span names, since the
-latents' key is what says a voice is stored as frames.
+both on (the unpinned lane), q8 alone, or neither: native without q8 is no lane and is refused.
+Three lanes, each its own image: `pocket-native`, the unpinned default - a file's own quants,
+K-quant planes included, repacked for the box's backend, so the tag is config-bound; `pocket-q8`,
+the q8 pin, config-bound the same way; `pocket-f32`, the reference lane, under a config-free tag.
+The meta carries the scalars, the driver rules, the spans, the roster's names and the tokenizer's
+vocabulary (`serialize_spm`), so an image serves without its GGUF, and a `.dlim` path maps the lane
+it was baked on whatever the pin asks. `pocket_serves_file` reads a file's family from its head - a
+GGUF's architecture, an image's lane tag - and the facade routes a path by it. A host that holds an
+image's bytes hands them over instead (`load_pocket(base, bytes)`, the facade's
+`load_tts_model(base, bytes)`; `ARCHITECTURE_IMAGE.md#image-borrowed-memory`): the family needs no
+pack, so the bytes are the whole model, where a phoneme family's image reads its packs from its
+directory and opens from a path. A roster voice is a borrowed view over the mapped plane, in the
+same table as the voices a run registers, which the model owns: both free through `release_plane`,
+and the walk binds a roster voice in the one table its span names, since the latents' key is what
+says a voice is stored as frames.
 
 ### The published file carries the served quants {#pocket-q8-file}
 
@@ -233,26 +238,26 @@ and the 2m (112 wide, off the 32 lattice) is published f16: its backbone serves 
 every lane, and its codec transformers' matrices, 128 and 512 wide, take the q8 lane's Q8_0 at
 the load like any f16 linear on the lattice; the `z_proj` bottleneck, like the EOS logit, stays f16.
 
-The two lanes every Pocket file has, as the StyleTTS2 families have them: f32, the parity
-rail's reference, and q8, the served default - the transformer layers' four matrices and the
-frame input projection as Q8_0 rows (`linear_prepare`), the decode step on the q8 GEMV entry.
-The codec's convs serve f32 on every lane: the q8 rows conv quantizes its activations to int8
-per 32 input channels, and in the Mimi decoder those activations are the audio, so one loud
-channel's block scale crushes the quiet ones into a hiss floor 30 dB over the reference in
-every silence - the quietest twentieth of 100 ms windows of `harness/tts_synth.das` renders of
-four fixture sentences at `stuart_bell`, per band above 1 kHz, on an Apple M5 Max with the
-`arm64-gen` backend and the `arm-i8mm` tune profile, no overrides; `test_pocket_quiet_floor`
-reads the same effect as 11 dB on its differenced whole-signal metric and holds the served lane
-to the f32 lane's floor. The
-published GGUF (`convert_pocket.py --q8`) stores the served linears as Q8_0 in the layout the
-kernels read - [nout][nin] with the 32-blocks along nin - so `read_linear` takes the blocks
-into the int8 planes and repacks for the backend; every conv and every other tensor stays f16,
-and the f32 lane of such a file serves the same weights dequantized. A file of the older form
-that stores a codec conv as a Q8_0 slab dequantizes it at load (`read_conv_q8`). The
-converter's `q8_linear` is the engine's eligibility rule written a second time;
-`test_pocket_q8_file` holds the two files to each other and the rig holds the published file to
-the reference. The file's block scales
-are f16, the load-time quantizer's f32, and the flow head amplifies that half a thousandth per
-block into about one percent of a frame (`test_pocket_q8_file`'s teacher-forced compare of the
-two loads) - the same picture as the lane itself against the f32
-oracle, and why the rig, not a per-element bar, is the q8 gate.
+The two lanes every Pocket file has, as the StyleTTS2 families have them: f32, the parity rail's
+reference, and q8, the served default - the transformer layers' four matrices and the frame input
+projection as Q8_0 rows (`linear_prepare`), the decode step on the q8 GEMV entry. The codec's convs
+serve unquantized on every lane - floats, or on the unpinned lane the halves the file stores, as do
+the flow head's rows where a file keeps them F16
+(`ARCHITECTURE_CPU_KERNELS_TILES.md#half-rows-by-target`): the q8 rows conv quantizes its activations to
+int8 per 32 input channels, and in the Mimi decoder those activations are the audio, so one loud
+channel's block scale crushes the quiet ones into a hiss floor 30 dB over the reference in every
+silence - the quietest twentieth of 100 ms windows of `harness/tts_synth.das` renders of four
+fixture sentences at `stuart_bell`, per band above 1 kHz, on an Apple M5 Max with the `arm64-gen`
+backend and the `arm-i8mm` tune profile, no overrides; `test_pocket_quiet_floor` reads the same
+effect as 11 dB on its differenced whole-signal metric and holds the served lane to the f32 lane's
+floor. The published GGUF (`convert_pocket.py --q8`) stores the served linears as Q8_0 in the layout
+the kernels read - [nout][nin] with the 32-blocks along nin - so `read_linear` takes the blocks into
+the int8 planes and repacks for the backend; every conv and every other tensor stays f16, and the
+f32 lane of such a file serves the same weights dequantized. A file of the older form that stores a
+codec conv as a Q8_0 slab dequantizes it at load (`read_conv_q8`). The converter's `q8_linear` is
+the engine's eligibility rule written a second time; `test_pocket_q8_file` holds the two files to
+each other and the rig holds the published file to the reference. A file whose quants were minted
+from another rounding of the weights than the halves the f16 file stores moves a frame through the flow head
+(`test_pocket_q8_file`'s teacher-forced compare of the two loads holds it under `Q8_FILE_BAR` and logs it) - the
+same picture as the lane itself against the f32 oracle, and why the rig, not a per-element bar, is
+the q8 gate.

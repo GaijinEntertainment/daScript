@@ -76,18 +76,17 @@ compile-time choice that carries it; or the behaviour change named with the test
 it.**
 
 **A kernel-family stamp - any stamp of a class template or derivative of a base shell that a
-`[metal_dispatch]`, `[vk_dispatch]` or `[cuda_dispatch]` builder dispatches - that binds a buffer
-to a binding whose fields its compiled body, inherited code included, never reads or writes is a
-defect: gate the field with `@template_gate` where a template constant decides it, and where the
-family shares one binding layout on purpose, name that case in `ARCHITECTURE_GPU.md#gpu-backends`'s
-ledgered kernel-binding asymmetries.** A binding counts as used when the compiled body reads or
-writes any field declared on it - fields in the stamp or in the shell may share a binding,
-`@role = "alias"` marks such a view - including a field touched only under a run-time flag.
+`[*_dispatch]` class's builder dispatches - that binds a buffer to a binding whose fields its
+compiled body, inherited code included, never reads or writes is a defect: gate the field with
+`@template_gate` where a template constant decides it, and where the family shares one binding
+layout on purpose, name that case in `ARCHITECTURE_GPU.md#gpu-backends`'s ledgered kernel-binding
+asymmetries.** A binding counts as used when the compiled body reads or writes any field declared on
+it - fields in the stamp or in the shell may share a binding, `@role = "alias"` marks such a view -
+including a field touched only under a run-time flag.
 
 **A diff that moves a kernel class out of the class template its siblings stamp, or off the base
-shell they derive from, gives the class a `//!` line above its `[metal_dispatch]`,
-`[vk_dispatch]` or `[cuda_dispatch]` declaration naming the body difference that keeps it out of
-that template or shell.**
+shell they derive from, gives the class a `//!` line above its `[*_dispatch]` declaration naming the
+body difference that keeps it out of that template or shell.**
 
 **A diff that adds a kernel class stamping or deriving from - through an intermediate template
 too - a template more than one home stamps (`dasllama/dasllama_gpu_kernels_common.das`,
@@ -107,10 +106,10 @@ the CUDA home or a `DISCRETE_ONE_HOME_STAMPS` license, and every one in
 `dasllama/dasllama_gpu_kernels_common.das` to a stamp from the Metal and the Vulkan home, through
 any chain of intermediate templates.
 
-**A diff that adds or changes a binding of a class a lens (the `[metal_dispatch]`, `[vk_dispatch]`
-or `[cuda_dispatch]` macro that generates its builder) declares that no site writes
-after arming - a binding filled before the first encode and never written again - puts
-`@role = "weight"` on a field at that binding.**
+**A diff that adds or changes a binding of a class a lens (the macro behind a `[*_dispatch]`
+annotation, which generates its builder) declares that no site writes after arming - a binding
+filled before the first encode and never written again - puts `@role = "weight"` on a field at that
+binding.**
 
 **`@role = "weight"` on data written during a step - a pooled buffer the host refills each encode,
 or one another kernel rewrites - is a defect, judged per stamp by the buffer its dispatch sites
@@ -118,10 +117,10 @@ bind; such a field either omits `@role` or names the access its body performs.**
 Metal nor the Vulkan lens orders a `weight` read after the write that refilled the buffer, and
 neither refuses the role on a field the body only reads.
 
-**A diff that adds a `[metal_dispatch]`, `[vk_dispatch]` or `[cuda_dispatch]` class under
-`dasllama/` that the engine's Metal, Vulkan or CUDA driver never compiles at any point of a run is
-a defect - the class moves into the file under `modules/dasLLAMA/benchmarks/` or
-`modules/dasLLAMA/tests/` that compiles it, and a class nothing compiles is deleted.**
+**A diff that adds a class any `[*_dispatch]` annotation declares under `dasllama/` that the
+engine's Metal, Vulkan or CUDA driver never compiles at any point of a run is a defect - the class
+moves into the file under `modules/dasLLAMA/benchmarks/` or `modules/dasLLAMA/tests/` that compiles
+it, and a class nothing compiles is deleted.**
 
 **A diff that deletes a GEMM form `DASLLAMA_CUDA_MMQ` selects between, on the ground that another form
 wins on every card measured, is a defect - move the knob's default instead and keep the loser
@@ -161,9 +160,9 @@ key the entry is a prefix of.
 **Weakening the blind-entry asserts in `modules/dasLLAMA/tests/test_kernel_coverage.das` - that
 an entry matches a compiled census key, and that it matches no dispatched one - is a defect.**
 
-**Weakening any refusal a lens - the macro behind `[metal_dispatch]`, `[vk_dispatch]` or
-`[cuda_dispatch]` that derives each field's access and generates the builder - makes at compile
-time, or any cell that holds one, is a defect.**
+**Weakening any refusal a lens - the macro behind a `[*_dispatch]` annotation that derives each
+field's access and generates the builder - makes at compile time, or any cell that holds one, is a
+defect.**
 
 **Weakening any refusal the manual-dispatch check in `dasllama/dasllama_metal_lens.das` makes in a
 module whose name starts with `dasllama` and contains `metal` - a direct

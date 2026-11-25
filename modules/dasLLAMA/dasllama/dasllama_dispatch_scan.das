@@ -26,6 +26,8 @@ struct LensWords {
     uniform_note : string   //! what the @uniform refusal points the author at
     args_many : string      //! the refusal of a second args member
     args_word : string      //! the args member's name in its own refusals
+    kargs : string = "push_constant"   //! the annotation the home's emitter reads the args member under
+    kargs_bind : bool = false          //! the args member takes the binding past the class's highest
 }
 
 //! one @ssbo member: its name, binding and declared @role
@@ -131,7 +133,7 @@ def private lens_members(st : StructurePtr; var s : LensScan; w : LensWords; var
         for (annDecl in field.annotation) {
             if (annDecl.name == "ssbo") {
                 is_ssbo = true
-            } elif (annDecl.name == "push_constant") {
+            } elif (annDecl.name == w.kargs) {
                 is_push = true
             } elif (annDecl.name == "workgroup") {
                 is_wg = true
@@ -174,7 +176,7 @@ def lens_scan(var st : StructurePtr; args : AnnotationArgumentList; w : LensWord
     var s <- lens_args(args, w, fam_count, seen_ord, errors)
     return <- s if (!s.ok)
     s.ok = false
-    kargs_as(st, "push_constant")
+    kargs_as(st, w.kargs, w.kargs_bind)
     return <- s if (!lens_members(st, s, w, errors))
     var covered : table<int>
     for (bf in s.bufs) {
@@ -306,6 +308,22 @@ def lens_params(var fn : Function?; at : LineInfo; args : AnnotationArgumentList
     return true
 }
 
+//! the rail's ensure `rail_ensure_<base>(rl)`: the stamp's `ensure_<base>()` picked by the rail's type, for a body generic over the rail
+def private lens_rail_ensure(at : LineInfo; s : LensScan; w : LensWords; rail : string; var errors : das_string) : bool {
+    var fn = new Function(at = at, atDecl = at, name := "rail_ensure_{s.base}", flags = FunctionFlags.generated, result = new TypeDecl(at = at, baseType = Type.tBool))
+    var rl = new Variable(at = at, name := "rl", _type = mk_alias_t(at, rail, true))
+    rl.flags.marked_used = true
+    fn.arguments |> emplace_new <| rl
+    var body <- array<ExpressionPtr>(new ExprReturn(at = at, subexpr = new ExprCall(at = at, name := "ensure_{s.base}")))
+    fn.body = make_expression_block(body)
+    fn.body |> force_at(at)
+    if (!(compiling_module() |> add_function(fn))) {
+        errors := "{w.lens} {s.base}: failed to add rail_ensure_{s.base}"
+        return false
+    }
+    return true
+}
+
 //! the rail stamp overload `enc_<base>(rl, roles, pc, <params>)` over `body`: `rl` the home's `rail` (`rail_const` read-only), `roles` a `TowerBuf` a binding, `pc` where args exist
 def lens_rail_overload(at : LineInfo; args : AnnotationArgumentList; s : LensScan; w : LensWords; rail : string; rail_const : bool;
                        var body : array<ExpressionPtr>; var errors : das_string) : bool {
@@ -326,5 +344,5 @@ def lens_rail_overload(at : LineInfo; args : AnnotationArgumentList; s : LensSca
         errors := "{w.lens} {s.base}: failed to add the rail enc_{s.base}"
         return false
     }
-    return true
+    return lens_rail_ensure(at, s, w, rail, errors)
 }

@@ -107,7 +107,7 @@ var private FACADE_DEFS_WITHOUT_TUTORIAL <- {
     "register_gigaam_gpu", "register_gigaam_gpu_exact", "register_gigaam_gpu_encode", "register_gigaam_gpu_ctc", "register_rnnt_gpu",   //! the Metal and Vulkan towers and decoders register their device seats through them
     "rnnt_greedy", "rnnt_decode", "rnnt_n_logits", "rnnt_joint_blocks", "rnnt_step_lanes",   //! the shared transducer decode the parakeet and gigaam families drive
     "rnnt_dev_args", "rnnt_dev_cap", "rnnt_dev_faulted", "rnnt_dev_first_input", "rnnt_dev_key",   //! the host half of the device transducer decode the Metal and Vulkan seats call
-    "rnnt_bake", "rnnt_net_baked",   //! the transducer decoder's image form: a family's staging bakes it, its served net reads it
+    "rnnt_bake", "rnnt_net_baked", "rnnt_baked_rows_f32",   //! the transducer decoder's image form: a family's staging bakes it, its served net reads it
     "rnnt_dev_land_tokens", "rnnt_dev_layer_args", "rnnt_dev_layout", "rnnt_dev_round_budget",   //! the host half of the device transducer decode the Metal and Vulkan seats call
     "rnnt_dev_rounds", "rnnt_dev_shape_ok", "rnnt_dev_planes_ok", "rnnt_dev_state_words",   //! the host half of the device transducer decode the Metal and Vulkan seats call
     "set_rnnt_dev_fault", "set_rnnt_dev_round_budget",    //! probe seams a fixture sets to force a device fault, a round budget or a lane split
@@ -288,7 +288,8 @@ def private check_family_seams(carrier, kind_enum : string; exempt : table<strin
 // The backend-role partition, mechanically: every dasllama_<gpu>_*.das file's suffix is a role
 // ARCHITECTURE_GPU.md#gpu-backends's role table carries — a new role file adds its role to BOTH.
 var private GPU_ROLES_METAL <- {
-    "kernels", "common", "decode", "prefill", "gemm", "shapes", "tower", "asr_dec", "nmt", "lens", "mtp_gemma", "dflash"
+    "kernels", "common", "decode", "prefill", "gemm", "shapes", "tower", "asr_dec", "nmt", "lens", "mtp_gemma", "dflash",
+    "rail", "dispatch", "classes_tts", "tts", "sites"
 }
 
 var private GPU_ROLES_VULKAN <- {
@@ -299,22 +300,23 @@ var private GPU_ROLES_VULKAN <- {
 var private GPU_ROLES_CUDA <- {
     "classes", "classes_front", "classes_blocks", "classes_asr", "common", "dispatch", "decode", "stream", "rail",
     "tower", "tower_seat", "tower_audio", "tower_whisper", "tower_fc", "tower_g4a", "asr_dec", "asr_dec_fc", "mtp_gemma",
-    "classes_rows", "classes_dflash", "dflash"
+    "classes_rows", "classes_dflash", "dflash", "classes_tts", "tts"
 }
 
-// the fastmath default, mechanically: a [metal_kernel] declaring fastmath=false reds unless
+// the fastmath default, mechanically: a [metal_kernel] or [cuda_kernel] declaring fastmath=false reds unless
 // its kernel name is listed here against the test that reds under fast math (the failing test
 // ships with the kernel per the checklist; adding a row is a gate edit the master's weakening
 // rule reviews). The StyleTTS2 harmonic-source kernels earned theirs: under fast math
-// `st2_source_gate` in tests/test_metal_prefill_kernels.das reds on both resample laws (the
-// divisions approximate, the two-float cumsum's compensation folds away).
+// `test_mtl_source` in tests/test_metal_tts_kernels.das reds the phase frames, the mixed signal and
+// the long cumsum on both resample laws (the divisions approximate, the two-float cumsum's
+// compensation folds away).
 var private FASTMATH_OFF_EXEMPT <- {
-    "metal_st2_src_low_torch_msl" => "st2_source_gate",
-    "metal_st2_src_low_onnx_msl" => "st2_source_gate",
-    "metal_st2_src_cumsum_torch_msl" => "st2_source_gate",
-    "metal_st2_src_cumsum_onnx_msl" => "st2_source_gate",
-    "metal_st2_src_sines_torch_msl" => "st2_source_gate",
-    "metal_st2_src_sines_onnx_msl" => "st2_source_gate",
+    "tts_src_low_torch_cls_msl" => "test_mtl_source",
+    "tts_src_low_onnx_cls_msl" => "test_mtl_source",
+    "tts_src_cumsum_torch_cls_msl" => "test_mtl_source",
+    "tts_src_cumsum_onnx_cls_msl" => "test_mtl_source",
+    "tts_src_sines_torch_cls_msl" => "test_mtl_source",
+    "tts_src_sines_onnx_cls_msl" => "test_mtl_source",
     //! the per-32 GEMV and its small-batch form (an unnamed kernel keys by its method): under fast math the two sum a
     //! column's dot apart, and `b32_mvb_gate` in tests/test_metal_prefill_kernels.das reds its bit-for-bit compare
     "metal_kq_gemv_q51_msl" => "b32_mvb_gate",
@@ -344,6 +346,25 @@ var private FASTMATH_OFF_EXEMPT <- {
     "metal_dflash_walk_soft_msl" => "df_walk_soft_gate"
 }
 
+//! the CUDA home's speech stamps (`dasllama_cuda_classes_tts`) compiled under NVRTC's fast math: the tanh GELU reds
+//! `test_pocket_prompt_gpu` (tests/test_tts_pocket.das, the prompt's values past 1e-5), the harmonic source's noise draw
+//! and sines red `test_cud_source` (tests/test_cuda_tts_kernels.das, the own draw and the mixed signal past Metal's bars),
+//! and the Pocket row GEMV, every epilogue and stored member, reds `test_pocket_frames_metal` (the latents past 2e-5)
+def private cuda_tts_fastmath_off_exempt : table<string; string> {
+    var rows <- {
+        "tts_gelu_tanh_cls_cuda" => "test_pocket_prompt_gpu",
+        "tts_src_noise_cls_cuda" => "test_cud_source",
+        "tts_src_sines_torch_cls_cuda" => "test_cud_source",
+        "tts_src_sines_onnx_cls_cuda" => "test_cud_source"
+    }
+    for (ep in ["dot", "ln_silu", "gate", "add_silu", "tail", "ln_qkv", "add_scale", "add", "ln_gelu"]) {
+        for (stamp in ["tts_pk_gemv", "q8_tts_pkst", "kq_tts_pkst_k4", "kq_tts_pkst_k5", "kq_tts_pkst_k6", "f16_tts_pkst"]) {
+            rows["{stamp}_{ep}_cls_cuda"] = "test_pocket_frames_metal"
+        }
+    }
+    return <- rows
+}
+
 //! The `name="..."` a [metal_kernel] line declares, or "" where the line carries none.
 def private metal_kernel_name(line : string) : string {
     let at = find(line, "name")
@@ -359,6 +380,7 @@ def private metal_kernel_name(line : string) : string {
 def private check_fastmath_default {
     var files : array<string>
     collect_das_files("modules/dasLLAMA/dasllama", files)
+    var inscope cuda_exempt <- cuda_tts_fastmath_off_exempt()
     for (p in files) {
         var line_no = 0
         var inscope lines <- split(fread(p), "\n")
@@ -370,7 +392,7 @@ def private check_fastmath_default {
                 let next = strip(lines[line_no])
                 key = next |> starts_with("def ") ? strip(slice(next, 4, find(next, " ", 4) < 0 ? length(next) : find(next, " ", 4))) : ""
             }
-            if (!key_exists(FASTMATH_OFF_EXEMPT, key)) {
+            if (!key_exists(FASTMATH_OFF_EXEMPT, key) && !key_exists(cuda_exempt, key)) {
                 gate_finding(p, line_no,
                     ("kernel declares fastmath=false without an exemption row naming the test that"
                     + " fails under fastmath - fastmath is the default; the opt-out ships its"
@@ -1419,7 +1441,7 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 65
-let private IMAGE_LAYOUT_STAMP_HASH = 0x9479d6d72c027113ul
+let private IMAGE_LAYOUT_STAMP_HASH = 0xae69d512eb04c370ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
@@ -1437,7 +1459,8 @@ var private LAYOUT_HELPERS <- {
     "gg_stream_plane", "gg_job_span", "gg_plane_total", "tower_dev_put", "tower_bake_q8",
     "kq_gather_rows_dev", "nv4_dev_unit", "kq_dev_qsb", "kq_dev_ssb", "pack_iq_dev_row", "wd_gather", "tower_fc_gather_kq_member", "tower_gather_q8_regions",
     "fc_kq_records", "tower_kq_seat_take", "parakeet_fc_record_seats", "tw_fc_kq_attach",
-    "q8_gather_rows", "q8_gather_slice", "rnnt_dev_slab", "rnnt_dev_layout", "rnnt_bake",
+    "q8_gather_rows", "q8_gather_slice", "rnnt_dev_slab", "rnnt_dev_layout", "rnnt_bake", "rnnt_pred_rows", "rnnt_joint_cols",
+    "ts_gather_member", "ts_gather_member_metal", "tsw_store", "tts_slab_build_stored", "kq_scale_doff", "kq_scale_d_tail", "image_config_for", "kq_region_to_metal_planes", "kq_bind_offs",
     "fc_q8_regions", "fc_gemm_records", "fc_front_records", "tower_fc_kq_plan", "tower_aud_regions", "ln_block_regions",
     "tower_ct_regions", "tower_q3a_regions", "gemma4a_all_regions", "gemma4a_block_regions",
     "tower_aud_stem16", "tower_aud_stem_kdp", "tower_g4a_front16", "tower_q3a_front16", "tower_q3a_stages", "tower_conv_stage",
@@ -2548,9 +2571,10 @@ def private check_unicode_tables_stamp {
 
 let private GEMM_GEN_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_gemm_gen.das",
+    "modules/dasLLAMA/dasllama/dasllama_gemm_gen_f32.das",
     "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das"
 ]
-let private GEMM_GEN_STAMP_HASH = 0x349cfec765f0fc79ul
+let private GEMM_GEN_STAMP_HASH = 0xe6411f541527049ul
 
 [arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
 def private check_gemm_gen_stamp {
@@ -2566,7 +2590,7 @@ def private check_gemm_gen_stamp {
     }
     if (h != GEMM_GEN_STAMP_HASH) {
         gate_finding(GEMM_GEN_FILES[0],
-            "the generated GEMM tier's generator sources changed (dasllama_gemm_gen.das, dasllama_gemm_schema.das - ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers): a generator's text is outside the JIT cache key, so `.cache/daslang` serves the kernels the old text emitted - bump LLVM_JIT_CODEGEN_VERSION in modules/dasLLVM/daslib/llvm_jit_plan.das unless the emitted code is the same for every perm (the bump moves LLVM_JIT_EMITTER_HASH, which tests-cpp/small/test_jit_emitter_pin.cpp prints), then re-stamp GEMM_GEN_STAMP_HASH = {h}ul in modules/dasLLAMA/REVIEW.das")
+            "the generated GEMM tier's generator sources changed (dasllama_gemm_gen.das, dasllama_gemm_gen_f32.das, dasllama_gemm_schema.das - ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers): a generator's text is outside the JIT cache key, so `.cache/daslang` serves the kernels the old text emitted - bump LLVM_JIT_CODEGEN_VERSION in modules/dasLLVM/daslib/llvm_jit_plan.das unless the emitted code is the same for every perm (the bump moves LLVM_JIT_EMITTER_HASH, which tests-cpp/small/test_jit_emitter_pin.cpp prints), then re-stamp GEMM_GEN_STAMP_HASH = {h}ul in modules/dasLLAMA/REVIEW.das")
     }
 }
 
@@ -2759,7 +2783,7 @@ def private check_require_bans {
 let private SHARED_KERNEL_FILES <- ["modules/dasLLAMA/dasllama/dasllama_gpu_kernels_discrete.das",
     "modules/dasLLAMA/dasllama/dasllama_gpu_kernels_common.das"]
 let private CUDA_CLASSES_FILE = "modules/dasLLAMA/dasllama/dasllama_cuda_classes.das"
-let private METAL_KERNELS_FILE = "modules/dasLLAMA/dasllama/dasllama_metal_kernels.das"
+let private METAL_LANES_FILE = "modules/dasLLAMA/dasllama/dasllama_metal_rail.das"
 
 //! the discrete templates one home stamps - each named in followup_general.md's row of stamps that wait on their families
 var private DISCRETE_ONE_HOME_STAMPS : table<string>
@@ -2871,7 +2895,7 @@ def private check_shared_file_spelling {
     collect_das_files(ENGINE_DIR, files, true)
     for (path in files) {
         let base = base_name(path)
-        continue if (base == base_name(SHARED_KERNEL_FILES[0]) || base == base_name(METAL_KERNELS_FILE))
+        continue if (base == base_name(SHARED_KERNEL_FILES[0]) || base == base_name(METAL_LANES_FILE))
         var line_no = 0
         for (line in split(read_lf(path), "\n")) {
             line_no++
@@ -2880,8 +2904,8 @@ def private check_shared_file_spelling {
                 !(line |> starts_with("def private gk_subgroup_")))
             gate_finding(path, line_no, ("defines a `gk_subgroup_*` lane primitive - the discrete file " +
                 "carries the one copy in SPIR-V's spelling, which both discrete emitters lower, and a " +
-                "home defines its own only where its spelling differs, Metal's `simd_*` " +
-                "(ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels)"))
+                "home defines its own only where its spelling differs, Metal's `simd_*` in the Metal rail " +
+                "(ARCHITECTURE_GPU.md#gpu-backends)"))
         }
     }
 }
@@ -3180,18 +3204,23 @@ def private check_running_max_nan {
 }
 
 let private COVERAGE_FILE = "modules/dasLLAMA/tests/test_kernel_coverage.das"
-let private PINNED_DOC = "modules/dasLLAMA/tests/REVIEW_PINNED_GATES.md"
+let private PINNED_DOCS = ["modules/dasLLAMA/tests/REVIEW_PINNED_GATES.md",
+                           "modules/dasLLAMA/tests/REVIEW_PINNED_KERNEL_GATES.md"]
 let private CENSUS_TABLES = ["let private CENSUS_NEVER_DISPATCHED <- [", "let private VK_CENSUS_NEVER_DISPATCHED <- ["]
 
-//! the backticked names of the pinned set's entries, and the files whose entry pins them whole (an entry naming the file and no cell)
+//! the backticked names of the pinned set's entries, over every pinned document that exists, and the files whose
+//! entry pins them whole (an entry naming the file and no cell)
 def private pinned_set(var names : table<string>; var whole_files : table<string>) {
-    for (line in split(read_lf(PINNED_DOC), "\n")) {
-        var inscope parts <- split(line, "`")
-        for (name in quoted_segments(line, "`")) {
-            names |> insert(name)
-        }
-        if (line |> starts_with("- `") && length(parts) >= 3 && parts[1] |> ends_with(".das") && parts[2] |> starts_with(" must")) {
-            whole_files |> insert(parts[1])
+    for (doc in PINNED_DOCS) {
+        continue if (!fexist(doc))
+        for (line in split(read_lf(doc), "\n")) {
+            var inscope parts <- split(line, "`")
+            for (name in quoted_segments(line, "`")) {
+                names |> insert(name)
+            }
+            if (line |> starts_with("- `") && length(parts) >= 3 && parts[1] |> ends_with(".das") && parts[2] |> starts_with(" must")) {
+                whole_files |> insert(parts[1])
+            }
         }
     }
 }
@@ -3273,7 +3302,7 @@ def private called_by_pinned_cell(name, home : string; pinned : table<string>) :
 //! every kernel-unit cell a census table names as a blind spot's evidence is in the pinned set
 [arch(at = "ARCHITECTURE_ENGINE.md#test-folder-gates")]
 def private check_census_evidence_pinned {
-    return if (!fexist(COVERAGE_FILE) || !fexist(PINNED_DOC))
+    return if (!fexist(COVERAGE_FILE) || !fexist(PINNED_DOCS[0]))
     var inscope pinned, whole_files : table<string>
     pinned_set(pinned, whole_files)
     var inscope evidence : table<string; int>
@@ -3285,7 +3314,7 @@ def private check_census_evidence_pinned {
         if (empty(home)) {
             gate_finding(COVERAGE_FILE, line, "a census table cites `{name}` as evidence and no file under tests/ defines it - name the cell that dispatches the kernel (ARCHITECTURE_ENGINE.md#test-folder-gates)")
         } elif (!key_exists(whole_files, base_name(home)) && !called_by_pinned_cell(name, home, pinned)) {
-            gate_finding(COVERAGE_FILE, line, "a census table cites `{name}` ({base_name(home)}) as a blind spot's evidence, and the pinned set does not hold it - a cell a checked-in table names as its evidence is pinned, by a named-cell entry or its file's entry, in tests/REVIEW_PINNED_GATES.md (ARCHITECTURE_ENGINE.md#test-folder-gates)")
+            gate_finding(COVERAGE_FILE, line, "a census table cites `{name}` ({base_name(home)}) as a blind spot's evidence, and the pinned set does not hold it - a cell a checked-in table names as its evidence is pinned, by a named-cell entry or its file's entry, in tests/REVIEW_PINNED_GATES.md or its kernel-gate companion tests/REVIEW_PINNED_KERNEL_GATES.md (ARCHITECTURE_ENGINE.md#test-folder-gates)")
         }
     }
 }

@@ -12,6 +12,9 @@ require daslib/jobque_boost
 require _attn_oracle
 require _compares   // nan_wide_diff: the running largest differences' term
 require daslib/f16_cvt   // the binary16 round-trip the geglu table property checks
+require dasllama/dasllama_tower_image   // tower_bake_block, tower_block_current: a flavored mint's device block
+require daslib/rtti   // this_context().last_exception: a refusal read as text
+require strings
 require math
 
 // Model-free unit tests for the encoder-tower helpers both the audio (gemma4a) and vision
@@ -327,5 +330,66 @@ def test_attention_bidir(t : T?) {
             }
         }
         t |> success(length(hp) >= int(4l * tt * d), "hp scratch grown by the core")
+    }
+}
+
+//! a fixture tower's model, staging and flavor record: the fields `tower_bake_block` and `tower_block_current` read
+struct private FxTower {
+    dev_backend : TowerDev
+    dev_layout : uint64
+}
+
+struct private FxStaging {
+    e : FxTower
+    @exact_size dev : array<uint8>
+    @exact_size devplan : array<int64>
+}
+
+struct private FxFlavor {
+    backend : TowerDev
+    bake : function<(m : FxTower; var b : TowerDevBuild) : bool>
+}
+
+let private FX_SPENT = fixed_array(0x1100ul, 0x2200ul)   //! the weight arrays the fixture bake names as replaced
+
+[unused_argument(m)]
+def private fx_bake(m : FxTower; var b : TowerDevBuild) : bool {
+    tower_dev_put(b, "fx.rows", [1.0, 2.0, 3.0])
+    b.spent |> push_from(FX_SPENT)
+    return true
+}
+
+[unused_argument(m, b)]
+def private fx_bake_declines(m : FxTower; var b : TowerDevBuild) : bool => false
+
+[test(description = "`tower_bake_block` places the registered driver's block in the staging and names every weight array the bake spent, and panics naming the family and the driver where the bake declines the model; `tower_block_current` holds a CPU image under any layout and a device block under its own layout alone")]
+def test_tower_bake_block(t : T?) {
+    t |> run("the block lands in the staging, the spent arrays in the caller's set") @(t : T?) {
+        var inscope st = FxStaging(e = FxTower(dev_backend = TowerDev.vulkan))
+        var inscope spent : table<uint64>
+        tower_bake_block(FxFlavor(backend = TowerDev.vulkan, bake = @@fx_bake), st, spent, "fx")
+        t |> equal(length(spent), length(FX_SPENT), "every spent array is named once")
+        for (a in FX_SPENT) {
+            t |> success(key_exists(spent, a), "the bake's spent array {a} reaches the staging's walk")
+        }
+        t |> equal(long_length(st.devplan), TOWER_DEV_PIECE_WORDS, "the plan names the one piece")
+        t |> equal(length(st.dev), 3 * typeinfo sizeof(type<float>), "the staging holds the piece's bytes")
+    }
+    t |> run("a bake that declines the model is a panic naming the family and the driver") @(t : T?) {
+        var why = "no panic"
+        var inscope st = FxStaging(e = FxTower(dev_backend = TowerDev.vulkan))
+        var inscope spent : table<uint64>
+        try {
+            tower_bake_block(FxFlavor(backend = TowerDev.vulkan, bake = @@fx_bake_declines), st, spent, "fx")
+        } recover {
+            why = this_context().last_exception |> rtrim
+        }
+        t |> success(find(why, "dasLLAMA fx: the vulkan driver could not bake the model") >= 0, "the refusal: '{why}'")
+        t |> success(empty(spent) && empty(st.devplan), "nothing is spent and no block is placed")
+    }
+    t |> run("a device block is current under the layout it was laid out in") @(t : T?) {
+        t |> success(tower_block_current(FxTower(dev_backend = TowerDev.none, dev_layout = 7ul), 9ul), "a CPU image carries no block: current under any layout")
+        t |> success(tower_block_current(FxTower(dev_backend = TowerDev.vulkan, dev_layout = 9ul), 9ul), "a device block under its own layout")
+        t |> success(!tower_block_current(FxTower(dev_backend = TowerDev.vulkan, dev_layout = 7ul), 9ul), "a device block another layout laid out is not")
     }
 }

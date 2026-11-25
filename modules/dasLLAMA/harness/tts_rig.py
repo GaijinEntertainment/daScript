@@ -157,13 +157,14 @@ def score_wer_ru(rows, hyps):
 
 def lane_suffix(a):
     """the run folder's lane part: a lane or recipe flag changes what is synthesized, so it changes the folder"""
+    clip = "_clip" if a.clip else ""
     if a.q8:
-        return "_q8"
+        return "_q8" + clip
     if a.f32:
-        return "_f32"
+        return "_f32" + clip
     if a.recipe:
-        return "_recipe-" + re.sub(r"[^a-z0-9]+", "-", a.recipe.lower()).strip("-")
-    return "_small" if a.small else ""
+        return "_recipe-" + re.sub(r"[^a-z0-9]+", "-", a.recipe.lower()).strip("-") + clip
+    return ("_small" if a.small else "") + clip
 
 
 def main():
@@ -181,6 +182,7 @@ def main():
     ap.add_argument("--skip-synth", action="store_true", help="score existing folders")
     ap.add_argument("--q8", action="store_true", help="pin the rows GEMMs to Q8_0 quants, the serving default (folders get a _q8 suffix)")
     ap.add_argument("--f32", action="store_true", help="pin the rows GEMMs to the file's f32 planes, the reference lane (folders get a _f32 suffix)")
+    ap.add_argument("--clip", default="", help="clone each pair's voice from this audio clip (tts_synth.das --clip; a cloning Pocket file; folders get a _clip suffix)")
     a = ap.parse_args()
     if (a.small or a.recipe) and (a.q8 or a.f32):
         ap.error("--small / --recipe ask the recipe lane and --q8 / --f32 pin another: pass one lane")
@@ -215,6 +217,8 @@ def main():
                 cmd += ["--q8"]
             if a.f32:
                 cmd += ["--f32"]
+            if a.clip:
+                cmd += ["--clip", a.clip]
             run(cmd)
     env = dict(os.environ, HF_HOME=os.path.join(a.root, ".hf"), NEMO_CACHE_DIR=os.path.join(a.root, ".nemo"),
                TORCH_HOME=os.path.join(os.path.dirname(a.root), ".torchhub"))

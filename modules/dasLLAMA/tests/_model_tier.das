@@ -117,6 +117,19 @@ def asr_oracle_dir(family : string) : string => path_join(models_dir(), "asr_ora
 //! the machine-local llama2.c checkout (stories15M.bin, tokenizer.bin); override with DASLLAMA_LLAMA2C_DIR (e.g. the x64 handoff box)
 def llama2c_dir() : string => root_or(g_env_test.llama2c_dir, "/Users/borisbatkin/Work/llama2.c")
 
+//! `body` with the half rows' form pinned and no bake target armed, both put back after it
+def with_rows_f32(floats : bool; body : block<() : void>) {
+    let armed = bake_cpu_override_active()
+    var inscope target <- bake_cpu_override_config()
+    clear_bake_backend_override()
+    set_rows_f32(floats)
+    invoke(body)
+    reset_rows_f32()
+    if (armed) {
+        pin_backend_for_bake(target)
+    }
+}
+
 // Arm filter for the metal suites: DASLLAMA_TEST_ARMS = comma-separated substrings; when set,
 // only arm blocks whose name matches a token run. The skip is LOUD (t |> skip) so a filtered
 // run can never masquerade as full coverage. Unset/empty = every arm runs. Drive through

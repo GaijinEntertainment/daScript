@@ -24,7 +24,7 @@ require _compares   // mismatch_rel, logits_maxdiff: the tile arm's bar
 // position: same last-position logits AND same KV cache — both for a from-scratch prompt and for a
 // prefill that continues an already-populated cache (start_pos > 0, the multi-turn-chat path). The
 // fp32 model's batched GEMMs ride the tile walk, which rounds in its lanes
-// (ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice), so its bit-exact cells pin the row nest - the
+// (ARCHITECTURE_CPU_KERNELS_TILES.md#f32-batch-tile-lattice), so its bit-exact cells pin the row nest - the
 // same dot on both paths, as the Q8 cell's portable pin is - and one tile cell holds the shipped walk's
 // last-position logits within PREFILL_TILE_REL of Nx forward.
 // Needs llama2.c's stories15M.bin (gitignored, 60MB); skips cleanly when absent.

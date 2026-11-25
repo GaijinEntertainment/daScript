@@ -27,6 +27,10 @@ stating the same behavior, default, and files and paths.** A flag's copies are i
 saying the flag means the same as the same-named flag of the other file. A copy need not match
 another's reasons or measured numbers.
 
+**A diff that changes the set of values a flag accepts, or its default, updates in the same
+change every log text in this folder and every `control.html` option list that names that flag
+or its config key and lists those values or that default.**
+
 **A diff that adds or edits a flag's entry in a synopsis code block - the `[--flag VALUE]` command
 line in `README.md` or either reference page - writes the flag's default as the value, or a
 placeholder where the default is not a literal value.**
@@ -51,9 +55,15 @@ request to that route, in the same change.**
 **A diff that changes the response a fixture's recorded request gets - a key, an item in a list
 it answers, or a value the code sets itself (a default it fills in for a key the request and the
 configuration leave unset is one), not one the traffic since boot, the configuration, the loaded
-model or the machine decides - re-captures every fixture under `tests/fixtures/` that records that
-route, in the same change.**
-The fixtures are the recorded response shape.
+model or the machine decides - re-captures every fixture under `tests/fixtures/` that records
+that route and that `tests/fixtures/README.md` does not name hand-composed, in the same change,
+and names in the PR body the capture command run for each.** The fixtures are the recorded
+response shape, and a hand-edited fixture looks the same in a diff as a captured one.
+
+**A diff that changes the response a hand-composed fixture under `tests/fixtures/` records
+re-composes that fixture in the same change, and keeps it hand-composed only while its
+`tests/fixtures/README.md` row says why no machine available for capture produces that
+response, and captures it otherwise.**
 
 **A diff that adds a read of a response key in `control.html` or in a Playwright `.spec.js`,
 wherever the diff puts it, or edits a line that reads one, and no fixture under

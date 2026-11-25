@@ -6,6 +6,7 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 require dastest/testing_boost public
 require ../performance/profile_common.das
 require ../performance/gen_bench_records.das   // the record rig's own pure seams - file-relative require, explicit .das (pays the rig's compile, like test_tok_seed)
+require ../harness/_seam_race.das   // the CUDA races' shared rig: its pure seams
 require daslib/fio
 require math
 require strings
@@ -512,6 +513,92 @@ def test_tts_seat_verdict(t : T?) {
     }
 }
 
+[test(description = "The speech sweep's discrete home legs: `discrete_leg` names the vulkan or cuda leg a run asked, its das child carries no leg flag (the environment arms the home), `tts_pairs_torch_cuda` pairs torch cuda only beside a row a discrete home served on a family whose package serves the GPU, and `tts_row_backend` stamps the home that served")]
+def test_tts_discrete_legs(t : T?) {
+    t |> run("the leg a run asked, alone") @(t : T?) {
+        t |> equal(discrete_leg(false, false), "", "no discrete leg")
+        t |> equal(discrete_leg(true, false), "vulkan")
+        t |> equal(discrete_leg(false, true), "cuda")
+    }
+    t |> run("a discrete leg's das child carries neither the metal nor the accel flag") @(t : T?) {
+        let cfg = Args(tts_sentences = 7, tts_reps = 2)
+        for (leg in fixed_array("vulkan", "cuda")) {
+            let spec = tts_spec_of("kokoro-82m.gguf")
+            var inscope args <- tts_das_args(spec, cfg, 6, "cell.json", "/opt/rig/b", leg)
+            t |> success(has(args, "--tts") && !has(args, "--ngl") && !has(args, "--accel"),
+                "the {leg} leg's child serves on the CPU arm the environment points at the home")
+        }
+    }
+    t |> run("torch cuda pairs a discrete home's row on a GPU-serving package") @(t : T?) {
+        t |> success(tts_pairs_torch_cuda("vulkan", true), "a vulkan row")
+        t |> success(tts_pairs_torch_cuda("cuda", true), "a cuda row")
+        t |> success(!tts_pairs_torch_cuda("cpu", true), "a cpu row pairs the cpu reference")
+        t |> success(!tts_pairs_torch_cuda("metal", true), "a metal row pairs mps")
+        t |> success(!tts_pairs_torch_cuda("", true), "a failed cell pairs nothing")
+        t |> success(!tts_pairs_torch_cuda("cuda", false), "kitten's CPU package has no cuda arm")
+    }
+    t |> run("the das row stamps the home whose seats served every chunk") @(t : T?) {
+        t |> equal(tts_row_backend(true, "all", false), "metal")
+        t |> equal(tts_row_backend(true, "partial", true), "metal", "the metal arm reds on its own")
+        t |> equal(tts_row_backend(false, "all", false), "vulkan")
+        t |> equal(tts_row_backend(false, "all", true), "cuda", "the CUDA home served")
+        t |> equal(tts_row_backend(false, "none", false), "cpu")
+        t |> equal(tts_row_backend(false, "partial", true), "cpu", "a partial cell reds")
+    }
+    t |> run("a media cell with no home asked holds whatever its row stamps") @(t : T?) {
+        var fell <- [BenchModel(gguf = "m.gguf",
+                                runs <- [BenchRun(engine = "das", backend = "cpu")])]
+        t |> success(cell_served_on(fell, ""), "the neon, accel and metal legs pass no home")
+        t |> success(!cell_served_on(fell, "cuda"), "the cuda leg's cell refuses a cpu row")
+        delete fell
+    }
+}
+
+[test(description = "`tts_discrete_leg` runs a discrete home's das cell and then torch cuda's reference only beside a row a discrete home served on a package that serves the GPU, and `media_das_cell` fails by name a cell whose das row came back off the asked home - nothing absorbed, no store written, its cell file removed - where the asked home's own row is absorbed")]
+def test_tts_discrete_leg_cells(t : T?) {
+    t |> run("a discrete leg runs its das cell, then torch cuda's reference only beside a row a home served") @(t : T?) {
+        let cfg = Args(settle = 0, das_settle = 0)
+        for (c in [(served = "cuda", torch_gpu = true, want = "das ref"), (served = "vulkan", torch_gpu = true, want = "das ref"),
+                (served = "", torch_gpu = true, want = "das"), (served = "cpu", torch_gpu = true, want = "das"),
+                (served = "cuda", torch_gpu = false, want = "das")]) {
+            var inscope ran : array<string>
+            tts_discrete_leg(cfg, c.torch_gpu, $ {
+                ran |> push("das")
+                return c.served
+            }, $ {
+                ran |> push("ref")
+            })
+            t |> equal(join(ran, " "), c.want, "a das row served on '{c.served}', the package's GPU arm {c.torch_gpu}")
+        }
+    }
+    t |> run("a media cell whose das row came back off the asked home fails by name and absorbs nothing") @(t : T?) {
+        var pv = ""
+        if (run_and_capture(["python3", "--version"], pv, 30.0) != 0) {
+            t |> skip("no python3 on this box: the cell's child is `python3 --version`, a child that exits clean")
+            return
+        }
+        let dir = path_join(test_temp_dir(), "dasllama_media_cell")
+        mkdir_rec(dir)
+        let cell = path_join(dir, "cell.json")
+        let store = path_join(dir, "store.json")
+        for (c in [(want = "cuda", back = "", failed = "m.gguf das tts cuda", stored = false), (want = "cpu", back = "cpu", failed = "", stored = true)]) {
+            var inscope row <- [BenchModel(gguf = "m.gguf", runs <- [BenchRun(engine = "das", backend = "cpu", tune = "t", tune_sha = "s")])]
+            t |> success(write_bench_records(cell, row), "the child's cell file is written ahead of it")
+            remove(store)
+            var inscope models : array<BenchModel>
+            var inscope failed : array<string>
+            let back = media_das_cell("m.gguf", "tts {c.want}", ["python3", "--version"], cell, store, models, failed, want_backend = c.want)
+            t |> equal(back, c.back, "asked {c.want}, the cpu row's backend comes back only where it is the asked home's")
+            t |> equal(join(failed, "; "), c.failed, "asked {c.want}: the failed cell is named by its model and leg, none where the row is the asked home's")
+            t |> equal(length(models), c.stored ? 1 : 0, "asked {c.want}: the rows absorbed")
+            t |> equal(stat(store).is_valid, c.stored, "asked {c.want}: the store written")
+            t |> success(!stat(cell).is_valid, "asked {c.want}: the cell file is removed either way")
+        }
+        var why : string
+        rmdir_rec(dir, why)
+    }
+}
+
 [test(description = "`mlx_lm_bench_args` builds the flat reference argv on the MLX venv with --npl only past one stream, and `mlx_lm_rows` keeps only whole ROW lines with a positive numeric rate")]
 def test_mlx_lm_reference(t : T?) {
     t |> run("the mlx-lm argv is the flat reference's shape, the batched row only past one stream") @(t : T?) {
@@ -612,5 +699,43 @@ def test_ref_py(t : T?) {
         let dflt = ref_py("", "tts")
         t |> success(find(dflt, ".venv-tts") >= 0, "the default names the venv: {dflt}")
         t |> success(find(ref_py("", "mlx"), ".venv-mlx") >= 0, "each name its own venv")
+    }
+}
+
+[test(description = "The seam race rig resolves a candidate's unnamed seams to the values the race found and keeps the ones it names, spells the `RACE seams found` line a seam a pair in the table's order, lists a candidate's distinct pass hashes once each in hex, runs every candidate once a round with the order rotated a round, and refuses a candidate pair that is not key=value, whose value is no integer, whose key names no seam or whose value the seam does not admit, each by its reason")]
+def test_seam_race_rig(t : T?) {
+    t |> run("a candidate's values: its own, the found one where it names none") @(t : T?) {
+        let found <- [1l, 16l]
+        let partial <- race_resolve(RaceCand(name = "tg=4", vals <- [SEAM_KEEP, 4l]), found)
+        t |> success(partial[0] == 1l && partial[1] == 4l, "an unnamed seam runs at the found value, a named one at its own: {partial}")
+        let whole <- race_resolve(RaceCand(name = "pdl=0,tg=4", vals <- [0l, 4l]), found)
+        t |> success(whole[0] == 0l && whole[1] == 4l, "a value of 0 is a named value, not a kept seam (the control): {whole}")
+    }
+    t |> run("the seams line and the distinct hashes") @(t : T?) {
+        var inscope seams <- [RaceSeam(key = "pdl", allowed <- [0l, 1l], words = "0 or 1"), RaceSeam(key = "tg", words = "0 or more")]
+        t |> equal(race_seams_line(seams, [1l, 16l]), "RACE seams found: pdl 1, tg 16
+")
+        t |> equal(race_distinct_hashes([0xabul, 0xabul, 0xabul]), "ab", "one hash over every pass is one word")
+        let two = race_distinct_hashes([0xabul, 0xcdul, 0xabul])
+        t |> success(two == "ab cd" || two == "cd ab", "a pass that parted is a second word: '{two}'")
+    }
+    t |> run("a candidate's pair: a seam of the table at a value it admits, or the reason it sets none") @(t : T?) {
+        var inscope seams <- [RaceSeam(key = "pdl", allowed <- [0l, 1l], words = "0 or 1"), RaceSeam(key = "tg", words = "0 or more")]
+        let named = race_seam_value(seams, "tg=4")
+        t |> success(named.at == 1 && named.n == 4l && empty(named.why), "a pair the table admits sets its seam (the control): {named}")
+        for (bad in [(kv = "pdl", why = "'pdl' is not key=value"), (kv = "=1", why = "'=1' is not key=value"),
+                (kv = "pdl=on", why = "'pdl=on': the value is not an integer"), (kv = "rows=4", why = "unknown seam 'rows' (pdl, tg)"),
+                (kv = "pdl=2", why = "pdl=2: 0 or 1"), (kv = "tg=-1", why = "tg=-1: 0 or more")]) {
+            let sv = race_seam_value(seams, bad.kv)
+            t |> success(sv.at < 0, "'{bad.kv}' sets no seam")
+            t |> equal(sv.why, bad.why)
+        }
+    }
+    t |> run("every candidate once a round, the order rotated a round") @(t : T?) {
+        var inscope turns : array<int>
+        race_rounds(2, 3) $(ci, round) {
+            turns |> push(ci * 10 + round)
+        }
+        t |> equal("{turns}", "{[0, 10, 20, 11, 21, 1]}", "round 0 runs 0, 1, 2 and round 1 runs 1, 2, 0")
     }
 }

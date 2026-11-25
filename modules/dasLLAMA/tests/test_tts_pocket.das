@@ -14,6 +14,7 @@ require dasllama/dasllama_audio_io
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_tts_slab   // the prompt's cache admission and residency record, model-free
+require dasllama/dasllama_tower_tts   // set_tts_codec_window_, tts_codec_windows_: the codec seat's window and its count; tts_home_said_
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require dasllama/dasllama   // moe_gpu_drop_model: the LLM tier's model drop between two syntheses
 require daslib/jobque_boost
@@ -30,6 +31,8 @@ require _tts_oracle
 require _tts_parity
 require _model_once
 require ?das_metal dasllama/dasllama_metal_tower
+require ?das_metal dasllama/dasllama_metal_common   // metal_kernel_coverage: the per-kernel launch census
+require dasllama/dasllama_tower   // TowerDev: the flavor a model was staged for
 require _tts_corpus   // the corpus sentences the oracle prepared: the prepare-parity cell's inputs
 require _model_tier
 
@@ -47,15 +50,23 @@ require _model_tier
 // quiet-floor cell needs pocket-tts-en-kq.gguf alone. The voice-state cap cell and the from-memory
 // cell need pocket-tts-en-18m-q8.gguf, and the cap cell skips on a roster of fewer than three
 // voices. The GPU cells skip on a build without a GPU
-// module (das_metal or vulkan) and need a device that serves the tower (they red where a present
+// module (das_metal, vulkan or cuda) and need a device that serves the tower (they red where a present
 // device declines); the language cells run each language's `pocket-tts-<code>-q8.gguf` and its small form
 // `pocket-tts-<code>-kq.gguf`, a form skipping without its file or its `tts_oracle/pocket_<config>/` dumps;
 // the served-lane cells run a published file at a time - pocket-tts-en-q8.gguf's block, pocket-tts-en-kq.gguf's -
 // and a block skips without its own file, its served frames cell also unless the oracle carries two voices' stage cases; the
-// cells that hold the CPU chain pin the tower off for their run. Each file loads once a form, through its one
-// `with_model_once` block (`pocket_form`: the image, no lane pinned, the f32 pin, the q8 pin); the F16 table's and the
-// quiet floor's lanes are forms of their file's block, compared after it; the cells that hold several lanes or files
-// at once, and the from-memory cell, hold their own loads.
+// stored-plane Metal cells skip off an Apple build, where no device serves the TTS seats, and - the control cell - where
+// the CPU backend carries no K-quant layout; the knob-flip cell and the served synthesis's tower leg run on a `@dev` form,
+// a skipped cell where no device serves the seats, and the served synthesis's CPU leg, read only beside that tower leg,
+// is a skipped cell there too; the head-halves verdict skips where the oracle carries no stage case of alba's; the
+// unbuilt-seats and frame-leaf-layout cells skip where no device serves; the
+// said-again cell skips where the build has no GPU tower; the cells that hold the CPU chain run on a `@cpu` form, the CPU
+// image, or pin the tower off for their run. Each file loads once a form, through its one `with_model_once` block
+// (`pocket_form`: the image; no lane pinned, the f32 pin, the q8 pin, each as the box's GPU home serves it with the host's
+// weights kept, as its CPU image `@cpu`, or as a load serves it `@dev`); the F16 table's, the quiet floor's, the head
+// halves' and the served synthesis's forms are forms of their file's block, compared after it; the cells that hold
+// several lanes or files at once, the from-memory cell, and the unbuilt-seats and row-form cells, which assert on a load
+// under a seat or a pin, hold their own loads.
 
 let GPU_CODEC_BAR = 1e-5   //! the codec seat against the CPU chain on the f32 lane: reads 9e-7 on the exact stamps (M5 Max, -jit)
 let GPU_FRAME_BAR = 2e-5   //! the frames seat against the CPU chain on the f32 lane, teacher-forced: reads 2e-6 on the latents (M5 Max, -jit)
@@ -509,7 +520,7 @@ def private test_pocket_frames(t : T?; m : PocketModel) {
 def test_pocket_codec_metal(t : T?; m : PocketModel) {
     var inscope man <- stocked_manifest(t)
     return if (empty(man.cases))
-    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         pocket_lane_cell(PocketLane.f32) {
             var inscope sc = PocketScratch()
             var done = 0
@@ -555,7 +566,7 @@ def test_pocket_codec_metal_served(t : T?; m : PocketModel; file : string) {
 def private pocket_served_leg(t : T?; leg : block<(man : PocketManifest; var sc : PocketScratch) : void>) {
     var inscope man <- stocked_manifest(t)
     return if (empty(man.cases))
-    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         with_gpu_cell() {
             reset_pocket_q8()
             var inscope sc = PocketScratch()
@@ -578,13 +589,22 @@ def private test_pocket_prompt_served(t : T?; m : PocketModel; file : string) {
     }
 }
 
-//! the served cells of `m`, the native form of the published file `file` (the q8 file, the kq file): the codec seat, the
-//! frames seat and the prompt seat on its served planes
+//! the served cells of `m`, the native form of the published file `file` (the q8 file, the kq file): the codec seat and its
+//! windows, the encoder and voice seats, the frames seat, the prompt seat and the stored members on its served planes
 [cold_path]
 def private pocket_served_cells(t : T?; m : PocketModel; file : string) {
     unsafe {
         t |> run("test_pocket_codec_metal_served: {file}") @capture(& m)(t : T ?) {
             test_pocket_codec_metal_served(t, m, file)
+        }
+        t |> run("test_pocket_codec_windows: {file}") @capture(& m)(t : T ?) {
+            test_pocket_codec_windows(t, m, file)
+        }
+        t |> run("test_pocket_voice_seats: {file}") @capture(& m)(t : T ?) {
+            test_pocket_voice_seats(t, m, file)
+        }
+        t |> run("test_pocket_stored_members: {file}") @capture(& m)(t : T ?) {
+            test_pocket_stored_members(t, m, file)
         }
         t |> run("test_pocket_frames_metal_served: {file}") @capture(& m)(t : T ?) {
             test_pocket_frames_metal_served(t, m, file)
@@ -604,6 +624,158 @@ def private codec_served_leg(t : T?; m : PocketModel; tag : string; latents : ar
             pocket_decode_latents(m, lat_x, frames, sc, out)
         } else {
             pocket_decode_latents(m, latents, frames, sc, out)
+        }
+    }
+}
+
+//! `frames` latent frames tiled from an oracle case's own
+def private tiled_latents(src : array<float>; frames, ld : int64) : array<float> {
+    let have = long_length(src) / ld
+    return <- [for (i in range64(frames * ld)); src[((i / ld) % have) * ld + i % ld]]
+}
+
+//! The codec seat's windows on the served planes of `file`, `m` its native form: a 40-frame call
+//! in one, ten and five windows bit for bit (another call the control), a no-frame window held
+//! at one, and a 600-frame call within GPU_CODEC_SERVED_BAR of the file's own CPU chain.
+def private test_pocket_codec_windows(t : T?; m : PocketModel; file : string) {
+    pocket_served_leg(t) $(man : PocketManifest; var sc : PocketScratch) {
+        set_serving_gpu_tower(true, TowerFamily.tts)
+        for (c in man.cases) {
+            continue if (!c.stages)
+            var inscope dump <- load_tts_dump(path_join(oracle_dir(), c.file))
+            var inscope lat <- tiled_latents(dump["latent"].f, 600l, m.latent_dim)
+            let tag = "{c.id} {file}"
+            let c0 = pocket_gpu_stats("codec")
+            let was = set_tts_codec_window_(64l)
+            let w0 = tts_codec_windows_()
+            var inscope whole : array<float>
+            pocket_decode_latents(m, lat, 40l, sc, whole)
+            let one = tts_codec_windows_() - w0
+            var inscope other : array<float>
+            pocket_decode_latents(m, lat, 41l, sc, other)
+            var inscope windows : array<int64>
+            var inscope off : array<int>
+            for (w in [4l, 9l]) {
+                set_tts_codec_window_(w)
+                let w1 = tts_codec_windows_()
+                var inscope got : array<float>
+                pocket_decode_latents(m, lat, 40l, sc, got)
+                windows |> push(tts_codec_windows_() - w1)
+                off |> push(mismatch_exact(got, whole))
+            }
+            set_tts_codec_window_(0l)
+            let floor = set_tts_codec_window_(was)
+            let c1 = pocket_gpu_stats("codec")
+            return if (c1.served - c0.served != 4 && !tower_served(t, tag, "{gpu_declines()}"))
+            t |> equal(floor, 1l, "{tag}: a window of no frames is held at one")
+            t |> success(all_finite(whole) && all_finite(other), "{tag}: the one-window call and the 41-frame call are finite")
+            t |> equal(one, 1l, "{tag}: a 40-frame call under a 64-frame window decodes in one window")
+            t |> equal(windows[0], 10l, "{tag}: a 40-frame call at a 4-frame window decodes in ten windows")
+            t |> equal(windows[1], 5l, "{tag}: a 40-frame call at a 9-frame window decodes in five windows")
+            to_log(LOG_INFO, "{tag}: samples off the one-window call's - {off[0]} at a 4-frame window, {off[1]} at a 9-frame window, {mismatch_exact(other, whole)} for a 41-frame call\n")
+            t |> equal(off[0], 0, "{tag}: a 40-frame call in windows of 4 frames is the one-window call's samples bit for bit")
+            t |> equal(off[1], 0, "{tag}: a 40-frame call in windows of 9 frames is the one-window call's samples bit for bit")
+            t |> success(mismatch_exact(other, whole) != 0, "{tag}: a 41-frame call's samples are another call's (the equality's control)")
+            var inscope cpu : array<float>
+            codec_served_leg(t, m, "{tag} 600 frames", lat, 600l, GPU_CODEC_SERVED_BAR, sc, cpu)
+            return
+        }
+    }
+}
+
+typedef PromptRows = tuple<k : array<float>; v : array<float>>
+
+//! every layer's K and V rows [r0, r1) of a voice state, each layer's rows after the one before: [0, vs.len) the voice's
+//! own, [vs.len, vs.len + n) the rows a prompt of n tokens left
+def private kv_rows(vs : PocketVoiceState; r0, r1 : int64) : PromptRows {
+    var r : PromptRows
+    let per = (r1 - r0) * vs.caches[0].heads * vs.caches[0].dh
+    r.k |> resize(per * long_length(vs.caches))
+    r.v |> resize(per * long_length(vs.caches))
+    unsafe {
+        for (li, kc in iter_range(vs.caches), vs.caches) {
+            kv_cache_read_rows(kc, r0, r1, 0l, addr(r.k[int64(li) * per]), addr(r.v[int64(li) * per]))
+        }
+    }
+    return <- r
+}
+
+let private GPU_ENCODE_SERVED_BAR = 3e-2   //! the encoder seat's latents against the file's own CPU encoder on the served planes, the CPU's Q8_0 activations the whole of the gap
+let private GPU_VOICE_SERVED_BAR = 8e-2    //! the voice seat's keys and values against the CPU backbone pass on the served planes, the same cause
+
+//! the latent frames one pass of the encoder seat takes: the driver's private window, pinned here by value
+let private POCKET_ENC_WINDOW = 8l
+
+//! The home's dense dispatches over widened rows across the legs of `tag`, a clip of `frames` latent frames: none with
+//! the tower off (the count's control); on the encoder seat one a window for its first conv, a single input channel
+//! wide and so off the 8 lattice of the half member's gather, and none for any other leaf; none on the voice seat.
+def private voice_seats_widened(t : T?; tag : string; m : PocketModel;
+                                frames, widened_off, widened_enc, widened_voice : int64) {
+    let windows = (frames + POCKET_ENC_WINDOW - 1l) / POCKET_ENC_WINDOW
+    let first = conv_off_lattice(m.mimi.enc_in) ? 1l : 0l
+    t |> equal(widened_off, 0l, "{tag}: the tower off, no dispatch over widened rows is counted "
+        + "(the count's control)")
+    t |> equal(widened_enc, windows * first, "{tag}: the encoder seat's dispatches over widened rows are "
+        + "its first conv's alone ({m.mimi.enc_in.cin} input channel(s)), one a window of "
+        + "{POCKET_ENC_WINDOW} frames over {frames} frames - no transformer matrix or lattice "
+        + "conv the file stores was widened")
+    t |> equal(widened_voice, 0l, "{tag}: the voice seat dispatches over no widened rows")
+}
+
+//! The encoder and voice seats on the served planes of `file`, `m` its native form, vs the file's
+//! CPU encoder and backbone pass over an oracle clip: each served once, a tower-off leg serving
+//! none, the reversed clip outside both bars; a file that carries no encoder skips.
+def private test_pocket_voice_seats(t : T?; m : PocketModel; file : string) {
+    pocket_served_leg(t) $(man : PocketManifest; var sc : PocketScratch) {
+        if (!m.cloning) {
+            t |> skip("{file} carries no encoder")
+            return
+        }
+        for (c in man.cases) {
+            continue if (!c.stages)
+            var inscope dump <- load_tts_dump(path_join(oracle_dir(), c.file))
+            let tag = "{c.id} {file}"
+            var inscope lat_c, lat_g, lat_x : array<float>
+            set_serving_gpu_tower(false, TowerFamily.tts)
+            let e0 = pocket_encode_gpu_stats()
+            let v0 = pocket_voice_gpu_stats()
+            let w0 = gpu_widened()
+            let fc = pocket_encode_latents(m, dump["voice_pcm"].f, sc, lat_c)
+            var inscope vs_c <- voice_state_from_latents(m, lat_c, fc, sc)
+            let e1 = pocket_encode_gpu_stats()
+            let v1 = pocket_voice_gpu_stats()
+            let w1 = gpu_widened()
+            set_serving_gpu_tower(true, TowerFamily.tts)
+            t |> success(e1.calls > e0.calls && v1.calls > v0.calls, "{tag}: every home registers the encoder and voice seats, each asked with the tower off")
+            t |> success(e1.served == e0.served && v1.served == v0.served, "{tag}: the tower off, neither seat serves")
+            let fg = pocket_encode_latents(m, dump["voice_pcm"].f, sc, lat_g)
+            let w2 = gpu_widened()
+            var inscope vs_g <- voice_state_from_latents(m, lat_c, fc, sc)
+            let w3 = gpu_widened()
+            let e2 = pocket_encode_gpu_stats()
+            let v2 = pocket_voice_gpu_stats()
+            return if ((e2.served - e1.served != 1 || v2.served - v1.served != 1) && !tower_served(t, tag, "{gpu_declines()}"))
+            t |> equal(fg, fc, "{tag}: the encoder seat's frame count")
+            voice_seats_widened(t, tag, m, fg, w1 - w0, w2 - w1, w3 - w2)
+            let de = rel_l2(lat_g, lat_c)
+            var inscope kc <- kv_rows(vs_c, 0l, vs_c.len)
+            var inscope kg <- kv_rows(vs_g, 0l, vs_g.len)
+            let dk = rel_l2(kg.k, kc.k)
+            let dv = rel_l2(kg.v, kc.v)
+            to_log(LOG_INFO, "pocket {tag}: encoder latents rel-l2 {de} over {fc} frames (bar {GPU_ENCODE_SERVED_BAR}); voice keys {dk} values {dv} over {vs_c.len} rows x {length(vs_c.caches)} layers (bar {GPU_VOICE_SERVED_BAR})\n")
+            t |> success(de <= GPU_ENCODE_SERVED_BAR, "{tag}: the encoder seat's latents within {GPU_ENCODE_SERVED_BAR} (rel-l2 {de})")
+            t |> success(dk <= GPU_VOICE_SERVED_BAR && dv <= GPU_VOICE_SERVED_BAR, "{tag}: the voice seat's keys and values within {GPU_VOICE_SERVED_BAR} (rel-l2 {dk} / {dv})")
+            let pn = long_length(dump["voice_pcm"].f)
+            var inscope pcm_x <- [for (i in range64(pn)); dump["voice_pcm"].f[pn - 1l - i]]
+            pocket_encode_latents(m, pcm_x, sc, lat_x)
+            let xe = rel_l2(lat_x, lat_c)
+            t |> success(xe > GPU_ENCODE_SERVED_BAR, "{tag}: the clip reversed reds the encoder's bar (rel-l2 {xe}, the compare's control)")
+            var inscope vs_x <- voice_state_from_latents(m, lat_x, fc, sc)
+            var inscope kx <- kv_rows(vs_x, 0l, vs_x.len)
+            let xk = rel_l2(kx.k, kc.k)
+            let xv = rel_l2(kx.v, kc.v)
+            t |> success(xk > GPU_VOICE_SERVED_BAR && xv > GPU_VOICE_SERVED_BAR, "{tag}: the reversed clip's voice reds the voice bar (rel-l2 {xk} / {xv}, the compare's control)")
+            return
         }
     }
 }
@@ -658,7 +830,7 @@ def private frames_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
                             var sc : PocketScratch) : tuple<fc : int64; cpu : FrameRows> {
     var r : tuple<fc : int64; cpu : FrameRows>
     r.fc = -1l
-    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         set_serving_gpu_tower(false, TowerFamily.tts)
         let fc = forced_frames(m, k, k.x0, k.x1, sc)
         r.cpu <- frame_rows(m, sc, fc)
@@ -779,33 +951,16 @@ def test_pocket_seat_stats(t : T?) {
     }
 }
 
-typedef PromptRows = tuple<k : array<float>; v : array<float>>
-
-//! every layer's K and V rows [vs.len, vs.len + n) as the prompt left them, each layer's rows after the one before
-def private prompt_kv(vs : PocketVoiceState; n : int64) : PromptRows {
-    var r : PromptRows
-    let d = vs.caches[0].heads * vs.caches[0].dh
-    let per = n * d
-    r.k |> resize(per * long_length(vs.caches))
-    r.v |> resize(per * long_length(vs.caches))
-    unsafe {
-        for (li, kc in iter_range(vs.caches), vs.caches) {
-            kv_cache_read_rows(kc, vs.len, vs.len + n, 0l, addr(r.k[int64(li) * per]), addr(r.v[int64(li) * per]))
-        }
-    }
-    return <- r
-}
-
 //! The prompt seat against the CPU chain over one case's text: every layer's K and V rows within `bar` with the bar's
 //! one-element control and the text rotated by one token as the compare's control, one hook call served, one encode,
 //! the knob-off leg bit-equal with its decline recorded; false where no device serves (the skip registered).
 [unused_argument(t, m, k, tag, bar, sc)]   // off-Apple the gated body is empty
 def private prompt_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : string; bar : float; var sc : PocketScratch) : bool {
-    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         let n = long_length(k.ids)
         set_serving_gpu_tower(false, TowerFamily.tts)
         pocket_prompt_rows(m, k.ids, k.vs, sc)
-        var inscope cpu <- prompt_kv(k.vs, n)
+        var inscope cpu <- kv_rows(k.vs, k.vs.len, k.vs.len + n)
         set_serving_gpu_tower(true, TowerFamily.tts)
         let h0 = pocket_gpu_stats("prompt")
         let e0 = gpu_encodes()
@@ -815,7 +970,7 @@ def private prompt_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
         return false if (h1.served - h0.served != 1 && !tower_served(t, tag, "{gpu_declines()}"))
         t |> equal(h1.calls - h0.calls, 1, "{tag}: one hook call")
         t |> equal(e1 - e0, 1l, "{tag}: one tower encode")
-        var inscope gpu <- prompt_kv(k.vs, n)
+        var inscope gpu <- kv_rows(k.vs, k.vs.len, k.vs.len + n)
         let dk = rel_l2(gpu.k, cpu.k)
         let dv = rel_l2(gpu.v, cpu.v)
         to_log(LOG_INFO, "pocket {tag}: rel-l2 keys {dk} values {dv} against the CPU chain over {n} rows x {length(k.vs.caches)} layers (bar {bar})\n")
@@ -824,13 +979,13 @@ def private prompt_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
         t |> success(rel_l2(w, cpu.v) > bar, "{tag}: one value moved by twice the bar reds it (the bar's control)")
         knob_off_leg(t, tag, 1l, $ => pocket_gpu_stats("prompt")) $ {
             pocket_prompt_rows(m, k.ids, k.vs, sc)
-            var inscope off <- prompt_kv(k.vs, n)
+            var inscope off <- kv_rows(k.vs, k.vs.len, k.vs.len + n)
             return rel_l2(off.k, cpu.k) == 0.0 && rel_l2(off.v, cpu.v) == 0.0
         }
         set_serving_gpu_tower(true, TowerFamily.tts)
         var inscope ids_rot <- [for (i in range64(n)); k.ids[(i + 1l) % n]]
         pocket_prompt_rows(m, ids_rot, k.vs, sc)
-        var inscope gx <- prompt_kv(k.vs, n)
+        var inscope gx <- kv_rows(k.vs, k.vs.len, k.vs.len + n)
         t |> success(rel_l2(gx.k, cpu.k) > bar && rel_l2(gx.v, cpu.v) > bar, "{tag}: the text rotated by one token reds the keys' and the values' bars (the compare's control)")
         return true
     } else {
@@ -842,7 +997,7 @@ def private prompt_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
 def private test_pocket_prompt_gpu(t : T?; m : PocketModel) {
     var inscope man <- stocked_manifest(t)
     return if (empty(man.cases))
-    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         pocket_lane_cell(PocketLane.f32) {
             var inscope sc = PocketScratch()
             for (c in man.cases) {
@@ -857,6 +1012,15 @@ def private test_pocket_prompt_gpu(t : T?; m : PocketModel) {
     }
 }
 
+//! A stored Pocket leg launched no f32 row GEMV and counted no dense dispatch over widened rows (`widened`), `leaves`
+//! what it read - the f32 lane's frames cell launches that GEMV (`f32_lane_held`), the control.
+def private no_widened_leaf(t : T?; tag : string; launched : table<string; int64>; widened : int64; leaves : string) {
+    t |> equal(census_launches(launched, [F32_ROW_GEMV]), 0l, "{tag}: no f32 row GEMV launched - "
+        + "no frame matrix the file stores was widened into the slab")
+    t |> equal(widened, 0l, "{tag}: no dense dispatch read widened rows - every {leaves} the file "
+        + "stores sits on its member's lattice")
+}
+
 //! The frames seat on the Metal tower against the CPU chain on the f32 lane, teacher-forced on the
 //! oracle's noise and frames: the latents, the conditioning rows and the EOS logits within
 //! GPU_FRAME_BAR with the bar's one-element control and the x3-scaled noise as the compare's
@@ -867,7 +1031,7 @@ def private test_pocket_prompt_gpu(t : T?; m : PocketModel) {
 def test_pocket_frames_metal(t : T?; m : PocketModel) {
     var inscope man <- stocked_manifest(t)
     return if (empty(man.cases))
-    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         pocket_lane_cell(PocketLane.f32) {
             var inscope sc = PocketScratch()
             var done = 0
@@ -875,8 +1039,13 @@ def test_pocket_frames_metal(t : T?; m : PocketModel) {
                 continue if (!c.stages || c.voice != "alba")
                 let tag = "{c.id} {c.voice} frames"
                 var inscope k <- forced_case(m, c, man, sc)
+                var inscope before <- gpu_census()
                 var inscope leg <- frames_seat_leg(t, m, k, tag, GPU_FRAME_BAR, true, sc)
                 return if (leg.fc < 0l)
+                var inscope after <- gpu_census()
+                var inscope launched <- census_gain(before, after)
+                f32_lane_held(t, tag, launched, census_launches(launched, [F32_ROW_GEMV]),
+                    "the frame loop's f32 row GEMV")
                 let fc = leg.fc
                 knob_off_leg(t, tag, 3l, $ => pocket_gpu_stats("frames")) $ {
                     let fo = forced_frames(m, k, k.x0, k.x1, sc)
@@ -960,13 +1129,141 @@ def test_pocket_frames_metal_served(t : T?; m : PocketModel; file : string) {
     }
 }
 
+//! a Metal-flavor cell's leg: `leg` on the English oracle's manifest and a scratch of its own, on a set-up job queue with the
+//! GPU knobs put back after, no lane pinned and the tower on; a skip where the dumps are not stocked, off an Apple build and
+//! where no Metal device serves the TTS seats
+def private pocket_metal_leg(t : T?; leg : block<(man : PocketManifest; var sc : PocketScratch) : void>) {
+    var inscope man <- stocked_manifest(t)
+    return if (empty(man.cases))
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_gpu_cell() {
+            reset_pocket_q8()
+            set_serving_gpu_tower(true, TowerFamily.tts)
+            if (!serving_tower_device_up(TowerFamily.tts)) {
+                t |> skip("no Metal device serves the TTS seats on this box: the stored-plane seats are the flavor's")
+                return
+            }
+            var inscope sc = PocketScratch()
+            invoke(leg, man, sc)
+        }
+    } else {
+        t |> skip("no Metal module in this build")
+    }
+}
+
+//! the launches of a K4 GEMM over the prompt's rows on the Metal home: the stored GEMM tile over a leaf in the home's layout
+//! and the exact tile over one in the shared layout
+def private pocket_k4_mm_launches() : int64 => metal_stored_launches("st2_k4_", "kq_f32_gemm_k4_cls")
+
+//! The Metal flavor's stored planes on `m`, the native form of the K-quant file: its backbone linears stay Q4_K planes in
+//! disk order, and a forced case launches the K4 row GEMV for its frames and the K4 mul_mm for its prompt. Skips off an
+//! Apple build and where no Metal device serves the TTS seats.
+def private test_pocket_kq_metal_stored(t : T?; m : PocketModel) {
+    pocket_metal_leg(t) $(man : PocketManifest; var sc : PocketScratch) {
+        t |> success(pocket_serves_native(), "unpinned, the lane is the file's own formats")
+        t |> equal(m.dev_backend, TowerDev.metal, "with the device up and the tower on, the mint takes the Metal flavor")
+        return if (m.dev_backend != TowerDev.metal)
+        let l0 & = unsafe(m.backbone.layers[0])
+        t |> success(l0.in_proj.kq_fmt == 4 && l0.ffn2.kq_fmt == 4 && !l0.in_proj.kq_repacked && !l0.ffn2.kq_repacked,
+            "the flavor's backbone linears are the file's Q4_K planes in disk order")
+        let enc_in_proj & = unsafe(m.mimi.enc_tf.layers[0].in_proj)
+        t |> success(enc_in_proj.kq_fmt == 4 && !enc_in_proj.kq_repacked, "the codec encoder's linears are the "
+            + "file's Q4_K planes in disk order too: its seat reads them as stored")
+        for (c in man.cases) {
+            continue if (!c.stages)
+            var inscope k <- forced_case(m, c, man, sc)
+            let gemv0 = gpu_launches(["tts_pk", "_k4_"])
+            let mm0 = pocket_k4_mm_launches()
+            let h0 = pocket_gpu_stats("frames")
+            let p0 = pocket_gpu_stats("prompt")
+            forced_frames(m, k, k.x0, k.x1, sc)
+            let served = pocket_gpu_stats("frames").served - h0.served == 1 && pocket_gpu_stats("prompt").served - p0.served == 1
+            return if (!served && !tower_served(t, "{c.id}: the flavor's frames and prompt seats", "{gpu_declines()}"))
+            let gemv = gpu_launches(["tts_pk", "_k4_"]) - gemv0
+            let mm = pocket_k4_mm_launches() - mm0
+            to_log(LOG_INFO, "pocket {c.id} on the Metal flavor: {gemv} K4 row GEMV launches, {mm} K4 mul_mm launches\n")
+            t |> success(gemv > 0l, "{c.id}: the frames' backbone linears launched the K4 row GEMV ({gemv})")
+            t |> success(mm > 0l, "{c.id}: the prompt's backbone linears launched the K4 mul_mm ({mm})")
+            return
+        }
+        t |> skip("the oracle manifest carries no stages case")
+    }
+}
+
+//! The control of `test_pocket_kq_metal_stored` on `mc`, the K-quant file's `native@cpu` form:
+//! no seat stages the backend's interleave, so the frames seat declines, no K4 kernel launched.
+//! Skips off an Apple build, with no Metal device up, and with no CPU K-quant layout.
+def private test_pocket_kq_cpu_staged(t : T?; mc : PocketModel) {
+    pocket_metal_leg(t) $(man : PocketManifest; var sc : PocketScratch) {
+        if (!kernel_backend_has_kq()) {
+            t |> skip("this box's CPU backend carries no K-quant layout: a CPU staging is disk order too, and the seats serve it")
+            return
+        }
+        for (c in man.cases) {
+            continue if (!c.stages)
+            t |> success(mc.backbone.layers[0].in_proj.kq_repacked, "{c.id}: the CPU staging holds the backend's K-quant layout")
+            var inscope kc <- forced_case(mc, c, man, sc)
+            var inscope d0 <- gpu_declines()
+            let hc0 = pocket_gpu_stats("frames")
+            let gemv1 = gpu_launches(["tts_pk", "_k4_"])
+            let mm1 = pocket_k4_mm_launches()
+            forced_frames(mc, kc, kc.x0, kc.x1, sc)
+            var inscope d1 <- gpu_declines()
+            t |> equal(pocket_gpu_stats("frames").served - hc0.served, 0, "{c.id}: a CPU staging's frames seat serves nothing")
+            t |> success((d1?["shape"] ?? 0l) + (d1?["flavor"] ?? 0l) > (d0?["shape"] ?? 0l) + (d0?["flavor"] ?? 0l), "{c.id}: ... and declines it - by flavor, or by shape where the seat stages a CPU image's planes")
+            t |> equal(gpu_launches(["tts_pk", "_k4_"]) - gemv1, 0l, "{c.id}: ... with no K4 row GEMV launched")
+            t |> equal(pocket_k4_mm_launches() - mm1, 0l, "{c.id}: ... and no K4 mul_mm (the prompt count's control)")
+            return
+        }
+        t |> skip("the oracle manifest carries no stages case")
+    }
+}
+
+//! The stored members on the served planes of the published file `file`, `m` its native form: over one forced case the
+//! frames and prompt seats serve, the backbone's tag (Q4_K planes or Q8_0 blocks) and the head's (Q8_0 blocks or half-float
+//! rows) each see their format's stamps launch on the serving home, Q5_K and Q6_K, which neither file holds, launch none,
+//! and so does the f32 row GEMV, which a frame matrix widened into the slab would launch (the f32 lane's frames cell
+//! launches it - the control).
+def private test_pocket_stored_members(t : T?; m : PocketModel; file : string) {
+    pocket_served_leg(t) $(man : PocketManifest; var sc : PocketScratch) {
+        set_serving_gpu_tower(true, TowerFamily.tts)
+        let tag = file
+        let bb & = unsafe(m.backbone.layers[0].in_proj)
+        let hd & = unsafe(m.head.input_proj)
+        let head_halves = linear_host_halves(hd)
+        t |> success(bb.kq_fmt == 4 || bb.q8, "{tag}: the loader tags the backbone's linears Q4_K planes or Q8_0 blocks (kq id {bb.kq_fmt}, q8 {bb.q8})")
+        t |> success(hd.q8 || head_halves, "{tag}: the loader tags the head's linears Q8_0 blocks or half-float rows (q8 {hd.q8}, halves {head_halves})")
+        for (c in man.cases) {
+            continue if (!c.stages)
+            var inscope k <- forced_case(m, c, man, sc)
+            let marks = stored_marks()
+            let h0 = pocket_gpu_stats("frames")
+            let p0 = pocket_gpu_stats("prompt")
+            let w0 = gpu_widened()
+            var inscope before <- gpu_census()
+            forced_frames(m, k, k.x0, k.x1, sc)
+            var inscope after <- gpu_census()
+            let widened = gpu_widened() - w0
+            let served = pocket_gpu_stats("frames").served - h0.served == 1 && pocket_gpu_stats("prompt").served - p0.served == 1
+            return if (!served && !tower_served(t, "{tag} {c.id}: the frames and prompt seats", "{gpu_declines()}"))
+            stored_members_launched(t, "{tag} {c.id}", marks, fixed_array(bb.q8 || hd.q8 ? STORED_HELD : STORED_ABSENT, bb.kq_fmt == 4 ? STORED_HELD : STORED_ABSENT,
+                STORED_ABSENT, STORED_ABSENT, head_halves ? STORED_HELD : STORED_UNTAGGED))
+            var inscope launched <- census_gain(before, after)
+            to_log(LOG_INFO, "{tag} {c.id}: the forced case launched {census_text(launched)}\n")
+            no_widened_leaf(t, "{tag} {c.id}", launched, widened, "frame and prompt matrix")
+            return
+        }
+        t |> skip("the oracle manifest carries no stages case")
+    }
+}
+
 //! The frames seat after the LLM tier's model drop in the same process (a slot switch, a reload): the seat serves again on
 //! the same voice and reads the same frames, the slabs, the scratch and the voice slot rebuilt behind the drop.
 [cold_path]
 def test_pocket_frames_after_model_drop(t : T?; m : PocketModel) {
     var inscope man <- stocked_manifest(t)
     return if (empty(man.cases))
-    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         with_gpu_cell() {
             reset_pocket_q8()
             var inscope sc = PocketScratch()
@@ -988,24 +1285,101 @@ def test_pocket_frames_after_model_drop(t : T?; m : PocketModel) {
     }
 }
 
+//! A decline the serving home said is said once while the model stays and again after a weights
+//! reload, on `m`, the K-quant file's `native@cpu` form with the tower off. Skips where the
+//! build has no GPU tower.
+[cold_path]
+def private test_pocket_decline_said_again_after_reload(t : T?; m : PocketModel) {
+    with_gpu_cell() {
+        let dev = serving_tower_dev(TowerFamily.tts)
+        if (dev == TowerDev.none) {
+            t |> skip("the build has no GPU tower")
+            return
+        }
+        var inscope sc = PocketScratch()
+        var inscope lat <- [for (_ in range64(2l * m.latent_dim)); 0.0]
+        var inscope wave : array<float>
+        set_serving_gpu_tower(false, TowerFamily.tts)
+        bump_weights_epoch()   // whatever an earlier cell's declines left said
+        t |> equal(tts_home_said_(dev), 0, "a weights reload leaves no reason said")
+        pocket_decode_latents(m, lat, 2l, sc, wave)
+        let said = tts_home_said_(dev)
+        t |> success(said > 0, "the tower off, the codec seat's decline is said ({said})")
+        pocket_decode_latents(m, lat, 2l, sc, wave)
+        t |> equal(tts_home_said_(dev), said, "the same decline again says nothing more")
+        bump_weights_epoch()
+        t |> equal(tts_home_said_(dev), 0, "the reload forgets what was said")
+        pocket_decode_latents(m, lat, 2l, sc, wave)
+        t |> equal(tts_home_said_(dev), said, "the next model's decline is said anew")
+    }
+}
+
+[test(description = "With the GPU seats' classes read as not built the flavor pick names no home and the Pocket file loads the CPU image, which speaks with no seat served; with them built the pick names the home")]
+def test_pocket_unbuilt_seats_take_cpu_image(t : T?) {
+    own_load("the cell asserts on the load itself: the image flavor it lands on with the GPU seats' classes read as not built")
+    let path = path_join(models_dir(), "pocket-tts-en-kq.gguf")   // a published file: the cell runs wherever a box stocks from the hub
+    return if (!model_available(t, path))
+    tts_unbuilt_seats_take_cpu_image(t, path, "The seats did not build, and the words still land.", "alba", true)
+}
+
+//! the K-quant file's `native@dev` form, a GPU home's image as a load serves it, with its tower knob flipped off
+[cold_path]
+def private test_pocket_knob_flip_refuses(t : T?; var m : TtsModel) {
+    tts_knob_flip_refuses(t, m, "pocket-tts-en-kq.gguf", "The tower was on when this model loaded.", "alba")
+}
+
+//! One leg of the served synthesis across the tower knob on the served lane, kept in `k`, on `m`, a form of the English
+//! file with no lane pinned: its CPU image (`native@cpu`) the tower-off leg; the image a load serves, its weights the
+//! device block's alone (`native@dev`), the tower-on leg - each held to its own verdict (`synth_leg_held`)
+[cold_path]
+def private pocket_synthesis_leg(t : T?; var m : TtsModel; form : string; var k : SynthLane) {
+    with_gpu_cell() {
+        let text = "The tower serves the codec, and the words still land. Then it slept."
+        let name = "pocket served lane, the {form} form"
+        if (tts_form_of(form).home == "cpu") {
+            served_lane_cpu_leg(k, m, text, "alba")
+            synth_leg_held(t, name, k.a, k.cpu_encodes, k.cpu_launches, on_tower = false, declines = "")
+        } elif (!k.cpu_ran) {
+            t |> failure("the {form} form ran with no tower-off leg of the served lane kept")
+        } else {
+            served_lane_dev_leg(k, m, text, "alba")
+            synth_leg_held(t, name, k.b, k.encodes, census_total(k.launched), on_tower = true,
+                declines = k.declines)
+        }
+    }
+}
+
+let POCKET_DEV_FORMATS_CELL = ("test_pocket_synthesis_metal: the image a load serves launches its "
+    + "stored leaves' stamps and no f32 row GEMV")
+
+//! The formats the English file's image holds as a load serves it, over the served synthesis's tower leg `k`: the stamps
+//! that read stored leaves launched, and the f32 row GEMV none - a frame matrix widened into the slab would launch it (the
+//! f32 lane's frames cell launches it - the control). A red where the form kept no tower leg.
+def private pocket_dev_formats_held(t : T?; k : SynthLane) {
+    let name = "pocket served lane, the native@dev form"
+    t |> success(k.dev_ran, "{name}: the form kept a tower leg")
+    return if (!k.dev_ran || (k.encodes == 0l && !tower_served(t, name, k.declines)))
+    to_log(LOG_INFO, "{name}: the tower leg launched {census_text(k.launched)}\n")
+    var stored = 0l
+    for (n in k.stored) {
+        stored += n
+    }
+    t |> success(stored > 0l, "{name}: the stamps that read stored leaves launched "
+        + "({k.stored[0]} Q8_0, {k.stored[1]} Q4_K, {k.stored[2]} Q5_K, {k.stored[3]} Q6_K, "
+        + "{k.stored[4]} half-float)")
+    no_widened_leaf(t, name, k.launched, k.widened, "codec, frame and prompt leaf")
+}
+
 //! The served synthesis across the tower knob on the served lane: every chunk's codec and frame
 //! loop on the tower, one codec encode a chunk, the knob-off leg declining every seat per chunk,
 //! both legs speaking.
 [cold_path]
-def test_pocket_synthesis_metal(t : T?; var m : TtsModel) {
-    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        with_gpu_cell() {
-            reset_pocket_q8()   // the served lane is the unpinned default, whatever an earlier cell left
-            let text = "The tower serves the codec, and the words still land. Then it slept."
-            served_lane_counters(t, m, text, "alba", "pocket served lane", "") $(a, b : TtsAudio; chunks : int; encodes : int64) {
-                t |> success(encodes > int64(chunks), "the tower encoded the frame batches and one codec pass a chunk ({encodes} encodes over {chunks} chunk(s))")
-                t |> success(speech_level(a.pcm).finite && speech_level(b.pcm).finite, "both legs finite")
-                t |> success(length(a.pcm) > 24000 && length(b.pcm) > 24000, "both legs speak ({length(a.pcm)} and {length(b.pcm)} samples)")
-                to_log(LOG_INFO, "pocket served lane: CPU {timings_line(a.timings, a.sample_rate)}; tower {timings_line(b.timings, b.sample_rate)}\n")
-            }
-        }
-    } else {
-        t |> skip("no GPU module in this build")
+def test_pocket_synthesis_metal(t : T?; k : SynthLane) {
+    served_lane_held(t, k, "pocket served lane") $(a, b : TtsAudio; chunks : int; encodes : int64) {
+        t |> success(encodes > int64(chunks), "the tower encoded the frame batches and one codec pass a chunk ({encodes} encodes over {chunks} chunk(s))")
+        t |> success(speech_level(a.pcm).finite && speech_level(b.pcm).finite, "both legs finite")
+        t |> success(length(a.pcm) > 24000 && length(b.pcm) > 24000, "both legs speak ({length(a.pcm)} and {length(b.pcm)} samples)")
+        to_log(LOG_INFO, "pocket served lane: CPU {timings_line(a.timings, a.sample_rate)}; tower {timings_line(b.timings, b.sample_rate)}\n")
     }
 }
 
@@ -1048,9 +1422,11 @@ def private test_pocket_q8_lane(t : T?; m : PocketModel) {
 
 
 // the frames of one teacher-forced case on a model, for a lane-to-lane compare
-def private forced_latents(m : PocketModel; c : PocketCase; man : PocketManifest; var sc : PocketScratch; odir : string = oracle_dir()) : array<float> {
+def private forced_latents(m : PocketModel; c : PocketCase; man : PocketManifest; var sc : PocketScratch; odir : string = oracle_dir();
+                           noise_scale : float = 1.0) : array<float> {
     var inscope k <- forced_case(m, c, man, sc, odir)
-    let frames = forced_frames(m, k, k.x0, k.x1, sc)
+    var inscope x0 <- scaled_copy(k.x0, noise_scale)
+    let frames = forced_frames(m, k, x0, k.x1, sc)
     var inscope rows <- frame_rows(m, sc, frames)
     return <- rows.lat
 }
@@ -1083,9 +1459,8 @@ def test_pocket_q8_file(t : T?) {
             continue if (!c.stages || c.voice != "alba")
             var inscope a <- forced_latents(mq, c, man, sc)
             var inscope b <- forced_latents(mf, c, man, sc)
-            // the file's block scales are f16 (the Q8_0 format), the load-time quantizer keeps
-            // them f32, and the flow head amplifies that half-a-thousandth per block into
-            // percents of a frame; the published file's own rig row is its quality gate
+            // a file whose quants were minted from another rounding of the weights than the halves the f16
+            // file stores moves a frame through the flow head; the published file's own rig row is its quality gate
             bar_diff(t, "pocket {c.id} q8 file vs the load-time quants of the q8 lane", a, b, Q8_FILE_BAR, BarMetric.rel_l2, 2.0)
             break
         }
@@ -1111,10 +1486,186 @@ def test_pocket_q8_file(t : T?) {
     }
 }
 
+let HEAD_HALVES_BAR = 1.0e-4   //! the head's rows as halves against the same values as floats: the half dot's summation order alone
+
+//! a head layer a file stores F16: its halves alone where the row form is halves (`halves`), its floats alone where it is floats
+def private head_linear_form(t : T?; l : TtsLinear; name : string; halves : bool) {
+    t |> success(linear_host_halves(l) == halves && empty(l.w) == halves, "the head's {name} is {halves ? "the file's halves with no f32 copy" : "floats with no halves"}")
+}
+
+//! what the head-halves cell keeps of the published q8 file's forms: one teacher-forced case's latents on the unpinned CPU
+//! image, and on the pinned q8 one as rendered and with the noise scaled by three
+struct HeadHalvesKept {
+    case_id : string
+    halves : array<float>
+    floats : array<float>
+    floats_x3 : array<float>
+}
+
+//! A leg of `test_pocket_head_halves` on `m`, a CPU image of the published q8 file: unpinned, the
+//! F16 flow head as halves where the target converts them in hardware, else floats; pinned q8,
+//! floats, the control. One case's latents kept on each, the pinned one's also with noise x3.
+[cold_path]
+def private head_halves_leg(t : T?; m : PocketModel; form : string; var kept : HeadHalvesKept) {
+    var inscope man <- stocked_manifest(t)
+    return if (empty(man.cases))
+    with_gpu_cell() {
+        set_every_gpu_tower(false)   // the half matvec is the CPU chain's: a seat reads the same rows widened
+        var inscope sc = PocketScratch()
+        let unpinned = form == "native@cpu"
+        if (unpinned) {
+            let halves = !active_rows_f32()
+            head_linear_form(t, m.head.input_proj, "input_proj", halves)
+            head_linear_form(t, m.head.cond_embed, "cond_embed", halves)
+            head_linear_form(t, m.head.blocks[0].mlp1, "blocks[0].mlp1", halves)
+            head_linear_form(t, m.head.final_linear, "final_linear", halves)
+        } else {
+            t |> success(!linear_host_halves(m.head.input_proj) && !empty(m.head.input_proj.w), "pinned q8, the head's rows are floats: the halves are the unpinned lane's (the control)")
+        }
+        for (c in man.cases) {
+            continue if (!c.stages || c.voice != "alba")
+            kept.case_id = c.id
+            if (unpinned) {
+                kept.halves <- forced_latents(m, c, man, sc)
+            } else {
+                kept.floats <- forced_latents(m, c, man, sc)
+                kept.floats_x3 <- forced_latents(m, c, man, sc, oracle_dir(), 3.0)
+            }
+            break
+        }
+    }
+}
+
+//! the two loads' teacher-forced latents agree to HEAD_HALVES_BAR on the CPU chain, after the q8 file's block; the float
+//! rows fed the noise scaled by three land outside it. Skips where the oracle is not stocked or carries no stage case of
+//! alba's; where it carries one, a load that kept no latents of it is a red.
+def private test_pocket_head_halves(t : T?; kept : HeadHalvesKept) {
+    var inscope man <- stocked_manifest(t)
+    return if (empty(man.cases))
+    var staged = false
+    for (c in man.cases) {
+        staged ||= c.stages && c.voice == "alba"
+    }
+    if (!staged) {
+        t |> skip("the oracle manifest carries no stage case of alba's")
+        return
+    }
+    t |> success(!empty(kept.halves) && !empty(kept.floats), "each load kept the latents of alba's "
+        + "stage case ({length(kept.halves)} unpinned, {length(kept.floats)} pinned q8)")
+    return if (empty(kept.halves) || empty(kept.floats))
+    bar_diff(t, "pocket {kept.case_id} the head's halves vs the same rows as floats", kept.halves, kept.floats, HEAD_HALVES_BAR, BarMetric.rel_l2, 2.0)
+    let moved = rel_l2(kept.halves, kept.floats_x3)
+    t |> success(all_finite(kept.halves) && all_finite(kept.floats_x3) && moved >= HEAD_HALVES_BAR, "pocket {kept.case_id} control: the float rows fed the noise x3 land outside the bar (rel-l2 {moved})")
+}
+
+//! the bytes of each stored member's quant plane in the frame part of `m`'s device block baked for `dev`; empty where the bake declines
+[unused_argument(m, dev)]   // a build with no GPU module carries no bake
+def private frame_member_bytes(m : PocketModel; dev : TowerDev) : array<int64> {
+    var bytes : array<int64>
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
+        var inscope b : TowerDevBuild
+        return <- bytes if (!tts_pk_bake(m, b, dev))
+        bytes |> reserve(16)
+        for (i in range(16)) {
+            bytes |> push(tower_dev_find(b, "pk.frames.wq{i}").bytes)
+        }
+    }
+    return <- bytes
+}
+
+//! A Pocket frame leaf re-minted Q5_K or Q6_K lands in that format's shared member plane on
+//! every home, while the Metal home holds its Q4_K leaves outside the shared Q4_K plane: on `m`,
+//! the K-quant file's native form. Skips where no GPU device serves the TTS seats.
+[unused_argument(m)]   // on a build with no GPU module the gated body is a skip
+def private test_pocket_frame_leaf_layouts(t : T?; var m : PocketModel) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
+        with_gpu_cell() {
+            if (serving_tower_dev(TowerFamily.tts) == TowerDev.none || !serving_tower_device_up(TowerFamily.tts)) {
+                t |> skip("no GPU device serves the TTS seats on this box: the staging mints for the CPU backend, and its block holds no stored leaf")
+                return
+            }
+            set_serving_gpu_tower(true, TowerFamily.tts)
+            var l & = unsafe(m.backbone.layers[0].in_proj)
+            t |> success(l.kq_fmt == 4 && !l.kq_repacked, "staged for the GPU home, the backbone's projection holds its Q4_K planes as the file stores them (kq id {l.kq_fmt}, repacked {l.kq_repacked})")
+            return if (l.kq_fmt != 4 || l.kq_repacked)
+            var inscope disc0 <- frame_member_bytes(m, TowerDev.vulkan)
+            var inscope metal0 <- frame_member_bytes(m, TowerDev.metal)
+            t |> success(!empty(disc0) && !empty(metal0), "the model bakes for the discrete homes and for Metal")
+            return if (empty(disc0) || empty(metal0))
+            let n = l.nout * l.nin
+            var inscope w <- [for (i in range64(n)); float(i % 97l) * 0.01 - 0.48]
+            for (f in fixed_array(KqFmt.k6, KqFmt.k5)) {
+                var inscope kq, ks : array<uint8>
+                kq |> resize(n / KQ_SB_ELEMS * kq_qsb(f))
+                ks |> resize(n / KQ_SB_ELEMS * kq_ssb(f))
+                quantize_kq_plane(f, w, n, kq, ks, 0l)
+                swap(l.kq, kq)
+                swap(l.ks, ks)
+                l.kq_fmt = kq_schema_id(f)
+                var inscope disc <- frame_member_bytes(m, TowerDev.vulkan)
+                var inscope metal <- frame_member_bytes(m, TowerDev.metal)
+                swap(l.kq, kq)
+                swap(l.ks, ks)
+                l.kq_fmt = 4
+                t |> success(!empty(disc) && !empty(metal), "{f}: the model with one {f} projection bakes for both")
+                continue if (empty(disc) || empty(metal))
+                var held = -1
+                var k4 = -1
+                for (i in range(length(disc))) {
+                    held = disc0[i] == 0l && disc[i] > 0l ? i : held
+                    k4 = disc[i] < disc0[i] ? i : k4
+                }
+                t |> success(held >= 0 && k4 >= 0, "{f}: on the discrete homes the leaf leaves the Q4_K member plane ({k4}) for one that held nothing ({held})")
+                continue if (held < 0 || k4 < 0)
+                t |> success(metal0[held] == 0l && metal[held] > 0l, "{f}: the Metal home keeps the leaf in the shared layout's member plane ({metal[held]} bytes, none before)")
+                t |> success(metal0[k4] == 0l && metal[k4] == 0l, "{f}: the Metal home holds its Q4_K leaves in its own layout, outside the shared Q4_K plane (the control)")
+            }
+        }
+    } else {
+        t |> skip("no GPU module in this build")
+    }
+}
+
+[test(description = "Pinned to float rows, a Pocket load holds the F16 flow head and an F16 codec conv as floats with no halves; pinned to halves it holds them as the file's halves with no float copy")]
+def test_pocket_row_form_follows_the_pin(t : T?) {
+    own_load("the cell asserts on the load itself: the planes it lands on under the half rows' form pin, a published file a pin")
+    let q8path = path_join(models_dir(), "pocket-tts-en-q8.gguf")
+    let kqpath = path_join(models_dir(), "pocket-tts-en-kq.gguf")
+    return if (!model_available(t, q8path) || !model_available(t, kqpath))
+    with_gpu_cell() {
+        defer() {
+            reset_pocket_q8()
+        }
+        reset_pocket_q8()
+        for (floats in fixed_array(true, false)) {
+            with_rows_f32(floats) {
+                var inscope mh <- pocket_minted(q8path, PkMint.cpu)
+                var inscope mk <- pocket_minted(kqpath, PkMint.cpu)
+                head_linear_form(t, mh.head.input_proj, "input_proj", !floats)
+                codec_conv_form(t, mk.mimi.dec_in, "dec_in", !floats)
+            }
+        }
+    }
+}
+
 let Q8_FILE_BAR = 5.0e-2
 let KQ_EXACT_BAR = 5.0e-2   //! the kq lane against the exact lane of the same file (measured 3.4e-2): the head's Q8_0 route and the activation quants
 let KQ_HEAD_BAR = 2.0e-2    //! the flow head on its Q8_0 route against the f32 oracle's frames (measured 9.8e-3), the oracle's own conditioning and noise in
 
+
+//! a codec conv a file stores F16: its halves alone where the row form is halves (`halves`; unpinned, where the target converts
+//! them in hardware), its floats alone where it is floats
+def private codec_conv_form(t : T?; c : TtsConv1d; name : string; halves : bool = target_half_converts()) {
+    let floats = !empty(c.transposed ? c.wtr : c.wk)
+    t |> success(conv1d_host_halves(c) == halves && floats != halves, "the codec's {name} is {halves ? "the file's halves with no f32 copy" : "floats with no halves"}")
+}
+
+//! the unpinned K-quant file's F16 codec convs: halves where the target converts them in hardware, floats elsewhere - never both
+def private kq_codec_convs_form(t : T?; mimi : PocketMimi) {
+    codec_conv_form(t, mimi.dec_in, "dec_in")
+    codec_conv_form(t, mimi.dec_out, "dec_out")
+    codec_conv_form(t, mimi.dec_up[0], "dec_up[0]")
+}
 
 [test(description = "The K-quant Pocket file serves Q4_K planes unpinned, Q8_0 pinned q8 and f32 pinned f32; its kq lane holds rel-l2 5e-2 of the q8 and exact lanes, the Q8_0 head 2e-2 of the oracle, and a roster-name clone keeps 19 voices and speaks")]
 def test_pocket_kq_file(t : T?) {
@@ -1147,12 +1698,14 @@ def test_pocket_kq_file(t : T?) {
         t |> success(mk.head.blocks[0].mlp1.q8 && mk.head.final_linear.q8 && mk.head.cond_embed.q8 && mk.head.input_proj.q8, "the flow head's matrices came in as Q8_0 blocks, its 32-wide input projection included")
         t |> success(!mk.speaker_proj.q8 && mk.speaker_proj.kq_fmt == 0, "the speaker projection stays f32")
         t |> success(mk.text_kq.kq_fmt == 4 && mk.text_kq.nout == 4001l && empty(mk.text_emb.a), "the Q4_K embedding table serves as its own planes, with no f32 copy")
+        kq_codec_convs_form(t, mk.mimi)
         // the same file on the q8 lane: every Q4_K tensor dequantized and requantized to Q8_0 (a
         // re-encode of the same values), so the two lanes differ by that re-encode and their
         // activation quants; the head is the same Q8_0 blocks on both
         set_pocket_q8(true)
         var inscope mq <- pocket_minted(kqpath)
         t |> success(mq.backbone.layers[0].in_proj.q8 && mq.backbone.layers[0].in_proj.kq_fmt == 0, "pinned q8, the K-quant tensor is Q8_0 blocks")
+        t |> success(!conv1d_host_halves(mq.mimi.dec_in) && !empty(mq.mimi.dec_in.wk), "pinned q8, a codec conv is floats: the halves are the unpinned lane's (the control)")
         // the exact lane over the K-quant file: dequantized f32 planes, the head dequantized too -
         // the one load whose head is not the Q8_0 route, so it is what pins that route
         set_pocket_q8(false)
@@ -1505,7 +2058,7 @@ def private small_parity_cells(t : T?; m : PocketModel; S : PocketSmall; man : P
         bar_diff(t, "{tag} codec decode", wave, dump["waveform_oneshot"].f, CODEC_BAR, BarMetric.of_peak)
         bar_off_row(t, "{tag} codec decode", wave, dump["waveform_oneshot"].f, CODEC_BAR, int64(m.sample_rate) / 100l)
         if (S.codec_seat) {
-            static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+            static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
                 var inscope cpu : array<float>
                 codec_served_leg(t, m, "{tag} codec seat", dump["latent"].f, int64(c.n_frames), GPU_CODEC_BAR, sc, cpu)
                 set_serving_gpu_tower(false, TowerFamily.tts)
@@ -1527,7 +2080,7 @@ def private small_parity_cells(t : T?; m : PocketModel; S : PocketSmall; man : P
         bar_off_row(t, "{tag} waveform (teacher-forced, faded in)", sc.wave, k.dump["waveform"].f, CODEC_BAR * 4.0, int64(m.sample_rate) / 100l)
         t |> equal(sc.wave[0], 0.0, "{tag}: the chunk's first sample is faded to zero")
         to_log(LOG_INFO, "pocket {tag}: {timings_line(k.tm, m.sample_rate)}\n")
-        static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
             if (S.frames_seat) {
                 var inscope leg <- frames_seat_leg(t, m, k, "{tag} frames seat", GPU_FRAME_BAR, true, sc)
                 t |> success(leg.fc != 0l, "{tag}: the frames seat served the teacher-forced case, or declined with its skip")
@@ -1577,8 +2130,8 @@ def private small_published_cells(t : T?; var tm : TtsModel; S : PocketSmall) {
             reset_pocket_q8()
         }
         reset_pocket_q8()
-        set_serving_gpu_tower(false, TowerFamily.tts)
         let q8_lane = pocket_serves_q8()   //! the unpinned default lane, read before the load
+        set_serving_gpu_tower(false, TowerFamily.tts)
         t |> equal(tm.pocket.backbone.layers[0].in_proj.q8, q8_lane && S.q8_file, "{S.config}: the published file's backbone GEMMs serve {S.q8_file ? "Q8_0 blocks on the q8 lane" : "f32 planes (its widths are off the 32 lattice)"}")
         var bad = 0
         for (r in fx.rows) {
@@ -1606,7 +2159,7 @@ def private small_published_cells(t : T?; var tm : TtsModel; S : PocketSmall) {
         var inscope c2 <- caps(tm)
         t |> success(c2.cloning && length(c2.voices) == 19 && c2.langs[0] == "en", "{S.config}: the facade reports a cloning English model with the roster")
         chunk_probes(t, tm, fx, S.config)
-        static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
             with_gpu_knobs() {
                 set_serving_gpu_tower(true, TowerFamily.tts)
                 let d0 <- gpu_declines()
@@ -1651,12 +2204,10 @@ def private small_admission_cells(t : T?; var m : PocketModel; S : PocketSmall) 
         return tts_lin_ok(l)
     }
     t |> success(admits, "{S.config}: the loaded model is admitted")
-    let key = tts_pk_frames_key(m)
     m.cond_dim += 2l
     t |> success(!tts_pk_frames_ok(m, 64l, 4096l) $(l : TtsLinear) : bool {
         return tts_lin_ok(l)
     }, "{S.config}: a conditioning row off the 4 lattice is refused")
-    t |> success(tts_pk_frames_key(m) != key, "{S.config}: the slab key moves with the conditioning row")
     m.cond_dim -= 2l
     m.z_proj.nin += 4l
     t |> success(!tts_pk_frames_ok(m, 64l, 4096l) $(l : TtsLinear) : bool {
@@ -1668,7 +2219,28 @@ def private small_admission_cells(t : T?; var m : PocketModel; S : PocketSmall) 
         return tts_lin_ok(l)
     }, "{S.config}: a time-free head carrying a time constant is refused")
     m.head.time_const.a |> pop()
-    t |> equal(tts_pk_frames_key(m), key, "{S.config}: the model put back keys as before")
+}
+
+//! A Pocket text of 400 words with no mark in it is cut at its spaces into chunks of at most POCKET_HARD_TOKENS tokens with
+//! every word kept in order, and a 60-word run under that cap stays one chunk: on `m`, the published q8 file's CPU image
+[cold_path]
+def private test_pocket_hard_split(t : T?; m : PocketModel) {
+    var inscope run <- pocket_chunks(m, join([for (_i in range(400)); "alpha"], " "))
+    var words = 0
+    var longest = 0
+    for (c in run) {
+        var inscope ids <- pocket_text_ids(m, c)
+        longest = max(longest, length(ids))
+        var inscope ws <- split(c, " ")
+        for (w in ws) {
+            words += starts_with(w, "alpha") || starts_with(w, "Alpha") ? 1 : 0
+        }
+    }
+    t |> success(length(run) >= 2, "a 400-word run with no mark is cut ({length(run)} chunks)")
+    t |> success(longest <= POCKET_HARD_TOKENS * 11 / 10, "no chunk is past the cap ({longest} tokens against {POCKET_HARD_TOKENS}, a word's tokens counted on its own)")
+    t |> equal(words, 400, "every word is in a chunk")
+    var inscope whole <- pocket_chunks(m, join([for (_i in range(60)); "alpha"], " "))
+    t |> equal(length(whole), 1, "a 60-word run under the cap stays one chunk (the cut's control)")
 }
 
 //! the chunker's decimal rule over the two tokens about a mark: a decimal point inside a number never ends a chunk, a point
@@ -1697,7 +2269,7 @@ def private small_reference_cells(t : T?; var m : PocketModel; S : PocketSmall) 
     var inscope man <- stocked_manifest(t, odir, S.config)
     return if (empty(man.cases))
     pocket_lane_cell(PocketLane.f32) {
-        set_serving_gpu_tower(false, TowerFamily.tts)
+        set_serving_gpu_tower(false, TowerFamily.tts)   // the form is the serving flavor's image with the host's weights kept: the cells below flip the knob on it
         t |> success(!m.q8, "{S.config}: the reference lane serves f32")
         small_shape_cells(t, m, S)
         small_admission_cells(t, m, S)
@@ -1960,7 +2532,7 @@ def test_pocket_quiet_floor(t : T?; a, b : TtsAudio) {
 def private test_pocket_long_chunk(t : T?; var m : TtsModel) {
     with_dasllama_jobque_() {
         let text = build_string() $(w) {
-            for (i in range(230)) {
+            for (i in range(190)) {   // past the chunk budget, under `POCKET_HARD_TOKENS`: the longest piece the chunker keeps whole
                 w |> write(i == 0 ? "word" : " word")
             }
         }
@@ -1968,14 +2540,17 @@ def private test_pocket_long_chunk(t : T?; var m : TtsModel) {
         t |> equal(length(chunks), 1, "an unsplittable text is one chunk")
         var inscope ids <- pocket_text_ids(m.pocket, chunks[0])
         t |> success(length(ids) > POCKET_MAX_TOKENS, "{length(ids)} tokens: past the budget the caches were sized for")
-        static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
             with_gpu_knobs() {
                 set_serving_gpu_tower(true, TowerFamily.tts)
                 let d0 <- gpu_declines()
+                let c0 = pocket_gpu_stats("codec")
                 var inscope a <- synthesize(m, text, "alba")
                 t |> success(speech_level(a.pcm).finite && length(a.pcm) > 24000, "the long chunk speaks ({length(a.pcm)} samples)")
                 let d1 <- gpu_declines()
-                t |> success((d1?["shape"] ?? 0l) - (d0?["shape"] ?? 0l) >= 1l, "the chunk past the codec seat's frame cap declines by shape, and the CPU codec speaks it")
+                let shaped = (d1?["shape"] ?? 0l) - (d0?["shape"] ?? 0l)
+                let served = pocket_gpu_stats("codec").served - c0.served
+                t |> success(shaped >= 1l || served >= 1, "the long chunk's codec ran on the device in windows ({served} served), or past a seat's frame cap declined by shape for the CPU codec ({shaped})")
             }
         } else {
             var inscope a <- synthesize(m, text, "alba")
@@ -2335,20 +2910,44 @@ def private pocket_cell(t : T?; name : string; var m : auto(MODEL); cell : auto(
 }
 
 // The English file, one block: the facade's cells on the image form, the cells that pin no lane, the f32 lane's and the
-// q8 lane's, each a subtest under the name of the test it was; the F16 table's rows are kept on the unpinned and the f32
-// form and compared once the block has dropped both.
-[test(description = "pocket-tts-en.gguf loads once a form. On the image form: Pocket through the facade reports a cloning English model with 19 voices and no speed, matches the reference chunker, speaks 1 to 8 seconds, clones a voice from the checked-in clip, and refuses unknown voice, speed, phonemes, wrong rate and over-long clips by name. With no lane pinned: `prepare_pocket_text` matches the reference's prepared string and frames-after-EOS on all 200 corpus rows and the fixture probes, applies the terminal-mark and word-count rules, and panics on blank text while the chunker yields none; Pocket served-lane synthesis serves every seat once a chunk with the knob on and declines each with it off, encoding more than once a chunk, both legs finite and over a second of speech; An unsplittable chunk past POCKET_MAX_TOKENS speaks instead of panicking, the GPU codec seat declining it by shape, the voice's caches grow to the chunk's need, and a following short sentence on the same voice still speaks. On the f32 lane: On the f32 CPU lane the Pocket codec decoder and encoder hold 2e-3 of the oracle's peak, the prompt trim 1e-6, and the trimmed prompt's frame count and per-layer KV rows hold 5e-3, against the oracle dumps; The windowed Pocket codec decode and encode match the whole-run output within 1e-5 absolute at window 1 and the default, using under half the scratch, and after `pocket_release_scratch` frees every buffer the next decode matches again; Teacher-forced on the oracle's noise and frames, Pocket reproduces the token and frame counts, and the flow head, conditioning, EOS logits and latents hold 5e-3 of the oracle's peak, the waveform 8e-3; The Pocket codec seat on the GPU tower, f32 lane, holds rel-l2 1e-5 of the CPU chain over the oracle's latents with one encode a call, and with the knob off the CPU result is bit-equal and the decline recorded; The Pocket prompt seat's per-layer K/V rows hold rel-l2 1e-5 of the CPU chain on the f32 lane, one call and encode, knob-off bit-equal, with one-element and rotated-text controls; The Pocket frames seat on the tower, f32 lane, teacher-forced holds latents, conditioning and EOS at rel-l2 2e-5 of the CPU chain with the RNG ending equal, the free run 5e-3, batches of 3 too, and an empty driver record reaches no hook. On the q8 lane: On the pinned q8 lane the Pocket backbone GEMMs serve q8 and codec convs f32, teacher-forced latents hold rel-l2 0.5 of the f32 oracle with an rms-shift control, and the free run lands within 4 frames of the oracle with speech. Across the unpinned and the f32 form: the file's F16 text table serves unpinned as the file's halfwords with no f32 copy, a prompt's rows the pinned f32 lane's bit for bit, and the rows of the next token ids differing as the control")]
+// q8 lane's, each a subtest under the name of the test it was - the f32 lane's CPU chain on its CPU image (`f32@cpu`); the
+// F16 table's rows are kept on the unpinned and the f32 form, the served synthesis's legs on the unpinned lane's CPU image
+// and on its image as a load serves it, each compared once the block has dropped both.
+[test(description = "pocket-tts-en.gguf loads once a form. On the image form: Pocket through the facade reports a cloning English model with 19 voices and no speed, matches the reference chunker, speaks 1 to 8 seconds, clones a voice from the checked-in clip, and refuses unknown voice, speed, phonemes, wrong rate and over-long clips by name. With no lane pinned: `prepare_pocket_text` matches the reference's prepared string and frames-after-EOS on all 200 corpus rows and the fixture probes, applies the terminal-mark and word-count rules, and panics on blank text while the chunker yields none; An unsplittable chunk past POCKET_MAX_TOKENS speaks instead of panicking, the GPU codec seat declining it by shape, the voice's caches grow to the chunk's need, and a following short sentence on the same voice still speaks. On the f32 lane, its CPU image holding the CPU chain: On the f32 CPU lane the Pocket codec decoder and encoder hold 2e-3 of the oracle's peak, the prompt trim 1e-6, and the trimmed prompt's frame count and per-layer KV rows hold 5e-3, against the oracle dumps; The windowed Pocket codec decode and encode match the whole-run output within 1e-5 absolute at window 1 and the default, using under half the scratch, and after `pocket_release_scratch` frees every buffer the next decode matches again; Teacher-forced on the oracle's noise and frames, Pocket reproduces the token and frame counts, and the flow head, conditioning, EOS logits and latents hold 5e-3 of the oracle's peak, the waveform 8e-3; The Pocket codec seat on the GPU tower, f32 lane, holds rel-l2 1e-5 of the CPU chain over the oracle's latents with one encode a call, and with the knob off the CPU result is bit-equal and the decline recorded; The Pocket prompt seat's per-layer K/V rows hold rel-l2 1e-5 of the CPU chain on the f32 lane, one call and encode, knob-off bit-equal, with one-element and rotated-text controls; The Pocket frames seat on the tower, f32 lane, teacher-forced holds latents, conditioning and EOS at rel-l2 2e-5 of the CPU chain with the RNG ending equal, launching the f32 row GEMV and no quant format's stamp, the free run 5e-3, batches of 3 too, and an empty driver record reaches no hook. On the q8 lane: On the pinned q8 lane the Pocket backbone GEMMs serve q8 and codec convs f32, teacher-forced latents hold rel-l2 0.5 of the f32 oracle with an rms-shift control, and the free run lands within 4 frames of the oracle with speech. Across the unpinned and the f32 form: the file's F16 text table serves unpinned as the file's halfwords with no f32 copy, a prompt's rows the pinned f32 lane's bit for bit, and the rows of the next token ids differing as the control. Across the unpinned lane's CPU image and its image as a load serves it: Pocket served-lane synthesis serves every seat once a chunk with the knob on and declines each with it off, encoding more than once a chunk, both legs finite and over a second of speech, the image a load serves launching the stamps that read its stored leaves and no f32 row GEMV, the home counting no dense dispatch over widened rows; on the image a load serves the idle release gives the home's activation rows back and keeps its weights while the next synthesis speaks the same samples, and once every form is deleted the home holds no device byte for the TTS driver")]
 def test_pocket_en(t : T?) {
     var inscope f16 = F16TableKept()
+    var inscope served = SynthLane(lane = "native")
+    var dev_held = TtsDevHeld()
     var ran = false
     with_dasllama_jobque_() {
-        ran = with_model_once(t, "tts", "pocket-tts-en.gguf", ["image", "native", "f32", "q8"], @@pocket_form) $(var m; form) {
+        var inscope forms <- ["image", "native", "f32", "f32@cpu", "q8"]
+        let lacks = tts_dev_why()
+        let cpu_leg_why = tts_cpu_leg_why(lacks)
+        add_served_forms(t, forms, "pocket-tts-en.gguf", ["native@cpu"], cpu_leg_why)
+        add_served_forms(t, forms, "pocket-tts-en.gguf", ["native@dev"], lacks)
+        ran = with_model_once(t, "tts", "pocket-tts-en.gguf", forms, @@pocket_form) $(var m; form) {
             pocket_form_is(t, m, form)
             if (form == "image") {
                 pocket_cell(t, "test_pocket_facade", m, @@test_pocket_facade)
+            } elif (form == "native@cpu" || form == "native@dev") {
+                unsafe {
+                    t |> run("test_pocket_synthesis_metal: the {form == "native@cpu" ? "tower-off leg on the CPU image" : "tower-on leg on the image a load serves"}") @capture(& m, & served)(t : T ?) {
+                        pocket_synthesis_leg(t, m, form, served)
+                    }
+                    if (form == "native@dev") {
+                        t |> run(POCKET_DEV_FORMATS_CELL) @capture(& served)(t : T ?) {
+                            pocket_dev_formats_held(t, served)
+                        }
+                        tts_device_release_cell(t, m, path_join(models_dir(), "pocket-tts-en.gguf"),
+                            "The home gives its rows back when idle.", "alba", false, dev_held)
+                    }
+                }
+            } elif (form == "f32@cpu") {
+                pocket_cell(t, "test_pocket_parity", m.pocket, @@test_pocket_parity)
+                pocket_cell(t, "test_pocket_codec_stream", m.pocket, @@test_pocket_codec_stream)
+                pocket_cell(t, "test_pocket_frames", m.pocket, @@test_pocket_frames)
             } elif (form == "native") {
                 pocket_cell(t, "test_prepare_pocket_text", m.pocket, @@test_prepare_pocket_text)
-                pocket_cell(t, "test_pocket_synthesis_metal", m, @@test_pocket_synthesis_metal)
                 pocket_cell(t, "test_pocket_long_chunk", m, @@test_pocket_long_chunk)
                 unsafe {
                     t |> run("test_pocket_f16_table: the table with no lane pinned") @capture(& m, & f16)(t : T ?) {
@@ -2361,9 +2960,6 @@ def test_pocket_en(t : T?) {
                         f16_table_floats(t, m.pocket, f16)
                     }
                 }
-                pocket_cell(t, "test_pocket_parity", m.pocket, @@test_pocket_parity)
-                pocket_cell(t, "test_pocket_codec_stream", m.pocket, @@test_pocket_codec_stream)
-                pocket_cell(t, "test_pocket_frames", m.pocket, @@test_pocket_frames)
                 pocket_cell(t, "test_pocket_codec_metal", m.pocket, @@test_pocket_codec_metal)
                 pocket_cell(t, "test_pocket_prompt_gpu", m.pocket, @@test_pocket_prompt_gpu)
                 pocket_cell(t, "test_pocket_frames_metal", m.pocket, @@test_pocket_frames_metal)
@@ -2373,36 +2969,78 @@ def test_pocket_en(t : T?) {
         }
     }
     return if (!ran)
+    tts_device_dropped_held(t, "pocket-tts-en.gguf", dev_held)
     unsafe {
         t |> run("test_pocket_f16_table") @capture(& f16)(t : T ?) {
             test_pocket_f16_table(t, f16.d, f16.sh, f16.sf, f16.sn)
         }
-    }
-}
-
-// The published Q8_0 file, one block: the seats on its served planes, then the frames seat across the LLM tier's drop.
-[test(description = "pocket-tts-en-q8.gguf loads once, no lane pinned: on its served planes the Pocket codec seat holds rel-l2 2e-1 of the file's own CPU chain over the oracle's latents, served once a call, with one-sample and x3-scaled controls; the frames seat, teacher-forced for one case a voice, makes the CPU chain's frame count with latents within rel-l2 1e-1 of the file's own CPU chain, served once with one encode a batch; the prompt seat's K/V rows hold rel-l2 5e-2 of the file's own CPU chain; and after the LLM tier's `moe_gpu_drop_model` in the same process the frames seat serves again and holds the same bar against the CPU chain at the same frame count as before the drop")]
-def test_pocket_en_q8(t : T?) {
-    with_dasllama_jobque_() {
-        with_model_once(t, "tts", "pocket-tts-en-q8.gguf", ["native"], @@pocket_form) $(var m; form) {
-            pocket_form_is(t, m, form)
-            pocket_served_cells(t, m.pocket, "pocket-tts-en-q8.gguf")
-            pocket_cell(t, "test_pocket_frames_after_model_drop", m.pocket, @@test_pocket_frames_after_model_drop)
+        if (served.dev_ran) {
+            t |> run("test_pocket_synthesis_metal") @capture(& served)(t : T ?) {
+                test_pocket_synthesis_metal(t, served)
+            }
         }
     }
 }
 
-// The published K-quant file, one block: the seats on its served planes with no lane pinned, then one sentence rendered
-// on the q8 form and on the f32 form, their quiet floors compared once the block has dropped both.
-[test(description = "pocket-tts-en-kq.gguf loads once a form. With no lane pinned, on its served planes the Pocket codec seat holds rel-l2 2e-1 of the file's own CPU chain over the oracle's latents, served once a call, with one-sample and x3-scaled controls; the frames seat, teacher-forced for one case a voice, makes the CPU chain's frame count with latents within rel-l2 1e-1 of the file's own CPU chain, served once with one encode a batch; and the prompt seat's K/V rows hold rel-l2 5e-2 of the file's own CPU chain. Across its q8 and f32 forms the q8 lane's quiet floor (the quietest twentieth of differenced 100 ms windows) sits within 6 dB of the f32 lane's, while the f32 render with a -60 dBFS hiss mixed in lands past that bar")]
+// The published Q8_0 file, one block: the seats on its served planes, then the frames seat across the LLM tier's drop; on
+// its CPU image the hard split, and the flow head's halves on the unpinned and the pinned q8 CPU image, their latents
+// compared once the block has dropped both.
+[test(description = "pocket-tts-en-q8.gguf loads once a form. With no lane pinned, on its served planes the Pocket codec seat holds rel-l2 2e-1 of the file's own CPU chain over the oracle's latents, served once a call, with one-sample and x3-scaled controls; the frames seat, teacher-forced for one case a voice, makes the CPU chain's frame count with latents within rel-l2 1e-1 of the file's own CPU chain, served once with one encode a batch; the prompt seat's K/V rows hold rel-l2 5e-2 of the file's own CPU chain; the codec seat decodes a call in windows: a 40-frame call decodes in one window under a 64-frame window, ten at a 4-frame one and five at a 9-frame one, its samples at either the one-window call's bit for bit (another call's samples the control), a window asked at no frames is held at one, and a 600-frame call, past the old one-pass cap, is served within rel-l2 2e-1 of the file's own CPU chain with one-sample and x3-scaled controls; where the file carries its encoder, the encoder seat's latent frames of an oracle clip and the voice seat's keys and values over them sit within rel-l2 3e-2 and 8e-2 of the file's own CPU encoder and CPU backbone pass, each served once with a tower-off leg that serves none, the clip reversed outside both bars, the home's dense dispatches over widened rows the encoder seat's first conv alone, one a window of 8 latent frames, none on the voice seat and none with the tower off; the file's leaves launch the stamps of the formats the loader tagged them: over one forced case the frames and prompt seats serve, the backbone's tag (Q4_K planes or Q8_0 blocks) and the head's (Q8_0 blocks or half-float rows) each see their format's stamps launch on the serving home, and Q5_K and Q6_K, which the file does not hold, and the f32 row GEMV, which a frame matrix widened into the slab would launch, launch none, the home counting no dense dispatch over widened rows; and after the LLM tier's `moe_gpu_drop_model` in the same process the frames seat serves again and holds the same bar against the CPU chain at the same frame count as before the drop. On its CPU image a text of 400 words with no mark in it is cut at its spaces into chunks of at most POCKET_HARD_TOKENS tokens with every word kept in order, and a 60-word run under that cap stays one chunk. Across its unpinned and its pinned q8 CPU image: unpinned, the F16 flow head holds its rows as halves with no float copy where the target converts halves in hardware (floats elsewhere), the pinned q8 lane holds floats, and the two loads' teacher-forced latents agree to rel-l2 1e-4 on the CPU chain")]
+def test_pocket_en_q8(t : T?) {
+    var inscope halves = HeadHalvesKept()
+    var ran = false
+    with_dasllama_jobque_() {
+        ran = with_model_once(t, "tts", "pocket-tts-en-q8.gguf", ["native", "native@cpu", "q8@cpu"], @@pocket_form) $(var m; form) {
+            pocket_form_is(t, m, form)
+            if (form == "native") {
+                pocket_served_cells(t, m.pocket, "pocket-tts-en-q8.gguf")
+                pocket_cell(t, "test_pocket_frames_after_model_drop", m.pocket, @@test_pocket_frames_after_model_drop)
+                return
+            }
+            if (form == "native@cpu") {
+                pocket_cell(t, "test_pocket_hard_split", m.pocket, @@test_pocket_hard_split)
+            }
+            unsafe {
+                t |> run("test_pocket_head_halves: the {form == "native@cpu" ? "unpinned" : "pinned q8"} load") @capture(& m, & halves)(t : T ?) {
+                    head_halves_leg(t, m.pocket, form, halves)
+                }
+            }
+        }
+    }
+    return if (!ran)
+    unsafe {
+        t |> run("test_pocket_head_halves") @capture(& halves)(t : T ?) {
+            test_pocket_head_halves(t, halves)
+        }
+    }
+}
+
+// The published K-quant file, one block: the seats on its served planes with no lane pinned, the Metal flavor's stored
+// planes and a frame leaf's layouts beside them; on its CPU image the stored planes' control and a decline said again
+// after a reload; on its image as a load serves it the knob flip; then one sentence rendered on the q8 form and on the
+// f32 form, their quiet floors compared once the block has dropped both.
+[test(description = "pocket-tts-en-kq.gguf loads once a form. With no lane pinned, on its served planes the Pocket codec seat holds rel-l2 2e-1 of the file's own CPU chain over the oracle's latents, served once a call, with one-sample and x3-scaled controls; the frames seat, teacher-forced for one case a voice, makes the CPU chain's frame count with latents within rel-l2 1e-1 of the file's own CPU chain, served once with one encode a batch; and the prompt seat's K/V rows hold rel-l2 5e-2 of the file's own CPU chain; the codec seat decodes a call in windows: a 40-frame call decodes in one window under a 64-frame window, ten at a 4-frame one and five at a 9-frame one, its samples at either the one-window call's bit for bit (another call's samples the control), a window asked at no frames is held at one, and a 600-frame call, past the old one-pass cap, is served within rel-l2 2e-1 of the file's own CPU chain with one-sample and x3-scaled controls; where the file carries its encoder, the encoder seat's latent frames of an oracle clip and the voice seat's keys and values over them sit within rel-l2 3e-2 and 8e-2 of the file's own CPU encoder and CPU backbone pass, each served once with a tower-off leg that serves none, the clip reversed outside both bars, the home's dense dispatches over widened rows the encoder seat's first conv alone, one a window of 8 latent frames, none on the voice seat and none with the tower off; the file's leaves launch the stamps of the formats the loader tagged them: over one forced case the frames and prompt seats serve, the backbone's tag (Q4_K planes or Q8_0 blocks) and the head's (Q8_0 blocks or half-float rows) each see their format's stamps launch on the serving home, and Q5_K and Q6_K, which the file does not hold, and the f32 row GEMV, which a frame matrix widened into the slab would launch, launch none, the home counting no dense dispatch over widened rows; under the Metal flavor the backbone linears stay Q4_K planes in disk order, and a forced case launches the K4 row GEMV for its frames and the K4 mul_mm for its prompt; a frame leaf re-minted Q5_K or Q6_K lands in the shared layout's member plane of that format on the Metal home as on the discrete homes - the plane empty before the re-mint - while the Metal home holds its Q4_K leaves outside the shared Q4_K plane the discrete homes fill. On its CPU image the same file holds the backend's interleave, and its frames seat declines by flavor or by shape with neither K4 kernel launched; a decline reason the serving home said is said once while the model stays and again after a weights reload: with the tower off the codec seat's decline is recorded said, a second call records no more, `bump_weights_epoch` empties the said set, and the next call records it again. Its image as a load serves it speaks with the tower knob on, with the knob flipped off its next synthesis refuses by name and points at the source model, the codec, the codec encoder, the voice state's pass and the prompt's pass refuse by their own names, with the tower on and the frames seat withdrawn the frame loop refuses by its own, and with the knob back on the image speaks again. Across its q8 and f32 forms the q8 lane's quiet floor (the quietest twentieth of differenced 100 ms windows) sits within 6 dB of the f32 lane's, while the f32 render with a -60 dBFS hiss mixed in lands past that bar")]
 def test_pocket_en_kq(t : T?) {
     var inscope floor = QuietFloorKept()
     var ran = false
     with_dasllama_jobque_() {
-        ran = with_model_once(t, "tts", "pocket-tts-en-kq.gguf", ["native", "q8", "f32"], @@pocket_form) $(var m; form) {
+        var inscope forms <- ["native", "native@cpu", "q8", "f32"]
+        add_served_forms(t, forms, "pocket-tts-en-kq.gguf", ["native@dev"], tts_dev_why())
+        ran = with_model_once(t, "tts", "pocket-tts-en-kq.gguf", forms, @@pocket_form) $(var m; form) {
             pocket_form_is(t, m, form)
             if (form == "native") {
                 pocket_served_cells(t, m.pocket, "pocket-tts-en-kq.gguf")
+                pocket_cell(t, "test_pocket_kq_metal_stored", m.pocket, @@test_pocket_kq_metal_stored)
+                pocket_cell(t, "test_pocket_frame_leaf_layouts", m.pocket, @@test_pocket_frame_leaf_layouts)
+                return
+            }
+            if (form == "native@cpu") {
+                pocket_cell(t, "test_pocket_kq_metal_stored: the same file staged for the CPU", m.pocket, @@test_pocket_kq_cpu_staged)
+                pocket_cell(t, "test_pocket_decline_said_again_after_reload", m.pocket, @@test_pocket_decline_said_again_after_reload)
+                return
+            }
+            if (form == "native@dev") {
+                pocket_cell(t, "test_pocket_knob_flip_refuses", m, @@test_pocket_knob_flip_refuses)
                 return
             }
             unsafe {

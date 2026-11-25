@@ -6,8 +6,10 @@ docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_IMAGE_LEDGER.md`. Planned work:
 
 **A kernel-unit cell applies `REVIEW_KERNEL_CELLS.md` (beside this file) too, wherever the diff puts it.**
 
-**A diff that touches a cell `REVIEW_PINNED_GATES.md` (beside this file) pins, or any cell of a
-file it pins whole, or changes which `run.das` suites list one, applies that checklist too.**
+**A diff that touches a cell `REVIEW_PINNED_GATES.md` or `REVIEW_PINNED_KERNEL_GATES.md` (both
+beside this file) pins, or any cell of a file either pins whole, or changes which `run.das` suites
+list a file holding such a cell, applies `REVIEW_PINNED_GATES.md` too, whose rules bind the entries
+of both files.**
 
 **A diff that adds, moves, merges, renames or removes a test file or a `[test]`, or adds an optional
 `require ?<mod>` to a file, or adds or changes a function in a file that has one, applies
@@ -21,12 +23,13 @@ two sides the cell computes is never such a value, whatever model file it was me
 
 **A cell that calls - in its own code or through a helper - a `../dasllama/` call that sets a
 module or process global a later load, route choice or kernel dispatch reads (that property is
-the trigger, whatever the name; `set_*`, `enable_*`, `disable_*`, `allow_*`, `pin_*`, `reset_*`,
-`restore_*`, `reinstall_*`, `register_*`, `unregister_*`, `select_*_override` and `unset_*` are
-the common spellings), or that passes a loader parameter choosing a family's serving lane (the
-weight form the family runs: q8 planes, a quantized carrier's own planes, or the f16 or f32 planes
-of the exact lane), or whose claim depends on which route or serving lane runs it - a compare of a
-CPU run against a GPU run among them - applies `REVIEW_LANE_PINS.md` (beside this file) too.**
+the trigger, whatever the name; `set_*`, `enable_*`, `disable_*`, `allow_*`, `pin_*`, `clear_*`,
+`reset_*`, `restore_*`, `reinstall_*`, `register_*`, `unregister_*`, `select_*_override` and
+`unset_*` are the common spellings), or that passes a loader parameter choosing a family's serving
+lane (the weight form the family runs: q8 planes, a quantized carrier's own planes, or the f16 or
+f32 planes of the exact lane - and whether a weight row stored as half floats serves as halves or
+as floats), or whose claim depends on which route or serving lane runs it - a compare of a CPU run
+against a GPU run among them - applies `REVIEW_LANE_PINS.md` (beside this file) too.**
 
 **A cell that feeds, preprocesses, or asserts on media bytes an encoder consumes - pixels or
 audio samples - compares an encoder's output rows against a second source, or compares ASR
@@ -36,9 +39,13 @@ transcripts, applies `REVIEW_MEDIA_CELLS.md` (beside this file) too.**
 changes such a condition, or changes the body of a function in this folder that such a condition
 calls, applies `REVIEW_SKIPS.md` (beside this file) too.**
 
-**A diff that adds, moves or changes a cell that loads a model file, a `with_cpu_and_gpu_model`
-or `with_model_once` call or an `own_load` call, or changes `REVIEW.das`'s `check_models_load_once`, `LOAD_ONCE_AREAS`
-or `LOADERS`, applies `REVIEW_LOAD_ONCE.md` (beside this file) too.**
+**A diff that adds, moves or changes a cell that loads a model file, a `with_cpu_and_gpu_model`,
+`with_model_once` or `with_model_once_at` call, an `own_load` call, a `family_on` call, or a TTS
+form helper (`styletts2_form`, `pocket_form`, `styletts2_form_is`, `pocket_form_is`,
+`_tts_parity.das`), or changes `REVIEW.das`'s `check_models_load_once`, `check_block_rows`,
+`check_family_tags`, `FAMILY_FREE`, `LOAD_ONCE_AREAS` or `LOADERS`, applies `REVIEW_LOAD_ONCE.md`
+(beside this file) too - the one block a model file loads on, the family a load is tagged with, and
+the load a CPU-run cell takes.**
 
 - A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest. It owns the asserts
   of every helper it calls and, where it runs inside the body of a `with_cpu_and_gpu_model`,
@@ -66,8 +73,9 @@ or `LOADERS`, applies `REVIEW_LOAD_ONCE.md` (beside this file) too.**
 - A box fact is a condition one box or run mode meets and another does not: the device or its
   memory, whether the build carries a module (`typeinfo module_exists` or `typeinfo
   builtin_module_exists`), the value of an environment variable or runner flag the run reads, the
-  value a tune companion returns (a function whose body is the winner the `[tune]` framework picked
-  for this box), a host toolchain, or a stocked artifact's presence.
+  value a tune companion returns (a function whose body is the winner the `[tune]` framework
+  picked for this box), the CPU kernel backend the box's CPU features pick
+  (`active_kernel_backend`), a host toolchain, or a stocked artifact's presence.
 - A change reaches a test file or a cell when it alters anything its result depends on - its test
   file, a shared helper, engine code it exercises, an in-tree fixture or corpus it reads, or a name
   it asserts on; an edit that changes only whitespace or comments, or that moves code with its text
@@ -136,11 +144,11 @@ header of every test file that runs the cell, wherever the cell is defined, so t
 names every fact the cells that file runs skip on.**
 
 **A diff that changes `run.das`'s surface - a flag, a suite name, an area name, what a flag does,
-what a run with no flag does, or an environment knob the runner reads - adds it to or corrects it in
-`CLAUDE.md`'s "Run suites ONLY through the runner" block and `../CLAUDE.md` in the same change.** A
-data row in a table `run.das` looks up - `MODULE_AREAS`, a suite's or an area's file list or arm
-list (`area_image_arms`) - is not the surface. A stale copy sends its
-reader to a flag that no longer does what the text says.
+which suite or area a run with no flag runs, or an environment knob the runner reads - adds it to
+or corrects it in `CLAUDE.md`'s "Run suites ONLY through the runner" block and `../CLAUDE.md` in the
+same change.** A data row in a table `run.das` looks up - `MODULE_AREAS`, a
+suite's or an area's file list or arm list (`area_image_arms`) - is not the surface. A stale copy
+sends its reader to a flag that no longer does what the text says.
 
 **On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell that
 returns without asserting registers `t |> skip` there; `feint` is a print, not a skip.
@@ -165,7 +173,8 @@ family's half-precision GEMM twins - or the CPU kernel backend a load serves on)
 any load call that writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is unset, itself or
 through a loader it calls. Such a cell loads a GGUF through a load that bakes nothing (`load_model_`
 is one), and a media carrier in memory through the family's `stage_*` paired with its `mint_*`, or
-`cache_via_image_staged` with an empty image path; the cells that break this by design are ledgered at `../ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`.
+`cache_via_image_staged` with an empty image path; the cells that break this by design are ledgered
+at `../ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`.
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -226,26 +235,9 @@ then names everything the cell reads; an artifact's url and checksum sit in one 
 **A test that reads a vision encode oracle dump without naming the minting arm in its header - the
 backend, the flash-attention setting and the mmproj precision the dump came from - is a defect.**
 
-**A diff after which a `[test]` in a file of any `run.das` suite loads a stocked model file of a
-family it did not load before - a `.gguf` carrier, its shards or an mmproj, or outside the `llm`
-area a `.bin` pack of a family `CLAUDE.md`'s family filter list holds a token for - calls in that
-`[test]`, ahead of its first load, `family_on(t, name)` (`_model_tier.das`) with that family's
-token, one call a family, the calls in sequence.** An untagged test runs under every `--family` filter, each load of another
-family's decoder file skipping inside it; calls in sequence run it only under a filter naming every
-family it loads.
-
-**A diff after which a `[test]` loads a `.gguf` carrier, its shards or an mmproj of a family
-`CLAUDE.md`'s family filter list holds no token for adds the family's entry to that list in the same
-change.**
-
-**A diff that makes a test load a language-model `.gguf` - not a tower, speech model or fixture -
-whose name no row of `model_families()` (`_model_categories.das`) holds adds the row in the same
-change, under the token the test's `family_on` check names.** `model_available` skips another
-family's file by that row; a file with no row loads under every `--family` filter.
-
-**A model file past `MODEL_TIER_CEILING_BYTES` that a diff names joins a category in the same change
-- `test_large_rows_have_a_category` and `test_large_stocked_models_have_a_category` check it -, and a
-diff that weakens either gate is a defect.**
+**A diff that weakens `test_large_rows_have_a_category` (`test_model_specs.das`) or
+`test_large_stocked_models_have_a_category` (`test_run_suites.das`), which hold every model file
+past `MODEL_TIER_CEILING_BYTES` to a category, is a defect.**
 
 **A diff that adds or moves a batched-vs-sequential parity cell - one comparing the batched
 stack against a per-session sequential forward whose sequential side runs on the CPU - onto a

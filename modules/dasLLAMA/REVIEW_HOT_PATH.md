@@ -32,22 +32,26 @@ annotated function's carries `[hot_path]`, a `[no_alloc]` / `[no_env]` / `[no_io
 `[cold_path]`.** The allocation lint does not follow an `invoke` into a function another module
 filled the seat with, so nothing else covers that path into the function.
 
+**A function under `dasllama/` that runs only while a profile knob is on carries `[cold_path]`.** A profile knob is
+any switch a default run leaves off that turns on timing reports - among them `DASLLAMA_GPU_PROF`
+and `set_rail_prof_pin`, the program-side pin of the same profile ledger.
+
 **A `[cold_path]` function that a serving step calls, or runs through a function value, with no
 guard around the call or the `invoke` - a guard that skips it on most steps of every request
-that runs it at least once - is a defect: split the rarely-taken part (a rebuild, a first-use
-allocation, a log) into its own `[cold_path]` function behind the guard that keeps it rare, and
-leave the function every serving step reaches unmarked.** The annotation is a promise about how
-often the function runs, and the allocation lint stops walking at it.
+that runs it at least once, or one on a profile knob - is a defect: split the rarely-taken part
+into its own `[cold_path]` function behind the guard that keeps it rare, and leave the function
+every serving step reaches unmarked.** The annotation is a promise about how often the function
+runs, and the allocation lint stops walking at it.
 
 **A diff that renames a function carrying `[hot_path]`, `[cold_path]` or a `[no_alloc]` /
 `[no_env]` / `[no_io]` contract, or inserts a def between that annotation and the def it
 annotated, keeps the annotation on the function it annotated while that function is still the
-region entry or the rarely-taken branch - on the new name after a rename.**
+region entry or the rarely-taken or profile-knob branch - on the new name after a rename.**
 
 **A `[hot_path]` or a `[no_alloc]` / `[no_env]` / `[no_io]` contract on an interior function is a
 defect - drop it, and when no function the interior function runs under still carries `[hot_path]`
 or that contract, put it on the region entry the interior function runs under; an interior function
-carries a `[cold_path]` only on a rarely-taken branch.**
+carries a `[cold_path]` only on a rarely-taken branch or one behind a profile knob.**
 
 **Never put `[hot_path]` or a `[no_alloc]` / `[no_env]` / `[no_io]` contract on a function no
 serving step reaches through a call or an `invoke` - it is no region entry; it carries

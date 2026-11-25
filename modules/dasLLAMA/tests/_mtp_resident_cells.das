@@ -28,6 +28,7 @@ require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_gpu_resident   // the driver's counters: drafts, verifies, rollbacks, head rows
 require dasllama/dasllama_kv_dtype
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_head_embed_gathered: the head's rows gathered off their ids, where the module exists
+require ?cuda dasllama/dasllama_cuda_decode   // cuda_head_warm_declined: the driver's word on the head's prompt warm, where the module exists
 require _model_tier
 require _resident_feed
 require _compares
@@ -1182,6 +1183,32 @@ def mtp_head_warm_cpu_rows(var warms : array<MtpWarmRows>; tr : Model; kv : KVDt
         w.cpu <- head_k_rows_f32(tr, c, w.nprompt - 1l)
         delete c
         delete prompt
+    }
+}
+
+//! whether the armed CUDA driver says the NextN head's prompt warm declined; false on a build that carries no CUDA home
+def mtp_head_warm_declined() : bool {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return cuda_head_warm_declined()
+    } else {
+        return false
+    }
+}
+
+//! the head-warm fault form: the CUDA window chain serves and the head's warm declines
+[cold_path]
+def mtp_head_warm_declined_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("Qwen3.5-0.8B-MTP: the head warm's planes found no room - the window serves, the warm declines by name, no head row lands on the device") @capture(& tr)(t : T ?) {
+            var inscope prompt <- resident_prompt(DRAFT_PROMPT)
+            var s <- create_session(tr, mirror_kv_dtype())
+            let served0 = gpu_resident_prefills_()
+            prefill_warm(tr, s, prompt)
+            t |> success(gpu_resident_prefills_() == served0 + 1l, "the resident window chain served the prompt")
+            t |> success(mtp_head_warm_declined(), "the driver says the head's prompt warm declined")
+            t |> equal(moe_gpu_resident_head_rows(s), 0l, "no head row was warmed on the device")
+            delete s
+        }
     }
 }
 

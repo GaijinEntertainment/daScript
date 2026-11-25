@@ -10,7 +10,9 @@ options _dasllama_internal = true
 // the on-box conversion recipe for the files no registry serves. Verify is the default;
 // --fetch downloads what is absent. Roots
 // come from the usual env: DASLLAMA_MODELS_DIR ("llm") and WHISPER_CPP_MODELS ("whisper" —
-// point it at the llm dir to keep ONE dir per box).
+// point it at the llm dir to keep ONE dir per box). A file lands at its entry's name under its
+// root, the path the tests open: the TTS files and their oracle folders at the top of the models
+// dir, a folder only where the name carries one.
 //   bin/daslang modules/dasLLAMA/performance/fetch_models.das -- [--fetch] [--dry-run] [-o <substr>]
 
 require daslib/clargs
@@ -159,11 +161,11 @@ def private try_convert(e : ProvEntry; path : string; var canary_done : bool&) {
     }
 }
 
-// are the acceptance test — curl's exit status is not (run_capture swallows it anyway)
+//! the bytes and sha256 checked after the fetch accept it, not curl's exit; -f writes no file for an HTTP error
 def private fetch_one(e : ProvEntry; path : string) {
     to_log(LOG_INFO, "fetch_models: START {e.name} ({e.bytes / 1000000l} MB)\n")
     mkdir_rec(dir_name(path))
-    run_capture("curl -sSL -C - --retry 5 --retry-delay 10 -o \"{path}\" \"{e.url}\"", false)
+    run_capture("curl -fsSL -C - --retry 5 --retry-delay 10 -o \"{path}\" \"{e.url}\"", false)
 }
 
 [export, tune_policy(missing = "fallback")]

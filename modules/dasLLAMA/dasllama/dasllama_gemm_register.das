@@ -6,6 +6,7 @@ module dasllama_gemm_register shared private
 
 require dasllama/dasllama_lint public
 require dasllama/dasllama_gemm_gen
+require dasllama/dasllama_gemm_gen_f32
 
 //! The `llvm_code_generator` group member: the package's descriptor joins the group, and
 //! `llvm_user_modules` calls `register_llvm_code_generators` on every member, so dasLLVM
@@ -14,4 +15,5 @@ require dasllama/dasllama_gemm_gen
 [macro_function]
 def public register_llvm_code_generators {
     register_dasllama_gemm_generators()
+    register_dasllama_f32_gemm_generators()
 }

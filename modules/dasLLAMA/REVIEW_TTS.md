@@ -3,13 +3,24 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_TTS.md`, `ARCHITECTURE_TTS_FORMATS.md`, `ARCHITECTURE_TTS_FRONT_END.md`,
 `ARCHITECTURE_TTS_RU_STRESS.md`, `ARCHITECTURE_TTS_TEXTNORM_RU.md`, `ARCHITECTURE_TTS_MEMORY.md`,
-`ARCHITECTURE_POCKET.md`, `ARCHITECTURE_GPU.md`. Planned work: `followup_general.md`.
+`ARCHITECTURE_POCKET.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_TOWER_TTS.md`. Planned work:
+`followup_general.md`.
 
 A TTS source file is a file the glob `dasllama/dasllama_tts*.das` matches,
 `dasllama/dasllama_styletts2.das`, a TTS family file - a `dasllama/dasllama_<family>.das` holding
 exactly one voice model's code, never the two-family carrier `dasllama/dasllama_styletts2.das` -
 or a text front-end file - a `dasllama/` file holding one stage of the pass that turns text into
 phonemes in any language, or the pack shape or codepoint scanning those stages share.
+
+A final PR is one whose body's Validation section opens with `Kind: final PR of the <arc> arc.`,
+and its change is the union of the diffs of its arc's PRs; every other PR is an intermediate one.
+
+**On a final PR, a rule here asking for the WER and UTMOS of `harness/tts_rig.py` before and after
+takes the after side from a rig run at the PR's tip and the before side from the rig table of the
+last PR that published figures for that model, weight lane and serving home (the CPU chain or a GPU
+home's seats) - cited by its `PERF_LEDGER.md` entry or its `harness/tts_model_card.md` row - never
+from a rig run of master; the PR body names each model no earlier table covers as not compared.**
+Master already holds the arc's merged PRs, so a run of it is not the state the change started from.
 
 **A synthesis entry point of a family (`styletts2_synthesize`, `pocket_synthesize`) without
 `[hot_path]` is a defect.**
@@ -22,14 +33,16 @@ value has a different count of the vowels а е ё и о у ы э ю я from its
 within the key's vowel count.** The stress mark lands on the same-numbered vowel of the respelled
 word, so a changed count moves the stress.
 
-**In a TTS source file, an array or table that a synthesis sizes or fills, or that model load fills
-for later syntheses to reuse, is `@scratch` - on its declaration or on the callee parameter it grows
-through - or the diff is a defect. This covers module globals and the fields of the activation
-scratch struct of a synthesis (`St2Scratch`, `PocketScratch`), never the model struct.** The
-annotation is what lets `[hot_path]` hold through every stage the entry point drives.
+**In a TTS source file, an array or table held across syntheses that a synthesis sizes or fills, or
+that model load fills for later syntheses to reuse - a module global, or a field of a synthesis's
+activation scratch struct (`St2Scratch`, `PocketScratch`) wherever that struct is held, never a
+weight plane of the model struct or a weight tensor a stored slab carries - is `@scratch` - on its
+declaration or on the callee parameter it grows through - or the diff is a defect.** The annotation
+is what lets `[hot_path]` hold through every stage the entry point drives.
 
 **A function that exists only for tests, debugging or profiling - a stats, trace or dump reader
-no synthesis entry point calls - in a TTS source file, that is not `[cold_path]`, is a defect.**
+no synthesis entry point calls - in a TTS source file or a file the glob `dasllama/dasllama_*tts*.das`
+matches, that is not `[cold_path]`, is a defect.**
 
 **A GEMM in `dasllama/dasllama_styletts2.das` or a TTS family file that does not go through
 a kernel `dasllama/dasllama_tts_blocks.das` exports is a defect, hand-written dot-product
@@ -72,9 +85,9 @@ pass the consumer (`rows`, `rows_only`) so `conv1d_prepare` / `linear_prepare` d
 layout nobody reads.**
 
 **A caller that pins a TTS weight lane (`set_tts_q8` / `set_styletts2_q8` / `set_pocket_q8` /
-`set_styletts2_recipe`) for a load pins in the context that runs the load, never in the context
-that spawned that loading context.** A `new_thread` context starts every module global at its declared default, so a pin set
-in another context never arrives.
+`set_styletts2_recipe`) for a load pins in the context that runs the load, never in the context that
+spawned that loading context.** A `new_thread` context starts every module global at its declared
+default, so a pin set in another context never arrives.
 
 **A diff that reorders the float operations, or changes the rounding of any step, of the phase
 the CPU harmonic source builds in `dasllama/dasllama_tts_blocks.das` - the cycles, the resamples,
@@ -102,7 +115,7 @@ record on the shared carrier holds it, filled by its reader from the gguf or the
 `verify` beside it (`dasllama/dasllama_styletts2.das`), in the same change** - an unwritten
 field reads back zero from a mapped image.
 
-**A diff - on a final PR, its change (`tests/REVIEW_RUNS.md`) - that changes what a flag-free run
+**A diff - on a final PR, its change - that changes what a flag-free run
 synthesizes from English text on a model it synthesized before - a run with no flags and no
 environment overrides, on the CPU chain or on a GPU TTS seat (a stage's device hook a tower driver
 fills) that serves by default (`ARCHITECTURE_GPU.md#gpu-backends`), the English front end included
@@ -116,15 +129,22 @@ and each weight lane whose kernels or mint it changes, on one model of each fami
 lane; where it mints nothing and changes no lane, it owes one model the change reaches, at its
 unpinned default.
 
-**A diff that changes what a flag-free run synthesizes from text in another language, on a model
-that synthesized that language before, lists in the PR body what it moved, each with its reason:
-every word of that language's g2p corpus fixture (`tests/_tts_fixtures/g2p_corpus_<lang>.json`)
-for which the front end's phonemes change, and every pinned sentence of that language's normalizer
-test file (`tests/test_tts_textnorm_<lang>.das`) the diff adds or whose expected string it changes;
-and, for a language `harness/tts_rig.py --lang` does not take, names the `followup_general.md` row
-under which that language's rig arm is owed.** The rig measures the languages its `--lang` takes;
-for a stage whose file that language lacks, the PR body lists by hand the inputs the diff moved
-there.
+A non-English change: a diff that changes what a flag-free run synthesizes from text in a
+language other than English, on a model that synthesized that language before.
+
+**A non-English change lists in the PR body what it moved, each with its reason: every word of
+that language's g2p corpus fixture (`tests/_tts_fixtures/g2p_corpus_<lang>.json`) for which the
+front end's phonemes change, and every pinned sentence of that language's normalizer test file
+(`tests/test_tts_textnorm_<lang>.das`) the diff adds or whose expected string it changes.** For a
+stage whose file that language lacks, the PR body lists by hand the inputs the diff moved there.
+
+**A non-English change in a language `harness/tts_rig.py --lang` takes ships in the PR body
+the rig's WER and UTMOS in that language, before and after, on the runs its PR kind owes, or the PCM
+hash of one flag-free synthesis in it per model the change reaches, before and after, the two
+matching.** The rig measures the languages its `--lang` takes.
+
+**A non-English change in a language `--lang` does not take names in the PR body the
+`followup_general.md` row under which that language's rig arm is owed.**
 
 **A diff that newly serves a model or a language no flag-free run could synthesize before ships,
 in the same change, a facade cell on that model - a synthesis whose sample count is the front
@@ -135,10 +155,10 @@ rig measurement, and a model that could not speak before has no hash to match.
 
 **A diff that changes what a GPU TTS seat's chain computes, on a seat that is not armed by
 default, ships in the PR body the WER and UTMOS of `harness/tts_rig.py` with that seat armed
-(`DASLLAMA_GPU=1` on Vulkan), before and after, at the rig's voice, on one model of each family
-the seat serves, on its served lane - or the PCM hash of one synthesis per family with that seat
-armed, before and after, the two matching.** The rig measures what the seat's own cells cannot -
-the speech.
+(`DASLLAMA_GPU=1`, plus `DASLLAMA_CUDA=1` on CUDA), before and after, at the rig's voice,
+on one model of each family the seat serves, on its served lane - or the PCM hash of one synthesis
+per family with that seat armed, before and after, the two matching.** The rig measures what the
+seat's own cells cannot - the speech.
 
 **A text normalization or grapheme-to-phoneme error that a transcript of `harness/tts_rig.py` or a
 listening pass exposes lands as a failing-first case in the test file of the front-end file the

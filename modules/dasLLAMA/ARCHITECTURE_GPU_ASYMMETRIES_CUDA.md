@@ -132,19 +132,19 @@ prefill, the MXFP4 expert pieces on the FP4 tensor rung, the nv4 nibble decode, 
   and the blocks upload them; default on), `set_cuda_tower_splitk_fill` / `cuda_tower_splitk_fill` (the fc2 site's split
   gate, `#cuda-cm2-column`; default 4, 0 the pick's own rule), `set_cuda_tower_splitk_min_rows` /
   `cuda_tower_splitk_min_rows` (an encode row floor the split must also reach; default 0, no floor), and
-  `set_cuda_tower_graphs` / `cuda_tower_graphs_on` (`#cuda-chain-graphs`; default on). The Vulkan tower has none of the first three to flip:
+  `set_cuda_tower_graphs` / `cuda_tower_graphs_on` (`#cuda-chain-graphs`; default on), `set_cuda_tts_shot_pdl` / `cuda_tts_shot_pdl_on` (on: a speech shot under the home's programmatic dependent launch, `ARCHITECTURE_GPU_TOWER_TTS.md`; default off). The Vulkan tower has none of the first three to flip:
   its driver sizes the shared-memory split, its hazard rail overlaps independent dispatches with no marks, and its front
   hands its rows to the blocks through the host.
-- **The CUDA home takes its window chain's planes when the driver arms; the Vulkan home takes its own at the first window** (`crd_pf_setup` from `cud_rdec_upload_norms`, `ARCHITECTURE_ENGINE_MEMORY.md#cuda-window-planes-at-arm`): a CUDA drafter attached later checks its own room against a card already holding the window's planes, and a window whose planes found no room refuses by name (`crd_pf_ready`), where Vulkan's `pf_setup` allocates inside the first prefill. `set_cuda_window_fault_` is the CUDA-only test seat that reads the planes as missing at every arm until pinned back, answering the value it replaced; `cuda_window_planes_held` is its witness.
-- **The CUDA tower serves the vision and the audio families; the translation and TTS seats stay the Vulkan tower's**
+- **The CUDA home takes its window chain's planes when the driver arms; the Vulkan home takes its own at the first window** (`crd_pf_setup` from `cud_rdec_upload_norms`, `ARCHITECTURE_ENGINE_MEMORY.md#cuda-window-planes-at-arm`): a CUDA drafter attached later checks its own room against a card already holding the window's planes, and a window whose planes found no room refuses by name (`crd_pf_ready`), where Vulkan's `pf_setup` allocates inside the first prefill. `set_cuda_window_fault_` is the CUDA-only test seat that reads the planes as missing at every arm until pinned back, answering the value it replaced; `cuda_window_planes_held` is its witness. `set_cuda_head_warm_fault_` is its twin for the NextN head's prompt-warm planes, `cuda_head_warm_declined` the witness.
+- **The CUDA tower serves the vision, the audio and the TTS families; the translation seats stay the Vulkan tower's**
   (`dasllama_cuda_tower`: gemma3v, gemma4v, gemma4uv, qwen3v, qwen25v - `ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains`;
   the audio and ASR-decoder seats from the home each family's row of `CUDA_AUDIO_HOMES` names, every row the CUDA home's -
-  `ARCHITECTURE_GPU_TOWER_RAIL.md#rail-audio-installs`). A process serving a translation or TTS tower beside the CUDA home
+  `ARCHITECTURE_GPU_TOWER_RAIL.md#rail-audio-installs`; the TTS seats from the driver both discrete homes instantiate). A process serving a translation tower beside the CUDA home
   holds both APIs - the Vulkan device armed for that tower, the CUDA context for the rest - and the Vulkan tower's vision
   seats stand down there (`vulkan_tower_install_vision` is the Vulkan home's installer,
   `ARCHITECTURE_GPU_TOWER.md#tower-reach`). The CUDA tower keeps no hazard rail and no descriptor sets (the `cud_`
-  rail's launches are stream-ordered), carries no per-role GPU profile (`DASLLAMA_GPU_PROF` is the Vulkan tower's -
-  its encode is timed by the lane probe's wall), declines no tile family (the home has one feed, cm2), and takes its
+  rail's launches are stream-ordered), carries no per-role GPU profile on its vision and audio chains (their encode is
+  timed by the lane probe's wall; its TTS seats keep every home's ledger), declines no tile family (one feed, cm2), and takes its
   f16 x f16 GEMM through `CuF16GemmCm2W` and its s column `CuF16GemmCm2WS` - the `F16GemmCm2T` stamps with the weight
   offset (`#cuda-cm2-column`), beside the E-series seat's `CuF16GemmCm2`, which pins the offset off - where the Vulkan
   tower's `F16GemmCm2` stamps serve both sites.
@@ -278,15 +278,15 @@ process with a warning, and `DASLLAMA_CUDA_GRAPHS=0` launches every chain kernel
 
 The policy is per class family, by the class module that stamps the kernel (`cud_class_fn`, the module `[cuda_dispatch]`
 passes it). Every kernel asks the whole carveout (`cuda_function_set_shared_carveout(fn, 100)`): the tiles' blocks an SM are
-the latency hiding the home has. The one exception is a kernel of the tower families' own class modules
-(`dasllama_cuda_classes_front`, `_blocks`, `_asr`) that takes no shared memory: it leaves the split to the driver, which
-gives it the L1. Those are the shared templates' row kernels (the log filterbank, the subsample convs' LayerNorm-ReLU rows,
-gemma4a's windowed attention), which read their rows thread by thread through L1, and under the full carveout their working
-set spilled past it. The LLM window and token classes (`dasllama_cuda_classes`, a tower kernel stamped there included,
-since the window chain launches some) keep the full carveout: left to the driver they read 0.4% slower on tg128 on the reference box (RTX 5060 Ti), a cost the
+the latency hiding the home has. The exceptions leave the split to the driver, which gives the kernel the L1 (`cud_l1_scoped`):
+a kernel of the tower families' own class modules (`dasllama_cuda_classes_front`, `_blocks`, `_asr`) that takes no shared
+memory - the row kernels that read their rows thread by thread through L1 (the log filterbank, the subsample convs'
+LayerNorm-ReLU rows, gemma4a's windowed attention), whose working set spills past the full carveout - and every kernel of
+`_rows` and `_tts`: the TTS LSTM direction, one block with 5 KB of shared memory, re-reads its recurrence matrix every step,
+so under the full carveout it waits on the L1 the carveout took and trails the Vulkan home on the same card, and under the
+driver's split it runs level with it (`PERF_LEDGER.md`, the CUDA speech seats' carveout and launch order). The LLM window and token classes (`dasllama_cuda_classes`, a tower kernel stamped there included, since the window chain launches some) keep the full carveout: left to the driver they read 0.4% slower on tg128 on the reference box (RTX 5060 Ti), a cost the
 tower's gain does not buy on the served LLM shape (`PERF_LEDGER.md`, the audio towers on the CUDA home). The class-load log line names each kernel's module and
-carveout. The test seam `set_cuda_tower_carveout_full` puts the tower modules' no-shared-memory kernels on the full
-carveout too and re-applies the policy to every kernel already loaded, so a race compares the two policies with no reload. The Vulkan driver sizes the split per pipeline from its shared-memory use, so the Vulkan home has nothing to set.
+carveout. The test seam `set_cuda_tower_carveout_full` puts the scoped kernels on the full carveout too and re-applies the policy to every kernel already loaded, so a race compares the two policies with no reload. The Vulkan driver sizes the split per pipeline from its shared-memory use, so the Vulkan home has nothing to set.
 
 ### The CUDA home binds its context to the calling thread at every entry {#cuda-thread-binding}
 

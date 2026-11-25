@@ -87,13 +87,10 @@ var private g_asr_tower_fp32 = false   // the TOWER half only — the GPU-tower 
 //! a facade fp32 rail (the whole model or the tower half) holds the load off its q8 lane
 def private asr_fp32_pinned() : bool => g_asr_force_fp32 || g_asr_tower_fp32
 
-// LLM-decoder ASR sessions' KV dtype. f16 is the DEFAULT (matches the reference KV — format-to-
-// format comparisons; zen2 gb1 -3%, transcripts near-tie-sane); f32 is the oracle/parity rail
-// (frozen-id cells pin it); q8_0 measured slower at ASR depths (decode overhead > bandwidth win)
-var private g_asr_kv = KVDtype.f16
+var private g_asr_kv = KVDtype.automatic
 
-//! Select the KV-cache dtype for subsequent ASR decoder sessions (f16 default — matches the
-//! reference's KV; f32 is the oracle/parity rail). LLM-decoder families only: whisper and
+//! Select the KV-cache dtype for subsequent ASR decoder sessions (auto default — f16 on a CPU that converts halves in
+//! hardware, the reference's KV; f32 is the oracle/parity rail). LLM-decoder families only: whisper and
 //! parakeet carry no LLM KV and ignore this. Applies at ``create_session``.
 def set_asr_kv(dt : KVDtype) {
     g_asr_kv = dt

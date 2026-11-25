@@ -3192,6 +3192,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `create_batch_workspace` - Create the caller-owned scratch that `eval_batch` steps through — one per concurrent batch, reused across calls (buffers grow to the largest batch seen).
 - `create_kv_pool` - Create a caller-owned PAGED KV pool over `model`'s cache geometry: sessions over it allocate pages of `page_rows` positions on demand instead of the full `seq_len` slab, so many sessions share one elastic pool; keep it alive as long as sessions live.
 - `create_session` - Create a fresh session (KV cache + scratch) sized to `model.config.seq_len` — one model, many independent conversations.
+- `default_kv_dtype` - The codec `KVDtype.automatic` names on this machine - what a session, a pool, a chat and the GPU mirror take where none is asked: `f16`, or `q8_0` where the CPU converts half floats in software (WebAssembly, x86 without F16C), where an `f16` cache pays a convert on every read.
 - `detach_block_drafter` - Detach the process's block drafter, if one is attached; plain decode serves.
 - `detach_mtp_drafter` - Detach `model`'s assistant drafter, if one is attached; its rounds stop and plain decode serves.
 - `load_model` - Load a model AND its tokenizer from a GGUF file — architecture and tokenizer backend are auto-selected from metadata; `mode` picks the weight quantization.
@@ -3419,7 +3420,7 @@ Text to speech in pure daslang: load a converted StyleTTS2-lineage GGUF (KittenT
 ### Loading and capabilities
 
 - `caps` - What the loaded model offers: the canonical voice names the front end can drive, each with its language (a voice whose language it does not phonemize is left out; aliases resolve at synthesis), the PCM rate, the languages, whether it clones a voice, whether a speed applies.
-- `finalize` - Free the model's planes, the carrier and both packs; `delete m` runs it.
+- `finalize` - Free the model's planes, the carrier and both packs - a GPU image's device state with them; `delete m` runs it.
 - `g2p_pack_path`
 - `load_tts_model` - Load a TTS model from a prepared image its host holds in memory, on an image-page boundary, where `load_tts_model(path)` loads a GGUF or an image file: the bytes are borrowed and stay the host's for as long as the model lives.
 - `tts_finish_styletts2` - A StyleTTS2 carrier in `m.model`, loaded or minted from `path`, made a facade: its family's kind, the packs its voices' languages ask for from the same directory (the English pair also where it merely sits there, for the Latin words inside another language's text), the voices it cannot speak said once.
@@ -3449,7 +3450,7 @@ Text to speech in pure daslang: load a converted StyleTTS2-lineage GGUF (KittenT
 
 - `synthesize` - Text -> speech: normalize, chunk by sentence, phonemize, map into the family's symbols, synthesize; the chunks concatenate, the timings sum.
 - `synthesize_stream` - Text -> speech, one sentence-sized chunk at a time: the block receives each chunk's audio as soon as it exists, in order.
-- `tts_release_scratch` - Free the activation scratch a synthesis or a clone left behind - the carrier of either family (a StyleTTS2 carrier whose noise the parity rail captured stays) and the block home's scratch globals; the next run grows them back for a few milliseconds.
+- `tts_release_scratch` - Free what a synthesis or a clone left behind - either family's carrier (a captured-noise StyleTTS2 carrier stays), the block home's globals, the GPU home's activation rows; the next run regrows them.
 - `tts_set_chunk_chars` - Cap the chunk a synthesis speaks at `chars` codepoints (default `TTS_CHUNK_CHARS`; under one is refused): the peak memory a say holds is the largest chunk's, so a memory-tight platform lowers it and the same text speaks in more, shorter pieces, each its own synthesis.
 
 ### The served lane

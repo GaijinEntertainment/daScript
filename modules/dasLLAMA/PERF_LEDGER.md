@@ -10,6 +10,75 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-11-25, `direction-grade`) - the CUDA speech stamps' exact math: compiling the tanh GELU, the
+  harmonic source's noise draw and sines and the Pocket row GEMV family without NVRTC's fast math costs synthesis
+  0.1-0.9% on the shipped arm (RunPod RTX PRO 4500 Blackwell, driver 595.112.07, Linux).** Two processes a model, one
+  a build, back to back on an idle GPU (one lock held over all six): a compile option is not a runtime seam, so the
+  two builds cannot be candidates of one race, and the comparison picks nothing under `REVIEW_RACE_PICKS.md` (timings
+  from two processes). The stamps compile exact for their accuracy (`ARCHITECTURE_CELL_BARS.md`); this reading is the
+  cost of that pick, not its reason. The fast arm: the pod's tree at 7e27719da2 with dasCUDA's `fastmath` switch
+  (e9530a0a0d) and no stamp using it - every kernel text and cubin key the same as 7e27719da2's; the exact arm: the
+  same tree with this entry's commit's `dasllama_cuda_classes_tts.das` (58 stamps `fastmath = false`). Instrument
+  `harness/tts_race.das`, `-jit`, under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1 DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1
+  DAS_NO_HUGEPAGE_HINT=1`, `DAS_TUNE_POLICY`, `DASLLAMA_CUDA_MMQ`, `DASLLAMA_CUDA_PDL` and `DASLLAMA_COOPMAT` unset:
+  `./bin/daslang --disable-module dasVulkan -jit modules/dasLLAMA/harness/tts_race.das -- -m /root/models/<model>.gguf
+  -v <voice> --rounds 8 --cand carveout=0,pdl=0 --cand carveout=0,pdl=1`; a figure is the seconds of synthesis over
+  the 200-sentence fixture, mean over 8 passes (min-max), every pass serving every seat on CUDA:
+
+    | model, voice | fast, pdl=0 (shipped) | exact, pdl=0 | fast, pdl=1 | exact, pdl=1 |
+    |---|---|---|---|---|
+    | kitten-mini, Bella | 10.057 (10.026-10.073) | 10.070 (10.064-10.084) | 10.700 (10.661-10.719) | 10.755 (10.750-10.764) |
+    | kokoro-82m, af_heart | 8.898 (8.895-8.903) | 8.914 (8.910-8.917) | 9.352 (9.346-9.359) | 9.380 (9.375-9.387) |
+    | pocket-tts-en-kq, alba | 4.888 (4.868-4.900) | 4.931 (4.912-4.943) | 5.984 (5.969-5.996) | 5.982 (5.971-5.991) |
+
+  Each arm's audio hash is one across its passes and differs between the arms (the exact stamps round otherwise).
+- **MEASURED (2026-11-24, `direction-grade`) - the CUDA speech seats' carveout and launch order: the TTS class
+  family on the driver's carveout split and the TTS shots in plain stream order, each raced in one process against
+  the other candidate, win on every StyleTTS2 model and put CUDA synthesis level with the Vulkan home (RunPod RTX PRO
+  4500 Blackwell, Linux).** Instrument `harness/tts_race.das` at commit 05a5d6dbba, the exe the pod's build of that
+  tree, `-jit`, under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1 DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1 DAS_NO_HUGEPAGE_HINT=1`,
+  `DAS_TUNE_POLICY`, `DASLLAMA_CUDA_MMQ`, `DASLLAMA_CUDA_PDL` (on) and `DASLLAMA_COOPMAT` unset: one process a model,
+  the model loaded once, four candidates - `carveout` (`set_cuda_tower_carveout_full`: 0 the driver's split, shipped; 1
+  the full carveout on every scoped kernel the process loads, the TTS family's and the front family's kernels with no
+  shared memory) crossed with `pdl` (`set_cuda_tts_shot_pdl`: 0 plain stream order, shipped; 1 the home's programmatic
+  dependent launch) - 8 rounds, each running every candidate once, the order rotated a round, a turn speaking 8
+  sentences untimed and then the 200-sentence fixture timed. A figure is the seconds of synthesis the engine's timings
+  sum over the 200 sentences (the front end through the waveform), mean over the 8 passes (min-max); every pass of a
+  model gave one audio hash and served every seat on CUDA (no decline). Command, a model and voice a row:
+  `./bin/daslang --disable-module dasVulkan -jit modules/dasLLAMA/harness/tts_race.das -- -m /root/models/<model>.gguf
+  -v <voice> --rounds 8 --cand carveout=0,pdl=0 --cand carveout=1,pdl=0 --cand carveout=0,pdl=1 --cand
+  carveout=1,pdl=1`:
+
+    | model, voice | carveout=0, pdl=0 | carveout=1, pdl=0 | carveout=0, pdl=1 | carveout=1, pdl=1 |
+    |---|---|---|---|---|
+    | kitten-mini, Bella | 10.067 (10.033-10.082) | 15.036 (14.991-15.051) | 10.712 (10.682-10.732) | 14.801 (14.779-14.815) |
+    | kokoro-82m, af_heart | 8.910 (8.905-8.919) | 12.918 (12.899-12.990) | 9.363 (9.357-9.373) | 12.746 (12.727-12.756) |
+    | pocket-tts-en-kq, alba | 4.899 (4.873-4.909) | 4.899 (4.879-4.912) | 5.997 (5.975-6.013) | 5.795 (5.766-5.869) |
+
+  The driver's split wins on both StyleTTS2 models (1.49x and 1.45x) and is level on Pocket, whose seats run no
+  recurrence; plain order wins on all three (1.06x, 1.05x, 1.22x). The pair before both picks (`carveout=1, pdl=1`)
+  is the slowest StyleTTS2 arm but one: under the full carveout PDL gains 1-2%, under the driver's split it costs.
+
+  The Vulkan home on the same box and tree, `harness/tts_synth.das`, one process a run, 3 runs a model, under
+  `DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1 DAS_NO_HUGEPAGE_HINT=1`, `DASLLAMA_COOPMAT` unset:
+  `./bin/daslang --disable-module dasCUDA -jit modules/dasLLAMA/harness/tts_synth.das -- --model
+  /root/models/<model>.gguf --voice <voice> --out <dir>`, its `tts synth: 200 sentences, ... in <s> s` line: kitten-mini
+  10.056 s (10.039-10.077), kokoro-82m 8.886 s (8.882-8.891), pocket-tts-en-kq 6.097 s (6.091-6.109) - level with the
+  CUDA home's shipped arm on StyleTTS2, behind it on Pocket.
+
+  The carveout's cost by role: `harness/tts_synth.das` under `DASLLAMA_GPU_PROF=1`, 1 run an arm, the full arm (the
+  full carveout, PDL on) from commit 9a081c7baf's `dasllama_cuda_common.das` and `dasllama_cuda_rail.das`, the split
+  arm (the driver's split, plain order) from commit 833e0aa18d (the run's exact command line was not kept); the device microseconds a role summed over sentences 2-200
+  from the `<home> tower <chain> gpu:` report lines, kitten-mini: the LSTM role of the text, dur_enc, durations and
+  prosody seats 743 / 2221 / 739 / 2620 ms on Vulkan, 1323 / 3940 / 1300 / 4664 ms on the full arm (1.78x
+  Vulkan's, each seat), 746 / 2239 / 745 / 2646 ms on the split arm; the decode seat 1582 / 1641 / 1647 ms
+  (level on every arm). Kokoro-82m: LSTM 679 / 2029 / 677 / 1722 ms Vulkan, 1209 / 3586 / 1188 / 3069 ms full arm,
+  682 / 2044 / 680 / 1739 ms split arm.
+
+  The CUDA ledger's spans: a probe of `cuda_event_ready` on the stamp before at each stamp (an instrumented engine
+  build kept outside the tree), kitten-mini, `--limit 3`, `DASLLAMA_GPU_PROF=1`, the CUDA flags above: a stamp whose
+  predecessor had already landed - the device waiting on the host - at most 3 of the albert seat's 124 stamps, 3 of
+  the text seat's 18, none of the dur_enc, durations and prosody seats', 4 of the decode seat's 354.
 - **MEASURED (2026-11-24, `direction-grade`) - the nv4 lane split measures out: an nv4 decode GEMV row past 96 blocks
   at the whole subgroup against the grid formats' sixteen lanes, both discrete homes (RunPod RTX PRO 4500 Blackwell 32
   GB).** The box and the unset flags are the nv4 device unit entry's of this date. Exe: the daslang binary built from
@@ -1601,7 +1670,7 @@ what it costs today and what the fix would change.
 
 - **MEASURED (2026-10-24, `direction-grade`) - the fp32 batch GEMM tile and the lane-split conv front on the three AWS
 boards.** `matmul_batch_core` runs a four-by-four tile (`f32_batch_tile`,
-`ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice`); `harness/f32_batch_race.das -- --reps 5` races its two constants
+`ARCHITECTURE_CPU_KERNELS_TILES.md#f32-batch-tile-lattice`); `harness/f32_batch_race.das -- --reps 5` races its two constants
 and the tile against the dot-a-cell nest it replaces in one process, interleaved, best of 5 (`bin/daslang -jit`,
 `DAS_TUNE_POLICY` unset and no other override; GFLOP/s; the M5 Max under `DAS_TUNE_MANIFEST` naming a scratch sidecar
 the tuner minted for this kernel - `f32_batch_tile` vec4_u4 - with `DASLLAMA_ALLOW_UNTUNED=1` for the rest, the Granite
@@ -3552,8 +3621,7 @@ half-width dot); the whole bf16 tower set shares that gap.
 
 - **MEASURED (2026-10-06, `direction-grade`) - Pocket's text prompt on the device takes a third of its request on
   both boxes; the thirteen TTS kernels moved to templates both homes stamp read as before.** The prompt seat runs the
-  chunk's text rows through the frames slab's layers at the voice's positions (`ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames`,
-  `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-pocket-chain`), the keys and values back to the host; the last layer ends at
+  chunk's text rows through the frames slab's layers at the voice's positions (`ARCHITECTURE_GPU_TOWER_TTS.md#tts-pocket-seats`), the keys and values back to the host; the last layer ends at
   its K/V on every rail, including the CPU's. `dasllama-server` with the TTS model alone, `harness/served_bench.das
   --no-chat --tts-url <server> --reps 8`, one sentence, master and the branch alternated twice in one sitting on each
   box (the master lives first); the stages are the engine's own stage clock. The M5's tune sidecar predates the binary.
@@ -4802,7 +4870,7 @@ half-width dot); the whole bf16 tower set shares that gap.
   The pair costs a dispatch's floor at every row count a sentence produces, so the path ships no
   gate on the row count.
 - **LANDED (2026-09-26) - the StyleTTS2 and Pocket seats ride the Vulkan TTS driver
-  (`ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain`): the kitten and kokoro families' seven
+  (`ARCHITECTURE_GPU_TOWER_TTS.md#tts-st2-seats`): the kitten and kokoro families' seven
   seats and the Pocket codec and frames seats on the Vulkan tower's knob, the front end on the
   f32-exact tile, the decoder and generator convs on the f16 tile, every slab through the shared
   host writer.** Box: the pod - the RunPod RTX PRO 4500 Blackwell, Linux - every das figure
@@ -4840,7 +4908,7 @@ half-width dot); the whole bf16 tower set shares that gap.
   Pocket frames slab (322 MB) builds in 70 ms against 201 with the q8 rows dequantized over the
   job pool. What the seats hold: the Pocket frames slab 322 MB, the kokoro decoder's scratch past
   3 GB at its widest sentence, the Pocket codec's one-shot column slot about 4 GB at the 512-frame
-  cap (`followup_vulkan.md` 108, 109).
+  cap (`followup_vulkan.md` 108).
 - **LANDED (2026-09-26) - three TTS parity bars widened to cover the pod's x64 CPU chain beside
   the M5 Max's.** Every reading `-jit` through `tests/run.das -- --area tts` on the named box: the
   pod (the RunPod RTX PRO 4500, Linux; its x64 CPU chain is the arm under compare) and the M5 Max
@@ -4870,7 +4938,7 @@ half-width dot); the whole bf16 tower set shares that gap.
   before the change: sampled within 5% of greedy. `lcpp_bench` carries no sampler flag (its
   `--mtp-temp` sets a temperature alone), so no board row holds the sampled rate.
 - **LANDED (2026-09-25) - the Pocket TTS frame loop rides the Metal tower as the family's second
-  seat (`ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames`): the backbone step and the flow head for every
+  seat (`ARCHITECTURE_GPU_TOWER_TTS.md#tts-pocket-seats`): the backbone step and the flow head for every
   frame, eight frames a command buffer over a per-voice device K/V slot, the EOS rule on the host
   between batches, the q8 backbone on the decode GEMV, the head's GEMVs carrying their norm and
   activations, the attention row a threadgroup a head with its scores staged.** The bare q8
@@ -4916,9 +4984,9 @@ half-width dot); the whole bf16 tower set shares that gap.
   file's latents 0.012 against the CPU chain's 0.025, the kq file's 0.10 against 0.11 - since the
   CPU quantizes the activations it feeds a q8 or K-quant plane and the tower feeds them f32. Quality,
   `harness/tts_rig.py` on the 200-sentence corpus against the codec-seat rows: q8 4.23 / 4.364 -> 4.18 / 4.364, kq 4.04 / 4.333 -> 3.91 / 4.325, stuart-kq 3.23 / 4.117 -> 3.36 / 4.136 (WER / UTMOS, a word or two of the 2201 either way, the UTMOS within a hundredth). The
-  levers left are `followup_metal.md` sec.27.
+  levers left are `followup_metal.md` sec.76.
 
-- **LANDED (2026-09-25) - the Pocket TTS codec rides the Metal tower (`ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-codec`): a chunk's latents up, its samples back, one command buffer, the CPU's windowed codec
+- **LANDED (2026-09-25) - the Pocket TTS codec rides the Metal tower (`ARCHITECTURE_GPU_TOWER_TTS.md#tts-pocket-seats`): a chunk's latents up, its samples back, one command buffer, the CPU's windowed codec
   run as one shot over the chunk on the f32-exact GEMM stamps, the K-quant transformer linears
   dequantized into the slab so the small form serves too.** Box: the M5 Max, every das figure
   `-jit` on this tree with `DAS_TUNE_MANIFEST=performance/m5.tune.json` (its runtime section
@@ -5002,7 +5070,7 @@ half-width dot); the whole bf16 tower set shares that gap.
   of the generator alone 1.2e-3 at most; the served lane's sample counts within a hundredth of the
   CPU chain's (139600 against 140800 on the kitten-nano sentence, equal on kokoro's). The cells
   ran through `tests/run.das -- --area tts` (`-jit`, the manifest above, the M5 Max). The remaining
-  cost and the f32-exact decoder question are `followup_metal.md` sec.27.
+  cost and the f32-exact decoder question are `followup_metal.md` sec.76.
 
 - **LANDED (2026-09-24) - the FastConformer Metal chain's rel-pos attention rides the f32 GEMM
   builder per head (`ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`), where the per-row kernel it replaced
@@ -8677,7 +8745,7 @@ names the CPU arm).
   does the same speech in 34 ms on the device. The next factor for the browser build sits in the CPU kernels at
   narrow widths.
 - **The Metal codec seat over the small decoder** (the attention row's head size an argument, `GkPkAttnArgs.hs`;
-  `ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-codec`): the stanza's codec 91 -> 21.7 ms on the 18m, 100 -> 20.8
+  `ARCHITECTURE_GPU_TOWER_TTS.md#tts-pocket-seats`): the stanza's codec 91 -> 21.7 ms on the 18m, 100 -> 20.8
   on the 7m (`harness/pocket_pace.das` at one build, the seat off under `DASLLAMA_METAL_TOWER=0` against on); over the corpus `pocket-tts-en-18m-q8.gguf` 0.021 -> 0.011, `pocket-tts-en-18m-kq.gguf` 0.021 -> 0.011,
   `pocket-tts-en-18m-refl-q8.gguf` 0.023 -> 0.010, `pocket-tts-en-7m-q8.gguf` 0.019 -> 0.008 - level with the 100M
   model's 0.009 on its three seats, the backbone still on the CPU chain (the frames and prompt seats decline the

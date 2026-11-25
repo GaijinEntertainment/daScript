@@ -4356,6 +4356,27 @@ def private crd_gemm(var sc : CudSched; fmt : int; wblk : int64; a : CudArena; x
 
 var private g_crd_pf_fault = false   //! the test seat's pin: the next arm's window planes read as having found no room
 
+var private g_crd_head_warm_fault = false   //! the test seat's pin: the head warm's planes read as having found no room
+
+var private g_crd_mmq_fault = false   //! the test seat's pin: the FP4 expert chain's planes read as having found no room
+
+//! Test seat: the FP4 expert chain's planes read as having found no room at their setup until pinned back; answers the pin it replaced.
+def set_cuda_mmq_fault_(on : bool) : bool {
+    let was = g_crd_mmq_fault
+    g_crd_mmq_fault = on
+    return was
+}
+
+//! Test seat: the NextN head's prompt-warm planes read as having found no room at their setup until pinned back; answers the pin it replaced.
+def set_cuda_head_warm_fault_(on : bool) : bool {
+    let was = g_crd_head_warm_fault
+    g_crd_head_warm_fault = on
+    return was
+}
+
+//! whether the armed driver declined the NextN head's prompt warm: its planes found no room, or a window held more than one part
+def cuda_head_warm_declined : bool => g_crd != null && g_crd.pf_head_declined
+
 //! Test seat: the window chain's planes read as having found no room at every arm until pinned back; answers the pin it replaced.
 def set_cuda_window_fault_(on : bool) : bool {
     let was = g_crd_pf_fault
@@ -4374,7 +4395,7 @@ def private crd_pf_setup(var r : CudRdec) {
     let failures = cud_dev_failures()
     crd_pf_planes(r)
     let host_cut_null = r.experts_host && (r.pf_ones == 0ul || r.pf_ident == 0ul)   //! the two planes `buf_upload` takes, which no failure count sees
-    r.pf_failed = g_crd_pf_fault || cud_dev_failures() != failures || host_cut_null
+    r.pf_failed = r.pf_failed || g_crd_pf_fault || cud_dev_failures() != failures || host_cut_null
     if (r.pf_failed) {
         to_log(LOG_ERROR, "dasLLAMA cuda resident: the window chain's planes ({r.pf_np} rows) found no room on the device ({cuda_last_error()}) - a prompt window will refuse by name\n")
     }
@@ -4421,6 +4442,7 @@ def private crd_pf_planes(var r : CudRdec) {
         r.pf_dnof = cud_dev_zeroed(slack * di * 2l)
         r.pf_dnoq = cud_dev_zeroed(np * di)
         r.pf_dnos = cud_dev_zeroed(np * (di / Q8_BLOCK_ELEMS) * 4l)
+        r.pf_cap_dev = cud_dev_zeroed(PF_CAP_WORDS * 4l)
     }
     r.pf_kv = cud_dev_zeroed(np * 2l * kvd * 4l)
     r.pf_v = cud_dev_zeroed(np * kvd * 4l)
@@ -4702,6 +4724,7 @@ def private crd_pf_moe_mmq_setup(var r : CudRdec) {
     let nfe = r.nfe
     let rows = r.pf_nk
     let xrows = rows + TILE_READ_SLACK
+    let failures = cud_dev_failures()
     r.pf_mmq_rows = rows
     r.pf_mxf = cud_dev_zeroed(xrows * dim * 4l)
     r.pf_mx4q = cud_dev_zeroed(xrows * dim / FP4_NIBBLES_PER_BYTE)
@@ -4713,6 +4736,10 @@ def private crd_pf_moe_mmq_setup(var r : CudRdec) {
     r.pf_mmy1 = cud_dev_zeroed(rows * nfe * 4l)
     r.pf_mmy2 = cud_dev_zeroed(rows * nfe * 4l)
     r.pf_mmdn = cud_dev_zeroed(rows * dim * 4l)
+    if ((g_crd_mmq_fault || cud_dev_failures() != failures) && !r.pf_failed) {   // past the arm's own count where `set_moe_experts` sizes the chain: the window refuses by name as for the arm's planes
+        r.pf_failed = true
+        to_log(LOG_ERROR, "dasLLAMA cuda resident: the FP4 expert chain's planes ({rows} rows) found no room on the device ({cuda_last_error()}) - a prompt window will refuse by name\n")
+    }
     to_log(LOG_INFO, "dasLLAMA cuda resident: the routed block's expert pieces on the FP4 expert chain under DASLLAMA_CUDA_MMQ={r.pf_knob != CUDA_MMQ_UNPINNED ? r.pf_knob : crd_mmq_knob()} (set_cuda_mmq_pin under a test's pin; 0 keeps them on the cm2 s and e tiles) - the gathered rows as the stacks' FP4 feed over the schedule's s and m columns ({rows} bucket rows a window)\n")
 }
 
@@ -5025,6 +5052,7 @@ def private crd_pf_head_setup(var r : CudRdec) {
     let np = r.pf_np
     let dim = r.dim
     let slack = np + TILE_READ_SLACK
+    let failures = cud_dev_failures()
     r.pf_hemb = cud_dev_zeroed(np * dim * 4l)
     r.pf_hsrc = cud_dev_zeroed(np * dim * 4l)
     r.pf_hna = cud_dev_zeroed(np * dim * 4l)
@@ -5047,7 +5075,7 @@ def private crd_pf_head_setup(var r : CudRdec) {
     for (i in range(3)) {
         r.pf_hsch[i] = cud_sched_make(r.pf_sched_words)
     }
-    if (r.pf_hemb == 0ul || r.pf_hsrc == 0ul || r.pf_hna == 0ul || r.pf_hnb == 0ul || r.pf_hcat == 0ul || r.pf_hcos == 0ul || r.pf_hcatf == 0ul) {
+    if (g_crd_head_warm_fault || cud_dev_failures() != failures) {
         r.pf_head_declined = true
         to_log(LOG_WARNING, "dasLLAMA cuda resident: the NextN head's prompt warm found no room on the device for its planes; the head's prompt rows stay as the host holds them\n")
     }
@@ -5472,9 +5500,6 @@ def cud_rdec_prefill_caps(caps : array<RdecPfCap>) {
     return if (empty(caps) || g_crd == null || !g_crd.hybrid)
     var r & = unsafe(*g_crd)
     crd_snap_alloc(r)
-    if (r.pf_cap_dev == 0ul) {
-        r.pf_cap_dev = cud_dev_zeroed(PF_CAP_WORDS * 4l)
-    }
 }
 
 var private g_crd_hidden_ask = false

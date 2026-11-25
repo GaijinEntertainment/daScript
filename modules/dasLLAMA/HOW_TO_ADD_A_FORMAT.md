@@ -321,7 +321,7 @@ resident plan seats the table under).
   dereferences a null scale plane inside the k6 tile under the JIT, a panel format with no arm
   silently decodes as k6), `kq_batch_kernel_gen` tail, `kq_batch_groupn_gen` tail, `kq_groupn_gen`
   (two ladders), both `register_kernel_backend` rows (`kq_rows_<fmt> = @@<fmt>q8_gemv_gen`). The
-  tile's `tile4` companion (`ARCHITECTURE_CPU_KERNELS.md#amx-bf16-tile`): the stub
+  tile's `tile4` companion (`ARCHITECTURE_CPU_KERNELS_TILES.md#amx-bf16-tile`): the stub
   `<fmt>q8_tile4_gen` (body `kq_tile_ref(<id>, ...)`) with its `tune_companion` row (`<fmt>_tile4`),
   the format's `KqTag_<fmt>` overload of `kq_tile4_gen` - a `KqFmt` member without one fails the
   compile - and, for a format whose tile reads the packed planes (`kq_reads_packed_planes`), its arm
@@ -341,7 +341,7 @@ resident plan seats the table under).
   loader's kq dispatch, the layout companion and the tuner's completeness check all resolve it
   by name. `test_kquant`'s declined-family cell holds that lockstep: a format outside
   `kq_has_emitter` reads a false witness and layout 4.
-- The AMX bf16 leg (`ARCHITECTURE_CPU_KERNELS.md#amx-bf16-tile`): q40's grid carries two
+- The AMX bf16 leg (`ARCHITECTURE_CPU_KERNELS_TILES.md#amx-bf16-tile`): q40's grid carries two
   `amx_bf16` rows, and a family that copies them owes the leg's companions. In
   `dasllama_math_gen.das`: the stubs `<fmt>q8_tileform_gen` (returns 0), `<fmt>q8_amx_cfg_gen`,
   `<fmt>q8_witness_gen` and `<fmt>q8_panel_gen` (body `kq_panel_rows_bf16(<id>, ...)`) with

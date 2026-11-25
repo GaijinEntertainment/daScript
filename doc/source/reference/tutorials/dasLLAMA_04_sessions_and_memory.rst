@@ -26,7 +26,10 @@ key row and one value row per position per layer, so
 ``2 * n_layers * seq_len * kv_dim`` entries. ``create_session`` stores each
 entry as ``f16``, two bytes, unless you pass another ``kv_dtype``
 (``KVDtype.f32`` doubles the cache, ``KVDtype.q8_0`` roughly halves it,
-``KVDtype.tq4`` goes further still).
+``KVDtype.tq4`` goes further still). The default is ``KVDtype.automatic``, and
+``default_kv_dtype`` says what it names on this machine: ``f16``, or ``q8_0``
+on a CPU that converts half floats in software (WebAssembly, x86 without
+F16C), where an ``f16`` cache would pay a convert on every read.
 Models ship with big native contexts (Llama-3's native ``seq_len`` is 131072,
 which means tens of GB of KV), so cap ``seq_len`` to the context you actually
 need **before** creating sessions:

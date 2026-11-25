@@ -227,13 +227,17 @@ def kq_tile_stem(fmt_name : string; family : string = "batch") : string =>
     (fmt_name == "q8" || fmt_name == "q51" || fmt_name == "mx4" || fmt_name == "iq4nl32" || fmt_name == "q4032" || fmt_name == "q5032"
         || word_in(KQ_DISCRETE_UNSTAMPED, fmt_name)) ? "{fmt_name}_{family}" : "kq_{family}_{fmt_name}"
 
-//! a `<prefix><verb>[_<tail>]` placeholder -> `<verb>_<stem>_<tail>`, the tail the placeholder's or, where it names none, `arm_tail`
+let private STAMP_INST = "_::"   //! a placeholder written `_::<prefix>...` names a target resolved where its generic body is instantiated
+
+//! a `<prefix><verb>[_<tail>]` placeholder -> `<verb>_<stem>_<tail>`, the tail the placeholder's or, where it names none, `arm_tail`;
+//! a `_::` ahead of the placeholder stays ahead of the target
 def private stamp_target(placeholder, prefix, stem, arm_tail : string) : string {
-    let rest = slice(placeholder, length(prefix))
+    let inst = placeholder |> starts_with(STAMP_INST)
+    let rest = slice(placeholder, length(prefix) + (inst ? length(STAMP_INST) : 0))
     let cut = find(rest, "_")
     let verb = cut < 0 ? rest : slice(rest, 0, cut)
     let tail = cut < 0 ? arm_tail : slice(rest, cut + 1)
-    return "{verb}_{stem}_{tail}"
+    return "{inst ? STAMP_INST : ""}{verb}_{stem}_{tail}"
 }
 
 //! `tile_<verb>[_<tail>]` -> the format's `<verb>_<stem>_<tail>` in `family`; a `cm2e_cls` tail on an aliasing format takes `cm2m_cls`
@@ -247,7 +251,8 @@ class private PrefixCallNames : AstVisitor {
     names : array<string>
     def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
         let n = "{expr.name}"
-        if (n |> starts_with(prefix) && find_index(names, n) < 0) {
+        let bare = n |> starts_with(STAMP_INST) ? slice(n, length(STAMP_INST)) : n
+        if (bare |> starts_with(prefix) && find_index(names, n) < 0) {
             names |> push(n)
         }
         return <- expr
@@ -307,7 +312,7 @@ def kq_discrete_unstamped(f : KqFmt) : bool => word_in(KQ_DISCRETE_UNSTAMPED, "{
 def private stamp_skips(skip : string; f : KqFmt) : bool => (word_in(skip, "{f}") || (word_in(skip, "!b32") && !kq_dense_b32(f))
     || (kq_discrete_unstamped(f) && !word_in(skip, "metal")))
 
-//! a stamp macro's word list: a string literal, or a module `let` of one in the module the call compiles in
+//! a stamp macro's word list: a string literal, or a module `let` of one - in the module the call compiles in, else in the first module of the program that declares it
 def private macro_words(prog : ProgramPtr; arg : ExpressionPtr) : string {
     if (arg is ExprConstString) {
         return string((arg as ExprConstString).value)
@@ -318,6 +323,15 @@ def private macro_words(prog : ProgramPtr; arg : ExpressionPtr) : string {
         for_each_global(prog.getThisModule) $(v) {
             if ("{v.name}" == name && v.init is ExprConstString) {
                 words = string((v.init as ExprConstString).value)
+            }
+        }
+        if (empty(words)) {   // a generic's instance compiles in the module that instances it; the `let` sits in the module that wrote the call
+            get_ptr(prog) |> for_each_module() $(m) {
+                for_each_global(m) $(v) {
+                    if (empty(words) && "{v.name}" == name && v.init is ExprConstString) {
+                        words = string((v.init as ExprConstString).value)
+                    }
+                }
             }
         }
     }

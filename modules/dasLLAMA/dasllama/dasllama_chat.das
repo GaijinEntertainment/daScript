@@ -899,9 +899,9 @@ def create_chat_renderer_(model : Model; system : string = ""; max_new : int64 =
 }
 
 //! Start a conversation over `model`. `system` is the system prompt (empty = none); `max_new` caps
-//! each reply; `kv_dtype` is the session's KV-cache codec (f16 default, f32 = bit-exact reference).
+//! each reply; `kv_dtype` is the session's KV-cache codec (automatic default, f32 = bit-exact reference).
 //! A model can drive many independent ChatSessions.
-def create_chat_(model : Model; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.f16) : ChatSession {
+def create_chat_(model : Model; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.automatic) : ChatSession {
     var c <- create_chat_renderer_(model, system, max_new)
     c.session <- create_session_(model, kv_dtype, kv_dtype)
     return <- c
@@ -910,7 +910,7 @@ def create_chat_(model : Model; system : string = ""; max_new : int64 = 256l; kv
 //! Start an AUDIO-CAPABLE conversation: like create_chat, but takes ownership of an audio tower
 //! (moved in) so ``add_user_audio`` can splice soft tokens into its turns. A mismatched
 //! decoder/mmproj pair panics here, not at respond time.
-def create_chat_(model : Model; var tower : AudioTower; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.f16) : ChatSession {
+def create_chat_(model : Model; var tower : AudioTower; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.automatic) : ChatSession {
     if (tower.proj_dim != model.config.dim) {
         panic("dasLLAMA chat: mmproj projects to {tower.proj_dim} but the decoder is {model.config.dim}-wide - mismatched pair")
     }
@@ -923,7 +923,7 @@ def create_chat_(model : Model; var tower : AudioTower; system : string = ""; ma
 //! Start a VISION-CAPABLE conversation: takes ownership of a vision embedder (moved in; any family
 //! `load_vision_embedder` serves) so ``add_user_image`` can splice image soft tokens into its turns.
 //! A mismatched decoder/mmproj pair or a family with no image markers panics here, not at respond.
-def create_chat_(model : Model; var embedder : VisionEmbedder; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.f16) : ChatSession {
+def create_chat_(model : Model; var embedder : VisionEmbedder; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.automatic) : ChatSession {
     if (embedder.kind == VisionKind.none) {
         panic("dasLLAMA chat: create_chat(model, embedder) needs a loaded vision embedder - this one has no vision arm")
     }

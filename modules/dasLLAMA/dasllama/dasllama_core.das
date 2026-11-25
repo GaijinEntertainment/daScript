@@ -73,21 +73,28 @@ def load_model(path : string; mode : QuantMode = QuantMode.fp32) : Model {
     return <- load_model_cached(path, mode)
 }
 
-def create_session(model : Model; kv_dtype : KVDtype = KVDtype.f16) : Session {
+def create_session(model : Model; kv_dtype : KVDtype = KVDtype.automatic) : Session {
     //! Create a fresh session (KV cache + scratch) sized to ``model.config.seq_len`` — one model, many independent conversations.
-    //! ``kv_dtype`` picks the KV-cache codec: ``f16`` (default), ``q8_0`` (whole 32-blocks a head), ``tq4`` (a power-of-two head).
+    //! ``kv_dtype`` picks the KV-cache codec: ``automatic`` (default: ``default_kv_dtype``), ``f16``, ``q8_0`` (32-blocks a head), ``tq4`` (a power-of-two head).
     //! A codec the model cannot serve steps down to ``q8_0``, else ``f16``, with one logged line - ``kv_codec_served`` says which.
     return <- create_session_(model, kv_dtype, kv_dtype)
 }
 
-def create_device_session(model : Model; kv_dtype : KVDtype = KVDtype.f16) : Session {
+def default_kv_dtype() : KVDtype {
+    //! The codec ``KVDtype.automatic`` names on this machine - what a session, a pool, a chat and the GPU mirror take where none is
+    //! asked: ``f16``, or ``q8_0`` where the CPU converts half floats in software (WebAssembly, x86 without F16C), where an
+    //! ``f16`` cache pays a convert on every read. A model whose heads are not whole 32-blocks keeps ``f16``.
+    return default_kv_dtype_()
+}
+
+def create_device_session(model : Model; kv_dtype : KVDtype = KVDtype.automatic) : Session {
     //! Create a DEVICE-HOME session: its K/V cache lives only in the armed GPU driver's region - no host cache, nothing over the bus per token.
     //! Hold at most ``gpu_device_sessions()`` live ones, in the driver's codec (``gpu_device_session_dtype``).
     //! A codec the model cannot serve steps down as ``create_session``'s does. A call the device cannot serve panics.
     return <- create_device_session_(model, kv_dtype)
 }
 
-def create_kv_pool(model : Model; page_rows : int64 = 64l; kv_dtype : KVDtype = KVDtype.f16) : KVPool {
+def create_kv_pool(model : Model; page_rows : int64 = 64l; kv_dtype : KVDtype = KVDtype.automatic) : KVPool {
     //! Create a caller-owned PAGED KV pool over ``model``'s cache geometry: sessions over it allocate pages of ``page_rows``
     //! positions on demand instead of the full ``seq_len`` slab, so many sessions share one elastic pool; keep it alive as
     //! long as sessions live. A codec the model cannot serve steps down as ``create_session``'s does.
@@ -367,21 +374,21 @@ def embed_batch(model : Model; texts : array<string>; pooling : int64 = -1l; dim
 
 // ===== Chat =====
 
-def create_chat(model : Model; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.f16) : ChatSession {
+def create_chat(model : Model; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.automatic) : ChatSession {
     //! Start a conversation over ``model``: resolves the chat template (GGUF-embedded, falling back
     //! to the arch registry) and creates the session. ``system`` is the system prompt (empty =
     //! none); ``max_new`` caps each reply; ``kv_dtype`` is the session's KV-cache codec.
     return <- create_chat_(model, system, max_new, kv_dtype)
 }
 
-def create_chat(model : Model; var tower : AudioTower; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.f16) : ChatSession {
+def create_chat(model : Model; var tower : AudioTower; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.automatic) : ChatSession {
     //! Start an AUDIO-CAPABLE conversation: takes ownership of ``tower`` (moved in — load with
     //! ``load_audio_tower``) so ``add_user_audio`` can splice audio into its turns. Panics on a
-    //! mismatched decoder/mmproj pair; ``kv_dtype`` is the session's KV-cache codec (f16 default).
+    //! mismatched decoder/mmproj pair; ``kv_dtype`` is the session's KV-cache codec (automatic default).
     return <- create_chat_(model, tower, system, max_new, kv_dtype)
 }
 
-def create_chat(model : Model; var embedder : VisionEmbedder; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.f16) : ChatSession {
+def create_chat(model : Model; var embedder : VisionEmbedder; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.automatic) : ChatSession {
     //! Start a VISION-CAPABLE conversation: takes ownership of ``embedder`` (moved in — load with
     //! ``load_vision_embedder``, which sniffs the mmproj's family) so ``add_user_image`` can splice
     //! image soft tokens into its turns. Panics on a mismatched pair or a family with no image markers.
@@ -832,7 +839,7 @@ def mtp_capable(model : Model) : bool {
     return mtp_capable_(model)
 }
 
-def device_kv_max_rows(model : Model; kdt : KVDtype = KVDtype.f16; vdt : KVDtype = KVDtype.f16) : int64 {
+def device_kv_max_rows(model : Model; kdt : KVDtype = KVDtype.automatic; vdt : KVDtype = KVDtype.automatic) : int64 {
     //! The rows of context the armed GPU driver holds a session's K/V for under these codecs - the
     //! model's own context where no driver bounds it. A server sizes its context by it: a blob-only
     //! model's session past it has no CPU stack to fall back to.

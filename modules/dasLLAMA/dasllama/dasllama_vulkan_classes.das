@@ -37,9 +37,7 @@ def fa_khr_serves(hs : int64; cap : float; gated : bool) : bool => hs != 96l && 
 def fa_cm2_serves(hs : int64; cap : float; gated : bool) : bool
     => (fa_head_ok(hs) || hs == 96l) && (!gated || hs == 256l) && (cap == 0.0 || (hs == 256l && !gated))
 
-
 // ===== add + rmsnorm =====
-
 
 [vk_dispatch(name = "cls_ar", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class ClsArAddRms : ArBase {
@@ -58,7 +56,6 @@ class ClsArAddRmsRqB : ArRqBase {
         rq_b_body()
     }
 }
-
 
 [vk_dispatch(name = "cls_ar_rqx", grid = "wgs", params = "wgs : int64")]
 class ArAddRmsRqX : ArRqT {
@@ -91,7 +88,6 @@ class ArAddRmsRqKX : ArRqT {
     }
 }
 
-
 [vk_dispatch(name = "cls_ar_comb", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class ClsArComb : ArCombBase {
     override OUT_F32 = true
@@ -122,7 +118,6 @@ class ClsArCombF16B : ArCombBase {
         ar_body()
     }
 }
-
 
 //! off `ArBase`, the `cls_ar_comb*` siblings' shell: the four-reduce step over the slot map's routed rows and the dense row, its next norm as floats
 [vk_dispatch(name = "cls_ar_comb_g4", kernel = "run", grid = "nrows", params = "nrows : int64")]
@@ -167,7 +162,6 @@ class ClsArAddRmsF16B : ArBase {
     }
 }
 
-
 [vk_dispatch(name = "cls_dn_rq", kernel = "run", family = "rq_cls", grid = "wgs", params = "wgs : int64")]
 class DnRequant : RqPlainT {
     [spirv_kernel(local_size_x = 256)]
@@ -202,7 +196,6 @@ def rq_enc(raw : VkCommandBuffer; var h : VkHaz; var rq_set : VkDescriptorSet; f
     rq_enc(raw, h, rq_set, kq_sb(fmt), 0l, elems)
 }
 
-
 //! the activation + requant of `elems` gate/up floats into the feed the down plane reads (`pca` carries the site's act code
 //! and its offsets; its block count is set here): Q8_K where `kq`, Q8_0 otherwise - the one spelling of the pair
 def actrq_enc(raw : VkCommandBuffer; var h : VkHaz; var act_set : VkDescriptorSet; kq : bool; var pca : ActArgs; elems : int64) {
@@ -215,7 +208,6 @@ def actrq_enc(raw : VkCommandBuffer; var h : VkHaz; var act_set : VkDescriptorSe
 }
 
 // ===== act + requant (the FFN mid-chain elementwise family) =====
-
 
 [vk_dispatch(name = "q8_actrq_cls", kernel = "run", family = "actrq_cls", grid = "wgs", params = "wgs : int64")]
 class Q8ActRq : ActRqT {
@@ -244,7 +236,6 @@ class Q8kActRq : ActRqT {
         rq_body()
     }
 }
-
 
 [vk_dispatch(name = "actf16_cls", grid = "wgs", params = "wgs : int64")]
 class ActF16 : ActF16T {
@@ -286,7 +277,6 @@ class PleFinish : GkPleFinish {
     }
 }
 
-
 [vk_dispatch(name = "emb_gather_cls", grid = "wgs", params = "wgs : int64")]
 class EmbGather : EmbGatherT {
     [spirv_kernel(local_size_x = 256)]
@@ -313,7 +303,6 @@ class ClsEpilogue : GkClsEpilogue {
         epi_body()
     }
 }
-
 
 [vk_dispatch(name = "cls_argmax_part", grid = "wgs", params = "wgs : int64")]
 class ClsArgmaxPart : ClsArgmaxPartT {
@@ -1446,7 +1435,6 @@ class template AtPrepT {
     }
 }
 
-
 [vk_dispatch(name = "at_prep_cls", grid = "npos", params = "npos : int64")]
 class AtPrep : AtPrepT {
     [spirv_kernel(local_size_x = 256, name = "at_prep_cls_spv")]
@@ -1454,7 +1442,6 @@ class AtPrep : AtPrepT {
         at_prep_body()
     }
 }
-
 
 //! prefill attention Q tile: a workgroup a (head, 8-query tile)
 [vk_dispatch(name = "at_attn_cls", grid = "wgs", params = "wgs : int64")]
@@ -1548,7 +1535,6 @@ class AtAttn : AtAttnTileT {
 // mask computes on the fly in a per-element callback (no mask buffer); softmax state, the P
 // conversion, and the O rescale ride the reduce/per-element/componentwise rails. =====
 
-
 [vk_dispatch(name = "fa_cm2_h64_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class FaCm2H64 : FaH64T {
     typedef OT = float
@@ -1605,7 +1591,6 @@ class FaCm2H64SinkF16 : FaH64T {
     }
 }
 
-
 [vk_dispatch(name = "fa_cm2_h128_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class FaCm2H128 : FaH128T {
     typedef OT = float
@@ -1661,7 +1646,6 @@ class FaCm2H128Bidir : FaH128T {
         fa_body()
     }
 }
-
 
 [vk_dispatch(name = "fa_cm2_h256_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class FaCm2H256 : FaH256T {
@@ -1730,7 +1714,6 @@ class FaCm2H256CapF16 : FaH256T {
         fa_body()
     }
 }
-
 
 [vk_dispatch(name = "fa_cm2_h512_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class FaCm2H512 : FaH512T {
@@ -2009,7 +1992,6 @@ def fa_stamp_enc(khr : bool; hs : int64; gated, cap, sink, f16 : bool; raw : VkC
     }
 }
 
-
 [vk_dispatch(name = "da_attn_bw_cls", grid = "wgs", params = "wgs : int64")]
 class DaAttnBW : DaAttnBWT {
     typedef KT = float
@@ -2054,7 +2036,6 @@ class DaAttnBF16 : DaAttnBT {
         at_attn_body()
     }
 }
-
 
 //! DaAttnB's hs=128 twin on f16 MMAs; hs unread, baked to 128
 [ |> template_struct_instance]
@@ -2286,7 +2267,6 @@ def da_attn_b_stamp_enc(h128, wide, f16 : bool; raw : VkCommandBuffer; var h : V
 
 // ===== decode attention =====
 
-
 [vk_dispatch(name = "da_attn_cls", grid = "wgs", params = "wgs : int64")]
 class DaAttn : DaAttnT {
     typedef KT = float
@@ -2487,7 +2467,6 @@ def da_attn_stamp_enc(dt : KVDtype; slab : DaSlab; raw : VkCommandBuffer; var h 
 }
 
 // ===== the Q8_0 batch GEMM tile (the sdot4 prefill workhorse) =====
-
 
 //! a fork of the per-256 `KqBatchBase` shell kept apart on purpose: its per-32 f16 scale pass runs over 8-block steps
 //! (32x32 tiles through shared, K advancing 8 blocks per barrier pair), so only the 32x32 store (`MoeCmBase.store_y`) is shared
@@ -3587,7 +3566,6 @@ class template MmBatchT : MoeCmBase {
     }
 }
 
-
 //! the Q8_0 leaf: eight 32-blocks a step, a staged uint a block word
 [vk_dispatch(name = "q8_batch_cmf16_cls", grid = "wgs", params = "wgs : int64")]
 class CmF16Batch : CmF16Base {
@@ -3711,7 +3689,6 @@ class CmI8Batch : MoeCmBase {
         }
     }
 }
-
 
 // the L tile with edge tiles
 [vk_dispatch(name = "q8_batch_mm_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -4841,7 +4818,6 @@ class Q8KhrBatch : Q8Cm2T {
     }
 }
 
-
 //! a file's f32 rows under the template: a block is one 16-byte word of four f32 bit patterns; only the KHR stamp exists, so the
 //! decode serves the template's uncalled cm2 body alone
 [ |> template_struct_instance]
@@ -5345,6 +5321,7 @@ class F32GemmB : F32GemmT {
 [vk_dispatch(name = "f32_gemm_bf16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class F32GemmBf16 : F32GemmT {
     override BF16W = true
+    override WWORDS = true
 
     [spirv_kernel(local_size_x = 256)]
     def run {
@@ -5357,6 +5334,7 @@ class F32GemmBf16 : F32GemmT {
 class F32GemmBf16B : F32GemmT {
     override BIAS = true
     override BF16W = true
+    override WWORDS = true
 
     [spirv_kernel(local_size_x = 256)]
     def run {
@@ -5364,8 +5342,84 @@ class F32GemmBf16B : F32GemmT {
     }
 }
 
+//! the f32 tile over the file's Q8_0 blocks as stored (`F32GemmT`'s stored member), the bias row added where the args name one
+[vk_dispatch(name = "q8_f32_gemm_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class F32GemmQ8 : F32GemmT {
+    override BIAS = true
+    override WSTORED = true
+    override WQ8 = true
+    override WWORDS = true
+    override WSC = true
 
-//! the PL-BERT embedding sum, the text encoder's word rows and the nearest-x2 upsample on the row gather both homes stamp
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        f32_gemm_body()
+    }
+}
+
+//! the f32 tile over the file's Q4_K superblocks as stored (`F32GemmT`'s stored member), the bias row added where the args name one
+[vk_dispatch(name = "kq_f32_gemm_k4_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class F32GemmK4 : F32GemmT {
+    override BIAS = true
+    override WSTORED = true
+    override WK4 = true
+    override WWORDS = true
+    override WQ4 = true
+    override WSC = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        f32_gemm_body()
+    }
+}
+
+//! the f32 tile over the file's Q5_K superblocks as stored (`F32GemmT`'s stored member), the bias row added where the args name one
+[vk_dispatch(name = "kq_f32_gemm_k5_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class F32GemmK5 : F32GemmT {
+    override BIAS = true
+    override WSTORED = true
+    override WK5 = true
+    override WWORDS = true
+    override WQ4 = true
+    override WSC = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        f32_gemm_body()
+    }
+}
+
+//! the f32 tile over the file's Q6_K superblocks as stored (`F32GemmT`'s stored member), the bias row added where the args name one
+[vk_dispatch(name = "kq_f32_gemm_k6_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class F32GemmK6 : F32GemmT {
+    override BIAS = true
+    override WSTORED = true
+    override WK6 = true
+    override WWORDS = true
+    override WQ4 = true
+    override WSC = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        f32_gemm_body()
+    }
+}
+
+//! the f32 tile over the file's half floats as stored (`F32GemmT`'s stored member), the bias row added where the args name one
+[vk_dispatch(name = "f16_f32_gemm_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class F32GemmF16 : F32GemmT {
+    override BIAS = true
+    override WSTORED = true
+    override WF16 = true
+    override WWORDS = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        f32_gemm_body()
+    }
+}
+
+//! the PL-BERT embedding sum, the text encoder's word rows and the nearest-x2 upsample on the row gather both homes stamp (`GkRowGather`)
 [vk_dispatch(name = "tts_row_gather_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsRowGather : GkRowGather {
     [spirv_kernel(local_size_x = 256, name = "tts_row_gather_cls_spv")]
@@ -5374,147 +5428,32 @@ class TtsRowGather : GkRowGather {
     }
 }
 
-struct TtsElemArgs {
-    nelem : uint   //! the elements mapped
-    off : uint     //! their element base in x
-    slope : float  //! the leaky stamp's negative slope
-}
-
-//! an in-place elementwise map of x[off .. off + nelem), four elements an invocation; a stamp supplies `act`
-[ |> template_struct_instance]
-class template TtsElemT {
-    @ssbo @binding = 0 x : array<float>
-    @push_constant pa : TtsElemArgs
-
-    def abstract act(v : float) : float   //! the map of one element
-
-    [spirv_kernel(local_size_x = 256)]
-    def run {
-        let e = gl_GlobalInvocationID.x * 4u
-        let b = pa.off + e
-        if (e + 4u <= pa.nelem) {
-            let v0 = act(x[b])
-            let v1 = act(x[b + 1u])
-            let v2 = act(x[b + 2u])
-            let v3 = act(x[b + 3u])
-            x[b] = v0
-            x[b + 1u] = v1
-            x[b + 2u] = v2
-            x[b + 3u] = v3
-        } else {
-            var i = e
-            while (i < pa.nelem) {
-                let vi = act(x[pa.off + i])
-                x[pa.off + i] = vi
-                i++
-            }
-        }
-    }
-}
-
-//! the CPU `gelu`'s tanh form in f32 (not the f16 LUT form `act_f32` spells - its roundings would move the front end's
-//! durations); the clamp keeps a device tanh off its exp overflow and changes no f32 result
+//! the front end's tanh-form gelu in place, on the template both discrete homes stamp (`TtsGeluTanhT`)
 [vk_dispatch(name = "tts_gelu_tanh_cls", kernel = "run", grid = "nelem/1024", params = "nelem : int64")]
-class TtsGeluTanh : TtsElemT {
-    def override act(v : float) : float => tts_gelu_tanh(v)
-}
-
-//! the CPU `leaky_relu`: v > 0 ? v : v * slope
-[vk_dispatch(name = "tts_leaky_cls", kernel = "run", grid = "nelem/1024", params = "nelem : int64")]
-class TtsLeaky : TtsElemT {
-    def override act(v : float) : float => v > 0.0 ? v : v * pa.slope
-}
-
-struct TtsAttnArgs {
-    t : uint       //! the rows, queries and keys alike
-    d : uint       //! the planes' row stride
-    hs : uint      //! the head size
-    heads : uint
-    scale : float  //! the score scale, 1 / sqrt(hs)
-    qoff : uint    //! each plane's element base
-    koff : uint
-    voff : uint
-    ooff : uint
-}
-
-let TTS_ATTN_TCAP = 512u   //! the staged score row's capacity
-
-//! bidirectional multi-head attention (`WgReduceBase`) in f32 over q, k, v [t][d] (head h at columns h * hs) into out - the CPU
-//! `attention_rows` per (query row, head) workgroup: every key's scaled dot, the softmax as max, exp clamped at -80, sum,
-//! then the value sum of the normalized weights, 256 / hs invocations a value column. The driver dispatches it only at
-//! t <= TTS_ATTN_TCAP (the staged score row) and hs 64 or 128 (the value split's lattice); the class declines nothing
-[vk_dispatch(name = "tts_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TtsAttn : WgReduceBase {
-    @ssbo @binding = 0 q : array<float>
-    @ssbo @binding = 1 k : array<float>
-    @ssbo @binding = 2 v : array<float>
-    @ssbo @binding = 3 out : array<float>
-    @push_constant pa : TtsAttnArgs
-    @workgroup sc : float[int(TTS_ATTN_TCAP)]   //! the row's scores, then its exp weights
-    @workgroup vpart : float[256]                //! the value sums' partials, one an invocation
-
-    //! the scaled dot of the query row at `qb` and the key row at `kb`, one mad a column in column order
-    def score(qb, kb : uint) : float {
-        var acc = 0.0
-        var e = 0u
-        while (e < pa.hs) {
-            acc = mad(q[qb + e], k[kb + e], acc)
-            e++
-        }
-        return acc * pa.scale
-    }
-
+class TtsGeluTanh : TtsGeluTanhT {
     [spirv_kernel(local_size_x = 256)]
     def run {
-        let tid = gl_LocalInvocationID.x
-        let t = max(pa.t, 1u)
-        let hs = max(pa.hs, 1u)
-        let h = gl_WorkGroupID.x / t
-        let i = gl_WorkGroupID.x % t
-        let col = h * pa.hs
-        let qb = pa.qoff + i * pa.d + col
-        var m0 = -3.0e38
-        var j = tid
-        while (j < pa.t) {
-            let s = score(qb, pa.koff + j * pa.d + col)
-            sc[j] = s
-            m0 = max(m0, s)
-            j += 256u
-        }
-        let m = wg_max(m0, 0u)
-        var l0 = 0.0
-        j = tid
-        while (j < pa.t) {
-            let p = exp(max(sc[j] - m, -80.0))
-            sc[j] = p
-            l0 += p
-            j += 256u
-        }
-        let inv = 1.0 / wg_sum(l0, 1u)
-        let parts = 256u / hs
-        let vb = pa.voff + col + tid % hs
-        var acc = 0.0
-        j = tid / hs
-        while (j < pa.t) {
-            acc = mad(sc[j] * inv, v[vb + j * pa.d], acc)
-            j += parts
-        }
-        vpart[tid] = acc
-        barrier()
-        if (tid < pa.hs) {
-            var o = vpart[tid]
-            var pp = 1u
-            while (pp < parts) {
-                o += vpart[pp * pa.hs + tid]
-                pp++
-            }
-            out[pa.ooff + i * pa.d + col + tid] = o
-        }
+        elem_body()
     }
 }
 
-//! the attention's workgroup count: one a (query row, head)
-def tts_attn_wgs(t, heads : int64) : int64 => t * heads
+//! the leaky ReLU in place, on the template both discrete homes stamp (`TtsLeakyT`)
+[vk_dispatch(name = "tts_leaky_cls", kernel = "run", grid = "nelem/1024", params = "nelem : int64")]
+class TtsLeaky : TtsLeakyT {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        elem_body()
+    }
+}
+
+//! the front end's bidirectional attention, on the template both discrete homes stamp (`TtsAttnT`)
+[vk_dispatch(name = "tts_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsAttn : TtsAttnT {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        attn_body()
+    }
+}
 
 // ===== rope + KV store + qk-norm =====
 
@@ -6138,7 +6077,6 @@ class TowerLnRq : TowerPostAddLnT {
     override OUT32 = false
 }
 
-
 //! the whisper decoder's fc1 epilogue on the template both discrete homes stamp (`TowerBiasActRqT`)
 [vk_dispatch(name = "tower_bias_act_rq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TowerBiasActRq : TowerBiasActRqT {
@@ -6258,7 +6196,6 @@ class TowerRopeTab : GkRopeTab {
     }
 }
 
-
 //! the f32-mirror stamp of `RopeKvStoreT` on `GkRopeKvStore`
 [vk_dispatch(name = "rope_kv_cls", grid = "wgs", params = "wgs : int64")]
 class RopeKvStore : RopeKvStoreT {
@@ -6281,7 +6218,6 @@ class RopeKvStoreF16 : RopeKvStoreT {
         rope_kv_body()
     }
 }
-
 
 [vk_dispatch(name = "rope_kv_b_cls", grid = "wgs", params = "wgs : int64")]
 class RopeKvStoreB : RopeKvStoreBT {
@@ -6321,7 +6257,6 @@ def rope_kv_b_stamp_enc(kv16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s
         enc_rope_kv_b_cls(raw, h, s, pc, wgs)
     }
 }
-
 
 [vk_dispatch(name = "qkn_rope_cls", grid = "wgs", params = "wgs : int64")]
 class QknRopeKv : QknRopeKvT {
@@ -6422,7 +6357,6 @@ def kv_codec_cls_ensure(dt : KVDtype) : bool {
     return attn && ensure_kv_tq4_store_cls() && ensure_kv_tq4_store_b_cls() && ensure_kv_tq4_shadow_cls() && ensure_kv_tq4_unrot_cls()
 }
 
-
 [vk_dispatch(name = "q8_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class Q8Gemv : Q8GemvT {
     [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q8_gemv_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
@@ -6430,7 +6364,6 @@ class Q8Gemv : Q8GemvT {
         gemv_body()
     }
 }
-
 
 [vk_dispatch(name = "q8_gemv_n2_cls", grid = "wgs", params = "wgs : int64")]
 class Q8GemvN2 : Q8GemvNT {
@@ -6503,7 +6436,6 @@ class Q8GemvAr : Q8GemvArT {
         gemv_ar_body()
     }
 }
-
 
 [vk_dispatch(name = "q8_gemv_gu_n1_cls", grid = "wgs", params = "wgs : int64")]
 class Q8GemvGuN1 : Q8GemvGuNT {
@@ -6591,7 +6523,6 @@ def pleact_enc_cols(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescripto
         enc_q8_gemv_pleact_cls(raw, h, set_, pc, wgs)
     }
 }
-
 
 [vk_dispatch(name = "q51_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class Q51Gemv : Blk32GemvRunT {
@@ -6779,7 +6710,6 @@ class Q5032GemvN : Blk32GemvRunT {
     }
 }
 
-
 [vk_dispatch(name = "mx4_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class Mx4Gemv : Blk32GemvRunT {
     typedef FMT = KqTag_mx4
@@ -6800,7 +6730,6 @@ class Mx4GemvN : Blk32GemvRunT {
         b32_body()
     }
 }
-
 
 [ |> template_struct_instance, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-b32-window-gemm")]
 class template Blk32BatchT : MoeCmBase {
@@ -6987,7 +6916,6 @@ class Mx4GemvGu : Mx4GemvGuT {
     }
 }
 
-
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer")]
 def kq_grid_dev() : uint64 {
     if (g_gpu.kq_grid_dev == 0ul) {
@@ -6997,7 +6925,6 @@ def kq_grid_dev() : uint64 {
     }
     return g_gpu.kq_grid_dev
 }
-
 
 // ===== the q8 batch tile router (class side) =====
 // The (mode, tile, aligned) pick as a variant ordinal — all six classes
@@ -7292,7 +7219,6 @@ def gemv_cls_enc_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : V
     }
 }
 
-
 [vk_dispatch(name = "kq_gemv_k4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK4 : K4GemvT {
     [spirv_kernel(local_size_x = 64)]
@@ -7336,7 +7262,6 @@ class KqGemvK4Gu : K4GemvT {
     }
 }
 
-
 [vk_dispatch(name = "kq_gemv_q40_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvQ40 : Q40GemvT {
     [spirv_kernel(local_size_x = 64)]
@@ -7368,7 +7293,6 @@ class KqGemvQ40N4 : Q40GemvT {
         leaf_body()
     }
 }
-
 
 [vk_dispatch(name = "kq_gemv_iq4xs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq4xs : Iq4xsGemvT {
@@ -7459,7 +7383,6 @@ class KqGemvIq3s4Gu : Iq4xsGemvT {
     }
 }
 
-
 [vk_dispatch(name = "kq_gemv_iq3s_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq3s : Iq3sGemvT {
     [spirv_kernel(local_size_x = 64)]
@@ -7491,7 +7414,6 @@ class KqGemvIq3sN4 : Iq3sGemvT {
         leaf_body()
     }
 }
-
 
 [vk_dispatch(name = "kq_gemv_iq3xxs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq3xxs : Iq3xxsGemvT {
@@ -7525,7 +7447,6 @@ class KqGemvIq3xxsN4 : Iq3xxsGemvT {
     }
 }
 
-
 [vk_dispatch(name = "kq_gemv_iq4nl_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq4nl : Iq4nlGemvT {
     [spirv_kernel(local_size_x = 64)]
@@ -7557,7 +7478,6 @@ class KqGemvIq4nlN4 : Iq4nlGemvT {
         leaf_body()
     }
 }
-
 
 //! the nv4 decode GEMV: `Nv4GemvT` on the SWAR nibble decode
 [vk_dispatch(name = "kq_gemv_nv4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
@@ -7593,7 +7513,6 @@ class KqGemvNv4N4 : Nv4GemvT {
     }
 }
 
-
 [vk_dispatch(name = "kq_gemv_k3_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK3 : K3GemvT {
     [spirv_kernel(local_size_x = 64)]
@@ -7625,7 +7544,6 @@ class KqGemvK3N4 : K3GemvT {
         leaf_body()
     }
 }
-
 
 [vk_dispatch(name = "kq_gemv_k2_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK2 : K2GemvT {
@@ -7659,7 +7577,6 @@ class KqGemvK2N4 : K2GemvT {
     }
 }
 
-
 [vk_dispatch(name = "kq_gemv_k5_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK5 : K5GemvT {
     [spirv_kernel(local_size_x = 64)]
@@ -7692,7 +7609,6 @@ class KqGemvK5N4 : K5GemvT {
     }
 }
 
-
 [vk_dispatch(name = "kq_gemv_k6_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK6 : K6GemvT {
     [spirv_kernel(local_size_x = 64)]
@@ -7724,7 +7640,6 @@ class KqGemvK6N4 : K6GemvT {
         leaf_body()
     }
 }
-
 
 [vk_dispatch(name = "kq_gemv_iq2s_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq2s : Iq2sGemvT {
@@ -7768,7 +7683,6 @@ class KqGemvIq2sGu : Iq2sGemvT {
     }
 }
 
-
 [vk_dispatch(name = "kq_gemv_iq2xs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq2xs : Iq2xsGemvT {
     [spirv_kernel(local_size_x = 64)]
@@ -7800,7 +7714,6 @@ class KqGemvIq2xsN4 : Iq2xsGemvT {
         leaf_body()
     }
 }
-
 
 [vk_dispatch(name = "kq_gemv_iq2xxs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq2xxs : Iq2xxsGemvT {
@@ -8143,89 +8056,23 @@ class TtsIm2col16 : GkIm2col1d {
     }
 }
 
-struct TtsLstmArgs {
-    t : uint          //! the steps
-    hidden : uint     //! H, at most `TTS_LSTM_LANES`
-    goff : uint       //! the input gates' element base: [t][4H] rows in gate order i, f, g, o
-    gstride : uint    //! ... and their row stride (4H on the GEMM's 64 lattice)
-    hhoff : uint      //! the recurrence's element base: w_hh transposed [H][4H], element (i, g H + j) = w_hh[(g H + j) H + i]
-    hoff : uint       //! the h rows' element base
-    hstride : uint    //! ... and their row stride: 2H where the two directions share a row
-    backward : uint   //! 1 = the steps walk t - 1 down to 0
+//! one LSTM direction in one workgroup, on the template both discrete homes stamp (`TtsLstmDirT`)
+[vk_dispatch(name = "tts_lstm_dir_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsLstmDir : TtsLstmDirT {
+    [spirv_kernel(local_size_x = 1024)]
+    def run {
+        lstm_dir_body()
+    }
 }
 
-let TTS_LSTM_LANES = 256u   //! the hidden units a direction's workgroup holds (four invocations each): a direction past it declines at the driver
-
-//! one LSTM direction end to end in one workgroup (the CPU `lstm_direction`, wgs = 1 a direction): four invocations a
-//! hidden unit j, one a gate g, each taking its gate's input row (x w_ih^T + b, an F32GemmB ahead of it) plus the dot
-//! of the transposed recurrence's column g H + j with h_prev over four accumulators (i mod 4, folded at the end, so a
-//! step's loads pipeline; the CPU's `matmul` dot carries its own order, so no k order is the reference's) - a step's
-//! lanes read consecutive floats - and the unit's first lane folding the four into c = f c + i g and h = o tanh(c); h
-//! lives in `hs` between steps, c in that
-//! lane. A direction over `TTS_LSTM_LANES` hidden units declines at the driver
-[vk_dispatch(name = "tts_lstm_dir_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TtsLstmDir {
-    @ssbo @binding = 0 gates : array<float>
-    @ssbo @binding = 1 @role = "weight" whh : array<float>
-    @ssbo @binding = 2 h : array<float>
-    @push_constant pa : TtsLstmArgs
-    @workgroup hs : float[int(TTS_LSTM_LANES)]
-    @workgroup gs : float[int(TTS_LSTM_LANES) * 4]   //! a step's four gate dots a unit, the unit's lanes side by side
+//! ... the recurrence read from its stored Q8_0 plane (`TtsLstmDirT`)
+[vk_dispatch(name = "tts_lstm_dir_q8_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsLstmDirQ8 : TtsLstmDirT {
+    override WQ8 = true
 
     [spirv_kernel(local_size_x = 1024)]
     def run {
-        let lane = gl_LocalInvocationID.x
-        let j = lane >> 2u
-        let g = lane & 3u
-        let hd = pa.hidden
-        let live = j < hd
-        let lead = live && g == 0u
-        if (lead) {
-            hs[j] = 0.0
-        }
-        var cst = 0.0
-        let t_first = pa.backward != 0u ? pa.t - 1u : 0u
-        let w4 = 4u * hd
-        let col = pa.hhoff + g * hd + j
-        var step = 0u
-        while (step < pa.t) {
-            barrier()
-            var acc = 0.0
-            if (live) {
-                var a0 = 0.0
-                var a1 = 0.0
-                var a2 = 0.0
-                var a3 = 0.0
-                var i = 0u
-                while (i + 3u < hd) {
-                    a0 = mad(whh[col + i * w4], hs[i], a0)
-                    a1 = mad(whh[col + (i + 1u) * w4], hs[i + 1u], a1)
-                    a2 = mad(whh[col + (i + 2u) * w4], hs[i + 2u], a2)
-                    a3 = mad(whh[col + (i + 3u) * w4], hs[i + 3u], a3)
-                    i += 4u
-                }
-                while (i < hd) {
-                    a0 = mad(whh[col + i * w4], hs[i], a0)
-                    i++
-                }
-                acc = (a0 + a1) + (a2 + a3)
-            }
-            gs[lane] = acc
-            barrier()
-            if (lead) {
-                let ti = pa.backward != 0u ? t_first - step : t_first + step
-                let gb = pa.goff + ti * pa.gstride + j
-                let gi = sigmoid_f32(gates[gb] + gs[lane])
-                let gf = sigmoid_f32(gates[gb + hd] + gs[lane + 1u])
-                let gg = tts_tanh(gates[gb + 2u * hd] + gs[lane + 2u])
-                let go = sigmoid_f32(gates[gb + 3u * hd] + gs[lane + 3u])
-                cst = gf * cst + gi * gg
-                let hn = go * tts_tanh(cst)
-                hs[j] = hn
-                h[pa.hoff + ti * pa.hstride + j] = hn
-            }
-            step++
-        }
+        lstm_dir_body()
     }
 }
 
@@ -8247,104 +8094,42 @@ class TtsSigSum : GkSigSum {
     }
 }
 
-struct TtsStatsArgs {
-    t : uint      //! the rows
-    c : uint      //! the channels, x's row width
-    nblk : uint   //! the blocks: ceil(t / TTS_STATS_ROWS)
-    poff : uint   //! the block partials' element base in `part`: [nblk][c]
-}
-
-let TTS_STATS_ROWS = 128u   //! the rows a column-statistics block sums, the kernel body's literal
-
-//! the block partials of the instance norm's column statistics of x [t][c]: workgroup `blk` sums rows blk rb .. + rb of every
-//! channel, a lane a channel reading the rows as they lie (the lanes of a row consecutive) - the plain sum, or under SQ the
-//! squared deviations from the mean `stats[ch]` holds; part[poff + blk c + ch]; wgs = nblk. The CPU `column_stats`'s two
-//! passes, each over row blocks so every SM takes a share of the rows
-[ |> template_struct_instance]
-class template TtsColPartT {
-    @template_constant SQ : bool = false
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 @template_gate = SQ stats : array<float>
-    @ssbo @binding = 2 part : array<float>
-    @push_constant pa : TtsStatsArgs
-
+//! the instance norm's column statistics, on the templates both discrete homes stamp (`TtsColPartT`, `TtsColReduceT`)
+[vk_dispatch(name = "tts_colpart_sum_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsColPartSum : TtsColPartT {
     [spirv_kernel(local_size_x = 256)]
     def run {
-        let blk = gl_WorkGroupID.x
-        let r0 = blk * TTS_STATS_ROWS
-        let r1 = min(r0 + TTS_STATS_ROWS, pa.t)
-        var ch = gl_LocalInvocationID.x
-        while (ch < pa.c) {
-            var m = 0.0
-            static_if (SQ) {
-                m = stats[ch]
-            }
-            var s = 0.0
-            var r = r0
-            while (r < r1) {
-                let v = x[r * pa.c + ch]
-                static_if (SQ) {
-                    let dv = v - m
-                    s += dv * dv
-                } else {
-                    s += v
-                }
-                r++
-            }
-            part[pa.poff + blk * pa.c + ch] = s
-            ch += 256u
-        }
+        colpart_body()
     }
 }
-
-[vk_dispatch(name = "tts_colpart_sum_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TtsColPartSum : TtsColPartT {}
 
 [vk_dispatch(name = "tts_colpart_sq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TtsColPartSq : TtsColPartT {
     override SQ = true
-}
-
-//! the partials folded a channel a lane: stats[ch] = the mean, or under SQ stats[c + ch] = the sum of squared deviations
-[ |> template_struct_instance]
-class template TtsColReduceT {
-    @template_constant SQ : bool = false
-    @ssbo @binding = 0 part : array<float>
-    @ssbo @binding = 1 stats : array<float>
-    @push_constant pa : TtsStatsArgs
 
     [spirv_kernel(local_size_x = 256)]
     def run {
-        let ch = gl_GlobalInvocationID.x
-        if (ch < pa.c) {
-            var s = 0.0
-            var blk = 0u
-            while (blk < pa.nblk) {
-                s += part[pa.poff + blk * pa.c + ch]
-                blk++
-            }
-            static_if (SQ) {
-                stats[pa.c + ch] = s
-            } else {
-                stats[ch] = s / float(pa.t)
-            }
-        }
+        colpart_body()
     }
 }
 
 [vk_dispatch(name = "tts_colreduce_mean_cls", kernel = "run", grid = "c/256", params = "c : int64")]
-class TtsColReduceMean : TtsColReduceT {}
+class TtsColReduceMean : TtsColReduceT {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        colreduce_body()
+    }
+}
 
 [vk_dispatch(name = "tts_colreduce_sq_cls", kernel = "run", grid = "c/256", params = "c : int64")]
 class TtsColReduceSq : TtsColReduceT {
     override SQ = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        colreduce_body()
+    }
 }
-
-//! the column statistics' blocks over `t` rows
-def tts_stats_blocks(t : int64) : int64 => (t + int64(TTS_STATS_ROWS) - 1l) / int64(TTS_STATS_ROWS)
-
-//! the stats rows a seat holds for `c_max` channels over `t_max` rows: the mean and squared-deviation rows, then the partials
-def tts_stats_floats(t_max, c_max : int64) : int64 => 2l * c_max + tts_stats_blocks(t_max) * c_max
 
 //! AdaIN then LeakyReLU(0.2) / Snake
 [vk_dispatch(name = "tts_adain_leaky_cls", kernel = "run", grid = "total/256", params = "total : int64")]
@@ -8518,9 +8303,6 @@ class TtsPkRowScale : GkBiasAct {
     }
 }
 
-let TTS_PK_ATTN_HS = GK_PK_ATTN_HS
-let TTS_PK_ATTN_MAX_KEYS = GK_PK_ATTN_MAX_KEYS
-
 //! the Pocket chains' causal cached attention row - off `WgReduceBase` onto the template both homes stamp (`GkPkAttn`, which
 //! derives the same reductions through `GkWgReduce`)
 [vk_dispatch(name = "tts_pk_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -8531,16 +8313,18 @@ class TtsPkAttn : GkPkAttn {
     }
 }
 
-let TTS_PK_GEMV_MAX_NIN = GK_PK_GEMV_MAX_NIN
-
-//! the Pocket frame's row GEMV on the template both homes stamp (`GkPkGemv`) over the slab's f32 rows, the inverse norm `1 / sqrt`
-[ |> template_struct_instance]
-class template TtsPkGemvT : GkPkGemv {
-    [spirv_inline]
-    def override row_dot_into(row, lane : uint; var acc : float&) {
-        f32_row_dot_into(row, lane, acc)
+//! a transposed conv's overlap-add over its lift rows, on the template both discrete homes stamp (`TtsFoldT`)
+[vk_dispatch(name = "tts_fold_cls", kernel = "run", grid = "total/256", params = "total : int64")]
+class TtsFold : TtsFoldT {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        fold_body()
     }
+}
 
+//! the Pocket frame's row GEMV over the slab's f32 rows, on the template both discrete homes stamp (`TtsPkGemvF32T`)
+[ |> template_struct_instance]
+class template TtsPkGemvT : TtsPkGemvF32T {
     [spirv_kernel(local_size_x = 128)]
     def run {
         pk_gemv_body(gl_WorkGroupID.x, gl_LocalInvocationID.x)
@@ -8598,6 +8382,385 @@ class TtsPkGemvAdd : TtsPkGemvT {
 
 [vk_dispatch(name = "tts_pk_gemv_ln_gelu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvLnGelu : TtsPkGemvT {
+    override NORM_IN = true
+    override EPI = 8
+}
+
+//! the Pocket frame's row GEMV over weight rows read as the file holds them, on the template both discrete homes stamp (`TtsPkGemvStoredT`)
+[ |> template_struct_instance]
+class template TtsPkGemvStT : TtsPkGemvStoredT {
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        pk_gemv_body(gl_WorkGroupID.x, gl_LocalInvocationID.x)
+    }
+}
+
+//! `TtsPkGemvStoredT` over Q8_0 rows: the plain dot
+[vk_dispatch(name = "q8_tts_pkst_dot_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStDotQ8 : TtsPkGemvStT {
+    override WFMT = 1
+}
+
+//! `TtsPkGemvStoredT` over Q4_K rows: the plain dot
+[vk_dispatch(name = "kq_tts_pkst_k4_dot_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStDotK4 : TtsPkGemvStT {
+    override WFMT = 2
+}
+
+//! `TtsPkGemvStoredT` over Q5_K rows: the plain dot
+[vk_dispatch(name = "kq_tts_pkst_k5_dot_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStDotK5 : TtsPkGemvStT {
+    override WFMT = 3
+}
+
+//! `TtsPkGemvStoredT` over Q6_K rows: the plain dot
+[vk_dispatch(name = "kq_tts_pkst_k6_dot_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStDotK6 : TtsPkGemvStT {
+    override WFMT = 4
+}
+
+//! `TtsPkGemvStoredT` over half-float rows: the plain dot
+[vk_dispatch(name = "f16_tts_pkst_dot_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStDotF16 : TtsPkGemvStT {
+    override WFMT = 5
+}
+
+//! `TtsPkGemvStoredT` over Q8_0 rows: the normed, modulated input and the SiLU
+[vk_dispatch(name = "q8_tts_pkst_ln_silu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStLnSiluQ8 : TtsPkGemvStT {
+    override WFMT = 1
+    override NORM_MOD_IN = true
+    override MOD_IN = true
+    override EPI = 1
+}
+
+//! `TtsPkGemvStoredT` over Q4_K rows: the normed, modulated input and the SiLU
+[vk_dispatch(name = "kq_tts_pkst_k4_ln_silu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStLnSiluK4 : TtsPkGemvStT {
+    override WFMT = 2
+    override NORM_MOD_IN = true
+    override MOD_IN = true
+    override EPI = 1
+}
+
+//! `TtsPkGemvStoredT` over Q5_K rows: the normed, modulated input and the SiLU
+[vk_dispatch(name = "kq_tts_pkst_k5_ln_silu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStLnSiluK5 : TtsPkGemvStT {
+    override WFMT = 3
+    override NORM_MOD_IN = true
+    override MOD_IN = true
+    override EPI = 1
+}
+
+//! `TtsPkGemvStoredT` over Q6_K rows: the normed, modulated input and the SiLU
+[vk_dispatch(name = "kq_tts_pkst_k6_ln_silu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStLnSiluK6 : TtsPkGemvStT {
+    override WFMT = 4
+    override NORM_MOD_IN = true
+    override MOD_IN = true
+    override EPI = 1
+}
+
+//! `TtsPkGemvStoredT` over half-float rows: the normed, modulated input and the SiLU
+[vk_dispatch(name = "f16_tts_pkst_ln_silu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStLnSiluF16 : TtsPkGemvStT {
+    override WFMT = 5
+    override NORM_MOD_IN = true
+    override MOD_IN = true
+    override EPI = 1
+}
+
+//! `TtsPkGemvStoredT` over Q8_0 rows: the gated residual
+[vk_dispatch(name = "q8_tts_pkst_gate_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStGateQ8 : TtsPkGemvStT {
+    override WFMT = 1
+    override MOD_IN = true
+    override EPI = 2
+}
+
+//! `TtsPkGemvStoredT` over Q4_K rows: the gated residual
+[vk_dispatch(name = "kq_tts_pkst_k4_gate_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStGateK4 : TtsPkGemvStT {
+    override WFMT = 2
+    override MOD_IN = true
+    override EPI = 2
+}
+
+//! `TtsPkGemvStoredT` over Q5_K rows: the gated residual
+[vk_dispatch(name = "kq_tts_pkst_k5_gate_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStGateK5 : TtsPkGemvStT {
+    override WFMT = 3
+    override MOD_IN = true
+    override EPI = 2
+}
+
+//! `TtsPkGemvStoredT` over Q6_K rows: the gated residual
+[vk_dispatch(name = "kq_tts_pkst_k6_gate_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStGateK6 : TtsPkGemvStT {
+    override WFMT = 4
+    override MOD_IN = true
+    override EPI = 2
+}
+
+//! `TtsPkGemvStoredT` over half-float rows: the gated residual
+[vk_dispatch(name = "f16_tts_pkst_gate_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStGateF16 : TtsPkGemvStT {
+    override WFMT = 5
+    override MOD_IN = true
+    override EPI = 2
+}
+
+//! `TtsPkGemvStoredT` over Q8_0 rows: the add and the SiLU
+[vk_dispatch(name = "q8_tts_pkst_add_silu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStAddSiluQ8 : TtsPkGemvStT {
+    override WFMT = 1
+    override AUX_IN = true
+    override EPI = 3
+}
+
+//! `TtsPkGemvStoredT` over Q4_K rows: the add and the SiLU
+[vk_dispatch(name = "kq_tts_pkst_k4_add_silu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStAddSiluK4 : TtsPkGemvStT {
+    override WFMT = 2
+    override AUX_IN = true
+    override EPI = 3
+}
+
+//! `TtsPkGemvStoredT` over Q5_K rows: the add and the SiLU
+[vk_dispatch(name = "kq_tts_pkst_k5_add_silu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStAddSiluK5 : TtsPkGemvStT {
+    override WFMT = 3
+    override AUX_IN = true
+    override EPI = 3
+}
+
+//! `TtsPkGemvStoredT` over Q6_K rows: the add and the SiLU
+[vk_dispatch(name = "kq_tts_pkst_k6_add_silu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStAddSiluK6 : TtsPkGemvStT {
+    override WFMT = 4
+    override AUX_IN = true
+    override EPI = 3
+}
+
+//! `TtsPkGemvStoredT` over half-float rows: the add and the SiLU
+[vk_dispatch(name = "f16_tts_pkst_add_silu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStAddSiluF16 : TtsPkGemvStT {
+    override WFMT = 5
+    override AUX_IN = true
+    override EPI = 3
+}
+
+//! `TtsPkGemvStoredT` over Q8_0 rows: the frame tail
+[vk_dispatch(name = "q8_tts_pkst_tail_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStTailQ8 : TtsPkGemvStT {
+    override WFMT = 1
+    override NORM_MOD_IN = true
+    override MOD_IN = true
+    override AUX_IN = true
+    override TAIL = true
+    override EPI = 4
+}
+
+//! `TtsPkGemvStoredT` over Q4_K rows: the frame tail
+[vk_dispatch(name = "kq_tts_pkst_k4_tail_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStTailK4 : TtsPkGemvStT {
+    override WFMT = 2
+    override NORM_MOD_IN = true
+    override MOD_IN = true
+    override AUX_IN = true
+    override TAIL = true
+    override EPI = 4
+}
+
+//! `TtsPkGemvStoredT` over Q5_K rows: the frame tail
+[vk_dispatch(name = "kq_tts_pkst_k5_tail_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStTailK5 : TtsPkGemvStT {
+    override WFMT = 3
+    override NORM_MOD_IN = true
+    override MOD_IN = true
+    override AUX_IN = true
+    override TAIL = true
+    override EPI = 4
+}
+
+//! `TtsPkGemvStoredT` over Q6_K rows: the frame tail
+[vk_dispatch(name = "kq_tts_pkst_k6_tail_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStTailK6 : TtsPkGemvStT {
+    override WFMT = 4
+    override NORM_MOD_IN = true
+    override MOD_IN = true
+    override AUX_IN = true
+    override TAIL = true
+    override EPI = 4
+}
+
+//! `TtsPkGemvStoredT` over half-float rows: the frame tail
+[vk_dispatch(name = "f16_tts_pkst_tail_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStTailF16 : TtsPkGemvStT {
+    override WFMT = 5
+    override NORM_MOD_IN = true
+    override MOD_IN = true
+    override AUX_IN = true
+    override TAIL = true
+    override EPI = 4
+}
+
+//! `TtsPkGemvStoredT` over Q8_0 rows: the normed qkv row, roped and stored
+[vk_dispatch(name = "q8_tts_pkst_ln_qkv_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStLnQkvQ8 : TtsPkGemvStT {
+    override WFMT = 1
+    override NORM_IN = true
+    override ROPE_STORE = true
+    override EPI = 5
+}
+
+//! `TtsPkGemvStoredT` over Q4_K rows: the normed qkv row, roped and stored
+[vk_dispatch(name = "kq_tts_pkst_k4_ln_qkv_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStLnQkvK4 : TtsPkGemvStT {
+    override WFMT = 2
+    override NORM_IN = true
+    override ROPE_STORE = true
+    override EPI = 5
+}
+
+//! `TtsPkGemvStoredT` over Q5_K rows: the normed qkv row, roped and stored
+[vk_dispatch(name = "kq_tts_pkst_k5_ln_qkv_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStLnQkvK5 : TtsPkGemvStT {
+    override WFMT = 3
+    override NORM_IN = true
+    override ROPE_STORE = true
+    override EPI = 5
+}
+
+//! `TtsPkGemvStoredT` over Q6_K rows: the normed qkv row, roped and stored
+[vk_dispatch(name = "kq_tts_pkst_k6_ln_qkv_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStLnQkvK6 : TtsPkGemvStT {
+    override WFMT = 4
+    override NORM_IN = true
+    override ROPE_STORE = true
+    override EPI = 5
+}
+
+//! `TtsPkGemvStoredT` over half-float rows: the normed qkv row, roped and stored
+[vk_dispatch(name = "f16_tts_pkst_ln_qkv_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStLnQkvF16 : TtsPkGemvStT {
+    override WFMT = 5
+    override NORM_IN = true
+    override ROPE_STORE = true
+    override EPI = 5
+}
+
+//! `TtsPkGemvStoredT` over Q8_0 rows: the scaled residual add
+[vk_dispatch(name = "q8_tts_pkst_add_scale_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStAddScaleQ8 : TtsPkGemvStT {
+    override WFMT = 1
+    override AUX_IN = true
+    override EPI = 6
+}
+
+//! `TtsPkGemvStoredT` over Q4_K rows: the scaled residual add
+[vk_dispatch(name = "kq_tts_pkst_k4_add_scale_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStAddScaleK4 : TtsPkGemvStT {
+    override WFMT = 2
+    override AUX_IN = true
+    override EPI = 6
+}
+
+//! `TtsPkGemvStoredT` over Q5_K rows: the scaled residual add
+[vk_dispatch(name = "kq_tts_pkst_k5_add_scale_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStAddScaleK5 : TtsPkGemvStT {
+    override WFMT = 3
+    override AUX_IN = true
+    override EPI = 6
+}
+
+//! `TtsPkGemvStoredT` over Q6_K rows: the scaled residual add
+[vk_dispatch(name = "kq_tts_pkst_k6_add_scale_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStAddScaleK6 : TtsPkGemvStT {
+    override WFMT = 4
+    override AUX_IN = true
+    override EPI = 6
+}
+
+//! `TtsPkGemvStoredT` over half-float rows: the scaled residual add
+[vk_dispatch(name = "f16_tts_pkst_add_scale_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStAddScaleF16 : TtsPkGemvStT {
+    override WFMT = 5
+    override AUX_IN = true
+    override EPI = 6
+}
+
+//! `TtsPkGemvStoredT` over Q8_0 rows: the residual add
+[vk_dispatch(name = "q8_tts_pkst_add_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStAddQ8 : TtsPkGemvStT {
+    override WFMT = 1
+    override EPI = 7
+}
+
+//! `TtsPkGemvStoredT` over Q4_K rows: the residual add
+[vk_dispatch(name = "kq_tts_pkst_k4_add_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStAddK4 : TtsPkGemvStT {
+    override WFMT = 2
+    override EPI = 7
+}
+
+//! `TtsPkGemvStoredT` over Q5_K rows: the residual add
+[vk_dispatch(name = "kq_tts_pkst_k5_add_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStAddK5 : TtsPkGemvStT {
+    override WFMT = 3
+    override EPI = 7
+}
+
+//! `TtsPkGemvStoredT` over Q6_K rows: the residual add
+[vk_dispatch(name = "kq_tts_pkst_k6_add_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStAddK6 : TtsPkGemvStT {
+    override WFMT = 4
+    override EPI = 7
+}
+
+//! `TtsPkGemvStoredT` over half-float rows: the residual add
+[vk_dispatch(name = "f16_tts_pkst_add_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStAddF16 : TtsPkGemvStT {
+    override WFMT = 5
+    override EPI = 7
+}
+
+//! `TtsPkGemvStoredT` over Q8_0 rows: the normed input and the GELU
+[vk_dispatch(name = "q8_tts_pkst_ln_gelu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStLnGeluQ8 : TtsPkGemvStT {
+    override WFMT = 1
+    override NORM_IN = true
+    override EPI = 8
+}
+
+//! `TtsPkGemvStoredT` over Q4_K rows: the normed input and the GELU
+[vk_dispatch(name = "kq_tts_pkst_k4_ln_gelu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStLnGeluK4 : TtsPkGemvStT {
+    override WFMT = 2
+    override NORM_IN = true
+    override EPI = 8
+}
+
+//! `TtsPkGemvStoredT` over Q5_K rows: the normed input and the GELU
+[vk_dispatch(name = "kq_tts_pkst_k5_ln_gelu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStLnGeluK5 : TtsPkGemvStT {
+    override WFMT = 3
+    override NORM_IN = true
+    override EPI = 8
+}
+
+//! `TtsPkGemvStoredT` over Q6_K rows: the normed input and the GELU
+[vk_dispatch(name = "kq_tts_pkst_k6_ln_gelu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStLnGeluK6 : TtsPkGemvStT {
+    override WFMT = 4
+    override NORM_IN = true
+    override EPI = 8
+}
+
+//! `TtsPkGemvStoredT` over half-float rows: the normed input and the GELU
+[vk_dispatch(name = "f16_tts_pkst_ln_gelu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
+class TtsPkGemvStLnGeluF16 : TtsPkGemvStT {
+    override WFMT = 5
     override NORM_IN = true
     override EPI = 8
 }

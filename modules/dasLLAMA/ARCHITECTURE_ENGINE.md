@@ -70,14 +70,17 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   the metal tensor crowns, and the three metal prefill raced-constant knobs beside them - both are
   applied by `apply_box_profile_runtime` and CONSUMED by the Metal backends at their own init.
   `REVIEW.das`'s `check_fastmath_default` licensed set names each kernel that opts out of fastmath
-  against the test that reds under it: the StyleTTS2 harmonic-source stamps, a resample law each
-  (`metal_st2_src_{low,cumsum,sines}_{torch,onnx}_msl`, gated by `st2_source_gate`), and the per-32
+  against the test that reds under it: the StyleTTS2 harmonic-source stamps of the Metal rail, a resample law each
+  (`tts_src_{low,cumsum,sines}_{torch,onnx}_cls_msl`, gated by `test_mtl_source`), and the per-32
   GEMV with its small-batch form (`metal_kq_gemv_<fmt>_msl` for q51, iq4nl32, q4032, q5032 and the affine members, their
   `_ks_msl` K-split stamps, `metal_b32_mvb` by its method - gated by `b32_mvb_gate`, whose
   bit-for-bit compare fast math breaks), and the classifier tail's selection (`metal_cls_select_msl`,
   gated by `cls_select_gate`: fast math lets a NaN lane through the ordered compare that floors it), and the DFlash2
   selector's sampled walk (`metal_dflash_walk_soft_msl`, gated by `df_walk_soft_gate`: fast math moves its softmax off the
-  host's q); an entrant ships its failing-under-fastmath test too.
+  host's q), and on the CUDA home three speech stamp families of `dasllama_cuda_classes_tts` (the rows
+  `cuda_tts_fastmath_off_exempt` builds): the tanh GELU (`test_pocket_prompt_gpu`), the harmonic source's noise draw and
+  sines (`test_cud_source`) and the Pocket row GEMV with its stored members (`test_pocket_frames_metal`); an entrant
+  ships its failing-under-fastmath test too.
 - **`dasllama_transformer.das`** - the block-composition seam, and the require umbrella: the
   `[init]`-only side-effect requires (arch registrations, GPU tiers, and any module that
   requires the engine back, which the umbrella therefore hosts to break the cycle).
@@ -237,9 +240,9 @@ callers, and the declaration is the `[lever]` getter.
 
 ### The test folder's documents track its files {#test-folder-gates}
 
-`tests/CLAUDE.md` is the map a reader finds a cell or an arm in, `tests/REVIEW_PINNED_GATES.md` the set of cells whose
-asserts hold fixed, and `tests/_compares.das` the compares the bars read. `REVIEW.das` holds each to the files, and each
-check licenses no names:
+`tests/CLAUDE.md` is the map a reader finds a cell or an arm in, `tests/REVIEW_PINNED_GATES.md` with its kernel-gate
+companion `tests/REVIEW_PINNED_KERNEL_GATES.md` the set of cells whose asserts hold fixed, and `tests/_compares.das`
+the compares the bars read. `REVIEW.das` holds each to the files, and each check licenses no names:
 
 - `check_arm_tokens_documented` - every literal `arm_on` token a tests file filters on (an interpolated one by the prefix
   ahead of its first `{`) is a word of a backtick span in `tests/CLAUDE.md`.

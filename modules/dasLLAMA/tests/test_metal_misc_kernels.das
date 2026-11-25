@@ -3750,6 +3750,61 @@ def test_lens_max_threads_gate(t : T?) {
     }
 }
 
+//! a one-class [metal_rail_dispatch] program: `tg` and the `@kargs` member each droppable, the two refusals the rail lens owns
+def private rail_fixture_src(with_tg, with_kargs : bool) : string {
+    return join([
+        "options gen2",
+        "options _dasllama_internal = true",
+        "",
+        "require dasllama/dasllama_lint public",
+        "require metal/msl_shader",
+        "require metal/das_metal_boost",
+        "require daslib/shader_lingua_franca",
+        "require dasllama/dasllama_metal_rail public",
+        "require dasllama/dasllama_metal_dispatch",
+        "",
+        "struct RdFixArgs \{",
+        "    n : uint",
+        "\}",
+        "",
+        "[metal_rail_dispatch(name = \"rd_fixture_cls\", kernel = \"run\", grid = \"n/64\", params = \"n : int64\"{with_tg ? ", tg = 64" : ""})]",
+        "class RdFixture \{",
+        "    @ssbo @binding = 0 x : array<float>",
+        with_kargs ? "    @kargs pa : RdFixArgs" : "",
+        "",
+        "    [metal_kernel(name = \"rd_fixture_cls_msl\")]",
+        "    def run \{",
+        "        let i = gl_GlobalInvocationID.x",
+        "        if (i < {with_kargs ? "pa.n" : "64u"}) \{",
+        "            x[i] = 1.0",
+        "        \}",
+        "    \}",
+        "\}",
+        "",
+        "[export]",
+        "def main() \{",
+        "\}",
+        ""], "\n")
+}
+
+[test(description = "A spawned compile refuses a `metal_rail_dispatch` class with no `@kargs` struct member and one with no `tg=`, each refusal naming what is missing, and compiles the twin that carries both.")]
+def test_lens_rail_gate(t : T?) {
+    t |> run("[metal_rail_dispatch] takes a class with a @kargs member and a tg=") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let no_kargs = spawn_lens_compile("rail_nokargs", rail_fixture_src(true, false))
+            t |> success(no_kargs.rc != 0, "a class with no @kargs member must not compile")
+            t |> success(find(no_kargs.out, "no @kargs struct member") >= 0, "the refusal names the member: {no_kargs.out}")
+            let no_tg = spawn_lens_compile("rail_notg", rail_fixture_src(false, true))
+            t |> success(no_tg.rc != 0, "a class with no tg= must not compile")
+            t |> success(find(no_tg.out, "'tg' (the threads a threadgroup) is required") >= 0, "the refusal names the argument: {no_tg.out}")
+            let good = spawn_lens_compile("rail_ok", rail_fixture_src(true, true))
+            t |> equal(0, good.rc, "the twin with both compiles (the control): {good.out}")
+        } else {
+            t |> skip("das_metal is not built on this platform")
+        }
+    }
+}
+
 [test(description = "A spawned compile refuses a `metal_dispatch` requires= item with a non-integer modulus or no percent sign, naming the item grammar, and compiles the well-formed n % 64 twin.")]
 def test_lens_requires_gate(t : T?) {
     t |> run("[metal_dispatch] requires= takes only 'lhs % int' items") @(t : T?) {

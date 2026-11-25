@@ -19,6 +19,11 @@ a `@scratch` mark on a local is inert: the mark says "this buffer persists betwe
 and grows to its working size once", which only a field or a global can promise. The source
 noise lives in the carrier too, and `TtsNoise.captured` decides whether a synthesis draws it:
 a reused carrier is never empty after the first chunk, so emptiness cannot.
+`styletts2_frames` is the same pass stopped after its durations stage, on the same carrier - the
+frames a chunk speaks, with no prosody, no decode and `sc.wave` untouched - and
+`styletts2_samples_of` is the samples those frames synthesize to, walked through the length steps
+the decoder and the generator themselves take (`st2_blk_rows`, `st2_stage_pad`, `st2_wave_samples`)
+with no activation computed.
 
 ### The generator runs on six buffers {#tts-generator-buffers}
 
@@ -64,11 +69,24 @@ speaks in more, shorter pieces, each its own synthesis with its own prosody (a p
 across two chunks is read as two phrases), and the peak scales with the cap. Pocket takes no
 cap: its peak is its window's (`ARCHITECTURE_POCKET.md#pocket-codec-stream`), not its chunk's. What a say leaves behind stays
 sized to the largest chunk it saw, so the next chunk allocates nothing (`ARCHITECTURE_TTS_MEMORY.md#tts-scratch-carrier`);
-`tts_release_scratch` gives it all back - the carrier, the Pocket carrier and the block home's
-globals - for a caller that says idle memory matters more than the allocation the next run then
-pays. The carrier's source noise goes with it: a synthesis draws its noise from the seed and the
+`tts_release_scratch` gives it all back - the carrier, the Pocket carrier, the block home's
+globals and the GPU home's activation rows (`ARCHITECTURE_TTS_MEMORY.md#tts-device-release`) - for a
+caller that says idle memory matters more than the allocation the next run then pays. The carrier's source noise goes with it: a synthesis draws its noise from the seed and the
 chunk index, so nothing is lost, except on the parity rail, whose captured noise the release
 keeps by leaving that carrier alone.
+
+### A GPU home's device state follows the facade {#tts-device-release}
+
+The GPU driver's device state - the slabs and voice slots a model's weights fill, and the activation
+rows its seats grow: every seat's scratch, the Pocket codec caches, the readback buffer, the schedule
+plane - is one home's at a time (`ts_claim`). The facade does not require the driver, so the driver
+reaches it through one hook in the block home both see (`tts_dev_release`), set as a home registers:
+it runs the owning home's `TtsHome` release, or with `weights` its forget. The idle release asks for
+the activations alone (`tts_release_activations`), so the next synthesis re-grows its rows and
+attaches nothing; a GPU image's `delete` asks for the weights too, as a weights-epoch bump does, so a
+model still loaded re-attaches its slabs on its next synthesis. Neither bumps the weights epoch, whose
+listeners drop the LLM homes' device state too. `tts_home_held` reads the bytes a home holds, split the
+same two ways.
 
 ### The harmonic source streams in frame windows {#tts-source-stream}
 

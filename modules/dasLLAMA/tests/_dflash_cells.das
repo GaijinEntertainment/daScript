@@ -26,6 +26,7 @@ require ?das_metal dasllama/dasllama_metal_decode   // nolint:STYLE030,LINT019 -
 require ?das_metal dasllama/dasllama_metal_prefill   // nolint:STYLE030,LINT019 - metal_prefill_stats, metal_prefill_shutdown, inside the das_metal half
 require ?das_metal metal/das_metal_boost   // nolint:STYLE030,LINT019 - metal_log_leaks_if_any, inside the das_metal half
 require daslib/fio
+require daslib/random   // random_seed, random_float: the draws a seeded walk spends
 require math   // min, max, abs
 require _model_tier   // _model_tier::models_dir() + model_available() presence/size-tier gate
 require _compares   // first_mismatch
@@ -182,16 +183,32 @@ def same_drafts(t : T?; m : Model; a, b : array<int64>; what : string) {
 let SAMPLED_PARAMS = SamplingParams(temp = 0.7)
 let SAMPLED_SEED = 4242
 let SAMPLED_STEPS = 64l
+let DRAWS_LIMIT = 1024
 
 //! the speculative sampled walk on `m` under `accept`, the drafter at `draft_temp`, seeded at SAMPLED_SEED
 def spec_sampled(m : Model; prompt : array<int64>; accept : MtpAccept; draft_temp : float) : MtpSampledWalk {
-    set_mtp_accept(accept)
-    set_dflash_draft_temp(draft_temp)
     var s = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
-    set_seed_(s, SAMPLED_SEED)
-    var w <- generate_mtp_sampled(m, s, prompt, SAMPLED_PARAMS, SAMPLED_STEPS)
+    var w <- spec_sampled_on(m, s, prompt, accept, draft_temp)
     delete s
     return <- w
+}
+
+//! the same on the caller's session `s`, whose random stream the caller reads after it
+def spec_sampled_on(m : Model; var s : Session; prompt : array<int64>; accept : MtpAccept; draft_temp : float) : MtpSampledWalk {
+    set_mtp_accept(accept)
+    set_dflash_draft_temp(draft_temp)
+    set_seed_(s, SAMPLED_SEED)
+    return <- generate_mtp_sampled(m, s, prompt, SAMPLED_PARAMS, SAMPLED_STEPS)
+}
+
+//! the draws past SAMPLED_SEED that leave a session's random stream at `rng`; -1 past `limit`
+def draws_spent(rng : int4; limit : int) : int {
+    var at = random_seed(SAMPLED_SEED)
+    for (n in range(limit + 1)) {
+        return n if (at == rng)
+        random_float(at)
+    }
+    return -1
 }
 
 //! the device selector's ended passes so far (0 off the Metal build)
@@ -239,12 +256,41 @@ def set_device_soft_pick(on : bool) {
     }
 }
 
+//! the exact walk against the plain one of its seed: the plain walk spends one draw an id, the exact walk one a judged row -
+//! its first id, each accepted draft, each round's next id - and its first id, drawn off the plain walk's prefill row by the
+//! seed's first draw, is the plain walk's; where `tokens_hold` the two are the same ids, elsewhere the shared ids are logged
+def private exact_holds_plain(t : T?; m : Model; tag : string; tokens_hold : bool;
+                              plain : array<int64>; plain_rng : int4;
+                              exact : MtpSampledWalk; exact_rng : int4) {
+    let same = common_prefix_len(plain, exact.ids)
+    let plain_text = eyeball_text(m, plain)
+    let exact_text = eyeball_text(m, exact.ids)
+    to_log(LOG_INFO, "{tag} plain sampled text: {plain_text}\n")
+    to_log(LOG_INFO, "{tag} exact sampled text: {exact_text}\n")
+    t |> equal(draws_spent(plain_rng, DRAWS_LIMIT), length(plain), "{tag}: the plain walk spends one draw an id")
+    t |> equal(draws_spent(exact_rng, DRAWS_LIMIT), int(1l + exact.accepted + exact.rounds),
+        "{tag}: the exact walk spends the first id's draw, one an accepted draft and one a round for the id after its run - none on a draft it rejects ({length(exact.ids)} ids, {exact.accepted} accepted, {exact.rounds} rounds)")
+    t |> success(same > 0l, "{tag}: the exact walk's first id is the plain walk's - both drawn off "
+        + "one prefill row by the seed's first draw")
+    if (tokens_hold) {
+        t |> equal(length(exact.ids), length(plain), "{tag}: the exact walk is the plain walk's length")
+        t |> equal(same, long_length(plain), "{tag}: exact == the plain sampled walk token for token (plain '{decode(m, plain)}', spec '{decode(m, exact.ids)}')")
+    } else {
+        to_log(LOG_INFO, "{tag}: exact == the plain sampled walk for {same} of {length(plain)} "
+            + "ids - plain '{plain_text}', exact '{exact_text}'\n")
+    }
+    t |> success(exact.accepted > 0l, "{tag}: exact accepted {exact.accepted} of {exact.drafted}")
+}
+
 //! the three acceptances over the drafter file `drafter` on `m`, the pass on the asked arm, against the plain sampled walk at the
-//! same seed: exact equals it token for token with drafts accepted; each rejection walk (point-mass drafts, drafts drawn at the
-//! stream's temperature) accepts some drafts and rejects some - its stream parts from the plain one at its first rejection, so
-//! its rate is not the exact walk's to compare (the closed form is test_mtp_accept_walks.das's), the three rates logged; on the
-//! device arm the drawn drafts drawn by the device selector, and with its soft pick off drawn on the host - the same stream
-def sampled_modes_walk(t : T?; m : Model; drafter : string; device : bool; tag : string) {
+//! same seed: exact spends a draw a judged row with drafts accepted and opens on the plain walk's first id - where `tokens_hold`
+//! it equals the plain walk token for token, elsewhere the ids the two share are logged; each rejection walk (point-mass drafts,
+//! drafts drawn at the stream's temperature) accepts some drafts and rejects some - its stream parts from the plain one at its
+//! first rejection, so its rate is not the exact walk's to compare (the closed form is test_mtp_accept_walks.das's), the three
+//! rates logged; on the device arm the drawn drafts drawn by the device selector, and with its soft pick off drawn on the host -
+//! the same stream
+def sampled_modes_walk(t : T?; m : Model; drafter : string; device : bool; tag : string;
+                       tokens_hold : bool = false) {
     set_dflash_device(device)
     let why = attach_dflash_drafter(m, path_join(_model_tier::models_dir(), drafter))
     t |> equal(why, "", "{tag}: the drafter attaches")
@@ -260,17 +306,14 @@ def sampled_modes_walk(t : T?; m : Model; drafter : string; device : bool; tag :
     let knob = get_mtp_accept()
     let temp0 = get_dflash_draft_temp()
     let sel_before_exact = device_selections()
-    var inscope exact <- spec_sampled(m, prompt, MtpAccept.exact, 0.0)
+    var s2 = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
+    var inscope exact <- spec_sampled_on(m, s2, prompt, MtpAccept.exact, 0.0)
+    let exact_rng = s2.rng
+    delete s2
     let sel_exact = device_selections() - sel_before_exact
-    var same = 0l
-    while (same < long_length(plain) && same < long_length(exact.ids) && plain[same] == exact.ids[same]) {
-        same++
-    }
-    t |> equal(length(exact.ids), length(plain), "{tag}: the exact walk is the plain walk's length")
-    t |> equal(same, long_length(plain), "{tag}: exact == the plain sampled walk token for token (plain '{decode(m, plain)}', spec '{decode(m, exact.ids)}')")
-    t |> success(exact.accepted > 0l, "{tag}: exact accepted {exact.accepted} of {exact.drafted}")
-    var stops <- [plain[SAMPLED_STEPS / 2l]]
-    let stop_at = find_index(plain, stops[0])
+    exact_holds_plain(t, m, tag, tokens_hold, plain, s1.rng, exact, exact_rng)
+    var stops <- [exact.ids[long_length(exact.ids) / 2l]]
+    let stop_at = find_index(exact.ids, stops[0])
     set_mtp_accept(MtpAccept.exact)
     var s3 = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
     set_seed_(s3, SAMPLED_SEED)

@@ -14,12 +14,14 @@ require strings
 
 //! KV-cache storage codec, chosen per session at create time; K and V carry independent
 //! dtypes. f16 = half the KV bytes, near-lossless; f32 = bit-exact reference;
-//! q8_0 = block codec (34B/32 elements, needs kv_dim/head_size % 32); tq4 = rotated 4-bit (18B/32, needs head_size a power of two).
+//! q8_0 = block codec (34B/32 elements, needs kv_dim/head_size % 32); tq4 = rotated 4-bit (18B/32, needs head_size a power of two);
+//! automatic = an ask, never a stored codec: f16, or q8_0 where the CPU converts halves in software (`default_kv_dtype_`).
 enum KVDtype {
     f32
     f16
     q8_0
     tq4
+    automatic
 }
 
 //! tq4 cache-pointer dispatch tag: the read seam overloads on the cache pointer's element type, and
@@ -63,9 +65,11 @@ def kv_dtype_of(ordinal : int) : KVDtype {
     panic("no KVDtype has ordinal {ordinal}")
 }
 
-//! The codec a user's spelling names - `f32`, `f16`, `q8_0`, `tq4`, any case; `known` false (and f16) for any other text.
 def kv_dtype_named(name : string) : tuple<dt : KVDtype; known : bool> {
+    //! The codec a user's spelling names - `f32`, `f16`, `q8_0`, `tq4`, `auto` (or `automatic`), any case; `known` false (and f16)
+    //! for any other text.
     let want = to_lower(name)
+    return (dt = KVDtype.automatic, known = true) if (want == "auto")
     for (dt in type<KVDtype>) {
         return (dt = dt, known = true) if ("{dt}" == want)
     }

@@ -9,20 +9,23 @@ Terms this checklist does not define are as `REVIEW.md` (beside this file) defin
 - A family is one model architecture's loader and kernels (`../dasllama/dasllama_<family>.das`).
 - A family's serving lane is the weight form it runs a model's weights in: q8 planes, a quantized
   carrier's own planes (kq), or the exact lane, whose form - f16 or f32 - the `.dlim` flavor baked
-  for the serving GPU home (Vulkan, CUDA or Metal) picks.
+  for the serving GPU home (Vulkan, CUDA or Metal) picks; and, on any lane and for every family at
+  once, whether a weight row a file stores as half floats serves as halves or as floats.
 - The blob form is a model after `convert_model_to_metal_blob`, the only form the Metal drivers
   serve.
 - A lane setter is a call that pins a family's serving lane - `set_<name>_q8`, the ASR facade's
-  `set_asr_fp32` / `set_asr_tower_fp32` / `set_asr_tower_q8` - or a facade call that makes that
-  call. A lane setter's paired unset - `reset_<name>_q8`, `set_asr_fp32(false)`,
-  `set_asr_tower_fp32(false)` - is a lane setter too, never a driver setter. A call that sets a knob
-  a family's `*_serves_q8` accessor reads when no lane is pinned (`set_gpu_gigaam_exact_lane`) is a
-  driver setter.
+  `set_asr_fp32` / `set_asr_tower_fp32` / `set_asr_tower_q8`, `set_rows_f32` (serve a half-float
+  weight row as floats, or as halves), `set_styletts2_recipe` (pin the StyleTTS2 lane to the
+  per-group formats the file stores) - or a facade call that makes that call. A lane setter's
+  paired unset - `reset_<name>_q8`, `set_asr_fp32(false)`, `set_asr_tower_fp32(false)`,
+  `reset_rows_f32`, `reset_styletts2_recipe` - is a lane setter too, never a driver setter. A call
+  that sets a knob a family's `*_serves_q8` accessor reads when no lane is pinned
+  (`set_gpu_gigaam_exact_lane`) is a driver setter.
 - A driver setter is any other `../dasllama/` call the cell makes that sets a value stored in a
   module global or process-global state that a later load, route choice or kernel dispatch reads,
-  whatever its name (`set_*`, `enable_*`, `disable_*`, `allow_*`, `pin_*`, `reset_*`, `restore_*`,
-  `register_*`, `select_*_override` and `unset_*` are the common spellings); a call a loader makes
-  on its own is not the cell's.
+  whatever its name (`set_*`, `enable_*`, `disable_*`, `allow_*`, `pin_*`, `clear_*`, `reset_*`,
+  `restore_*`, `reinstall_*`, `register_*`, `unregister_*`, `select_*_override` and `unset_*` are
+  the common spellings); a call a loader makes on its own is not the cell's.
 - A route-deciding setter is a driver setter whose last-written value decides which route or
   kernel (which branch of a dispatch) an asserted call takes, whether an assert the cell makes
   passes, or what an assert's expected value is computed from. The GPU home is not one: the home the
@@ -102,4 +105,5 @@ such a cell takes, loads through `load_resident`, `load_resident_lane`, `load_re
 true, or `load_resident_as` / `load_resident_at` with `host` false (`_resident_feed.das`), which
 keep no host copy of the weight planes; only a cell that runs CPU inference on that model, or reads
 its weight planes, itself or through a helper, loads through `load_resident_host` with `image`
-false, those two with `host` true, or calls `set_host_planes(true)` / `set_vulkan_trim(false)`.** A host copy beside the device's is a load the product never makes.
+false, those two with `host` true, or calls `set_host_planes(true)` / `set_vulkan_trim(false)`.** A
+host copy beside the device's is a load the product never makes.

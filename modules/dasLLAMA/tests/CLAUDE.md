@@ -18,11 +18,11 @@ full-suite run turns a one-arm fix into an afternoon.
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked --exclude <file>   # the iteration form - drops a file the change does not reach
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite gpu-kernels       # the extended model-free pass - the Vulkan and CUDA device kernel files: no model and no test wall. On a box you keep it costs the tests' own work and no compile, because the GPU driver caches every kernel it compiled, and nothing where no device answers: run it beside model-free. Only a box that never ran it pays the driver's first compile of every kernel. The stocked suite runs these files first
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite wasm              # the kernel files with a wasm seat, as one wasm64 release under node; takes emcc, node and the wasm64 archives
-DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --only cuda,regions,resident_moe,embeddings,gptoss,gemma4_dense,gemma4_moe,gemma2_3,gemma4_e2b,mtp_gemma_drafter,resident_hybrid,resident_qwen2,resident_qwen3,resident_qwen_moe,resident_format_census,resident_llama,audio,whisper,gigaam,rnnt,vad,gemma4uv,gemma4v,gemma3v,qwen3v,qwen25v,vision_chat,dflash_drafter   # the CUDA home's pass: the run's CUDA files, the segmented window, the regions rig, the resident MoE files, the gemma, gpt-oss and drafter files (the DFlash2 drafter by its CUDA arm), and the audio and vision files whose tower twins run on the CUDA tower under the ask (each audio family by its `CUDA_AUDIO_FAMILIES` row)
+DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --only cuda,regions,resident_moe,embeddings,gptoss,gemma4_dense,gemma4_moe,gemma2_3,gemma4_e2b,mtp_gemma_drafter,resident_hybrid,resident_qwen2,resident_qwen3,resident_qwen_moe,resident_format_census,resident_llama,audio,whisper,gigaam,rnnt,vad,gemma4uv,gemma4v,gemma3v,qwen3v,qwen25v,vision_chat,dflash_drafter,tts_kitten,tts_kokoro,tts_pocket   # the CUDA home's pass: the run's CUDA files, the segmented window, the regions rig, the resident MoE files, the gemma, gpt-oss and drafter files (the DFlash2 drafter by its CUDA arm), and the audio and vision files whose tower twins run on the CUDA tower under the ask (each audio family by its `CUDA_AUDIO_FAMILIES` row), and the kitten, kokoro and pocket voice files, whose `@dev` forms serve the speech seats on the CUDA home
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --poison-kv             # every child's K/V caches start as NaN (DASLLAMA_KV_INIT=poison): a read of a row no store wrote reds its cell; each session touches its whole cache, so the run's memory is not the product's
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio            # one area: audio | vision | tts | translate | llm | infra (comma list)
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area examples         # the browser examples' smoke tests (storyteller, storywish, parrot, interpreter): on demand - no other run takes them
-./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area llm --rerun   # every file: without --rerun a file whose program loaded whole from its compile record and whose last run on this box, over the same model files and environment, passed is reported from that pass, not run
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area llm --rerun   # every file, recording no pass - for a defect in the pass records only, never a run's default: without --rerun a file whose program loaded whole from its compile record and whose last run on this box, over the same model files and environment, passed is reported from that pass, not run
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free --batch 1    # one child a file (the default is the whole suite in one child on this suite and ten a child on any other run, compiled as one program: the engine parsed and JIT'd once a batch)
 ```
 
@@ -51,15 +51,19 @@ are the caller's to scope. A core change is the per-edit gate only: the whole st
 the `NEXT` line says so. The fleet is two pods, one a GPU home: the first runs the whole
 `run.das` command on the Vulkan home, the second the same command on the CUDA home
 (`DASLLAMA_CUDA=1`) kept to the CUDA pass's files (`--only` the `CUDA_PASS_ONLY` tokens of
-`_model_categories.das`, the command below), the Vulkan home of a two-pod fleet leaving out the CUDA-only files
-(`--exclude` the `CUDA_ONLY_EXCLUDE` tokens, which `test_run_suites.das` holds to the files requiring the CUDA kernel
-classes unguarded), and a `run` whose `--args` carry an `--only` of their
+`_model_categories.das`, the command below), the Vulkan home of a two-pod fleet less the CUDA-only files
+(`--exclude` `CUDA_ONLY_EXCLUDE`) whatever the caller's `--env` keeps, its runner dropping them as well where the
+module is left out, and a `run` whose `--args` carry an `--only` of their
 own is refused. Both homes run the command thirty files a child (`--batch 30`, `FLEET_BATCH`): a cold child
 pays the engine's parse and JIT once a batch, and the pod's memory holds a child of thirty files; a `--batch` in
 `--args` wins, and the model-free suite keeps its own whole-suite batch. No file runs split across pods, and a home's run that outgrows its pod cuts
 tests rather than adding a pod - every pod of a split compiles its own shaders and kernels. `up`
 refuses a third pod; a one-pod fleet runs the Vulkan home, its `run` line saying the CUDA home has
-no pod. A session deletes its fleet (`down`) when its runs are done: a stopped pod
+no pod. The pod a session works on stays up for the arc and is the Vulkan home of every run, so its compile
+records, JIT outputs and passes stay warm on its own disk; the CUDA home's pod is made for a run and deleted after
+it, and the working pod is deleted when the arc's pod work ends. The fleet file records each pod's home: `up --pods 1`
+seats its pod at the home with none, and `down --home cuda` deletes the CUDA home's pod alone - `down` with no
+`--home` every pod the tool made, and no pod it did not make, whatever its name. A pod is deleted, never stopped: a stopped pod
 bills its disk, keeps no container state, and restarts only while its host has a card free. On a two-pod fleet each home leaves out the other home's dynamic module (`DASLLAMA_DISABLE_MODULES`: dasVulkan on
 the CUDA home, dasCUDA on the Vulkan home; a caller's `--env` value wins, a lone pod leaves out none), so its children,
 the children a test spawns and its prewarm compile only its own GPU module. The model-free suite runs once a fleet
@@ -90,7 +94,7 @@ adds `DASLLAMA_PARITY_FULL=1` for an arc's final run, lifting it for the files n
 is a category's and runs only under `run.das --category`. The image suite's
 arms the plan owns run on one box with the rail on, through dastest's `--test` with `DASLLAMA_TEST_ARMS` set to
 them, and the PR cites that run beside the fleet's two home runs. The run starts with a `MISSING` line a model file its files - and
-the fixtures they require - name that the models directory does not hold, and ends with `REPORT` (files, failures,
+the fixtures they require - name that the models directory does not hold (never a name of a model-free suite's file, nor one a file hands only to its scratch calls - the dastest temp-directory call, a `_scratch_dir.das` function, a function of the file that calls one: a file the test writes), and ends with `REPORT` (files, failures,
 cells skipped - a filtered arm, an absent device, or a missing model - and files excluded) and `NEXT` (what is still
 owed). `pod_fleet.das -- status` reads each home's log (`vulkan.log`, `cuda.log`) under its home's name, its `PREWARM` and `CACHE-IN` / `CACHE-OUT` lines among them, and each home's memory peak (the largest child's resident
 kB and its file, `harness/pod_mem_track.sh`, which also drops the model copies' unmapped pages from the page cache while
@@ -118,15 +122,21 @@ want of a seat run. A file joins the suite in `suite_files("wasm")` and is a mod
 cell a wasm target cannot run - one that starts a child process - records a skip there
 (`no_children_here`, `_compares.das`), and the `REPORT` line counts the run's skips.
 `--exclude <substr,...>` drops the files whose name contains a token and names each
-on an `EXCLUDED` line, so a trimmed run cannot read as full; `--only <substr,...>` keeps the files
+on an `EXCLUDED` line, so a trimmed run cannot read as full; a run whose children leave dasCUDA out
+(`DASLLAMA_DISABLE_MODULES`) drops the CUDA-only files the same way, each on an `EXCLUDED` line naming the knob and
+counted on the `REPORT` line (`run_exclusion`; the `CUDA_ONLY_EXCLUDE` tokens of `_model_categories.das`, which
+`test_run_suites.das` holds to the files requiring the CUDA kernel classes unguarded - they do not compile without
+the module), and a run those drops leave empty is refused as an `--exclude` that drops every file is. No test file
+requires the Vulkan kernel classes unguarded, so a run with dasVulkan left out drops none; `--only <substr,...>` keeps the files
 whose name contains a token and drops the rest, each kept file on an `ONLY` line and the tokens on
 the `REPORT` line. The CUDA home's pass runs under `DASLLAMA_GPU=1` and the CUDA ask -
 `DASLLAMA_CUDA=1` or `set_gpu_home("cuda")` on a dasCUDA build (`cuda_tower_asked`) - beside the
-Vulkan home's whole run, never in its place: `--changed --only cuda,regions,resident_moe,embeddings,gptoss,gemma4_dense,gemma4_moe,gemma2_3,gemma4_e2b,mtp_gemma_drafter,resident_hybrid,resident_qwen2,resident_qwen3,resident_qwen_moe,resident_format_census,resident_llama,audio,whisper,gigaam,rnnt,vad,gemma4uv,gemma4v,gemma3v,qwen3v,qwen25v,vision_chat,dflash_drafter`
+Vulkan home's whole run, never in its place: `--changed --only cuda,regions,resident_moe,embeddings,gptoss,gemma4_dense,gemma4_moe,gemma2_3,gemma4_e2b,mtp_gemma_drafter,resident_hybrid,resident_qwen2,resident_qwen3,resident_qwen_moe,resident_format_census,resident_llama,audio,whisper,gigaam,rnnt,vad,gemma4uv,gemma4v,gemma3v,qwen3v,qwen25v,vision_chat,dflash_drafter,tts_kitten,tts_kokoro,tts_pocket`
 (the CUDA files, the segmented window, the regions rig, the resident MoE files, whose fixtures
 read the armed home's witnesses, the gemma, gpt-oss, qwen35 hybrid, llama, drafter and Vulkan format census files that branch on
 `gpu_want_cuda()`, and the audio and vision files whose tower twins seat on the CUDA tower under the ask -
-`_tower_twin`, `_audio_twin`, `_vision_forms` or a CUDA tower module; the tokens are `CUDA_PASS_ONLY` in
+`_tower_twin`, `_audio_twin`, `_vision_forms` or a CUDA tower module -, and the voice files that require `_tts_parity`, whose `@dev` forms
+serve the speech seats on the armed home; the tokens are `CUDA_PASS_ONLY` in
 `_model_categories.das`, and `test_run_suites.das` reds a file that reaches the CUDA home and no token keeps, and a
 copy of the command here that differs from the constant). The CUDA pass's `--only`
 tokens must match every file holding a cell that runs on the CUDA home. Under the ask every other
@@ -440,9 +450,12 @@ knobs - before its first walk and puts each back at the value its getter read be
   rows8 site of the drafter's (nv4 has no rows8 member); the Metal arm is a driver-against-itself compare, the speculative
   walk against the plain walk on the same device;
 - `dflash-27b-sampled-cpu` / `dflash-27b-sampled-metal` - the three acceptances at temperature 0.7, seeded, 64 tokens
-  (`generate_mtp_sampled` against `generate_`): the exact walk equal to the plain sampled walk token for token with drafts
-  accepted, and again with the plain stream's 33rd id as a stop id, ending on that id's first occurrence (the stopless
-  walk's full length the control); rejection with point-mass drafts (`set_dflash_draft_temp(0)`) and with drafts drawn at the stream's temperature (the knob's default, `set_dflash_draft_temp(-1)`) each accepting some
+  (`generate_mtp_sampled` against `generate_`): the plain walk spending one draw of the seeded stream an id and the exact
+  walk one a judged row - its first id, each accepted draft, each round's next id (`draws_spent`), none on a draft it
+  rejects; the exact walk's first id the plain walk's (both drawn off one prefill row by the seed's first draw), drafts
+  accepted; on the 27B GGUF trunk's Metal arm alone (`tokens_hold`) the exact walk equal to the plain sampled walk token
+  for token, on every other arm the ids the two share logged with both walks decoded; the exact walk again with its own
+  33rd id as a stop id, ending on that id's first occurrence (the stopless walk's full length the control); rejection with point-mass drafts (`set_dflash_draft_temp(0)`) and with drafts drawn at the stream's temperature (the knob's default, `set_dflash_draft_temp(-1)`) each accepting some
   drafts and rejecting some (a rejection stream parts from the plain one at its first rejection, so its rate is not the
   exact walk's to compare; the closed form is `test_mtp_accept_walks.das`'s), the three rates logged, both streams
   decoded in the log; on the device arm the exact walk's passes ending on the device selector and the drawn drafts' none
@@ -468,7 +481,8 @@ knobs - before its first walk and puts each back at the value its getter read be
   ride joint rounds (the scheduler's `mtp_joined_max` 2, a stream alone 1 - the control), each the plain scheduler's
   token for token, the two together accepting what each accepts alone within a fifth; the detach reported; a stream given a stop id emits exactly the ids before that id's first
   occurrence, the stopless stream running past it (the control); then, on the same load, `dflash-27b-sampled-metal`'s
-  walks over the E2B's Q8_0 drafter (`sampled_modes_walk`, tag `E2B sampled metal`); skips without das_metal;
+  walks over the E2B's Q8_0 drafter (`sampled_modes_walk`, tag `E2B sampled metal`), the exact walk held by its draws and
+  its first id, not token for token; skips without das_metal;
 - `dflash-27b-discrete` (large tier; the Q8_0, Q4_K_M and NVFP4 drafters over one trunk load) - the device arm on the serving discrete home (the CUDA home under its ask, else Vulkan) over the
   resident trunk (`resident_trunk`, an f16 mirror): a counting walk - one with no near tie, the home's rows and its one-row
   step rounding apart - the plain walk's token for token with drafts accepted (a driver-against-itself compare, the
@@ -488,7 +502,8 @@ knobs - before its first walk and puts each back at the value its getter read be
   model's mlx-community 4-bit snapshot (mlx4b planes, no NextN head; large tier, the directory through `hf_snapshot_dir` as
   `test_mlx_snapshot.das`'s 27B cell) with the Q8_0 drafter: the lossless arm also counts the trunk's verify sites on the
   rows8 form over mlx4b planes (`metal_rows8_sites_of`) where the box runs the form; the sampled arm runs the host-judged
-  rounds over a trunk with no head, whose drawn drafts read the verify scratch the session carries.
+  rounds over a trunk with no head, whose drawn drafts read the verify scratch the session carries, its exact walk held by
+  its draws and its first id, not token for token.
 
 Beside the arms, the NextN head's lossless gate on the large -MTP- carriers no block loads: self-speculative greedy decode
 token-for-token against plain decode on the 64-trunk-layer Qwen3.6-27B-MTP carrier and the GLM-4.5-Air arm - the one
@@ -499,12 +514,17 @@ own reject count rides the kernels' summation order and has read zero). Both are
 invariance pair is `_mtp_cpu_cells.das`'s, and the hyper-connection Qwen3.8-Flash-Next's arm runs on its block's head-pinned
 CPU form (`mtp_flashnext_invariance_cell`, `test_gpu_resident_hc.das`).
 The E2B's DFlash2 cells off the Metal home run in `test_gpu_resident_gemma4_e2b.das`'s block (its entry below): the
-planes-trimmed refusal, the CPU-arm lossless and sampled walks, and the discrete home's legs.
+planes-trimmed refusal, the CPU-arm lossless and sampled walks, and the discrete home's legs. A sampled walk's exact arm
+holds its draws and its first id and logs the ids it shares with the plain walk, both decoded: a sampled speculative walk
+parts from the plain seeded walk where a draw lands near a boundary the verify row and the one-token decode place an ulp
+apart (`ARCHITECTURE_CPU_KERNELS.md#q8-activation-forms`), on the CPU chains and on the Metal chain alike, and the 27B
+GGUF trunk's Metal arm alone holds the two token for token.
 `_dflash_cells.das` carries the walks this file, `test_gpu_resident_gemma4_e2b.das` and `test_gpu_resident_qwen3.das` run:
 `lossless_walk` (the plain greedy walk against the speculative one on the asked arm, the ids equal, drafts accepted),
 `cpu_drafter_lossless` (a drafter file's planes tagged by disk type where asked, then the CPU arm's `lossless_walk`, raw or over
 a chat turn), `sampled_modes_walk` (the three sampled acceptances against the plain sampled
-walk; on the device arm the selector's draws, the verify-ahead and soft-pick knobs' streams), `planes_tag_disk_types`,
+walk - the exact walk's draws and first id on every arm, token for token under `tokens_hold`; on the device arm the
+selector's draws, the verify-ahead and soft-pick knobs' streams), `planes_tag_disk_types`,
 `same_drafts`, and the discrete homes' legs - `discrete_drafter_legs`, `discrete_stop_leg`, `discrete_embed_leg`, and
 `discrete_drafter_cells`, which runs each drafter file's legs on a trunk the caller loaded and, under `stop_embed`, the stop
 and embedding legs after them; `discrete_drafter_form` the drafter form, `discrete_drafter_cell` the legs as one cell on it,
@@ -987,7 +1007,8 @@ child builds (up to 120 s each) proving the lens refuses a `[metal_dispatch]` cl
 `test_lens_requires_gate`, `test_lens_params_gate` (a `params=` name no `grid=`, `tg=`,
 `requires=` or `@span` reads is refused; one only a `requires=` item reads compiles),
 `test_lens_stamp_gate`, `test_lens_max_threads_gate` (`[metal_kernel]`'s `max_threads=` refused at 0 and as a
-string, 64 compiling) and `test_lens_call_macro_gates` spawn the same way. The attn file's fused
+string, 64 compiling), `test_lens_rail_gate` (`[metal_rail_dispatch]` refusing a class with no `@kargs` member and one with
+no `tg=`, the twin with both compiling) and `test_lens_call_macro_gates` spawn the same way. The attn file's fused
 single-pass cells (`sq_d_gate`) run the part and combine stamps against the CPU attention row at
 heads of 128, 64 and 96 (three fixture rows read as one of four heads of 96), on the WIDE stamps at a head of 256 (one head over rows twice as wide, the
 combine reading two heads of 128) and 512 (four times as wide, four heads of 128), each on the
@@ -1086,17 +1107,14 @@ channels - the k-run tail past the taps, dilation 3 with pads off both ends, 45 
 product exact, so the 1e-3 bar covers the accumulation order alone) and the f32-exact one on
 operands off the f16 lattice at 2e-6, where the f16-staged stamp on the same operands must miss
 the bar (the stamp's control); the im2col route at 22 channels on a whole chunk and an offset
-one; the stats + fused AdaIN pair, Snake and leaky, at one stride with a tail and at two strides
-plus a tail; the elementwise rows on every grid tail, the residual join's scale included; the row
-gather with its adds off and on; the concat rows with and without the residual columns; the
-depthwise transposed pool; both LSTM directions on one gate set against a CPU recurrence (the
-fixture centred off tanh's saturation, asserted); the ALBERT attention rows against the CPU
-`attention_rows` at 37 and 100 rows; the sigmoid sums; the tanh GELU past its clamp; the harmonic
-source trio on either resample law's stamps against the CPU source chain itself - the phase frames
-within one ulp of its carry, the mixed signal within 2e-6 - a 40000-frame cumsum against a double
-accumulator where the two laws part by whole cycles, and the driver's own noise draw through the
-fill kernel (finite, repeatable per seed, moving with it); the STFT on either pad law's stamp and
-the inverse STFT with and without the window envelope. Each carries a poisoned input. The census row is one synthesis each
+one; the one-pass column statistics at one stride with a tail and at two strides plus a tail
+(`st2_colstats_gate`); the row gather with its adds off and on; and both LSTM directions over the
+recurrence's stored Q8_0 blocks on one gate set against a CPU recurrence over the blocks' own dequant (the
+fixture centred off tanh's saturation, asserted); and `st2_stored_conv_gates`, each stored conv stamp the Metal home's own
+tile carries - forward, exact and transposed over a Q8_0 plane and over each K-quant member - against the conv in double
+over the plane's own dequant. Each carries a poisoned input. The chain's other stamps -
+the elementwise rows, the AdaIN pair, the attention rows, the source, the STFT pair - are the Metal rail's,
+held by `test_metal_tts_kernels.das`. The census row is one synthesis each
 on kitten-nano (the ONNX law's stamps) and kokoro-82m (the torch law's) on the file's planes (`cov_tower_styletts2`). The parakeet
 front's cells (the same file): the first conv as the chain the fronts run - the shared im2col at one
 channel, the f16-staged GEMM over the [ch][32] tap panel, the bias-and-ReLU rows - on an 11 x 10 image - odd along one axis, even along
@@ -1127,8 +1145,7 @@ tails' row kernels - the grid mean pool (`tw_pool2d_gate`: a 6 x 4 row grid pool
 host mean, a one-axis pool told apart), the standardize (`tw_affine_gate`: in place against
 (x * scale - b) * m on the standardize arm and x * scale on the scale-only arm, two rows past the run
 kept, the form with no scale told apart), the NEOX table rope over a fused row's k slot
-(`rope_tab_gate` over the `RopeTabStamp` enum: the tower's NEOX stamp from position 0 and the pocket
-prompt's interleaved stamp from a position base, each against `rope_tab_ref`, the q and v slots
+(`rope_tab_gate`: the tower's NEOX stamp from position 0 against `rope_tab_ref`, the q and v slots
 untouched, a poisoned k element) and the gated hidden (`tw_bias_gate_gate`: silu(g + bg) . (u + bu) in
 place over g against a double form, the bias rows at offsets, at 210 and at 209 elements - the last
 lane's guard). Every seam kind runs at 512 too - two whole trips of the 256-thread stride; the tower
@@ -1141,20 +1158,13 @@ narrow of the host's sum or product over all five panels, their pad rows zero, o
 a panel; the rel-shift softmax (`fc_pexp`) over two heads at 24 and 300 keys - the weights within
 one half step of the oracle's, the stat within 1e-5 of a double sum, pad rows and pad columns
 left as they were, a poisoned rel score reddening both. The Pocket chain's cells (the same
-file): the row copies with and without the ELU, the layer scale, the rows rope over a row stride
-from a column with the tables bound at a position's row, the prompt's rope from the voice tables at a
-position base (`pk_rope_tab_gate`: the k span of 23 rows from position 37 against `rope_rows`, the q
-and v spans untouched, a poisoned k element reddening the compare), the attention
-row against `attention_causal_rows` over a `TtsKvCache` (every key and an 8-key window, an
-unseen key's poison staying silent), the rope-and-store kernel's f32 stamp at the frame loop's
-binds (no bias, the whole head, the tables and the caches at the position's row) against
-`rope_rows` with the caches' sentinel rows, the add-and-norm at a width under the threadgroup and one past it, and the row
-GEMV's nine stamps (f32 rows under the bare dot, f32 rows and a q8 blob under the normed and
-modulated x with the SiLU out, the gated residual, the SiLU over the slab vector and the frame tail;
-the bare q8 dot rides the decode GEMV) against
-an fp64 oracle with x, y and the latent row bound at offsets. The census row is one Pocket
+file): the rows rope over a row stride from a column with the tables bound at a position's row, the
+rope-and-store kernel's f32 stamp at the frame loop's binds (no bias, the whole head, the tables and the
+caches at the position's row) against `rope_rows` with the caches' sentinel rows, and the add-and-norm at a
+width under the threadgroup and one past it; the chain's row copies, attention row and row GEMVs are the Metal
+rail's stamps, held by `test_metal_tts_kernels.das`. The census row is one Pocket
 codec pass over synthetic latents and one spoken line on the f16 file, then one spoken line on
-the kq file so the q8 GEMV stamps count (`cov_tower_pocket`). Shared fixtures - the `MetalCell`
+the kq file so the stored row GEMV's stamps count (`cov_tower_pocket`). Shared fixtures - the `MetalCell`
 record (the Vulkan `CellPlanes` verbs: `in_` / `in_plain` / `out_` / `out_words` / `io_`, `plane_run` /
 `plane_as` / `plane_upload` / `plane_refill`, `cell_record`, `with_metal_cell`), `queue_record`
 (`cell_record` over a bare queue), `check_buf` (a
@@ -1270,6 +1280,33 @@ shadow (`KvShadowT`) to the CPU dequant rounded to half, bit for bit, the rows o
 left at their sentinel, one block's dequant past the half range landing the clamp.
 `test_vkc_tq4_unrot` holds the un-rotation to `fwht_unsign_row` bit for bit at heads of 32, 64 and
 512 and under the head gate at 128 at the approx bar (the ungated rows the control).
+The four `test_vulkan_tts_*kernels.das` files, `test_cuda_tts_kernels.das` and `test_metal_tts_kernels.das` run one set of
+case bodies, written once over any home's rig - the Metal file's rig is `_metal_cell.das`'s `MtPlanes`, its stamps the Metal
+rail's (`dasllama_metal_classes_tts`), with the row GEMV's own-layout dots, the rail's zero fill and the home's own dense tile under inputs narrower than a weight row as its own cells (`test_mtl_mm_own_pad`: `dasllama_metal_sites`' `rail_tts_mm` over a Q8_0 leaf in the home's layout, 40 inputs under 64-wide weight rows after a whole-width call left NaN in the tile's scratch rows - the sum over the 40 inputs, every output finite, the sum over the weight rows moved down one the control; `test_mtl_conv_tile_follows_half`: `rail_tts_conv` over a Q4_K leaf in the home's layout on operands off the f16 lattice - the float tile within 1e-4 of the k-ordered sum, the f16-staged tile under the site's half flag within the half tile's bar and outside the float tile's; `test_mtl_tts_prof_ledger`: a TTS shot under the profile ledger's pin against the one-buffer shot, and a weights-epoch bump - a model's discharge, which reaches the home's forget through its registered reload prep - dropping the last report; `test_mtl_tts_widened_counts`: `_tts_widened_cells.das`'s `tts_widened_counts_case`, the home's count of dense dispatches over widened rows (`tts_home_stats(dev).widened`) on a hand-built Pocket frame model no file stocks - a backbone 36 wide and a latent 20 wide, both off the stored members' 32 lattice, two layers, a one-block pointwise head - whose frame part the case bakes (`tts_part_bake`) and serves through the registered prompt and frames seats: a backbone projection held as half floats counts once a layer on the prompt's rows GEMM and once a layer a frame on the frame loop's fused projection over its 3 frames, an input linear of halves once a frame on the row GEMV, the model of floats nothing on either seat (the control); a weights-epoch bump discharges each model, and the cell skips where no GPU device serves the TTS seats) - (`_discrete_tts_cells.das` and its `_conv`, `_pocket` and `_source` companions, in `_discrete_cells.das`'s form): a
+Vulkan cell and its CUDA twin (`test_cud_*`, a CUDA device with NVRTC, else it skips; a stamp NVRTC refuses reds its cell)
+call the same case, so the paragraphs below describe both homes' cells. `test_vkt_tts_im2col16` has no CUDA twin: it
+drives the Vulkan f16 GEMM's arms. Two CUDA cells have no Vulkan twin and dispatch no kernel: `test_cud_tts_carveout`
+(`cud_l1_scoped`: every stamp of the TTS class module leaves the shared-memory carveout to the driver, the LSTM direction's
+5 KB of workgroup memory included, where an LLM window class module keeps the full carveout - the control) and
+`test_cud_tts_shot_plain_order` (`rail_tts_shot` on a `CutRail` with programmatic dependent launch asked on: it reads off
+inside the shot and on again after it, the launch mode then put back as the cell found it). A case whose bar differs by home reads it through the rig's `home_bar` from a
+`HomeBars` (`_compares.das`) - each home's arithmetic its own bar, the reading beside it. The
+stored-plane cells: `test_vkt_f32_gemm_stored` / `test_cud_f32_gemm_stored` and `test_cud_f32_gemm_stored_lift` hold each
+stored member of the exact tile (Q8_0, Q4_K, Q5_K, Q6_K, half floats) to the k-ordered sum over the rows the CPU reader widens
+the same planes to - a leaf minted by the engine's quantizers and gathered into the device layout as the driver stages it
+(a Q8_0 scale as the half the layout holds), biased, with no bias row named, under x rows narrower than a weight row, and
+over a transposed conv's lift; `test_vkt_tts_lstm_dir_q8` / `test_cud_tts_lstm_dir_q8` the recurrence over its stored Q8_0
+plane against the CPU loop over the reader's rows, both directions; `test_vkt_tts_fold` / `test_cud_tts_fold` the
+overlap-add of x times a transposed conv's lift, plus the bias, against the CPU `conv1d`;
+`test_vkt_pk_gemv_stored` and its twins (`test_cud_pk_gemv_stored`, `test_mtl_pk_gemv_stored`) the five stored row-GEMV
+stamps of each stored member (a stamp a member, each reached through the driver's own dispatch, `tts_pkst_enc`, and on the
+Metal home its own-layout stamps through `rail_tts_pk_own`) in the device layout against the CPU `linear_vec` chains over the reader's rows, every slot
+outside a row at its sentinel (control: the weight rows moved down one), and the `_fused` cell of each home the frame loop's
+four fused stamps over the same stored rows at a 256-wide backbone - the roped qkv row into y and the caches' one row, the
+residual adds with and without the scale, the normed GELU - the caches' other rows untouched (control: the scaled add
+against the chain with its weight rows moved down one). `test_vkt_bias_act` and its twins hold the row-broadcast bias
+(`TowerBiasAct`) over 434 rows of 12 at an element base, alone bit for bit x + b and under relu max(x + b, 0), the elements
+past the rows untouched (controls: it lands off the input, and the two arms differ).
 `test_vulkan_tts_conv_kernels.das` - model-free (a Vulkan device, else skips; the half im2col cell
 also skips where the device serves no f16 tile - neither cm2 nor the KHR tile at subgroup 32): the TTS tower's
 Vulkan sequence classes against the CPU chain - `test_vkt_tts_im2col` feeds the conv im2col
@@ -1353,7 +1390,9 @@ over a `TtsKvCache` of two 64-wide heads, the device's key and value rows writte
 own layouts with three poisoned rows past the appended 45 - a 45-query prompt over every key, a
 decode step at position 44 over an 8-key window (the query its own one-row plane) and the
 prompt over a 16-key window - at the approx bar (controls: a poisoned key just before the decode
-step's window leaves its output bit for bit, the 16-key window moves the prompt's rows);
+step's window leaves its output bit for bit, the 16-key window moves the prompt's rows), then a decode step over 300
+keys, every key in reach, past one 256-key stride of the scores a row stages (control: the row over the first stride's
+keys alone lands outside the bar);
 `test_vkt_pk_attn_grouped` the same row over grouped keys - a 21-query prompt of four 32-wide query
 heads over two key-value heads, the caches' rows at the key-value width (`kvs`), every key and an
 8-key window, against `attention_causal_rows` (control: the window moves the late rows off the
@@ -2410,7 +2449,13 @@ bounds - a window past the planes read 30-72% off the chain.
 the speculative carry (its two-region form runs the recurrent segmented cells first, `_segment_cells.das`'s entry), its cells `_mtp_resident_cells.das`'s - one body a cell for both discrete homes, each cell's device rows
 asserting the CUDA driver's position counter rising (`mtp_cell_served`; the unhomed pass arm its control, the counter
 standing). Every device form keeps the planes on the host (the cells run the CPU head on the model) at the block's 4096-row
-context (`CARRY_RIG_CTX`): one region, two regions, the head kept off, depth 8, depth 1, depth 2, the block-rounds ask, and the q8_0 and tq4 mirrors
+context (`CARRY_RIG_CTX`): on the CUDA home, first, the head-warm fault form (`device_form(regions = 1l, host = true,
+cuda_head_warm_fault = true)`: `ModelForm.cuda_head_warm_fault` pins the seat `set_cuda_head_warm_fault_` through the form -
+the head's planes are taken at its first prompt warm - and `mtp_head_warm_declined_cell` holds the window chain serving
+the 40-token prompt, the driver saying the warm declined, `cuda_head_warm_declined`, and no head row warmed on the device;
+the one-region form after it is the control, the warm not declined and every head row but the last warmed; where the
+run arms no CUDA home the form is a skipped cell of its own); then
+one region, two regions, the head kept off, depth 8, depth 1, depth 2, the block-rounds ask, and the q8_0 and tq4 mirrors
 (a codec the environment keeps off a logged skip), one region at 512 positions (`MTP_SCHED_CTX`: the resident scheduler
 cells, `test_scheduler_mtp_resident_picks` and `test_scheduler_mtp_device_home`) and the driver's own regions (the
 self-speculative streams against the plain scheduler, `scheduler_mtp_cell`); each asserts the file carries its NextN head (`mtp_carrier_held`). Its q8
@@ -3094,10 +3139,21 @@ load (`load_translator`: a GGUF through the cached loader, a Bergamot student th
 the q8 lane, `q8_cls_zeroed` the q8 lane with its classifier's Q8_0 copy zeroed, `device` the q8 lane as the copy the
 build's translation seat serves (`translator_form_why`: `nmt_seat_why`). The TTS form loaders are
 `_tts_parity.das`'s, each answering the facade's `TtsModel`: `styletts2_form` (`image`: the facade's load through the image
-rail; `f32`, `q8`, `kq`: the lane minted in memory, no `.dlim` baked; the packs read where they sit beside the file) and
-`pocket_form` (`image`; `native`, `f32`, `q8`: minted with no lane pinned, the f32 pin, the q8 pin, the lane unset after
-the mint, a panic included - `with_put_back`, `dasllama_lever.das`). Each block's first step holds the form to the lane its name says (`styletts2_form_is`,
-`pocket_form_is`, `ru_stress_form_is`). A cell
+rail, in the flavor the box's GPU home serves; `image_cpu`: that load under `with_cpu_flavor`, the CPU image; `f32`, `q8`,
+`kq`: the lane's CPU image minted in memory, no `.dlim` baked; `<lane>@dev`: the lane as a load stages it for the serving
+home, the tower knob on; `+<pins>`: the recipe lane with those groups pinned; the packs read where they sit beside the
+file) and `pocket_form` (`image`; `native`, `f32`, `q8`: minted with no lane pinned, the f32 pin, the q8 pin, as the image
+the box's GPU home serves with the weights its device block replaces kept beside it - one model for a compare's CPU leg
+and its served legs; `<lane>@cpu` the lane's CPU image, `<lane>@dev` the image a load serves, its weights the device
+block's alone; the lane unset and the knobs put back after the mint, a panic included - `with_put_back`,
+`dasllama_lever.das`). Each loader first unsets the lane pins its load consults (`reset_styletts2_q8`,
+`reset_styletts2_recipe`; `reset_pocket_q8`, `reset_rows_f32`), the image forms included. A `@dev` form loads only where a
+device serves the TTS seats (`tts_dev_why`), a skipped cell of its own elsewhere (`add_served_forms`), and so is a lane's
+CPU form whose leg is read only beside it (`tts_cpu_leg_why`). Each block's first step holds the form to the lane and the image its name says (`styletts2_form_is`,
+`pocket_form_is`, `ru_stress_form_is`), and a voice's form to how it came by its image (`form_origin_is` over the engine's
+`tts_image_origin`): a minted form's image built in memory, an image form's a `.dlim` the image rail mapped - held where the
+run's rail maps one (`DASLLAMA_IMAGE` and `DASLLAMA_IMAGE_SAVE` on) -, and a Pocket form's image baked under the lane tag the
+form names, `pocket-native` where it pins none. A cell
 that reads two files runs in the inner of two nested calls; a cell that is its file's only cell holds the call inside its
 subtest, so an absent file skips that cell; a compare of two forms follows the call, on what the cells kept.
 `_cpu_gpu_model.das`'s feed helpers: `feeds_within` (each device feed against its CPU twin), `dense_feeds_block` (a
@@ -3872,7 +3928,11 @@ against the CPU chain, one window and two, one `[test]` a format (dastest's `--t
 `test_moe_formats_NVFP4_30B_cut` is the MoE NVFP4 carrier on every run - the Qwen3-30B-A3B `--pure` NVFP4 mint's seven-block
 cut, every weight site nv4, router and norms F32, one load-once block of a host-pinned form (four of seven routed layers on
 the host, an f16 mirror) and the CPU form: its blocks asserted, the census, the two feeds with the meet's and the rare
-rail's witnesses, each within the routed bar of the CPU chain),
+rail's witnesses, each within the routed bar of the CPU chain; on the CUDA home, first, the FP4-chain fault form
+(`device_form(regions = 1l, host_layers = 4l, cuda_mmq_fault = true)`: `ModelForm.cuda_mmq_fault` pins the seat
+`set_cuda_mmq_fault_` through the form) - `fp4_chain_fault_cell`: the driver arms, holds no window chain
+(`cuda_window_planes_held`), and a prompt window refuses naming the planes that found no room; the host-pinned form after
+it holds the window chain again, the seat's control),
 the meet's host share forced through `set_moe_host_first` and witnessed by its counter, since a small carrier's device
 ring would otherwise take every expert, and the fed steps' host picks witnessed off the device planes too (`g_rare_dec_rows`:
 the one-row rail). Each file is one block (`with_cpu_and_gpu_model`): its four-layer form feeds the format cells (and, on
@@ -3984,6 +4044,10 @@ one `[test]` holds a block (`with_model_once`) green, a file whose one `[test]` 
 cell module that reads the backend pin and its form's K-quant knob, a commented pin beside them, and a call whose name
 ends a longer name or follows a `.`, green; a cell calling
 `pin_kernel_backend`, `clear_kernel_backend_pin` or `set_kquant_native` each one finding at its line, naming the call.
+`test_family_tags_gate`: the family-tag check of this folder's `REVIEW.das` over its `--family-tags <file>...` rail - a block
+of a file a family row holds, a block behind a `family_on` call in its own function and a block whose function's every caller
+calls `family_on` first, green; an untagged block of a fixture the gate lists as no family's (stories15M.bin), green; a block of a file of no row with no call, one whose only call follows the block and one whose
+function an untagged function calls too each one finding at the block's line, naming the file.
 `test_dasllama_core_requires_no_decoder`: walks the module dependencies in-process; no module
 `dasllama_core` depends on is `audio` or `stbimage`, while `dasllama/dasllama` depends on both.
 `test_stream_calls_refuse_without_a_model`: the library example's stream and memory calls refuse
@@ -4295,7 +4359,8 @@ round's verify rides the N-row token command, which has no host-experts form on 
 card); `mtp-gdraft-vdecl` runs on Metal alone, since the discrete rounds bind no stream off the mirror's codec.
 `test_model_forms.das` - model-free: the load-once forms and blocks (`_model_form.das`) on fake loaders, no model file read.
 `test_model_form_knobs`: the load-once forms' pure parts (`_model_form.das`) - a knob-free device form is the driver's
-default form on the environment's codec (a region count or an asked codec the control), `drops_device` no load knob; a
+default form on the environment's codec (a region count or an asked codec the control), `drops_device` no load knob, each
+CUDA fault seat (`cuda_window_fault`, `cuda_head_warm_fault`, `cuda_mmq_fault`) no default form and the FP4-chain seat named by `form_name`; a
 cells form defaults to the q8 cached load, alone, no pin (the CPU form answering the device forms not alone, the
 control); a backend pin or a K-quant knob (the Q4_0 native `on_q40` too) makes a load of its own that `form_name` names and that answers no device form
 (`main_side`), the knob-free cells form answering the default form on its armed codec; and a cells load stands alone on
@@ -4424,19 +4489,34 @@ the argument contracts, the area map, the reach plan behind
 `--changed` (a test file itself, a fixture the tests requiring it and no model-suite file, a leaf
 module its witness row, a core module the core set and its other areas whole, a benchmark the
 bench rows' files; every witness row and the core set census files, every row's module a file
-that reaches llm), the `--exclude` filter's semantics, the children's module-cache folder (keyed by the binary, the
+that reaches llm), the `--exclude` filter's semantics and the run's exclusion (`test_run_exclusion`: the CUDA-only
+files dropped where the children leave dasCUDA out and none where they leave out another module or none, one
+`EXCLUDED` line a file - a caller's `--exclude` first, a file both drop once -, a run dropped whole refused naming its
+causes, and a dry run under the knob printing the line and the count where one without it does neither), the children's module-cache folder (keyed by the binary, the
 other binaries' folders removed on the runner's own binary alone, no folder for a binary that
 cannot be stat'd, the child command carrying it), the model files a run names that a directory lacks
-(`test_missing_models`: whole quoted names, a fixture's among them, none once the directory holds them), the reap
+(`test_missing_models`: whole quoted names, a fixture's among them, none once the directory holds them; `model_paths`
+dropping a climb, an absolute, a drive and a backslash path and the bare `.gguf` suffix), the reap
 (`test_reap_images`: the images and temp files a directory gained go, the kept ones and every other file stay; through
 `reap_after` a run without `--reap-images` removes nothing and one with it removes a subfolder's image too), the K/V
 start a `--poison-kv` run hands its children (`test_poison_kv_envs`: `DASLLAMA_KV_INIT=poison` on both shells' forms,
-no start named without the flag), and a dry run of the runner with a no-op child binary.
+no start named without the flag), a dry run of the runner with a no-op child binary, what a `MISSING` line leaves out
+(`test_missing_models_leave_scratch_files`: a name every line hands to a scratch call is a file the test writes, one plain
+line makes it a model, a model-free suite's file names none), and the family filter's reach over
+the tts area (`test_tts_family_run`: of the model files the area's tests name, a run narrowed to `kitten`, `kokoro`, `pocket`
+or `rustress` opens every file of that family's row, none of another's, and the context model no row holds).
 Requires `run` by bare same-dir name.
 `uncategorized_persistent_heap_stack_524288.das` - model-free: the tune interrupt gate in a
 spawned child (`test_interrupt_aborts_without_minting`), the Metal lens's FLOAT A refusal (`test_float_a_gate`) and
 the class mint's returned text (`test_class_mint_text`: `../harness/class_mint_text.das`'s two forms, each parsed back).
-`test_pod_fleet.das` - model-free, the same options as the file above: the pod fleet's planners, fourteen tests.
+`test_pod_fleet.das` - model-free, the same options as the file above: the pod fleet's planners, sixteen tests.
+Requires `run` by bare same-dir name (`run_exclusion`).
+`test_fleet_recorded_homes` (pod-free): a fleet file that records each pod's home seats it there whatever its order or
+index, a pod with no recorded home takes the first home left, `unseated_homes` names the homes `up` fills - the CUDA
+home's beside a kept Vulkan pod, the Vulkan home's beside a kept CUDA pod - and the model-free suite goes to the last
+seated home. `test_fleet_down_selection` (pod-free): `down` deletes the fleet file's pods only - every one with no
+`--home`, the named home's pod alone with one, nothing for a home with no pod, a `--home` naming no home refused - and the
+pods it names are the file's ids, never another session's pod on the account.
 `test_fleet_create_argv` and `test_fleet_commands` (pod-free): the pod fleet's planners (`../harness/pod_fleet.das`) -
 the `runpodctl pod create` argument list (the models volume and its data center, the GPU, the
 disk, the ssh port, the key in the boot's environment, the boot installing sshd, rsync, git and
@@ -4454,9 +4534,10 @@ suite whole on the CUDA home's command on two pods and its Vulkan files (`VULKAN
 that slice's exit reddening the Vulkan home's `RUN-EXIT`, and the whole suite on the lone pod's Vulkan command on one.
 `test_fleet_home_modules` (pod-free): the CUDA home's environment `DASLLAMA_DISABLE_MODULES=dasVulkan` and the Vulkan
 home's `dasCUDA` on two pods, none on a lone pod, the prewarm's command line leaving the same module out, and a
-caller's `--env` value winning on both. `test_fleet_cuda_only_excluded` (pod-free): the two-pod Vulkan home's model
-list, model-free slice and given command carrying `--exclude` the `CUDA_ONLY_EXCLUDE` tokens, one `--exclude` joining
-a caller's own, none on the CUDA home or a lone pod. `test_fleet_home_commands` (pod-free): the two homes' remote
+caller's `--env` value winning on both. `test_fleet_cuda_only_excluded` (pod-free): the two-pod Vulkan home's model list,
+model-free slice and given command each carrying one `--exclude` of the CUDA-only files, under the default environment
+and under a caller `--env` keeping dasCUDA (where `run_exclusion` drops nothing); the CUDA home and a lone pod
+excluding none; a caller's `--exclude` taking the tokens; `excluded_args`'s two spellings. `test_fleet_home_commands` (pod-free): the two homes' remote
 commands - the same command on both, `DASLLAMA_CUDA=1` and `--only` the CUDA pass on the CUDA home's alone,
 an `--only` in the caller's `--args` refused, no `--shard` on either,
 `--batch 30` on both unless the caller's `--args` name a `--batch` (`batched_args`; the model-free suite's `--args`
@@ -4621,7 +4702,15 @@ reference's: the summary line's two fields (the realtime factor over the samples
 parse), the runs a process prints, the best rep (`crispasr_best`, none unless every rep timed), the row's
 flavor stamp (`asr_ref_flavor`), each tool's CPU exe (`asr_ref_exe`) and the GPU leg's own Metal build
 (`asr_gpu_ref_missing`), and `cmake_built_bin`'s three layouts in their order - the branches that
-decide what lands on the public board, which no model suite reaches.
+decide what lands on the public board, which no model suite reaches; and the CUDA races' shared rig
+(`../harness/_seam_race.das`, `test_seam_race_rig`): a candidate's unnamed seams resolved to the values the race found,
+the `RACE seams found` line, a candidate's distinct pass hashes, the rounds' rotated order, and a candidate pair's
+refusals by their reasons (`race_seam_value`: no `key=value`, a value that is no integer, a key that names no seam, a value
+the seam does not admit; a pair the table admits the control); and the speech sweep's discrete leg (`test_tts_discrete_leg_cells`):
+`tts_discrete_leg` runs the das cell and then torch cuda's reference only beside a row a discrete home served on a
+package that serves the GPU, and `media_das_cell` - its child `python3 --version`, the cell file written ahead of it, a
+skip where the box has no python3 - fails by name a cell whose das row came back off the asked home, absorbing nothing,
+writing no store and removing the cell file, where the asked home's own row is absorbed (the control).
 `test_sizing_helpers.das` - model-free: the sizing helpers (`reserve_resize` exact capacity,
 `grow_resize` geometric reuse and its re-added tail reading zero, `ensure_length` grow-only with
 the grown tail zeroed, `overwrite_resize` grow-only no-init) fed directly, including grows past
@@ -4632,7 +4721,13 @@ pool and restored into a pool of another page size, a recurrent request's two ch
 inside a checkpoint or holding another model's, and every refusal by name with no page held), the SPIR-V dump differ, the parity
 reference cache's load (`test_parity_cache_roundtrip`, `test_parity_cache_rejects_corruption`), the `.dlim` wipe
 (`test_dlim_wipe`), the `[from_template]` stamp, a twin's held verdict on synthetic rows (`test_twin_rows_owed_poison`:
-a twin that owes its input poison and kept none fails one assert, one that kept it or owes none holds), and the Silero
+a twin that owes its input poison and kept none fails one assert, one that kept it or owes none holds), the kernel
+report (`test_kernel_report`: `kernel_report` names the stamped kernel families or the reference kernels, and
+`prepared_image_alignment` is the image page), the GPU homes' one profile report (`test_rail_prof_report`:
+`rail_prof_lines` charges each stamp to its role and prints the chain's line under the home's tag, then a line a stamped
+role in role order with its share, an unstamped role left out and an empty ledger printing its chain line alone;
+`rail_prof_report` keeps the reported ledger as `rail_prof_last`; every `RailProfRole` fits the ledger's width; the pin
+turns the ledger on, and with the pin off `DASLLAMA_GPU_PROF` decides), and the Silero
 VAD's load from bytes its host holds
 (`test_vad_from_memory`: the checked-in bin read one byte past a page boundary, its CPU probabilities those of the file
 load bit for bit after the host bytes are zeroed, a copy with 4096 bytes zeroed giving a different probability in some
@@ -4693,7 +4788,8 @@ constructed Models; among them
 `test_facade_device_kv_rows` - the rows a device holds a session's K/V for (`device_kv_max_rows`):
 the installed room seam (`set_gpu_kv_room_hook`, put back) over the model's K/V bytes a row, both
 planes of every layer that keeps rows of its own (a `kv_src` layer owns none), f32 halving the f16
-count, never past the model's context, and no seam bounding nothing but the context; on a Metal
+count, no codec named reading the automatic one - f16 where the target converts halves, q8_0 where it serves float rows
+(`with_rows_f32`, `_model_tier.das`) - never past the model's context, and no seam bounding nothing but the context; on a Metal
 box the installed seam itself - the device's largest buffer over the row's bytes: the idle mirror cap
 (`set_metal_decode_mirror_cap_mb`, put back) bounds no room, so 64 and 128 MiB read the same rows, past the 65536
 that 128 MiB of 2048-byte rows would hold.
@@ -4768,7 +4864,10 @@ gemv or panel row is another format's; it skips on a build without dasLLVM, wher
 ggml block bytes of the type, ids round-trip, `kq_fmt_of_id` refuses an id no format carries),
 `kq_bytes_per_weight` as the stride table's arithmetic on every superblock format, the
 `kq_fmt_stamp` call macro binding every member's tag so a tag-overload family resolves at compile
-time, the key-radix and lattice-predicate cells, and the load report's row name (`conv_row_name`: the site off the GGUF tensor role, the disk type, a kq plane by its `KqFmt` member and a converted copy by its conversion).
+time, the key-radix and lattice-predicate cells, the load report's row name (`conv_row_name`: the site off the GGUF tensor role, the disk type, a kq plane by its `KqFmt` member and a converted copy by its conversion),
+and the `kq_tile_stamp` ladder's refusals on fixture arms (`test_kq_tile_stamp_refuses_an_unarmed_slot`: an armed slot
+and an armed (member, tail) pair run their arm, a slot the skip words drop panics naming the slot, a pair they drop
+panics naming the tail and the member).
 `test_kv_codec.das` - stocked suite; the K/V codec's layout invariants and kernel units on synthetic Configs
 (model-free); `test_kv_stories_cells` - stories15M on one load, its weights quantized: the f16 cache's 24-step greedy
 decode emitting the f32 cache's ids (final logits within 1.0, fused and standard decode under f16 bit for bit), its
@@ -5037,7 +5136,7 @@ in-memory mint. The GPU knobs it pins - every GPU tower knob and ASR-decoder kno
 carries (`GpuKnobs`) - are captured and put back through `_gpu_knobs.das`, the record the TTS rail
 shares. Every serving helper of `_gpu_knobs.das` takes the cell's family (`TowerFamily`: `vision`,
 `tts`, and each audio family) and answers from the home that family's seats serve on
-(`tower_family_cuda`): the CUDA tower under the CUDA ask for the vision families and an audio family
+(`tower_family_cuda`): the CUDA tower under the CUDA ask for the vision families, the TTS seats and an audio family
 whose `CUDA_AUDIO_FAMILIES` row is on - the engine's `CUDA_AUDIO_HOMES` rows; a row off routes the family's cells to the
 Vulkan home (`../ARCHITECTURE_GPU_TOWER_RAIL.md#rail-audio-installs`) - else the Vulkan
 tower, and every one but the discrete homes' release (`gpu_tower_shutdown`) picks the Metal tower first
@@ -5390,11 +5489,26 @@ the clean rows the control), the model-gated cells (`kitten-<size>.gguf` +
 run the parity rail of `_tts_parity.das` per size and a facade smoke cell that speaks one
 sentence and checks the PCM is finite, non-silent, of speech length, and carries its timings.
 Each voice file is one block (`with_model_once`, `styletts2_form`): `test_kitten_nano` holds `kitten-nano.gguf`'s -
-its image form the facade cell, the generator-hook cell (`test_kitten_generator_hook`), the over-long chunk
-(`test_kitten_over_long_chunk`, on the facade's own StyleTTS2 model) and the facade's cells of
-`_tts_facade_cells.das`, its `f32`, `q8` and `kq` forms the synthesis and the parity rail a lane each -
-`test_kitten_facade` the two published files' and `test_kitten_mini` `kitten-mini.gguf`'s (`f32`, `q8`, `kq`: the rail);
-`test_kitten_stored_file` owns its loads (`own_load`: it holds a stored file's staging beside two lanes of its source);
+its image form the facade cell, the over-long chunk (`test_kitten_over_long_chunk`, on the facade's own StyleTTS2 model)
+and the facade's phonemizer and chunker cells of `_tts_facade_cells.das`; its `image_cpu` form, the CPU image, the
+decode-hook cell (`test_kitten_decode_hook`: a registered decode hook called once a chunk, a decline served by the CPU
+chain, a serve's silent waveform reaching the facade) and the facade's streaming and release cells; its `f32`, `q8`, `kq`
+and pinned `kq+ups=k5` forms and their `@dev` forms the synthesis and the parity rail, a leg a form; and the unpinned
+lane's `@dev` form the decode seat's profile ledger (`tts_seat_profile_cell`, `_tts_parity.das`, two cells: under
+`set_rail_prof_pin(true)` one synthesis leaves `rail_prof_last()` the decode shot's ledger - stamps and device time on each
+of `tts_gemm`, `tts_im2col`, `tts_act`, `tts_adain`, `tts_rows`, `tts_source` and `tts_stft`, none of PL-BERT's `tts_attn`;
+then the same synthesis with the pin off reports nothing and speaks the same samples, a skipped cell where
+`DASLLAMA_GPU_PROF=1` keeps the ledger on; home-neutral, on whichever GPU home serves the form) and
+the knob flip (`test_kitten_knob_flip_refuses`, `tts_knob_flip_refuses`: the home's image holds a
+device block and speaks with the tower on, with the knob off its next synthesis refuses by name and points at the
+source model, and every later stage entered on its own refuses by its own name) -
+`test_kitten_facade` the two published files' and `test_kitten_mini` `kitten-mini.gguf`'s (`f32`, `q8`, `kq` and their
+`@dev` forms: the rail);
+`test_kitten_stored_file` owns its loads (`own_load`: it holds a stored file's staging beside two lanes of its source),
+as does `test_kitten_unbuilt_seats_take_cpu_image` (`own_load`: it asserts on the image flavor its load lands on -
+`tts_unbuilt_seats_take_cpu_image`: with the seats' classes read as not built, `set_tts_ready_fault_`, the flavor pick
+names no home and the load mints the CPU image, which speaks with no seat served; with them built the pick names the
+home, the control);
 `test_kitten_stored_file` (nano) writes the file that stores the Q8_0 lane's weights and the one that stores
 the recipe lane's (`write_styletts2_gguf`): each under half its source, naming its lane, its staged
 quant and K-quant bytes the in-memory lane's byte for byte and every float the lane's or the lane's
@@ -5409,15 +5523,37 @@ site takes and the writer over a stored file are each refused by name, a tensor 
 floats stages (the control), and a destination that cannot be written answers false with no temp file;
 the facade cell (`kitten_facade_cell`) speaks the f32 file on `test_kitten_nano`'s image form and, under
 `test_kitten_facade`, the two published stored files (`kitten-nano-q8.gguf`, `kitten-nano-kq.gguf`, each skipping where absent);
+each stored file's block also loads its lane's CPU form and `@dev` form (`styletts2_stored_forms`: a skipped cell each
+where no device serves) for the served synthesis's legs, held after the block as the lane forms' are, and the cell of the
+formats the file stores (`test_kitten_stored_synthesis`: `st2_stored_formats_held` on a block with no f32 lane to read
+against - the loader's tags off the file, each tagged format's stamps launched and no other format's, on the Metal home
+none of its own f32 tiles, the widened rows' count exact);
 `test_kitten_synthesis_metal` (nano) is the synthesis across the tower knob through
-`tts_gpu_synthesis_lane` (`_tts_parity.das`; kokoro's twin is `test_kokoro_synthesis_metal`), a cell a lane form -
-the f32 reference lane first, the served lane on `q8`, the recipe lane on `kq`, each lane on its own tower
+`tts_gpu_synthesis_lane` (`_tts_parity.das`; kokoro's twin is `test_kokoro_synthesis_metal`), a cell a lane form's leg -
+a lane's CPU form the tower-off leg on the CPU image, its `@dev` form the tower-on leg on the image the box's GPU home
+serves, each leg holding its own verdict (`synth_leg_held`: finite samples; on a tower leg the home's seats encoding
+and its kernels launching; on a CPU leg no seat encoding and no kernel launched on the home, the control of every launch
+count a tower leg holds; the f32 form's CPU leg a skipped cell where no device serves the tower leg it is read beside) and the
+two held after the block (`styletts2_synthesis_held`) - the f32 reference lane first, the served lane on
+`q8`, the recipe lane on `kq` and the recipe lane with its upsamplers pinned on `kq+ups=k5`, each lane on its own tower
 verdict: on the
-served lane every chunk served at every seat but the generator's, one tower encode per seat per
-chunk, the knob-off chunks reaching every seat (the generator seat's included), serving nothing and
-declining by name at each, the generator seat never reached while the decode seat serves, the
+served lane every chunk served at every seat, one tower encode per seat per
+chunk, the knob-off chunks reaching every seat on every lane, serving nothing and
+declining by name at each, the
 tower leg audible, the sample counts within a twentieth
-(the q8 CPU chain quantizes its activations, so its durations can round a frame apart); on the
+(the q8 CPU chain quantizes its activations, so its durations can round a frame apart); the recipe lane
+the same way, and again with its upsamplers pinned Q5_K (`set_styletts2_recipe("ups=k5")`, the ask put back as found);
+on each quantized lane's `@dev` form a cell of the formats it stores (`st2_stored_formats_held`, read off the kernels the
+tower leg launched - `gpu_census`, `census_gain`): each stored format a lane holds launching its stamps and no other, on
+the Vulkan home the Q4_K convs' schedule-fed tile launching exactly where the device serves a cooperative-matrix feed, a
+lane with no Q4_K leaf launching none, and the f32 tiles a leaf widened into the slab would launch (`f32_row_launches`:
+the shared f32 tile, the Metal home's own f32 tiles, the f32 recurrence, Pocket's f32 row GEMV) launching at fewer dense
+sites than on the f32 lane's image - on the Metal home none of its own f32 tiles and no f32 recurrence; the control is
+the f32 lane's tower leg, which launches the f32 tiles and no quant format's stamp (`reference_formats_held`); and the
+home's count of dense dispatches over rows a stored leaf was widened into (`gpu_widened`, the driver's
+`tts_home_stats(dev).widened`) exact - one a chunk for each noise conv the form holds off the 8 lattice
+(`st2_off_lattice_convs` over `conv_off_lattice`: two on kitten and on kokoro, 22 inputs wide, halves on a home's image),
+none across the tower-off leg, the count's control; on the
 reference lane, one captured noise stream on both legs, the sample counts equal - the durations
 token for token. The sample-wise figures are logged, not gated: an uncaptured synthesis draws its
 noise on the tower (a hashed stream) and on the CPU (its PCG32 stream), and the source phase sits
@@ -5431,19 +5567,24 @@ the source, the generator and the inverse STFT on the oracle's noise - within 5e
 the served q8 planes within 1e-1 (reads 2e-2 to 6e-2; the CPU chain quantizes its activations, the
 tower reads the weights dequantized at f32 through their f16 block scales) - the only numeric gate
 on the q8 slab writes. Each cell carries a scaled or
-reversed input as the compare's control. The seam check carries the generator seat alone on the
-oracle's own inputs within `GPU_SEAM_BAR` (5e-3; 1.2e-3 at most), the knob-off leg bit-equal to
-the CPU chain with its decline recorded. The rail runs a form at a time: the f32 form's cell holds every stage but
-the q8 and recipe decodes and keeps each bring-up case's decode inputs (`ParityDecode`), which the `q8` and `kq` forms'
-cells feed their decode seat (`tts_parity_decode`: a skip where the oracle is not stocked, a red where a stocked oracle
-left it no case; the inputs are the f32 form's CPU chain's, `cpu_decode_inputs`). The lane forms mint in memory
-from the GGUF's staging, no `.dlim` baked, and load only where the build carries a GPU home (`styletts2_lane_forms`). The GPU cells read the serving driver
+reversed input as the compare's control. The rail runs a form at a time: the f32 form's cell holds every stage against
+the oracle and, where a device serves the `@dev` forms after it, keeps each bring-up case's CPU stages (`ParityCase`,
+`cpu_stage_rows`: the stage inputs and each seat's CPU leg; elsewhere no cell reads them and they do not run); the `q8` and `kq` forms' cells add their lane's decode on the CPU chain over those inputs, and each lane's
+`@dev` form - the lane as the box's GPU home serves it - its seats' served and poisoned legs (`tts_parity_legs`: a skip
+where the oracle is not stocked, a red where a stocked oracle left the form no case; each leg held to its own verdict,
+`parity_leg_held` - a CPU leg's finite rows, a tower leg served once with finite rows); the compares are held after the
+block (`styletts2_parity_held`). The lane forms mint in memory from the GGUF's staging, no `.dlim` baked; a `@dev` form
+loads only where a device serves the TTS seats, a skipped cell of its own elsewhere, and the `q8` and `kq` CPU forms load
+beside theirs alone, each a skipped cell of its own elsewhere too (`styletts2_lane_forms`). The GPU cells read the serving driver
 through the rail's helpers (the `_gpu_knobs.das` record - `gpu_knobs`, `set_gpu_knobs`,
 `with_gpu_knobs`, shared with the tower twins - and `set_serving_gpu_tower`, `gpu_encodes`, `gpu_declines`): the Metal
-tower on an Apple build, the Vulkan TTS driver elsewhere. Where no GPU device serves, every cell
-skips loudly, and a driver that registers no seat for a cell's stage skips that cell; a device
-whose seat declines a stage is a red.
-The kitten image rail is the `image` suite's `kitten` arm (the TTS area's), not a cell here.
+home's TTS seats on an Apple build, the CUDA home's under the CUDA ask, the Vulkan home's elsewhere. Where no GPU device serves, every cell
+skips loudly; a driver that registers no seat for a cell's stage, and a device whose seat declines a stage, are reds.
+The kitten image rail is the `image` suite's `kitten` arm (the TTS area's), not a cell here. That arm and the `pocket`
+arm also hold the device block's layout refusal (`block_layout_cell`, `test_model_image.das`): the q8 GPU image, loaded
+by its own path under a block layout another build registered (`set_styletts2_block_layout` / `set_pocket_block_layout`,
+each put back at the layout it answered), refuses naming the block, and loads again with the layout back - the control;
+the cells skip where no GPU device serves the TTS seats or the image rail is off.
 `test_tts_kokoro.das` - stocked suite; model-free cells: the symbol map over a synthetic phoneme
 string, the out-of-vocabulary drop, the style-row clamps, and the pack-name language rule
 (`<language><f|m>_` for all nine codes, and every other shape reading "" whatever letter it opens
@@ -5480,8 +5621,8 @@ and at least one line differing from the American string's, which is what proves
 synthesis - and the voice refusals (a pack whose language the front end lacks names that language;
 a voice the model has never heard of refuses first, with no language to name); the GPU cells of
 `_tts_parity.das` - the seam check, the per-stage cells with the q8 decode cell, and the served
-synthesis across the tower knob on both lanes - as the kitten entry describes them, the seat-absent
-skip included; and, model-free, the seat-name refusal of `styletts2_gpu_stats`.
+synthesis across the tower knob on every lane - as the kitten entry describes them, the stored formats' cells
+and the seat-absent red included; and, model-free, the seat-name refusal of `styletts2_gpu_stats`.
 `test_tts_pocket.das` - stocked suite (`pocket-tts-en.gguf` + `tts_oracle/pocket_english_2026-04/`
 under the models dir, minted by `../harness/convert_pocket.py` and `../harness/pocket_oracle.py`): the
 unigram tokenizer id for id against the package on the 200-sentence corpus and the byte-fallback
@@ -5531,7 +5672,14 @@ slot rebuilt behind the drop); the served frames cell takes both oracle voices i
 on each file, so the second voice's slot displaces the first's, within `GPU_FRAME_SERVED_BAR` (1e-1; reads 1.9e-2 to 7.1e-2)
 with the x3-scaled noise as the compare's control; the seat record's refusal of a
 name no seat carries and its seat names in order (`test_pocket_seat_stats`, model-free); the
-long chunk's codec seat declining by shape; and the served synthesis across the knob, every
+long chunk's codec served in windows, or past a seat's frame cap declining by shape; the stored formats on their files
+(`test_pocket_stored_members`: over one forced case on each served file, the backbone's and the head's loader tags - Q4_K
+planes, Q8_0 blocks, half-float rows - each with its format's stamps launched on the serving home, Q5_K and Q6_K launching
+none, and the f32 row GEMV (`tts_pk_gemv_*`), which a frame matrix widened into the slab would launch, launching none -
+the f32 lane's frames cell, `test_pocket_frames_metal`, launches it and no quant format's stamp, the control
+(`f32_lane_held`, `_tts_parity.das`) - and the home counting no dense dispatch over widened rows (`gpu_widened`; the encoder
+seat's leg of `test_pocket_voice_seats` is where that count moves); the census is `_tts_parity.das`'s `stored_marks` / `stored_members_launched`, which the kitten and kokoro served-lane
+cells assert too: Q8_0 on the served lane, Q4_K and Q6_K beside it on the recipe lane, Q4_K and Q5_K under the `ups=k5` pin); and the served synthesis across the knob, every
 chunk's prompt, codec and frame loop served, the encodes
 past one a chunk, the knob-off chunks declining at every seat - where no GPU device serves all
 three skip loudly, a present device that declines is a red; the parity, stream and frames cells
@@ -5604,17 +5752,47 @@ speaking otherwise as the control. Every cell that loads a Pocket GGUF mints it 
 (`pocket_form`'s lane forms and `pocket_minted`, `pocket_tts_minted` in `_tts_parity.das`), so the file writes no image
 beside a stocked model; `test_pocket_facade` and `test_pocket_reports_generation_complete` run on an image form, the
 facade's own load, which bakes. Each file is a block loaded once a form (`with_model_once`, `pocket_form`):
-`test_pocket_en` holds `pocket-tts-en.gguf`'s - `image`, `native`, `f32`, `q8` - each former test a subtest under its own
-name, `test_pocket_f16_table`'s halfwords kept on the `native` and `f32` forms and compared after the block;
+`test_pocket_en` holds `pocket-tts-en.gguf`'s - `image`, `native`, `f32`, `f32@cpu`, `q8`, and where a device serves the
+seats `native@cpu` and `native@dev` - each former test a subtest under its own name: the parity, stream and frames cells
+on `f32@cpu`, the CPU image; `test_pocket_f16_table`'s halfwords kept on the `native` and `f32` forms and compared after
+the block; `test_pocket_synthesis_metal`'s tower-off leg on `native@cpu` and its tower-on leg on `native@dev`, the image
+a load serves, each leg holding its own verdict (`synth_leg_held`) and the two held after the block (`served_lane_held`),
+and on `native@dev` a cell of the formats the image stores (`pocket_dev_formats_held`: the stamps that read stored
+leaves launched, the f32 row GEMV none, no dense dispatch over widened rows counted); where no device serves, both forms
+are skipped cells;
 `test_pocket_en_q8` and `test_pocket_en_kq` the published files' (the K-quant file's also under the `q8` and `f32` pins,
-`test_pocket_quiet_floor`'s two lanes, compared after the block), the served seats' cells a file each
-(`test_pocket_codec_metal_served`, `test_pocket_frames_metal_served`, the prompt seat's served leg) and, on the q8 file,
-`test_pocket_frames_after_model_drop`; `test_pocket_languages`, `test_pocket_small_models` (the voice-state cap its
+`test_pocket_quiet_floor`'s two lanes, compared after the block), the served seats' cells a file each on its `native`
+form (`test_pocket_codec_metal_served`, `test_pocket_codec_windows` - a 40-frame call in one window under a 64-frame
+window, ten at 4 frames and five at 9, bit for bit the one-window call's, a 41-frame call the control, a window asked at
+no frames held at one, a 600-frame call within the served bar -, `test_pocket_voice_seats` - the encoder seat's latents
+and the voice seat's keys and values within `GPU_ENCODE_SERVED_BAR` and `GPU_VOICE_SERVED_BAR` of the file's own CPU
+chain, each served once, a tower-off leg serving none, the clip reversed the control; and the home's count of dense
+dispatches over widened rows (`voice_seats_widened`): the encoder seat one a window of 8 latent frames for its first
+conv alone - one input channel wide, off the half member's 8 lattice - none for its transformer's matrices, the voice
+seat none, the tower-off leg none -, `test_pocket_frames_metal_served`,
+the prompt seat's served leg, `test_pocket_stored_members`); on the q8 file `test_pocket_frames_after_model_drop`, on its
+`native@cpu` form `test_pocket_hard_split` (400 unmarked words cut at spaces under `POCKET_HARD_TOKENS`, 60 words one
+chunk the control) and across `native@cpu` and `q8@cpu` `test_pocket_head_halves` (the F16 flow head's rows halves with no
+float copy where the target converts halves in hardware, floats pinned q8, the two loads' teacher-forced latents within
+`HEAD_HALVES_BAR` after the block, the noise scaled by three the control; the verdict skips where the oracle is not
+stocked or carries no stage case of alba's, and reds where it carries one and a load kept no latents of it); on the
+K-quant file's `native` form
+`test_pocket_kq_metal_stored` (the Metal flavor's Q4_K planes in disk order, the backbone's and the codec encoder's alike,
+the K4 row GEMV and the K4 mul_mm launched over a forced case) and `test_pocket_frame_leaf_layouts` (a frame leaf re-minted Q5_K or Q6_K in the shared layout's
+member plane on every home, the Metal home's Q4_K leaves outside the shared Q4_K plane; the leaf put back), on its
+`native@cpu` form that cell's control (the CPU staging holds the backend's interleave, its frames seat declining by
+flavor or shape with no K4 kernel launched) and `test_pocket_decline_said_again_after_reload` (a decline said once while
+the model stays and again after `bump_weights_epoch`), and on its `native@dev` form `test_pocket_knob_flip_refuses`
+(`tts_knob_flip_refuses`: the codec refusing by name with the knob off, the codec encoder, the voice state's pass, the
+prompt's pass and - its seat withdrawn - the frame loop each by its own); `test_pocket_languages`, `test_pocket_small_models` (the voice-state cap its
 subtest on the 18M file), `test_pocket_small_refl` and `test_pocket_no_encoder` (the completion cell its subtest on the
 one-voice file's image form, the two 18M files' speech compared after their blocks) a literal block a file. The cells
 that hold several lanes or files at once own their loads (`own_load`: `test_pocket_q8_file`, `test_pocket_kq_file`,
-`test_pocket_prepared_prompt_transfer`), as does
-`test_pocket_from_memory` (a reload from bytes it bakes).
+`test_pocket_prepared_prompt_transfer`), as do
+`test_pocket_from_memory` (a reload from bytes it bakes), `test_pocket_unbuilt_seats_take_cpu_image` (the image flavor
+its load lands on under `set_tts_ready_fault_`) and `test_pocket_row_form_follows_the_pin` (the planes a load lands on
+under the half rows' form pin, `with_rows_f32`: the F16 flow head and an F16 codec conv floats with no halves pinned to
+floats, the file's halves with no float copy pinned to halves).
 `test_tts_facade.das` - stocked suite, every cell model-free: the sentence chunker (the reference
 driver's boundary rule, the cap counted in codepoints, the hard split of a whitespace-free run,
 the appended comma as Kitten's driver rule and the bare text Kokoro's sends), the normalizer the
@@ -5631,8 +5809,10 @@ the reference's order - phases, then normals row by row - against the phases fro
 moving most samples; the window knob read back from the carry's stride at the default, the whole
 run and five frames, each speaking the same samples; a negative window refused by name).
 `_tts_facade_cells.das` - the facade's cells on a loaded kitten-nano (`tts_facade_kitten_cells`, run on the image form
-of `test_tts_kitten.das`'s `test_kitten_nano` block; each skips without the phoneme pack beside the file, and the release
-cell, last, puts the chunk cap back): the streaming form's chunks concatenate to the buffered synthesis sample for sample, one
+of `test_tts_kitten.das`'s `test_kitten_nano` block: the phonemizer and the chunker; `tts_facade_kitten_cpu_cells`, run on
+its `image_cpu` form, the CPU image whose CPU rows kernels and CPU generator are the claims: the streaming and the release
+cells; each skips without the phoneme pack beside the file, and the release cell, last, puts the chunk cap back): the
+streaming form's chunks concatenate to the buffered synthesis sample for sample, one
 synthesis at one lane and the other at the box's lanes, the phonemizer on the corpus rail, the
 model-keyed chunker's Kitten arm (the driver's comma - the arm no model-free cell reaches), the
 language form of `tts_phonemize` - the declared language reads as the bare form does, an
@@ -5683,8 +5863,17 @@ transcription of their arithmetic on synthetic weights (`_kernel_oracles.das`'s 
 the layer against the other GELU form's transcription, the embeddings against the sum with the type
 row dropped;
 `bert_layer_rows` and `gelu_rows` are arms of the split-invariance gate.
+`test_image_origin_without_an_image` holds `tts_image_origin` on a carrier with no image: no mapping, no tag, no header read.
+`test_slab_widened_marks` holds the tower slab writer's widened mark (`TtsConvSlot.widened`) on synthetic leaves: a conv of
+halves on the 8 lattice and a Q8_0 conv stay out of the slab unmarked under the staged members' mask and are marked rows
+under none, a conv of halves off the lattice and a dense layer of halves off the 32 lattice are marked rows, a Q4_K conv
+in disk order is a stored plane on the 8 lattice, marked rows off it and under no mask, a K-quant conv or dense layer is
+a stored plane in disk order and marked rows where the box's backend repacked it, and a leaf of floats is rows unmarked
+(the control).
 `_tts_parity.das` - the rail both families run: token ids against the reference driver on every
-oracle case, identical durations on every case, and on the bring-up set every stage through the
+oracle case, identical durations on every case - a case off the bring-up set stops after its durations
+stage (`styletts2_frames`), its sample count the one its frames predict (`styletts2_samples_of`), a count
+each bring-up case holds against the samples its own synthesis returns - and on the bring-up set every stage through the
 decoder output within 1e-4 of the oracle's peak, the sine source within `SOURCE_BAR` (5e-3, absolute:
 the phase past 1e5 radians turns a ulp of an increment into radians; the pod's x64 chain reads
 2.5e-3 on kitten's ONNX law, the M5 Max under 1e-4) fed the oracle's F0,
@@ -5693,13 +5882,14 @@ magnitude carries signal, and the generator (its stage-0 internals included) wit
 oracle's spectrum and decoder output - its conv_post seam within `SEAM_CONV_POST_BAR` (2.5e-4 of the
 peak) and the waveform within `SEAM_WAVE_BAR` (1e-3, absolute), the fp32 batch tile rounding apart from
 the per-token dot, each with the control of the generator fed `gen_in` rotated one row landing outside
-the bar; the end-to-end waveform difference is logged, not gated (the F0 phase drift the file header
+the bar; the end-to-end waveform difference is logged on the bring-up set, not gated (the F0 phase drift the file header
 explains). The whole rail runs under `with_reference_f32_tile` (`_f32_tile_pin.das`): every fp32 batch
 GEMM on `f32_batch_tile`'s declared fallback through the engine's f32 tile pin (`set_f32_tile_pin`), a
 seat of its own ahead of the float-batch override, so a sidecar crowning another permutation moves no bar
 and the rail holds under `DASLLAMA_ACCEL=1` - only the f32 tile is pinned, every other kernel keeps its
 stamp, and the pin is put back however the block leaves, a panic included. The rail's cells run on one form of
-the model at a time (`styletts2_parity_cell`, `styletts2_synthesis_cell`), the forms a voice's block loads through
+the model at a time (`styletts2_parity_cell`, `styletts2_synthesis_cell`), a lane's CPU form and its `@dev` form a leg
+each and the two held after the block (`styletts2_parity_held`, `styletts2_synthesis_held`), the forms a voice's block loads through
 `styletts2_form` and a Pocket file's through `pocket_form`; `facade_smoke_cell` is the facade smoke on a loaded image
 form. The quant matrices:
 `test_quant_mints` runs a conv minted in the K-quant form (Q4_K, Q5_K, Q6_K; forward, transposed and
@@ -5736,7 +5926,10 @@ fallback and as many kernels warm as cold, the served-from-cache verdict asserte
 (clamp, row norms, f16-table GEGLU-quick, im2col, two-axis rope, avg-pool, `attention_bidir`),
 each against an in-test reference; `rel_pos_table` against an fp64 sin/cos reference, its
 relative-position-0 row exactly (0, 1) pairs, the table of one frame more as the control that
-must miss the bar.
+must miss the bar; and a flavored mint's device block on a fixture tower (`test_tower_bake_block`,
+`dasllama/dasllama_tower_image`): `tower_bake_block` placing the driver's block in the staging and naming every weight
+array the bake spent, its panic where the bake declines the model, and `tower_block_current` holding a CPU image under
+any layout and a device block under its own layout alone.
 `test_matmul_batch.das` - model-free: the batched GEMMs against a plain double oracle under a NaN
 sentinel - the fp32 tile walk within `F32_TILE_REL` of the oracle at every tail shape with an
 `all_finite` assert and a poisoned expectation, the threaded walk bit for bit the one-lane walk (its
@@ -5990,20 +6183,26 @@ panic cell uses it.
 model blocks tagged with a listed family run - `family_on(t, name)` in
 `_model_tier.das`, EXACT token match, loud `t |> skip` like the arm filter. Model-free blocks
 carry no tag and always run. The model gate applies the filter too, by file name: `model_available`
-skips a decoder file whose family row (`model_families()`, `_model_categories.das`, the longest stem
+skips a file whose family row (`model_families()`, `_model_categories.das`, the longest stem
 that opens the name) is not among the tokens, so a cell on another family's model skips in a test
-that carries no tag; a file no row holds - a tower, a speech model, a fixture - opens under any
-filter. Family tokens: `llama` (`--suite decode`, `prefill`, `matrix` and
+that carries no tag, and a load-once block of a row's file needs no tag: its gate is `model_available`. The rows are the chat
+decoders', the voices' (`kitten`, `kokoro`, `pocket`), the Russian stress models' (`rustress`), the ASR carriers' (`whisper`,
+`parakeet`, `gigaam`, `canary` - its encoder), the VAD's (`vad`) and the Bergamot students' (`bergamot`). A file no row holds
+opens under any filter - a tower, a fixture, a front-end pack or context model a voice reads beside it (`tts_g2p*.bin`,
+`tts_postag.bin`, `tts_ctx_ru.gguf`), a decoder a cell of another family reads (the canary decoder) - and its own block carries
+`family_on`: `g2p` tags the English front-end packs' tests, `rustress` the Russian stress pack's and context model's.
+`REVIEW.das` (`check_family_tags`) holds every block to a row or to a `family_on` call ahead of it, in its function or in
+every function of the file that calls it. Family tokens: `llama` (`--suite decode`, `prefill`, `matrix` and
 `coverage`, plus the image `smol`, `untied`, `metal` and `metal-untied` arms and the `image-vulkan` `vulkan` arm),
 `qwen2`, `qwen3`, `phi3`,
-`gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe`, `qwen4exp` (the support-matrix family cells; `qwen35` also tags `test_vulkan_mint.das`, `_metal_batched_cells.das`'s Qwen3.5 cells and the `dflash-27b-*` arms of `test_dflash_drafter.das`; `qwen3` and `qwen35` also tag the chat decoder cells of `test_nmt.das`; `gemma3`, `gemma4`, `gemma4e` and `qwen3` the image chat decoder cells under the vision tower blocks), `gemma`,
+`gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe`, `qwen4exp` (the support-matrix family cells; `qwen35` also tags `test_vulkan_mint.das`, `_metal_batched_cells.das`'s Qwen3.5 cells and the `dflash-27b-*` arms of `test_dflash_drafter.das`; `qwen3` and `qwen35` also tag the chat decoder cells of `test_nmt.das`; `gemma3`, `gemma4`, `gemma4e`, `qwen2` and `qwen3` the image chat decoder cells under the vision tower blocks - the Qwen2.5-Omni-3B decoder is `qwen2`'s, the Qwen3-VL 4B and Qwen3-Omni decoders `qwen3`'s), `gemma`,
 `ultravox`, `whisper`, `voxtral`, `parakeet`, `gigaam`, `qwen3a`, `canary`, `gemma4a` (image suite arms, and each
 family's tower blocks in the audio test files), `qwen2a` (the Qwen2-Audio tower's block), `qwen25a` (the Qwen2.5-Omni
 audio towers' blocks),
 `gemma3v`, `qwen25v`, `qwen3v` (the coverage census tower rows and each family's tower blocks in the vision test files; `gemma3v` also the image suite's `gemma3v` arm), `gemma4v` (the gemma4v and gemma4uv tower blocks, and the image suite's
 `gemma4v`, `gemma4uv` and `gemma4uv-metal` arms), `kitten` (the image suite's
-kitten arm), `kokoro` (kitten and kokoro are two families of one architecture), `pocket` (the coverage census TTS rows), `vad` (the coverage census silero VAD row), `bergamot` (the image suite's
-bergamot arm and the coverage census Bergamot row, ru-en tiny on the Metal seat),
+kitten arm), `kokoro` (kitten and kokoro are two families of one architecture), `pocket` (the coverage census TTS rows; the three also their voice files' blocks in the tts area, by row), `g2p` (the English front-end packs' tests), `rustress` (the Russian stress pack's and context model's tests, and the stress models' blocks by row), `vad` (the coverage census silero VAD row, and the VAD's block by row), `bergamot` (the image suite's
+bergamot arm and the coverage census Bergamot row, ru-en tiny on the Metal seat; the students' blocks by row),
 `gemma4e` (support-matrix rows under `fam-gemma4e` - E2B Q8_0, Q4_K_M and
 Q4_0, small-tier always-on - what the rows assert is the
 support matrix's `fam-gemma4e` clause; plus the coverage-census E2B row; `gptoss`/`gemma4moe`/`qwen2moe`/`qwen3moe` carry census rows too - the `qwen2moe` and `qwen3moe`

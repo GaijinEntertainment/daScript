@@ -19,6 +19,8 @@ require dasllama/dasllama_image
 require dasllama/dasllama_spm
 require dasllama/dasllama_unicode
 require dasllama/dasllama_tower   // add_inplace_rows: the residual add the block home shares with the towers
+require dasllama/dasllama_tower_flavor   // [tower_flavor]: the family's GPU flavor seat
+require dasllama/dasllama_tower_image    // tower_dev_flavor, register_tower_dev_tags
 require dasllama/dasllama_gpu_math   // tts_modulate
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
@@ -237,8 +239,13 @@ struct PocketModel {
     reserved_ids : array<int64>   // the control ids (unknown, BOS, EOS, padding): text never encodes to them
     byte_fallback : bool
     q8 : bool                // the lane this model serves: the GEMM weights as Q8_0 quants, or f32
+    dev_backend : TowerDev   //! the GPU home this image was staged for: its seat-served K-quant planes sit in disk order; `none` on a CPU image
+    host_weights : bool      //! a cell's mint (`set_tts_host_weights_`): the weights its device block replaces are held too
+    dev_layout : uint64      //! the layout of the device block this image carries (`set_pocket_block_layout`); 0 on a CPU image
     blob : PlaneF = PlaneF()
     qblob : PlaneI8 = PlaneI8()
+    dev : PlaneU8 = PlaneU8()         //! a GPU image's device block (`#tower-dev-block`): the pieces its home's seats bind ...
+    devplan : PlaneI64 = PlaneI64()   //! ... and the plan naming them; empty on a CPU image
     image_map : void?
     image_bytes : uint64
 }
@@ -270,7 +277,7 @@ def weights_walk(var io : TtsBlobIo; var m : PocketModel) {
 
 // serialize_image_meta covers 47 fields and the reserved ids' array; the voice tables (views bound from their spans, and
 // what a run registers), image_map and image_bytes are the deliberate skips
-let private POCKET_META_FIELDS = 47 + 5
+let private POCKET_META_FIELDS = 49 + 6
 let POCKET_ARCH = "pocket-tts"              //!< a Pocket GGUF's `general.architecture`
 let POCKET_IMAGE_PREFIX = "pocket-"         //!< every lane tag of the family starts with it
 let POCKET_IMAGE_TAG = "pocket-native"     //!< the unpinned lane: a file's own quants, K-quant planes included
@@ -327,6 +334,9 @@ def private serialize_image_meta(var arch : Archive; var m : PocketModel) {
     serialize_pod_array(arch, m.reserved_ids)
     arch |> serialize_raw(m.byte_fallback)
     arch |> serialize_raw(m.q8)
+    arch |> serialize_raw(m.dev_backend)
+    arch |> serialize_raw(m.host_weights)
+    arch |> serialize_raw(m.dev_layout)
 }
 
 [unused_argument(m)]
@@ -344,6 +354,8 @@ struct PocketStaging {
     native : bool   //! the staged read serves a K-quant tensor as its own planes: with `e.q8` it names the lane
     blob : array<float>
     qblob : array<int8>
+    @exact_size dev : array<uint8>
+    @exact_size devplan : array<int64>
 }
 
 def private serialize_image_meta(var arch : Archive; var st : PocketStaging) {
@@ -364,9 +376,48 @@ def private pocket_layout_fingerprint() : uint64 {
     return layout
 }
 
+var private g_pocket_block_layout = 0ul
+
+//! The registered driver's device-block layout, which a GPU image records and a load holds it to; answers the layout it replaced
+def set_pocket_block_layout(layout : uint64) : uint64 {
+    let was = g_pocket_block_layout
+    g_pocket_block_layout = layout
+    return was
+}
+
+//! The family's GPU flavor seat (`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block`): the registered driver's backend, whether
+//! its seats serve the unpinned lane (`serves`, the lane's native flag), and its bake
+[tower_flavor(family = "pocket", model = "PocketModel")]
+struct PocketFlavor {}
+
+//! the flavor a load takes on the lane (`native`: the unpinned lane): the driver's where its seats serve it, else `none`, the CPU image
+def pocket_dev_flavor(native : bool) : TowerDev => tower_dev_flavor(g_pocket_flavor, native)
+
+//! a GPU image's stage reaching its CPU body refuses: the image holds that stage's weights in its device block alone; "" refuses nothing
+def private pocket_cpu_refuse(m : PocketModel; stage : string) {
+    if (!empty(stage) && m.devplan.n > 0l && !m.host_weights) {
+        panic("dasLLAMA pocket: the {stage} did not run on the device - a GPU image never runs on the CPU (the seat's log line names the reason; with the tower knob off, load the source model: it maps the CPU image)")
+    }
+}
+
+//! a GPU image whose home's seats do not serve now (the knob off, the device down - a home's gate
+//! reads no lane) refuses at a synthesis's entry, before the voice table's walk holds its lock and
+//! before any scratch is touched
+def private pocket_entry_refuse(m : PocketModel) {
+    return if (m.devplan.n == 0l || m.host_weights
+        || (g_pocket_flavor.backend != TowerDev.none && g_pocket_flavor.backend == m.dev_backend
+            && invoke(g_pocket_flavor.serves, true)))
+    pocket_cpu_refuse(m, "synthesis")
+}
+
 [init]
 def private register_pocket_image_tags {
     register_image_family_tag(POCKET_IMAGE_TAG, false, @@pocket_layout_fingerprint)       // the quants follow the backend's repack
+    for (dev in [TowerDev.metal, TowerDev.vulkan, TowerDev.cuda]) {   // a flavor's Q8_0 planes are still the CPU backend's: config-bound
+        register_image_flavor_tag(tower_dev_tag(POCKET_IMAGE_TAG, dev), POCKET_IMAGE_TAG, false)
+        register_image_flavor_tag(tower_dev_tag(POCKET_IMAGE_TAG_Q8, dev), POCKET_IMAGE_TAG_Q8, false)
+        register_image_flavor_tag(tower_dev_tag(POCKET_IMAGE_TAG_F32, dev), POCKET_IMAGE_TAG_F32)
+    }
     register_image_family_tag(POCKET_IMAGE_TAG_Q8, false, @@pocket_layout_fingerprint)
     register_image_family_tag(POCKET_IMAGE_TAG_F32, true, @@pocket_layout_fingerprint)    // no box property shapes the f32 planes
 }
@@ -494,9 +545,9 @@ struct PocketScratch {
     @scratch @exact_size ct : array<float>       // a transposed stream conv's whole output, the window's rows cut from it
     @scratch @exact_size lw : array<float>       // the window's latent frames
     @scratch @exact_size wave : array<float>
-    codec_caches : array<TtsKvCache>
-    dec_carry : array<PocketConvCarry>           // the decoder's convs, in chain order
-    enc_carry : array<PocketConvCarry>
+    @scratch @exact_size codec_caches : array<TtsKvCache>
+    @scratch @exact_size dec_carry : array<PocketConvCarry>   // the decoder's convs, in chain order
+    @scratch @exact_size enc_carry : array<PocketConvCarry>
     rng : TtsRng
 }
 
@@ -604,7 +655,8 @@ def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string;
         return <- l
     }
     l.w <- read_arr(m, bytes, wname)   // a Q8_0 or K-quant tensor dequantizes here: the f32 lane of a published file, or the q8 lane pinned over a K-quant one
-    linear_prepare(l, true, g_stage_q8, g_stage_repack, vec_only)   // a vector layer mints nothing and keeps w
+    let halves = vec_only && g_stage_native && gguf_tensor_type(m, wname) == GGML_TYPE_F16 && !active_rows_f32()
+    linear_prepare(l, true, g_stage_q8, g_stage_repack, vec_only, halves)
     return <- l
 }
 
@@ -665,7 +717,8 @@ def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; s
     let cc = conv1d_dims_of(m.tensors[ti].dims, transposed, groups)
     c.cin = cc.cin
     c.cout = cc.cout
-    conv1d_prepare(c, false, g_stage_repack)
+    let halves = g_stage_native && gguf_tensor_type(m, wname) == GGML_TYPE_F16 && !active_rows_f32()
+    conv1d_prepare(c, false, g_stage_repack, false, halves)
     return <- c
 }
 
@@ -788,6 +841,26 @@ def private read_head(m : GGUFMeta; bytes : array<uint8> | #; var hd : PocketHea
 }
 
 //! the codec's two transformers, the encoder's and the decoder's; a file whose config names no decoder side carries the encoder's shape under both
+//! the codec's encoder side: its stages read the ratios reversed, 1 -> 64 channels first, doubling per stage
+def private read_mimi_encoder(m : GGUFMeta; bytes : array<uint8> | #; var mm : PocketMimi; enc : PocketTfShape) {
+    let nr = long_length(mm.ratios)
+    mm.enc_in <- read_conv(m, bytes, "mimi.encoder.model.0.conv", 1l, 1l, false)
+    mm.enc_res |> resize(int(nr))
+    mm.enc_down |> resize(int(nr))
+    for (i in range64(nr)) {
+        let ratio = mm.ratios[nr - 1l - i]
+        mm.enc_res[i] <- read_res_conv(m, bytes, "mimi.encoder.model.{1l + 3l * i}")
+        mm.enc_down[i] <- read_conv(m, bytes, "mimi.encoder.model.{3l + 3l * i}.conv", ratio, 1l, false)
+    }
+    mm.enc_out <- read_conv(m, bytes, "mimi.encoder.model.{2l + 3l * nr}.conv", 1l, 1l, false)
+    mm.enc_tf <- read_transformer(m, bytes, "mimi.enc_tf", enc, true)
+    mm.downsample <- read_conv(m, bytes, "mimi.downsample.conv.conv", 0l, 1l, false)
+    if (mm.downsample.k / 2l != mm.frame_steps) {
+        panic("dasLLAMA pocket: the downsampler's kernel {mm.downsample.k} and the upsampler's {2l * mm.frame_steps} disagree on the frame stride")
+    }
+    mm.downsample.stride = mm.frame_steps
+}
+
 def private read_mimi(m : GGUFMeta; bytes : array<uint8> | #; var mm : PocketMimi; enc, dec : PocketTfShape; encoder : bool) {
     mm.ratios <- gguf_int_array(m, bytes, "pocket.mimi.ratios")
     let nr = long_length(mm.ratios)
@@ -801,22 +874,7 @@ def private read_mimi(m : GGUFMeta; bytes : array<uint8> | #; var mm : PocketMim
     mm.frame_steps = up_dims[0] / 2l
     mm.upsample <- read_conv(m, bytes, "mimi.upsample.convtr.convtr", mm.frame_steps, up_dims[2], true)
     if (encoder) {
-        // the encoder's stages read the ratios reversed: 1 -> 64 channels first, doubling per stage
-        mm.enc_in <- read_conv(m, bytes, "mimi.encoder.model.0.conv", 1l, 1l, false)
-        mm.enc_res |> resize(int(nr))
-        mm.enc_down |> resize(int(nr))
-        for (i in range64(nr)) {
-            let ratio = mm.ratios[nr - 1l - i]
-            mm.enc_res[i] <- read_res_conv(m, bytes, "mimi.encoder.model.{1l + 3l * i}")
-            mm.enc_down[i] <- read_conv(m, bytes, "mimi.encoder.model.{3l + 3l * i}.conv", ratio, 1l, false)
-        }
-        mm.enc_out <- read_conv(m, bytes, "mimi.encoder.model.{2l + 3l * nr}.conv", 1l, 1l, false)
-        mm.enc_tf <- read_transformer(m, bytes, "mimi.enc_tf", enc, true)
-        mm.downsample <- read_conv(m, bytes, "mimi.downsample.conv.conv", 0l, 1l, false)
-        if (mm.downsample.k / 2l != mm.frame_steps) {
-            panic("dasLLAMA pocket: the downsampler's kernel {mm.downsample.k} and the upsampler's {2l * mm.frame_steps} disagree on the frame stride")
-        }
-        mm.downsample.stride = mm.frame_steps
+        read_mimi_encoder(m, bytes, mm, enc)
     }
     mm.dec_tf <- read_transformer(m, bytes, "mimi.dec_tf", dec, true)
     mm.dec_in <- read_conv(m, bytes, "mimi.decoder.model.0.conv", 1l, 1l, false)
@@ -1016,7 +1074,9 @@ def stage_pocket(path : string; q8, native : bool) : PocketStaging {
     // K-quant planes repack wherever it carries kq kernels - linear_take_kq asks that itself
     let selected = (q8 || native) ? select_matmul_backend_for_load_() : false
     g_stage_repack = q8 && selected
-    let kq_arm = !native ? "" : (kernel_backend_has_kq() ? ", its K-quant planes repacked for {active_kernel_backend()}" : ", its K-quant planes in disk order (the portable GEMV)")
+    st.e.dev_backend = tower_staging_dev()
+    let kq_cpu = kernel_backend_has_kq() ? "repacked for {active_kernel_backend()}" : "in disk order (the portable GEMV)"
+    let kq_arm = !native ? "" : (st.e.dev_backend != TowerDev.none ? ", its K-quant planes in disk order for the {st.e.dev_backend} seats" : ", its K-quant planes {kq_cpu}")
     to_log(LOG_INFO, "dasLLAMA pocket: GEMM lane {q8 ? "q8" : "f32"}{native ? ", a K-quant tensor as its own planes" : ""}{kq_arm} - {g_pocket_q8_pin != GemmLane.unset ? "pinned via set_tts_q8" : "the policy default"}\n")
     stage_pocket_gguf(path, st.e)
     st.e.tok <- load_tokenizer_gguf(path)
@@ -1025,6 +1085,15 @@ def stage_pocket(path : string; q8, native : bool) : PocketStaging {
         panic("dasLLAMA pocket: '{path}' holds a text table of {rows} rows for a vocabulary of {length(st.e.tok.vocab)} pieces")
     }
     var io = TtsBlobIo(staging = true, blob = unsafe(addr(st.blob)), qblob = unsafe(addr(st.qblob)))
+    var inscope spent : table<uint64>
+    if (st.e.dev_backend != TowerDev.none) {
+        tower_bake_block(g_pocket_flavor, st, spent, "pocket")
+        st.e.dev_layout = g_pocket_block_layout
+        st.e.host_weights = tts_host_weights_()
+        if (!st.e.host_weights) {
+            io.spent = unsafe(addr(spent))
+        }
+    }
     weights_walk(io, st.e)
     return <- st
 }
@@ -1094,11 +1163,17 @@ def pocket_serves_file(path : string) : bool {
 def pocket_serves_memory(base : void?; bytes : uint64) : bool =>
     !empty(image_memory_lane_if_readable(base, bytes, POCKET_IMAGE_PREFIX))
 
-//! Mint a served model from a staged read without touching disk - the in-memory image rail, the off-rail control for
-//! suites. The staged read's lane picks the tag.
+//! `stage_pocket` under the GPU flavor the load takes on this lane (`pocket_dev_flavor`), so the seats find the planes they stage as stored
+def stage_pocket_served(path : string; q8, native : bool) : PocketStaging {
+    return <- tower_dev_staged(pocket_dev_flavor(native)) {
+        return <- stage_pocket(path, q8, native)
+    }
+}
+
+//! a served model minted from a staged read off disk - the suites' off-rail control; the read's lane and flavor pick the tag
 [cold_path]
 def mint_pocket(var st : PocketStaging; var out : PocketModel) {
-    cache_via_image_staged(st, out, "", pocket_tag(st.e.q8, st.native))
+    cache_via_image_staged(st, out, "", tower_dev_tag(pocket_tag(st.e.q8, st.native), st.e.dev_backend))
     pocket_bind(out)
 }
 
@@ -1115,15 +1190,25 @@ def bake_pocket_image(path, out : string; q8, native : bool) : bool {
 //! file names its lane, and the gguf is not needed. The roster's states are built on first use.
 [arch(at="../ARCHITECTURE_POCKET.md#pocket-image")]
 def load_pocket(path : string) : PocketModel {
+    tts_host_weights_refuse_load("dasLLAMA pocket")
     bump_weights_epoch()   //! the previous model's GPU slabs drop before this one's weights can land at their addresses
     let q8 = pocket_serve_q8_()
     let native = pocket_serves_native()
     if (path |> ends_with(".dlim")) {
         pocket_pin_not_applied()
     }
-    let tag = image_path_lane(path, pocket_tag(q8, native), POCKET_IMAGE_PREFIX)
-    var inscope m <- load_staged_image(path, tag, "pocket", "source gguf", type<PocketModel>) {
-        return <- stage_pocket(path, q8, native)
+    let lane = image_path_lane(path, pocket_tag(q8, native), POCKET_IMAGE_PREFIX)
+    let dev = path |> ends_with(".dlim") ? TowerDev.none : pocket_dev_flavor(native)
+    let tag = path |> ends_with(".dlim") ? named_image_tag(path, lane) : tower_dev_tag(lane, dev)
+    var inscope m <- load_staged_image(path, tag, "pocket", "source gguf", type<PocketModel>, $ {
+        return <- stage_pocket_served(path, q8, native)
+    }, $(t : PocketModel) => tower_block_current(t, g_pocket_block_layout), $(t : PocketModel; src : string) {
+        if (!tower_block_current(t, g_pocket_block_layout)) {
+            panic("dasLLAMA pocket: '{src}' carries a {t.dev_backend} device block another build laid out - regenerate it from the source gguf")
+        }
+    })
+    if (m.dev_backend != TowerDev.none) {
+        to_log(LOG_INFO, "dasLLAMA pocket: the load serves the {m.dev_backend} image - its seats' weights are the device block's\n")
     }
     pocket_bind(m)
     return <- m
@@ -1153,9 +1238,9 @@ def load_pocket(base : void?; bytes : uint64) : PocketModel {
 //! q [t][qd], k and v [t][kvd] out of the stacked projection rows [t][qd + 2 kvd]
 def private split_qkv(qkv : array<float>; t, qd, kvd : int64; @scratch @exact_size var q : array<float>;
                       @scratch @exact_size var k : array<float>; @scratch @exact_size var v : array<float>) {
-    q |> reserve_resize(t * qd)
-    k |> reserve_resize(t * kvd)
-    v |> reserve_resize(t * kvd)
+    unsafe(scratch_resize(q, t * qd))
+    unsafe(scratch_resize(k, t * kvd))
+    unsafe(scratch_resize(v, t * kvd))
     let w = qd + 2l * kvd
     for (r in range64(t)) {
         let row = r * w
@@ -1229,8 +1314,9 @@ def transformer_rows(tf : PocketTransformer; var x : array<float>; t, pos0 : int
     }
 }
 
-def private caches_init(var caches : array<TtsKvCache>; tf : PocketTransformer; cap : int64) {
-    caches |> resize(length(tf.layers))
+def private caches_init(@scratch @exact_size var caches : array<TtsKvCache>; tf : PocketTransformer;
+                        cap : int64) {
+    unsafe(scratch_resize(caches, length(tf.layers)))
     for (kc in caches) {
         kv_cache_init(kc, tf.kv_heads, tf.dh, cap)
     }
@@ -1240,15 +1326,9 @@ def private caches_init(var caches : array<TtsKvCache>; tf : PocketTransformer; 
 
 // ===== the codec stream: a chunk or a clip in windows, each conv carrying its last rows =====
 
-//! the rows a conv sees again ahead of a window: a forward conv its last `k - stride` inputs
-//! (the causal pad's width, zeros before the first window), a transposed one the inputs whose
-//! taps reach past the rows it emitted
-def private carry_rows(c : TtsConv1d) : int64 =>
-    c.transposed ? (c.k + c.stride - 1l) / c.stride - 1l : c.k - c.stride
-
 def private carry_init(var cr : PocketConvCarry; c : TtsConv1d) {
-    cr.n = c.transposed ? 0l : carry_rows(c)
-    cr.rows |> reserve_resize(cr.n * c.cin)
+    cr.n = c.transposed ? 0l : conv1d_carry_rows(c)
+    unsafe(scratch_resize(cr.rows, cr.n * c.cin))
     for (i in range64(cr.n * c.cin)) {
         cr.rows[i] = 0.0
     }
@@ -1266,10 +1346,10 @@ def private carry_replicate(var cr : PocketConvCarry; x : array<float>; n, w : i
 [arch(at="../ARCHITECTURE_POCKET.md#pocket-codec-stream")]
 def private stream_conv(c : TtsConv1d; var cr : PocketConvCarry; x : array<float>; n : int64; var sc : PocketScratch; @scratch @exact_size var y : array<float>) : int64 {
     let w = c.cin
-    let need = carry_rows(c)
+    let need = conv1d_carry_rows(c)
     let tin = cr.n + n
     if (cr.n > 0l) {
-        sc.cs |> reserve_resize(tin * w)
+        unsafe(scratch_resize(sc.cs, tin * w))
         copy_floats(cr.rows, 0l, sc.cs, 0l, cr.n * w)
         copy_floats(x, 0l, sc.cs, cr.n * w, n * w)
     }
@@ -1281,7 +1361,7 @@ def private stream_conv(c : TtsConv1d; var cr : PocketConvCarry; x : array<float
             conv1d_rows(c, cr.n > 0l ? sc.cs : x, tin, sc.ct)
         }
         t_out = n * c.stride
-        y |> reserve_resize(t_out * c.cout_s)
+        unsafe(scratch_resize(y, t_out * c.cout_s))
         copy_floats(sc.ct, cr.n * c.stride * c.cout_s, y, 0l, t_out * c.cout_s)
     } else {
         conv1d_rows(c, cr.n > 0l ? sc.cs : x, tin, y)
@@ -1292,7 +1372,7 @@ def private stream_conv(c : TtsConv1d; var cr : PocketConvCarry; x : array<float
         if (cr.n > 0l) {
             copy_floats(sc.cs, (tin - need) * w, cr.rows, 0l, need * w)
         } else {
-            cr.rows |> reserve_resize(need * w)
+            unsafe(scratch_resize(cr.rows, need * w))
             copy_floats(x, (n - need) * w, cr.rows, 0l, need * w)
         }
         cr.n = need
@@ -1328,8 +1408,19 @@ typedef PocketFramesGpuFn = function<(m : PocketModel; var vs : PocketVoiceState
 //! appended on the host; false = declined, the caches untouched.
 typedef PocketPromptGpuFn = function<(m : PocketModel; var vs : PocketVoiceState; n_txt : int64; var sc : PocketScratch) : bool>
 
+//! A voice's state from its latent frames [frames][latent_dim]: `voice_state_from_latents`' second half - the speaker
+//! projection, the BOS row ahead of it, the backbone at positions 0.. - every layer's cache appended on the host; `vs.len`
+//! is the rows and the caches are sized and empty on entry. false = declined, the caches untouched.
+typedef PocketVoiceGpuFn = function<(m : PocketModel; lat : array<float>; frames : int64; var vs : PocketVoiceState; var sc : PocketScratch) : bool>
+
+//! The codec encoder as a whole: a clip's samples to its latent frames [frames][latent_dim] in `latents`, the frames back -
+//! `pocket_encode_latents`' contract; below zero = declined.
+typedef PocketEncodeGpuFn = function<(m : PocketModel; pcm : array<float>; var sc : PocketScratch; @scratch @exact_size var latents : array<float>) : int64>
+
 //! A driver's seats, one per stage; a seat left empty keeps the CPU form for that stage.
 struct PocketGpuDriver {
+    encode : PocketEncodeGpuFn
+    voice : PocketVoiceGpuFn
     codec : PocketCodecGpuFn
     frames : PocketFramesGpuFn
     prompt : PocketPromptGpuFn
@@ -1342,6 +1433,10 @@ let private PK_SEAT_CODEC = 0
 let private PK_SEAT_FRAMES = 1
 let private PK_SEAT_PROMPT = 2
 var private g_pk_seats <- tts_seats(["codec", "frames", "prompt"])
+
+//! the registered seat record: what a caller that withdraws one seat registers the rest of
+[cold_path]
+def pocket_gpu_driver() : PocketGpuDriver => g_pk_drv
 
 [arch(at = "../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
 def register_pocket_gpu(drv : PocketGpuDriver) {
@@ -1370,6 +1465,15 @@ def pocket_encode_latents(m : PocketModel; pcm : array<float>; var sc : PocketSc
     if (!m.cloning) {
         panic("dasLLAMA pocket: this file carries no codec encoder, so it cannot encode a clip")
     }
+    if (g_pk_drv.encode != null) {
+        g_pk_encode_calls++
+        let served = invoke(g_pk_drv.encode, m, pcm, sc, latents)
+        if (served >= 0l) {
+            g_pk_encode_served++
+            return served
+        }
+    }
+    pocket_cpu_refuse(m, "codec encoder")
     let mm & = unsafe(m.mimi)
     let n = long_length(pcm)
     let frames = (n + m.frame_samples - 1l) / m.frame_samples
@@ -1378,7 +1482,7 @@ def pocket_encode_latents(m : PocketModel; pcm : array<float>; var sc : PocketSc
     let fs = mm.frame_steps
     let ld = mm.downsample.cout_s
     var ec & = unsafe(sc.enc_carry)
-    ec |> resize(3l + 2l * nr)
+    unsafe(scratch_resize(ec, 3l + 2l * nr))
     carry_init(ec[0], mm.enc_in)
     for (i in range64(nr)) {
         carry_init(ec[1l + 2l * i], mm.enc_res[i].conv1)
@@ -1433,11 +1537,12 @@ def pocket_decode_latents(m : PocketModel; latents : array<float>; frames : int6
             return
         }
     }
+    pocket_cpu_refuse(m, "codec")
     let mm & = unsafe(m.mimi)
     let nr = long_length(mm.ratios)
     let ld = mm.quant_proj.cin
     var dc & = unsafe(sc.dec_carry)
-    dc |> resize(3l + 2l * nr)
+    unsafe(scratch_resize(dc, 3l + 2l * nr))
     carry_init(dc[0], mm.upsample)
     carry_init(dc[1], mm.dec_in)
     for (i in range64(nr)) {
@@ -1446,7 +1551,7 @@ def pocket_decode_latents(m : PocketModel; latents : array<float>; frames : int6
     }
     carry_init(dc[2l + 2l * nr], mm.dec_out)
     caches_init(sc.codec_caches, mm.dec_tf, frames * mm.frame_steps)
-    wave |> reserve_resize(frames * m.frame_samples)
+    unsafe(scratch_resize(wave, frames * m.frame_samples))
     let window = codec_window(frames)
     let stride = mm.dec_out.cout
     var f0 = 0l
@@ -1454,7 +1559,7 @@ def pocket_decode_latents(m : PocketModel; latents : array<float>; frames : int6
     var out = 0l
     while (f0 < frames) {
         let n = min(window, frames - f0)
-        sc.lw |> reserve_resize(n * ld)
+        unsafe(scratch_resize(sc.lw, n * ld))
         copy_floats(latents, f0 * ld, sc.lw, 0l, n * ld)
         conv1d_rows(mm.quant_proj, sc.lw, n, sc.ca)
         compact_rows(sc.ca, n, mm.quant_proj.cout_s, mm.quant_proj.cout)
@@ -1511,8 +1616,18 @@ def voice_state_from_latents(m : PocketModel; lat : array<float>; frames : int64
     var inscope vs = PocketVoiceState()
     let d = m.backbone.d
     let bos = m.bos_before_voice ? 1l : 0l
+    vs.len = frames + bos
+    caches_init(vs.caches, m.backbone, vs.len + chunk_rows(int64(POCKET_MAX_TOKENS)))
+    if (g_pk_drv.voice != null) {
+        g_pk_voice_calls++
+        if (invoke(g_pk_drv.voice, m, lat, frames, vs, sc)) {
+            g_pk_voice_served++
+            return <- vs
+        }
+    }
+    pocket_cpu_refuse(m, "voice state's backbone pass")
     var inscope rows : array<float>
-    rows |> reserve_resize((frames + bos) * d)
+    rows |> reserve_resize(vs.len * d)
     var inscope proj : array<float>
     linear_rows(m.speaker_proj, lat, frames, proj)
     for (j in range64(bos * d)) {
@@ -1521,11 +1636,22 @@ def voice_state_from_latents(m : PocketModel; lat : array<float>; frames : int64
     for (i in range64(frames * d)) {
         rows[bos * d + i] = proj[i]
     }
-    vs.len = frames + bos
-    caches_init(vs.caches, m.backbone, vs.len + chunk_rows(int64(POCKET_MAX_TOKENS)))
     transformer_rows(m.backbone, rows, vs.len, 0l, vs.caches, sc, kv_only_last = true)
     return <- vs
 }
+
+var private g_pk_voice_calls = 0
+var private g_pk_voice_served = 0
+var private g_pk_encode_calls = 0
+var private g_pk_encode_served = 0
+
+//! the encoder seat's clips (with a driver registered) and those it served - once a cloned voice, so it stays out of `pocket_gpu_seats`
+[cold_path]
+def pocket_encode_gpu_stats() : tuple<calls : int; served : int> => (calls = g_pk_encode_calls, served = g_pk_encode_served)
+
+//! the voice seat's voice states (a driver registered) and those it served - a voice, not a chunk, so out of `pocket_gpu_seats`
+[cold_path]
+def pocket_voice_gpu_stats() : tuple<calls : int; served : int> => (calls = g_pk_voice_calls, served = g_pk_voice_served)
 
 //! Add (or replace) a voice: `pcm` at the model's sample rate, mono. It joins the roster under
 //! `name` once its state is built (a clip the encoder refuses leaves no half voice behind), a replaced
@@ -1794,6 +1920,7 @@ def pocket_text_ids(m : PocketModel; prepared : string) : array<int64> =>
     <- unigram_encode(m.tok, prepared, m.unk_id, m.byte_fallback, m.reserved_ids)
 
 let POCKET_MAX_TOKENS = 50   // the reference driver's chunk budget; past it the model skips words
+let POCKET_HARD_TOKENS = 200   //! the longest piece a chunk keeps whole: its frames beside a sixty-second voice fit a GPU seat's 2048-key stage
 
 // the ids of a marker string less its leading dummy-space piece
 def private marker_ids(m : PocketModel; s : string) : array<int64> {
@@ -1863,9 +1990,28 @@ def private warn_over_budget(n, max_tokens : int; text : string) {
     to_log(LOG_WARNING, "dasLLAMA pocket: a chunk of {n} tokens over the {max_tokens} budget, the model may skip words: '{text}'\n")
 }
 
-//! The chunks one text takes, the reference driver's rule: the whole text prepared, split on
-//! its sentence-mark ids (a decimal point excepted), an over-long sentence re-split on its
-//! comma, semicolon and colon ids, then regrouped under the token budget; a piece nothing splits stays whole, warned.
+//! a piece no mark splits, past `POCKET_HARD_TOKENS`, cut at its spaces into runs of at most that many; one word past the cap stays whole
+def private hard_split(m : PocketModel; text : string; var out : array<PocketSegment>) {
+    var inscope words <- split(strip(text), " ")
+    var cur = ""
+    var cur_n = 0
+    for (w in words) {
+        continue if (empty(w))
+        var inscope ids <- pocket_text_ids(m, w)
+        let n = length(ids)
+        if (!empty(cur) && cur_n + n > POCKET_HARD_TOKENS) {
+            out |> push(PocketSegment(n = cur_n, text = cur))
+            cur = ""
+            cur_n = 0
+        }
+        cur = empty(cur) ? w : "{cur} {w}"
+        cur_n += n
+    }
+    if (!empty(cur)) {
+        out |> push(PocketSegment(n = cur_n, text = cur))
+    }
+}
+
 [arch(at="../ARCHITECTURE_POCKET.md#pocket-chunker")]
 def pocket_chunks(m : PocketModel; text : string; max_tokens : int = POCKET_MAX_TOKENS) : array<string> {
     var inscope chunks : array<string>
@@ -1887,7 +2033,11 @@ def pocket_chunks(m : PocketModel; text : string; max_tokens : int = POCKET_MAX_
             refined |> push_from(subs)
         } else {
             warn_over_budget(s.n, max_tokens, s.text)
-            refined |> push(s)
+            if (s.n > POCKET_HARD_TOKENS) {
+                hard_split(m, s.text, refined)
+            } else {
+                refined |> push(s)
+            }
         }
     }
     var inscope cur : array<string>
@@ -2115,6 +2265,7 @@ def private prompt_rows(m : PocketModel; ids : array<int64>; var vs : PocketVoic
             return
         }
     }
+    pocket_cpu_refuse(m, "prompt's backbone pass")
     transformer_rows(m.backbone, sc.rows, n_txt, vs.len, vs.caches, sc, kv_only_last = true)
 }
 
@@ -2172,6 +2323,7 @@ def pocket_synthesize(m : PocketModel; ids : array<int64>; var vs : PocketVoiceS
             tts_seat_served(g_pk_seats, PK_SEAT_FRAMES)
         }
     }
+    pocket_cpu_refuse(m, served ? "" : "frame loop")
     while (!served && frames < max_frames) {
         let tb = ref_time_ticks()
         let eos = frame_step(m, vs, vs.len + n_txt + frames, sc)
@@ -2212,6 +2364,7 @@ def pocket_synthesize(m : PocketModel; ids : array<int64>; var vs : PocketVoiceS
 //! The full chunk path in one call: a roster voice (encoded on first use) speaks one chunk,
 //! prepared here as the reference prepares each of its chunks; the facade's entry.
 def pocket_speak(var m : PocketModel; chunk : string; voice : string; temp : float; seed : uint64; var tm : TtsTimings; var sc : PocketScratch) : int64 {
+    pocket_entry_refuse(m)
     ensure_voice_state(m, voice, sc)
     let p = prepare_pocket_text(m, chunk)
     var inscope ids <- pocket_text_ids(m, p.prepared)

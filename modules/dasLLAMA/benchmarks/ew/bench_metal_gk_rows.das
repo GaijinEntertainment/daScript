@@ -506,26 +506,96 @@ def private ple_proj_rows : array<Reading> {
     return <- rows
 }
 
-//! the Pocket frame's row GEMV at the backbone's 1024: the bare dot and the normed, modulated SiLU over the slab's f32 rows
+//! the Pocket row GEMV race stamps' shell: the shipped f32 template (`TtsPkGemvF32T`) at another `ROWS`, the rows a threadgroup
+//! takes - 32 lanes each, x staged once for them all
+[ |> template_struct_instance]
+class template BenchPkGemvT : TtsPkGemvF32T {
+    override RSQRT = true
+    override QUAD = false
+    [metal_kernel]
+    def bench_pk_gemv {
+        pk_gemv_body(gl_WorkGroupID.x, gl_LocalInvocationID.x)
+    }
+}
+
+[metal_dispatch(name = "bench_enc_pk_gemv_r16", pso = "g_bench_pso_pk_gemv_r16", tgmem = "BenchPkGemvR16_bench_pk_gemv_msl_tgmem", tg = 512, grid = "nout/16",
+    params = "nout : int64")]
+class BenchPkGemvR16 : BenchPkGemvT {
+    override ROWS = 16
+}
+
+[metal_dispatch(name = "bench_enc_pk_gemv_r4", pso = "g_bench_pso_pk_gemv_r4", tgmem = "BenchPkGemvR4_bench_pk_gemv_msl_tgmem", tg = 128, grid = "nout/4",
+    params = "nout : int64")]
+class BenchPkGemvR4 : BenchPkGemvT {
+    override ROWS = 4
+}
+
+[metal_dispatch(name = "bench_enc_pk_gemv_r8", pso = "g_bench_pso_pk_gemv_r8", tgmem = "BenchPkGemvR8_bench_pk_gemv_msl_tgmem", tg = 256, grid = "nout/8",
+    params = "nout : int64")]
+class BenchPkGemvR8 : BenchPkGemvT {
+    override ROWS = 8
+}
+
+[metal_dispatch(name = "bench_enc_pk_gemv_r32", pso = "g_bench_pso_pk_gemv_r32", tgmem = "BenchPkGemvR32_bench_pk_gemv_msl_tgmem", tg = 1024, grid = "nout/32",
+    params = "nout : int64")]
+class BenchPkGemvR32 : BenchPkGemvT {
+    override ROWS = 32
+}
+
+var private g_bench_pso_pk_gemv_r16 : MetalComputePipeline?
+var private g_bench_pso_pk_gemv_r4 : MetalComputePipeline?
+var private g_bench_pso_pk_gemv_r8 : MetalComputePipeline?
+var private g_bench_pso_pk_gemv_r32 : MetalComputePipeline?
+
+//! The Pocket frame's row GEMV at the backbone's 1024 x 1024, the plain dot over the slab's f32 rows, raced over the rows a
+//! threadgroup takes: sixteen (the shipped stamps' `ROWS`, the baseline, held to the dot in double) against four, eight and
+//! thirty-two, each held to the baseline's rows
 def private pk_rows : array<Reading> {
     let n = 1024
-    var bw = fill_buf(n * n + 4 * n, 0.01)
+    var rows : array<Reading>
+    var ok = true
+    g_bench_pso_pk_gemv_r16 = compile_stamp(BenchPkGemvR16_bench_pk_gemv_msl, ok)
+    g_bench_pso_pk_gemv_r4 = compile_stamp(BenchPkGemvR4_bench_pk_gemv_msl, ok)
+    g_bench_pso_pk_gemv_r8 = compile_stamp(BenchPkGemvR8_bench_pk_gemv_msl, ok)
+    g_bench_pso_pk_gemv_r32 = compile_stamp(BenchPkGemvR32_bench_pk_gemv_msl, ok)
+    if (!ok) {
+        to_log(LOG_ERROR, "race pk gemv: a ROWS stamp failed to compile\n")
+        return <- rows
+    }
+    var bw = fill_buf(n * n + n, 0.01)
     var bx = fill_buf(n, 0.5)
     var by = fill_buf(n, 0.0)
-    var bmod = fill_buf(3 * n, 0.1)
-    var ka = GkPkGemvArgs(nin = uint(n), nout = uint(n), stride = uint(n), eps = 1e-6, boff = uint(n * n), lwoff = uint(n * n + n),
-        lboff = uint(n * n + 2 * n))
-    var rows <- [
-        time_rows("pk gemv dot nin={n} nout={n}") $(enc) {
-            enc_pk_gemv_f32(enc, bw, bx, by, ka, int64(n))
-        },
-        time_rows("pk gemv ln silu nin={n} nout={n}") $(enc) {
-            enc_pk_gemv_f32_ln_silu(enc, bw, bx, by, bmod, ka, int64(n))
+    var ka = GkPkGemvArgs(nin = uint(n), nout = uint(n), stride = uint(n), eps = 1e-6, boff = uint(n * n))
+    var ref : array<double>
+    ref |> reserve(n)
+    for (o in range(n)) {
+        var acc = double(pat(n * n + o, 0.01))
+        for (i in range(n)) {
+            acc += double(pat(o * n + i, 0.01)) * double(pat(i, 0.5))
         }
-    ]
-    for (buf in fixed_array(bw, bx, by, bmod)) {
+        ref |> push(acc)
+    }
+    let names <- ["ROWS 16 (the shipped stamps')", "ROWS 4 (bench stamp)", "ROWS 8 (bench stamp)", "ROWS 32 (bench stamp)"]
+    race_rows("pk gemv dot nin={n} nout={n}", names, ref, rows, $ {
+        fill_pattern(by, n, 0.0)
+    }, $(var got) {
+        got |> push_from(read_floats(by, n))
+    }, $(enc, a) {
+        if (a == 0) {
+            bench_enc_pk_gemv_r16(enc, bw, bx, by, ka, int64(n))
+        } elif (a == 1) {
+            bench_enc_pk_gemv_r4(enc, bw, bx, by, ka, int64(n))
+        } elif (a == 2) {
+            bench_enc_pk_gemv_r8(enc, bw, bx, by, ka, int64(n))
+        } else {
+            bench_enc_pk_gemv_r32(enc, bw, bx, by, ka, int64(n))
+        }
+    })
+    for (buf in fixed_array(bw, bx, by)) {
         metal_release(buf)
     }
+    release_handles(g_bench_pso_pk_gemv_r16, g_bench_pso_pk_gemv_r4, g_bench_pso_pk_gemv_r8, g_bench_pso_pk_gemv_r32)
+    delete ref
     return <- rows
 }
 

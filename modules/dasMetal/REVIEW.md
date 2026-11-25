@@ -11,81 +11,82 @@ the diff puts it.**
 **An emitted-text or fail-closed fixture answers to `tests/msl/REVIEW.md` (repo root), wherever
 the diff puts it.**
 
-The W staging stride is the threadgroup row stride `tmm2d_helper_text` (`metal/msl_emit.das`)
-writes: its `dstp` index and the row stride in the W tensor's `metal::array<int32_t, 2>{1, N}`
-argument.
+**A diff that changes the MSL text any `[metal_kernel]` body can produce, with or without a
+`name=` argument, ships a `tests/msl/` (repo root) fixture asserting the new text, in the same
+change.**
 
-- **A diff that changes the MSL text any `[metal_kernel]` body can produce, with or without a
-  `name=` argument, ships a `tests/msl/` (repo root) fixture asserting the new text, in the same
-  change.**
+**A diff that adds an emit shape to `metal/msl_emit.das` gives it a census kind no other emit
+shape records.** An emit shape is a text one emitter code path produces; the same text emitted
+for another builtin name is a second shape. A census kind is a label `declared_msl_census`
+(`tests/msl/_msl_common.das`, repo root) declares. Shapes sharing a kind let either go untested.
 
-- **A diff that adds an emit shape to `metal/msl_emit.das` gives it a census kind no other emit
-  shape records.** An emit shape is one distinct text one emitter code path can produce - the
-  same text under another name is a second shape; a census kind is the construct label the
-  emitter records at emit time, declared in `declared_msl_census` (`tests/msl/_msl_common.das`,
-  repo root). Two shapes sharing one kind lets either one go untested.
+**A diff that adds a code path to `metal/msl_emit.das` whose text varies by the type filling a
+place in that text puts the type's `census_class` (`daslib/shader_emit_common.das`, repo root), or
+its type name, in the path's census kind.** Without it the census counts an `f16` and an `f32`
+instantiation as one covered construct.
 
-- **A new or changed `[metal_kernel]` annotation argument that declares or sets a module-level
-  global other than the kernel's MSL text - a compile option among them - ships a `tests/msl/`
-  (repo root) fixture asserting that global, in the same change.**
+**A new or changed `[metal_kernel]` annotation argument that declares or sets a module-level
+global other than the kernel's MSL text - a compile option among them - ships a `tests/msl/`
+(repo root) fixture asserting that global, in the same change.**
 
-- **A diff that adds an MSL emitter rejection a `[metal_kernel]` body can reach, widens an
-  existing one's condition, or changes a rejection's message text ships a
-  `tests/msl/_fail_closed/` (repo root) fixture asserting that rejection's needle, in the same
-  change.** An error needle is the substring of the compile error that names the rejected
-  construct.
+**A diff that adds an MSL emitter rejection a `[metal_kernel]` body can reach, widens an
+existing one's condition, or changes a rejection's message text ships a
+`tests/msl/_fail_closed/` (repo root) fixture asserting that rejection's needle, in the same
+change.** An error needle is the substring of the compile error that names the rejected
+construct.
 
-- **A kernel behavioral change ships a CPU-oracle test under `tests/metal/` (repo root).** A
-  kernel behavioral change is a diff that changes the values any dispatch of an existing kernel
-  writes, or which dispatch sizes it accepts; a CPU-oracle test compares the GPU result against
-  a CPU-computed expectation.
+**A kernel behavioral change ships a CPU-oracle test under `tests/metal/` (repo root).** A
+kernel behavioral change is a diff that changes the values any dispatch of an existing kernel
+writes, or which dispatch sizes it accepts; a CPU-oracle test compares the GPU result against
+a CPU-computed expectation.
 
-- **Never commit a `.msl` file and never hand-write MSL outside `metal/msl_emit.das`'s emitted
-  text - emit it from a `[metal_kernel]` body instead.**
+**Never commit a `.msl` file and never hand-write MSL outside `metal/msl_emit.das`'s emitted
+text - emit it from a `[metal_kernel]` body instead.**
 
-- **A new or changed host extern - a function `src/dasMetal.mm` binds into daslang - or a new or
-  changed public function in `metal/das_metal_boost.das` ships a host-side test under
-  `tests/metal/` (repo root) in the same change.**
+**A new or changed host extern - a function `src/dasMetal.mm` binds into daslang - or a new or
+changed public function in `metal/das_metal_boost.das` ships a host-side test under
+`tests/metal/` (repo root) in the same change.**
 
-- **Weakening `REVIEW.das`'s descriptor check is a defect.** That check requires every
-  `matmul2d_descriptor` written in `metal/msl_emit.das` to set `relaxed_precision = true`.
-  Scanning less than all of `metal/msl_emit.das` weakens it. So does making its finding text
-  stop naming what failed. `relaxed_precision = false` keeps the op off the tensor-unit fast
-  path.
+**Weakening `REVIEW.das`'s descriptor check is a defect.** That check requires every
+`matmul2d_descriptor` written in `metal/msl_emit.das` to set `relaxed_precision = true`.
+Scanning less than all of `metal/msl_emit.das` weakens it. So does making its finding text
+stop naming what failed. `relaxed_precision = false` keeps the op off the tensor-unit fast
+path.
 
-- **Weakening `REVIEW.das`'s fail-closed sync check is a defect.** That check requires every
-  `tests/msl/_fail_closed/` fixture to have a `check_rejects` call in
-  `tests/msl/uncategorized_no_aot.das` (repo root), and every such call to have a fixture.
+**Weakening `REVIEW.das`'s fail-closed sync check is a defect.** That check requires every
+`tests/msl/_fail_closed/` fixture to have a `check_rejects` call in
+`tests/msl/uncategorized_no_aot.das` (repo root), and every such call to have a fixture.
 
-- **Weakening the `REVIEW.das` shim pool check (`ARCHITECTURE.md#shim-autorelease-pools`) is a
-  defect.** That check requires every Objective-C property read in `src/dasMetal.mm` to sit
-  inside an `@autoreleasepool` block. Scanning less than all of `src/dasMetal.mm` weakens it, and
-  so does adding to its `SCALAR_GETTERS` list a getter that returns an object or a pointer into
-  the storage of an object.
+**Weakening the `REVIEW.das` shim pool check (`ARCHITECTURE.md#shim-autorelease-pools`) is a
+defect.** That check requires every Objective-C property read in `src/dasMetal.mm` to sit
+inside an `@autoreleasepool` block. Scanning less than all of `src/dasMetal.mm` weakens it, and
+so does adding to its `SCALAR_GETTERS` list a getter that returns an object or a pointer into
+the storage of an object.
 
-- **A diff that makes `metal/msl_emit.das` emit a write to an element of a tensor
-  `get_destination_cooperative_tensor` returned, before the first `run` into that tensor, is a
-  defect - drop the write; the call already returns the tensor zeroed.**
+**A diff that makes `metal/msl_emit.das` emit a write to an element of a tensor
+`get_destination_cooperative_tensor` returned, before the first `run` into that tensor, is a
+defect - drop the write; the call already returns the tensor zeroed.**
 
-- **A diff that changes `emit_tmm2d_tg_step_deva`'s `ldb` row stride (`metal/msl_emit.das`) also
-  changes `ldb` in `tmm2d_tg_step_deva` (`metal/metal_builtins.das`), in the same change.** The
-  CPU body of `tmm2d_tg_step_deva` repeats the emitted tile indexing, so a one-sided change makes
-  the CPU run read the wrong f16 elements with no compile error.
+**A diff that changes `emit_tmm2d_tg_step_deva`'s `ldb` row stride (`metal/msl_emit.das`) also
+changes `ldb` in `tmm2d_tg_step_deva` (`metal/metal_builtins.das`), in the same change.** The
+CPU body of `tmm2d_tg_step_deva` repeats the emitted tile indexing, so a one-sided change makes
+the CPU run read the wrong f16 elements with no compile error.
 
-- **A diff that changes the W staging stride changes the `wt` size documented on `tmm2d_q8u_f32`
-  (`metal/metal_builtins.das`) in the same change.** `wt` is the staged weight tile - the
-  dequantized W the emitter stores in threadgroup memory - and the documented size is the
-  caller's only statement of the stride.
+**A diff that changes the W staging stride - the threadgroup row stride `tmm2d_helper_text`
+(`metal/msl_emit.das`) writes in its `dstp` index and in the W tensor's
+`metal::array<int32_t, 2>{1, N}` argument - in the same change updates the `wt` size documented
+on `tmm2d_q8u_f32` (`metal/metal_builtins.das`) and resizes every `@workgroup` staging array a
+`tests/msl/` or `tests/metal/` (repo root) fixture sizes for that stride.** `wt` is the staged
+weight tile, and its documented size is the caller's only statement of the stride; nothing checks a
+fixture's allocation against the stride, so a one-sided change overruns it silently.
 
-- **A diff that changes the W staging stride also resizes every `@workgroup` staging array a
-  `tests/msl/` or `tests/metal/` (repo root) fixture sizes for that stride, in the same change.** Nothing checks
-  a fixture's allocation against the stride, so a one-sided change overruns it silently.
+**A diff that drops or lowers `options stack` in `metal/msl_shader.das` or `metal/msl_emit.das`
+is a defect.** The macro context takes the hosting module's stack, and the emitter interpreted -
+the first compile after an edit, before a JIT image exists - recurses past the default on the
+largest engine kernels (`stack overflow while calling emit_value`).
 
-- **A diff that drops or lowers `options stack` in `metal/msl_shader.das` or `metal/msl_emit.das` is a defect.** The
-  macro context takes the hosting module's stack, and the emitter interpreted - the first compile after an edit, before
-  a JIT image exists - recurses past the default on the largest engine kernels (`stack overflow while calling emit_value`).
-
-- **A diff that makes `metal/msl_emit.das` pick a builtin's lowering from anything other than the
-  das function name and, for a pointer operand, its pointee type is a defect.** Nothing else
-  tells the builtins apart, and the generic parameters of the builtins let the compiler accept
-  any operand, so only the emitter rejects a wrong one.
+**A diff that makes `metal/msl_emit.das` select which lowering branch runs for a builtin from
+anything other than the das function name and, for a pointer operand, its pointee type is a
+defect; a type name the chosen branch writes may come from the call's resolved types.** Nothing
+else tells the builtins apart, and their generic parameters accept any operand, so only the
+emitter rejects a wrong one.

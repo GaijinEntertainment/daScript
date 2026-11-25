@@ -154,7 +154,7 @@ def private cud_init_first() : bool {
     cuda_set_launch_pdl(g_cud.sm >= 90 && g_env_vulkan.cuda_pdl != 0l)   // every kernel of the home comes through the emitter, which puts the entry wait in each
     g_cud.driver = cuda_driver_version()
     g_cud.nvrtc = cuda_nvrtc_version()
-    to_log(LOG_INFO, "dasLLAMA cuda tier: device ready ({g_cud.name}, {g_cud.sm_count} SMs, sm_{g_cud.sm}, driver {g_cud.driver}, nvrtc {g_cud.nvrtc}, programmatic dependent launch {cuda_launch_pdl() ? "on" : "off"})\n")
+    to_log(LOG_INFO, "dasLLAMA cuda tier: device ready ({g_cud.name}, {g_cud.sm_count} SMs, sm_{g_cud.sm}, driver {g_cud.driver}, nvrtc {g_cud.nvrtc}, programmatic dependent launch {cuda_launch_pdl() ? "on" : "off"}, the TTS seats' shots in plain stream order by default)\n")
     return true
 }
 
@@ -288,24 +288,33 @@ def cud_mapped_free(var m : CudMapped) {
 //! the class modules whose kernels with no shared memory leave the carveout to the driver: the tower families' own
 let private CUD_L1_CLASS_MODULES = fixed_array("dasllama_cuda_classes_front", "dasllama_cuda_classes_blocks", "dasllama_cuda_classes_asr")
 
-//! the class modules whose every kernel leaves the carveout to the driver, shared memory or none: a family whose kernels all
-//! re-read one small plane (the rows tensor leaf's feed, read by every tile)
-let private CUD_L1_FAMILY_MODULES = fixed_array("dasllama_cuda_classes_rows")
+//! the class modules whose every kernel leaves the carveout to the driver, shared memory or
+//! none: a family whose kernels re-read one plane through L1 (the rows tensor leaf's feed, read
+//! by every tile; the TTS recurrence's matrix, every step)
+let private CUD_L1_FAMILY_MODULES = fixed_array("dasllama_cuda_classes_rows",
+    "dasllama_cuda_classes_tts")
 
-var private g_cud_l1_full = false   //! the tower class modules' no-smem kernels take the full carveout too (`set_cuda_tower_carveout_full`)
+def cud_l1_scoped(class_module : string; smem : uint64) : bool {
+    //! a kernel of `class_module` taking `smem` bytes of shared memory leaves the carveout to the
+    //! driver under the policy
+    return (has_value(CUD_L1_FAMILY_MODULES, class_module)
+        || (smem == 0ul && has_value(CUD_L1_CLASS_MODULES, class_module)))
+}
+
+var private g_cud_l1_full = false   //! the scoped kernels (`cud_l1_scoped`) take the full carveout too (`set_cuda_tower_carveout_full`)
 var private g_cud_l1_fns : array<void?>   //! the loaded kernels the scoped policy leaves to the driver, this epoch's
 var private g_cud_l1_epoch = -1
 
 //! the carveout a scoped kernel asks under the policy: the whole of it, or the driver's split (-1, the driver default)
 def private cud_l1_carveout : int => g_cud_l1_full ? 100 : -1
 
-//! Test A/B seat: the tower class modules' no-smem kernels on the full carveout (`on`) or the driver's split, re-applied to every
+//! Test A/B seat: the scoped kernels (`cud_l1_scoped`) on the full carveout (`on`) or the driver's split, re-applied to every
 //! kernel already loaded; answers the setting it replaced
 def set_cuda_tower_carveout_full(on : bool) : bool {
     let was = g_cud_l1_full
     g_cud_l1_full = on
     if (on != was) {
-        to_log(LOG_INFO, "dasLLAMA cuda tier: set_cuda_tower_carveout_full({on}) - the tower class modules' kernels with no shared memory take {on ? "the full carveout" : "the driver's split"}\n")
+        to_log(LOG_INFO, "dasLLAMA cuda tier: set_cuda_tower_carveout_full({on}) - the scoped kernels (`cud_l1_scoped`) take {on ? "the full carveout" : "the driver's split"}\n")
         if (g_cud_l1_epoch == g_cud_epoch) {
             for (fn in g_cud_l1_fns) {
                 cuda_function_set_shared_carveout(fn, cud_l1_carveout())
@@ -353,7 +362,7 @@ def cud_class_fn(var c : CudClass; ord : int; text, entry : string; smem : uint6
     c.smem[ord] = uint(smem)
     c.blocks[ord] = blk
     let threads = int(blk.x * blk.y * blk.z)
-    let scoped = has_value(CUD_L1_FAMILY_MODULES, class_module) || (smem == 0ul && has_value(CUD_L1_CLASS_MODULES, class_module))
+    let scoped = cud_l1_scoped(class_module, smem)
     if (scoped) {
         if (g_cud_l1_epoch != g_cud_epoch) {
             g_cud_l1_fns |> clear()
@@ -551,6 +560,12 @@ def cud_off_rung_names : array<string> {
     var names <- [for (k in keys(g_cud_off_rung)); k]
     names |> sort()
     return <- names
+}
+
+//! Per-kernel launch counts (name -> count): every seeded [cuda_dispatch] kernel appears, so a 0 row is compiled but never launched
+def cud_kernel_coverage() : table<string; int64> {
+    var out <- {for (name in keys(g_cud_ensures)); name => int64(g_cud_census?[name] ?? 0)}
+    return <- out
 }
 
 //! the launches `kernel` took this process; a name nothing seeded panics, so a misspelt key cannot read as a zero count

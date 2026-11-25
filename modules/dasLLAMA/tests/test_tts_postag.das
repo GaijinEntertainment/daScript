@@ -21,6 +21,7 @@ require _model_form   // own_load: the load budget's own load
 def private tagger_path() : string => path_join(models_dir(), "tts_postag.bin")
 
 def private tagger_present(t : T?) : bool {
+    return false if (!family_on(t, "g2p"))
     let f = fopen(tagger_path(), "rb")
     if (f == null) {
         t |> skip("tts_postag.bin absent in {models_dir()}")

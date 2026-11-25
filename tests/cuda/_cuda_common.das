@@ -171,6 +171,22 @@ class Precise {
     }
 }
 
+//! `fastmath = false`: the text carries `__DAS_NO_FAST_MATH__` and compiles without `--use_fast_math`, so a quotient and a
+//! square root round as the CPU's
+class NoFastMath {
+    @ssbo @binding = 0 a : array<float>
+    @ssbo @binding = 1 b : array<float>
+    @ssbo @binding = 2 c : array<float>
+    @ssbo @binding = 3 d : array<float>
+
+    [cuda_kernel(name="nofastmath_cuda", local_size_x = 64, fastmath = false), marker(no_coverage)]
+    def nofastmath {
+        let i = gl_GlobalInvocationID.x
+        c[i] = a[i] / b[i]
+        d[i] = sqrt(a[i])
+    }
+}
+
 //! componentwise float4/int2 infix, vector-scalar broadcast, vector negate, das's scalar-bool
 //! vector ==/!=, swizzles, the ctor, splat and convert forms
 class VecArith {
@@ -1738,6 +1754,7 @@ def public declared_cuda_census : table<string> {   // nolint:STYLE038 - one fla
         "param.kargs",
         "preamble",
         "prelude.half",
+        "prelude.no_fast_math",
         "stmt.assign",
         "stmt.break",
         "stmt.call_atomic",
@@ -1778,7 +1795,7 @@ def public declared_cuda_census : table<string> {   // nolint:STYLE038 - one fla
 
 def public all_cuda_censuses : array<string> {
     return <- [mul_ab_cuda_census, axpy_cuda_census, uarith_cuda_census, iarith_cuda_census, farith_cuda_census,
-        precise_cuda_census, vecarith_cuda_census, control_cuda_census, mathcalls_cuda_census, reduce_cuda_census, halfarith_cuda_census,
+        precise_cuda_census, nofastmath_cuda_census, vecarith_cuda_census, control_cuda_census, mathcalls_cuda_census, reduce_cuda_census, halfarith_cuda_census,
         userfns_cuda_census, atomics_cuda_census, consttab_cuda_census, lattice_cuda_census, ptrs_cuda_census,
         alias_cuda_census, blocks_cuda_census, packs_cuda_census, coop_cuda_census, cm2_cuda_census, cm2flash_cuda_census, cm2flash_loads_first_cuda_census, cm2w8_cuda_census,
         cm2dec_cuda_census, cm2deck_cuda_census, cm2raw_cuda_census, cm2i8_cuda_census, intrin_cuda_census, intrin_fp4_cuda_census,
@@ -1795,6 +1812,7 @@ def public all_cuda_texts : array<tuple<name : string; text : string; entry : st
         (name = "iarith", text = iarith_cuda, entry = iarith_cuda_entry, min_cc = 0),
         (name = "farith", text = farith_cuda, entry = farith_cuda_entry, min_cc = 0),
         (name = "precise", text = precise_cuda, entry = precise_cuda_entry, min_cc = 0),
+        (name = "nofastmath", text = nofastmath_cuda, entry = nofastmath_cuda_entry, min_cc = 0),
         (name = "vecarith", text = vecarith_cuda, entry = vecarith_cuda_entry, min_cc = 0),
         (name = "control", text = control_cuda, entry = control_cuda_entry, min_cc = 0),
         (name = "mathcalls", text = mathcalls_cuda, entry = mathcalls_cuda_entry, min_cc = 0),

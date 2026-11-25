@@ -138,6 +138,9 @@ first tie, and an ulp-sized change anywhere - the f32 GEMV's summation order on 
 `x / d` for `x * (1 / d)` in the rounding - moves a step's top logit by more than one. The q8
 chain then lands anywhere in the band the reference build's quantized CPU path lands in by its
 attention form and batching, and the file's f32 chain is the reference a device chain is held to.
+A sampled speculative walk parts from the plain seeded walk where a draw lands near a boundary the
+verify row and the one-token decode place an ulp apart, on the CPU chains and on the Metal chain
+alike.
 
 The figures are a scratch probe's on the M5 Max (an engine build instrumented at every GEMV input,
 kept outside the tree), over `gemma-4-E2B-it-Q4_K_M.gguf` and the forced-feed cells' 48 prose ids
@@ -158,71 +161,6 @@ The tier kernels run from lambdas the job dispatch lifts out of the function tha
 
 Every format's repack is made of the same two moves over a row of units - a 256-weight superblock, or a 32-block - of `ubytes`: the quant-plane interleave, which stacks mr rows per group and lands column c of unit u in row r at `[g][u][c][r][colw]`, and the scale-plane interleave, which is field-major, `[g][u][field][i][r][width]`, the fields in destination order with their source offsets. Tail rows (`d % mr`) stay disk-order and the row-major dots serve them.
 
-### The bf16 tile keeps its sum in the matrix unit {#amx-bf16-tile}
-
-An int8 matrix tile (AMX TDPBSSD, and the reference build's own AMX path) accumulates in int32,
-and every quant format carries a scale every 32 weights, so the tile has to be stored and
-scale-folded at every block: that traffic is what made the int8 tile lose to the vector lattice
-on every box it was raced on. The `amx_bf16` perm of every superblock family and of the q8
-family has no fold.
-
-The batch wrapper dequantizes a row group's weights once per token block into a bf16 panel in
-the pair-interleaved B layout (`[group][k-step of 32][16 pair-rows][16 cols][2]`, every scale
-folded in) and widens the quantized activations to bf16 once per call (q times its block scale
-- the Q8_K superblock's, the Q8 block's - the same rounding the vector lanes multiply by); the
-tile then runs `TDPBF16PS` over all of K with C in the tiles and stores straight into y, so the
-K length is free. The tile covers 32 tokens (two A tiles) by one or two row groups (the perm's
-`nrsplit`, the tile-form companion's value). A tile form above 0 IS the 32-token tile, so the
-superblock families carry no tokstep companion (`amx_bf16_tile_tokens()`); the q8 family keeps
-its own, which the int8 tile also answers. A token tail short of the tile walks four tokens at a
-time through the family's `tile4` companion - the stamped perm's 4-token vector tile over the
-same int8 plane, the busd lattice like every amx companion - and the last one to three tokens,
-like a group tail short of the tile, through the gemv rows core. A batch shorter than the tile
-step runs no amx tile at all: the q8 kernels and the superblock cell take the vector walk
-(`q8q8_batch_cell_gen`, `kq_batch_cell_gen`) on `tile4`, which builds no activation plane and no
-bf16 panel and dispatches once - the decode step's four rows are that batch. A `tile4` stamped
-from an amx perm prefetches its weight stream a fixed distance ahead (`tile4_perm`, one prefetch a
-line, on the packed planes; a byte panel is the walk's fresh scratch): four tokens of dots a
-weight line leave the core too few lines in flight off DRAM without it, and the four-row step
-runs a fifth slower (`debug-jit`; `PERF_LEDGER.md`, the AMX short-batch arc). The
-panel amortizes over the token block, so the walk reads its block off `q8_token_block` floored
-at 512 tokens and rounded down to whole tiles (`bf16_token_block`), under no L2 clamp - a block
-the clamp cuts pays a second panel and a token tail - and it chunks its groups in whole tile units
-over the whole token range: a chunk of one group misses a two-group tile outright, and a token
-slice per cell rebuilds every panel per slice. The q8 family carries the leg on both scale
-planes - a Q8_0 GGUF keeps its binary16 weight scales, so a real q8 model prefills on the
-wscale_f16 twin, whose panel companion widens the f16 scales into the same panel.
-
-The panel is the tile's bill: written as a daslang loop it runs scalar and costs more than the
-matrix unit's whole multiply, so every panel is an emitted companion (`k4q8_panel_gen` and its
-siblings, one generator over eight 64-byte quads per block: the format's code planes decoded to
-a byte per weight - nibble split, the k5/k6/k3 high-bit planes, a `VPSHUFB` codebook for the
-LUT formats, the gemv's grid gather with the sign column applied for the five grid formats -
-then the per-row scale FMA and `vcvtneps2bf16`). That convert is an AVX512_BF16 instruction, a
-feature apart from `amx-bf16`: the perm requires both, the `x86-amx` class lists both, and a
-clone built without `avx512bf16` would call a soft-float routine for it. A quad is four consecutive weights of each of
-the group's 16 rows: quad `q` of a 32-weight block holds weights `4q..4q+3`, 4 bytes a row, 64
-bytes in all. The grp16 int8 plane's four-byte columns are already quads, so the q8 panel
-companion loads them as they lie and decodes nothing. A panel companion stamped from a perm
-that is not `amx_bf16` is an empty body - the tile form is 0 there and nothing calls it; its
-das body, which no stamp runs, is the row dequant scattered into the pair layout
-(`kq_panel_rows_bf16`).
-
-The numerics are a bf16 envelope of the vector route, the Metal f16-tile class, never
-bit-exact: the tuner gates every variant on that bar, and the q8 family's crown also passes the
-end-to-end confirm - a superblock family's crown is the race's alone. The tile ops are the raw
-immediate-tmm intrinsics: the cfg companion loads the full palette (eight 16x64 tiles) once per
-dispatch chunk after the witness's XTILEDATA grant. The tile operands are line-aligned where
-the walk owns them (the panel and the bf16 activation plane): Intel splits a tile row that
-straddles a cache line. The activation plane is a module global of the context that calls the
-batch kernel - one per inference thread; the kernel builds it before it dispatches, and no lane
-builds one, since a fork-pool lane owns no globals. The panels are that context's walk scratch
-(`walk_panels`): one panel per dispatch slot (`get_dispatch_slot_bound()`), each on its own
-cache lines with a line to spare, sized before the dispatch; the indexed dispatch
-(`maybe_parallel_for_indexed`) hands a chunk its slot's panel, so a chunk allocates nothing and
-two chunks never share one. The byte panel of a format whose tile reads unpacked quants rides
-the same scratch, and the q8 walk's bias sums a scratch of their own (`q8q8_bias_sums`).
-
 ### A hot leaf is instantiated in its caller's JIT partition {#jit-partition-inlining}
 
 The split-module JIT inlines within one partition only, so a leaf a hot loop calls is written to instantiate in the caller's: a generic over its operand (`iq_grid_octet`), or a plain function stamped beside the codecs it drives (`kq_transcode_units`). A call into another module's function inside a `[tune]` loop body blocks the loop's vectorization outright - `dot_bf16` spells its bf16 widen as the shift for that reason. The same rule runs the other way for the leaves themselves - the inliner's decisions over a leaf follow its call-site count, which is why the run-time-format `dot_kq` stamp lives in the test fixture `tests/_kq_dot.das` and not beside the sixteen tag overloads in `dasllama_math_default.das`.
@@ -236,56 +174,3 @@ out-norm epilogue. One token of a decode step, one position of a prefill and one
 B-session batched step all walk those same three pieces, so no caller can round apart from
 another; what differs is only the lane split over (token, head) and the projections around them.
 
-### The batch tile walks an absolute lattice {#f32-batch-tile-lattice}
-
-`matmul_batch_core` computes Y = X*W^T in four-row by four-token tiles over an f32 plane
-(`f32_batch_tile`) or a bf16 plane (`bf16_batch_tile`, each weight widened by the exact high-half
-shift as it is read, so the outputs are the f32 walk's over the widened plane): each step along n
-loads four weights and four inputs and issues sixteen FMAs into sixteen SIMD accumulators, where one
-`dot` per output loads two values per FMA. A tile's accumulators and a lone `dot` round differently,
-so which kernel computes an output has to be a property of the output alone. The lattice is the 4x4
-grid counted from row 0 and token 0, the same whatever range a chunk covers: the dispatch unit is a
-row tile, a token chunk is whole tiles, every token block (`f32_batch_token_block`: the X rows that
-fit the smaller of the box's q8 L2 budget and `g_f32_batch_x_block` bytes, rounded down to whole
-tiles, or the whole token range when it fits) starts on the lattice, and only the rows past the last
-whole row tile of d and the tokens past the last whole token tile of ntok take a per-output dot
-(`batch_dot_rows`: `dot` on an f32 plane, `dot_bf16` on a bf16 one). Any row chunking, worker count
-or token split then lands the same bits (`test_matmul_batch.das`'s lanes cell holds the threaded
-walk to the one-worker walk bit for bit); a batch and the same tokens one at a time do not, and
-`test_matmul_batch.das` holds the fp32 path and the bf16-plane path to the per-token dot over the
-widened weights within `F32_TILE_REL`. `g_f32_batch_tile_min_n` routes a dot shorter than it to
-`batch_dot_rows` whole; it ships at 1, so the tile serves every length, and
-`harness/f32_batch_race.das` is the lever that races the two constants and the nest against the
-tile. `matmul_batch_rows` is the nest as its own entry, under no knob: a batch whose outputs decide
-what decode decides on the GEMV's bits takes it - the MoE router's prefill logits (`mm_fblob_rows`),
-whose top-k over tile-rounded logits parts from decode's at a near tie and routes the token to
-another expert than decode would (`test_parity.das` holds the 26B-A4B's Q4_0 file to its pinned
-tokens on the CPU backend; `test_matmul_batch.das` holds the entry to the per-token matmul bit for
-bit at the router's shape).
-
-### A bf16 plane multiplies through the matrix unit on bf16 activations {#bf16-weight-tile-family}
-
-A bf16 weight plane - an encoder tower's GEMMs, gemma-E's per-layer projection - multiplies as bf16
-times bf16, the f32 activations rounded to bf16 first: `bf16w_batch` runs the `bf16w_tile_gen` family
-where the family serves the call; a declined call multiplies the f32 activations unrounded. Once per call, `xbf16_build_f32` rounds the activations to
-bf16 (nearest even) and also keeps the rounded values widened back to f32.
-
-For each unit, `bf16w_panel_build` packs the plane's rows into the B-tile layout the quant families'
-bf16 tile reads: for each pair of K positions (2k, 2k+1), the pair from each of sixteen rows side by
-side. That is one 32-bit move per pair, because the plane already stores each pair adjacent. The
-same `amx_bf16` emitter then runs the AMX bf16 tile (`TDPBF16PS`) over the panel and the activation
-plane.
-
-A unit is `tileform` groups of sixteen rows (the perm's `nrsplit`, one or two) over every whole
-`tokstep` block of tokens (32 under `amx_bf16`). Three tails go through `batch_tile_block`, the
-batch tile walk over the bf16 plane, fed the widened rounded copy: a unit short of `tileform`
-groups, the tokens past the last whole block, and the rows past the last whole group. So every
-output of one call multiplies the same activation bits, whichever kernel computed it.
-
-`bf16w_batch` declines the whole call when the selected perm is not `amx_bf16` or the target did not
-emit it (`bf16w_tileform_gen` is 0, or `bf16w_witness_gen` is false), when n is not a multiple of
-32, when d is under 16, or when ntok is under `tokstep`. A one-token call never reaches it (the GEMV
-path serves). A declined call runs `matmul_batch_core` over the f32 activations, unrounded. The
-matrix unit adds in a different order from a sequential dot, so the probe
-(`harness/gen_tune_probe.das`) holds the family to `bf16_envelope` - the bf16 rounding step at the
-largest output - and not to `batch_tile_block`'s bits.

@@ -1537,10 +1537,11 @@ def private resident_mirror_ask() : tuple<dt : KVDtype; knob : string; fold_why 
     let knob = want.pinned ? "set_gpu_kv_dtype in process" : "DASLLAMA_GPU_KV"
     var named = (dt = want.value, known = true)
     if (!want.pinned) {
-        return (dt = KVDtype.f16, knob = "", fold_why = "") if (empty(g_env_gpu.gpu_kv))
+        return (dt = default_kv_dtype_(), knob = "", fold_why = "") if (empty(g_env_gpu.gpu_kv))
         named = kv_dtype_named(g_env_gpu.gpu_kv)
     }
-    return (dt = KVDtype.f16, knob = knob, fold_why = "{knob} asked '{g_env_gpu.gpu_kv}', which names no K/V codec (f16 | q8_0 | tq4)") if (!named.known)
+    return (dt = default_kv_dtype_(), knob = knob, fold_why = "") if (named.known && named.dt == KVDtype.automatic)
+    return (dt = KVDtype.f16, knob = knob, fold_why = "{knob} asked '{g_env_gpu.gpu_kv}', which names no K/V codec (auto | f16 | q8_0 | tq4)") if (!named.known)
     return (dt = KVDtype.f16, knob = knob, fold_why = "{knob} asked f32, which the mirror arms under DASLLAMA_VK_KV32=1 alone - f32 sessions serve on the CPU rails") if (named.dt == KVDtype.f32)
     return (dt = named.dt, knob = knob, fold_why = "")
 }

@@ -132,7 +132,10 @@ NVRTC is thread-safe across program objects, and since CUDA 12.3 concurrent comp
 its optimizer concurrently. Each job creates and destroys its own program.
 
 The options a text compiles with on a card come from one function, `cuda_text_compile_options`:
-the card's sm target, with the `a` suffix where the text is arch-specific.
+the card's sm target, with the `a` suffix where the text is arch-specific, `--std=c++17`, and
+`--use_fast_math` unless the text carries `__DAS_NO_FAST_MATH__` (`ARCHITECTURE_EMIT.md`, the
+`fastmath` switch). The options are part of the cubin cache key, so one text under the two
+option sets keys two files, and a text without the marker hashes the three options alone.
 `module_from_source` and a consumer building the prewarm's texts both call it, so the prewarm
 writes the file a load reads.
 
@@ -173,7 +176,7 @@ keying and one stat a text, and no job is dispatched.
 | `cuda/cuda_builtins.das` | The kernel vocabulary: a public re-export of `spirv/spirv_builtins` (the compute IDs, barriers, atomics and the subgroup set), so a class the Vulkan home stamps stamps here unchanged. |
 | `cuda/cuda_emit.das` | The text emitter: `generate_cuda(fn, var errors, cfg, var census, var smem) : string`. Manual recursion (`emit_value` / `emit_stmt`), the member and body scans, the prelude generators, the census at every emit site. What it writes: `ARCHITECTURE_EMIT.md` and its companion `ARCHITECTURE_EMIT_TILES.md`. |
 | `cuda/cuda_intrinsics.das` | The CUDA-only tier of the kernel vocabulary (the table under "The kernel vocabulary's two tiers" in `ARCHITECTURE_EMIT.md`): AST markers the emitter lowers by name, spelled as PTX/CUDA spells them, with CPU bodies that emulate the pure lane functions and stand in for the rest. A body that calls one is a CUDA-only kernel by construction. |
-| `cuda/cuda_kernel.das` | `[cuda_kernel]` function-macro on a class method (`name=`, `entry=`, `local_size_x/y/z=`, `min_blocks=`, `precise=`). `apply` declares the companion globals - the text, `_entry`, `_census`, `_smem`, `_block` - and `fixup` fills them with constant nodes; `patch` pins the module's reachable functions against the CPU inliner. The companion-global scaffolding is `daslib/shader_emit_common`'s, shared with `[metal_kernel]`. |
+| `cuda/cuda_kernel.das` | `[cuda_kernel]` function-macro on a class method (`name=`, `entry=`, `local_size_x/y/z=`, `min_blocks=`, `precise=`, `fastmath=`). `apply` declares the companion globals - the text, `_entry`, `_census`, `_smem`, `_block` - and `fixup` fills them with constant nodes; `patch` pins the module's reachable functions against the CPU inliner. The companion-global scaffolding is `daslib/shader_emit_common`'s, shared with `[metal_kernel]`. |
 | `CMakeLists.txt` | `ADD_MODULE_DAS_FROM_DESCRIPTOR(cuda cuda)` and the install rule; nothing is compiled. |
 
 ## Test architecture
@@ -192,7 +195,7 @@ keying and one stat a text, and no job is dispatched.
 4. **The behavioral gate** (`test_cuda_oracle.das`): the same kernel method runs on the CPU - a
    driver loop sets the builtin IDs per thread and calls it on a class instance whose members
    are plain arrays - and on the GPU through the emitted text; ints compare bit-exact, floats
-   under the fastmath tolerance, a `precise` kernel's floats bit-exact; kernels whose meaning
+   under the fastmath tolerance, a `precise` or `fastmath = false` kernel's floats bit-exact; kernels whose meaning
    lives in the warp (reductions, shared hand-offs, atomics) compare against hand-computed
    expectations.
 5. **The rejection gate** (`test_cuda_reject.das`): a kernel class the emitter must refuse is

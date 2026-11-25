@@ -75,7 +75,8 @@ workgroup tiles as shared arrays over per-warp fragment grids, both by inline PT
 (`modules/dasCUDA/ARCHITECTURE.md`); `[spirv_decode]` - the decode-in-load callback is
 lowered, a direct call is a plain method call; literal fixed-array hoisting - present, to a
 `__constant__` table; no-contraction - `--use_fast_math` on every compile unless the kernel's
-annotation carries `precise=`, which compiles that kernel without it; `textureGrad` and
+annotation carries `fastmath=false` (Metal's spelling), which compiles that text without it, while
+`precise=` emits the scalar f32 operators as the correctly rounded intrinsics; `textureGrad` and
 `family=` - absent, the module is compute-only, and its dispatch lens is `[cuda_dispatch]` over
 the same bindings the other two lenses read. Its second vocabulary tier, `cuda_intrinsics`
 (`modules/dasCUDA/ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers`: the `cp.async` copies,

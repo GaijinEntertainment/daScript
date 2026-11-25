@@ -5743,6 +5743,7 @@ class CuF32GemmB : F32GemmT {
 [cuda_dispatch(name = "f32_gemm_bf16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class CuF32GemmBf16 : F32GemmT {
     override BF16W = true
+    override WWORDS = true
 
     [cuda_kernel(local_size_x = 256, name = "f32_gemm_bf16_cls_cuda")]
     def run {
@@ -5755,8 +5756,86 @@ class CuF32GemmBf16 : F32GemmT {
 class CuF32GemmBf16B : F32GemmT {
     override BIAS = true
     override BF16W = true
+    override WWORDS = true
 
     [cuda_kernel(local_size_x = 256, name = "f32_gemm_bf16_b_cls_cuda")]
+    def run {
+        f32_gemm_body()
+    }
+}
+
+//! the f32 tile over the file's Q8_0 blocks as stored (`F32GemmT`'s stored member), the bias row added where the args name one
+[cuda_dispatch(name = "q8_f32_gemm_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuF32GemmQ8 : F32GemmT {
+    override BIAS = true
+    override WSTORED = true
+    override WQ8 = true
+    override WWORDS = true
+    override WSC = true
+
+    [cuda_kernel(local_size_x = 256, name = "q8_f32_gemm_cls_cuda")]
+    def run {
+        f32_gemm_body()
+    }
+}
+
+//! the f32 tile over the file's Q4_K superblocks as stored (`F32GemmT`'s stored member), the bias row added where the args name one
+[cuda_dispatch(name = "kq_f32_gemm_k4_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuF32GemmK4 : F32GemmT {
+    override BIAS = true
+    override WSTORED = true
+    override WK4 = true
+    override WWORDS = true
+    override WQ4 = true
+    override WSC = true
+
+    [cuda_kernel(local_size_x = 256, name = "kq_f32_gemm_k4_cls_cuda")]
+    def run {
+        f32_gemm_body()
+    }
+}
+
+//! the f32 tile over the file's Q5_K superblocks as stored (`F32GemmT`'s stored member), the bias row added where the args name one
+[cuda_dispatch(name = "kq_f32_gemm_k5_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuF32GemmK5 : F32GemmT {
+    override BIAS = true
+    override WSTORED = true
+    override WK5 = true
+    override WWORDS = true
+    override WQ4 = true
+    override WSC = true
+
+    [cuda_kernel(local_size_x = 256, name = "kq_f32_gemm_k5_cls_cuda")]
+    def run {
+        f32_gemm_body()
+    }
+}
+
+//! the f32 tile over the file's Q6_K superblocks as stored (`F32GemmT`'s stored member), the bias row added where the args name one
+[cuda_dispatch(name = "kq_f32_gemm_k6_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuF32GemmK6 : F32GemmT {
+    override BIAS = true
+    override WSTORED = true
+    override WK6 = true
+    override WWORDS = true
+    override WQ4 = true
+    override WSC = true
+
+    [cuda_kernel(local_size_x = 256, name = "kq_f32_gemm_k6_cls_cuda")]
+    def run {
+        f32_gemm_body()
+    }
+}
+
+//! the f32 tile over the file's half floats as stored (`F32GemmT`'s stored member), the bias row added where the args name one
+[cuda_dispatch(name = "f16_f32_gemm_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuF32GemmF16 : F32GemmT {
+    override BIAS = true
+    override WSTORED = true
+    override WF16 = true
+    override WWORDS = true
+
+    [cuda_kernel(local_size_x = 256, name = "f16_f32_gemm_cls_cuda")]
     def run {
         f32_gemm_body()
     }

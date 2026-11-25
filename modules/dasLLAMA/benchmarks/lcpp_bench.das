@@ -22,6 +22,7 @@ require dasllama/dasllama_audio   // --asr: AUDIO_SAMPLE_RATE, the 16 kHz mono c
 require dasllama/dasllama_tower   // the encode-stage prof rail (set_asr_prof/asr_prof_ms)
 require dasllama/dasllama_styletts2   // --tts: the StyleTTS2 seats' engage counters
 require dasllama/dasllama_pocket   // --tts: the Pocket seats' engage counters
+require dasllama/dasllama_tower_tts   // --tts: tts_home_stats, the home whose seats served
 require ?das_metal dasllama/dasllama_metal_tower   // --asr --ngl: the tower engage counters (anti-sandbag)
 require ?das_metal dasllama/dasllama_metal_asr_dec   // --asr CPU rows pin the wdec driver off (CPU means CPU)
 require ?das_metal dasllama/dasllama_metal_prefill   // --asr --ngl: the chat-decoder prefill engage witness
@@ -808,15 +809,13 @@ def private tts_cell_main(model, voice_arg, json_path : string; sentences, reps,
         var inscope dserved <- [for (a, b in seats0.served, seats1.served); b - a]
         let verdict = tts_seat_verdict(dcalls, dserved)
         print("lcpp_bench --tts: GPU seats {verdict} - calls {dcalls}, served {dserved}\n")
-        var backend = gpu ? "metal" : "cpu"
+        let backend = tts_row_backend(gpu, verdict, tts_home_stats(TowerDev.cuda).encodes > 0l)
         if (gpu && verdict != "all") {
             print("lcpp_bench --tts: LOUD FAIL - gpu row {base_name(model)} served {verdict} of its seats' calls - a \"metal\" row that measured the CPU\n")
             ok = false
         } elif (!gpu && verdict == "partial") {
             print("lcpp_bench --tts: LOUD FAIL - {base_name(model)}: the GPU seats served some chunks but not all, so the row is neither a CPU row nor a GPU one - no number\n")
             ok = false
-        } elif (!gpu && verdict == "all") {
-            backend = "vulkan"   // only a Vulkan build reaches here: on Metal the CPU arm pinned the tower off
         }
         var run = BenchRun(engine = "das", backend = backend, flavor = flavor_stamp(accel ? "accel" : "tuned"),
             exec_fmt = "{m.kind} {tts_serves_q8() ? "q8" : "f32"} lane",

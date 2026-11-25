@@ -17,6 +17,8 @@ require dasllama/dasllama_gpu_math
 require dasllama/dasllama_gpu_knee   // the knee races' rung loop and pricing (`knee_rungs`, `knee_pick`)
 require dasllama/dasllama_gpu_kernels_common public
 require dasllama/dasllama_metal_common
+require dasllama/dasllama_layout   // kq_scale_d_tail: a split scale plane's bind
+require dasllama/dasllama_metal_rail public   // gk_subgroup_*: the lane primitives the shared reductions ride
 require dasllama/dasllama_metal_lens
 
 // The family-agnostic dasMetal kernel + PSO registry (the format-matrix arc's W1 split): every
@@ -1019,7 +1021,6 @@ class MetalQ8GemvQkvRsF32 : MetalQ8GemvQkvRsT {
     typedef KT = float
     override CLAMP16 = false
 }
-
 
 // The W1|W3 twin: BOTH ffn rows of an output element dotted together, act(g)·u written directly -
 // the swiglu/geglu dispatch and its serialization level are gone. SPLIT = one threadgroup per
@@ -3298,7 +3299,6 @@ def private sqd_zero(var wacc : float[512]; wo : uint) {
     wacc[wo + 3u] = 0.0
 }
 
-
 // The f16/f32 codec pair: K and V stream through an advancing pointer, and `float4()` over an
 // already-float4 element is the no-op that lets one source line serve both instances.
 
@@ -4080,7 +4080,6 @@ def compile_pso(source, entry : string; fastmath : bool; var ok : bool&) : Metal
     return pso
 }
 
-
 //! the decode's environment overrides off their defaults, one line each as the decode comes up
 [cold_path]
 def private metal_decode_env_announce {
@@ -4400,29 +4399,33 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_f32_exact_mm = compile_stamp(metal_f32_exact_mulmm_msl, ok)
     g_pso_st2_conv_exact_mm = compile_stamp(metal_st2_conv_exact_mm_msl, ok)
     g_pso_st2_conv_tr_exact_mm = compile_stamp(metal_st2_conv_tr_exact_mm_msl, ok)
-    g_pso_st2_adain_leaky = compile_stamp(metal_st2_adain_leaky_msl, ok)
+    g_pso_st2_q8_exact_mm = compile_stamp(metal_st2_q8_exact_mm_msl, ok)
+    g_pso_st2_q8_conv_mm = compile_stamp(metal_st2_q8_conv_mm_msl, ok)
+    g_pso_st2_q8_conv_exact_mm = compile_stamp(metal_st2_q8_conv_exact_mm_msl, ok)
+    g_pso_st2_q8_conv_tr_mm = compile_stamp(metal_st2_q8_conv_tr_mm_msl, ok)
+    g_pso_st2_q8_conv_tr_exact_mm = compile_stamp(metal_st2_q8_conv_tr_exact_mm_msl, ok)
+    g_pso_st2_k4_exact_mm = compile_stamp(metal_st2_k4_exact_mm_msl, ok)
+    g_pso_st2_k4_conv_mm = compile_stamp(metal_st2_k4_conv_mm_msl, ok)
+    g_pso_st2_k4_conv_exact_mm = compile_stamp(metal_st2_k4_conv_exact_mm_msl, ok)
+    g_pso_st2_k4_conv_tr_mm = compile_stamp(metal_st2_k4_conv_tr_mm_msl, ok)
+    g_pso_st2_k4_conv_tr_exact_mm = compile_stamp(metal_st2_k4_conv_tr_exact_mm_msl, ok)
+    g_pso_st2_k5_exact_mm = compile_stamp(metal_st2_k5_exact_mm_msl, ok)
+    g_pso_st2_k5_conv_mm = compile_stamp(metal_st2_k5_conv_mm_msl, ok)
+    g_pso_st2_k5_conv_exact_mm = compile_stamp(metal_st2_k5_conv_exact_mm_msl, ok)
+    g_pso_st2_k5_conv_tr_mm = compile_stamp(metal_st2_k5_conv_tr_mm_msl, ok)
+    g_pso_st2_k5_conv_tr_exact_mm = compile_stamp(metal_st2_k5_conv_tr_exact_mm_msl, ok)
+    g_pso_st2_k6_exact_mm = compile_stamp(metal_st2_k6_exact_mm_msl, ok)
+    g_pso_st2_k6_conv_mm = compile_stamp(metal_st2_k6_conv_mm_msl, ok)
+    g_pso_st2_k6_conv_exact_mm = compile_stamp(metal_st2_k6_conv_exact_mm_msl, ok)
+    g_pso_st2_k6_conv_tr_mm = compile_stamp(metal_st2_k6_conv_tr_mm_msl, ok)
+    g_pso_st2_k6_conv_tr_exact_mm = compile_stamp(metal_st2_k6_conv_tr_exact_mm_msl, ok)
+    g_pso_st2_f16_exact_mm = compile_stamp(metal_st2_f16_exact_mm_msl, ok)
+    g_pso_st2_f16_conv_mm = compile_stamp(metal_st2_f16_conv_mm_msl, ok)
+    g_pso_st2_f16_conv_exact_mm = compile_stamp(metal_st2_f16_conv_exact_mm_msl, ok)
+    g_pso_st2_f16_conv_tr_mm = compile_stamp(metal_st2_f16_conv_tr_mm_msl, ok)
+    g_pso_st2_f16_conv_tr_exact_mm = compile_stamp(metal_st2_f16_conv_tr_exact_mm_msl, ok)
     g_pso_row_gather = compile_stamp(metal_row_gather_msl, ok)
-    g_pso_st2_concat = compile_stamp(metal_st2_concat_msl, ok)
-    g_pso_st2_pool_dw = compile_stamp(metal_st2_pool_dw_msl, ok)
-    g_pso_st2_lstm = compile_stamp(metal_st2_lstm_msl, ok)
-    g_pso_st2_sigsum = compile_stamp(metal_st2_sigsum_msl, ok)
-    g_pso_st2_gelu_tanh = compile_stamp(metal_st2_gelu_tanh_msl, ok)
-    g_pso_st2_attn = compile_stamp(metal_st2_attn_msl, ok)
-    g_pso_st2_src_low_torch = compile_stamp(metal_st2_src_low_torch_msl, ok)
-    g_pso_st2_src_low_onnx = compile_stamp(metal_st2_src_low_onnx_msl, ok)
-    g_pso_st2_src_cumsum_torch = compile_stamp(metal_st2_src_cumsum_torch_msl, ok)
-    g_pso_st2_src_cumsum_onnx = compile_stamp(metal_st2_src_cumsum_onnx_msl, ok)
-    g_pso_st2_src_noise = compile_stamp(metal_st2_src_noise_msl, ok)
-    g_pso_st2_src_sines_torch = compile_stamp(metal_st2_src_sines_torch_msl, ok)
-    g_pso_st2_src_sines_onnx = compile_stamp(metal_st2_src_sines_onnx_msl, ok)
-    g_pso_st2_stft_reflect = compile_stamp(metal_st2_stft_reflect_msl, ok)
-    g_pso_st2_stft_edge = compile_stamp(metal_st2_stft_edge_msl, ok)
-    g_pso_st2_istft = compile_stamp(metal_st2_istft_msl, ok)
-    g_pso_pk_rows = compile_stamp(metal_pk_rows_msl, ok)
-    g_pso_pk_rows_elu = compile_stamp(metal_pk_rows_elu_msl, ok)
-    g_pso_pk_row_scale = compile_stamp(metal_pk_row_scale_msl, ok)
-    g_pso_pk_attn = compile_stamp(metal_pk_attn_msl, ok)
-    g_pso_pk_rope_tab = compile_stamp(metal_pk_rope_tab_msl, ok)
+    g_pso_st2_lstm_q8 = compile_stamp(metal_st2_lstm_q8_msl, ok)
     g_pso_pk_add_ln = compile_stamp(metal_pk_add_ln_msl, ok)
     g_pso_tw_rms = compile_stamp(metal_tw_rms_msl, ok)
     g_pso_tw_patch_im2col = compile_stamp(metal_tw_patch_im2col_msl, ok)
@@ -4431,21 +4434,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_tw_add_post_rms = compile_stamp(metal_tw_add_post_rms_msl, ok)
     g_pso_tw_rope_tab = compile_stamp(metal_tw_rope_tab_msl, ok)
     g_pso_tw_bias_gate = compile_stamp(metal_tw_bias_gate_msl, ok)
-    g_pso_pk_gemv_f32 = compile_stamp(metal_pk_gemv_f32_msl, ok)
-    g_pso_pk_gemv_f32_ln_silu = compile_stamp(metal_pk_gemv_f32_ln_silu_msl, ok)
-    g_pso_pk_gemv_f32_gate = compile_stamp(metal_pk_gemv_f32_gate_msl, ok)
-    g_pso_pk_gemv_f32_add_silu = compile_stamp(metal_pk_gemv_f32_add_silu_msl, ok)
-    g_pso_pk_gemv_f32_tail = compile_stamp(metal_pk_gemv_f32_tail_msl, ok)
-    g_pso_pk_gemv_q8_ln_silu = compile_stamp(metal_pk_gemv_q8_ln_silu_msl, ok)
-    g_pso_pk_gemv_q8_gate = compile_stamp(metal_pk_gemv_q8_gate_msl, ok)
-    g_pso_pk_gemv_q8_add_silu = compile_stamp(metal_pk_gemv_q8_add_silu_msl, ok)
-    g_pso_pk_gemv_q8_tail = compile_stamp(metal_pk_gemv_q8_tail_msl, ok)
     g_pso_st2_colstats = compile_stamp(metal_st2_colstats_msl, ok)
-    g_pso_st2_adain_snake = compile_stamp(metal_st2_adain_snake_msl, ok)
-    g_pso_st2_leaky = compile_stamp(metal_st2_leaky_msl, ok)
-    g_pso_st2_axpy = compile_stamp(metal_st2_axpy_msl, ok)
-    g_pso_st2_add = compile_stamp(metal_st2_add_msl, ok)
-    g_pso_st2_reflect1 = compile_stamp(metal_st2_reflect1_msl, ok)
     g_pso_dn_gate = compile_stamp(MetalDnGate_metal_dn_gate_msl, ok)
     g_pso_dn_gate_hx = compile_stamp(MetalDnGateHX_metal_dn_gate_msl, ok)
     g_pso_dn_gate_sig = compile_stamp(MetalDnGateSig_metal_dn_gate_msl, ok)
@@ -6665,6 +6654,16 @@ def private metal_b32_release {
     release_handles(g_pso_b32_mvb2_mlx6b, g_pso_b32_mvb4_mlx6b, g_pso_b32_mvb8_mlx6b, g_pso_b32_mvb2_mlx6b_ks, g_pso_b32_mvb4_mlx6b_ks, g_pso_b32_mvb8_mlx6b_ks)
 }
 
+//! the speech chain's exact and conv f32 tiles' pipelines, and the stored-plane tile's (`MetalSt2StoredMmT`)
+def private st2_stored_release {
+    release_handles(g_pso_f32_exact_mm, g_pso_st2_conv_exact_mm, g_pso_st2_conv_tr_mm, g_pso_st2_conv_tr_exact_mm, g_pso_st2_lstm_q8)
+    release_handles(g_pso_st2_q8_exact_mm, g_pso_st2_q8_conv_mm, g_pso_st2_q8_conv_exact_mm, g_pso_st2_q8_conv_tr_mm, g_pso_st2_q8_conv_tr_exact_mm)
+    release_handles(g_pso_st2_k4_exact_mm, g_pso_st2_k4_conv_mm, g_pso_st2_k4_conv_exact_mm, g_pso_st2_k4_conv_tr_mm, g_pso_st2_k4_conv_tr_exact_mm)
+    release_handles(g_pso_st2_k5_exact_mm, g_pso_st2_k5_conv_mm, g_pso_st2_k5_conv_exact_mm, g_pso_st2_k5_conv_tr_mm, g_pso_st2_k5_conv_tr_exact_mm)
+    release_handles(g_pso_st2_k6_exact_mm, g_pso_st2_k6_conv_mm, g_pso_st2_k6_conv_exact_mm, g_pso_st2_k6_conv_tr_mm, g_pso_st2_k6_conv_tr_exact_mm)
+    release_handles(g_pso_st2_f16_exact_mm, g_pso_st2_f16_conv_mm, g_pso_st2_f16_conv_exact_mm, g_pso_st2_f16_conv_tr_mm, g_pso_st2_f16_conv_tr_exact_mm)
+}
+
 //! Release every PSO the registry compiled (the PSO half of metal_decode_shutdown — runs
 //! before the shared device goes).
 def metal_kernels_release {
@@ -6726,17 +6725,12 @@ def metal_kernels_release {
     release_handles(g_pso_dn_scan_h, g_pso_dn_prep)
     release_handles(g_pso_dn_gate_sig, g_pso_hc_norm, g_pso_hc_lo, g_pso_hc_init, g_pso_cat2, g_pso_hc_mix, g_pso_hc_combine, g_pso_ple_gate, g_pso_ple_conv)
     release_handles(g_pso_hc_stream_mean)
-    release_handles(g_pso_st2_attn)
-    release_handles(g_pso_pk_rows, g_pso_pk_rows_elu, g_pso_pk_row_scale, g_pso_pk_attn, g_pso_pk_rope_tab)
     release_handles(g_pso_tw_rms, g_pso_tw_rope_tab, g_pso_tw_bias_gate, g_pso_tw_add_ln, g_pso_tw_add_rms, g_pso_tw_add_post_rms)
     release_handle(g_pso_tw_patch_im2col)
-    release_handles(g_pso_pk_add_ln, g_pso_pk_gemv_f32, g_pso_pk_gemv_f32_ln_silu, g_pso_pk_gemv_f32_gate, g_pso_pk_gemv_f32_add_silu)
-    release_handles(g_pso_pk_gemv_f32_tail, g_pso_pk_gemv_q8_ln_silu, g_pso_pk_gemv_q8_gate, g_pso_pk_gemv_q8_add_silu, g_pso_pk_gemv_q8_tail)
-    release_handles(g_pso_st2_adain_leaky, g_pso_row_gather, g_pso_st2_concat, g_pso_st2_pool_dw, g_pso_st2_lstm, g_pso_st2_sigsum, g_pso_st2_gelu_tanh,
-        g_pso_st2_src_low_torch, g_pso_st2_src_low_onnx, g_pso_st2_src_cumsum_torch, g_pso_st2_src_cumsum_onnx, g_pso_st2_src_noise,
-        g_pso_st2_src_sines_torch, g_pso_st2_src_sines_onnx, g_pso_st2_stft_reflect, g_pso_st2_stft_edge, g_pso_st2_istft)
-    release_handles(g_pso_f32_exact_mm, g_pso_st2_conv_exact_mm, g_pso_st2_conv_tr_mm, g_pso_st2_conv_tr_exact_mm)
-    release_handles(g_pso_st2_im2col, g_pso_st2_conv_mm, g_pso_st2_colstats, g_pso_st2_adain_snake, g_pso_st2_leaky, g_pso_st2_axpy, g_pso_st2_add, g_pso_st2_reflect1)
+    release_handles(g_pso_pk_add_ln)
+    release_handles(g_pso_row_gather)
+    st2_stored_release()
+    release_handles(g_pso_st2_im2col, g_pso_st2_conv_mm, g_pso_st2_colstats)
     release_handles(g_pso_qkvrs16, g_pso_qkvrs32, g_pso_w13sw, g_pso_w13sw_sg, g_pso_gemv_b2, g_pso_gemv_b4)
     release_handles(g_pso_mv_b2, g_pso_mv_b4, g_pso_w13sw_b2, g_pso_w13sw_b4, g_pso_gemm_b, g_pso_gemm_b_sk)
     release_handles(g_pso_skred, g_pso_gemm64_b, g_pso_mm, g_pso_attnb16, g_pso_attnb32, g_pso_attnb_q8)
@@ -6747,7 +6741,6 @@ def metal_kernels_release {
     release_handles(g_pso_attndw_q8, g_pso_attndw_tq4, g_pso_attndx_q8, g_pso_attndx_tq4, g_pso_rpstb32, g_pso_rpstb_q8, g_pso_rpstb_tq4)
     release_handles(g_pso_kv_rows_q8, g_pso_kv_rows_tq4)
 }
-
 
 // ===== Metal-4 tensor twin races (decode-side batch GEMM families) =====
 
@@ -7683,9 +7676,7 @@ class MetalQ8MulMmSk : MetalQ8MulMmBaseT {
 //! elements of a weight row's 32-block `kb`, half `il0`, into `va`. KQ keeps the scale and quant views (q8 and mx4 bind their
 //! own), KQ_SC the superblock formats' sub-scale view; B32 is the per-32 plane pair (q51, iq4nl32 under IQ4XS).
 [ |> template_struct_instance]
-class template MetalKqTileDecodeT : MetalMmTileBase {
-    typedef TILET = float16
-    typedef SGT = simdgroup_half8x8
+class template MetalKqTileDecodeBaseT : MetalMmTileBase {
     //! s0off is the SLOT-0 view offset: k4/k5 callers pass soff again, k6 passes the d-plane doff; the per-32 formats bind their scale plane there
     @ssbo @binding = 0 @role = "weight" @off = "s0off" @template_gate = KQ_D16 ksh : array<float16> //! k4/k5: 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1); k6: the d plane (bound at byte nsb*16); q51: d, m at 2*blk; iq4nl32: d at blk
     @ssbo @binding = 0 @role = "weight" @off = "s0off" @template_gate = BF ksb : array<uint16>   //! the scale plane as BF16 halfwords: an affine member's pairs
@@ -7769,7 +7760,7 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
     }
 
     //! publishes a decoded A half into the shared W tile, fenced against the previous math loop
-    def publish_a(var va : float16[16]; tA0 : uint) {
+    def publish_a(var va : TILET[16]; tA0 : uint) {
         barrier()
         for [unroll_full] (i in range(16)) {
             ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
@@ -7790,13 +7781,13 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
     }
 
     //! an affine block `blk`'s half `il0` - elements 16 il0 .. 16 il0 + 15 - as scale * q + bias into `va`
-    def aff_decode(blk, il0 : uint; var va : float16[16]) {
+    def aff_decode(blk, il0 : uint; var va : TILET[16]) {
         static_if (AFF) {
             let sb = aff_pair(blk)
             let qa = unsafe(addr(kqu[blk * B32W]))
             static_if (A8) {
                 for [unroll_full] (k in range(16)) {
-                    va[k] = float16(mlx_el_level(sb, mlx8_el_code(unsafe(qa[il0 * 4u + uint(k / 4)]), uint(k))))
+                    va[k] = TILET(mlx_el_level(sb, mlx8_el_code(unsafe(qa[il0 * 4u + uint(k / 4)]), uint(k))))
                 }
             } else {
                 static_if (A6) {
@@ -7804,11 +7795,11 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
                     let u1 = unsafe(qa[il0 * 3u + 1u])
                     let u2 = unsafe(qa[il0 * 3u + 2u])
                     for [unroll_full] (k in range(16)) {
-                        va[k] = float16(mlx_el_level(sb, mlx6_el_code(u0, u1, u2, uint(k))))
+                        va[k] = TILET(mlx_el_level(sb, mlx6_el_code(u0, u1, u2, uint(k))))
                     }
                 } else {
                     for [unroll_full] (k in range(16)) {
-                        va[k] = float16(mlx_el_level(sb, mlx4_el_code(unsafe(qa[il0 * 2u + uint(k / 8)]), uint(k))))
+                        va[k] = TILET(mlx_el_level(sb, mlx4_el_code(unsafe(qa[il0 * 2u + uint(k / 8)]), uint(k))))
                     }
                 }
             }
@@ -7816,7 +7807,7 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
     }
 
     //! row origin `wb` (in `kq_unit()`s), 32-block `kb`, half `il0` -> the 16 decoded elements in `va`
-    def kq_decode(wb, kb, il0 : uint; var va : float16[16]) {   // nolint:STYLE037,STYLE038 — one decode arm per format, each a constant's static_if
+    def kq_decode(wb, kb, il0 : uint; var va : TILET[16]) {   // nolint:STYLE037,STYLE038 — one decode arm per format, each a constant's static_if
         static_if (KQ) {
             static_if (B32) {
                 let blk32 = wb + kb
@@ -7832,7 +7823,7 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
                         for [unroll_full] (c in range(4)) {
                             let el32 = uint(k) * 4u + uint(c)
                             let q32 = ((u32 >> (8u * uint(c) + nsh32)) & 15u) | (((qh32 >> (el32 + hb32)) & 1u) << 4u)
-                            va[k * 4 + c] = float16(d32 * float(q32) + m32)
+                            va[k * 4 + c] = TILET(d32 * float(q32) + m32)
                         }
                     }
                 } else {
@@ -7847,7 +7838,7 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
                             for [unroll_full] (c in range(4)) {
                                 let el32 = uint(k) * 4u + uint(c)
                                 let q32 = ((u32 >> (8u * uint(c) + nsh32)) & 15u) | (((qh32 >> (el32 + hb32)) & 1u) << 4u)
-                                va[k * 4 + c] = float16(d32 * float(int(q32) - 16))
+                                va[k * 4 + c] = TILET(d32 * float(int(q32) - 16))
                             }
                         }
                     } else {
@@ -7860,7 +7851,7 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
                             for [unroll_full] (k in range(4)) {
                                 let u32 = unsafe(qp32[k])
                                 for [unroll_full] (c in range(4)) {
-                                    va[k * 4 + c] = float16(dsc32 * iq4lut[(u32 >> (8u * uint(c) + nsh32)) & 15u])
+                                    va[k * 4 + c] = TILET(dsc32 * iq4lut[(u32 >> (8u * uint(c) + nsh32)) & 15u])
                                 }
                             }
                         }
@@ -7898,10 +7889,10 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
                         // all 4 bytes composed at once — cross-byte bleed of the uint-wide shifts is
                         // masked off; per element only mask+fma remain (shift folded into dsc1..3)
                         let qv = ((u >> nsh) & 0x0F0F0F0F) | (((hu >> hsh) & 0x03030303) << 4u)
-                        va[k * 4] = float16(dsc * float(qv & 255u) - dmn)
-                        va[k * 4 + 1] = float16(dsc1 * float(qv & 65280u) - dmn)
-                        va[k * 4 + 2] = float16(dsc2 * float(qv & 16711680u) - dmn)
-                        va[k * 4 + 3] = float16(dsc3 * float(qv & 4278190080u) - dmn)
+                        va[k * 4] = TILET(dsc * float(qv & 255u) - dmn)  // nolint:PERF020,LINT019 — the float stamps' identity cast
+                        va[k * 4 + 1] = TILET(dsc1 * float(qv & 65280u) - dmn)  // nolint:PERF020,LINT019 — the float stamps' identity cast
+                        va[k * 4 + 2] = TILET(dsc2 * float(qv & 16711680u) - dmn)  // nolint:PERF020,LINT019 — the float stamps' identity cast
+                        va[k * 4 + 3] = TILET(dsc3 * float(qv & 4278190080u) - dmn)  // nolint:PERF020,LINT019 — the float stamps' identity cast
                     }
                 } else {
                     static_if (K3) {
@@ -7927,10 +7918,10 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
                             let u = unsafe(qp[k])
                             let hu = unsafe(hp[k])
                             let qv = ((u >> nsh) & 0x03030303) | (((hu >> hsh) & 0x01010101) << 2u)
-                            va[k * 4] = float16(dsc * float(qv & 255u) - dmn)
-                            va[k * 4 + 1] = float16(dsc1 * float(qv & 65280u) - dmn)
-                            va[k * 4 + 2] = float16(dsc2 * float(qv & 16711680u) - dmn)
-                            va[k * 4 + 3] = float16(dsc3 * float(qv & 4278190080u) - dmn)
+                            va[k * 4] = TILET(dsc * float(qv & 255u) - dmn)  // nolint:PERF020,LINT019 — the float stamps' identity cast
+                            va[k * 4 + 1] = TILET(dsc1 * float(qv & 65280u) - dmn)  // nolint:PERF020,LINT019 — the float stamps' identity cast
+                            va[k * 4 + 2] = TILET(dsc2 * float(qv & 16711680u) - dmn)  // nolint:PERF020,LINT019 — the float stamps' identity cast
+                            va[k * 4 + 3] = TILET(dsc3 * float(qv & 4278190080u) - dmn)  // nolint:PERF020,LINT019 — the float stamps' identity cast
                         }
                     } else {
                         static_if (IQ2XXS) {
@@ -7948,7 +7939,7 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
                                 let nib = uint(k) % 2u == 0u ? sgb2 & 15u : sgb2 >> 4u
                                 let sw = iq3s_signed(iq2xxs_gw(int(bidx * 2u + uint(k) % 2u)), nib)
                                 for [unroll_full] (c in range(4)) {
-                                    va[k * 4 + c] = float16(dsc * iq3s_sx(sw, uint(c)))
+                                    va[k * 4 + c] = TILET(dsc * iq3s_sx(sw, uint(c)))
                                 }
                             }
                         } else {
@@ -7967,7 +7958,7 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
                                 let nib = uint(k) % 2u == 0u ? sgb2 & 15u : sgb2 >> 4u
                                 let sw = iq3s_signed(iq2xs_gw(int(idx2)), nib)
                                 for [unroll_full] (c in range(4)) {
-                                    va[k * 4 + c] = float16(dsc * iq3s_sx(sw, uint(c)))
+                                    va[k * 4 + c] = TILET(dsc * iq3s_sx(sw, uint(c)))
                                 }
                             }
                         } else {
@@ -7988,7 +7979,7 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
                                 let nib = uint(k) % 2u == 0u ? sgb2 & 15u : sgb2 >> 4u
                                 let sw = iq3s_signed(iq2s_gw(int(idx2)), nib)
                                 for [unroll_full] (c in range(4)) {
-                                    va[k * 4 + c] = float16(dsc * iq3s_sx(sw, uint(c)))
+                                    va[k * 4 + c] = TILET(dsc * iq3s_sx(sw, uint(c)))
                                 }
                             }
                         } else {
@@ -8006,7 +7997,7 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
                                 let nib = uint(k) % 2u == 0u ? sgb & 15u : sgb >> 4u
                                 let sw = iq3s_signed(gridw3x[(qsw >> (8u * uint(k))) & 255u], nib)
                                 for [unroll_full] (c in range(4)) {
-                                    va[k * 4 + c] = float16(dsc * iq3s_sx(sw, uint(c)))
+                                    va[k * 4 + c] = TILET(dsc * iq3s_sx(sw, uint(c)))
                                 }
                             }
                         } else {
@@ -8025,7 +8016,7 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
                                     let nib = (sgw3 >> ((b3 / 2u) * 8u + (b3 % 2u) * 4u)) & 15u
                                     let sw = iq3s_signed(gridw3[idx], nib)
                                     for [unroll_full] (c in range(4)) {
-                                        va[k * 4 + c] = float16(dsc * iq3s_sx(sw, uint(c)))
+                                        va[k * 4 + c] = TILET(dsc * iq3s_sx(sw, uint(c)))
                                     }
                                 }
                             } else {
@@ -8050,7 +8041,7 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
                                     for [unroll_full] (k in range(4)) {
                                         let u = unsafe(qp[k])
                                         for [unroll_full] (c in range(4)) {
-                                            va[k * 4 + c] = float16(dsc * iq4lut[(u >> (8u * uint(c) + nsh)) & 15u])
+                                            va[k * 4 + c] = TILET(dsc * iq4lut[(u >> (8u * uint(c) + nsh)) & 15u])
                                         }
                                     }
                                 } else {
@@ -8072,10 +8063,10 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
                                         for [unroll_full] (k in range(4)) {
                                             let u = unsafe(qp[k])
                                             let qv = (u >> nsh) & 0x03030303
-                                            va[k * 4] = float16(dsc * float(qv & 255u) - dmn)
-                                            va[k * 4 + 1] = float16(dsc1 * float(qv & 65280u) - dmn)
-                                            va[k * 4 + 2] = float16(dsc2 * float(qv & 16711680u) - dmn)
-                                            va[k * 4 + 3] = float16(dsc3 * float(qv & 4278190080u) - dmn)
+                                            va[k * 4] = TILET(dsc * float(qv & 255u) - dmn)  // nolint:PERF020,LINT019 — the float stamps' identity cast
+                                            va[k * 4 + 1] = TILET(dsc1 * float(qv & 65280u) - dmn)  // nolint:PERF020,LINT019 — the float stamps' identity cast
+                                            va[k * 4 + 2] = TILET(dsc2 * float(qv & 16711680u) - dmn)  // nolint:PERF020,LINT019 — the float stamps' identity cast
+                                            va[k * 4 + 3] = TILET(dsc3 * float(qv & 4278190080u) - dmn)  // nolint:PERF020,LINT019 — the float stamps' identity cast
                                         }
                                     } else {
                                     let sv = ks4[blk]
@@ -8093,7 +8084,7 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
                                             let hu = unsafe(hp[k])
                                             for [unroll_full] (c in range(4)) {
                                                 let q = ((u >> (8u * uint(c) + nsh)) & 15u) | (((hu >> (8u * uint(c) + js)) & 1u) << 4u)
-                                                va[k * 4 + c] = float16(dsc * float(q) - dmn)
+                                                va[k * 4 + c] = TILET(dsc * float(q) - dmn)  // nolint:PERF020,LINT019 — the float stamps' identity cast
                                             }
                                         }
                                     } else {
@@ -8102,7 +8093,7 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
                                             let u = unsafe(qp[k])
                                             for [unroll_full] (c in range(4)) {
                                                 let q = (u >> (8u * uint(c) + nsh)) & 15u
-                                                va[k * 4 + c] = float16(dsc * float(q) - dmn)
+                                                va[k * 4 + c] = TILET(dsc * float(q) - dmn)  // nolint:PERF020,LINT019 — the float stamps' identity cast
                                             }
                                         }
                                     }
@@ -8117,6 +8108,576 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
                 }
             }
         }
+    }
+}
+
+//! the decode at half tiles: the weights staged at f16 - every prefill and routed stamp's base
+[ |> template_struct_instance]
+class template MetalKqTileDecodeT : MetalKqTileDecodeBaseT {
+    typedef TILET = float16
+    typedef SGT = simdgroup_half8x8
+}
+
+//! The speech chain's GEMM tile over a STORED weight plane: `MetalF32MulMmT`'s body (dense or the conv gather; half tiles, or float under EXACT) with a
+//! weight row's 16 elements decoded from the plane's format - a K-quant member (`kq_decode`) or, under WQ8, Q8_0 34-byte blocks.
+//! y[m x ndim] = x . W^T; ndim % 64, m padded to 32, K a whole decode unit a row (256 a superblock member, 32 else); CONV: cin % 8.
+[ |> template_struct_instance]
+class template MetalSt2StoredMmT : MetalKqTileDecodeBaseT {
+    @template_constant CONV : bool = false
+    @template_constant DENSE : bool = true
+    @template_constant EXACT : bool = false
+    @template_constant TRANSPOSED : bool = false
+    @template_constant WQ8 : bool = false   //!< the plane is Q8_0 blocks: the half scale of block b at 17 b, its quants at 34 b + 2
+    @template_constant WF16 : bool = false  //!< the plane is half floats, rows of whole 32s
+    @ssbo @binding = 0 @role = "weight" @off = "wboff" @template_gate = WQ8 wsh : array<float16>
+    @ssbo @binding = 1 @role = "weight" @off = "wboff" @template_gate = WQ8 wqb : array<int8>
+    @ssbo @binding = 0 @role = "weight" @off = "wboff" @template_gate = WF16 whf : array<float16>
+    @ssbo @binding = 3 @role = "read" xf : array<float4>                  // [m x kdim/4] activations (CONV: the [t_in x cin] rows)
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "mp*d*4" y : array<float>
+    @uniform @binding = 5 @template_gate = DENSE kdim_u : uint   //!< the dense stamps' K; the CONV stamps read it from their kargs
+    @uniform @binding = 6 ndim : uint
+    @uniform @binding = 7 @template_gate = CONV ka : St2ConvArgs
+    @uniform @binding = 8 @template_gate = TRANSPOSED cout_u : uint   //!< the transposed stamps' output channels: the lift's rows a tap
+
+    //! the plane's decode unit along K: Q8_0's 32-block, else the member's (`kq_unit`)
+    def w_unit() : uint {
+        static_if (WQ8 || WF16) {
+            return 32u
+        } else {
+            return kq_unit()
+        }
+    }
+
+    //! the tile's K: the dense stamps' uniform, a forward conv's k*cin padded to the plane's decode unit (its quant matrix's
+    //! row), a transposed conv's k*cin itself (its lift's rows are `cin` wide a tap, on the 32 lattice)
+    def k_stored() : uint {
+        static_if (TRANSPOSED) {
+            return ka.k * ka.cin
+        } else {
+            static_if (CONV) {
+                return (ka.k * ka.cin + w_unit() - 1u) / w_unit() * w_unit()
+            } else {
+                return kdim_u
+            }
+        }
+    }
+
+    def stored_mm_body {   // nolint:STYLE038 — MSL kernel body: one tile walk, the loaders and the decode a constant's static_if each
+        let lid = gl_LocalInvocationID.x
+        kq_tables()
+        let sg = gl_SubgroupID
+        let mBase = gl_WorkGroupID.x * 32u  // token rows
+        let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
+        var mc : simdgroup_float8x8[8]
+        var ma : SGT[4]
+        var mb : SGT[2]
+        var va : TILET[16]
+        let kdim = k_stored()
+        let kdim4 = kdim / 4u
+        let lr0 = lid / 2u                  // A split: weight row + 16-k half
+        let il0 = lid % 2u
+        let syA = lr0 / 8u
+        let lxA = lr0 % 8u
+        let tA0 = (il0 * 2u * 8u + syA) * 64u + lxA
+        let lr1 = lid / 4u                  // B split: token row + 8-k run
+        let iy = (lid % 4u) * 8u
+        let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
+        let aB = (sg % 2u) * 256u
+        let bB = (sg / 2u) * 128u
+        var kb = 0u
+        while (kb * 32u < kdim) {
+            var b0 = float4(0.0)
+            var b1 = float4(0.0)
+            static_if (CONV) {
+                var srcB = 0xFFFFFFFF
+                static_if (TRANSPOSED) {
+                    srcB = st2_conv_b_src_tr(mBase + lr1, kb * 32u + iy, ka.rows, ka.k, ka.cin, ka.r0, ka.pad_l, ka.dil, ka.stride, ka.t_in, ka.xs)
+                } else {
+                    srcB = st2_conv_b_src_fwd(mBase + lr1, kb * 32u + iy, ka.rows, ka.k, ka.cin, ka.r0, ka.pad_l, ka.dil, ka.stride, ka.t_in, ka.xs)
+                }
+                if (srcB != 0xFFFFFFFF) {
+                    b0 = xf[srcB]
+                    b1 = xf[srcB + 1u]
+                }
+            } else {
+                let srcB = (mBase + lr1) * kdim4 + (kb * 32u + iy) / 4u
+                b0 = xf[srcB]
+                b1 = xf[srcB + 1u]
+            }
+            // the weight row's 32-block in the plane: a quant matrix row [K], or the lift's row tap * cout + co [cin]
+            var row_unit0 = (nBase + lr0) * (kdim / w_unit())
+            var unit_in_row = kb
+            static_if (TRANSPOSED) {
+                let per_tap = ka.cin / 32u
+                let row = nBase + lr0 < cout_u ? (kb / per_tap) * cout_u + nBase + lr0 : 0u
+                row_unit0 = row * ((ka.cin + w_unit() - 1u) / w_unit())
+                unit_in_row = kb % per_tap
+            }
+            static_if (WQ8) {
+                let blk = row_unit0 + unit_in_row
+                let sA = float(wsh[blk * 17u])
+                let qp = unsafe(addr(wqb[blk * 34u + 2u + il0 * 16u]))
+                for [unroll_full] (i in range(16)) {
+                    va[i] = TILET(float(unsafe(qp[i])) * sA)  // nolint:PERF020,LINT019 — the float stamps' identity cast
+                }
+            } else {
+                static_if (WF16) {
+                    let hp = unsafe(addr(whf[(row_unit0 + unit_in_row) * 32u + il0 * 16u]))
+                    for [unroll_full] (i in range(16)) {
+                        va[i] = TILET(float(unsafe(hp[i])))  // nolint:PERF020,LINT019 — the float stamps' identity cast
+                    }
+                } else {
+                    kq_decode(row_unit0, unit_in_row, il0, va)
+                }
+            }
+            static_if (TRANSPOSED) {
+                if (nBase + lr0 >= cout_u) {   // a pad row would read the next tap's rows: zeros
+                    for [unroll_full] (i in range(16)) {
+                        va[i] = TILET(0.0)  // nolint:PERF020,LINT019 — the float stamps' identity cast
+                    }
+                }
+            }
+            publish_a(va, tA0)
+            static_if (EXACT) {
+                tg_store_float4(tb, ibB, b0)
+                tg_store_float4(tb, ibB + 4u, b1)
+            } else {
+                tg_store_half4(tb, ibB, b0)
+                tg_store_half4(tb, ibB + 4u, b1)
+            }
+            barrier()
+            acc_quad(aB, bB, ma, mb, mc)
+            kb++
+        }
+        let row0 = mBase + (sg / 2u) * 16u  // accumulator rows = tokens
+        let col0 = nBase + (sg % 2u) * 32u  // accumulator cols = weight rows
+        for [unroll_full] (i in range(8)) {
+            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ndim + col0 + uint(i % 4) * 8u, ndim)
+        }
+    }
+}
+
+//! The stored-plane tile's stamps, a form a format of the planes the engine's own mints hold (Q8_0, Q4_K, Q5_K, Q6_K): the dense GEMM
+//! at float tiles; the conv gather and the transposed conv's gather over the lift, each at half tiles and at float tiles (EXACT:
+//! the seats whose outputs round to integers or feed a phase, and the Pocket codec).
+[metal_dispatch(name = "enc_st2_q8_exact_mm", pso = "g_pso_st2_q8_exact_mm", tgmem = "metal_st2_q8_exact_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64")]
+class MetalSt2Q8ExactMm : MetalSt2StoredMmT {
+    typedef TILET = float
+    typedef SGT = simdgroup_float8x8
+    override EXACT = true
+    override WQ8 = true
+
+    [metal_kernel(name="metal_st2_q8_exact_mm_msl")]
+    def metal_st2_q8_exact_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_st2_q8_conv_mm", pso = "g_pso_st2_q8_conv_mm", tgmem = "metal_st2_q8_conv_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 8, ka.xs % 4")]
+class MetalSt2Q8ConvMm : MetalSt2StoredMmT {
+    typedef TILET = float16
+    typedef SGT = simdgroup_half8x8
+    override CONV = true
+    override DENSE = false
+    override WQ8 = true
+
+    [metal_kernel(name="metal_st2_q8_conv_mm_msl")]
+    def metal_st2_q8_conv_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_st2_q8_conv_exact_mm", pso = "g_pso_st2_q8_conv_exact_mm", tgmem = "metal_st2_q8_conv_exact_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 8, ka.xs % 4")]
+class MetalSt2Q8ConvExactMm : MetalSt2StoredMmT {
+    typedef TILET = float
+    typedef SGT = simdgroup_float8x8
+    override EXACT = true
+    override CONV = true
+    override DENSE = false
+    override WQ8 = true
+
+    [metal_kernel(name="metal_st2_q8_conv_exact_mm_msl")]
+    def metal_st2_q8_conv_exact_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_st2_q8_conv_tr_mm", pso = "g_pso_st2_q8_conv_tr_mm", tgmem = "metal_st2_q8_conv_tr_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 32, ka.xs % 4")]
+class MetalSt2Q8ConvTrMm : MetalSt2StoredMmT {
+    typedef TILET = float16
+    typedef SGT = simdgroup_half8x8
+    override CONV = true
+    override DENSE = false
+    override TRANSPOSED = true
+    override WQ8 = true
+
+    [metal_kernel(name="metal_st2_q8_conv_tr_mm_msl")]
+    def metal_st2_q8_conv_tr_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_st2_q8_conv_tr_exact_mm", pso = "g_pso_st2_q8_conv_tr_exact_mm", tgmem = "metal_st2_q8_conv_tr_exact_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 32, ka.xs % 4")]
+class MetalSt2Q8ConvTrExactMm : MetalSt2StoredMmT {
+    typedef TILET = float
+    typedef SGT = simdgroup_float8x8
+    override EXACT = true
+    override CONV = true
+    override DENSE = false
+    override TRANSPOSED = true
+    override WQ8 = true
+
+    [metal_kernel(name="metal_st2_q8_conv_tr_exact_mm_msl")]
+    def metal_st2_q8_conv_tr_exact_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_kq_st2_k4_exact_mm", pso = "g_pso_st2_k4_exact_mm", tgmem = "metal_st2_k4_exact_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64")]
+class MetalSt2K4ExactMm : MetalSt2StoredMmT {
+    typedef TILET = float
+    typedef SGT = simdgroup_float8x8
+    override EXACT = true
+    override KQ = true
+    override KQ_D16 = true
+    override KQ_SC = true
+    override SB_UINTS = 32u
+    override QH = false
+
+    [metal_kernel(name="metal_st2_k4_exact_mm_msl")]
+    def metal_st2_k4_exact_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_kq_st2_k4_conv_mm", pso = "g_pso_st2_k4_conv_mm", tgmem = "metal_st2_k4_conv_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 8, ka.xs % 4")]
+class MetalSt2K4ConvMm : MetalSt2StoredMmT {
+    typedef TILET = float16
+    typedef SGT = simdgroup_half8x8
+    override CONV = true
+    override DENSE = false
+    override KQ = true
+    override KQ_D16 = true
+    override KQ_SC = true
+    override SB_UINTS = 32u
+    override QH = false
+
+    [metal_kernel(name="metal_st2_k4_conv_mm_msl")]
+    def metal_st2_k4_conv_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_kq_st2_k4_conv_exact_mm", pso = "g_pso_st2_k4_conv_exact_mm", tgmem = "metal_st2_k4_conv_exact_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 8, ka.xs % 4")]
+class MetalSt2K4ConvExactMm : MetalSt2StoredMmT {
+    typedef TILET = float
+    typedef SGT = simdgroup_float8x8
+    override EXACT = true
+    override CONV = true
+    override DENSE = false
+    override KQ = true
+    override KQ_D16 = true
+    override KQ_SC = true
+    override SB_UINTS = 32u
+    override QH = false
+
+    [metal_kernel(name="metal_st2_k4_conv_exact_mm_msl")]
+    def metal_st2_k4_conv_exact_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_kq_st2_k4_conv_tr_mm", pso = "g_pso_st2_k4_conv_tr_mm", tgmem = "metal_st2_k4_conv_tr_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 32, ka.xs % 4")]
+class MetalSt2K4ConvTrMm : MetalSt2StoredMmT {
+    typedef TILET = float16
+    typedef SGT = simdgroup_half8x8
+    override CONV = true
+    override DENSE = false
+    override TRANSPOSED = true
+    override KQ = true
+    override KQ_D16 = true
+    override KQ_SC = true
+    override SB_UINTS = 32u
+    override QH = false
+
+    [metal_kernel(name="metal_st2_k4_conv_tr_mm_msl")]
+    def metal_st2_k4_conv_tr_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_kq_st2_k4_conv_tr_exact_mm", pso = "g_pso_st2_k4_conv_tr_exact_mm", tgmem = "metal_st2_k4_conv_tr_exact_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 32, ka.xs % 4")]
+class MetalSt2K4ConvTrExactMm : MetalSt2StoredMmT {
+    typedef TILET = float
+    typedef SGT = simdgroup_float8x8
+    override EXACT = true
+    override CONV = true
+    override DENSE = false
+    override TRANSPOSED = true
+    override KQ = true
+    override KQ_D16 = true
+    override KQ_SC = true
+    override SB_UINTS = 32u
+    override QH = false
+
+    [metal_kernel(name="metal_st2_k4_conv_tr_exact_mm_msl")]
+    def metal_st2_k4_conv_tr_exact_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_kq_st2_k5_exact_mm", pso = "g_pso_st2_k5_exact_mm", tgmem = "metal_st2_k5_exact_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64")]
+class MetalSt2K5ExactMm : MetalSt2StoredMmT {
+    typedef TILET = float
+    typedef SGT = simdgroup_float8x8
+    override EXACT = true
+    override KQ = true
+    override KQ_D16 = true
+    override KQ_SC = true
+    override SB_UINTS = 40u
+    override QH = true
+
+    [metal_kernel(name="metal_st2_k5_exact_mm_msl")]
+    def metal_st2_k5_exact_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_kq_st2_k5_conv_mm", pso = "g_pso_st2_k5_conv_mm", tgmem = "metal_st2_k5_conv_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 8, ka.xs % 4")]
+class MetalSt2K5ConvMm : MetalSt2StoredMmT {
+    typedef TILET = float16
+    typedef SGT = simdgroup_half8x8
+    override CONV = true
+    override DENSE = false
+    override KQ = true
+    override KQ_D16 = true
+    override KQ_SC = true
+    override SB_UINTS = 40u
+    override QH = true
+
+    [metal_kernel(name="metal_st2_k5_conv_mm_msl")]
+    def metal_st2_k5_conv_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_kq_st2_k5_conv_exact_mm", pso = "g_pso_st2_k5_conv_exact_mm", tgmem = "metal_st2_k5_conv_exact_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 8, ka.xs % 4")]
+class MetalSt2K5ConvExactMm : MetalSt2StoredMmT {
+    typedef TILET = float
+    typedef SGT = simdgroup_float8x8
+    override EXACT = true
+    override CONV = true
+    override DENSE = false
+    override KQ = true
+    override KQ_D16 = true
+    override KQ_SC = true
+    override SB_UINTS = 40u
+    override QH = true
+
+    [metal_kernel(name="metal_st2_k5_conv_exact_mm_msl")]
+    def metal_st2_k5_conv_exact_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_kq_st2_k5_conv_tr_mm", pso = "g_pso_st2_k5_conv_tr_mm", tgmem = "metal_st2_k5_conv_tr_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 32, ka.xs % 4")]
+class MetalSt2K5ConvTrMm : MetalSt2StoredMmT {
+    typedef TILET = float16
+    typedef SGT = simdgroup_half8x8
+    override CONV = true
+    override DENSE = false
+    override TRANSPOSED = true
+    override KQ = true
+    override KQ_D16 = true
+    override KQ_SC = true
+    override SB_UINTS = 40u
+    override QH = true
+
+    [metal_kernel(name="metal_st2_k5_conv_tr_mm_msl")]
+    def metal_st2_k5_conv_tr_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_kq_st2_k5_conv_tr_exact_mm", pso = "g_pso_st2_k5_conv_tr_exact_mm", tgmem = "metal_st2_k5_conv_tr_exact_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 32, ka.xs % 4")]
+class MetalSt2K5ConvTrExactMm : MetalSt2StoredMmT {
+    typedef TILET = float
+    typedef SGT = simdgroup_float8x8
+    override EXACT = true
+    override CONV = true
+    override DENSE = false
+    override TRANSPOSED = true
+    override KQ = true
+    override KQ_D16 = true
+    override KQ_SC = true
+    override SB_UINTS = 40u
+    override QH = true
+
+    [metal_kernel(name="metal_st2_k5_conv_tr_exact_mm_msl")]
+    def metal_st2_k5_conv_tr_exact_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_kq_st2_k6_exact_mm", pso = "g_pso_st2_k6_exact_mm", tgmem = "metal_st2_k6_exact_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64")]
+class MetalSt2K6ExactMm : MetalSt2StoredMmT {
+    typedef TILET = float
+    typedef SGT = simdgroup_float8x8
+    override EXACT = true
+    override KQ = true
+    override KQ_D16 = true
+    override KQ_SC = true
+    override SIXBIT = true
+
+    [metal_kernel(name="metal_st2_k6_exact_mm_msl")]
+    def metal_st2_k6_exact_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_kq_st2_k6_conv_mm", pso = "g_pso_st2_k6_conv_mm", tgmem = "metal_st2_k6_conv_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 8, ka.xs % 4")]
+class MetalSt2K6ConvMm : MetalSt2StoredMmT {
+    typedef TILET = float16
+    typedef SGT = simdgroup_half8x8
+    override CONV = true
+    override DENSE = false
+    override KQ = true
+    override KQ_D16 = true
+    override KQ_SC = true
+    override SIXBIT = true
+
+    [metal_kernel(name="metal_st2_k6_conv_mm_msl")]
+    def metal_st2_k6_conv_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_kq_st2_k6_conv_exact_mm", pso = "g_pso_st2_k6_conv_exact_mm", tgmem = "metal_st2_k6_conv_exact_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 8, ka.xs % 4")]
+class MetalSt2K6ConvExactMm : MetalSt2StoredMmT {
+    typedef TILET = float
+    typedef SGT = simdgroup_float8x8
+    override EXACT = true
+    override CONV = true
+    override DENSE = false
+    override KQ = true
+    override KQ_D16 = true
+    override KQ_SC = true
+    override SIXBIT = true
+
+    [metal_kernel(name="metal_st2_k6_conv_exact_mm_msl")]
+    def metal_st2_k6_conv_exact_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_kq_st2_k6_conv_tr_mm", pso = "g_pso_st2_k6_conv_tr_mm", tgmem = "metal_st2_k6_conv_tr_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 32, ka.xs % 4")]
+class MetalSt2K6ConvTrMm : MetalSt2StoredMmT {
+    typedef TILET = float16
+    typedef SGT = simdgroup_half8x8
+    override CONV = true
+    override DENSE = false
+    override TRANSPOSED = true
+    override KQ = true
+    override KQ_D16 = true
+    override KQ_SC = true
+    override SIXBIT = true
+
+    [metal_kernel(name="metal_st2_k6_conv_tr_mm_msl")]
+    def metal_st2_k6_conv_tr_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_kq_st2_k6_conv_tr_exact_mm", pso = "g_pso_st2_k6_conv_tr_exact_mm", tgmem = "metal_st2_k6_conv_tr_exact_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 32, ka.xs % 4")]
+class MetalSt2K6ConvTrExactMm : MetalSt2StoredMmT {
+    typedef TILET = float
+    typedef SGT = simdgroup_float8x8
+    override EXACT = true
+    override CONV = true
+    override DENSE = false
+    override TRANSPOSED = true
+    override KQ = true
+    override KQ_D16 = true
+    override KQ_SC = true
+    override SIXBIT = true
+
+    [metal_kernel(name="metal_st2_k6_conv_tr_exact_mm_msl")]
+    def metal_st2_k6_conv_tr_exact_mm {
+        stored_mm_body()
+    }
+}
+
+//! ... and over a plane of half floats: a codec conv or a flow head a file stores F16, its rows re-laid for the tile
+[metal_dispatch(name = "enc_st2_f16_exact_mm", pso = "g_pso_st2_f16_exact_mm", tgmem = "metal_st2_f16_exact_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64")]
+class MetalSt2F16ExactMm : MetalSt2StoredMmT {
+    typedef TILET = float
+    typedef SGT = simdgroup_float8x8
+    override EXACT = true
+    override WF16 = true
+
+    [metal_kernel(name="metal_st2_f16_exact_mm_msl")]
+    def metal_st2_f16_exact_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_st2_f16_conv_mm", pso = "g_pso_st2_f16_conv_mm", tgmem = "metal_st2_f16_conv_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 8, ka.xs % 4")]
+class MetalSt2F16ConvMm : MetalSt2StoredMmT {
+    typedef TILET = float16
+    typedef SGT = simdgroup_half8x8
+    override CONV = true
+    override DENSE = false
+    override WF16 = true
+
+    [metal_kernel(name="metal_st2_f16_conv_mm_msl")]
+    def metal_st2_f16_conv_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_st2_f16_conv_exact_mm", pso = "g_pso_st2_f16_conv_exact_mm", tgmem = "metal_st2_f16_conv_exact_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 8, ka.xs % 4")]
+class MetalSt2F16ConvExactMm : MetalSt2StoredMmT {
+    typedef TILET = float
+    typedef SGT = simdgroup_float8x8
+    override EXACT = true
+    override CONV = true
+    override DENSE = false
+    override WF16 = true
+
+    [metal_kernel(name="metal_st2_f16_conv_exact_mm_msl")]
+    def metal_st2_f16_conv_exact_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_st2_f16_conv_tr_mm", pso = "g_pso_st2_f16_conv_tr_mm", tgmem = "metal_st2_f16_conv_tr_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 32, ka.xs % 4")]
+class MetalSt2F16ConvTrMm : MetalSt2StoredMmT {
+    typedef TILET = float16
+    typedef SGT = simdgroup_half8x8
+    override CONV = true
+    override DENSE = false
+    override TRANSPOSED = true
+    override WF16 = true
+
+    [metal_kernel(name="metal_st2_f16_conv_tr_mm_msl")]
+    def metal_st2_f16_conv_tr_mm {
+        stored_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_st2_f16_conv_tr_exact_mm", pso = "g_pso_st2_f16_conv_tr_exact_mm", tgmem = "metal_st2_f16_conv_tr_exact_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64, ka.cin % 32, ka.xs % 4")]
+class MetalSt2F16ConvTrExactMm : MetalSt2StoredMmT {
+    typedef TILET = float
+    typedef SGT = simdgroup_float8x8
+    override EXACT = true
+    override CONV = true
+    override DENSE = false
+    override TRANSPOSED = true
+    override WF16 = true
+
+    [metal_kernel(name="metal_st2_f16_conv_tr_exact_mm_msl")]
+    def metal_st2_f16_conv_tr_exact_mm {
+        stored_mm_body()
     }
 }
 
@@ -8883,7 +9444,7 @@ def private kmask_sc_mn_ch(sv : uint4; jl : uint; ch : int; var sc, mn : uint&) 
 
 // q4_K/q5_K kmask halfword-pair scale decode — sc/min byte pairs for both 32-halves of the
 // lane's superblock quadrant (x = sc lo-pair, y = min lo-pair, z = sc hi-pair, w = min hi-pair).
-def private kmask_scales(sv : uint4; iq : uint) : uint4 {
+def kmask_scales(sv : uint4; iq : uint) : uint4 {
     let hw0 = (sv.y >> (16u * iq)) & 0xFFFF
     let hw2 = (sv.z >> (16u * iq)) & 0xFFFF
     let hw4 = (sv.w >> (16u * iq)) & 0xFFFF
@@ -8895,7 +9456,6 @@ def private kmask_scales(sv : uint4; iq : uint) : uint4 {
 [grid_words(of = "iq3s_grid")]
 def public iq3s_gw(i : int) : uint {}
 
-
 def public iq3s_sx(sw, t : uint) : float => float((int((sw >> (t * 8u)) & 255u) ^ 128) - 128)
 
 def public u8x4_f4(w : uint) : float4 => float4(float(w & 255u), float((w >> 8u) & 255u),
@@ -8905,7 +9465,6 @@ def public u8x4_f4(w : uint) : float4 => float4(float(w & 255u), float((w >> 8u)
 // word per call; the GEMV and mul_mm stage it, the mv twins read it directly.
 [grid_words(of = "iq3xxs_grid")]
 def public iq3xxs_gw(i : int) : uint {}
-
 
 def public iq_sign_apply(m : float4; nib : uint) : float4 => float4((nib & 1u) != 0u ? -m.x : m.x, (nib & 2u) != 0u ? -m.y : m.y,
     (nib & 4u) != 0u ? -m.z : m.z, (nib & 8u) != 0u ? -m.w : m.w)
@@ -11894,7 +12453,6 @@ class template MetalKqGemvK4T : MetalGemvSiteT {
     @ssbo @binding = 7 @role = "read" @template_gate = GATHERED sel : array<uint>    // [streams x 2k] selection rows (idx section read)
     @template_constant X4 : bool = false
 
-
     def abstract x4_at(i : uint) : float4
 
     def gemv_body {   // nolint:STYLE038 — MSL kernel body; the gathered GEMV phases share tgmem state
@@ -12404,7 +12962,6 @@ class MetalMoeGemvK2 : MetalKqGemvK2T {
         gemv_body()
     }
 }
-
 
 // LANES picks the map lane_setup lays into lc[] - 23 = k2/k3, 45 = k4/k5, 6 = k6, 0 = none; an mv_superblock reads the slots back by position
 [ |> template_struct_instance]
@@ -17389,77 +17946,6 @@ class MetalSt2ColStats : MetalTgReduceBase {
     }
 }
 
-[metal_dispatch(name = "enc_st2_adain_snake", pso = "g_pso_st2_adain_snake", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2AdainSnake : GkAdain {
-    override SNAKE = true
-
-    [metal_kernel(name="metal_st2_adain_snake_msl")]
-    def metal_st2_adain_snake {
-        adain_body()
-    }
-}
-
-[metal_dispatch(name = "enc_st2_adain_leaky", pso = "g_pso_st2_adain_leaky", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2AdainLeaky : GkAdain {
-    [metal_kernel(name="metal_st2_adain_leaky_msl")]
-    def metal_st2_adain_leaky {
-        adain_body()
-    }
-}
-
-//! LeakyReLU in place at the stage's slope - an ew1 map with the slope bound.
-[metal_dispatch(name = "enc_st2_leaky", pso = "g_pso_st2_leaky", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2Leaky : MetalEw1BaseT {
-    @uniform @binding = 2 slope : float
-
-    def override map(a : float) : float => a > 0.0 ? a : a * slope
-
-    [metal_kernel(name="metal_st2_leaky_msl")]
-    def metal_st2_leaky {
-        ew1_body()
-    }
-}
-
-//! out = (zero ? 0 : out) + scale * y - the stage's averaged residual-block sum.
-[metal_dispatch(name = "enc_st2_axpy", pso = "g_pso_st2_axpy", tg = 64, grid = "nelem/64", params = "nelem : int64")]
-class MetalSt2Axpy : GkAxpy {
-    [metal_kernel(name="metal_st2_axpy_msl")]
-    def metal_st2_axpy {
-        axpy_body()
-    }
-}
-
-//! the residual join's add-and-scale: the AdaIN blocks' join (1 / sqrt 2) and the generator's averaged stage sum, in place where o is a
-//! - off the `MetalEw2T` family onto the template both homes stamp (`GkAddScale`), whose body is the Vulkan twin's
-[metal_dispatch(name = "enc_st2_add", pso = "g_pso_st2_add", tg = 64, grid = "nelem/64", params = "nelem : int64")]
-class MetalSt2Add : GkAddScale {
-    [metal_kernel(name="metal_st2_add_msl")]
-    def metal_st2_add {
-        add_scale_body()
-    }
-}
-
-//! y [t + 1][c] = x [t][c] behind one reflected row (row 0 = x's row 1): the last stage's left reflect pad.
-[metal_dispatch(name = "enc_st2_reflect1", pso = "g_pso_st2_reflect1", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2Reflect1 {
-    @ssbo @binding = 0 @role = "read" x : array<float>
-    @ssbo @binding = 1 @role = "write" y : array<float>
-    @uniform @binding = 2 c : uint
-    @uniform @binding = 3 total : uint      //!< (t + 1) * c
-
-    [metal_kernel(name="metal_st2_reflect1_msl")]
-    def metal_st2_reflect1 {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        let r = gid / c
-        let ci = gid % c
-        let src = r == 0u ? 1u : r - 1u
-        y[gid] = x[src * c + ci]
-    }
-}
-
 //! the row gather both homes stamp: a stem's window-sort reorder with the adds off, an embedding lookup with its position and
 //! type rows on, the greedy chain's one-row gather from the fp32 token table under the model's embed scale
 [metal_dispatch(name = "enc_row_gather", pso = "g_pso_row_gather", tg = 64, grid = "total/64", params = "total : int64")]
@@ -17467,24 +17953,6 @@ class MetalRowGather : GkRowGather {
     [metal_kernel(name="metal_row_gather_msl")]
     def metal_row_gather {
         row_gather_body()
-    }
-}
-
-//! cat(x [t][c], res [t][rc] at stride rs when with_res, f0 at stride f0s, n at stride ns), zero-padded to width.
-[metal_dispatch(name = "enc_st2_concat", pso = "g_pso_st2_concat", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2Concat : GkConcat {
-    [metal_kernel(name="metal_st2_concat_msl")]
-    def metal_st2_concat {
-        concat_body()
-    }
-}
-
-//! The depthwise transposed pool on rows - the transposed form of the depthwise conv both homes stamp.
-[metal_dispatch(name = "enc_st2_pool_dw", pso = "g_pso_st2_pool_dw", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2PoolDw : GkDwConvRows {
-    [metal_kernel(name="metal_st2_pool_dw_msl")]
-    def metal_st2_pool_dw {
-        dw_conv_rows_body()
     }
 }
 
@@ -17498,17 +17966,20 @@ struct St2LstmArgs {
     reverse : uint
 }
 
-[metal_dispatch(name = "enc_st2_lstm", pso = "g_pso_st2_lstm", tgmem = "metal_st2_lstm_msl_tgmem", tg = "lanes", grid = "1", params = "lanes : int64")]
-class MetalSt2Lstm {
+//! The recurrence over the layer's weight as it is held: f32 rows, or under WQ8 its stored Q8_0 blocks
+[ |> template_struct_instance]
+class template MetalSt2LstmT {
+    @template_constant WQ8 : bool = false
     @ssbo @binding = 0 @role = "read" xg : array<float>
     @ssbo @binding = 1 @role = "write" y : array<float>
-    @ssbo @binding = 2 @role = "weight" @off = "woff" whh : array<float4>   //!< [4 hidden x hidden] row-major, four inputs a load
+    @ssbo @binding = 2 @role = "weight" @off = "woff" @template_gate = "!WQ8" whh : array<float4>   //!< [4 hidden x hidden] row-major, four inputs a load
+    @ssbo @binding = 2 @role = "weight" @off = "woff" @template_gate = WQ8 wsh : array<float16>   //!< the same rows as Q8_0 blocks, hidden / 32 a row: a block's half scale at 17 b
     @uniform @binding = 3 ka : St2LstmArgs
+    @ssbo @binding = 4 @role = "alias" @off = "woff" @template_gate = WQ8 wqb : array<int8>   //!< ... and its quants at 34 b + 2
     @workgroup hsh : float[256]
     @workgroup gsh : float[1024]
 
-    [metal_kernel(name="metal_st2_lstm_msl")]
-    def metal_st2_lstm {
+    def st2_lstm_body {
         let lid = gl_LocalInvocationID.x
         let hd = ka.hidden
         let g = lid / hd
@@ -17523,13 +17994,29 @@ class MetalSt2Lstm {
         while (step < ka.t) {
             barrier()
             var acc = 0.0
-            let wrow = (g * hd + j) * hd4
-            var i4 = 0u
-            while (i4 < hd4) {
-                let w4 = whh[wrow + i4]
-                let i = i4 * 4u
-                acc += w4.x * hsh[i] + w4.y * hsh[i + 1u] + w4.z * hsh[i + 2u] + w4.w * hsh[i + 3u]
-                i4++
+            static_if (WQ8) {
+                let nb = hd / 32u
+                var b = 0u
+                while (b < nb) {
+                    let blk = (g * hd + j) * nb + b
+                    let qp = unsafe(addr(wqb[blk * 34u + 2u]))
+                    let hp = unsafe(addr(hsh[b * 32u]))
+                    var part = 0.0
+                    for [unroll_full] (i in range(32)) {
+                        part += float(unsafe(qp[i])) * unsafe(hp[i])
+                    }
+                    acc += part * float(wsh[blk * 17u])
+                    b++
+                }
+            } else {
+                let wrow = (g * hd + j) * hd4
+                var i4 = 0u
+                while (i4 < hd4) {
+                    let w4 = whh[wrow + i4]
+                    let i = i4 * 4u
+                    acc += w4.x * hsh[i] + w4.y * hsh[i + 1u] + w4.z * hsh[i + 2u] + w4.w * hsh[i + 3u]
+                    i4++
+                }
             }
             gsh[lid] = acc
             barrier()
@@ -17552,225 +18039,13 @@ class MetalSt2Lstm {
     }
 }
 
-//! q, k, v and o as f32 rows [t][d], head h at column h * hs, hs at most 128.
-struct St2AttnArgs {
-    t : uint
-    d : uint
-    hs : uint
-    heads : uint
-}
+[metal_dispatch(name = "enc_st2_lstm_q8", pso = "g_pso_st2_lstm_q8", tgmem = "metal_st2_lstm_q8_msl_tgmem", tg = "lanes", grid = "1", params = "lanes : int64", requires = "ka.hidden % 32")]
+class MetalSt2LstmQ8 : MetalSt2LstmT {
+    override WQ8 = true
 
-[metal_dispatch(name = "enc_st2_attn", pso = "g_pso_st2_attn", tg = 64, grid = "total/2", params = "total : int64")]
-class MetalSt2Attn {
-    @ssbo @binding = 0 @role = "read" q : array<float>
-    @ssbo @binding = 1 @role = "read" k : array<float>
-    @ssbo @binding = 2 @role = "read" v : array<float>
-    @ssbo @binding = 3 @role = "write" o : array<float>
-    @uniform @binding = 4 ka : St2AttnArgs
-
-    [metal_kernel(name="metal_st2_attn_msl")]
-    def metal_st2_attn {
-        let gid = gl_GlobalInvocationID.x
-        let row = gid / 32u
-        if (row >= ka.heads * ka.t) {   //! whole simdgroups: the rows align to them
-            return
-        }
-        let lane = gid % 32u
-        let h = row / ka.t
-        let i = row % ka.t
-        let qrow = i * ka.d + h * ka.hs
-        var acc : float[128]
-        var e0 = 0u
-        while (e0 < ka.hs) {
-            acc[e0] = 0.0
-            e0++
-        }
-        var m = -1.0e30
-        var l = 0.0
-        var j = lane
-        while (j < ka.t) {
-            let krow = j * ka.d + h * ka.hs
-            var sdot = 0.0
-            var e = 0u
-            while (e < ka.hs) {
-                sdot += q[qrow + e] * k[krow + e]
-                e++
-            }
-            let sc = sdot / sqrt(float(ka.hs))
-            let mn = max(m, sc)
-            let f = exp(m - mn)
-            let p = exp(sc - mn)
-            l = l * f + p
-            e = 0u
-            while (e < ka.hs) {
-                acc[e] = acc[e] * f + p * v[krow + e]
-                e++
-            }
-            m = mn
-            j += 32u
-        }
-        let mall = simd_max(m)
-        let f2 = exp(m - mall)
-        let lall = simd_sum(l * f2)
-        var e1 = 0u
-        while (e1 < ka.hs) {
-            let s = simd_sum(acc[e1] * f2)
-            if (lane == 0u) {
-                o[qrow + e1] = s / lall
-            }
-            e1++
-        }
-    }
-}
-
-//! The CPU gelu's tanh form at full precision: the LUT form's two f16 roundings would move the front end's durations.
-[metal_dispatch(name = "enc_st2_gelu_tanh", pso = "g_pso_st2_gelu_tanh", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2GeluTanh : MetalEw1BaseT {
-    def override map(a : float) : float => tts_gelu_tanh(a)
-
-    [metal_kernel(name="metal_st2_gelu_tanh_msl")]
-    def metal_st2_gelu_tanh {
-        ew1_body()
-    }
-}
-
-//! the duration sigmoid sums - the CPU `styletts2_durations`' raw durations
-[metal_dispatch(name = "enc_st2_sigsum", pso = "g_pso_st2_sigsum", tg = 64, grid = "t/64", params = "t : int64")]
-class MetalSt2SigSum : GkSigSum {
-    [metal_kernel(name="metal_st2_sigsum_msl")]
-    def metal_st2_sigsum {
-        sigsum_body()
-    }
-}
-
-[metal_dispatch(name = "enc_st2_src_low_torch", pso = "g_pso_st2_src_low_torch", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2SrcLowTorch : GkSrcLow {
-    override TORCH = true
-
-    [metal_kernel(name="metal_st2_src_low_torch_msl", fastmath=false)]
-    def metal_st2_src_low_torch {
-        src_low_body()
-    }
-}
-
-[metal_dispatch(name = "enc_st2_src_low_onnx", pso = "g_pso_st2_src_low_onnx", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2SrcLowOnnx : GkSrcLow {
-    [metal_kernel(name="metal_st2_src_low_onnx_msl", fastmath=false)]
-    def metal_st2_src_low_onnx {
-        src_low_body()
-    }
-}
-
-[metal_dispatch(name = "enc_st2_src_cumsum_torch", pso = "g_pso_st2_src_cumsum_torch", tg = "nh", grid = "1", params = "nh : int64")]
-class MetalSt2SrcCumsumTorch : GkSrcCumsum {
-    override TORCH = true
-
-    [metal_kernel(name="metal_st2_src_cumsum_torch_msl", fastmath=false)]   //! fast math folds the compensation away
-    def metal_st2_src_cumsum_torch {
-        src_cumsum_body()
-    }
-}
-
-[metal_dispatch(name = "enc_st2_src_cumsum_onnx", pso = "g_pso_st2_src_cumsum_onnx", tg = "nh", grid = "1", params = "nh : int64")]
-class MetalSt2SrcCumsumOnnx : GkSrcCumsum {
-    [metal_kernel(name="metal_st2_src_cumsum_onnx_msl", fastmath=false)]
-    def metal_st2_src_cumsum_onnx {
-        src_cumsum_body()
-    }
-}
-
-//! The source's own noise draw - the captured stream's seat when no stream was captured.
-[metal_dispatch(name = "enc_st2_src_noise", pso = "g_pso_st2_src_noise", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2SrcNoise : GkSrcNoise {
-    [metal_kernel(name="metal_st2_src_noise_msl")]
-    def metal_st2_src_noise {
-        src_noise_body()
-    }
-}
-
-[metal_dispatch(name = "enc_st2_src_sines_torch", pso = "g_pso_st2_src_sines_torch", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2SrcSinesTorch : GkSrcSines {
-    override TORCH = true
-
-    [metal_kernel(name="metal_st2_src_sines_torch_msl", fastmath=false)]
-    def metal_st2_src_sines_torch {
-        src_sines_body()
-    }
-}
-
-[metal_dispatch(name = "enc_st2_src_sines_onnx", pso = "g_pso_st2_src_sines_onnx", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2SrcSinesOnnx : GkSrcSines {
-    [metal_kernel(name="metal_st2_src_sines_onnx_msl", fastmath=false)]
-    def metal_st2_src_sines_onnx {
-        src_sines_body()
-    }
-}
-
-//! spec rows [frames][2 bins], the magnitudes then the phases; a zero imaginary part on the negative real axis reads +pi.
-[metal_dispatch(name = "enc_st2_stft_reflect", pso = "g_pso_st2_stft_reflect", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2StftReflect : GkStft {
-    override REFLECT = true
-
-    [metal_kernel(name="metal_st2_stft_reflect_msl")]
-    def metal_st2_stft_reflect {
-        stft_body()
-    }
-}
-
-[metal_dispatch(name = "enc_st2_stft_edge", pso = "g_pso_st2_stft_edge", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2StftEdge : GkStft {
-    [metal_kernel(name="metal_st2_stft_edge_msl")]
-    def metal_st2_stft_edge {
-        stft_body()
-    }
-}
-
-//! From conv_post's rows y [tt][stride] - a bin's log magnitude, then its phase; a non-negligible envelope divided out.
-//! The inverse STFT from conv_post's rows.
-[metal_dispatch(name = "enc_st2_istft", pso = "g_pso_st2_istft", tg = 64, grid = "n/64", params = "n : int64")]
-class MetalSt2Istft : GkIstft {
-    [metal_kernel(name="metal_st2_istft_msl")]
-    def metal_st2_istft {
-        istft_body()
-    }
-}
-
-[metal_dispatch(name = "enc_pk_rows", pso = "g_pso_pk_rows", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalPkRows : GkPkRows {
-    [metal_kernel(name="metal_pk_rows_msl")]
-    def metal_pk_rows {
-        pk_rows_body()
-    }
-}
-
-[metal_dispatch(name = "enc_pk_rows_elu", pso = "g_pso_pk_rows_elu", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalPkRowsElu : GkPkRows {
-    override ELU = true
-
-    [metal_kernel(name="metal_pk_rows_elu_msl")]
-    def metal_pk_rows_elu {
-        pk_rows_body()
-    }
-}
-
-//! x [t][c] *= s[c]: a transformer layer's per-channel layer scale, the rows template's SCALE stamp (`total` = the elements over four)
-[metal_dispatch(name = "enc_pk_row_scale", pso = "g_pso_pk_row_scale", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalPkRowScale : GkBiasAct {
-    override SCALE = true
-
-    [metal_kernel(name = "metal_pk_row_scale_msl")]
-    def metal_pk_row_scale {
-        bias_act_body()
-    }
-}
-
-//! the Pocket prompt's adjacent-pair rope over a span of rows from the voice slot's tables at an element base
-//! (the position the rows start at): the Vulkan chain's rope, stamped here for the prompt stage
-[metal_dispatch(name = "enc_pk_rope_tab", pso = "g_pso_pk_rope_tab", tg = 64, grid = "pairs/64", params = "pairs : int64")]
-class MetalPkRopeTab : GkRopeTab {
-    [metal_kernel(name="metal_pk_rope_tab_msl")]
-    def metal_pk_rope_tab {
-        rope_tab_body()
+    [metal_kernel(name="metal_st2_lstm_q8_msl")]
+    def metal_st2_lstm_q8 {
+        st2_lstm_body()
     }
 }
 
@@ -17847,34 +18122,6 @@ class MetalTwBiasGate : GkBiasGate {
     }
 }
 
-let PK_ATTN_HS = int(GK_PK_ATTN_HS)   //!< the widest head the attention row takes; a narrower head shares a column's value sum across 256 / hs parts
-let PK_ATTN_MAX_KEYS = int64(GK_PK_ATTN_MAX_KEYS)   //!< the scores the attention row stages in threadgroup memory - the body's literal
-
-//! the subgroup primitives the shared reductions ride, Metal's spelling
-def gk_subgroup_add(v : float) : float => simd_sum(v)
-def gk_subgroup_max(v : float) : float => simd_max(v)
-def gk_subgroup_xor(v : float; m : uint) : float => simd_shuffle_xor(v, m)
-def gk_subgroup_xor_u(v : uint; m : uint) : uint => simd_shuffle_xor(v, m)
-def gk_subgroup_bcast0_u(v : uint) : uint => simd_shuffle(v, 0u)
-def gk_subgroup_min_u(v : uint) : uint {
-    var m = v
-    var b = 16u
-    while (b >= 1u) {
-        m = min(m, simd_shuffle_xor(m, b))
-        b /= 2u
-    }
-    return m
-}
-
-//! The Pocket chains' causal cached attention row; a threadgroup a (head, row) over staged scores.
-[metal_dispatch(name = "enc_pk_attn", pso = "g_pso_pk_attn", tgmem = "metal_pk_attn_msl_tgmem", tg = 256, grid = "total", params = "total : int64", requires = "pa.hs % 4")]
-class MetalPkAttn : GkPkAttn {
-    [metal_kernel(name="metal_pk_attn_msl")]
-    def metal_pk_attn {
-        pk_attn_body()
-    }
-}
-
 //! Rows [nrows x dim]: x += a in place, then y = LayerNorm(x) * w + b at `yoff` - a layer's residual join
 //! and the norm after it as one dispatch (a is read out before y is written, so y may alias it): the
 //! ADD stamp of the LayerNorm body.
@@ -17885,153 +18132,6 @@ class MetalPkAddLn : GkPostAddLn {
     [metal_kernel(name="metal_pk_add_ln_msl")]
     def metal_pk_add_ln {
         post_add_ln_body()
-    }
-}
-
-//! The row GEMV's epilogues: the bare dot, the SiLU, the gated residual, the SiLU over the slab vector, the frame's tail.
-let PK_GEMV_MAX_NIN = 4096l   //!< the x the row GEMV stages in threadgroup memory - the body's literal
-let PK_GEMV_DOT = 0
-let PK_GEMV_LN_SILU = 1
-let PK_GEMV_GATE = 2
-let PK_GEMV_ADD_SILU = 3
-let PK_GEMV_TAIL = 4
-
-//! The Pocket frame's row GEMV on the template both homes stamp (`GkPkGemv`): the f32 rows of the slab, the inverse norm `rsqrt`
-[ |> template_struct_instance]
-class template MetalPkGemvT : GkPkGemv {
-    override RSQRT = true
-    override QUAD = false
-
-    def override row_dot_into(row, lane : uint; var acc : float&) {
-        f32_row_dot_into(row, lane, acc)
-    }
-}
-
-//! ... over a q8 region of the blob: the decode GEMV's lane map, a lane four quants of a block, the 32 lanes eight blocks a step
-//! derives GkPkGemv, the template both homes stamp
-[ |> template_struct_instance]
-class template MetalPkGemvQ8T : GkPkGemv {
-    @ssbo @binding = 9 @role = "weight" @off = "qoff" wsh : array<float16>
-    @ssbo @binding = 10 @role = "alias" @off = "qoff" wqb : array<int8>
-    override RSQRT = true
-    override QUAD = false
-
-    def override row_dot_into(row, lane : uint; var acc : float&) {
-        let nb4 = pa.nin / 4u
-        let wrow = row * (pa.nin / 32u)
-        var k = lane
-        while (k < nb4) {
-            let bi = wrow + k / 8u
-            let d = float(wsh[bi * 17u])
-            let qb = bi * 34u + 2u + (k % 8u) * 4u
-            let xv = float4(xs[k * 4u], xs[k * 4u + 1u], xs[k * 4u + 2u], xs[k * 4u + 3u])
-            acc += q8_quad_dot(wqb, qb, xv) * d
-            k += 32u
-        }
-    }
-}
-
-[metal_dispatch(name = "enc_pk_gemv_f32", pso = "g_pso_pk_gemv_f32", tgmem = "metal_pk_gemv_f32_msl_tgmem", tg = 128, grid = "rows/4", params = "rows : int64")]
-class MetalPkGemvF32 : MetalPkGemvT {
-    [metal_kernel(name="metal_pk_gemv_f32_msl")]
-    def metal_pk_gemv_f32 {
-        pk_gemv_body(gl_WorkGroupID.x, gl_LocalInvocationID.x)
-    }
-}
-
-[metal_dispatch(name = "enc_pk_gemv_f32_ln_silu", pso = "g_pso_pk_gemv_f32_ln_silu", tgmem = "metal_pk_gemv_f32_ln_silu_msl_tgmem", tg = 128, grid = "rows/4", params = "rows : int64")]
-class MetalPkGemvF32LnSilu : MetalPkGemvT {
-    override MOD_IN = true
-    override NORM_MOD_IN = true
-    override EPI = 1
-
-    [metal_kernel(name="metal_pk_gemv_f32_ln_silu_msl")]
-    def metal_pk_gemv_f32_ln_silu {
-        pk_gemv_body(gl_WorkGroupID.x, gl_LocalInvocationID.x)
-    }
-}
-
-[metal_dispatch(name = "enc_pk_gemv_f32_gate", pso = "g_pso_pk_gemv_f32_gate", tgmem = "metal_pk_gemv_f32_gate_msl_tgmem", tg = 128, grid = "rows/4", params = "rows : int64")]
-class MetalPkGemvF32Gate : MetalPkGemvT {
-    override MOD_IN = true
-    override EPI = 2
-
-    [metal_kernel(name="metal_pk_gemv_f32_gate_msl")]
-    def metal_pk_gemv_f32_gate {
-        pk_gemv_body(gl_WorkGroupID.x, gl_LocalInvocationID.x)
-    }
-}
-
-[metal_dispatch(name = "enc_pk_gemv_f32_add_silu", pso = "g_pso_pk_gemv_f32_add_silu", tgmem = "metal_pk_gemv_f32_add_silu_msl_tgmem", tg = 128, grid = "rows/4", params = "rows : int64")]
-class MetalPkGemvF32AddSilu : MetalPkGemvT {
-    override AUX_IN = true
-    override EPI = 3
-
-    [metal_kernel(name="metal_pk_gemv_f32_add_silu_msl")]
-    def metal_pk_gemv_f32_add_silu {
-        pk_gemv_body(gl_WorkGroupID.x, gl_LocalInvocationID.x)
-    }
-}
-
-[metal_dispatch(name = "enc_pk_gemv_f32_tail", pso = "g_pso_pk_gemv_f32_tail", tgmem = "metal_pk_gemv_f32_tail_msl_tgmem", tg = 128, grid = "rows/4", params = "rows : int64")]
-class MetalPkGemvF32Tail : MetalPkGemvT {
-    override MOD_IN = true
-    override AUX_IN = true
-    override TAIL = true
-    override NORM_MOD_IN = true
-    override EPI = 4
-
-    [metal_kernel(name="metal_pk_gemv_f32_tail_msl")]
-    def metal_pk_gemv_f32_tail {
-        pk_gemv_body(gl_WorkGroupID.x, gl_LocalInvocationID.x)
-    }
-}
-
-[metal_dispatch(name = "enc_pk_gemv_q8_ln_silu", pso = "g_pso_pk_gemv_q8_ln_silu", tgmem = "metal_pk_gemv_q8_ln_silu_msl_tgmem", tg = 128, grid = "rows/4", params = "rows : int64", requires = "pa.nin % 32")]
-class MetalPkGemvQ8LnSilu : MetalPkGemvQ8T {
-    override MOD_IN = true
-    override NORM_MOD_IN = true
-    override EPI = 1
-
-    [metal_kernel(name="metal_pk_gemv_q8_ln_silu_msl")]
-    def metal_pk_gemv_q8_ln_silu {
-        pk_gemv_body(gl_WorkGroupID.x, gl_LocalInvocationID.x)
-    }
-}
-
-[metal_dispatch(name = "enc_pk_gemv_q8_gate", pso = "g_pso_pk_gemv_q8_gate", tgmem = "metal_pk_gemv_q8_gate_msl_tgmem", tg = 128, grid = "rows/4", params = "rows : int64", requires = "pa.nin % 32")]
-class MetalPkGemvQ8Gate : MetalPkGemvQ8T {
-    override MOD_IN = true
-    override EPI = 2
-
-    [metal_kernel(name="metal_pk_gemv_q8_gate_msl")]
-    def metal_pk_gemv_q8_gate {
-        pk_gemv_body(gl_WorkGroupID.x, gl_LocalInvocationID.x)
-    }
-}
-
-[metal_dispatch(name = "enc_pk_gemv_q8_add_silu", pso = "g_pso_pk_gemv_q8_add_silu", tgmem = "metal_pk_gemv_q8_add_silu_msl_tgmem", tg = 128, grid = "rows/4", params = "rows : int64", requires = "pa.nin % 32")]
-class MetalPkGemvQ8AddSilu : MetalPkGemvQ8T {
-    override AUX_IN = true
-    override EPI = 3
-
-    [metal_kernel(name="metal_pk_gemv_q8_add_silu_msl")]
-    def metal_pk_gemv_q8_add_silu {
-        pk_gemv_body(gl_WorkGroupID.x, gl_LocalInvocationID.x)
-    }
-}
-
-[metal_dispatch(name = "enc_pk_gemv_q8_tail", pso = "g_pso_pk_gemv_q8_tail", tgmem = "metal_pk_gemv_q8_tail_msl_tgmem", tg = 128, grid = "rows/4", params = "rows : int64", requires = "pa.nin % 32")]
-class MetalPkGemvQ8Tail : MetalPkGemvQ8T {
-    override MOD_IN = true
-    override AUX_IN = true
-    override TAIL = true
-    override NORM_MOD_IN = true
-    override EPI = 4
-
-    [metal_kernel(name="metal_pk_gemv_q8_tail_msl")]
-    def metal_pk_gemv_q8_tail {
-        pk_gemv_body(gl_WorkGroupID.x, gl_LocalInvocationID.x)
     }
 }
 

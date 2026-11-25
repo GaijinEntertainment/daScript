@@ -2,7 +2,7 @@
 
 Companion to `ARCHITECTURE_GPU_TOWER.md`; a section is cited by its anchor. This document
 carries the Vulkan tower's row classes and attention routes, the tower encode chains on the discrete
-homes, and the whisper ASR decoder on the discrete homes; the StyleTTS2 and Pocket seats are `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`, the
+homes, and the whisper ASR decoder on the discrete homes; the StyleTTS2 and Pocket seats are `ARCHITECTURE_GPU_TOWER_TTS.md`, the
 FastConformer chain's rotary form (GigaAM) `ARCHITECTURE_GPU_TOWER_VULKAN_FC.md`. The
 Metal sections cited - the attention routes (`ARCHITECTURE_GPU_TOWER.md#tower-attn-routes`) and
 the encode chain's shape (`ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`) - stay in that file.

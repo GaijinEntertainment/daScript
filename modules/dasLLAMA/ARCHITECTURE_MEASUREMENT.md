@@ -200,7 +200,7 @@ cards. `performance/REVIEW.das` checks the records' tree-decidable provenance:
   class whose profile lacks one fails here instead of in `daspkg release --fat`. A profile
   carries no `engine_sha` because its validity is its release pin and its feature class: a
   commit stamp would name an orphan commit after every rebase and give a reader nothing to act
-  on. Licenses no names.
+  on. Licenses no names. A seat a class's own box did not time is borrowed and a ledger row names it: `gemm_f32_tile_gen` on `arm-neon`, `arm-sve`, `x86-amx` and `x86-avx2`, until the release re-mint races each (`followup_general.md` 317).
 - `check_ruler_records` - a `records/mtp/` file names no home directory. Licenses no names.
 - `main` - `dasllama_version.das` declares a readable `DASLLAMA_RELEASE`. Licenses no names.
 

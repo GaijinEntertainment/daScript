@@ -943,7 +943,7 @@ def test_boot_degrades_when_the_worker_cannot_load(t : T?) {
                 t |> success(!(tts?["ready"] ?? true), "the worker never armed")
                 t |> equal(int(tts?["pending"] ?? -1l), 0, "and nothing is queued behind it")
                 t |> equal(length(json_strings(tts?["voices"])), 0, "no voice list to offer")
-                t |> equal(tts?["lane"] ?? "", "q8", "the lane the boot asked for")
+                t |> equal(tts?["lane"] ?? "", "default", "the lane the boot asked for: no --tts-lane, the unpinned default")
                 let err = tts?["error"] ?? ""
                 t |> success(!empty(err), "the block carries the reason the page draws")
                 t |> success(find(err, "version 1") >= 0 && find(err, "tts_g2p.bin") >= 0,

@@ -8,6 +8,7 @@ require daslib/typemacro_boost
 require math
 require dasllama/dasllama_gpu_math   // ue4m3_half_f32: an NVFP4 codebook's sub-block scale in the selector's walk
 require daslib/math_bits   // uint_bits_to_float: the bf16 word form widens each half by its bit shift
+require daslib/shader_lingua_franca   // unpackHalf2x16, unpack8: the stored planes' decode helpers
 require daslib/ast_boost   // [tag_function(spirv_inline)]: the helpers the SPIR-V emitter visits at their call sites, with no dasSpirv require
 
 struct GkAxpyArgs {
@@ -967,6 +968,7 @@ struct GkPkGemvArgs {
     coff : uint     //! ... the cos table [pos][dh / 2] in tabs
     soff : uint     //! ... the sin table, the same layout
     x0mul : float   //! the tail: the noise row's weight in the frame - 1 where the flow steps from the noise (lsd, pointwise), 0 where the output is the frame itself (drifting)
+    wsoff : uint    //! a stored-row stamp over a member in a home's own layout: its scale rows' byte in the scale plane, `woff` then its first block's byte in the quant plane; a stored-row stamp's `woff` and `stride` count its member's plane's elements
 }
 
 //! The Pocket frame's row GEMV: y [nout] = W . x [nin] + b at one row, x staged in the workgroup - as it is, under NORM_IN through a
@@ -982,6 +984,7 @@ class template GkPkGemv : GkWgReduce {
     @template_constant ROPE_STORE : bool = false   //!< the qkv epilogue: the tables and the two caches bound
     @template_constant EPI : int = 0           //!< the epilogue, spelled as its literal: a template constant folds only a literal
     @template_constant QUAD : bool = true      //!< the f32 rows read as float4 on the four lattice (an alias of the rows' binding)
+    @template_constant ROWS : int = 4          //!< the rows a workgroup takes, 32 lanes each: its threads are 32 ROWS, and x is staged once for them all
     @ssbo @binding = 0 @role = "weight" wn : array<float>
     @ssbo @binding = 0 @role = "alias" @template_gate = QUAD wn4 : array<float4>   //! the same rows as float4: the quad dot's loads
     @ssbo @binding = 1 @role = "read" x : array<float>
@@ -994,7 +997,7 @@ class template GkPkGemv : GkWgReduce {
     @ssbo @binding = 8 @role = "write" @template_gate = ROPE_STORE vc : array<float>
     @kargs pa : GkPkGemvArgs
     @workgroup xs : float[int(GK_PK_GEMV_MAX_NIN)]
-    @workgroup @template_gate = ROPE_STORE dq : float[4]   //! the rope-store stamp: the workgroup's four dots side by side, so an even row turns its pair
+    @workgroup @template_gate = ROPE_STORE dq : float[32]   //! the rope-store stamp: the workgroup's dots side by side (ROWS of them, 32 at most), so an even row turns its pair
 
     def abstract row_dot_into(row, lane : uint; var acc : float&) : void   //! row `row`'s dot with the staged x over its 32 lanes
 
@@ -1065,7 +1068,7 @@ class template GkPkGemv : GkWgReduce {
         var s = 0.0
         while (k < pa.nin) {
             s += x[pa.xoff + k]
-            k += 128u
+            k += uint(ROWS) * 32u
         }
         var total = 0.0
         wg_sum_into(s, 0u, total)
@@ -1075,7 +1078,7 @@ class template GkPkGemv : GkWgReduce {
         while (k < pa.nin) {
             let dv = x[pa.xoff + k] - mean
             vs += dv * dv
-            k += 128u
+            k += uint(ROWS) * 32u
         }
         var inv = 0.0
         wg_rms_inv_into(vs, pa.nin, pa.eps, 1u, inv)
@@ -1087,11 +1090,11 @@ class template GkPkGemv : GkWgReduce {
             } else {
                 xs[k] = nv
             }
-            k += 128u
+            k += uint(ROWS) * 32u
         }
     }
 
-    //! workgroup `wg`'s four rows, thread `tid` of its 128
+    //! workgroup `wg`'s `ROWS` rows, thread `tid` of its 32 ROWS
     [tag_function(spirv_inline)]
     def pk_gemv_body(wg, tid : uint) {
         static_if (NORM_MOD_IN || NORM_IN) {
@@ -1100,11 +1103,11 @@ class template GkPkGemv : GkWgReduce {
             var k = tid
             while (k < pa.nin) {
                 xs[k] = x[pa.xoff + k]
-                k += 128u
+                k += uint(ROWS) * 32u
             }
         }
         barrier()
-        let row = wg * 4u + tid / 32u
+        let row = wg * uint(ROWS) + tid / 32u
         let lane = tid % 32u
         let live = row < pa.nout
         var sum = 0.0
@@ -6750,5 +6753,748 @@ class template GkDflashWalk {
             barrier()
             r++
         }
+    }
+}
+
+struct TtsElemArgs {
+    nelem : uint   //! the elements mapped
+    off : uint     //! their element base in x
+    slope : float  //! the leaky stamp's negative slope
+}
+
+//! an in-place elementwise map of x[off .. off + nelem), four elements an invocation; a stamp supplies `act`
+[ |> template_struct_instance]
+class template TtsElemT {
+    @ssbo @binding = 0 x : array<float>
+    @kargs pa : TtsElemArgs
+
+    def abstract act(v : float) : float   //! the map of one element
+
+    def elem_body {
+        let e = gl_GlobalInvocationID.x * 4u
+        let b = pa.off + e
+        if (e + 4u <= pa.nelem) {
+            let x0 = x[b]
+            let x1 = x[b + 1u]
+            let x2 = x[b + 2u]
+            let x3 = x[b + 3u]
+            let v0 = act(x0)
+            let v1 = act(x1)
+            let v2 = act(x2)
+            let v3 = act(x3)
+            x[b] = v0
+            x[b + 1u] = v1
+            x[b + 2u] = v2
+            x[b + 3u] = v3
+        } else {
+            var i = e
+            while (i < pa.nelem) {
+                let xi = x[pa.off + i]
+                let vi = act(xi)
+                x[pa.off + i] = vi
+                i++
+            }
+        }
+    }
+}
+
+//! the CPU `gelu`'s tanh form in f32 (not the f16 LUT form `act_f32` spells - its roundings would move the front end's
+//! durations); the clamp keeps a device tanh off its exp overflow and changes no f32 result
+[ |> template_struct_instance]
+class template TtsGeluTanhT : TtsElemT {
+    def override act(v : float) : float => tts_gelu_tanh(v)
+}
+
+//! the CPU `leaky_relu`: v > 0 ? v : v * slope
+[ |> template_struct_instance]
+class template TtsLeakyT : TtsElemT {
+    def override act(v : float) : float => v > 0.0 ? v : v * pa.slope
+}
+
+struct TtsAttnArgs {
+    t : uint       //! the rows, queries and keys alike
+    d : uint       //! the planes' row stride
+    hs : uint      //! the head size
+    heads : uint
+    scale : float  //! the score scale, 1 / sqrt(hs)
+    qoff : uint    //! each plane's element base
+    koff : uint
+    voff : uint
+    ooff : uint
+}
+
+let TTS_ATTN_TCAP = 512u   //! the staged score row's capacity
+
+//! bidirectional multi-head attention (`GkWgReduce`) in f32 over q, k, v [t][d] into out - the CPU `attention_rows`, a workgroup a
+//! (query row, head): the scaled dots, the softmax (exp clamped at -80), the value sum, 256 / hs invocations a value column.
+//! The driver dispatches it at t <= TTS_ATTN_TCAP (the staged score row) and hs 64 or 128 (the value split's lattice)
+[ |> template_struct_instance]
+class template TtsAttnT : GkWgReduce {
+    @ssbo @binding = 0 q : array<float>
+    @ssbo @binding = 1 k : array<float>
+    @ssbo @binding = 2 v : array<float>
+    @ssbo @binding = 3 out : array<float>
+    @kargs pa : TtsAttnArgs
+    @workgroup sc : float[int(TTS_ATTN_TCAP)]   //! the row's scores, then its exp weights
+    @workgroup vpart : float[256]                //! the value sums' partials, one an invocation
+
+    //! the scaled dot of the query row at `qb` and the key row at `kb`, one mad a column in column order; a statement with
+    //! its result by reference, the form the MSL emitter inlines
+    def score_into(qb, kb : uint; var s : float&) {
+        var acc = 0.0
+        var e = 0u
+        while (e < pa.hs) {
+            acc = mad(q[qb + e], k[kb + e], acc)
+            e++
+        }
+        s = acc * pa.scale
+    }
+
+    def attn_body {
+        let tid = gl_LocalInvocationID.x
+        let t = max(pa.t, 1u)
+        let hs = max(pa.hs, 1u)
+        let h = gl_WorkGroupID.x / t
+        let i = gl_WorkGroupID.x % t
+        let col = h * pa.hs
+        let qb = pa.qoff + i * pa.d + col
+        var m0 = -3.0e38
+        var j = tid
+        while (j < pa.t) {
+            let kb = pa.koff + j * pa.d + col
+            var s = 0.0
+            score_into(qb, kb, s)
+            sc[j] = s
+            m0 = max(m0, s)
+            j += 256u
+        }
+        var m = 0.0
+        wg_max_into(m0, 0u, m)
+        var l0 = 0.0
+        j = tid
+        while (j < pa.t) {
+            let p = exp(max(sc[j] - m, -80.0))
+            sc[j] = p
+            l0 += p
+            j += 256u
+        }
+        var lsum = 0.0
+        wg_sum_into(l0, 1u, lsum)
+        let inv = 1.0 / lsum
+        let parts = 256u / hs
+        let vb = pa.voff + col + tid % hs
+        var acc = 0.0
+        j = tid / hs
+        while (j < pa.t) {
+            acc = mad(sc[j] * inv, v[vb + j * pa.d], acc)
+            j += parts
+        }
+        vpart[tid] = acc
+        barrier()
+        if (tid < pa.hs) {
+            var o = vpart[tid]
+            var pp = 1u
+            while (pp < parts) {
+                o += vpart[pp * pa.hs + tid]
+                pp++
+            }
+            out[pa.ooff + i * pa.d + col + tid] = o
+        }
+    }
+}
+
+//! the attention's workgroup count: one a (query row, head)
+def tts_attn_wgs(t, heads : int64) : int64 => t * heads
+
+struct TtsStatsArgs {
+    t : uint      //! the rows
+    c : uint      //! the channels, x's row width
+    nblk : uint   //! the blocks: ceil(t / TTS_STATS_ROWS)
+    poff : uint   //! the block partials' element base in `part`: [nblk][c]
+}
+
+let TTS_STATS_ROWS = 128u   //! the rows a column-statistics block sums, the kernel body's literal
+
+//! the block partials of the instance norm's column statistics of x [t][c] (the CPU `column_stats`'s two passes): workgroup
+//! `blk` sums its rows of every channel, a lane a channel - the plain sum, or under SQ the squared deviations from the
+//! mean `stats[ch]` holds - into part[poff + blk c + ch]; wgs = nblk
+[ |> template_struct_instance]
+class template TtsColPartT {
+    @template_constant SQ : bool = false
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 @template_gate = SQ stats : array<float>
+    @ssbo @binding = 2 part : array<float>
+    @kargs pa : TtsStatsArgs
+
+    def colpart_body {
+        let blk = gl_WorkGroupID.x
+        let r0 = blk * 128u   // TTS_STATS_ROWS spelled out: the MSL emitter reads no module constant inside a kernel body
+        let r1 = min(r0 + 128u, pa.t)
+        var ch = gl_LocalInvocationID.x
+        while (ch < pa.c) {
+            var m = 0.0
+            static_if (SQ) {
+                m = stats[ch]
+            }
+            var s = 0.0
+            var r = r0
+            while (r < r1) {
+                let v = x[r * pa.c + ch]
+                static_if (SQ) {
+                    let dv = v - m
+                    s += dv * dv
+                } else {
+                    s += v
+                }
+                r++
+            }
+            part[pa.poff + blk * pa.c + ch] = s
+            ch += 256u
+        }
+    }
+}
+
+//! the partials folded a channel a lane: stats[ch] = the mean, or under SQ stats[c + ch] = the sum of squared deviations
+[ |> template_struct_instance]
+class template TtsColReduceT {
+    @template_constant SQ : bool = false
+    @ssbo @binding = 0 part : array<float>
+    @ssbo @binding = 1 stats : array<float>
+    @kargs pa : TtsStatsArgs
+
+    def colreduce_body {
+        let ch = gl_GlobalInvocationID.x
+        if (ch < pa.c) {
+            var s = 0.0
+            var blk = 0u
+            while (blk < pa.nblk) {
+                s += part[pa.poff + blk * pa.c + ch]
+                blk++
+            }
+            static_if (SQ) {
+                stats[pa.c + ch] = s
+            } else {
+                stats[ch] = s / float(pa.t)
+            }
+        }
+    }
+}
+
+//! the column statistics' blocks over `t` rows
+def tts_stats_blocks(t : int64) : int64 => (t + int64(TTS_STATS_ROWS) - 1l) / int64(TTS_STATS_ROWS)
+
+//! the stats rows a seat holds for `c_max` channels over `t_max` rows: the mean and squared-deviation rows, then the partials
+def tts_stats_floats(t_max, c_max : int64) : int64 => 2l * c_max + tts_stats_blocks(t_max) * c_max
+
+struct TtsFoldArgs {
+    tin : uint       //! the conv's input rows
+    tout : uint      //! ... and its output rows
+    cout : uint      //! the output channels
+    k : uint         //! the taps
+    stride : uint
+    pad_l : uint
+    dilation : uint
+    loff : uint      //! the lift rows' element base: [tin][k * cout], row stride `lstride`
+    lstride : uint
+    ooff : uint      //! the output rows' element base, row stride `ostride`
+    ostride : uint
+}
+
+//! a transposed conv's overlap-add over its lift rows: lift [ti][tap * cout + co] holds input row ti against the conv's lift
+//! matrix (row tap * cout + co over the inputs), and out[to][co] sums the taps whose input row lands on `to` - to = ti * stride +
+//! tap * dilation - pad_l - in tap order; one output element an invocation
+[ |> template_struct_instance]
+class template TtsFoldT {
+    @ssbo @binding = 0 @role = "read" lift : array<float>
+    @ssbo @binding = 1 @role = "write" o : array<float>
+    @kargs pa : TtsFoldArgs
+
+    def fold_body {
+        let e = gl_GlobalInvocationID.x
+        let to = e / max(pa.cout, 1u)
+        let co = e % max(pa.cout, 1u)
+        if (to < pa.tout) {
+            var acc = 0.0
+            var tap = 0u
+            while (tap < pa.k) {
+                let at = to + pa.pad_l
+                let back = tap * pa.dilation
+                let stride = max(pa.stride, 1u)
+                if (at >= back && (at - back) % stride == 0u) {
+                    let ti = (at - back) / stride
+                    if (ti < pa.tin) {
+                        acc += lift[pa.loff + ti * pa.lstride + tap * pa.cout + co]
+                    }
+                }
+                tap++
+            }
+            o[pa.ooff + to * pa.ostride + co] = acc
+        }
+    }
+}
+
+struct TtsLstmArgs {
+    t : uint          //! the steps
+    hidden : uint     //! H, at most `TTS_LSTM_LANES`
+    goff : uint       //! the input gates' element base: [t][4H] rows in gate order i, f, g, o
+    gstride : uint    //! ... and their row stride (4H on the GEMM's 64 lattice)
+    hhoff : uint      //! the recurrence's element base: w_hh transposed [H][4H], element (i, g H + j) = w_hh[(g H + j) H + i]
+    hoff : uint       //! the h rows' element base
+    hstride : uint    //! ... and their row stride: 2H where the two directions share a row
+    backward : uint   //! 1 = the steps walk t - 1 down to 0
+}
+
+let TTS_LSTM_LANES = 256u   //! the hidden units a direction's workgroup holds (four invocations each): a direction past it declines at the driver
+
+//! one LSTM direction end to end in one workgroup (the CPU `lstm_direction`): four invocations a hidden unit, one a gate, each
+//! taking its gate's input row plus the dot of the recurrence with h_prev over four accumulators; the unit's first lane folds
+//! them into c and h. h lives in `hs` between steps, c in that lane; past `TTS_LSTM_LANES` hidden units the driver declines
+[ |> template_struct_instance]
+class template TtsLstmDirT {
+    @template_constant WQ8 : bool = false   //! the recurrence as its stored Q8_0 plane [4H][H] (`hhoff` its first element; H on the 32 lattice): row g H + j is the lane's own, widened a block at a time under the same four accumulators
+    @ssbo @binding = 0 gates : array<float>
+    @ssbo @binding = 1 @role = "weight" @template_gate = "!WQ8" whh : array<float>
+    @ssbo @binding = 1 @role = "weight" @template_gate = WQ8 whq : array<uint>
+    @ssbo @binding = 2 h : array<float>
+    @ssbo @binding = 3 @role = "weight" @template_gate = WQ8 whs : array<uint>   //! the plane's f16 scales, a block each, two a word
+    @kargs pa : TtsLstmArgs
+    @workgroup hs : float[int(TTS_LSTM_LANES)]
+    @workgroup gs : float[int(TTS_LSTM_LANES) * 4]   //! a step's four gate dots a unit, the unit's lanes side by side
+
+    def lstm_dir_body {
+        let lane = gl_LocalInvocationID.x
+        let j = lane >> 2u
+        let g = lane & 3u
+        let hd = pa.hidden
+        let live = j < hd
+        let lead = live && g == 0u
+        if (lead) {
+            hs[j] = 0.0
+        }
+        var cst = 0.0
+        let t_first = pa.backward != 0u ? pa.t - 1u : 0u
+        let w4 = 4u * hd
+        let col = pa.hhoff + g * hd + j
+        var step = 0u
+        while (step < pa.t) {
+            barrier()
+            var acc = 0.0
+            if (live) {
+                var a0 = 0.0
+                var a1 = 0.0
+                var a2 = 0.0
+                var a3 = 0.0
+                var i = 0u
+                static_if (WQ8) {
+                    let e0 = pa.hhoff + (g * hd + j) * hd
+                    while (i < hd) {
+                        let blk = (e0 + i) / 32u
+                        let d = q40_d_of(whs[blk / 2u], blk)
+                        var kk = 0u
+                        while (kk < 32u) {
+                            let q = whq[(e0 + i + kk) / 4u]
+                            a0 = mad(d * kv_q8_quant(q, 0), hs[i + kk], a0)
+                            a1 = mad(d * kv_q8_quant(q, 1), hs[i + kk + 1u], a1)
+                            a2 = mad(d * kv_q8_quant(q, 2), hs[i + kk + 2u], a2)
+                            a3 = mad(d * kv_q8_quant(q, 3), hs[i + kk + 3u], a3)
+                            kk += 4u
+                        }
+                        i += 32u
+                    }
+                } else {
+                    while (i + 3u < hd) {
+                        a0 = mad(whh[col + i * w4], hs[i], a0)
+                        a1 = mad(whh[col + (i + 1u) * w4], hs[i + 1u], a1)
+                        a2 = mad(whh[col + (i + 2u) * w4], hs[i + 2u], a2)
+                        a3 = mad(whh[col + (i + 3u) * w4], hs[i + 3u], a3)
+                        i += 4u
+                    }
+                    while (i < hd) {
+                        a0 = mad(whh[col + i * w4], hs[i], a0)
+                        i++
+                    }
+                }
+                acc = (a0 + a1) + (a2 + a3)
+            }
+            gs[lane] = acc
+            barrier()
+            if (lead) {
+                let ti = pa.backward != 0u ? t_first - step : t_first + step
+                let gb = pa.goff + ti * pa.gstride + j
+                let gi = sigmoid_f32(gates[gb] + gs[lane])
+                let gf = sigmoid_f32(gates[gb + hd] + gs[lane + 1u])
+                let gg = tts_tanh(gates[gb + 2u * hd] + gs[lane + 2u])
+                let go = sigmoid_f32(gates[gb + 3u * hd] + gs[lane + 3u])
+                cst = gf * cst + gi * gg
+                let hn = go * tts_tanh(cst)
+                hs[j] = hn
+                h[pa.hoff + ti * pa.hstride + j] = hn
+            }
+            step++
+        }
+    }
+}
+
+//! the Pocket frame's row GEMV (`GkPkGemv`) over f32 weight rows, the inverse norm `1 / sqrt`
+[ |> template_struct_instance]
+class template TtsPkGemvF32T : GkPkGemv {
+    [tag_function(spirv_inline)]
+    def override row_dot_into(row, lane : uint; var acc : float&) {
+        f32_row_dot_into(row, lane, acc)
+    }
+}
+
+[tag_function(spirv_inline)]
+def k6_terms_of(scw, dw, blk : uint; off : float) : float4 {
+    //! Q6_K / Q3_K: sub-block `blk`'s fold terms (A_lo, B_lo, A_hi, B_hi) off the scale word `scw` that holds its two per-16 int8
+    //! sub-scales and the word `dw` that holds the row's d: each half's d x sub-scale, and its term at quant offset `off`
+    let s4 = int4(unpack8(int(scw)))
+    let slo = float((blk % 2u) == 0u ? s4.x : s4.z)
+    let shi = float((blk % 2u) == 0u ? s4.y : s4.w)
+    let dd = unpackHalf2x16(dw).x
+    return float4(dd * slo, -off * dd * slo, dd * shi, -off * dd * shi)
+}
+
+[tag_function(spirv_inline)]
+def k45_terms_of(dmw, scw, mnw, blk : uint) : float4 {
+    //! Q4_K / Q5_K: sub-block `blk`'s fold terms (A, B, A, B) - d x scale and -(dmin x min) - off the word that packs the row's
+    //! d and dmin and the words that hold its scale and its min byte
+    let sm = k4_scale_min(unpackHalf2x16(dmw), scw, mnw, blk)
+    return float4(sm.x, -sm.y, sm.x, -sm.y)
+}
+
+//! ... the raw nibble codes (MXFP4's: `mx4_sdot` decodes them against x)
+[tag_function(spirv_inline)]
+def blk32_nib_quad(w : uint4; sh : uint) : uint4 => uint4(nib_word(w.x, sh), nib_word(w.y, sh), nib_word(w.z, sh), nib_word(w.w, sh))
+
+[tag_function(spirv_inline)]
+def k6_sub_quad(wv, qh : uint4; blk, sh : uint) : uint4 {
+    //! Q6_K: sub-block `blk`'s quants off its nibble quad `wv` and the high-bit quad of its half (`qh`) - the low sixteen at `sh` 0,
+    //! the high at 4
+    return k6_quad(blk32_nib_quad(wv, sh), qh, (blk % 4u) * 2u)
+}
+
+struct F32GemmArgs {
+    n : uint        //! K: the columns multiplied, a 32-multiple (the slab pads a row to 32 with zeros)
+    d : uint        //! M: the weight rows, the output width
+    rows : uint     //! N: the positions
+    woff : uint     //! the weight rows' element base in w
+    wstride : uint  //! the weight row stride (elements)
+    boff : uint     //! the bias row's element base in b (the BIAS stamp)
+    xoff : uint     //! the x rows' element base
+    xstride : uint  //! the x row stride (elements)
+    yoff : uint     //! the y rows' element base
+    ystride : uint  //! the y row stride (elements)
+    tcin : uint     //! a stored member over a transposed conv's lift [tap * d + row][tcin]: the conv's inputs; 0 = the rows as [d][n]
+}
+
+let F32G_NO_BIAS = 0xFFFFFFFFu   //! a stored member's `boff` that names no bias row
+
+//! y[rows x d] = x[rows x n] w[d x n]^T in f32, every product one mad in k order - the exact feed durations and phases need:
+//! workgroup tiles of 64 positions x 64 rows, no f16 staging; the BIAS stamp adds the bias row at the store. A stored member
+//! (`WSTORED`) reads the plane as the file holds it, in the shared device layout, and widens each weight as the CPU reader does
+[ |> template_struct_instance]
+class template F32GemmT {
+    @template_constant BIAS : bool = false
+    @template_constant BF16W : bool = false   //! the weight rows as bf16 pairs a word - the file's bf16 planes read as stored, each widened by its bit shift
+    @template_constant WSTORED : bool = false //! a stored member: its stamp names the format (`WQ8`, `WK4`, `WK5`, `WK6` or `WF16`) and sets `WWORDS`, and `WQ4` / `WSC` as the format reads them
+    @template_constant WQ8 : bool = false     //! Q8_0 blocks: the quants row-major, an f16 scale a block
+    @template_constant WK4 : bool = false     //! Q4_K superblocks in the discrete homes' device layout ...
+    @template_constant WK5 : bool = false     //! ... Q5_K ...
+    @template_constant WK6 : bool = false     //! ... Q6_K
+    @template_constant WF16 : bool = false    //! half floats
+    @template_constant WWORDS : bool = false  //! the weight plane is read as words: the bf16 pairs, or a stored member's quants or halves
+    @template_constant WQ4 : bool = false     //! a K-quant member: the quant plane as 16-byte words, a 32-wide sub-block each
+    @template_constant WSC : bool = false     //! a quant member: the scale plane at binding 4
+    @ssbo @binding = 0 @role = "weight" @template_gate = "!WWORDS" w : array<float>
+    @ssbo @binding = 0 @role = "weight" @template_gate = WWORDS ww : array<uint>
+    @ssbo @binding = 0 @role = "alias" @template_gate = WQ4 ww4 : array<uint4>
+    @ssbo @binding = 4 @role = "weight" @template_gate = WSC wsu : array<uint>   //! Q8_0: an f16 scale a block, two a word; K-quant: the device's five-word scale row a superblock
+    @ssbo @binding = 1 x : array<float>
+    @ssbo @binding = 2 y : array<float>
+    @ssbo @binding = 3 @role = "weight" @template_gate = BIAS b : array<float>
+    @kargs pa : F32GemmArgs
+    @workgroup xs : float[int(F32G_TP * F32G_LD)]
+    @workgroup ws : float[int(F32G_TD * F32G_LD)]
+    // the bodies spell the F32G_* constants as literals: the MSL emitter reads no module constant
+
+    // stage slot `s` (row s / BK, k s % BK) of the x rows from `p0` at step `kb`; zero past the rows or past n
+    def stage_x(p0, kb, s : uint) {
+        let row = s / 32u
+        let kk = s % 32u
+        var v = 0.0
+        if (p0 + row < pa.rows && kb + kk < pa.n) {
+            v = x[pa.xoff + (p0 + row) * pa.xstride + kb + kk]
+        }
+        xs[row * 33u + kk] = v
+    }
+
+    def stage_w(o0, kb, s : uint) {
+        let row = s / 32u
+        let kk = s % 32u
+        var v = 0.0
+        if (o0 + row < pa.d && kb + kk < pa.n) {
+            let i = pa.woff + (o0 + row) * pa.wstride + kb + kk
+            static_if (BF16W) {
+                v = gk_bf16_at(ww[i / 2u], i % 2u != 0u)
+            } else {
+                static_if (!WWORDS) {
+                    v = w[i]
+                }
+            }
+        }
+        ws[row * 33u + kk] = v
+    }
+
+    //! a stored member's eight weights k = kb + part * 8 .. + 7 of weight row o0 + row, one block's scale and quant words
+    //! serving them: w = A q + B as the CPU reader widens the member (a half as its float)
+    def stage_w8(o0, kb, row, part : uint) {
+        static_if (WSTORED) {
+            let at = row * 33u + part * 8u
+            if (o0 + row >= pa.d) {
+                for (i in range(8)) {
+                    ws[at + uint(i)] = 0.0
+                }
+            } else {
+                var e = pa.woff + (o0 + row) * pa.wstride + kb
+                if (pa.tcin != 0u) {
+                    e = pa.woff + ((kb / pa.tcin) * pa.d + o0 + row) * pa.wstride + kb % pa.tcin
+                }
+                static_if (WF16) {
+                    let h = (e + part * 8u) / 2u
+                    for (i in range(4)) {
+                        let v = unpackHalf2x16(ww[h + uint(i)])
+                        ws[at + uint(i) * 2u] = v.x
+                        ws[at + uint(i) * 2u + 1u] = v.y
+                    }
+                } else {
+                    var q : uint2
+                    var terms : float4
+                    static_if (WQ8) {
+                        let blk = e / 32u
+                        let d = q40_d_of(wsu[blk / 2u], blk)
+                        terms = float4(d, 0.0, d, 0.0)
+                        q = uint2(ww[(e + part * 8u) / 4u], ww[(e + part * 8u) / 4u + 1u])
+                    }
+                    static_if (WK4 || WK5) {
+                        let wsb = e / 256u
+                        let blk = (e % 256u) / 32u
+                        static_if (WK5) {
+                            let wv = ww4[wsb * 10u + blk]
+                            let qh = ww[wsb * 40u + 32u + blk]
+                            q = gk_w8_pick(k5_quad(wv, qh, 0u), k5_quad(wv, qh, 4u), part)
+                        } else {
+                            let wv = ww4[wsb * 8u + blk]
+                            q = gk_w8_pick(blk32_nib_quad(wv, 0u), blk32_nib_quad(wv, 4u), part)
+                        }
+                        terms = k45_terms_of(wsu[wsb * 5u], wsu[wsb * 5u + 1u + blk / 4u], wsu[wsb * 5u + 3u + blk / 4u], blk)
+                    }
+                    static_if (WK6) {
+                        let wsb = e / 256u
+                        let blk = (e % 256u) / 32u
+                        let qh = wsb * 12u + 8u + (blk / 4u) * 2u
+                        let wv = ww4[wsb * 12u + blk]
+                        q = gk_w8_pick(k6_sub_quad(wv, ww4[qh], blk, 0u), k6_sub_quad(wv, ww4[qh + 1u], blk, 4u), part)
+                        terms = k6_terms_of(wsu[wsb * 5u + blk / 2u], wsu[wsb * 5u + 4u], blk, 32.0)
+                    }
+                    let a = part < 2u ? terms.x : terms.z
+                    let c = part < 2u ? terms.y : terms.w
+                    for (i in range(8)) {
+                        ws[at + uint(i)] = a * gk_w8_quant(q.x, q.y, uint(i)) + c
+                    }
+                }
+            }
+        }
+    }
+
+    def stage(p0, o0, kb, tid : uint) {
+        var s = tid
+        while (s < 64u * 32u) {
+            stage_x(p0, kb, s)
+            static_if (!WSTORED) {
+                stage_w(o0, kb, s)
+            }
+            s += 256u
+        }
+        static_if (WSTORED) {
+            stage_w8(o0, kb, tid / 4u, tid % 4u)
+        }
+    }
+
+    def store(p, o : uint; v : float) {
+        if (p < pa.rows && o < pa.d) {
+            var out = v
+            static_if (BIAS) {
+                static_if (WSTORED) {
+                    if (pa.boff != 0xFFFFFFFFu) {
+                        out += b[pa.boff + o]
+                    }
+                } else {
+                    out += b[pa.boff + o]
+                }
+            }
+            y[pa.yoff + p * pa.ystride + o] = out
+        }
+    }
+
+    def store4(p, o : uint; v0, v1, v2, v3 : float) {
+        store(p, o, v0)
+        store(p, o + 1u, v1)
+        store(p, o + 2u, v2)
+        store(p, o + 3u, v3)
+    }
+
+    def f32_gemm_body {
+        let tid = gl_LocalInvocationID.x
+        let dgroups = max((pa.d + 64u - 1u) / 64u, 1u)
+        let p0 = (gl_WorkGroupID.x / dgroups) * 64u
+        let o0 = (gl_WorkGroupID.x % dgroups) * 64u
+        let tp = (tid / 16u) * 4u
+        let to = (tid % 16u) * 4u
+        var a00 = 0.0
+        var a01 = 0.0
+        var a02 = 0.0
+        var a03 = 0.0
+        var a10 = 0.0
+        var a11 = 0.0
+        var a12 = 0.0
+        var a13 = 0.0
+        var a20 = 0.0
+        var a21 = 0.0
+        var a22 = 0.0
+        var a23 = 0.0
+        var a30 = 0.0
+        var a31 = 0.0
+        var a32 = 0.0
+        var a33 = 0.0
+        var kb = 0u
+        while (kb < pa.n) {
+            stage(p0, o0, kb, tid)
+            barrier()
+            var kk = 0u
+            while (kk < 32u) {
+                let x0 = xs[tp * 33u + kk]
+                let x1 = xs[(tp + 1u) * 33u + kk]
+                let x2 = xs[(tp + 2u) * 33u + kk]
+                let x3 = xs[(tp + 3u) * 33u + kk]
+                let w0 = ws[to * 33u + kk]
+                let w1 = ws[(to + 1u) * 33u + kk]
+                let w2 = ws[(to + 2u) * 33u + kk]
+                let w3 = ws[(to + 3u) * 33u + kk]
+                a00 = mad(x0, w0, a00)
+                a01 = mad(x0, w1, a01)
+                a02 = mad(x0, w2, a02)
+                a03 = mad(x0, w3, a03)
+                a10 = mad(x1, w0, a10)
+                a11 = mad(x1, w1, a11)
+                a12 = mad(x1, w2, a12)
+                a13 = mad(x1, w3, a13)
+                a20 = mad(x2, w0, a20)
+                a21 = mad(x2, w1, a21)
+                a22 = mad(x2, w2, a22)
+                a23 = mad(x2, w3, a23)
+                a30 = mad(x3, w0, a30)
+                a31 = mad(x3, w1, a31)
+                a32 = mad(x3, w2, a32)
+                a33 = mad(x3, w3, a33)
+                kk++
+            }
+            barrier()
+            kb += 32u
+        }
+        let p = p0 + tp
+        let o = o0 + to
+        store4(p, o, a00, a01, a02, a03)
+        store4(p + 1u, o, a10, a11, a12, a13)
+        store4(p + 2u, o, a20, a21, a22, a23)
+        store4(p + 3u, o, a30, a31, a32, a33)
+    }
+}
+
+//! the f32 tile's arguments over [rows x n] -> [rows x dout]: the weight rows at `woff` with a stride of n, the bias row at `boff`, the output rows at `yoff`
+def f32_gemm_args(n, dout, rows : int64; woff : int64 = 0l; boff : int64 = 0l; yoff : int64 = 0l) : F32GemmArgs
+    => F32GemmArgs(n = uint(n), d = uint(dout), rows = uint(rows), woff = uint(woff), wstride = uint(n), boff = uint(boff), xoff = 0u, xstride = uint(n), yoff = uint(yoff), ystride = uint(dout))
+
+//! the Pocket frame's row GEMV (`GkPkGemv`) over weight rows read as the file holds them - the member `WFMT` names, in the
+//! shared device layout - each weight widened as the CPU reader widens it (w = A q + B, a half as its float); a stamp a member
+[ |> template_struct_instance]
+class template TtsPkGemvStoredT : GkPkGemv {
+    override QUAD = false
+    @template_constant WFMT : int = 1   //!< the member the weight rows are held in, spelled as its literal: 1 Q8_0, 2 Q4_K, 3 Q5_K, 4 Q6_K, 5 half floats
+    @ssbo @binding = 9 @role = "weight" swq : array<uint>      //! the member's quant plane (the halves' own plane), as words
+    @ssbo @binding = 9 @role = "alias" swq4 : array<uint4>     //! ... as 16-byte words: a K-quant sub-block each
+    @ssbo @binding = 10 @role = "weight" sws : array<uint>     //! its scale plane: Q8_0's f16 a block, two a word; a K-quant's five-word row a superblock
+
+    //! Row `row`'s dot over the staged x, a lane decoding a word of the plane a step: a K-quant lane one word of a sub-block's
+    //! quant quad (four low-nibble and four high-nibble weights), the 32 lanes a superblock; a Q8_0 lane four quants, four
+    //! blocks a step; a half lane a word's two halves. A row starts on its member's unit and spans whole ones
+    [tag_function(spirv_inline)]
+    def override row_dot_into(row, lane : uint; var acc : float&) {
+        stored_dot_into(row, lane, acc)
+    }
+
+    [tag_function(spirv_inline)]
+    def stored_dot_into(row, lane : uint; var acc : float&) {
+        let e0 = pa.woff + row * pa.stride
+        var a = acc
+        static_if (WFMT == 5) {
+            var j = lane * 2u
+            while (j < pa.nin) {
+                let v = unpackHalf2x16(swq[(e0 + j) / 2u])
+                a += v.x * xs[j] + v.y * xs[j + 1u]
+                j += 64u
+            }
+        } else {
+            static_if (WFMT == 1) {
+                let w = lane & 7u
+                var j = (lane >> 3u) * 32u
+                while (j < pa.nin) {
+                    let blk = (e0 + j) / 32u
+                    let d = q40_d_of(sws[blk / 2u], blk)
+                    let q = swq[(e0 + j) / 4u + w]
+                    let xb = j + w * 4u
+                    a += d * (kv_q8_quant(q, 0) * xs[xb] + kv_q8_quant(q, 1) * xs[xb + 1u] + kv_q8_quant(q, 2) * xs[xb + 2u] + kv_q8_quant(q, 3) * xs[xb + 3u])
+                    j += 128u
+                }
+            } else {
+                let blk = lane >> 2u
+                let wp = lane & 3u
+                var sbe = 0u
+                while (sbe < pa.nin) {
+                    let wsb = (e0 + sbe) / 256u
+                    var lo = uint4(0u)
+                    var hi = uint4(0u)
+                    var terms = float4(0.0)
+                    static_if (WFMT == 4) {
+                        let qh = wsb * 12u + 8u + (blk / 4u) * 2u
+                        let wv = swq4[wsb * 12u + blk]
+                        lo = k6_sub_quad(wv, swq4[qh], blk, 0u)
+                        hi = k6_sub_quad(wv, swq4[qh + 1u], blk, 4u)
+                        terms = k6_terms_of(sws[wsb * 5u + blk / 2u], sws[wsb * 5u + 4u], blk, 32.0)
+                    } else {
+                        static_if (WFMT == 3) {
+                            let wv = swq4[wsb * 10u + blk]
+                            let qh = swq[wsb * 40u + 32u + blk]
+                            lo = k5_quad(wv, qh, 0u)
+                            hi = k5_quad(wv, qh, 4u)
+                        } else {
+                            let wv = swq4[wsb * 8u + blk]
+                            lo = blk32_nib_quad(wv, 0u)
+                            hi = blk32_nib_quad(wv, 4u)
+                        }
+                        terms = k45_terms_of(sws[wsb * 5u], sws[wsb * 5u + 1u + blk / 4u], sws[wsb * 5u + 3u + blk / 4u], blk)
+                    }
+                    let ql = gk_quad_word(lo, wp)
+                    let qu = gk_quad_word(hi, wp)
+                    let xb = sbe + blk * 32u + wp * 4u
+                    a += ((terms.x * kv_q8_quant(ql, 0) + terms.y) * xs[xb] + (terms.x * kv_q8_quant(ql, 1) + terms.y) * xs[xb + 1u]
+                        + (terms.x * kv_q8_quant(ql, 2) + terms.y) * xs[xb + 2u] + (terms.x * kv_q8_quant(ql, 3) + terms.y) * xs[xb + 3u])
+                    a += ((terms.z * kv_q8_quant(qu, 0) + terms.w) * xs[xb + 16u] + (terms.z * kv_q8_quant(qu, 1) + terms.w) * xs[xb + 17u]
+                        + (terms.z * kv_q8_quant(qu, 2) + terms.w) * xs[xb + 18u] + (terms.z * kv_q8_quant(qu, 3) + terms.w) * xs[xb + 19u])
+                    sbe += 256u
+                }
+            }
+        }
+        acc = a
     }
 }

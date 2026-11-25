@@ -93,7 +93,8 @@ require _metal_batched_cells   // metal_qwen35_cells, metal_qwen35_mtp_cells: th
 //   -MTP-. The form is one skipped cell on a build without das_metal; a cell skips under a family filter without `qwen35`.
 // Every model test skips interpreted or without its file; without the armed tier each device form skips loudly as a cell of
 // its own while the CPU-cells forms run; a form whose plan does not fit the card skips loudly; the NVFP4 twin's device forms
-// skip as one loud cell without DASLLAMA_CUDA=1 or on a build with no CUDA module, and so does the 4B file's forced feed; a
+// skip as one loud cell without DASLLAMA_CUDA=1 or on a build with no CUDA module, and so do the 4B file's forced feed and the
+// -MTP- file's head-warm fault form without DASLLAMA_CUDA=1; a
 // parity row's form where the box cannot take DASLLAMA_PIN_BACKEND's pin. The K-quant cells skip on the f32 mirrors (`DASLLAMA_VK_KV32=1`), and so do the block-codec forms and the
 // codec pass arm; the window cells skip under DASLLAMA_VK_KV32=1 (the f32 mirror passes every f16 session as codec); the
 // two-window K-quant feed and the two-window head warm skip where the prompt window is not the file's 512 rows. Under
@@ -694,6 +695,9 @@ def private hybrid_mtp_main_rows(t : T?; var r : HybridMtpRows; var m : Model; f
     mtp_verify_reject_asked_cell(t, m)
     mtp_xb_poison_cell(t, m)
     mtp_head_warm_rows(r.warms, m)
+    if (r.cuda) {
+        r.cuda_counters |> held_fact(!mtp_head_warm_declined(), "control: the head-warm fault seat lifted, the next load's warm does not decline")
+    }
     mtp_rounds_rows(r.rounds, m)
     unsafe {
         t |> run("Qwen3.5-0.8B-MTP: the same on the NextN-headed carrier with speculation off, whose peel warms no head row; with it on, a short tail takes the chain, which warms the head's rows") @capture(& m)(t : T ?) {
@@ -768,7 +772,9 @@ def private hybrid_mtp_rows(t : T?; var r : HybridMtpRows; var m : Model; form :
         return
     }
     mtp_carrier_held(t, m)
-    if (form.regions == 0l) {
+    if (form.cuda_head_warm_fault) {
+        mtp_head_warm_declined_cell(t, m)
+    } elif (form.regions == 0l) {
         scheduler_mtp_cell(t, m)
     } elif (form.ctx == MTP_SCHED_CTX) {
         test_scheduler_mtp_resident_picks(t, m)
@@ -819,11 +825,18 @@ def private hybrid_mtp_rows(t : T?; var r : HybridMtpRows; var m : Model; form :
 //! form's whole history, and the driver's own regions for the self-speculative streams against the plain scheduler, whose
 //! census reads no tick of theirs a device step with the tier installed - and the q8 and q4_0 CPU forms whose cells stand
 //! alone (`_mtp_cpu_cells.das`, the speculative scheduler's CPU cells)
-def private hybrid_mtp_forms(var r : HybridMtpRows) : array<ModelForm> {
-    var forms <- [device_form(regions = 1l, host = true), device_form(regions = 2l, host = true, ctx = REGIONS_RIG_CTX),
+def private hybrid_mtp_forms(t : T?; var r : HybridMtpRows) : array<ModelForm> {
+    var forms : array<ModelForm>
+    if (r.cuda) {
+        forms |> push(device_form(regions = 1l, host = true, cuda_head_warm_fault = true))
+    } else {
+        skip_cell(t, "{MTP_CARRY_FILE}, the head-warm fault form: the run arms no CUDA home "
+            + "(DASLLAMA_CUDA=1), whose seat the form pins")
+    }
+    forms |> push_from([device_form(regions = 1l, host = true), device_form(regions = 2l, host = true, ctx = REGIONS_RIG_CTX),
         device_form(regions = 1l, host = true, head_off = true), device_form(regions = 1l, host = true, mtp_depth = 8l),
         device_form(regions = 1l, host = true, mtp_depth = 1l), device_form(regions = 1l, host = true, mtp_depth = 2l),
-        device_form(regions = 1l, host = true, block_rounds = true)]
+        device_form(regions = 1l, host = true, block_rounds = true)])
     codec_forms(forms, r.cuda_counters, [KVDtype.q8_0, KVDtype.tq4], device_form(regions = 1l, host = true)) $(kv) => "the NextN head over a {kv} mirror"
     forms |> push(device_form(regions = 1l, host = true, ctx = MTP_SCHED_CTX))
     forms |> push(device_form(host = true))
@@ -838,7 +851,7 @@ def test_gpu_resident_hybrid_mtp(t : T?) {
     pin_window_rows()
     return if (!family_on(t, "qwen35"))
     var r = HybridMtpRows(cuda = gpu_want_cuda())
-    var forms <- hybrid_mtp_forms(r)
+    var forms <- hybrid_mtp_forms(t, r)
     var ran = false
     with_cuda_mmq_winners() {
         ran = with_cpu_and_gpu_model(t, "llm", "Qwen3.5-0.8B-MTP-Q8_0.gguf", CARRY_RIG_CTX, forms) $(m, form) {
