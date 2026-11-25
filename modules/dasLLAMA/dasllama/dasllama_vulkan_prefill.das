@@ -178,8 +178,66 @@ def private pf_register_drop_hooks {
     register_vk_drop_hook(@@pf_caps_forget)
 }
 
-//! the slot of the segment whose last row is window row `row` of the window at `w0`, else -1
-def private pf_seg_ending_at(w0, row : int64) : int64 => rdec_seg_ending_at(g_pf_segs, w0, row)
+//! layer `l` reads a donor layer's K/V rows and keeps no row state, and nothing captures its rows: a row nobody reads may skip it
+def private pf_layer_in_tail(l : int64) : bool =>
+    g_rd.layers[l].kv_shared && !g_rd.layers[l].recurrent && !g_rd.layers[l].moe && !rdec_caps_layer(g_rd.cap_slots, l)
+
+//! the layer the window's shared-K/V tail starts at, `n_layers` where every row walks to the end: an embedding's rows (`hidden`)
+//! and the head's prompt warm (`warm`) read every row's last layer, a block codec stages its rows window-local, and a routed
+//! layer under the tail hands the next feed its own way
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-tail-cut")]
+def private pf_tail_from(hidden, warm : bool) : int64 {
+    let n = g_rd.n_layers
+    return n if (hidden || warm || !rdec_prefill_tail_cut() || rd_kv_block_codec())
+    var cut = n
+    while (cut > 0l && pf_layer_in_tail(cut - 1l)) {
+        cut--
+    }
+    return cut > 0l && !g_rd.layers[cut - 1l].moe ? cut : n
+}
+
+//! the rows that walk the tail from layer `cut`: the last row of each part that ends its segment, gathered to the front of the
+//! window's planes - the residual, the rope rows, the per-layer-embedding side rows - as one-row parts at their own positions,
+//! the window's parts from here on (the list untouched where no part ends), and layer `cut`'s head feed normed over them; the rows kept
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-tail-cut")]
+def private pf_tail_rows(raw : VkCommandBuffer; var h : VkHaz; cut, wlen : int64) : int64 {
+    let dim = g_rd.dim
+    let cos_bytes = g_rd.cos_elems * 4l
+    let ple_bytes = g_rd.n_layers * g_rd.ple * 4l
+    var moved = false
+    var n = 0l   // the parts kept so far: part `n` of the list is rewritten in place, never ahead of the part being read
+    for (part in g_pf_wsegs) {
+        let ws = part   // a copy: the list's part `n` below may be this very part
+        continue if (rdec_part_end_slot(g_pf_segs, ws) < 0l)
+        let lr = ws.row0 + ws.npos - 1l
+        let k = n
+        if (lr != k) {
+            if (!moved) {   // every plane at once: the copies sit behind all the window's writes and ahead of all its reads
+                vhz_dep(raw, h, 0xffffffffu, 0xffffffffu, true)
+                moved = true
+            }
+            cmd_copy_range(raw, g_rd.pf_x, lr * dim * 4l, g_rd.pf_x, k * dim * 4l, dim * 4l)
+            cmd_copy_range(raw, g_rd.pf_cos, lr * cos_bytes, g_rd.pf_cos, k * cos_bytes, cos_bytes)
+            if (g_rd.ple > 0l) {
+                cmd_copy_range(raw, g_rd.pf_ple, lr * ple_bytes, g_rd.pf_ple, k * ple_bytes, ple_bytes)
+            }
+        }
+        g_pf_wsegs[n] = RdecPfSeg(row0 = k, npos = 1l, pos0 = ws.pos0 + ws.npos - 1l, region = ws.region, seg = ws.seg, koff = ws.koff)
+        n++
+    }
+    g_rd.pf_tail_cut_rows += wlen - n
+    return 0l if (n == 0l)
+    g_pf_wsegs |> resize(n)
+    var pcn = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(cut, RD_NORM_ATT)), eps = g_rd.eps, ascale = 1.0)
+    if (!pf_qkv_feed_fused(cut)) {
+        enc_cls_ar(raw, h, g_rd.pf_sets[int((cut - 1l) * PF_ROLES) + 14], pcn, n)
+    } elif (pf_qkv6(cut)) {
+        enc_cls_ar_f16_b(raw, h, g_rd.pf_arq_sets[int((cut - 1l) * 2l + 1l)], pcn, n)
+    } else {
+        enc_cls_ar_rq_b(raw, h, g_rd.pf_arq_sets[int((cut - 1l) * 2l + 1l)], pcn, n)
+    }
+    return n
+}
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private pf_kv_merged(l, dim, kvd : int64) : bool {
@@ -2081,6 +2139,9 @@ def vk_rdec_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_ids 
 //! The windows that held several sessions' chunks as segments in this process (a cell's witness)
 def vk_rdec_prefill_segment_windows : int64 => g_rd != null ? g_rd.pf_seg_windows : 0l
 
+//! the window rows that stopped ahead of a shared-K/V tail in this process (a cell's witness)
+def vk_rdec_prefill_tail_cut_rows : int64 => g_rd != null ? g_rd.pf_tail_cut_rows : 0l
+
 //! After a resident prefill, hand recurrent layer `l`'s device slot to the session `stp`/`histp` name (valid, dirty, bound)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def vk_rdec_prefill_dn_own(l : int64; stp : float?; histp : float?) {
@@ -2668,7 +2729,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             let last = w0 + wlen >= npos
             pf_window_segs(w0, wlen)
             pf_window_caps(w0)
-            let nwseg = long_length(g_pf_wsegs)
+            var nwseg = long_length(g_pf_wsegs)
             if (nwseg > 1l) {
                 g_rd.pf_seg_windows++
             }
@@ -2743,7 +2804,13 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             var nextb = 1l
             var cstep = 1l
             var nchunk = 0
+            let cut = pf_tail_from(hidden, warm)
             for (l in range64(g_rd.n_layers)) {
+                if (l == cut) {
+                    wlen = pf_tail_rows(raw, h, cut, wfull)
+                    break if (wlen == 0l)
+                    nwseg = wlen
+                }
                 if (overlap && l == nextb) {
                     cmd_close(raw)
                     submit_nofence(raw)
@@ -2837,7 +2904,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             for (ws in g_pf_wsegs) {
                 break if (hidden)
                 let row = ws.row0 + ws.npos - 1l
-                let slot = pf_seg_ending_at(w0, row)
+                let slot = rdec_part_end_slot(g_pf_segs, ws)
                 continue if (slot < 0l)
                 ends++
                 rq_enc(raw, h, g_rd.pf_sets[bp + 1], kq_sb(g_rd.cls_fmt_marker), row * dim, dim)
@@ -2880,10 +2947,10 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 host_buf_read(g_rd.pf_hid_host, addr<void?>(g_pf_hidden[w0 * dim]), wlen * dim * 4l)
             }
             if (vk_prof()) {
-                to_log(LOG_INFO, "vk_rdpf w0 {w0} rows {wlen} prep {t_prep} record {t_record} submit {get_time_usec(tp0) - t_prep - t_record}\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
+                to_log(LOG_INFO, "vk_rdpf w0 {w0} rows {wfull} prep {t_prep} record {t_record} submit {get_time_usec(tp0) - t_prep - t_record}\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
             }
-            w0 += wlen
-            last_wlen = wlen
+            w0 += wfull
+            last_wlen = wfull
         }
         if (g_rd.hybrid) {
             pf_dn_end()

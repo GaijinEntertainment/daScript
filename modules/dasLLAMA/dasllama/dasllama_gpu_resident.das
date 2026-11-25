@@ -3129,6 +3129,8 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     //! place; a hyper-connection model keeps it too - its window chain reads the pre-step's rows, never token ids
     g_rdec_emb_gpu = resident_emb_gather_want(c) && resident_arm_emb(t, plan, ple_tbl_placed, bcls, bemb)
     resident_emb_pin_say(c, rdec_prefill_ids_installed())
+    let last = c.n_layers - 1l
+    rdec_tail_cut_say(g_env_gpu, kv_shared_layer(t, last) && !layer_is_recurrent(c, last) && !layer_is_moe(t, last))
     var norms : array<float>
     let norms_len = rdec_norms_len(c.n_layers, dim, c.qk_norm ? hs : 0l, head)
     norms |> reserve_resize(norms_len)

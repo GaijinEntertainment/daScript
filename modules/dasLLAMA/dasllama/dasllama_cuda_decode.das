@@ -333,6 +333,7 @@ struct CudRdec {
     token_steps : int64     //! the token steps alone: the first runs the chain plainly, the second captures the graph
     windows : int64         //! the window chains run
     seg_windows : int64     //! the windows that held several sessions' chunks as segments
+    tail_cut_rows : int64   //! the window rows that stopped ahead of a shared-K/V tail
     //! window buffers (crd_pf_setup): np rows; f16 feeds + read slack
     pf_np : int64
     pf_wlen : int64         //! the rows of the window being run (the plan's rows between calls): the MMQ admission reads it
@@ -4965,7 +4966,7 @@ def private crd_window_ffn(r : CudRdec; var s : void?; var L : CudLayer; wlen : 
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
-def private crd_window_moe(r : CudRdec; var s : void?; l : int64; var L : CudLayer; w0, wlen : int64; segs, wsegs : array<RdecPfSeg>; experts : RdecHostExpertsRowsFn) {
+def private crd_window_moe(r : CudRdec; var s : void?; l : int64; var L : CudLayer; wlen : int64; segs, wsegs : array<RdecPfSeg>; experts : RdecHostExpertsRowsFn) {
     let dim = r.dim
     let nfe = r.nfe
     let k = r.k
@@ -4974,7 +4975,7 @@ def private crd_window_moe(r : CudRdec; var s : void?; l : int64; var L : CudLay
     var pc8 = crd_wo_ar_args(r, L)
     enc_cls_ar(s, fixed_array(r.pf_x, r.pf_xb2, r.norms, r.pf_xb), pc8, wlen)
     if (L.experts_host) {
-        crd_window_host_cut(r, s, l, L, w0, wlen, segs, wsegs, experts)
+        crd_window_host_cut(r, s, l, L, wlen, segs, wsegs, experts)
         return
     }
     if (L.b1 >= 0l) {
@@ -5043,7 +5044,7 @@ def private crd_window_moe(r : CudRdec; var s : void?; l : int64; var L : CudLay
         crd_x_feeds_from(r, s, r.pf_xb, wlen, crd_head_feeds(r, r.layers[l + 1l]))
         return
     }
-    crd_window_cls_feed(r, s, r.pf_xb, w0, segs, wsegs)
+    crd_window_cls_feed(r, s, r.pf_xb, segs, wsegs)
 }
 
 //! the window's router GEMM over the rows into pf_mlog: the stored normed rows, or (the gemma-4 form) x under a weightless rms and the
@@ -5061,7 +5062,7 @@ def private crd_window_router(r : CudRdec; var s : void?; L : CudLayer; wlen : i
 //! landed and the stream waited, the host's routed sums over every row (`experts`), the sums up, then the combine over them as the one
 //! routed row of weight one a position beside the shared expert's row at its gate, and the next layer's feed
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
-def private crd_window_host_cut(r : CudRdec; var s : void?; l : int64; var L : CudLayer; w0, wlen : int64; segs, wsegs : array<RdecPfSeg>; experts : RdecHostExpertsRowsFn) {
+def private crd_window_host_cut(r : CudRdec; var s : void?; l : int64; var L : CudLayer; wlen : int64; segs, wsegs : array<RdecPfSeg>; experts : RdecHostExpertsRowsFn) {
     let dim = r.dim
     if (L.b1 >= 0l) {
         crd_x_feeds_from(r, s, r.pf_xb, wlen, crd_gu_feeds(r, L))
@@ -5093,33 +5094,105 @@ def private crd_window_host_cut(r : CudRdec; var s : void?; l : int64; var L : C
         crd_x_feeds_from(r, s, r.pf_xb, wlen, crd_head_feeds(r, r.layers[l + 1l]))
         return
     }
-    crd_window_cls_feed(r, s, r.pf_xb, w0, segs, wsegs)
+    crd_window_cls_feed(r, s, r.pf_xb, segs, wsegs)
 }
 
 //! the classifier's feed off each ending segment's last normed row of `hrows`
-def private crd_window_cls_feed(r : CudRdec; var s : void?; hrows : uint64; w0 : int64; segs, wsegs : array<RdecPfSeg>) {
+def private crd_window_cls_feed(r : CudRdec; var s : void?; hrows : uint64; segs, wsegs : array<RdecPfSeg>) {
     let dim = r.dim
     for (ws in wsegs) {
         let lr = ws.row0 + ws.npos - 1l
-        continue if (rdec_seg_ending_at(segs, w0, lr) < 0l)
+        continue if (rdec_part_end_slot(segs, ws) < 0l)
         crd_rq_rows(s, r.cls_fmt, hrows + uint64(lr * dim * 4l), r.pf_xq + uint64(lr * dim), r.pf_xs + uint64(lr * (dim / Q8_BLOCK_ELEMS) * 4l), dim)
     }
 }
 
+//! layer `l` reads a donor layer's K/V rows and keeps no row state, and nothing captures its rows: a row nobody reads may skip it
+def private crd_layer_in_tail(r : CudRdec; l : int64) : bool =>
+    r.layers[l].kv_shared && !r.layers[l].recurrent && !r.layers[l].moe && !rdec_caps_layer(r.cap_slots, l)
+
+//! the layer the window's shared-K/V tail starts at, `n_layers` where every row walks to the end: an embedding's rows (`hidden`)
+//! and the head's prompt warm (`warm`) read every row's last layer
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-tail-cut")]
+def private crd_window_tail_from(r : CudRdec; hidden, warm : bool) : int64 {
+    return r.n_layers if (hidden || warm || !rdec_prefill_tail_cut())
+    var cut = r.n_layers
+    while (cut > 0l && crd_layer_in_tail(r, cut - 1l)) {
+        cut--
+    }
+    return cut > 0l ? cut : r.n_layers
+}
+
+//! the rows that walk the tail from layer `cut`: the last row of each part that ends its segment, gathered to the front of the
+//! window's planes - the residual, the rope rows, the per-layer-embedding side rows - as one-row parts at their own positions in
+//! `tsegs`, and layer `cut`'s head feeds normed over them at the tail's row count; the rows kept
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-tail-cut")]
+def private crd_window_tail_rows(var r : CudRdec; cut, wlen : int64; segs, wsegs : array<RdecPfSeg>; var tsegs : array<RdecPfSeg>) : int64 {
+    var s = g_cud.stream
+    let dim = r.dim
+    tsegs |> clear()
+    for (ws in wsegs) {
+        continue if (rdec_part_end_slot(segs, ws) < 0l)
+        let lr = ws.row0 + ws.npos - 1l
+        let k = long_length(tsegs)
+        if (lr != k) {
+            cuda_memcpy_dtod(r.pf_x + uint64(k * dim * 4l), r.pf_x + uint64(lr * dim * 4l), uint64(dim * 4l), s)
+            cuda_memcpy_dtod(r.pf_cos + uint64(k * r.cos_elems * 4l), r.pf_cos + uint64(lr * r.cos_elems * 4l), uint64(r.cos_elems * 4l), s)
+            if (r.ple > 0l) {
+                cuda_memcpy_dtod(r.pf_ple + uint64(k * r.ple_all * 4l), r.pf_ple + uint64(lr * r.ple_all * 4l), uint64(r.ple_all * 4l), s)
+            }
+        }
+        tsegs |> push(RdecPfSeg(row0 = k, npos = 1l, pos0 = ws.pos0 + ws.npos - 1l, region = ws.region, seg = ws.seg, koff = ws.koff))
+    }
+    let n = long_length(tsegs)
+    r.tail_cut_rows += wlen - n
+    return 0l if (n == 0l)
+    r.pf_wlen = n
+    let pc = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = uint(norm_off(cut, RDEC_NORM_ATT)), eps = r.eps, ascale = 1.0)
+    crd_x_norm(r, s, r.pf_x, pc, n, crd_head_feeds(r, r.layers[cut]))
+    return n
+}
+
+var private @scratch g_crd_tsegs : array<RdecPfSeg>   //! the one-row parts that walk the window's shared-K/V tail
+
 //! a segment ending in the window (`wsegs` its parts, `segs` the call's) takes the classifier at its last row; under `hidden` every
-//! row's final residual stays in pf_x for the host and no classifier runs
+//! row's final residual stays in pf_x for the host and no classifier runs; past a shared-K/V tail's first layer only the ending rows walk on
 def private crd_window(var r : CudRdec; w0, wlen : int64; segs, wsegs : array<RdecPfSeg>; last, hidden : bool; experts : RdecHostExpertsRowsFn) {
     var s = g_cud.stream
     let dim = r.dim
-    let nlfin = uint(rdec_norms_final_base(r.n_layers, dim))
     let warm = !hidden && crd_window_warm_on(r, wsegs)
     if (warm) {   // the window's embed rows before layer 0 overwrites the residual: the head reads them unscaled
         cuda_memcpy_dtod(r.pf_hemb, r.pf_x, uint64(wlen * dim * 4l), s)
     }
-    var hrows = r.pf_xb   // the window's post-norm rows, the head warm's carry halves: the combine's plane on a routed last layer
     let pc_pro = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = r.eps, ascale = 1.0)
     crd_x_norm(r, s, r.pf_x, pc_pro, wlen, crd_head_feeds(r, r.layers[0]))
-    for (l in range64(r.n_layers)) {
+    let cut = crd_window_tail_from(r, hidden, warm)
+    var hrows = crd_window_layers(r, 0l, cut, w0, wlen, segs, wsegs, hidden, warm, experts)
+    return if (hidden)
+    var ends = 0l
+    if (cut < r.n_layers) {
+        let n = crd_window_tail_rows(r, cut, wlen, segs, wsegs, g_crd_tsegs)
+        if (n > 0l) {
+            hrows = crd_window_layers(r, cut, r.n_layers, w0, n, segs, g_crd_tsegs, false, false, experts)
+            ends = crd_window_cls(r, segs, g_crd_tsegs, hrows)
+        }
+    } else {
+        ends = crd_window_cls(r, segs, wsegs, hrows)
+    }
+    verify(!last || ends > 0l, "cud prefill: the last window ends no segment")
+    if (warm) {
+        crd_window_head_warm(r, w0, wlen, wsegs[0], hrows)
+    }
+}
+
+//! layers `lo` up to `hi` of the window chain over `wlen` rows, `wsegs` their parts; the window's post-norm rows' plane - the head
+//! warm's carry halves, the combine's plane on a routed last layer
+def private crd_window_layers(var r : CudRdec; lo, hi, w0, wlen : int64; segs, wsegs : array<RdecPfSeg>; hidden, warm : bool; experts : RdecHostExpertsRowsFn) : uint64 {
+    var s = g_cud.stream
+    let dim = r.dim
+    let nlfin = uint(rdec_norms_final_base(r.n_layers, dim))
+    var hrows = r.pf_xb
+    for (l in range64(lo, hi)) {
         var L & = unsafe(r.layers[l])
         let qd = L.qd
         if (L.recurrent) {
@@ -5133,7 +5206,7 @@ def private crd_window(var r : CudRdec; w0, wlen : int64; segs, wsegs : array<Rd
         crd_site(r, L.sch[SCH_O], L.fo, L.bo, r.pf_af, r.pf_aq, r.pf_as, r.pf_asum, r.pf_a4q, r.pf_a4s, r.pf_ars, r.pf_xb2, qd, dim, wlen)
         }
         if (L.moe) {
-            crd_window_moe(r, s, l, L, w0, wlen, segs, wsegs, experts)
+            crd_window_moe(r, s, l, L, wlen, segs, wsegs, experts)
             crd_cap_win(r, s, l, w0, wlen, hidden)   // the combine left the layer's rows in pf_x
             continue
         }
@@ -5159,12 +5232,12 @@ def private crd_window(var r : CudRdec; w0, wlen : int64; segs, wsegs : array<Rd
         } elif (warm || r.carry || rdec_caps_layer(r.cap_slots, l)) {   // the final norm over every row as floats (the head reads them all, the carry lands the ending rows', a captured last layer needs every row's residual), the ending rows' classifier feed off the normed rows
             enc_cls_ar(s, fixed_array(r.pf_x, r.pf_ffnout, r.norms, r.pf_xb2), pc14, wlen)
             hrows = r.pf_xb2
-            crd_window_cls_feed(r, s, hrows, w0, segs, wsegs)
+            crd_window_cls_feed(r, s, hrows, segs, wsegs)
             crd_cap_win(r, s, l, w0, wlen, hidden)
         } else {
             for (ws in wsegs) {
                 let lr = ws.row0 + ws.npos - 1l
-                continue if (rdec_seg_ending_at(segs, w0, lr) < 0l)
+                continue if (rdec_part_end_slot(segs, ws) < 0l)
                 var cbufs = fixed_array(r.pf_x + uint64(lr * dim * 4l), r.pf_ffnout + uint64(lr * dim * 4l), r.norms, r.pf_xq + uint64(lr * dim), r.pf_xs + uint64(lr * (dim / Q8_BLOCK_ELEMS) * 4l))
                 if (kq_sb(r.cls_fmt)) {
                     enc_cls_ar_rqk(s, cbufs, pc14, 1l)
@@ -5174,12 +5247,7 @@ def private crd_window(var r : CudRdec; w0, wlen : int64; segs, wsegs : array<Rd
             }
         }
     }
-    return if (hidden)
-    let ends = crd_window_cls(r, w0, segs, wsegs, hrows)
-    verify(!last || ends > 0l, "cud prefill: the last window ends no segment")
-    if (warm) {
-        crd_window_head_warm(r, w0, wlen, wsegs[0], hrows)
-    }
+    return hrows
 }
 
 //! the head's prompt warm runs over this window: asked by the engine, the head on the device, the planes made, and the window one
@@ -5448,13 +5516,13 @@ def private crd_window_dn(r : CudRdec; var L : CudLayer; wlen : int64; wsegs : a
 
 //! the classifier over each ending segment's last-row quants and its epilogue, the logits down into the segment's slot of the
 //! out block, the carry's row beside them off `hrows` (the window's post-norm floats) under the carry; the segments ended
-def private crd_window_cls(r : CudRdec; w0 : int64; segs, wsegs : array<RdecPfSeg>; hrows : uint64) : int64 {
+def private crd_window_cls(r : CudRdec; segs, wsegs : array<RdecPfSeg>; hrows : uint64) : int64 {
     var s = g_cud.stream
     let dim = r.dim
     var ends = 0l
     for (ws in wsegs) {
         let lr = ws.row0 + ws.npos - 1l
-        let slot = rdec_seg_ending_at(segs, w0, lr)
+        let slot = rdec_part_end_slot(segs, ws)
         continue if (slot < 0l)
         ends++
         if (r.carry) {   // the segment's carry: its last row's post-norm floats at its slot of the out block
@@ -5644,6 +5712,9 @@ def cud_rdec_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_ids
 
 //! the windows that held several sessions' chunks as segments in this process (a cell's witness)
 def cud_rdec_prefill_segment_windows : int64 => g_crd != null ? g_crd.seg_windows : 0l
+
+//! the window rows that stopped ahead of a shared-K/V tail in this process (a cell's witness)
+def cud_rdec_prefill_tail_cut_rows : int64 => g_crd != null ? g_crd.tail_cut_rows : 0l
 
 //! the next prefill call's checkpoint captures (`RdecPrefillCapsFn`): a capture's state and conv history land in its checkpoint row
 //! from inside the window (the scan's capture arm, the capture tail)
