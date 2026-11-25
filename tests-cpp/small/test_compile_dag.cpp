@@ -81,6 +81,20 @@ TEST_CASE("compile DAG: a compile that starts with a comment reader loaded runs 
     CHECK_EQ(readWith(4), read);
 }
 
+TEST_CASE("compile DAG deadlock prevention: a macro module that forks a debug agent context is nesting") {
+    auto fAccess = make_smart<FsFileAccess>();
+    TextWriter logs;
+    ModuleGroup libGroup;
+    CodeOfPolicies policies;
+    policies.compile_threads = 1;
+    auto program = compileDaScript(getDasRoot() + "/tests-cpp/small/test_compile_dag_fork_root.das", fAccess, logs, libGroup, policies);
+    REQUIRE_MESSAGE(!program->failed(), logs.str());
+    auto fork = libGroup.findModule("test_compile_dag_fork");
+    REQUIRE(fork);
+    REQUIRE(fork->macroContext);
+    CHECK(fork->macroNestsCompile);
+}
+
 TEST_CASE("compile DAG deadlock prevention: a macro module reaching a nesting builtin through a helper is nesting") {
     auto fAccess = make_smart<FsFileAccess>();
     TextWriter logs;
