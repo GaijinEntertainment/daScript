@@ -1211,11 +1211,11 @@ def private hc_mix_step(r : StepRes; t : Model; enc : MetalComputeEncoder?; norm
 //! a site's `n` x `d` plane over `nr` rows of `bx` into `by`: the single row's GEMV where `single`, else the rows GEMM site, its
 //! rows8 table pair `bxt` / `bxs` where `bx`'s producer wrote one
 def private site_rows(enc : MetalComputeEncoder?; t : Model; single : bool; fmt : KqFmt; off, n, d : int64; bx, by, u_d, u_n : MetalBuffer?; nr : int64;
-                      bxt : MetalBuffer? = null; bxs : MetalBuffer? = null; bxh : MetalBuffer? = null) {
+                      bxt : MetalBuffer? = null; bxs : MetalBuffer? = null; bxh : MetalBuffer? = null; pair : bool = false) {
     if (single) {
         enc_site_gemv(enc, t, fmt, off, n, d, bx, by, u_d, u_n)
     } else {
-        enc_batch_site(enc, t, rows_tier(nr), fmt, off, n, d, n, bx, by, u_d, u_n, u_n, 0l, false, bxh = bxh, bxt = bxt, bxs = bxs)
+        enc_batch_site(enc, t, rows_tier(nr), fmt, off, n, d, n, bx, by, u_d, u_n, u_n, 0l, false, bxh = bxh, bxt = bxt, bxs = bxs, pair = pair)
     }
 }
 
@@ -2233,18 +2233,19 @@ def private kq_half_rows(t : Model; nrows : int64) : bool {
 }
 
 //! the step's producers write the rows8 x tables beside the f16 twins: the rows8 form serves the step's row count, the panels'
-//! widths are whole 32-blocks (a producer's subgroup one block), and a site the producers feed is an affine member on the form,
-//! k4 or q8 where the half-x forms' twins exist, or an iq4xs plane on the form (its arm reads the twin)
+//! widths are whole 32-blocks, and a site the producers feed has an arm that reads the table; on a pair-layout box that is the
+//! q8 arm alone, from `METAL_ROWS8_PAIR_MIN` rows, and only where the simdgroup-matrix form (it reads the f32 rows) does not serve
 [arch(at="../ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit")]
 def private rows8_table_rows(t : Model; nrows : int64; tiled : bool = false) : bool {
     let blocks = t.config.dim % 32l == 0l && layer_hidden(t, 0l) % 32l == 0l && ffn_second_hidden(t) % 32l == 0l
     //! a verify step's producers write every row tile's table (`tiled`): its sites past eight rows read them
-    return false if (!metal_rows8_on() || !rows8_rows(nrows, tiled ? METAL_VERIFY_TILED_ROWS : 8l) || !blocks)
+    return false if (!(metal_rows8_on() || (nrows >= METAL_ROWS8_PAIR_MIN && metal_rows8_q8_on() && !metal_rows8_mma_on())) || !rows8_rows(nrows, tiled ? METAL_VERIFY_TILED_ROWS : 8l) || !blocks)
+    let quad = metal_rows8_on()
     let iq4 = metal_rows8_iq4xs_on()
     for (l in range64(t.config.n_layers)) {
         for (f in [fmt_at(t.wq_fmt, l), fmt_at(t.wk_fmt, l), fmt_at(t.wv_fmt, l), fmt_at(t.w1_fmt, l), fmt_at(t.w3_fmt, l), fmt_at(t.w2_fmt, l),
                    fmt_at(t.dnqkv_fmt, l), fmt_at(t.dngate_fmt, l), fmt_at(t.wsh1_fmt, l), fmt_at(t.wsh3_fmt, l)]) {
-            return true if (metal_rows8_aff_on(f) || f == KqFmt.k4 || f == KqFmt.q8 || (iq4 && f == KqFmt.iq4xs))
+            return true if (f == KqFmt.q8 || (quad && (metal_rows8_aff_on(f) || f == KqFmt.k4 || (iq4 && f == KqFmt.iq4xs))))
         }
     }
     return false
@@ -3287,8 +3288,16 @@ def private chain_draft_land(t : Model; var s : Session) {
     chain_draft_drop()
 }
 
-[unused_argument(t)]
-def private metal_mtp_verify_rows_cap(t : Model) : int64 => MTP_MAX_ROWS
+//! the drafts a block drafter's round verifies on the row forms, where no matrix unit shares the weight pass over its rows: on
+//! an M1 Max gemma-4 E2B's rounds pay at three and lose at seven, and Qwen3.6-35B's read faster at three than at five
+let METAL_ROWS_DRAFTS = 3l
+
+//! the verify rows a round takes on this home: the round's widest, and off the matrix-unit form (`rows8`) a block drafter's
+//! round with no depth set METAL_ROWS_DRAFTS drafts and their seed
+[arch(at="../ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-tick-rounds")]
+def metal_verify_rows_for(drafter, rows8, pinned : bool) : int64 => drafter && !rows8 && !pinned ? METAL_ROWS_DRAFTS + 1l : MTP_MAX_ROWS
+
+def private metal_mtp_verify_rows_cap(t : Model) : int64 => metal_verify_rows_for(mtp_block_attached(t), metal_rows8_on(), mtp_depth_pin().pinned)
 
 //! the verify's rows [tok, drafts] gathered against the n-gram window into its side-input rows; the window advances at the
 //! commit, not here
@@ -3687,7 +3696,7 @@ def private metal_block_embed_rows(t : Model; toks : array<int64>; var dst : arr
 //! the trunk's classifier over `n` normed rows (`bx`, [n][dim]) into `blog` ([n][vocab]) on an open encoder: the block drafter's
 //! draft rows, on the device pass or landed from the CPU one
 def enc_block_cls_rows(enc : MetalComputeEncoder?; t : Model; bx, blog, u_dim, u_vocab : MetalBuffer?; n : int64) {
-    site_rows(enc, t, n == 1l, cls_fmt_of(t), t.wcls_off, t.config.vocab_size, t.config.dim, bx, blog, u_dim, u_vocab, n)
+    site_rows(enc, t, n == 1l, cls_fmt_of(t), t.wcls_off, t.config.vocab_size, t.config.dim, bx, blog, u_dim, u_vocab, n, pair = true)
 }
 
 //! the block drafter's classifier: the trunk's output plane over `n` normed rows (`rows`, [n][dim]) into logits ([n][vocab])
@@ -4614,7 +4623,7 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
 def private enc_batch_site(enc : MetalComputeEncoder?; t : Model; bt : BatchTier; fmt : KqFmt;
                            woff, rows, n, ys : int64; bx, by, bn, bd, bys : MetalBuffer?;
                            ycol : int64; mv_ok : bool; sk : int64 = 0l; gemm64 : bool = false; bxh : MetalBuffer? = null;
-                           bxt : MetalBuffer? = null; bxs : MetalBuffer? = null) {
+                           bxt : MetalBuffer? = null; bxs : MetalBuffer? = null; pair : bool = false) {
     let yoff = uint64(ycol * 4l)
     //! a step past eight rows: the rows8 form over whole row tiles, the plane streamed once
     let tiles = (g_rows_tiled || bt.tiled) && bt.nrows > 8l && !bt.use_mm ? (bt.nrows + 7l) / 8l : 1l
@@ -4631,7 +4640,9 @@ def private enc_batch_site(enc : MetalComputeEncoder?; t : Model; bt : BatchTier
     let bw = blob_of(g_dev, t, woff)
     if (!bt.use_mm && rows8) {
         return if (pf_enc_rows8_q8(enc, bw.buf, bw.boff, bx, by, yoff, bn, bys, n, rows, ys, bxt, bxs, tiles)
-            || (one && g_env_metal.rows_mm8 && rows >= ROWS_MM8_Q8_MIN_ROWS && pf_enc_q8_mm8(enc, bw.buf, bw.boff, bx, by, yoff, bn, bd, bys, n, rows, ys)))
+            || (one && g_env_metal.rows_mm8 && rows >= ROWS_MM8_Q8_MIN_ROWS && pf_enc_q8_mm8(enc, bw.buf, bw.boff, bx, by, yoff, bn, bd, bys, n, rows, ys))
+            || (one && pf_enc_rows8_mma_q8(enc, bw.buf, bw.boff, bx, by, yoff, n, rows, ys, bt.nrows))   // no tensor stamp served: the 8x8 simdgroup matrix, the plane read once off the f32 rows
+            || ((pair || bt.nrows >= METAL_ROWS8_PAIR_MIN) && pf_enc_rows8_q8p(enc, bw.buf, bw.boff, bx, by, yoff, bn, bys, n, rows, ys, tiles, bxt, bxs)))   // a pair-layout box: past four rows one read of the plane where the row tiles read it once a tile of four (`pair`: at any row count)
     }
     if (bt.use_mm) {
         enc_gemm_mm_b(enc, bw.buf, bw.boff, bx, by, uint64(ycol * 4l), bn, bys, bt.mp, rows)
