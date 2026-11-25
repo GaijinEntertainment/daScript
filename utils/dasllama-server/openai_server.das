@@ -7565,7 +7565,8 @@ def private buffered_route(req : FrontReq; var resp : Reply) : http_status {   /
     if (req.route == Route.bake_start) return handle_bake_start(req, resp)
     if (req.route == Route.bake_get) return handle_bake_get(resp)
     if (req.route == Route.catalog) {
-        return resp |> JSON(catalog_state_json(g_catalog_dir, g_box_ram_gb, gpu_weight_budget_bytes() / (1024l * 1024l), @@tts_needs_packs))
+        let vram_mb = gpu_weight_budget_bytes() / (1024l * 1024l)
+        return resp |> JSON(catalog_state_json(g_catalog_dir, g_box_ram_gb, vram_mb, @@tts_pack_names))
     }
     if (req.route == Route.catalog_download) return handle_catalog_download(req, resp)
     if (req.route == Route.images) return handle_images(resp)

@@ -61,9 +61,9 @@ def pick_quant(s : string; tool : string = "dasllama-server") : QuantMode {
 def pick_kv_dtype(s : string; tool : string = "dasllama-server") : KVDtype {
     let named = kv_dtype_named(s)
     if (!empty(s) && !named.known) {
-        to_log(LOG_WARNING, "{tool}: unknown --kv-dtype '{s}', using f16 (valid: f32 | f16 | q8_0 | tq4)\n")
+        to_log(LOG_WARNING, "{tool}: unknown --kv-dtype '{s}', using f16 (valid: auto | f32 | f16 | q8_0 | tq4)\n")
     }
-    return named.dt
+    return empty(s) || named.dt == KVDtype.automatic ? default_kv_dtype() : named.dt
 }
 
 //! The Metal mode a `--metal` spelling names; `known` is false on a spelling that names none, and the mode is then off.

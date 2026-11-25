@@ -127,10 +127,11 @@ def test_slot_wants_device_kv(t : T?) {
             reset_gpu_kv_dtype()
         }
     }
-    t |> run("a --kv-dtype spelling picks the streams' codec, and one that names none picks f16") @(t : T?) {
+    t |> run("a --kv-dtype spelling picks the streams' codec, none or auto picks the machine's default, and one that names none picks f16") @(t : T?) {
         t |> equal(pick_kv_dtype("tq4"), KVDtype.tq4, "tq4")
         t |> equal(pick_kv_dtype("Q8_0"), KVDtype.q8_0, "any case")
-        t |> equal(pick_kv_dtype(""), KVDtype.f16, "no flag: f16")
+        t |> equal(pick_kv_dtype(""), default_kv_dtype(), "no flag: the machine's default")
+        t |> equal(pick_kv_dtype("auto"), default_kv_dtype(), "auto: the machine's default")
         t |> equal(pick_kv_dtype("bogus"), KVDtype.f16, "a spelling that names no codec: f16, said in the log")
     }
 }

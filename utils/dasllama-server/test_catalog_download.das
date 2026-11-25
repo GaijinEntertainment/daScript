@@ -12,7 +12,7 @@ require daslib/json_boost
 require strings
 
 [unused_argument(path)]
-def private no_packs(path : string) : bool => false
+def private no_packs(path : string) : array<string> => <- array<string>()
 
 //! the download machine's `download` record off the /catalog document
 def private download_field(dir, key : string) : string {

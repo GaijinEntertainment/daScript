@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap
+options _dasllama_internal = true   // tts_pack_names: the engine's answer the route test hands
 
 // The curated catalog + download rail, model-free: table invariants (pinned URLs, unique
 // ids, one default), the models-dir precedence, local-presence detection, and the
@@ -11,6 +12,9 @@ require daslib/fio
 require daslib/json_boost
 require strings
 require main                                            // the program root: ModelEntry, apply_model_override, boot_default_index (sibling by bare name)
+require dasllama/dasllama_tts   // tts_pack_names: the engine's answer for the /catalog route
+require serving_knobs   // tts_missing_file: the boot's speech file check
+require _server_rig   // models_dir / model_missing: the server suites' model roots and gate
 
 [test(description = "every assistant drafter resolves pinned and the gemma-4 26B card carries the upstream head")]
 def test_catalog_drafters(t : T?) {
@@ -210,9 +214,9 @@ def test_download_refusals(t : T?) {
     }
 }
 
-// the family test the document is handed in place of the engine's: a file named as a Pocket
-// form reads text and needs no pack, everything else is a phoneme family
-def private needs_packs_by_name(path : string) : bool => find(base_name(path), "pocket-tts-") < 0
+def private tts_pack_names_by_name(path : string) : array<string> =>
+    <- (find(base_name(path), "pocket-tts-") >= 0 ? array<string>()
+        : ["tts_g2p.bin", "tts_postag.bin"])
 
 [test(description = "the /catalog document carries every entry with presence and an idle download machine, and a planted tower reads present")]
 def test_state_json(t : T?) {
@@ -220,7 +224,7 @@ def test_state_json(t : T?) {
         let dir = path_join(test_temp_dir(), "doc")
         mkdir_rec(dir)
         var jerr = ""
-        var doc = read_json(catalog_state_json(dir, 64, 8192l, @@needs_packs_by_name), jerr)
+        var doc = read_json(catalog_state_json(dir, 64, 8192l, @@tts_pack_names_by_name), jerr)
         t |> success(doc != null, "state json parses: {jerr}")
         if (doc != null) {
             t |> equal(doc?["models_dir"] ?? "", dir)
@@ -261,7 +265,7 @@ def test_state_json(t : T?) {
             }
         }
         var jerr = ""
-        var doc = read_json(catalog_state_json(dir, 0, 0l, @@needs_packs_by_name), jerr)
+        var doc = read_json(catalog_state_json(dir, 0, 0l, @@tts_pack_names_by_name), jerr)
         t |> success(doc != null, "state json parses: {jerr}")
         let entries = doc?["entries"]
         if (entries != null && (entries.value is _array)) {
@@ -300,7 +304,7 @@ def test_state_json_drafter(t : T?) {
             }
         }
         var jerr = ""
-        var doc = read_json(catalog_state_json(dir, 0, 0l, @@needs_packs_by_name), jerr)
+        var doc = read_json(catalog_state_json(dir, 0, 0l, @@tts_pack_names_by_name), jerr)
         t |> success(doc != null, "state json parses: {jerr}")
         let entries = doc?["entries"]
         var seen = false
@@ -346,9 +350,118 @@ def test_download_accepted_json(t : T?) {
     }
 }
 
-[test(description = "the tts list names the front-end packs and the models, each saying whether it reads them")]
+def private row_packs(item : JsonValue?) : array<string> {
+    var out : array<string>
+    let packs = item?["packs"]
+    if (packs != null && (packs.value is _array)) {
+        out |> reserve(length(packs.value as _array))
+        for (p in packs.value as _array) {
+            out |> push("{p ?? ""}")
+        }
+    }
+    return <- out
+}
+
+def private row_packs_of(items : array<JsonValue?>; file : string) : array<string> {
+    for (item in items) {
+        return <- row_packs(item) if ("{item?["file"] ?? ""}" == file)
+    }
+    return <- array<string>()
+}
+
+def private row_packs_none_absent(items : array<JsonValue?>; file : string) : bool {
+    for (item in items) {
+        continue if ("{item?["file"] ?? ""}" != file)
+        for (name in row_packs(item)) {
+            for (pack in items) {
+                let named = (pack?["pack"] ?? false) && "{pack?["file"] ?? ""}" == name
+                return false if (named && !(pack?["present"] ?? false))
+            }
+        }
+    }
+    return true
+}
+
+[test(description = "a speech row names the packs its file reads: English complete without the Russian pack")]
+def test_state_json_tts_packs(t : T?) {
+    let english = "kitten-nano-kq.gguf"
+    let russian = "kokoro-ru-kq.gguf"
+    let models = models_dir()
+    return if (model_missing(t, [path_join(models, english), path_join(models, russian)]))
+    t |> run("an English model's packs are here without the Russian one; a Russian voice's are not") @(t : T?) {
+        let dir = path_join(test_temp_dir(), "ttspacks")
+        mkdir_rec(dir)
+        for (file in fixed_array(english, russian)) {
+            var err = ""
+            let copied = copy_file(path_join(models, file), path_join(dir, file), true, err)
+            t |> success(copied, "{file} copied into the scratch dir: {err}")
+        }
+        for (pack in fixed_array("tts_g2p.bin", "tts_postag.bin")) {   // stat-only: never read
+            fopen(path_join(dir, pack), "wb") $(f) {
+                if (f != null) {
+                    f |> fwrite("pack")
+                }
+            }
+        }
+        var jerr = ""
+        var doc = read_json(catalog_state_json(dir, 0, 0l, @@tts_pack_names), jerr)
+        t |> success(doc != null, "state json parses: {jerr}")
+        let items = doc?["tts"]
+        if (items != null && (items.value is _array)) {
+            for (item in items.value as _array) {
+                let file = "{item?["file"] ?? ""}"
+                if (file == english) {
+                    t |> equal(row_packs(item), ["tts_g2p.bin", "tts_postag.bin"],
+                        "{file}: an English voice reads the English pair")
+                } elif (file == russian) {
+                    t |> success(has_value(row_packs(item), "tts_g2p_ru.bin"),
+                        "{file}: a Russian voice reads the Russian pack")
+                }
+            }
+            let rows & = unsafe(items.value as _array)
+            t |> success(row_packs_none_absent(rows, english), "{english}: its packs are here")
+            t |> success(!row_packs_none_absent(rows, russian), "{russian}: its Russian pack is absent")
+            t |> equal(tts_missing_file(path_join(dir, english)), "",
+                "{english}: the boot's file check serves it without the Russian pack")
+            t |> equal(base_name(tts_missing_file(path_join(dir, russian))), "tts_g2p_ru.bin",
+                "{russian}: the boot's file check names the Russian pack")
+        }
+        unsafe {
+            delete doc
+        }
+    }
+}
+
+[test(description = "a speech row states the packs the engine reads, each a pack the card serves")]
+def test_stated_packs_match_engine(t : T?) {
+    t |> run("a speech row's stated packs are front-end pack rows of the tts list") @(t : T?) {
+        var inscope set <- serve_tts_set()
+        for (item in set) {
+            continue if (item.pack)
+            var inscope spec <- spec_by_file(item.entry.name)
+            for (pack in spec.serve_packs) {
+                let pinned = find_index_if(set) $(other) => other.pack && other.entry.name == pack
+                t |> success(has_value(TTS_FRONT_END_PACKS, pack) && pinned >= 0,
+                    "{item.entry.name}: its stated pack {pack} is a front-end pack the set pins")
+            }
+        }
+    }
+    for (item in serve_tts_set()) {
+        continue if (item.pack)
+        let file = item.entry.name
+        t |> run("{file}: the stated packs are the engine's") @(t : T?) {
+            let path = path_join(models_dir(), file)
+            return if (model_missing(t, path))
+            var inscope spec <- spec_by_file(file)
+            t |> equal(spec.serve_packs, tts_pack_names(path),
+                "{file}: its row's serve_packs against tts_pack_names")
+        }
+    }
+}
+
+[test(description = "the tts list names the front-end packs and the models, each saying whether it reads them and naming the ones it does")]
 def test_state_json_tts(t : T?) {
-    t |> run("the tts list: the front-end packs the route loads, then the models, each saying whether it reads them") @(t : T?) {
+    t |> run("the tts list: the front-end packs the route loads, then the models, each saying whether it reads them and naming the ones it does") @(t : T?) {
         let dir = path_join(test_temp_dir(), "ttsdoc")
         mkdir_rec(dir)
         let planted = path_join(dir, "pocket-tts-en-stuart-kq.gguf")
@@ -358,7 +471,7 @@ def test_state_json_tts(t : T?) {
             }
         }
         var jerr = ""
-        var doc = read_json(catalog_state_json(dir, 0, 0l, @@needs_packs_by_name), jerr)
+        var doc = read_json(catalog_state_json(dir, 0, 0l, @@tts_pack_names_by_name), jerr)
         t |> success(doc != null, "state json parses: {jerr}")
         let items = doc?["tts"]
         t |> success(items != null && (items.value is _array), "tts is an array")
@@ -375,8 +488,17 @@ def test_state_json_tts(t : T?) {
                     let present = item?["present"] ?? false
                     t |> equal(present, file == "pocket-tts-en-stuart-kq.gguf", "{file}: presence follows the dir")
                     t |> equal(item?["needs_packs"] ?? false, !present, "{file}: an absent model reads as needing the packs, the planted Pocket file as not")
+                    var inscope spec <- spec_by_file(file)
+                    var inscope want <- present ? array<string>() : clone_to_move(spec.serve_packs)
+                    t |> equal(row_packs(item), want,
+                        "{file}: an absent model names its stated packs, the Pocket file none")
                 }
             }
+            let rows & = unsafe(items.value as _array)
+            t |> equal(row_packs_of(rows, "kitten-nano-kq.gguf"), ["tts_g2p.bin", "tts_postag.bin"],
+                "an absent English model names the English pair")
+            t |> equal(row_packs_of(rows, "kokoro-ru-kq.gguf"), ["tts_g2p_ru.bin"],
+                "an absent Russian-voiced model names the Russian pack")
             t |> equal(packs, TTS_FRONT_END_PACKS, "the pack rows are the route's own list, in its order - the browser's American twin rides no ladder")
             var served = 0
             for (item in serve_tts_set()) {
