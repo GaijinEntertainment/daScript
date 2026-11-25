@@ -221,6 +221,16 @@ start of its own, with the arguments the config's `arm_flags` table gives that a
 because a slot that drafts is set up to draft at boot; the plain start runs the whole ladder and the
 long plain rows the arms are read against.
 
+The reference's command line is `reference_server`'s: `<llama-server> -m <gguf> --port <port> -ngl 99 -np <streams>
+-c <context x streams> --temp 0`, then the arm's `llama` flags of `arm_flags` with the drafter's file filled in
+(`--spec-type draft-mtp` for a NextN head; `--spec-type draft-dflash2 --spec-draft-model <drafter> -ngld 99` for a block
+drafter), and under the behind pass `--slot-save-path <dir>`. llama-server holds one context for all its slots, so `-c`
+is the entry's context a slot times its slots; `--temp 0` is on the command line because the bench's client cannot send
+a zero temperature. The runner sets no environment variable for the reference. The reference rows of `PERF_LEDGER.md`'s
+model-bench entries are llama.cpp commit 4483b2b; an entry names the model file, the context its servers started at and
+the box, and the nv4 device unit entry records that commit's build line (`cmake -DCMAKE_BUILD_TYPE=Release
+-DGGML_NATIVE=ON` with `-DGGML_CUDA=ON` or `-DGGML_VULKAN=ON`) on the RunPod RTX PRO 4500.
+
 A card is one run of the ladder's record (`BenchModel` / `BenchRun`, `performance/profile_common`):
 the engine, backend, box and hardware, the server's commit, both command lines, the model file's
 identity, and the bench's rows as its `tests`. The bench's own run file beside it keeps what the

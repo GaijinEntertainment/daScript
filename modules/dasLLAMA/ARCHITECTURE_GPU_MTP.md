@@ -127,7 +127,7 @@ argmax and the raw-argmax match would accept drafts the penalty rejects.
 serves an explicit setting (`set_mtp_depth`, the `--mtp-depth` flag) when one was made, else the
 box profile's `runtime.mtp_depth_assistant` or `runtime.mtp_depth_nextn` by the `MtpRoundKind` the
 assistant drafter's attach and detach select; a scheduler tick drafts an assistant's rounds at it
-(`ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds`) and a NextN head's at depth 1. The per-position acceptance curve has the same shape
+(`ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds`) and a NextN head's at its own. The per-position acceptance curve has the same shape
 on every task and on both carriers - of the rounds at depth 4, position 1 is accepted in about
 three quarters, position 2 in half to two thirds, position 3 in a third and position 4 in a
 fifth (the `_depths` ruler records under `performance/records/mtp/`), so a fourth draft adds
@@ -137,10 +137,10 @@ loses (`PERF_LEDGER.md`, the MTP section) - so the tuner mints the assistant kno
 serving race of depth 1 against depth 2 on the SpecBench chat corpus with a gemma-4 vehicle and its
 `mtp-` head (depth 2 must beat by 2% - its downside is asymmetric and a tie is not worth the longer
 round; a synthetic 32-token prompt is not the site shape, the drafter accepts less of incoherent
-text; no vehicle means depth 1). The NextN knob defaults to 1: every NextN carrier measured
-best there on the M4 Pro, and the M5 Max's depth-3 point (1.31x against 1.23x at depth 1 on
-Qwen3.8-27B, the ruler's `_depths` record) is a direction-grade reading the tuner does not yet
-mint into the knob.
+text; no vehicle means depth 1). On a Vulkan or CUDA home the assistant round drafts three (`MTP_DEPTH_ASSISTANT_DISCRETE`, the attach's `assistant_discrete` kind): no tuner arm races the knob there, and the 26B's assistant arm is fastest at depth 3 on the RTX PRO 4500's CUDA home and gains at each depth up to 3 on its Vulkan home and on the Radeon 8060S (`PERF_LEDGER.md`, the entry on the assistant drafter's draft depth on the discrete homes, and the draft-depth entry for the CUDA home). A NextN head's round drafts three there too (`MTP_DEPTH_NEXTN_DISCRETE`): `get_mtp_depth` serves it while the resident driver holds the decode (`set_mtp_home_discrete`, cleared by the next `select_decode_override`), and the driver sizes its verify rows off `mtp_depth_nextn_discrete` at its arm, before it holds the decode; those rows cap a block drafter's round on a trunk with a head, so three is that round's depth too. Served over depths 1 to 4 on the Radeon 8060S and on the RTX PRO 4500's two homes, Qwen3.6-35B's NextN and DFlash2 arms are slowest at depth 1 and best at 2 to 4, the best depth moving with the device and the arm (`PERF_LEDGER.md`, the draft-depth entry). Off the discrete homes the NextN knob defaults to 1:
+every NextN carrier measured best there on the M4 Pro, and no tuner arm races the NextN knob (`followup_general.md` row
+90); the M5 Max's depth-3 point (1.31x against 1.23x at depth 1 on Qwen3.8-27B, the ruler's `_depths` record) and the M1
+Max's best depth of 2 on the 35B (the draft-depth entry) are direction-grade readings the knob does not follow.
 
 ### The NextN draft chain reads only what its own chain wrote {#mtp-nextn-chain}
 

@@ -41,7 +41,8 @@ its row four columns a round - `accum_row_into` issues a round's four loads befo
 `GkQ8BlockStore.store_x4` its four loads before its stores - because a one-workgroup row kernel's time
 is its load rounds.
 `test_vkd_q8_gemv_ar_row_twin` holds the epilogue to the row kernel bit for bit on both columns,
-fed the GEMV's own y row.
+fed the GEMV's own y row; on an AMD device, whose compiler rounds a shader at a time, the two reduces land an ulp apart and
+the cell holds the scales at the approx bar.
 
 ### The row kernels address a batched step's rows through the token block {#nrow-kernel-rows}
 
@@ -64,6 +65,17 @@ thread a 32-block, element k the int8 lane `blk_decode` leaves and the term pair
 per-format arithmetic is the GEMV's own, never re-spelled), the grid formats staging their codebook as
 the GEMV does. A per-32 table (q51, iq4nl32, q4032, q5032) is the `Blk32GemvRunT` family's `EMB` leaf
 (`Q51Emb`, `Iq4nl32Emb`, `Q4032Emb`, `Q5032Emb`), its block decode the GEMV's own; mx4 never tags a table.
+
+**`EmbGather`'s row is the host embed's on a device that rounds as the CPU does, and an ulp off it on an AMD one.** The
+host dequantizes, then scales by the embed scale; the stamp spells the dequant as `mad(q, d, 0)` to keep that order, and an
+AMD compiler folds the embed scale into the block scale all the same (`test_vkd_emb_gather_q8_f32` reads the device equal to
+the folded order at every element there). A model carries the ulp to its logits: on the Radeon 8060S the gemma-4-E2B's
+batched rows sit off a load whose host embeds every row, inside the batched-row bar (`PERF_LEDGER.md`, the entry on the
+token-table gather). Stamped `precise` (NoContraction on every float
+result) the device computes the host's order and the same rows are bit for bit - the read that names the cause. The served
+stamp carries no `precise`: its cost is measured on no device, and a cell that holds the device to the host bit for bit
+holds a bar with its control on such a device instead (`vk_rounds_alike` in the kernel cells, `home_rounds_alike` in the
+model cells).
 
 ### The routed combine rides the residual step {#moe-combine-row}
 

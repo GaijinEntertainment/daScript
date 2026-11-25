@@ -48,7 +48,7 @@ one their resident driver does not serve whole or whose N-row token command decl
 host: the round's verify rides that command, which has no host-experts form on either discrete home) - before it reads the
 sidecar; the facade attaches on the home that takes the trunk
 and logs every home's refusal where none does. One drafter attaches at a time, and the attach selects the assistant
-round kind, so `get_mtp_depth` serves `runtime.mtp_depth_assistant`.
+round kind, so `get_mtp_depth` serves `runtime.mtp_depth_assistant` - or, from a discrete home's attach, that home's own depth (`ARCHITECTURE_GPU_MTP.md#mtp-depth-knob`).
 
 ### The assistant rounds of a tick {#assistant-drafter-rounds}
 

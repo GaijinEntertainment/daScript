@@ -150,12 +150,18 @@ and the token command reads the row the host's pre-step embedded, in place (`EMB
 ### A device-home recurrent stream keeps its state at its checkpoints on the device {#device-home-checkpoints}
 
 **A recurrent state exists at one position, so a region keeps copies of it at the positions a later request can share.** A
-region carries `RDEC_DN_SNAPS` (4) checkpoint rows beside its state slots, each in the rollback row's shape - every recurrent
+region carries up to `RDEC_DN_SNAPS` (4) checkpoint rows beside its state slots - the plan's pick, the most it holds whole down
+to one (`resident_snaps_pick` over `rdec_dn_snaps_pick`, which gives rows up before it gives up the wide prompt window; `DASLLAMA_GPU_DN_SNAPS` names a
+count) - each in the rollback row's shape - every recurrent
 layer's slot state (`nvh x ds x ds` floats) and its ring pair (`2 x cd x (dconv - 1)` floats) - with the region's ring parity
 (`RDec.snap_dev`, made at the first save or the first capture). The plan charges them (`rdec_dn_snap_bytes`): on the 35B (30 recurrent layers, 32
-value heads of 128, a 8192-channel conv of 3 taps) a row is 2.19 MiB a layer, 65.6 MiB in all, 262 MiB a region. The scheduler's
+value heads of 128, a 8192-channel conv of 3 taps) a row is 2.19 MiB a layer, 65.6 MiB in all, 262 MiB a region at four; on the Qwen3.8-27B (48 recurrent layers, 48 value heads
+of 128) a row is 158 MiB, 632 MiB a region at four. The scheduler's
 device mode plans a recurrent stream's stops at the request's openings and its last message's start and end
-(`device_checkpoints_plan`, the markers the host prefix cache keeps checkpoints at): a stop inside a window the window chain
+(`device_checkpoints_plan` over `checkpoint_stops_plan`, the markers the host prefix cache keeps checkpoints at), as many as the region keeps rows
+(`gpu_device_kv_checkpoint_rows`) in the order later requests take them up - the system opening, the last message's start, the
+messages' end, the opening's head - and a window ends at the stop past its rows (`take_within_rows` over `take_within_stops`), two stops on one row
+leaving it at neither's state: a stop inside a window the window chain
 captures into a row as it passes it (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`), a stop at a window's end the
 driver saves off the slots (`gpu_device_kv_checkpoint`: an empty row, else the least recently touched); the finished turn's
 state is the parked claim's own (`RdecRegion.dn_pos`). An adopter of a parked claim takes the longest of those positions its prompt contains

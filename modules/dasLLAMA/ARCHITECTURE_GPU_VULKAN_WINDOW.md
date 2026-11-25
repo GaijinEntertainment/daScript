@@ -2,8 +2,9 @@
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document carries what a window does a
 session at a time: the recurrent block, whose state and ring belong to one region, the segmented window that holds several
-sessions' chunks, the short window's peel through the token commands, the final residual rows a window lands for an
-embedding, and the scratch window that seats an embedding request's texts back to back in one region. The chain these sit in is
+sessions' chunks, the short window's peel through the token commands, the window's cut at a shared-K/V tail, the final
+residual rows a window lands for an embedding, and the scratch window that seats an embedding request's texts back to back in
+one region. The chain these sit in is
 `ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`.
 
 ### The recurrent block of the prefill window {#vk-prefill-dn-block}
@@ -12,7 +13,8 @@ embedding, and the scratch window that seats an embedding request's texts back t
 shared.** Per window the block runs the qkv and z GEMMs into the window planes, the beta and
 alpha rows into the layer's smalls, the conv over the selected region's ring image, the scan over
 that region's state slot (the chunked tensor-core form `DnScanChunkT` under `DASLLAMA_DN_CHUNK` where
-the device has KHR cooperative matrices at subgroup 32, its own set `pf_dn_scan_chunk_set`; the
+the device has KHR cooperative matrices at subgroup 32 and the box's served set leaves the scan on it -
+`vk_dn_chunk_wanted`, `ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps` - its own set `pf_dn_scan_chunk_set`; the
 sequential `DnScanT` elsewhere; the slot's bases ride the pushes, the sets bind every region's slot -
 `ARCHITECTURE_GPU_SHARED_KERNELS.md#dn-discrete-kernels`), and the out GEMM into `pf_xb2`. The smalls are the layer's per-layer f32 plane: the layer's
 cold constants (conv taps, out-norm weights, the `a` and `dt` rows), the beta and alpha rows, and a
@@ -164,6 +166,25 @@ chain, as does every window under the lever `set_vulkan_prefill_peel(false)`, wh
 `harness/vk_short_window_race.das` races the two forms through. The rows stay on the device as the chain
 leaves them; `rdec_prefill_landed` is either form's bookkeeping; the witness is `moe_gpu_resident_peels`, a
 peel counting as a served prefill too.
+
+### The window's cut at a shared-K/V tail {#vk-prefill-tail-cut}
+
+A layer that reads a donor layer's K/V rows stores none of its own (`RLayer.kv_shared`: gemma-4's E series, 20 of E2B's
+35 layers), so a prompt row's pass through it is read by that row's next layer and by nothing else. Where a model ends in a
+run of such layers, only a row whose output is read walks the run. The tail starts at the lowest layer from which every
+layer is K/V-shared, not recurrent, not routed, and not captured by the block drafter (`pf_layer_in_tail`, `pf_tail_from`;
+the CUDA home's `crd_layer_in_tail`, `crd_window_tail_from`). The window runs the layers under the tail over all its rows,
+then gathers the rows that walk on - the last row of each part that ends its segment - to the front of its planes
+(`pf_tail_rows`, `crd_window_tail_rows`: the residual, the rope rows, a per-layer-embedding model's side rows), norms the
+tail's first head feed over them, and runs the tail over them as one-row parts at their own positions (`RdecPfSeg.pos0`),
+each attending its region's keys up to itself. A window that ends no segment stops under the tail. On the Vulkan home the
+gather is buffer copies behind a barrier over every plane; on the CUDA home the feeds take the forms of the tail's row count
+(`CudRdec.pf_wlen`), so the tail's GEMMs are the short window's. A part's ending is read by position
+(`rdec_part_end_slot`): a gathered row's place in the planes no longer says which segment it ends. Every row walks every
+layer under an embedding's call, whose pool reads each row's last layer, under the NextN head's prompt warm, and under the
+lever `set_rdec_prefill_tail_cut(false)` or `DASLLAMA_GPU_PF_TAIL_CUT=0`; on the Vulkan home also under a block-codec
+mirror, whose rows stage window-local, and where the layer under the tail is routed. The witnesses are
+`vk_rdec_prefill_tail_cut_rows` and `cud_rdec_prefill_tail_cut_rows`.
 
 ### The window lands its hidden rows for an embedding {#vk-prefill-hidden-rows}
 

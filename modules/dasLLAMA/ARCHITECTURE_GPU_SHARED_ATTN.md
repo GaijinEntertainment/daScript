@@ -2,7 +2,7 @@
 
 Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document carries the attention bodies
 `dasllama_gpu_kernels_discrete.das` holds for the Vulkan and CUDA homes: the decode attention's key split, the prefill's
-flash-attention tile, the K/V mirror's block codecs, q8_0 and tq4, with tq4's attention in the rotated basis, the
+flash-attention tile, the CUDA home's wide flash tile at heads 512 and 256 (`#cuda-fa-wide`), the K/V mirror's block codecs, q8_0 and tq4, with tq4's attention in the rotated basis, the
 batched rope store's strided k and v reads, and the FastConformer rel-position attention (`#fc-rel-attn`). The
 Vulkan window chain the flash tile serves is `ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`; the attention-side planes
 the Vulkan driver uploads (the q/k/v bias, the sink logits, the output bias) are
@@ -76,8 +76,8 @@ every span past 512. The old rule, covering the card twice whatever the span, re
 pieces for a one-row step and eleven for a four-row step and paid double. The one-row and N-row
 forms sum a layer's keys in one order - a batched row the row alone bit for bit - while the N-row
 command's rows times the row's workgroups times the span's pieces fit one wave; past that the
-N-row command takes fewer pieces and the regions rig holds its rows to the split bar instead
-(`vk_rdec_rows_split_alike`). Every row of the batch sits in one band: a group's furthest row
+N-row command takes fewer pieces and the regions rig holds its rows to the wider of its
+batched-row and split bars (`vk_rdec_rows_split_alike`). Every row of the batch sits in one band: a group's furthest row
 picks the group's form, and a row batched across a band edge takes its group's. The
 pieces land in the partials plane; past them sit the arrival counters (`partu`, a word a (row, kv
 head, slab) at `cntoff`), each atomically bumped after a device-scope release. The piece that reads
@@ -114,14 +114,50 @@ output f16 when the `wo` feed is f16.** The running row max carries 3 ln 2, so e
 the f16 O accumulator cannot overflow; L carries the same bias, the final divide cancels it, and S, L and M stay f32. The mask pass
 runs only on the steps that cross the causal diagonal or the tile's last window start; the KV loop carries `[dont_unroll]` (RTX PRO
 4500, a 512-row window: E4B's attention 6868 -> 4014 us, gemma-3-1b's 2671 -> 1844). The `OUT16` instance writes the `wo` feed
-plane directly, so no attn-to-f16 convert encodes; the f32 instance serves the quant route. **Without cm2 - a KHR-only card, or a
+plane directly, so no attn-to-f16 convert encodes; the f32 instance serves the quant route. The cm2 arm's workgroup is 64 query rows (`QROWS`); a whole head-256 pass with no softcap takes the wide stamps (`FaH256WT`, `fa_cm2_h256w*`, `DASLLAMA_VK_FA_WIDE`) at 128, a head's keys walked once for twice the rows - on the RTX PRO 4500 the faster pass behind a long context (`PERF_LEDGER.md`, the entry on the Vulkan home's head-256 flash pass; the cell is `test_vkd_fa_cm2_h256_wide`). **Without cm2 - a KHR-only card, or a
 mode forced off cm2 - the tile's KHR arm (`FaT` at `KHR = true`, its twelve `fa_khr_*` stamps) serves the same head sizes but 96, the window, the softcap and the gated head of 256 (each thread's o row times the sigmoid of its gate columns at the store) from the same push constants on
 subgroup-scope 16x16x16 fragments:** sixteen query rows a workgroup, 64 keys a step, each subgroup owning one 16-key column of
 S = Q K^T (K^T a column-major load straight from the f16 shadow) and, after the softmax runs per element through shared memory, a
 quarter of the head's output columns of P V (f32 fragments a step - an f16 accumulator rounds toward zero on RDNA3's matrix cores, `ARCHITECTURE_GPU_SHARED_GEMM.md#khr-mm-kq-tile` - rounded once to f16 for the step's stash and summed into each thread's f32 o row; the walk takes the head in
 64-wide halves, which is why a head of 96 has a cm2 stamp alone and stays on the chunked pair off cm2). A key chunk that starts past
 the window's end is skipped; the last one may load up to fifteen rows past it, so every KV mirror carries `RDEC_MIR_SLACK` elements past its
-planes and the driver's prepare zero-fills both mirrors whole: the fragment reads the unwritten rows past the window's end, inside a plane and in the slack, and a masked probability times zero stays zero where a garbage NaN would not. The block-codec kernels lean on the same slack: a block's quants load as whole words, so a region's last block reads one word past its bytes. The tile stages nothing from the shadows: its q tile and the step's P V plane are sized for the 512-wide head on every stamp, 32 KB of the 49152 B of workgroup memory the tier requires of a device, so K^T and V fragments load straight from the f16 rows - an f16 mirror's, or a block codec's shadow. It runs its row max under the cm2 tile's 3 ln 2 bias (`FA_MAX_BIAS`). `fa_khr_serves` is the one pick the pre-flight and the window chain share: the tile wants those f16 rows and a 32-lane subgroup (its softmax runs eight lanes a row), serves a gated model - a q plane of `[q | gate]` - at the 256 head alone (its gated stamps; a gated head of another size keeps the chunked attention pair, and under a tq4 mirror the un-rotation gates and the tile runs ungated, `ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-tq4-basis`), and serves the softcap at an ungated 256 head alone, its cap stamps - the cm2 tile's rule but the head of 96.
+planes and the driver's prepare zero-fills both mirrors whole: the fragment reads the unwritten rows past the window's end, inside a plane and in the slack, and a masked probability times zero stays zero where a garbage NaN would not. The block-codec kernels lean on the same slack: a block's quants load as whole words, so a region's last block reads one word past its bytes. The tile stages nothing from the shadows: its q tile and the step's P V plane are sized for the 512-wide head on every stamp, 32 KB of the 49152 B of workgroup memory the tier requires of a device, so K^T and V fragments load straight from the f16 rows - an f16 mirror's, or a block codec's shadow. Where the device's shared-memory cap is under a stamp's footprint (the 32768 B of an AMD device against the 38912 B of these stamps) its pipe slot builds the stamp's small-slab twin (`wg_twin_of`): at a head of 256 or under the q tile and the stash at the 256 head's size (`QPV_WORDS` at 2048), at a head of 512 the q tile whole and the stash the head's half - a step's P V runs in two passes, each folded into the o rows of the lanes whose columns sit in that half (`PVHALF`, 30720 B). It runs its row max under the cm2 tile's 3 ln 2 bias (`FA_MAX_BIAS`). `fa_khr_serves` is the one pick the pre-flight and the window chain share: the tile wants those f16 rows and a 32-lane subgroup (its softmax runs eight lanes a row), serves a gated model - a q plane of `[q | gate]` - at the 256 head alone (its gated stamps; a gated head of another size keeps the chunked attention pair, and under a tq4 mirror the un-rotation gates and the tile runs ungated, `ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-tq4-basis`), and serves the softcap at an ungated 256 head alone, its cap stamps - the cm2 tile's rule but the head of 96.
+
+**Every KHR stamp has a tile-first alternate** (`TFIRST`, `fa_khr_<stamp>_tf_cls`, bit `VK_ALT_FA_TFIRST` of the alternate
+set, each at its small-slab twin's footprint). A workgroup's index names a head and a query tile; the stamp counts a head's
+tiles before the next head, the alternate a tile's heads before the next tile, and the rows are the same rows bit for bit.
+The order is what a device reads at once: a key row holds every key head side by side, so the workgroups in flight on the
+head-first stamp read one head's slice of each row for as long as that head's tiles last, and on the tile-first one every
+head of a tile walks the keys together and the rows are read whole. On the Radeon 8060S a model of eight key heads of 128
+(the Llama-3.2-3B, a 2048-byte key row) prefills a long prompt several times faster tile-first, more so the longer the
+prompt; a model of one key head (the gemma-4-E2B) there, and the Llama-3.2-1B on the Radeon 760M, read within a few
+percent under either order (`PERF_LEDGER.md`, the entry on the KHR flash stamps' tile-first alternates). An AMD device serves
+the alternates by `vk_alt_fa_by_vendor`, no race. A walk rotated a tile at a time, the query rows in runs of 256 a dispatch
+and a wait between two dispatches each measured under the tile-first order on that device. The cell is
+`test_vkd_fa_khr_tfirst` (`tests/test_vulkan_kernels_attn.das`).
+
+### The CUDA home's flash pass at heads 512 and 256 walks the keys once for a wide block of query rows {#cuda-fa-wide}
+
+**A whole-attention pass at a head of 512 or 256 on the CUDA home runs the wide tile (`FaMmaCuT`: the `fa_mma_h512` and
+`fa_mma_h256` stamps, f32 and f16 out, the 256 ones plain and gated; `cud_fa_wide`, `DASLLAMA_CUDA_FA_WIDE`), not the KHR arm
+or the cm2 tile.** The KHR arm's workgroup is sixteen query rows and each of its subgroups loads its K and V fragments
+straight off the mirror, so a head's keys are read once for every sixteen rows and every fragment is a load the product waits
+on. The wide tile's block is twelve subgroups, a subgroup 128 columns of one head: 48 query rows at head 512 (three 16-row
+groups of four subgroups) and 96 at head 256 (six groups of two), and a step is 32 keys. The step's K rows and V rows land in
+shared memory once by cp.async, a thread its own 16-byte chunks, the next step's K under this step's softmax and P V and its V
+under the scores, and every fragment is an ldmatrix load from there. A subgroup keeps its part of the scaled q rows in
+registers and writes its partial scores to shared memory; a group's subgroups share the sixteen rows' softmax over the
+partials' sum, four rows a round, under the biased running max of `#flash-attn-tile`, and leave P as f16 pairs and a rescale a
+row; a subgroup then scales its part of O in its f16 accumulators a row at a time, in the registers (`mma_acc_scale_rows`),
+and adds P V into them; the scores' accumulators stay f32. A product into an f16 accumulator holds the RTX 5060 Ti's tensor
+pipe half as long as one into an f32 accumulator, and the pass is the shorter for it there; the RTX PRO 4500 runs both alike.
+A row of keys past the pass's end lands as zeros, so the tile reads no mirror slack. The block's four shared arrays (`stg`,
+`ps`, `fp`, `fa`) take 99,200 bytes, and a thread about 150 registers: one block of 384 threads an SM. The rows a block
+serves a key walk set the pass's time: on the RTX PRO 4500 the tile at a head of 512 runs the gemma-4-E2B's global layers
+in under a third of the KHR arm's time (`PERF_LEDGER.md`, the entry on the wide flash tile at a head of 512, the accumulator
+reading too), and at a head of 256 a block of 96 rows beats one of 48 and the 64-row cm2 tile behind a long context (the
+entry on the 35B's long-context prefill on CUDA). A pass under a window, a softcap or over ring rows, and a plane whose base
+is off the tile's 16-byte words, keep the KHR arm or the cm2 tile. The cells are `test_cud_fa_h512` and `test_cud_fa_h256` (`tests/test_cuda_kernels.das`).
 
 ### The K/V mirror's block codecs: q8_0 and tq4 {#vk-kv-block-codecs}
 

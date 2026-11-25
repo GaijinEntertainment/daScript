@@ -684,6 +684,33 @@ at subgroup 32 - on a device with both NV_coopmat2 and KHR coopmat the same run 
 l/m/s/e tiles and the KHR tile. No new oracle: the `<fmt>f16_gemm_oracle` already holds the KHR
 arm, whose f16 accumulation sits inside the cell's 2e-2 relative bar.
 
+Declare the KHR stamp's rotated-walk alternate beside it (`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps`):
+`<Fmt>KhrBatchRot`, the same class with `override KROT = 2u`, under
+`[vk_dispatch(name = "kq_batch_<fmt>_khr_rot_cls", ..., alt_of = "kq_batch_<fmt>_khr_cls", alt_bit = 1)]`
+(a per-32 format spells both names `<fmt>_batch_khr...`; bit 1 is `VK_ALT_KHR_ROT`). `K4KhrBatchRot` is the pattern.
+The module gate's `check_khr_rot_alternates` (`REVIEW.das`) fails every `*_batch_khr_cls` stamp that has no
+`_rot_cls` alternate naming it in `alt_of`.
+
+Give the format its int8 window tiles, or skip it by name (`ARCHITECTURE_GPU_VULKAN_KHR.md#khr-int8-tiles`). The int8
+ladders `mmq_cls_ensure` / `mmq_cls_set` / `mmq_cls_enc` (`dasllama_vulkan_classes.das`) stamp
+`<stem>_batch_mmq_cls` and `<stem>_batch_mmqs_cls` over every `KqFmt` member outside `MMQ_SKIP`, so the tree fails to
+compile until the new member does one of two things:
+
+- joins `MMQ_SKIP`: the format's routed columns keep their f16 tiles; or
+- stays out of `MMQ_SKIP` and ships both stamps: a `<Fmt>MmqT : KqMmqKhrT` format template with the hooks `w_load0`,
+  `w_scale`, `w_put` and `plane_tile` (`w_load1` where one 16-byte word does not hold a block; `override HALF2` for a
+  scale a 16-element half, `override W32` for a plane bound as words), its 128-row stamp and its 32-row stamp
+  (`override TOKS = 32u`), and the format's rows in `test_vkd_mmq_tiles` (`tests/test_vulkan_kernels_gemm.das`).
+  `K4MmqT` is the pattern for a superblock format, `Q8MmqT` for a per-32 one.
+
+`mmq_cls_has` is the predicate the window reads before it routes a column to the int8 tile; it reads `MMQ_SKIP`
+through `kq_tile_stamped`, so the list is the one place a format is named.
+
+The decode GEMV's N-column leaves take the same choice for a superblock format
+(`ARCHITECTURE_GPU_SHARED_GEMM.md#ncol-rotated-walk`): join the `GEMV_N_ROT` skip list, or ship the rotated twins
+`kq_gemv_<fmt>_nr_cls` and `kq_gemv_<fmt>_n4r_cls`; `gemv_n_rot_fmt` reads the same list. A format in neither fails
+to compile.
+
 ## 7. Metal - `dasllama_metal_kernels.das`, `_common`, `_prefill`, `_shapes`, `dasllama_layout.das`
 
 The tier compiles MSL and runs only on a Mac. It is NOT a plane-verbatim consumer like Vulkan: a

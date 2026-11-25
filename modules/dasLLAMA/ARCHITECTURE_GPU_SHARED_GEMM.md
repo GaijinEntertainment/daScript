@@ -4,7 +4,7 @@ Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This docum
 batch GEMM tiles and of the decode GEMV family that `dasllama_gpu_kernels_discrete.das` holds for the Vulkan and CUDA
 homes: how a cm2 tile's decode callbacks read their quant bytes, the mx4 decode, the device scale row the decodes read, the
 tile body's k step, fast path and loop bounds, the KHR arm's hand-staged tile, the GEMV family's lane split and region walk,
-the N-column forms' load waves and row groups (`#ncol-load-waves`), and the routed gate-up fusion. How the Vulkan driver picks a tile, a k split and a GEMM mode is
+the N-column forms' load waves and row groups (`#ncol-load-waves`), their rotated walk over a colliding plane (`#ncol-rotated-walk`), and the routed gate-up fusion. How the Vulkan driver picks a tile, a k split and a GEMM mode is
 `ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`; the window GEMMs over a file's f32 rows that ride the KHR tile
 are `ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile`.
 
@@ -174,6 +174,12 @@ least; the probe's `khrx` arms measure them (`ARCHITECTURE_MEASUREMENT_VK_GEMM_P
 and `followup_vulkan.md` item 42 keeps the figures. On a partial token column the edge store costs
 nothing beyond the padded rows: per computed row a 300-token window runs at the whole-window rate.
 
+**The k loop reads its step through `khr_walk`.** Under the template constant `KROT` at 0 the walk is the loop's own k
+and the stamp's words are what they were without it; a stamp that overrides `KROT` starts each weight tile's walk that
+many 32-wide steps further into [k0, k1) (`khr_rot`, read once ahead of the loop) and wraps, every step still read once, and its subgroups leave out the rounds and
+stores of a token group with no row. The Vulkan home stamps one such alternate
+a format and serves it where the box's race picks it (`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps`).
+
 **The two staging arrays are the whole footprint by design.** A third array for the bounce
 costs the tile a seventh of its rate, because 8 KB more shared memory per workgroup is one
 workgroup fewer per SM. The k step is 32 (the reference exe's BK): a 64-deep step doubles the
@@ -235,6 +241,32 @@ once: both discrete homes stamp the K-quant shell at RR 2 (`KQ_N_RR`) in a four-
 stamp (`cud_gemv_cls_enc_n`, `gemv_cls_enc_n`). `REVIEW.das`'s `check_ncol_rr_literal` holds every
 stamp's `override RR` literal on either home to `KQ_N_RR`, the count both dispatches size the grid by.
 Each column's sum stays the one-column form's, term for term (`test_cud_gemv_n_cols`, `test_vkd_gemv_ncol`).
+
+### The N-column leaves walk a colliding plane rotated {#ncol-rotated-walk}
+
+**On an AMD device the lane groups of a workgroup do not read one column of rows a round stride apart at once.** Every
+group of an N-column dispatch starts its row at block 0, so the groups of a workgroup read one column of consecutive
+weight rows together; where those rows sit a multiple of 512 bytes apart the dispatch runs at half its rate or less - the
+collision of the KHR window tile and of the one-row residual GEMV (`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps`), on
+the N-column leaves. On the Radeon 8060S a two-column dispatch over a Q4_K or a Q8_0 plane at K 4096 takes about twice
+the one-column leaf's time or more, and a plane whose rows sit off the step takes the one-column leaf's
+(`harness/vk_gemv_probe.das -- <n> <d> cols cold n2off`). The rotated twins (`KROT`: `krot_start` and `krot_next` on
+`KqGemvShellT`, `rot_first` and `rot_next` on `Q8GemvNT`) start group g's walk g steps into the row and wrap, and the
+same dispatches then run near the one-column leaf's time or under it (`PERF_LEDGER.md`, the entry on the N-column GEMV
+leaves' rotated walk). A column's sum is the class's terms in another order, so a twin's rows agree with the
+one-column class within the float bar, not bit for bit (`test_vkd_gemv_ncol`'s rotated leg).
+
+**The twin is picked a plane, not a device** (`gemv_n_rot_wanted`, `q8_gemv_n_rot_wanted`, under the served set's
+`VK_ALT_N_ROT`, an AMD device's own rule): a plane whose rows do not collide runs slower rotated (Q5_K at K 2048 on the
+8060S, the same entry). A K-quant plane takes its twin where its quant rows are 1024 bytes or more and a multiple of 512;
+IQ4_XS at any stride from 1024, its walk gaining at every width measured; Q8_0, a row `n` bytes, at 1024 - one pass of
+the device's own subgroup, the width its `n2o` / `n4o` / `n8o` stamps run at - and at every multiple of 512 from 2048, on
+the pinned width (`n2r` / `n4r` / `n8r`). The row-pair form, where a box arms it, keeps its own stamps. Q4_K, Q4_0,
+IQ4_XS, iq3s4, IQ4_NL, NVFP4, Q2_K, IQ2_XS and IQ2_XXS have twins (`gemv_n_rot_fmt`); the other superblock formats gain
+nothing at K 2048 and 4096 and have none. Served on the 8060S the twins shorten every GEMV stage of the
+Qwen1.5-MoE-A2.7B's two-row step and raise the dense Qwen3.5-0.8B's rate at two and at four streams (the same entry). A
+routed model's stream rate also moves with whether its streams pick the same experts, so its rows are read a stage at a
+time.
 
 ### The one-column leaves walk their regions a row at a time {#gemv-region-walk}
 

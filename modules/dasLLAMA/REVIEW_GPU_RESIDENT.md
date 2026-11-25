@@ -49,7 +49,7 @@ host-cached sessions when none is.** The driver panics on a device-home session 
 **A diff that calls a listed setter calls it before the load it governs - the `set_gpu_*` and
 `reset_gpu_*` functions of `dasllama/dasllama_core.das`, `set_gpu_resident_block_rounds_`, `set_pf_window_rows_pin`,
 `set_expert_cache_mb`, `set_gpu_want_pf_stream`, `set_cuda_mmq_pin`, `set_resident_upload_fault`,
-`set_cuda_window_fault_`, `set_moe_gpu_streams`, `vk_rdec_chain_mode_set`,
+`set_cuda_window_fault_`, `set_moe_gpu_streams`, `set_rdec_dn_snaps`, `set_vk_alt_stamps`, `vk_rdec_chain_mode_set`,
 `cud_rdec_chain_mode_set`, `install_moe_gpu_resident_site_feeds`,
 `install_moe_gpu_resident_kv_ring`,
 `install_moe_gpu_resident_kv_share`, and the home's seat switchers `set_gpu_home_`,
