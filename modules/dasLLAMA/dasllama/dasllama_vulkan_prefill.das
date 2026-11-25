@@ -95,6 +95,12 @@ def pf_chunk_cap : int64 {
     return g_gpu.integrated ? 1l : PF_CHUNK_MAX
 }
 
+//! whether the window chain submits in chunks while the host still records: the knob on and no host-served expert layer;
+//! the per-role profile pins one fenced submit on a discrete device, so a chunk gap never bills to a role, and keeps the
+//! chunks on an integrated one, whose driver resets the device under one submit past its watchdog
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+def pf_window_overlaps(knob, prof, integrated, experts_host : bool) : bool => knob && !experts_host && (!prof || integrated)
+
 var private @scratch g_pf_segs : array<RdecPfSeg>    //! the call's segments (`RdecPfSeg`), rows over the whole call; a one-session call is one segment at row 0
 var private @scratch g_pf_wsegs : array<RdecPfSeg>   //! the parts of them inside the window being recorded, `row0` window-local, `npos` the part's rows
 
@@ -193,10 +199,21 @@ def pf_ffn_slice_row0(l, n_layers, wlen : int64; f16_gate, f16_down : bool) : in
 //! the h128 coopmat twin serves a 128-head layer where the cm2 flash tiles do not
 def private pf_fa128s : bool => !(cm2_fa_on() && vk_fa_on() && rd_pf_reads_f16()) && h128_twin_on()
 
-//! a window's rows from `w0`: the last window keeps at least the conv taps, so only window 0 can be shorter, and its history is zero
-def private pf_window_len(npos, w0 : int64) : int64 {
+//! the rows a window may hold that starts `keys0` positions into its context: the driver's window, on an integrated GPU
+//! brought down at the model's widest key row (`vk_pf_window_rows`)
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+def pf_window_cap(keys0 : int64) : int64 {
+    var kvd = 1l
+    for (L in g_rd.layers) {
+        kvd = max(kvd, L.kvd)
+    }
+    return vk_pf_window_rows(g_rd.pf_np, keys0, kvd)
+}
+
+//! a window's rows from `w0`, `keys0` positions into its context: the last window keeps at least the conv taps, so only window 0 can be shorter, and its history is zero
+def private pf_window_len(npos, w0, keys0 : int64) : int64 {
     let taps = max(g_rd.dn_dconv - 1l, 0l)
-    var wlen = min(g_rd.pf_np, npos - w0)
+    var wlen = min(pf_window_cap(keys0), npos - w0)
     if (g_rd.hybrid) {   //! a recurrent window is one deltanet chunk: the smalls planes (beta, g) and the scan workspace hold DN_WINDOW rows
         wlen = min(wlen, DN_WINDOW)
     }
@@ -2245,7 +2262,7 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
     unsafe {
         var w0 = 0l
         while (w0 < npos) {
-            let wlen = pf_window_len(npos, w0)
+            let wlen = pf_window_len(npos, w0, pos0 + w0)
             let last = w0 + wlen >= npos
             let pos0w = pos0 + w0
             pf_window_segs(w0, wlen)
@@ -2553,7 +2570,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
         var last_wlen = 0l
         while (w0 < npos) {
             let tp0 = ref_time_ticks()
-            let wlen = pf_window_len(npos, w0)
+            let wfull = pf_window_len(npos, w0, pos0 + w0)
+            var wlen = wfull   // the rows the layers run over: past a shared-K/V tail's first layer, the ending rows alone
             let last = w0 + wlen >= npos
             pf_window_segs(w0, wlen)
             pf_window_caps(w0)
@@ -2627,7 +2645,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             var pc_pro = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
             enc_cls_ar(raw, h, g_rd.pf_sets[bp + 0], pc_pro, wlen)   // prologue norm
             pfq_ts(raw)
-            let overlap = g_env_vulkan.vk_overlap && !vk_prof() && !g_rd.experts_host
+            let overlap = pf_window_overlaps(g_env_vulkan.vk_overlap, vk_prof(), g_gpu.integrated, g_rd.experts_host)
             let fuse_arq = g_env_vulkan.vk_fuse
             var nextb = 1l
             var cstep = 1l

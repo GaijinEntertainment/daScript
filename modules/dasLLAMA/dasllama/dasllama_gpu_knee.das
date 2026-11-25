@@ -236,6 +236,23 @@ def set_vk_split_k_tgs(v : int64) {
 
 def vk_split_k_tgs : int64 => g_vk_split_k_tgs
 
+let PF_IGPU_KEY_ELEMS = 32_000_000_000l   //! an integrated GPU's cap on a prefill window's rows x keys x key-row width: under it a layer's attention is a short job on the 8060S
+let PF_IGPU_ROWS_STEP = 256l              //! the step a window comes down in, and its floor: a whole l column of the window tiles
+
+//! the rows of a prefill window on an integrated GPU, `np` the driver's window, `keys0` the positions before it, `kvd` the
+//! model's widest key row: `np` down in `PF_IGPU_ROWS_STEP` rows until the window's rows x the keys they attend x `kvd` is
+//! under `PF_IGPU_KEY_ELEMS`. A layer's attention over a window is one dispatch, so one job, and a driver's watchdog resets
+//! the device under a job that runs past it
+def pf_igpu_window_rows(np, keys0, kvd : int64) : int64 {
+    var rows = np
+    while (rows > PF_IGPU_ROWS_STEP && rows * (keys0 + rows) * kvd > PF_IGPU_KEY_ELEMS) {
+        rows -= PF_IGPU_ROWS_STEP
+    }
+    return rows
+}
+
+let VK_VENDOR_AMD = 0x1002u   //! `VkPhysicalDeviceProperties.vendorID` of an AMD device, under either of its drivers
+
 //! The CUDA short window's split-K knee, the Vulkan knob's twin over the CUDA home's own stamps: a window the s column serves
 //! whose tile grid is at most half this many blocks splits its K; 0 leaves those windows whole. Raced by the mint
 //! (`cud_split_knee_race`); read at every pick. The default is the race's pick on the RTX PRO 4500 and the RTX 5060 Ti alike.

@@ -156,7 +156,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.kv_dev = make_device_buf((qd + 2l * kv_dim) * 4l * nb)
     r.q_dev = q_gated ? make_device_buf(2l * qd * 4l * nb) : r.kv_dev   //! an ungated q row is the k/v row's front (its first qd elements): one q+k+v GEMV dispatch lands all three
     r.attn_dev = make_device_buf(qd * 4l * nb)
-    r.attn_nsplit = da_nsplit(da_attn_row_wgs(n_heads, n_heads / (kv_dim / head_size), 1l), int64(g_gpu.sm_count))
+    r.attn_nsplit = da_nsplit(da_attn_row_wgs(n_heads, n_heads / (kv_dim / head_size), 1l), int64(g_gpu.attn_wave))
     r.attn_cnt_off = n_heads * max(r.attn_nsplit, 1l) * (head_size + 2l) * nb   //! the pieces: no dispatch splits past the one-row form's count
     r.attn_part_dev = make_device_buf((r.attn_cnt_off + n_heads * nb) * 4l)   //! a counter a (row, kv head, slab) group: a head a group at most, whatever a layer's GQA group
     upload_zeros(r.attn_part_dev, r.attn_cnt_off * 4l, n_heads * nb * 4l)   //! the arrival counters start at rest; the last piece of each group rearms its own
@@ -2167,7 +2167,7 @@ def private rd_pieces_for_span(span : int64) : int64 {
 [arch(at="../ARCHITECTURE_GPU_SHARED_ATTN.md#vk-decode-attn-split")]
 def private rd_layer_pieces(L : RLayer; nsplit, rows : int64) : int64 {
     let span = L.window == 0l ? nsplit : min(nsplit, rd_pieces_for_span(L.window))
-    let wave = max(1l, int64(g_gpu.sm_count) / (da_attn_row_wgs(g_rd.n_heads, L.kv_mul, 1l) * max(rows, 1l)))   //! the command's own rows, never the planes' height
+    let wave = max(1l, int64(g_gpu.attn_wave) / (da_attn_row_wgs(g_rd.n_heads, L.kv_mul, 1l) * max(rows, 1l)))   // the command's own rows, never the planes' height
     return min(span, wave)
 }
 

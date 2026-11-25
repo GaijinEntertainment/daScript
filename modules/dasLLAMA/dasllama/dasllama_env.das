@@ -600,7 +600,7 @@ struct public VulkanEnv {
     @clarg_doc = "The last layer's FFN runs on the window's last 32 rows only (the classifier reads one); 0 runs it over the whole window for a same-build A/B."
     vk_ffn_slice : bool = true
 
-    @clarg_doc = "Prefill record/execute overlap: the window chain submits in ramped chunks (1,2,4,8 layers) so the GPU starts while the CPU still records; 0 pins the single fenced submit (the per-role GPU profile pins it too, so a chunk gap never bills to a role)."
+    @clarg_doc = "Prefill record/execute overlap: the window chain submits in ramped chunks (1,2,4,8 layers) so the GPU starts while the CPU still records; 0 pins the single fenced submit (the per-role GPU profile pins it too on a discrete GPU, so a chunk gap never bills to a role; on an integrated GPU the profile keeps the chunks, one submit of a long window running past the driver's watchdog)."
     vk_overlap : bool = true
 
     @clarg_doc = "Layers one prefill submit holds at most (the overlap ramp's cap, 1..8); 0 = 1 on an integrated GPU, 8 on a discrete one. A Linux amdgpu resets the device under a job past its watchdog (about 10 s), which an iGPU's 8-layer chunk reaches on a long prompt."
@@ -615,8 +615,14 @@ struct public VulkanEnv {
     @clarg_doc = "The subgroup width every class pipeline pins where the device's own differs and its compute stage may pin it (Vulkan 1.3 subgroupSizeControl; RDNA runs 32 or 64 lanes and defaults to 64): the coopmat tiles, the h128 attention twin and the tower tiles own four 32-lane fragments a workgroup, so a device left at 64 serves the sdot4 tiles and the scalar attention instead. 0 = the device's own width."
     vk_subgroup : int64 = 32l
 
+    @clarg_doc = "The workgroups the decode attention counts as one wave of the device, in place of the device's own count (0 = the device's: its SM count, or an AMD device's active compute units, or 16 on a device that reports neither): the token command splits a head's keys into pieces to fill two waves, and the N-row command into the pieces its rows leave of one"
+    vk_attn_wave : int64 = 0l
+
     @clarg_doc = "Place the planes in the ReBAR device-local host-visible memory type (one larger than 1 GB present) and write uploads straight into them. Off by default: on the NVIDIA WDDM driver a mapped plane is a host-side shadow the manager parks in system memory under pressure, and a host-experts plan then decodes at PCIe speed (gemma-4 26B Q8_0 8.1 tok/s mapped against 32.7 staged, the 35B-A3B 38 against 71: debug-jit readings, the ReBAR entry in modules/dasLLAMA/PERF_LEDGER.md) - the default stages every upload into unmapped device-local planes."
     vk_rebar : bool = false
+
+    @clarg_doc = "Where the weight slabs sit on an integrated device whose BIOS sets a dedicated-memory carve-out aside (the UMA frame buffer): 1 = the host heap's memory type, which the kernel never places in the carve-out - a slab placed there reads at about half the rate; 0 = device-local memory like every other buffer; -1 (the default) = 1 on an AMD integrated device whose kernel driver reports a carve-out of 512 MB or less (Linux), 0 on every other device. A discrete card is never touched."
+    vk_carve_out_weights : int64 = -1l
 
     @clarg_doc = "Arm the resident driver with f32 KV mirrors instead of the default codec (A/B instrument; only sessions of the armed codec are served)."
     vk_kv32 : int64 = 0l

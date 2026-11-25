@@ -102,6 +102,10 @@ def private cut_prof_report(chain : string; nl, npos : int64; t0 : int64) {
     rail_prof_report(s, "cuda", chain, nl, npos, get_time_usec(t0))
 }
 
+//! the cut between two blocks of a tower chain: this home's stream takes the whole chain
+[unused_argument(rl)]
+def rail_block_cut(var rl : CutRail) {}
+
 //! the Q8_0-feed arm runs on this rail: never, every q8 GEMM rides the cm2 feed
 [unused_argument(rl)]
 def rail_mulmm(rl : CutRail) : bool => false
