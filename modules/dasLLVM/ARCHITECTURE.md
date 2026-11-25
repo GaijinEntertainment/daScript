@@ -40,10 +40,10 @@ label silently absorbing new sub-steps breaks the contract the same way an untim
 Under `--jit-split-modules` (`run_split_codegen` in `llvm_jit_run.das`) the same labels map
 differently: **declare** reads ~zero (declaration moves inside the partition loop), **irgen**
 covers partitioning plus every partition's declare/irgen/ctor work, **optimize** carries the
-`jit_par_emit_run` pool wall - per-job passes AND object emission interleave on the workers -
+`run_split_emit` wall - per-job passes AND object emission interleave on the jobque jobs -
 plus the post-optimize verifies and the partition teardown, and **emit+link** is the
 `link_from_objects` link plus the DLL reopen only. The finer steps print per the contract:
-one `LLVM JIT time: job {obj} passes ... emit ...` line per partition (from the pool, under the
+one `LLVM JIT time: job {obj} passes ... emit ...` line per partition (from `run_split_emit`, under the
 same log option) and the `link ... (N objects)` line under emit+link. With the obj cache on
 (`--jit-obj-cache`, default under split), cached partitions skip declare/irgen/optimize
 entirely: the key fold and probe cost lands in **irgen**, the `obj cache - K/N partitions

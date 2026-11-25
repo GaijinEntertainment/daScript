@@ -24,8 +24,12 @@ def public run_jit_codegen(prog : Program?; var ctx : Context?; var ok : bool?) 
     *ok = run_jit(prog, ctx).ok
 }
 
+//! a jobque or thread clone of this context dies while LLVM is
+//! still in use - only the context itself shuts LLVM down
 [finalize(late)]
 def private shutdown_llvm {
+    let category = this_context().category
+    return if (category.job_clone || category.thread_clone)
     LLVMShutdown()
 }
 
