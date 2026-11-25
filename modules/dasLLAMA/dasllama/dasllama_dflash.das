@@ -57,6 +57,10 @@ struct DflashDrafter {
     rank : int64
     topk : int64
     window : int64
+    dense : array<bool>       //! a layer the file's sliding_window_pattern leaves unwindowed: it attends its whole context
+    ring_idx : array<int64>   //! a layer's place among the layers of its kind in a ring: the windowed layers, then the dense
+    n_win : int64             //! the windowed layers
+    ring_first : int64        //! the slots a new ring's dense layers hold: the window, or `set_dflash_dense_reserve`'s
     eps : float
     theta : float
     inv_freq : array<float>   //! [hs/2] the rope's inverse frequencies, YaRN's per-pair divisors folded in
@@ -94,11 +98,12 @@ struct DflashDrafter {
     bo_offs : array<int64>
 }
 
-//! A session's drafter state: the context ring (a layer's K and V rows a slot, slot = position mod window), the positions it
-//! holds, and the target's captured layer outputs of the last forward's rows
+//! A session's drafter state: the context ring (a layer's K and V rows a slot, slot = position mod the layer's slots), the
+//! positions it holds, and the target's captured layer outputs of the last forward's rows
 struct private DflashSeq {
-    ring_k : array<float>   //! [L][window][n_kv * hs]
+    ring_k : array<float>   //! the windowed layers' [window][n_kv * hs], then the dense layers' [dense_cap][n_kv * hs]
     ring_v : array<float>
+    dense_cap : int64       //! the slots a dense layer holds: grown as the context does
     ctx : int64             //! positions 0 .. ctx-1 committed (the ring holds the last `window`)
     valid_lo : int64        //! the lowest position whose slot is valid (a gap in the commits moves it)
     caps : array<float>     //! [rows][ncap][dim]
@@ -115,7 +120,7 @@ var private g_seqs : table<uint64; DflashSeq>
 //! A device home's arm of the drafter, registered under the decode override's name: `ready` uploads the drafter's planes for `t`
 //! (false = the home declines, the CPU arm serves); `commit` writes the rows' context (`caps` [rows][slot][dim]) into the session's
 //! device ring at `pos0 ..`; `pass` runs the block of `rows` (the anchor and the masks) at `pos` against the ring's positions
-//! `lo .. lo + nctx - 1` and lands the first `nd` draft rows' logits ([nd][vocab]) and selector projections ([nd][rank]); `drop`
+//! `lo .. lo + nctx - 1` (a dense layer's from `dlo`) and lands the first `nd` draft rows' logits ([nd][vocab]) and selector projections ([nd][rank]); `drop`
 //! frees a session's ring; `detach` every plane. Where `selects` (a sampled round's drafts asked with `soft`), `select_pass` runs
 //! the same pass with the selector on the device too: its `nd` picks landed into drafts[1 ..], or, where the round lets it hold,
 //! left on the device as the verify's rows, the pass committed unwaited - `land` then waits it and lands the picks, its GPU
@@ -125,9 +130,9 @@ var private g_seqs : table<uint64; DflashSeq>
 struct DflashDeviceSeams {
     ready : function<(t : Model; dr : DflashDrafter) : bool>
     commit : function<(dr : DflashDrafter; uid : uint64; caps : array<float>; rows, pos0 : int64) : bool>
-    draft_pass : function<(t : Model; dr : DflashDrafter; uid : uint64; tok, pos, rows, nd, lo, nctx : int64; var logits : array<float>; var hsel : array<float>) : bool>
+    draft_pass : function<(t : Model; dr : DflashDrafter; uid : uint64; tok, pos, rows, nd, lo, nctx, dlo : int64; var logits : array<float>; var hsel : array<float>) : bool>
     selects : function<(soft : bool) : bool>
-    select_pass : function<(t : Model; dr : DflashDrafter; uid : uint64; tok, pos, rows, nd, lo, nctx : int64; may_hold, may_hold_ahead : bool; temp : float;
+    select_pass : function<(t : Model; dr : DflashDrafter; uid : uint64; tok, pos, rows, nd, lo, nctx, dlo : int64; may_hold, may_hold_ahead : bool; temp : float;
                             var rng : int4&; var drafts : array<int64>; var cids : array<int64>; var qs : array<float>) : DflashSelect>
     land : function<(var drafts : array<int64>; nd : int64; var rng : int4&; var cids : array<int64>; var qs : array<float>) : double>
     drop : function<(uid : uint64) : void>
@@ -144,6 +149,7 @@ struct DflashDeviceStats {
     commit_us : int64
     selected : int64
     walked : int64
+    grows : int64   //! the times a session's ring grew its dense layers
 }
 
 //! how a device pass with the selector on the device ended
@@ -155,6 +161,8 @@ enum DflashSelect {
 var private g_dflash_dev : table<string; DflashDeviceSeams>
 var private g_dflash_dev_on = false   //! the attached drafter's ring and pass are the active home's
 var private g_dflash_dev_knob = true
+var private g_dflash_dense_knob = -1   //! 1 / 0: pinned by `set_dflash_dense`; -1: the default - dense on a device arm, windowed on the CPU arm
+var private g_dflash_dense_reserve = 0l   //! the slots a new ring's dense layers hold; under the window, the window
 var private g_dflash_land_nd = 0l       //! the last draft's picks the round's land still owes the record
 var private g_dflash_land_rows = 0l
 var private g_dflash_held = false       //! ... left on the device as the verify's rows
@@ -166,13 +174,14 @@ var private g_dflash_draft_temp = -1.0   //! a rejection-sampling round's drafte
 var private g_dflash_point_q = false    //! the round in flight records its greedy drafts as point masses at the land
 
 //! a home's joint select: every stream's pass and select in one submission, stream b's `nd` picks into picks[b * nd ..]
-typedef DflashJointSelect = function<(t : Model; dr : DflashDrafter; uids : array<uint64>; toks, pos, lo, nctx : array<int64>; rows, nd : int64; var picks : array<int64>) : bool>
+typedef DflashJointSelect = function<(t : Model; dr : DflashDrafter; uids : array<uint64>; toks, pos, lo, nctx, dlo : array<int64>; rows, nd : int64; var picks : array<int64>) : bool>
 var private g_dflash_joint : DflashJointSelect
 var private g_dflash_joint_on = false
 var private @scratch g_jt_uids : array<uint64>
 var private @scratch g_jt_toks : array<int64>
 var private @scratch g_jt_lo : array<int64>
 var private @scratch g_jt_nctx : array<int64>
+var private @scratch g_jt_dlo : array<int64>
 var private @scratch g_jt_picks : array<int64>
 
 def register_dflash_joint(fn : DflashJointSelect) {
@@ -197,18 +206,20 @@ def dflash_draft_joint(t : Model; var sessions : array<Session?>; pos : array<in
     g_jt_toks |> resize(ns)
     g_jt_lo |> resize(ns)
     g_jt_nctx |> resize(ns)
+    g_jt_dlo |> resize(ns)
     for (i in range64(ns)) {
         let q = seq_of(*sessions[i])
         return false if (q == null || q.ctx != pos[i] || mtp_drafts_sampled(*sessions[i]))
-        let span = ring_span(*q, pos[i], dr.nblock)
+        let span = ring_span(*q, pos[i], dr.nblock, dr.window)
         g_jt_uids[i] = sessions[i].uid
         g_jt_toks[i] = sessions[i].mtp_vbatch[0]
         g_jt_lo[i] = span.lo
         g_jt_nctx[i] = span.nctx
+        g_jt_dlo[i] = q.valid_lo
     }
     g_dflash_land_nd = 0l
     g_dflash_held = false
-    return false if (!invoke(g_dflash_joint, t, dr, g_jt_uids, g_jt_toks, pos, g_jt_lo, g_jt_nctx, dr.nblock, nd, g_jt_picks))
+    return false if (!invoke(g_dflash_joint, t, dr, g_jt_uids, g_jt_toks, pos, g_jt_lo, g_jt_nctx, g_jt_dlo, dr.nblock, nd, g_jt_picks))
     for (i in range64(ns)) {
         var s & = unsafe(*sessions[i])
         for (r in range64(nd)) {
@@ -232,6 +243,39 @@ def register_dflash_device(name : string; var seams : DflashDeviceSeams) {
 def set_dflash_device(on : bool) {
     g_dflash_dev_knob = on
 }
+
+//! true = a layer the file leaves unwindowed attends its whole context; false = every layer rings at the window. Unset, the
+//! reading follows the arm: dense where a device arm serves the pass, windowed on the CPU arm. Set ahead of the attach: the
+//! ring's layout follows it
+def set_dflash_dense(on : bool) {
+    g_dflash_dense_knob = on ? 1 : 0
+    to_log(LOG_INFO, "dasLLAMA: set_dflash_dense({on}) - the block drafter's unwindowed layers {on ? "attend their whole context" : "ring at the window"} on every arm (reset_dflash_dense puts the default back: dense on a device arm, windowed on the CPU arm)\n")
+}
+
+//! the dense reading back to its default (`set_dflash_dense`)
+def reset_dflash_dense {
+    g_dflash_dense_knob = -1
+}
+
+//! what `set_dflash_dense` or `reset_dflash_dense` last wrote: 1 dense, 0 windowed, -1 the default
+def dflash_dense_knob() : int => g_dflash_dense_knob
+
+//! `dflash_dense_knob`'s earlier answer written back
+def restore_dflash_dense(knob : int) {
+    g_dflash_dense_knob = knob
+}
+
+//! whether the file's unwindowed layers are dense, the pass on a device arm or on the CPU's
+def private dflash_dense_reading(device : bool) : bool => g_dflash_dense_knob > 0 || (g_dflash_dense_knob < 0 && device)
+
+//! the slots a session's dense layers start with (0 = the window, grown as the context does): a ring made as wide as its
+//! context never grows. Set ahead of the attach: the arms size their planes to it
+def set_dflash_dense_reserve(slots : int64) {
+    g_dflash_dense_reserve = slots
+}
+
+//! what `set_dflash_dense_reserve` last wrote
+def dflash_dense_reserve() : int64 => g_dflash_dense_reserve
 
 //! the arm `set_dflash_device` last asked: the device (default) or the CPU reference arm
 def dflash_device_knob() : bool => g_dflash_dev_knob
@@ -369,6 +413,56 @@ def dflash_drafts_of_landing(dr : DflashDrafter; tok, nd : int64; idw : uint con
         }
     }
     dflash_drafts_of_lists(dr, tok, nd, ids64, cvals, hsel, drafts)
+}
+
+//! a discrete home's pass submitted unwaited, its drafts the verify's rows: how many, off which anchor, whether the device
+//! walked them, and whether the verify seat has landed them
+struct DflashHeldPass {
+    nd : int64
+    tok : int64
+    walked : bool
+    landed : bool
+}
+
+//! a pass's landing at `host` as the round's drafts in drafts[1 ..]: the walk's picks (a word a pick past the anchor's), or
+//! the lists through the host's walk
+def dflash_landed_drafts(dr : DflashDrafter; tok, nd : int64; walked : bool; host : void?; var drafts : array<int64>) {
+    unsafe {
+        if (walked) {
+            let idw = reinterpret<uint?>(host)
+            for (r in range64(nd)) {
+                drafts[r + 1l] = dflash_slot_id(idw[r + 1l])
+            }
+        } else {
+            let lists = nd * dr.topk * 4l
+            let bytes = reinterpret<uint8?>(host)
+            dflash_drafts_of_landing(dr, tok, nd, reinterpret<uint const?>(bytes), reinterpret<float const?>(bytes + lists),
+                reinterpret<float const?>(bytes + 2l * lists), drafts)
+        }
+    }
+}
+
+//! a home's `RdecHeldDraftsFn` over its held pass: the drafts off the landing at `host` once the verify's wait returned; false
+//! where `nd` is not the held pass's, the pass landed already, or the home holds none (`dr` null)
+def dflash_held_drafts(var held : DflashHeldPass&; dr : DflashDrafter const?; host : void?; var drafts : array<int64>; nd : int64) : bool {
+    return false if (held.nd != nd || held.landed || dr == null)
+    dflash_landed_drafts(*dr, held.tok, nd, held.walked, host, drafts)
+    held.landed = true
+    return true
+}
+
+//! a home's `land` seam over its held pass: where no verify came for the drafts the home's queue is waited (`wait`, false = the
+//! wait failed) and they land here; the pass is then let go. Returns the pass's GPU milliseconds - not told apart from the
+//! verify's on a discrete home, so 0 - or a negative for a pass that is not the held one or a wait that failed
+def dflash_held_land(var held : DflashHeldPass&; dr : DflashDrafter const?; host : void?; var drafts : array<int64>; nd : int64;
+                     wait : block<() : bool>) : double {
+    return -1.0lf if (held.nd != nd || dr == null)
+    if (!held.landed) {
+        return -1.0lf if (!invoke(wait))
+        dflash_landed_drafts(*dr, held.tok, nd, held.walked, host, drafts)
+    }
+    held = DflashHeldPass()
+    return 0.0lf
 }
 
 var private g_dflash_home = ""   //! the home whose seams the attach found ready; the override may move after it
@@ -637,6 +731,13 @@ def private read_meta(var dr : DflashDrafter; m : GGUFMeta; bytes : array<uint8>
     if (dr.nblock < 2l || dr.nblock > DFLASH_MAX_BLOCK || dr.mask_id < 0l) {
         return refuse(dr, "unsupported block {dr.nblock}, mask id {dr.mask_id}")
     }
+    dr.dense |> resize(dr.n_layers)
+    if (gguf_is_array(m, "{p}attention.sliding_window_pattern")) {
+        let pat <- gguf_int_array(m, bytes, "{p}attention.sliding_window_pattern")
+        for (l in range64(min(dr.n_layers, long_length(pat)))) {
+            dr.dense[l] = pat[l] == 0l
+        }
+    }
     rope_table(dr, m, bytes)
     return true if (!dr.v2)   //! a DFlash file names no vocabulary: its drafts are the trunk classifier's ids
     if (dr.conv_k != 2l || dr.dim % dr.conv_g != 0l || dr.topk < 1l || dr.rank <= 0l) {
@@ -790,10 +891,15 @@ def attach_dflash_drafter(t : Model; path : string) : string {
     detach_dflash_drafter()
     delete g_dflash
     g_dflash <- dr
+    let home = active_decode_override()
+    let dev_home = g_dflash_dev_knob && key_exists(g_dflash_dev, home)
+    dflash_ring_layout(g_dflash, dev_home)
     g_dflash_on = true
     g_dflash_hc = t.config.hyper_conn ? t.config.hc_count : 0l
-    let home = active_decode_override()
-    g_dflash_dev_on = g_dflash_dev_knob && key_exists(g_dflash_dev, home) && invoke(g_dflash_dev[home].ready, t, g_dflash)
+    g_dflash_dev_on = dev_home && invoke(g_dflash_dev[home].ready, t, g_dflash)
+    if (dev_home && !g_dflash_dev_on) {   // the device arm declined: the CPU arm's reading
+        dflash_ring_layout(g_dflash, false)
+    }
     g_dflash_home = g_dflash_dev_on ? home : ""
     if (!g_dflash_dev_on && t.planes_trimmed) {   // the CPU pass reads the trunk's classifier rows, which a trimmed lane does not hold
         let trimmed_why = "the drafter's pass has no device arm on this home and the trunk's image is planes-trimmed: the CPU pass reads classifier planes the image does not hold"
@@ -1018,12 +1124,6 @@ def private dflash_commit(var s : Session; pos0, rows : int64) {
     let d = dr.dim
     let ncap = long_length(dr.target_layers)
     let kvd = dr.n_kv * dr.hs
-    let w = dr.window
-    let lstride = w * kvd
-    if (long_length(q.ring_k) < dr.n_layers * lstride) {
-        q.ring_k |> reserve_resize(dr.n_layers * lstride)
-        q.ring_v |> reserve_resize(dr.n_layers * lstride)
-    }
     if (pos0 > q.ctx) {
         q.valid_lo = pos0
     }
@@ -1054,6 +1154,7 @@ def private dflash_commit(var s : Session; pos0, rows : int64) {
         q.ctx = pos0 + rows
         return
     }
+    q.dense_cap = dflash_ring_reach(dr, q.ring_k, q.ring_v, q.dense_cap, pos0 + rows)
     var cr : array<float>
     cr |> reserve_resize(rows * d)
     var kv : array<float>
@@ -1069,9 +1170,11 @@ def private dflash_commit(var s : Session; pos0, rows : int64) {
         if (dr.biased) {
             add_bias_rows(kv, dr.fblob, dr.bk_offs[l], kvd, rows)
         }
+        let w = dflash_ring_slots(dr, l, q.dense_cap)
+        let base = dflash_ring_off(dr, l, q.dense_cap)
         for (r in range64(rows)) {
             let pos = pos0 + r
-            let slot = l * lstride + (pos % w) * kvd
+            let slot = base + (pos % w) * kvd
             for (h in range64(dr.n_kv)) {
                 rms_w(q.ring_k, slot + h * dr.hs, kv, r * kvd + h * dr.hs, dr.fblob, dr.kn_offs[l], dr.hs, dr.eps)
                 rope_head(q.ring_k, slot + h * dr.hs, dr.hs, pos, dr.inv_freq)
@@ -1082,7 +1185,7 @@ def private dflash_commit(var s : Session; pos0, rows : int64) {
             add_bias_rows(kv, dr.fblob, dr.bv_offs[l], kvd, rows)
         }
         for (r in range64(rows)) {
-            copy_floats(kv, r * kvd, q.ring_v, l * lstride + ((pos0 + r) % w) * kvd, kvd)
+            copy_floats(kv, r * kvd, q.ring_v, base + ((pos0 + r) % w) * kvd, kvd)
         }
     }
     q.ctx = pos0 + rows
@@ -1091,11 +1194,86 @@ def private dflash_commit(var s : Session; pos0, rows : int64) {
     delete fcv
 }
 
-//! the ring positions a block of `rows` at `pos0` attends: from the oldest position its last row still sees (or the oldest the
-//! ring holds valid) up to the context's end
-def private ring_span(q : DflashSeq; pos0, rows : int64) : tuple<lo : int64; nctx : int64> {
-    let lo = max(q.valid_lo, max(0l, pos0 + rows - 1l - (g_dflash.window - 1l)))
+//! the ring positions a block of `rows` at `pos0` attends in a ring of `w` slots: from the oldest position its last row still
+//! sees (or the oldest the ring holds valid) up to the context's end
+def private ring_span(q : DflashSeq; pos0, rows, w : int64) : tuple<lo : int64; nctx : int64> {
+    let lo = max(q.valid_lo, max(0l, pos0 + rows - 1l - (w - 1l)))
     return (lo = lo, nctx = max(0l, q.ctx - lo))
+}
+
+//! the slots of layer `l` in a ring whose dense layers hold `cap`: its window, or `cap`
+def dflash_ring_slots(dr : DflashDrafter; l, cap : int64) : int64 => dr.dense[l] ? cap : dr.window
+
+//! layer `l`'s first element in such a ring: the windowed layers back to back, then the dense
+def dflash_ring_off(dr : DflashDrafter; l, cap : int64) : int64 {
+    let kvd = dr.n_kv * dr.hs
+    return dr.dense[l] ? (dr.n_win * dr.window + dr.ring_idx[l] * cap) * kvd : dr.ring_idx[l] * dr.window * kvd
+}
+
+def dflash_ring_elems(dr : DflashDrafter; cap : int64) : int64 => (dr.n_win * dr.window + (dr.n_layers - dr.n_win) * cap) * dr.n_kv * dr.hs
+
+//! whether a ring whose dense layers hold `cap` slots must grow before it holds positions under `need`
+def dflash_ring_short(dr : DflashDrafter; cap, need : int64) : bool => dr.n_win < dr.n_layers && need > cap
+
+//! the slots a new ring's dense layers hold
+def dflash_ring_first(dr : DflashDrafter) : int64 => max(dr.window, dr.ring_first)
+
+//! the dense slots a ring grows to: twice what it held, a new ring's at least
+def dflash_ring_grown(dr : DflashDrafter; cap, need : int64) : int64 => max(max(dflash_ring_first(dr), need), cap * 2l)
+
+let DFLASH_RING_SLACK = 64l   //! the slots a device ring's planes carry past the last layer: a step of an attention kernel's 64 keys loads past a layer's last slot (masked)
+
+//! a device ring plane's bytes for dense layers of `cap` slots, its rows halves: the layers, `joined` slots for the block rows a
+//! home joins past a dense layer's context, and the slack
+def dflash_ring_bytes(dr : DflashDrafter; cap, joined : int64) : int64
+    => (dflash_ring_elems(dr, cap) + (joined + DFLASH_RING_SLACK) * dr.n_kv * dr.hs) * 2l
+
+//! the moves a ring makes as its dense layers grow from `old` slots to `cap`: `blk(from, to, n)` a layer, its `n` elements from
+//! its first in the old ring to its first in the new, the last layer first - so a ring grown in place writes over no row it has
+//! yet to move. A windowed layer stays where it is (`from` == `to`)
+def dflash_ring_moves(dr : DflashDrafter; old, cap : int64; blk : block<(from, to, n : int64) : void>) {
+    let kvd = dr.n_kv * dr.hs
+    var l = dr.n_layers
+    while (l > 0l) {
+        l--
+        invoke(blk, dflash_ring_off(dr, l, old), dflash_ring_off(dr, l, cap), dflash_ring_slots(dr, l, old) * kvd)
+    }
+}
+
+//! the positions layer `l` attends in a pass whose windowed layers attend `lo .. lo + nctx - 1`: a dense layer from `dlo`
+def dflash_layer_span(dr : DflashDrafter; l, lo, nctx, dlo : int64) : tuple<lo : int64; nctx : int64>
+    => dr.dense[l] ? (lo = dlo, nctx = lo + nctx - dlo) : (lo = lo, nctx = nctx)
+
+//! a layer's place among the layers of its kind and a new ring's dense slots, as the knobs stand for a pass on a device arm
+//! (`device`) or on the CPU's: where the dense reading is off every layer is windowed
+def dflash_ring_layout(var dr : DflashDrafter; device : bool = true) {
+    dr.ring_idx |> resize(dr.n_layers)
+    dr.n_win = 0l
+    dr.ring_first = g_dflash_dense_reserve
+    for (l in range64(dr.n_layers)) {
+        dr.dense[l] = dr.dense[l] && dflash_dense_reading(device)
+        dr.ring_idx[l] = dr.dense[l] ? l - dr.n_win : dr.n_win
+        dr.n_win += dr.dense[l] ? 0l : 1l
+    }
+}
+
+//! the CPU arm's ring planes `rk` and `rv` hold positions under `need`: made at the first commit, their dense layers grown from
+//! `cap` slots and moved to their new places, the last first. Returns the slots a dense layer holds after
+def dflash_ring_reach(dr : DflashDrafter; var rk, rv : array<float>; cap, need : int64) : int64 {
+    return cap if (!empty(rk) && !dflash_ring_short(dr, cap, need))
+    let grown = dflash_ring_grown(dr, cap, need)
+    rk |> reserve_resize(dflash_ring_elems(dr, grown))
+    rv |> reserve_resize(dflash_ring_elems(dr, grown))
+    dflash_ring_moves(dr, cap, grown) $(from, to, n) {
+        return if (from == to)
+        var i = n - 1l
+        while (i >= 0l) {
+            rk[to + i] = rk[from + i]
+            rv[to + i] = rv[from + i]
+            i--
+        }
+    }
+    return grown
 }
 
 //! attention of the block's `rows` q rows (positions pos0 + t) over the ring's positions within the window and the block's own
@@ -1105,11 +1283,11 @@ def private block_attention(dr : DflashDrafter; q : DflashSeq; l : int64; qv : a
     let hs = dr.hs
     let kvd = dr.n_kv * dr.hs
     let qd = dr.n_heads * hs
-    let w = dr.window
-    let lstride = w * kvd
+    let w = dflash_ring_slots(dr, l, q.dense_cap)
+    let base = dflash_ring_off(dr, l, q.dense_cap)
     let grp = dr.n_heads / dr.n_kv
     let scale = dr.attn_scale
-    let span = ring_span(q, pos0, rows)
+    let span = ring_span(q, pos0, rows, w)
     let lo = span.lo
     let nctx = span.nctx
     let nkeys = nctx + rows
@@ -1128,7 +1306,7 @@ def private block_attention(dr : DflashDrafter; q : DflashSeq; l : int64; qv : a
                 }
                 var dot = 0.0
                 if (j < nctx) {
-                    let kb = l * lstride + (kpos % w) * kvd + kh * hs
+                    let kb = base + (kpos % w) * kvd + kh * hs
                     for (i in range64(hs)) {
                         dot += qv[t * qd + h * hs + i] * q.ring_k[kb + i]
                     }
@@ -1154,7 +1332,7 @@ def private block_attention(dr : DflashDrafter; q : DflashSeq; l : int64; qv : a
                 continue if (sc[j] == 0.0)
                 let p = sc[j] * inv
                 if (j < nctx) {
-                    let vb = l * lstride + ((lo + j) % w) * kvd + kh * hs
+                    let vb = base + ((lo + j) % w) * kvd + kh * hs
                     for (i in range64(hs)) {
                         out[t * qd + h * hs + i] += p * q.ring_v[vb + i]
                     }
@@ -1525,8 +1703,8 @@ def private dflash_block_draft(t : Model; var s : Session; tok, pos, k : int64) 
     }
     var logits, hsel : array<float>
     if (g_dflash_dev_on) {
-        let span = ring_span(*q, pos, rows)
-        if (!invoke(dev_seams().draft_pass, t, dr, s.uid, tok, pos, rows, nd, span.lo, span.nctx, logits, hsel)) {
+        let span = ring_span(*q, pos, rows, g_dflash.window)
+        if (!invoke(dev_seams().draft_pass, t, dr, s.uid, tok, pos, rows, nd, span.lo, span.nctx, q.valid_lo, logits, hsel)) {
             to_log(LOG_ERROR, "dasLLAMA: the block drafter's device pass at {pos} failed - the round steps plain\n")
             return 0l
         }
@@ -1567,10 +1745,10 @@ def private dflash_block_draft(t : Model; var s : Session; tok, pos, k : int64) 
 //! the device's own select - the pass and the pick one submission - its `nd` drafts (a held pass's land later) and their
 //! count; 0 = the pass failed (the round steps plain)
 def private dflash_device_select(t : Model; var s : Session; dr : DflashDrafter; q : DflashSeq; tok, pos, rows, nd : int64; soft : bool; draft_temp : float; t0 : int64) : int64 {
-    let span = ring_span(q, pos, rows)
+    let span = ring_span(q, pos, rows, g_dflash.window)
     var cids : array<int64>
     var qs : array<float>
-    let got = invoke(dev_seams().select_pass, t, dr, s.uid, tok, pos, rows, nd, span.lo, span.nctx, !sel_wanted(s), !sel_ask_reads_drafts(s), draft_temp,
+    let got = invoke(dev_seams().select_pass, t, dr, s.uid, tok, pos, rows, nd, span.lo, span.nctx, q.valid_lo, !sel_wanted(s), !sel_ask_reads_drafts(s), draft_temp,
         s.rng, s.mtp_vbatch, cids, qs)
     if (got == DflashSelect.failed) {
         to_log(LOG_ERROR, "dasLLAMA: the block drafter's device pass at {pos} failed - the round steps plain\n")

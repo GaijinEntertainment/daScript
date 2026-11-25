@@ -233,58 +233,6 @@ def private df_topk_gate(t : T?; var dev, queue; leg : DfTopkLeg) {
     }
 }
 
-//! the block attention's two stamps (`MetalDflashAttnTile`, `MetalDflashAttnMerge`) against `_dflash_oracle.das`'s softmax at one
-//! shape of the discrete homes' cell: the panel's first block and its second, the softmax with no window the control, the rows
-//! ahead of the block and the slots past it at their sentinel
-def private df_attn_gate(t : T?; var dev, queue; hs, w, pos0, lo, nctx, nheads, grp : int) {
-    let tag = "dflash attn hs{hs} w{w} heads {nheads} / {grp}"
-    let rows = DF_ATTN_ROWS
-    let qd = nheads * hs
-    for (arm in range(2)) {
-        var inscope f <- df_attn_fixture(hs, w, pos0, lo, nctx, nheads, grp, arm)
-        with_metal_cell(dev, queue) $(var mc : MetalCell) {
-            var err : string
-            let kt = kernel_of(@@enc_dflash_attn_tile)
-            let km = kernel_of(@@enc_dflash_attn_merge)
-            var pso_t = mc |> keep_stamp(kt, err)
-            return if (!pso_ok(t, "{tag} tile", pso_t, err))
-            var pso_m = mc |> keep_stamp(km, err)
-            return if (!pso_ok(t, "{tag} merge", pso_m, err))
-            let lead = arm * rows * qd
-            let pq = mc |> in_(f.q)
-            let pkb = mc |> in_(f.kb)
-            let pvb = mc |> in_(f.vb, 0, df_attn_v_slack(f))
-            let prk = mc |> in_(f.rk)
-            let prv = mc |> in_(f.rv)
-            let partials = nheads * rows * f.tiles * (hs + 2)
-            let ptp = mc |> out_(partials, 0, partials)
-            let po = mc |> out_(lead + rows * qd, 0, 8)
-            var pa = f.pa
-            let wgs = int64(rows * nheads * f.tiles)
-            let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-                invoke(kt.enc, enc, pso_t, mc.buf[pq], mc.buf[pkb], mc.buf[pvb], mc.buf[prk], mc.buf[prv], mc.buf[ptp], pa, wgs)
-                invoke(km.enc, enc, pso_m, mc.buf[ptp], mc.buf[po], pa, int64(nheads * rows))
-            }
-            return if (!ran)
-            var inscope o <- df_plane_and_past(mc, po, lead + rows * qd, NAN_SENTINEL)
-            var inscope tp_all <- mc |> plane_as(ptp, NAN_SENTINEL, 2 * partials)
-            var past_partials = 0
-            for (i in range(partials, 2 * partials)) {
-                past_partials += tp_all[i] == tp_all[i] ? 1 : 0
-            }
-            var inscope o_dev <- [for (i in range(rows * qd)); o.run[lead + i]]
-            var ahead_moved = 0
-            for (i in range(lead)) {
-                ahead_moved += o.run[i] == o.run[i] ? 1 : 0
-            }
-            check_rows(t, "{tag} block {arm} vs the windowed softmax over the ring and the block", o_dev, f.want, BAR_APPROX, qd, hs)
-            check_exceeds(t, "{tag} block {arm} control: the softmax with no window lands off the stamp's", o_dev, f.open, BAR_APPROX)
-            t |> equal(o.moved + ahead_moved, 0, "{tag} block {arm}: the rows ahead of the block and the slots past it keep their sentinel")
-            t |> equal(past_partials, 0, "{tag} block {arm}: no tile workgroup lands past the partials")
-        }
-    }
-}
-
 //! a walk stamp's input planes in a cell: the anchor, the selector rows, the candidates and their logits, and the codebooks' -
 //! the predecessor's quant and scale planes, then the successor's (`df_book_planes`), each side's in-word byte offset
 struct private DfWalkBinds {
@@ -3262,6 +3210,135 @@ def private dn_tape_gate(t : T?; var dev, queue; ba_rows : bool; cd, nvh, n, ng 
     }
 }
 
+//! the block drafter's attention on Metal - the scalar tiles (`GkDflashAttnTile`), or with `flash` the matrix kernel
+//! (`MetalDflashFlash`), each joined by `GkDflashAttnMerge` - against the in-test softmax over the halves the ring holds: `rows` rows of
+//! `nheads` query heads `hs` wide over `nheads / grp` key-value heads at `pos0` .., the `nctx` ring positions from `lo` under
+//! the window `w`. The block sits `rbase` rows into the q, K, V and output panels, the rows ahead of it poisoned: they and
+//! the slots past the partials keep their sentinel. Controls, each of which must land outside the bar: the rows' answers a
+//! row over (a row read another's query), and with `window_ctl` the softmax with no window (the shapes whose window masks
+//! enough to show)
+def private df_attn_gate(t : T?; var dev, queue; hs, nheads, grp, rows, w, pos0, lo, nctx : int; window_ctl : bool; flash : bool = false; rbase : int = 0) {
+    let tag = "dflash attention{flash ? " on the matrix kernel" : ""} hs={hs} heads={nheads}/{grp} rows={rows} w={w} keys={nctx + rows} block at row {rbase}"
+    let kvd = (nheads / grp) * hs
+    let qd = nheads * hs
+    let tiles = int(gk_dflash_attn_tiles(int64(nctx + rows)))
+    let scale = 1.0 / sqrt(float(hs))
+    let ringoff = w * kvd + 9
+    let nkeys = nctx + rows
+    var inscope q <- row_fill(rows * qd, 31, 11, 0.02, -1.0)
+    var inscope kb <- row_fill((rows + 64) * kvd, 17, 5, 0.02, -0.9)   // a step of rows past the block's: the matrix kernel's loads
+    var inscope vb <- row_fill((rows + 64) * kvd, 23, 3, 0.03, -1.3)
+    var inscope rk <- row_fill(ringoff + w * kvd, 43, 7, 0.02, -1.1)
+    var inscope rv <- row_fill(ringoff + w * kvd, 19, 13, 0.03, -1.2)
+    var inscope rkh <- [for (v in rk); uint16(f32_to_f16(v))]   // the rings are halves on the device: the oracle reads what they hold
+    var inscope rvh <- [for (v in rv); uint16(f32_to_f16(v))]
+    for (k, kh, v, vh in rk, rkh, rv, rvh) {
+        k = f16_to_f32(uint(kh))
+        v = f16_to_f32(uint(vh))
+    }
+    var inscope o_ref <- plane_of(rows * qd, 0.0)
+    var inscope o_open <- plane_of(rows * qd, 0.0)
+    var inscope sc : array<float>
+    sc |> resize(nkeys)
+    for (windowed in range(2)) {
+        for (r in range(rows)) {
+            for (h in range(nheads)) {
+                let kh = (h / grp) * hs
+                var mx = -3.0e38
+                for (j in range(nkeys)) {
+                    let kpos = j < nctx ? lo + j : pos0 + (j - nctx)
+                    sc[j] = -3.0e38
+                    if (windowed == 0 || abs(pos0 + r - kpos) < w) {
+                        var dot = 0.0
+                        for (e in range(hs)) {
+                            let kv = j < nctx ? rk[ringoff + (kpos % w) * kvd + kh + e] : kb[(j - nctx) * kvd + kh + e]
+                            dot += q[r * qd + h * hs + e] * kv
+                        }
+                        sc[j] = dot * scale
+                        mx = max(mx, sc[j])
+                    }
+                }
+                var tot = 0.0
+                for (j in range(nkeys)) {
+                    sc[j] = sc[j] <= -1.0e38 ? 0.0 : exp(sc[j] - mx)
+                    tot += sc[j]
+                }
+                for (i in range(hs)) {
+                    var acc = 0.0
+                    for (j in range(nkeys)) {
+                        let kpos = j < nctx ? lo + j : pos0 + (j - nctx)
+                        acc += sc[j] * (j < nctx ? rv[ringoff + (kpos % w) * kvd + kh + i] : vb[(j - nctx) * kvd + kh + i])
+                    }
+                    if (windowed == 1) {
+                        o_ref[r * qd + h * hs + i] = acc / tot
+                    } else {
+                        o_open[r * qd + h * hs + i] = acc / tot
+                    }
+                }
+            }
+        }
+    }
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kt = kernel_of(@@enc_dflash_attn_tile)
+        let kf = kernel_of(@@enc_dflash_flash)
+        let km = kernel_of(@@enc_dflash_attn_merge)
+        var pso_t = flash ? (mc |> keep_stamp(kf, err)) : (mc |> keep_stamp(kt, err))
+        return if (!pso_ok(t, "{tag} tile", pso_t, err))
+        var pso_m = mc |> keep_stamp(km, err)
+        return if (!pso_ok(t, "{tag} merge", pso_m, err))
+        let pq = mc |> in_(q, rbase * qd)
+        let pkb = mc |> in_(kb, rbase * kvd)
+        let pvb = mc |> in_(vb, rbase * kvd)
+        let prk = mc |> in_plain(rkh)
+        let prv = mc |> in_plain(rvh)
+        let pieces = int(df_flash_pieces(int64(lo), int64(nctx)))
+        let partials = nheads * rows * (flash ? pieces : tiles) * (hs + 2)
+        let ptp = mc |> out_(partials, 0, 8)
+        let po = mc |> out_(rows * qd, rbase * qd, 8)
+        var ka = GkDflashAttnArgs(rows = uint(rows), pos0 = uint(pos0), lo = uint(lo), nctx = uint(nctx), w = uint(w), hs = uint(hs),
+            nheads = uint(nheads), grp = uint(grp), scale = scale, rbase = uint(rbase), koff = uint(ringoff), voff = uint(ringoff))
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            if (flash) {
+                var fa = DfFlashArgs(rows = uint(rows), pos0 = uint(pos0), lo = uint(lo), nctx = uint(nctx), w = uint(w), nheads = uint(nheads),
+                    grp = uint(grp), scale = scale, rbase = uint(rbase), koff = uint(ringoff), voff = uint(ringoff), pieces = uint(pieces))
+                if (pieces == 1) {   // one piece: the kernel writes the joined rows itself
+                    fa.direct = 1u
+                    invoke(kf.enc, enc, pso_t, mc.buf[pq], mc.buf[pkb], mc.buf[pvb], mc.buf[prk], mc.buf[prv], mc.buf[po], fa, 1l,
+                        df_flash_groups(int64(rows), int64(nheads), int64(nheads / grp)))
+                } else {
+                    invoke(kf.enc, enc, pso_t, mc.buf[pq], mc.buf[pkb], mc.buf[pvb], mc.buf[prk], mc.buf[prv], mc.buf[ptp], fa, int64(pieces),
+                        df_flash_groups(int64(rows), int64(nheads), int64(nheads / grp)))
+                    var kma = ka   // the merge reads the pieces as its key tiles
+                    kma.nctx = uint(pieces * int(GK_DFLASH_ATTN_TILE) - rows)
+                    invoke(km.enc, enc, pso_m, mc.buf[ptp], mc.buf[po], kma, int64(nheads * rows))
+                }
+            } else {
+                invoke(kt.enc, enc, pso_t, mc.buf[pq], mc.buf[pkb], mc.buf[pvb], mc.buf[prk], mc.buf[prv], mc.buf[ptp], ka,
+                    gk_dflash_attn_tile_wgs(int64(rows), int64(nheads), int64(grp), int64(tiles)))
+                invoke(km.enc, enc, pso_m, mc.buf[ptp], mc.buf[po], ka, int64(nheads * rows))
+            }
+        }
+        return if (!ran)
+        let lead = rbase * qd
+        var inscope o_all <- df_plane_and_past(mc, po, lead + rows * qd, NAN_SENTINEL)
+        var inscope o_run <- [for (i in range(rows * qd)); o_all.run[lead + i]]
+        var ahead_moved = 0
+        for (i in range(lead)) {
+            ahead_moved += o_all.run[i] == o_all.run[i] ? 1 : 0
+        }
+        var inscope tp_all <- df_plane_and_past(mc, ptp, partials, NAN_SENTINEL)
+        check_rows(t, "{tag} vs the in-test softmax", o_run, o_ref, BAR_APPROX, qd, hs)
+        t |> equal(o_all.moved + ahead_moved, 0, "{tag}: the rows ahead of the block and the slots past it keep their sentinel")
+        t |> equal(tp_all.moved, 0, "{tag}: no workgroup lands past the partials")
+        var inscope o_next <- [for (i in range(rows * qd)); o_ref[(i + qd) % (rows * qd)]]
+        check_exceeds(t, "{tag} control: each row's answer a row over lands off the device's rows", o_run, o_next, BAR_APPROX)
+        if (window_ctl) {
+            check_exceeds(t, "{tag} control: the softmax with no window lands off the device's rows", o_run, o_open, BAR_APPROX)
+        }
+    }
+}
+
 [test(description = "The Metal decode and tower elementwise corpus - argmax and draft top-k, accept and draw, embed gathers, add-rms and norms, activations, im2col, whisper-decoder, hyper-connection mixer and PLE kernels - matches direct CPU oracles on served and tail shapes.")]
 def test_metal_misc_kernels(t : T?) {
     t |> run("decode elementwise/misc kernels == direct CPU oracles") @(t : T?) {
@@ -3281,12 +3358,14 @@ def test_metal_misc_kernels(t : T?) {
                 for (leg in df_topk_legs()) {
                     df_topk_gate(t, dev, queue, leg)
                 }
-                df_attn_gate(t, dev, queue, 64, 44, 100, 60, 40, 4, 2)
-                df_attn_gate(t, dev, queue, 64, 300, 400, 101, 299, 4, 2)
-                df_attn_gate(t, dev, queue, 96, 300, 400, 101, 299, 4, 2)
-                df_attn_gate(t, dev, queue, 64, 300, 400, 101, 299, 8, 4)
-                df_attn_gate(t, dev, queue, 96, 44, 100, 60, 40, 3, 1)
-                df_attn_gate(t, dev, queue, 64, 300, 400, 101, 299, 12, 6)
+                df_attn_gate(t, dev, queue, 128, 12, 3, 8, 2048, 3000, 953, 2047, false)   // the E2B drafter's shape: 24 queries a key-value head in three chunks, nine key tiles, the window masking the later rows' furthest keys
+                df_attn_gate(t, dev, queue, 64, 4, 2, 5, 300, 400, 101, 299, true)       // ten queries a head: a short last chunk, two tiles, the window's edge inside the ring
+                df_attn_gate(t, dev, queue, 128, 12, 3, 8, 2048, 3000, 953, 2047, false, true)   // the matrix kernel at the E2B drafter's shape: eight pieces, a ring that wraps inside the context
+                df_attn_gate(t, dev, queue, 128, 4, 2, 5, 128, 400, 273, 127, true, true)        // ... ten queries a head in two chunks, one piece, the window's edge inside the ring
+                df_attn_gate(t, dev, queue, 128, 12, 3, 8, 6000, 4500, 0, 4500, false, true)     // ... a dense layer: no window, sixteen pieces, the context from position 0
+                df_attn_gate(t, dev, queue, 64, 4, 2, 5, 300, 400, 101, 299, true, false, 5)        // the panel's second block: the scalar tiles
+                df_attn_gate(t, dev, queue, 128, 12, 3, 8, 2048, 3000, 953, 2047, false, true, 8)   // ... the matrix kernel's pieces and the merge
+                df_attn_gate(t, dev, queue, 128, 4, 2, 5, 128, 400, 273, 127, true, true, 5)        // ... the matrix kernel's one piece, written by the kernel
                 df_walk_gate(t, dev, queue, KqFmt.q8, KqFmt.q8, 64, 300, 16)
                 df_walk_gate(t, dev, queue, KqFmt.k4, KqFmt.k6, 256, 300, 16)
                 df_walk_gate(t, dev, queue, KqFmt.k5, KqFmt.k4, 512, 200, 7)    //! two superblocks a row, the products under the 4096 a position stages

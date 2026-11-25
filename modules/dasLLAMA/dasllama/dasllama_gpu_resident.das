@@ -4246,6 +4246,7 @@ def private vulkan_resident_verify_go(t : Model; var s : Session; toks : array<i
         g_rdec_verify_rows_in_flight = false
     }
     verify(ok, "dasLLAMA resident verify: the driver declined rows it answered it steps - engine bug")
+    rdec_held_drafts(s.mtp_vbatch, n - 1l)   // a pass the verify's wait covered: its drafts, ahead of the walk over the picks
     g_sel_landing = rdec_sel_landing()
     s.sel_row1 = g_sel_landing.rows > 0l ? 1l : 0l
     g_rdec_verify_picks |> resize(n)
