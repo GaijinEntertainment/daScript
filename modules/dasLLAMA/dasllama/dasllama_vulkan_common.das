@@ -3110,6 +3110,7 @@ struct RDec {
     pf_logits_host : HostBuf      //! the window's logits, a slot of `vocab` a segment: `regions` slots, the one-session window at slot 0
     pf_hid_host : HostBuf         //! the window's final residual rows when the chain is asked for them (`vk_rdec_hidden_ask`), made at the first ask
     pf_seg_windows : int64        //! the windows that held several sessions' chunks as segments (a cell's witness)
+    pf_tail_cut_rows : int64      //! the window rows that stopped ahead of a shared-K/V tail (a cell's witness)
     pf_midx_host : HostBuf        //! the last MoE layer's picks, read back for the profile's bucket report
     pf_meta : array<HostBuf>      // one host meta per (layer, role) + prologue/final/cls
     pf_sets : array<VkDescriptorSet>

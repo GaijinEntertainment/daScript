@@ -918,6 +918,29 @@ def public rdec_seg_ending_at(segs : array<RdecPfSeg>; w0, row : int64) : int64 
     return -1l
 }
 
+//! the slot of the segment a window part ends - the part's last row is the segment's - else -1; by position, so the part's rows
+//! may sit anywhere in the window's planes
+def public rdec_part_end_slot(segs : array<RdecPfSeg>; part : RdecPfSeg) : int64 =>
+    part.pos0 + part.npos == segs[part.seg].pos0 + segs[part.seg].npos ? part.seg : -1l
+
+var private g_rdec_pf_tail_cut = true   //! the window chain's cut at a shared-K/V tail; off = every row walks every layer (the A/B lever)
+
+//! The window chain's tail cut on or off (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-tail-cut`), under DASLLAMA_GPU_PF_TAIL_CUT
+def public set_rdec_prefill_tail_cut(on : bool) {
+    g_rdec_pf_tail_cut = on
+    to_log(LOG_INFO, "dasLLAMA: set_rdec_prefill_tail_cut({on}) - the window chain's cut at a shared-K/V tail ({on ? "on" : "off: every row walks every layer"})\n")
+}
+
+def public rdec_prefill_tail_cut() : bool => g_rdec_pf_tail_cut && g_env_gpu.gpu_pf_tail_cut
+
+//! DASLLAMA_GPU_PF_TAIL_CUT=0 said at a driver's load on a model with a shared-K/V tail (`tail`): nothing where the knob
+//! stands on in `env` or the model has no tail to cut
+def public rdec_tail_cut_say(env : GpuTierEnv; tail : bool) {
+    if (tail && !env.gpu_pf_tail_cut) {
+        to_log(LOG_INFO, "dasLLAMA: DASLLAMA_GPU_PF_TAIL_CUT=0 - every prompt row walks every layer of the shared-K/V tail (unset it, or set it to 1, to stop a row nobody reads at the last layer that stores K/V rows)\n")
+    }
+}
+
 //! The Vulkan home's decode tile knobs in `env` said at its driver's load, each by its env spelling and only where it moves a
 //! layer's form: `tile_layers` the layers of the tile's shape, `far_layers` the flat ones among them, `cm2_flash` the device's
 //! prefill flash on the cm2 arm, where the unset tile knob leaves the tile form off

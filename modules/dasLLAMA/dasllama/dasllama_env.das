@@ -178,6 +178,9 @@ struct public GpuTierEnv {
     @clarg_doc = "Stream each routed layer's expert stack to the device for the prompt, where the routed experts serve on the host (a hyper-connection model, or a plain MoE's host layers) - on the Vulkan tier over its transfer queue, on the CUDA home over its copy stream: pinned device-layout mirrors of every routed layer at load, a device slot (a layer's stack, or under DASLLAMA_GPU_MOE_SPLIT the per-expert chain's ring of experts), the copies landing while the chain computes, the host summing what the meet hands it. 0 keeps the host's sums and the hot pool's window chain."
     gpu_pf_stream : bool = true
 
+    @clarg_doc = "The window chain's cut at a shared-K/V tail: where a model's last layers read a donor layer's K/V rows and keep no row state of their own (gemma-4's E series: 20 of E2B's 35 layers), a prompt row whose output nobody reads stops at the last layer that stores K/V rows, and only each segment's last row walks the tail. 0 walks every row through every layer. An embedding's call, the NextN head's prompt warm and a captured layer inside the tail keep every row whatever the value."
+    gpu_pf_tail_cut : bool = true
+
     @clarg_default_doc = "0 (every host layer)"
     @clarg_doc = "Under DASLLAMA_GPU_PF_STREAM, mirror only the first this many host layers' expert stacks; the rest keep the host's sums. A parity cell's lever: a few layers' mirrors beside a planar load, where every layer's would not fit the box."
     gpu_pf_stream_layers : int64 = 0l
