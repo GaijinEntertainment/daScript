@@ -15,8 +15,6 @@ options _comment_hygiene = true
 // but the f16 column rule, the refusals and the closing leak gate skips without a CUDA device and NVRTC, and the cm2 pick also
 // skips under DASLLAMA_CM2_TILE or DASLLAMA_CM2_SPLITK and on a card outside 35 to 48 SMs. The leak gate never skips.
 
-module test_cuda_tower_blocks
-
 require dastest/testing_boost public
 require strings   // find: the refusal lines in the child's log
 require daslib/defer   // the pick cell's seams put back on every exit
