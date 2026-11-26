@@ -5017,6 +5017,21 @@ def pf_enc_qkn(enc : MetalComputeEncoder?; bq, bk, bv : MetalBuffer?; koff : uin
     }
 }
 
+var private g_attn_slab_reach = INDEX_REACH   //! the elements a score slab's 32-bit index reaches
+
+//! a test's stand-in for the score slab's reach (`elements`; 0 = the index's own 2^32): the pieced window's seam
+def public set_metal_attn_slab_reach_probe_(elements : uint64) {
+    g_attn_slab_reach = elements == 0ul ? INDEX_REACH : elements
+}
+
+def public get_metal_attn_slab_reach_probe_() : uint64 => g_attn_slab_reach
+
+//! the query rows of one score slab over `nk64` keys a head, a multiple of `ATTN_SLAB_STEP`; 0 where not one step fits
+def attn_slab_rows(n_heads, nk64 : int64) : int64
+    => (int64(g_attn_slab_reach) / (n_heads * nk64) / ATTN_SLAB_STEP) * ATTN_SLAB_STEP
+
+let ATTN_SLAB_STEP = 256l   //! a piece's rows keep every attention stamp's row tile whole
+
 struct AttnArgs {
     qd : uint
     kv_dim : uint
@@ -11854,6 +11869,7 @@ struct PfSeg {
     mp : int64            //!< the segment's query rows padded to the attention tiles' 32
     nk : int64            //!< the segment's keys: its session's cached rows and its own
     nk64 : int64
+    slab_rows : int64     //!< the query rows one score slab holds over the segment's keys (`attn_slab_rows`)
     kvrows : int64        //!< the panel form's rows: the gathered context and the chunk
     mir_koff : uint64
     mir_voff : uint64
@@ -11953,10 +11969,17 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
     for (sg in segs) {
         sg.row0 = npos
         npos += sg.npos
+        sg.mp = ((sg.npos + 31l) / 32l) * 32l
+        sg.nk = sg.start_pos + sg.npos
+        sg.nk64 = ((sg.nk + 63l) / 64l) * 64l
+        sg.slab_rows = attn_slab_rows(t.config.n_heads, sg.nk64)
     }
     var why = MetalPrefillDecline.none
     for (sg in segs) {
         why = prefill_decline(t, *sg.s, sg.npos, sg.start_pos)
+        if (why == MetalPrefillDecline.none && sg.slab_rows == 0l) {
+            why = MetalPrefillDecline.shape   //! not one step of the window's rows indexes its score slab
+        }
         break if (why != MetalPrefillDecline.none)
     }
     if (why == MetalPrefillDecline.none && nseg > 1l) {
@@ -12053,12 +12076,9 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
     var att_slab_mx = 0l   //! the largest score slab any segment asks: its padded queries by its padded keys
     var seq_ok = true
     for (sg in segs) {
-        sg.mp = ((sg.npos + 31l) / 32l) * 32l
-        sg.nk = sg.start_pos + sg.npos
-        sg.nk64 = ((sg.nk + 63l) / 64l) * 64l
         nk64_mx = max(nk64_mx, sg.nk64)
         mp_seg_mx = max(mp_seg_mx, sg.mp)
-        att_slab_mx = max(att_slab_mx, sg.mp * sg.nk64)
+        att_slab_mx = max(att_slab_mx, min(sg.mp, sg.slab_rows) * sg.nk64)
         seq_ok = seq_ok && sg.nk64 <= c.seq_len
     }
     //! the mirror-fed form: the chunk's K/V rows land in the session's KV mirror as halves and the device pair reads every key there,
@@ -12881,7 +12901,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                         bsnk = upload_region(unsafe(addr < void? >(t.fblob[t.sinks_off + l * n_heads])), uint64(n_heads * 4l))
                     }
                     for (sg, i in segs, count()) {
-                        var atka = AttnArgs(qd = uint(qd_l), kv_dim = uint(kvd_l), head_size = uint(hs_l),
+                        let atka = AttnArgs(qd = uint(qd_l), kv_dim = uint(kvd_l), head_size = uint(hs_l),
                             kv_mul = het ? uint(n_heads / kvh_sw) : kv_mul, npos = uint(sg.nk),
                             np32 = uint(sg.nk64),
                             scale = scale_l,
@@ -12897,36 +12917,48 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                         let lb = mirk ? uint64(mirror_lbase(t, KVDtype.f16, sg.mir_cap, l)) : 0ul
                         let mir_kb = mirk ? sg.mir_koff + lb : 0ul
                         let mir_vb = mirk ? sg.mir_voff + lb : 0ul
-                        let qboff = uint64(sg.row0 * qd_l * 4l)
-                        let qhoff = uint64(sg.row0 * qd_l * 2l)
-                        let xboff = uint64(sg.row0 * qd_l * 4l)
                         if (dev && !mirk) {
                             enc_kv_twin(enc, kpan, vpan, bkh, bvh, atka.scale, sg.nk64 * kvd_l)
                         }
-                        if (g_pf_skip != "attn_qk") {
-                            if (dev) {
-                                enc_qk_dev(enc, bqh_l, mirk ? g_arena : bkh, batt, atka, sg.mp, sg.nk64, n_heads, mir_kb, qhoff)
-                            } elif (mmattn) {
-                                enc_qk_mm(enc, bq, kpan, batt, atka, sg.mp, sg.nk64, n_heads, bqh = bqh_l, qboff = qboff, qhoff = qhoff)
-                            } else {
-                                enc_qk(enc, bq, qboff, kpan, batt, atka, sg.mp, sg.nk64, n_heads)
+                        var p0 = 0l
+                        while (p0 < sg.npos) {   //! the segment's rows a score slab at a time: one piece wherever the slab indexes whole
+                            let pn = min(sg.npos - p0, sg.slab_rows)
+                            let pmp = ((pn + 31l) / 32l) * 32l
+                            let pnk64 = ((sg.start_pos + p0 + pn + 63l) / 64l) * 64l
+                            var pka = atka
+                            pka.qoff = uint(sg.start_pos + p0)
+                            pka.qrows = uint(pmp)
+                            pka.npos = uint(sg.start_pos + p0 + pn)
+                            pka.np32 = uint(pnk64)
+                            let qboff = uint64((sg.row0 + p0) * qd_l * 4l)
+                            let qhoff = uint64((sg.row0 + p0) * qd_l * 2l)
+                            let xboff = uint64((sg.row0 + p0) * qd_l * 4l)
+                            if (g_pf_skip != "attn_qk") {
+                                if (dev) {
+                                    enc_qk_dev(enc, bqh_l, mirk ? g_arena : bkh, batt, pka, pmp, pnk64, n_heads, mir_kb, qhoff)
+                                } elif (mmattn) {
+                                    enc_qk_mm(enc, bq, kpan, batt, pka, pmp, pnk64, n_heads, bqh = bqh_l, qboff = qboff, qhoff = qhoff)
+                                } else {
+                                    enc_qk(enc, bq, qboff, kpan, batt, pka, pmp, pnk64, n_heads)
+                                }
                             }
-                        }
-                        if (g_pf_skip != "attn_sm") {
-                            if (dev) {
-                                enc_attn_pexp(enc, batt, atka, bstats, bsnk, sg.npos, n_heads)
-                            } else {
-                                enc_rowstat(enc, batt, atka, bstats, bsnk, sg.npos, n_heads)
+                            if (g_pf_skip != "attn_sm") {
+                                if (dev) {
+                                    enc_attn_pexp(enc, batt, pka, bstats, bsnk, pn, n_heads)
+                                } else {
+                                    enc_rowstat(enc, batt, pka, bstats, bsnk, pn, n_heads)
+                                }
                             }
-                        }
-                        if (g_pf_skip != "attn_av") {
-                            if (dev) {
-                                enc_av_dev(enc, batt, mirk ? g_arena : bvh, bxb, atka, bstats, sg.mp, n_heads, hs_l, mir_vb, xboff)
-                            } elif (mmattn) {
-                                enc_av_mm(enc, batt, vpan, bxb, atka, bstats, sg.mp, n_heads, hs_l, xboff)
-                            } else {
-                                enc_av(enc, batt, vpan, bxb, xboff, atka, bstats, sg.mp, n_heads, hs_l)
+                            if (g_pf_skip != "attn_av") {
+                                if (dev) {
+                                    enc_av_dev(enc, batt, mirk ? g_arena : bvh, bxb, pka, bstats, pmp, n_heads, hs_l, mir_vb, xboff)
+                                } elif (mmattn) {
+                                    enc_av_mm(enc, batt, vpan, bxb, pka, bstats, pmp, n_heads, hs_l, xboff)
+                                } else {
+                                    enc_av(enc, batt, vpan, bxb, xboff, pka, bstats, pmp, n_heads, hs_l)
+                                }
                             }
+                            p0 += pn
                         }
                     }
                 }

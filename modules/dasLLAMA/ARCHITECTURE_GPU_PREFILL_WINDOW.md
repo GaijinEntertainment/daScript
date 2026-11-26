@@ -167,7 +167,9 @@ the mirror row's element index in halves. A slice past that reach takes the form
 at a 64-bit offset instead: the single row's chunked attention for the fused one, the window's panels
 without the mirror feed (the decode then uploads the rows) for the f16 forms; a batch step's slice past
 it retries on an empty arena, whose first slices land low, and a speculative round past it is cold
-(`mirror_in_reach`, `mirror_slice_in_reach`).
+(`mirror_in_reach`, `mirror_slice_in_reach`). The reach is read off the slice as the arena recorded it:
+a slice may end at 2^32 units exactly, its last unit the last index, and its size counts a sliding
+layer's ring where a product of the rows-capacity and the layers would count a flat layer.
 
 ### The segmented window {#prefill-segments}
 

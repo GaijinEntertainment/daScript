@@ -678,6 +678,8 @@ var g_pso_attndw16 : MetalComputePipeline?   // ... its head-of-256 pair
 var g_pso_attndw32 : MetalComputePipeline?
 var g_pso_attndx16 : MetalComputePipeline?   // ... and its head-of-512 pair
 var g_pso_attndx32 : MetalComputePipeline?
+var g_pso_attn_tile16 : MetalComputePipeline?   //! the tile form of the fused attention; null where it failed to build (the fused form serves)
+var g_pso_attn_tilepk16 : MetalComputePipeline? //! ... and its packed stamp, null likewise
 var g_pso_attnd_q8 : MetalComputePipeline?   // the block-codec twins, a head of 64, 96 or 128 ...
 var g_pso_attnd_tq4 : MetalComputePipeline?
 var g_pso_attndw_q8 : MetalComputePipeline?   // ... of 256 ...
@@ -1699,14 +1701,42 @@ def private mirror_fits_device(total : uint64) : bool {
     return false
 }
 
+let INDEX_REACH = 0x100000000ul   //! what a 32-bit index reaches: a span may end at it, its last unit the last index
+
+//! the bytes of one route unit under codec `dt`: an element under a scalar codec, a byte under a block codec
+def route_unit_bytes(dt : KVDtype) : uint64 => uint64(kv_block_codec(dt) ? 1l : kv_row_bytes(dt, 1l))
+
 [arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#kv-mirror-arena")]
-def mirror_in_reach(dt : KVDtype; end : uint64) : bool => end / uint64(kv_block_codec(dt) ? 1l : kv_row_bytes(dt, 1l)) <= 0xFFFFFFFFul
+def mirror_in_reach(dt : KVDtype; end : uint64) : bool => end / route_unit_bytes(dt) <= g_mirror_reach
+
+var private g_mirror_reach = INDEX_REACH   //! the units a route table indexes
+
+//! a test's stand-in for the route tables' reach (`units`; 0 = the tables' own 2^32): the past-reach forms' seam
+def public set_metal_mirror_reach_probe_(units : uint64) {
+    g_mirror_reach = units == 0ul ? INDEX_REACH : units
+}
+
+//! the route tables' reach in units: what a pre-encoded step's key holds, and what a test hands back to the setter
+def public get_metal_mirror_reach_probe_() : uint64 => g_mirror_reach
+
+//! the route units `uid`'s slice ends at (0 = no slice): the value a test sets the reach probe around
+def public metal_mirror_slice_units_(uid : uint64) : uint64 {
+    return 0ul if (!key_exists(g_mirrors, uid))
+    let mr = g_mirrors[uid]
+    return (mr.koff + mr.bytes) / route_unit_bytes(mr.kdt)
+}
 
 //! `uid`'s whole slice lies inside the route tables' reach
 def mirror_slice_in_reach(uid : uint64) : bool {
-    return false if (!key_exists(g_mirrors, uid))
-    let mr = g_mirrors[uid]
-    return mirror_in_reach(mr.kdt, mr.koff + mr.bytes)
+    let units = metal_mirror_slice_units_(uid)
+    return units != 0ul && units <= g_mirror_reach
+}
+
+//! the arena's buffer at `g_arena_bytes`, every byte of it free
+def private arena_open {
+    g_arena = metal_new_buffer(g_dev, g_arena_bytes)
+    g_arena_free |> clear()
+    g_arena_free |> push((off = 0ul, size = g_arena_bytes))
 }
 
 // release-all rebuild at `want` (clamped to the ceiling): every mirror re-uploads via its
@@ -1722,9 +1752,7 @@ def private arena_rebuild(want : uint64; ceil_bytes : uint64) {
     g_mirror_refusal_said = false
     metal_release(g_arena)
     g_arena_bytes = min(want, ceil_bytes)
-    g_arena = metal_new_buffer(g_dev, g_arena_bytes)
-    g_arena_free |> clear()
-    g_arena_free |> push((off = 0ul, size = g_arena_bytes))
+    arena_open()
     g_arena_epoch++
     to_log(LOG_INFO, "dasLLAMA metal decode: KV mirror arena grown to {int(g_arena_bytes / (1024ul * 1024ul))}MB (ceiling {int(ceil_bytes / (1024ul * 1024ul))}MB)\n")
 }
@@ -1752,9 +1780,7 @@ def mirror_reserve(total, largest : uint64) : bool {
     }
     if (g_arena == null) {
         g_arena_bytes = clamp(256ul * 1024ul * 1024ul, total, ceil_bytes)   // total <= ceiling here
-        g_arena = metal_new_buffer(g_dev, g_arena_bytes)
-        g_arena_free |> clear()
-        g_arena_free |> push((off = 0ul, size = g_arena_bytes))
+        arena_open()
         return true
     }
     if (g_arena_bytes >= total) {
@@ -1961,9 +1987,7 @@ def mirror_prepare_rows(t : Model; var s : Session; pos, needed : int64) : tuple
         let ceil_bytes = mirror_device_max_bytes()
         if (g_arena == null) {
             g_arena_bytes = min(256ul * 1024ul * 1024ul, ceil_bytes)
-            g_arena = metal_new_buffer(g_dev, g_arena_bytes)
-            g_arena_free |> clear()
-            g_arena_free |> push((off = 0ul, size = g_arena_bytes))
+            arena_open()
         }
         var off = arena_alloc(kbytes + vbytes)
         while (off < 0l) {   // arena full — evict LRU until the slice fits (or nothing evictable)
