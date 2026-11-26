@@ -6,6 +6,8 @@ module _rst_distinct_mod public
 typedef distinct RstMeters = float //! Distance along a path, in meters.
 typedef private distinct RstHidden = int
 
+let RST_LONGEST_WALK = 7 //! The longest walk, in meters.
+
 class RstBase {
     tag : int
 }

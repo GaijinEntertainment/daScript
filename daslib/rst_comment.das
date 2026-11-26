@@ -302,7 +302,7 @@ class RstComment : AstCommentReader {
     def override afterGlobalVariable ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void {
         debug_rst("afterGlobalVariable {name} // {global_comment}")
         if (global_comment != "") {
-            write_to_detail("variable-{get_module_name(prog, mod)}-{name}", global_comment)
+            write_to_detail("Variable-{get_module_name(prog, mod)}-{name}", global_comment)
         }
     }
     def override afterGlobalVariables ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void {
