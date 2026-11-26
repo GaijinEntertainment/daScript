@@ -364,7 +364,10 @@ def private build_batch_fix(codec : string; cnts : array<int>; qstride : int; va
     let nb2 = length(cnts)
     let rowb = codec == "q8" ? NBLK * 34 : NBLK * 18
     // row spacing must clear the deepest slab: cnt <= 200 rows x KV_DIM elems (or rowb bytes)
-    let easz = 90000
+    var easz = 90000
+    for (r in range(nb2)) {
+        easz = max(easz, 500 + r * 27000 + 300 + (B_LAY + 1) * B_LAYSTRIDE + cnts[r] * KV_DIM)
+    }
     let basz = 92160
     if (codec == "f16") {
         fx.kh |> resize(easz)
@@ -403,7 +406,8 @@ def private build_batch_fix(codec : string; cnts : array<int>; qstride : int; va
             for (j in range(cnts[r])) {
                 for (side in range(2)) {
                     for (d in range(KV_DIM)) {
-                        raw[d] = kv_val(j * 3 + r * 7 + side * 11, d)
+                        //! the values repeat every 45 keys: a V row past 8192 keys is lifted, so a walk that drops the deep keys shows
+                        raw[d] = kv_val(j * 3 + r * 7 + side * 11, d) + (side == 1 ? float(j / 8192) * 8.0 : 0.0)
                     }
                     let dq = fx.roff[r] + j * KV_DIM
                     if (codec == "f16") {
@@ -711,6 +715,80 @@ def private sq_d_gate(t : T?; var dev, queue; codec : string; cnts : array<int>;
     }
 }
 
+//! The tile form with the fused form's combine against the row oracle: `kvh` K/V heads of `hs` serving `kvmul` q heads
+//! each, row r `keys[r]` keys deep. The plain stamp (`enc_attn_tile16_c`) reads a stream a row; the packed one
+//! (`enc_attn_tilepk16_c`, `pack`) its rows off one stream, a chunk holding two rows' queries masked at different counts,
+//! the slots past the last query idle. A count under 64 runs the lanes, one off a multiple of 64 the slid-back last step,
+//! one under a piece's first key leaves that piece empty, one past 8192 gives a piece two steps; `lead` route rows sit
+//! ahead of the cell's own, as in `sq_d_gate`; `gated` (the packed stamp's) reads the q at its [q | gate] stride
+def private sq_tile_gate(t : T?; var dev, queue; pack : bool; keys : array<int>; hs, kvh, kvmul : int; lead : int = 0; gated : bool = false) {
+    let rowx = kvh * hs / KV_DIM
+    let kvdim = kvh * hs
+    let nheads = kvh * kvmul
+    let qd = nheads * hs
+    let halves = hs / D_HS
+    let nrows = length(keys)
+    var deepest = 0
+    for (k in keys) {
+        deepest = max(deepest, k)
+    }
+    let pieces = int(attn_tile_pieces(int64(deepest)))
+    let tag = "sq_attn_tile{pack ? "_pk" : ""} keys={keys} hs={hs} kvh={kvh} kv_mul={kvmul} lead={lead} gated={gated}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let stt = stamp_of(@@enc_attn_tile16_c)
+        let stp = stamp_of(@@enc_attn_tilepk16_c)
+        let sc = stamp_of(@@enc_attncombd_c)
+        var pso_t = pack ? (mc |> keep_stamp(stp, err)) : (mc |> keep_stamp(stt, err))
+        let tile_ok = pso_ok(t, "{tag} tile", pso_t, err)
+        var pso_c = mc |> keep_stamp(sc, err)
+        return if (!pso_ok(t, "{tag} comb", pso_c, err) || !tile_ok)
+        let qstride = qd + 36
+        var inscope fx : BatchAttnFix
+        build_batch_fix("f16", pack ? [deepest * rowx] : [for (k in keys); k * rowx], qstride, fx)
+        var inscope q <- [for (i in range(nrows * qstride)); attn_q_val(i % (QD + 13))]
+        let scale = 1.0 / sqrt(float(hs))
+        var inscope want : array<float>
+        want |> resize(nrows * qd)
+        for (r in range(nrows)) {
+            let slab = fx.roff[pack ? 0 : r]
+            for (h in range(nheads)) {
+                attn_row_oracle(q, r * qstride + h * hs, fx.kdeq, slab, fx.vdeq, slab, kvdim, h, hs, kvmul, keys[r], scale, want, r * qd + h * hs)
+            }
+        }
+        let kv = mc |> kv_planes("f16", fx)
+        let bq = gated ? (mc |> in_(gated_batch(t, tag, q, nrows, qstride, qd, hs, qd, want))) : (mc |> in_(q))
+        let bpart = mc |> out_words(nrows * nheads * halves * pieces * 132, -1000.0)
+        let by = mc |> out_words(nrows * qd, -1000.0)
+        var inscope routes <- [for (_ in range(lead)); uint4(fx.rt[0].x, fx.rt[0].y, fx.rt[0].z, 1u)]
+        routes |> push_from([for (r in range(nrows)); uint4(fx.rt[pack ? 0 : r].x, fx.rt[pack ? 0 : r].y, fx.rt[pack ? 0 : r].z, uint(keys[r]))])
+        let brt = mc |> in_plain(routes)
+        let rtoff = uint64(lead * 16)
+        let bsink = mc |> in_(plane_of(nheads * halves, 0.0))
+        var kat = SqAttnTileArgs(lay = uint(B_LAY), layr = 0u, kstride = uint(kvdim), nheads = uint(nheads), kv_mul = uint(kvmul), hs = uint(hs),
+            scale = scale, qstride = uint(gated ? 2 * qd : qstride), keys = uint(deepest), rows = uint(nrows),
+            qhs = gated ? uint(2 * hs) : 0u, gated = gated ? 1u : 0u)
+        var kac = SqAttnCombDArgs(nchmax = uint(pieces), nheads = uint(nheads * halves), hs = uint(D_HS), hass = 0u, hdiv = uint(halves))
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            let (k, v, qb, p, rt) = (mc.buf[kv.x], mc.buf[kv.y], mc.buf[bq], mc.buf[bpart], mc.buf[brt])
+            if (pack) {
+                stamp_run(stp, pso_t) {
+                    invoke(stp.enc, enc, k, v, qb, p, rt, rtoff, kat, int64(pieces), int64(kvh) * attn_tile_pack_chunks(int64(nrows), int64(kvmul)))
+                }
+            } else {
+                stamp_run(stt, pso_t) {
+                    invoke(stt.enc, enc, k, v, qb, p, rt, rtoff, kat, int64(pieces), int64(nheads / 8), int64(nrows))
+                }
+            }
+            stamp_run(sc, pso_c) {
+                invoke(sc.enc, enc, p, mc.buf[by], rt, rtoff, kac, mc.buf[bsink], int64(nheads * halves), int64(nrows))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, BAR_ATTN, Shape(row_width = qd, head_width = hs))
+    }
+}
+
 [test(description = "The Metal single-query attention kernels over f16, f32, q8 and tq4 KV - single, split-K, batched and fused D forms, heads 64 to 512, windows, sinks, softcap, gated q - match CPU attention over the dequant truth within 2e-3")]
 def test_metal_attn_codec_kernels(t : T?) {
     t |> run("sq_attn codec twins (f32/q8/tq4, single + split-K) == CPU attention over the dequant truth") <| @(t : T?) {
@@ -790,6 +868,18 @@ def test_metal_attn_codec_kernels(t : T?) {
                 sq_d_gate(t, dev, queue, "f32", [60, 198], 3, hs = 96, lead = 1, window = 20, sinks = true, softcap = D_CAP)
                 sq_d_gate(t, dev, queue, "q8", [21, 63, 198], 3, hs = 96)
                 sq_d_gate(t, dev, queue, "tq4", [60, 198], 2, hs = 96, window = 30, sinks = true)
+                //! the tile form: the lanes, whole steps and the slid-back last one, an empty piece, a table offset, two steps a piece
+                sq_tile_gate(t, dev, queue, false, [21, 64, 200], 128, 1, 8)
+                sq_tile_gate(t, dev, queue, false, [128, 200], 128, 1, 8, lead = 2)
+                sq_tile_gate(t, dev, queue, false, [21, 64, 100], 256, 1, 8)
+                sq_tile_gate(t, dev, queue, false, [21, 32, 50], 512, 1, 8)
+                sq_tile_gate(t, dev, queue, false, [150], 512, 1, 8)
+                sq_tile_gate(t, dev, queue, false, [8300], 128, 1, 8)
+                //! the packed stamp: two rows' queries a chunk, idle slots past the last query, a row ending on a step's edge, the gate
+                sq_tile_gate(t, dev, queue, true, [99, 100], 128, 2, 4)
+                sq_tile_gate(t, dev, queue, true, [98, 99, 100], 256, 1, 6)
+                sq_tile_gate(t, dev, queue, true, [64, 65], 128, 2, 4)
+                sq_tile_gate(t, dev, queue, true, [98, 99, 100], 256, 1, 6, lead = 1, gated = true)
                 //! a gated model's q (qwen35): the head read at its [q | gate] stride, the out under the gate's sigmoid, on every form
                 sq_codec_single_gate(t, dev, queue, "f32", 40, 0.0, false, true)
                 sq_codec_single_gate(t, dev, queue, "q8", 40, 0.0, true, true)
@@ -1642,6 +1732,53 @@ def private unsign_gate(t : T?; var dev, queue; hs, nheads, nrows, pad : int; ga
             check_buf(t, tag, mc.buf[byo], want_g, BAR_FP, Shape(row_width = qstride))
         } else {
             check_buf(t, tag, mc.buf[byo], want, BAR_FP, Shape(row_width = qstride))
+        }
+    }
+}
+
+[test(description = "The tile attention's gates as pure functions: the step gate on each side of the far count, off under a negative one, with the packed stamp's one-stream and five-query floors; the model gate's f16, sinks, cap and gated-q arms; the layer gate's heads, chunks, window and ring; the piece count's 64-key steps under its cap of 128, and the partial plane's wider entry count.")]
+def test_metal_attn_tile_gates(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        t |> run("the step gate: the far count, and the packed stamp's floors") <| @(t : T?) {
+            t |> success(attn_tile_step_ok(1l, 1l, 8l, 8192l, 8192l, false), "one row at the far count takes the plain stamp")
+            t |> success(!attn_tile_step_ok(8l, 1l, 8l, 8191l, 8192l, false), "a key under the far count keeps the fused form")
+            t |> success(!attn_tile_step_ok(8l, 1l, 8l, 1000000l, -1l, false), "a negative far count turns the form off")
+            t |> success(attn_tile_step_ok(1l, 1l, 8l, 1l, 0l, false), "a far count of 0 takes every step")
+            t |> success(attn_tile_step_ok(4l, 4l, 8l, 8192l, 8192l, false), "the plain stamp takes the rows of several streams")
+            t |> success(!attn_tile_step_ok(4l, 2l, 4l, 8192l, 8192l, true), "the packed stamp refuses two streams' rows")
+            t |> success(!attn_tile_step_ok(1l, 1l, 4l, 8192l, 8192l, true), "the packed stamp refuses four queries a K/V head")
+            t |> success(attn_tile_step_ok(1l, 1l, 6l, 8192l, 8192l, true), "the packed stamp takes six queries a K/V head")
+            t |> success(attn_tile_step_ok(2l, 1l, 4l, 8192l, 8192l, true), "the packed stamp takes two rows of four")
+            t |> success(!attn_tile_step_ok(2l, 1l, 4l, 8191l, 8192l, true), "the packed stamp keeps the far count")
+        }
+        t |> run("the model gate: an f16 mirror, no sinks, no cap, a gated q on the packed stamp read in place") <| @(t : T?) {
+            t |> success(attn_tile_model_ok(true, false, false, false, false, false), "a plain f16 model has a stamp")
+            t |> success(!attn_tile_model_ok(false, false, false, false, false, false), "a block-codec mirror has none")
+            t |> success(!attn_tile_model_ok(true, true, false, false, false, false), "attention sinks have none")
+            t |> success(!attn_tile_model_ok(true, false, true, false, false, true), "a logit cap has none")
+            t |> success(!attn_tile_model_ok(true, false, false, true, true, false), "a gated q has no plain stamp")
+            t |> success(attn_tile_model_ok(true, false, false, true, true, true), "a gated q read in place has the packed stamp")
+            t |> success(!attn_tile_model_ok(true, false, false, true, false, true), "a gated q not read in place has none")
+        }
+        t |> run("the layer gate: heads of 128 to 512, whole chunks of eight on the plain stamp, no window, no ring") <| @(t : T?) {
+            t |> success(attn_tile_layer_ok(128l, 8l, 0u, 0u) && attn_tile_layer_ok(256l, 16l, 0u, 0u) && attn_tile_layer_ok(512l, 8l, 0u, 0u), "the plain heads")
+            t |> success(!attn_tile_layer_ok(64l, 8l, 0u, 0u), "a head of 64 has no stamp")
+            t |> success(!attn_tile_layer_ok(128l, 4l, 0u, 0u), "four q heads a K/V head have no plain stamp")
+            t |> success(attn_tile_layer_ok(128l, 4l, 0u, 0u, true) && attn_tile_layer_ok(256l, 6l, 0u, 0u, true), "... and have the packed one")
+            t |> success(!attn_tile_layer_ok(512l, 8l, 0u, 0u, true), "a head of 512 has no packed stamp")
+            t |> success(!attn_tile_layer_ok(128l, 8l, 30u, 0u), "a window keeps the fused form")
+            t |> success(!attn_tile_layer_ok(128l, 8l, 0u, 1u), "a ring keeps the fused form")
+            t |> success(!attn_tile_layer_ok(128l, 0l, 0u, 0u, true), "no q head, no stamp")
+        }
+        t |> run("the piece count and the partial plane's entries") <| @(t : T?) {
+            t |> equal(attn_tile_pieces(0l), 1l, "no key is one piece")
+            t |> equal(attn_tile_pieces(64l), 1l, "a whole step is one piece")
+            t |> equal(attn_tile_pieces(65l), 2l, "a key past it opens the second")
+            t |> equal(attn_tile_pieces(8192l), 128l, "128 steps are 128 pieces")
+            t |> equal(attn_tile_pieces(100000l), 128l, "the cap holds past them")
+            t |> equal(attn_d_entries(16l, 0l), 16l, "no tile stamp: the fused form's groups")
+            t |> equal(attn_d_entries(16l, 8192l), 128l, "the tile form's pieces where they are more")
+            t |> equal(attn_d_entries(16l, 200l), 16l, "the fused form's groups where they are more")
         }
     }
 }

@@ -2985,3 +2985,10 @@
     grid never sees the jammed form, so a family whose rows the jam would win cannot pick it. Done = the release
     re-mint races `row_jam = true` beside each x64 row-major perm (a perm argument the generator already reads), at
     the rail shape and a serving width, and the profiles carry the winner.
+324. **No board cell runs a Metal step past 8192 keys.** The rig's cells prefill 512 tokens and decode 128, so the tile
+    form of a step's attention (`ARCHITECTURE_GPU_BATCH.md#metal-attn-tile`), the prefill's pieced score slab
+    (`ARCHITECTURE_GPU_PREFILL.md#prefill-attn-slab`) and the single row past the route tables' reach
+    (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#kv-mirror-arena`) enter no board row: their readings are the dated
+    `PERF_LEDGER.md` entry on the tile attention race and the served bench's behind pass
+    (`ARCHITECTURE_MEASUREMENT_SERVED.md#model-bench`). Done = the release re-mint adds a spawned Metal cell behind a
+    base of 32768 tokens or deeper to `performance/gen_bench_records.das` and mints its rows on every board box.

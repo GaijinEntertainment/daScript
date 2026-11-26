@@ -13,7 +13,6 @@ options _function_length = 0   // the race's main is one flat ladder: the planes
 //   bin/daslang -jit modules/dasLLAMA/harness/attn_d_codec_race.das [-- <rows> <heads> <hs> <kv_heads>]
 
 require math
-require strings
 require metal/msl_shader
 require metal/das_metal_boost
 require ?das_metal das_metal
@@ -68,20 +67,10 @@ def private slab_blocks(src : array<float>; nrow_total, kv_dim : int; dt : KVDty
 def main {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let args <- get_command_line_arguments()
-        var nrows = 2
-        var heads = 32
-        var hs = 128
-        var kvh = 4
-        if (length(args) >= 4 && to_int(args[length(args) - 4]) > 0) {
-            nrows = to_int(args[length(args) - 4])
-            heads = to_int(args[length(args) - 3])
-            hs = to_int(args[length(args) - 2])
-            kvh = to_int(args[length(args) - 1])
-        }
-        let kv_dim = kvh * hs
-        let kv_mul = heads / kvh
-        let qd = heads * hs
-        let qstride = qd + 2 * kv_dim   // the decode's [q | k | v] row
+        let dims <- race_int_args(args, [2, 32, 128, 4])
+        let nrows = dims[0]
+        let sh = attn_race_shape(dims[1], dims[2], dims[3])
+        let (heads, hs, kvh, kv_dim, kv_mul, qd, qstride) = (sh.heads, sh.hs, sh.kvh, sh.kv_dim, sh.kv_mul, sh.qd, sh.qstride)
         let maxd = DEPTHS[length(DEPTHS) - 1]
         var dev = metal_create_system_default_device()
         var queue = metal_new_command_queue(dev)

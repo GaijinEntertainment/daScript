@@ -83,6 +83,10 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // the sampled chain's draw over the landing rides a sampled single-row stream (the zoo steps greedy); its coverage is
     // sel_draw_gate in test_metal_misc_kernels.das and arm15 in test_metal_decode_parity.das
     "metal_sel_draw",
+    // the tile attention's two stamps take a step from 8192 keys on, past every zoo row's context; their coverage is
+    // sq_tile_gate in test_metal_decode_kernels.das, tile_attention_leg in test_dflash_drafter.das and the mtp-tile arm of
+    // test_metal_mtp_parity.das
+    "metal_sq_attn_tile", "metal_sq_attn_tile_pk",
     // the verify seat's tape kernel rides a joint verify of a hybrid's groups (Qwen3.8-27B under a block drafter), and the
     // per-layer-embedding residual's and side geglu's table stamps a gemma-4 E-series step of three rows or more (E2B); the
     // zoo's rows run no verify and no E-series batch. Their coverage is dn_tape_gate in test_metal_misc_kernels.das and

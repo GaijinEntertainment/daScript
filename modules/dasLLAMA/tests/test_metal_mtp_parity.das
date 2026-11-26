@@ -777,6 +777,7 @@ def private fixture_arm(t : T?; stem, tag, held : string; on_whole : bool) : boo
 
 //! `blocks` past 0: the trunk blocks a cut's name claims, asserted on the load; `held` the arms
 //! a cut leaves on its whole file, which `on_whole` runs alone (`fixture_arm`)
+[cold_path]
 def private run_fixture(t : T?; file, tag : string; tol : float = FF_TOL; blocks : int64 = 0l;
                         held : string = ""; on_whole : bool = false) {   // nolint:LINT012,LINT019 — the body is the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -905,6 +906,29 @@ def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, co
         if (fixture_arm(t, "mtp-select", tag, held, on_whole)) {
             select_cell(t, trg, tag, count)
         }
+
+        if (fixture_arm(t, "mtp-tile", tag, held, on_whole)) {
+            tile_pack_cell(t, tr, trg, tag, count)
+        }
+    }
+}
+
+//! The packed tile stamp under the depth-1 counting walk, its verify one stream's rows: pinned on at every depth it
+//! serves the verify and the walk still emits the plain walk's tokens (`count_cell`: a count's next token is the
+//! prompt's own); pinned off, the control, it dispatches none
+def private tile_pack_cell(t : T?; tr, trg : Model; tag : string; count : array<int64>) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        for (on in [true, false]) {
+            with_metal_attn_tile_far(on ? 0l : -1l) {
+                count_cell(t, tr, trg, "{tag} tile {on ? "on" : "off"}", count, 1l)
+            }
+            let packed = metal_kernel_count("metal_sq_attn_tile_pk")
+            if (on) {
+                t |> success(packed > 0l, "{tag}: the verify's rows took the packed tile stamp ({packed} dispatches)")
+            } else {
+                t |> equal(packed, 0l, "{tag} control: the tile form pinned off dispatches none")
+            }
+        }
     }
 }
 
@@ -1032,6 +1056,7 @@ def test_metal_mtp_parity_qwen38_split_head(t : T?) {
 // here takes - the planar model only lends its config and tokenizer), so a carrier whose planar and
 // blob forms would not fit the box together still gets the rail's gates. The twin maps under the rig's
 // own identity (no wscale or backend pin), so the fixture mints no image of its own.
+[cold_path]
 def private run_fixture_served(t : T?; file, head, tag : string; tol : float) {   // nolint:LINT012,LINT019 — the body is the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let path = path_join(models_dir(), file)

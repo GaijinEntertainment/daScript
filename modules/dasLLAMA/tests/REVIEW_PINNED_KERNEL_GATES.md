@@ -48,6 +48,10 @@ holding:
   `cls_select_gate` at a wide, a narrow and the served vocab: the ids at or above the row's K-th largest logit and
   their logits exact against the host oracle, the row's max logit, the overflow flag and the recent ids' logits, the
   denominator within 2e-5, a poisoned id and a poisoned denominator its controls.
+- `test_metal_decode_kernels.das`'s `test_metal_attn_codec_kernels` cell must hold, by name, `sq_tile_gate` - the
+  census's evidence for the tile attention's two stamps: each stamp with the shipped combine against the CPU attention
+  at the bar the gate sets, over a row under 64 keys, rows ending on a step and off one, a lead, a row past 8192 keys
+  (two steps a piece), and on the packed stamp a gated q and a chunk with idle slots.
 - `test_metal_gemm_kernels.das`'s `test_metal_gemm_kernels` cell must hold every kernel gate it calls, at the bar each
   gate sets; and the short window's split-K stamps through the partial-plane reduce, NaN-poisoned outputs and planes
   their controls, each at its derived staging bar against the whole-K tile: `q8_split_gate`, `kq_split_gate` on every

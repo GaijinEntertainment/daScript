@@ -159,6 +159,7 @@ struct private StepRes {
     koff : uint64         // mirror arena offsets captured at encode time; arena_epoch pins the
     voff : uint64         // BUFFER those offsets index (a grow-rebuild frees it — stale pre-steps discard)
     arena_epoch : int64
+    reach : uint64        //! the route tables' reach the step's attention form was picked under
     cap : int64
     bx : MetalBuffer?
     bxb : MetalBuffer?
@@ -193,6 +194,8 @@ struct private StepRes {
     fuse13 : bool         // the batch's fused gate+up form serves this step
     attn_d : bool         // the batch's decode-attention form (nsgs partials per row)
     d_nsgs : int64
+    d_tile : int64        //! the deepest row's count where the tile form serves the step's full-context layers, else 0
+    d_pack : int64        //! ... and where its packed stamp does, the step's rows one stream's
     nchmax : int64        // the batch's chunk count over the deepest row
     u_total_dim : MetalBuffer?
     u_total_h : MetalBuffer?
@@ -471,7 +474,7 @@ def private metal_ple_decode_gate(t : Model; s : Session; npos, pos : int64) : b
     return npos == 1l ? metal_ple_decode_dev(t) : metal_ple_dev_said("batch decode", t)
 }
 
-def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint64; cap : int64; draft : bool = false; nrows : int64 = 1l; deepest : int64 = -1l) : StepRes {   // nolint:STYLE037,STYLE038 — flat per-shape buffer/uniform acquire list
+def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint64; cap : int64; draft : bool = false; nrows : int64 = 1l; deepest : int64 = -1l; streams : int64 = 1l) : StepRes {   // nolint:STYLE037,STYLE038 — flat per-shape buffer/uniform acquire list
     let c = t.config
     let dim = c.dim
     let head_size = c.head_size
@@ -501,7 +504,7 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     var r = StepRes(valid = true, pos = pos, chain_pos = pos, uid = s.uid, nrows = nrows,
         kdt = s.kv_dtype_k, s16 = t.wscale_f16, hetero = hetero, moe = moe,
         dn = c.recr_mask != 0ul,
-        koff = koff, voff = voff, cap = cap, arena_epoch = g_arena_epoch,
+        koff = koff, voff = voff, cap = cap, arena_epoch = g_arena_epoch, reach = get_metal_mirror_reach_probe_(),
         bytes_x = uint64(mp * dim * 4l), bytes_q = uint64(mp * qd_mx * 4l), bytes_xb = uint64(mp * max(dim, qd_mx) * 4l),
         bytes_qkv = uint64(mp * qkvd_mx * 4l),
         bytes_h2 = uint64(mp * h2 * 4l), bytes_tab = uint64(nrows * (rot / 2l) * 4l),
@@ -758,10 +761,12 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     r.bytes_part = uint64(nrows * n_heads * nchunks * (hs_mx + 2l) * 4l)
     //! the single row's route addresses its slice from the arena's start: a slice past that reach takes the chunked pair
     r.attn_d = (r.chunked && attn_d_serves(head_size, hs_sw) && (nrows == 1l || (c.sliding_window == 0l && !c.attn_sinks))
-        && (nrows > 1l || mirror_in_reach(r.kdt, voff + uint64(cap * kv_row_bytes(r.kdt, kv_row_total(t))))))
+        && (nrows > 1l || mirror_slice_in_reach(s.uid)))
     if (r.attn_d) {
         r.d_nsgs = attn_d_groups(top + nrows)
-        r.bytes_part = uint64(attn_d_part_floats(nrows, n_heads, hs_mx, r.d_nsgs) * 4l)
+        r.d_tile = attn_tile_keys(t, r.kdt, top + nrows, nrows)
+        r.d_pack = attn_tile_keys(t, r.kdt, top + nrows, nrows, true, streams)
+        r.bytes_part = uint64(attn_d_part_floats(nrows, n_heads, hs_mx, attn_d_entries(r.d_nsgs, max(r.d_tile, r.d_pack))) * 4l)
         r.bpart = pool_acquire(g_pool, g_dev, r.bytes_part)
     }
     if (r.attn_d && nrows == 1l) {
@@ -1057,6 +1062,17 @@ def private rope_store_single(var e : SingleLayerEnc; t : Model; enc : MetalComp
 def private attn_d_serves(head_size, hs_sw : int64) : bool
     => attn_d_head_ok(head_size) && attn_d_head_ok(hs_sw) && g_env_attn_d
 
+//! The deepest row's count where the tile form serves a step's full-context layers, else 0: its pipeline built, the model's
+//! attention one it has (`attn_tile_model_ok`), the step one it takes under the far count (`attn_tile_step_ok`,
+//! `set_metal_attn_tile_far`). Under `pack` the packed stamp's
+[arch(at="../ARCHITECTURE_GPU_BATCH.md#metal-attn-tile")]
+def private attn_tile_keys(t : Model; kdt : KVDtype; keys, nrows : int64; pack : bool = false; streams : int64 = 1l) : int64 {
+    let c = t.config
+    let built = (pack ? g_pso_attn_tilepk16 : g_pso_attn_tile16) != null
+    let model = attn_tile_model_ok(kdt == KVDtype.f16, c.attn_sinks, c.attn_logit_softcap != 0.0, c.q_gated, qg_direct(c, kdt), pack)
+    return built && model && attn_tile_step_ok(nrows, streams, c.n_heads / c.n_kv_heads, keys, g_attn_tile_far, pack) ? keys : 0l
+}
+
 //! Layer `l`'s fused single-pass attention over the rows of `r.brt` at `rtoff`, merged into `r.bxb`. Under `route_per_layer` each
 //! route base is already the layer's; else the kernel steps a stream's slab to the layer. `window` is a sliding layer's span in
 //! keys (0 = the whole context), `bsnk` the layer's sink logits (null = none).
@@ -1075,9 +1091,24 @@ def private encode_attn_d(t : Model; r : StepRes; enc : MetalComputeEncoder?; l,
         qstride = gd ? uint(2l * n_heads * head_size) : uint(n_heads * head_size) + 2u * kvd, nsgs = uint(r.d_nsgs),
         window = window, softcap = c.attn_logit_softcap, qhs = gd ? uint(2l * head_size) : 0u,
         gated = gd && r.kdt != KVDtype.tq4 ? 1u : 0u)
-    enc_attn_d(enc, r.kdt, gd ? r.bdn_qg : r.bqkv, r.bpart, r.brt, dka, r.d_nsgs, r.nrows, n_heads, rtoff)
+    let tile = r.d_tile > 0l && attn_tile_layer_ok(head_size, int64(dka.kv_mul), window, dka.ring)
+    let pack = !tile && r.d_pack > 0l && attn_tile_layer_ok(head_size, int64(dka.kv_mul), window, dka.ring, true)
+    let tkeys = max(r.d_tile, r.d_pack)
+    let entries = tile || pack ? attn_tile_pieces(tkeys) : r.d_nsgs
+    if (tile || pack) {
+        var tka = SqAttnTileArgs(lay = lays.x, layr = lays.y, kstride = kvd, nheads = uint(n_heads), kv_mul = dka.kv_mul, hs = uint(head_size),
+            scale = dka.scale, qstride = dka.qstride, keys = uint(tkeys), rows = uint(r.nrows), qhs = dka.qhs, gated = dka.gated)
+        if (pack) {
+            enc_attn_tilepk16_c(enc, g_arena, g_arena, gd ? r.bdn_qg : r.bqkv, r.bpart, r.brt, rtoff, tka, entries,
+                (n_heads / int64(dka.kv_mul)) * attn_tile_pack_chunks(r.nrows, int64(dka.kv_mul)))
+        } else {
+            enc_attn_tile16_c(enc, g_arena, g_arena, r.bqkv, r.bpart, r.brt, rtoff, tka, entries, n_heads / 8l, r.nrows)
+        }
+    } else {
+        enc_attn_d(enc, r.kdt, gd ? r.bdn_qg : r.bqkv, r.bpart, r.brt, dka, r.d_nsgs, r.nrows, n_heads, rtoff)
+    }
     let halves = attn_d_halves(head_size)   // the wide head's partials are two or four heads of 128 to the combine
-    var cka = SqAttnCombDArgs(nchmax = uint(r.d_nsgs), nheads = uint(n_heads * halves), hs = uint(head_size / halves),
+    var cka = SqAttnCombDArgs(nchmax = uint(entries), nheads = uint(n_heads * halves), hs = uint(head_size / halves),
         hass = bsnk != null ? 1u : 0u, hdiv = uint(halves))
     if (bct != null) {
         enc_attncombd_xt_c(enc, r.bpart, r.bxb, r.brt, rtoff, cka, bct, bcs, bsnk, n_heads * halves, r.nrows)
@@ -2853,7 +2884,7 @@ def mtp_mirror_short(s : Session; pos, k : int64) : bool {
 //! filled with row 0's; returns the pooled buffer and its byte size for the release
 def private group_routes(t : Model; r : StepRes; nr : int64) : tuple<buf : MetalBuffer?; bytes : uint64> {
     let c = t.config
-    let esz = uint64(kv_block_codec(r.kdt) ? 1l : kv_row_bytes(r.kdt, 1l))   // nolint:LINT021 — divides uint64 arena offsets; only the quotient narrows
+    let esz = route_unit_bytes(r.kdt)   // nolint:LINT021 — divides uint64 arena offsets; only the quotient narrows
     g_vrt |> grow_resize((c.n_layers + c.n_layer_nextn) * 4l * nr)
     for (l in range64(c.n_layers + c.n_layer_nextn)) {
         for (g in g_v_groups) {
@@ -3549,7 +3580,7 @@ def public metal_mtp_verify_groups(t : Model; var sessions : array<Session?>; po
     }
     let mr0 = g_mirrors[sessions[0].uid]
     let total = ng * n
-    var r = acquire_step(t, *sessions[0], pos[0] + 1l, mr0.koff, mr0.voff, mr0.cap_rows, [nrows = total, deepest = deepest + 1l])
+    var r = acquire_step(t, *sessions[0], pos[0] + 1l, mr0.koff, mr0.voff, mr0.cap_rows, [nrows = total, deepest = deepest + 1l, streams = ng])
     var refused = !r.gpu_logits
     if (!refused) {
         r.bvarg = pool_acquire(g_pool, g_dev, uint64(max(total, 16l) * 4l))
@@ -4404,7 +4435,7 @@ def metal_decode_forward(t : Model; var s : Session; token, pos : int64) : bool 
     residency_flush()   // pin/commit before the step's submission (the post-CPU-window slack)
     if (!(g_pre.valid && g_pre.uid == s.uid && g_pre.pos == pos &&
             g_pre.kdt == s.kv_dtype_k && g_pre.s16 == t.wscale_f16 &&
-            g_pre.arena_epoch == g_arena_epoch &&
+            g_pre.arena_epoch == g_arena_epoch && g_pre.reach == get_metal_mirror_reach_probe_() &&
             (!g_pre.dn || (g_pre.dn_epoch == g_dn_pool_epoch && dn_mirror_cur_at(s.uid, pos) == g_pre.dn_rd)))) {
         discard_pre()
         return metal_decode_slow(t, s, token, pos)
@@ -5253,6 +5284,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     let nchmax = (maxcnt + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS
     let use_attn_d = attn_d_serves(head_size, hs_sw)
     let d_nsgs = attn_d_groups(maxcnt)
+    let d_tile = use_attn_d ? attn_tile_keys(t, kdt, maxcnt, nrows) : 0l
     // logits-on-GPU (default ON): the batched final rms + classifier ride the same cb and the
     // CPU tail's classifier (one full weight-plane stream per step — ~6ms of the small-B wall)
     // is skipped via batch_decode_override_logits_done. Gates mirror the single-stream driver's.
@@ -5279,7 +5311,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     let bytes_tab = uint64(nrows * ((c.rope_dim > 0l ? c.rope_dim : head_size) / 2l) * 4l)   //! the rows are built at the ROTATED width (a partial carrier: rope_dim/2) - the copy below reads exactly them
     let bytes_tab_sw = uint64(nrows * half_sw * 4l)   // the swa pair's rows are ITS class's hs/2
     let bytes_rt = uint64(nrows * 16l)
-    let bytes_part = uint64(use_attn_d ? attn_d_part_floats(nrows, n_heads, hs_mx, d_nsgs) * 4l :
+    let bytes_part = uint64(use_attn_d ? attn_d_part_floats(nrows, n_heads, hs_mx, attn_d_entries(d_nsgs, d_tile)) * 4l :
         nrows * n_heads * nchmax * (hs_mx + 2l) * 4l)
     var bx = pool_acquire(g_pool, g_dev, bytes_x)
     var bxb = pool_acquire(g_pool, g_dev, bytes_xb)
@@ -5551,7 +5583,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         }
     }
     var r = StepRes(valid = true, pos = maxcnt - 1l, chain_pos = maxcnt - nrows, nrows = nrows, kdt = kdt, hetero = hetero, moe = moe,
-        chunked = chunked, attn_d = use_attn_d, d_nsgs = d_nsgs, nchmax = nchmax, hid0 = hidden,
+        chunked = chunked, attn_d = use_attn_d, d_nsgs = d_nsgs, d_tile = d_tile, nchmax = nchmax, hid0 = hidden,
         u_hidden2 = u_hidden2, u_total_h2 = u_total_h2, bcap = bcap, bytes_cap = bytes_cap,
         ple = plef, bple = ple_r.bple, u_ple = u_ple, bytes_ple = bytes_ple, ple_dev = ple_r.ple_dev,
         bple_proj = ple_r.bple_proj, u_ple_all = ple_r.u_ple_all, u_ple_sq = ple_r.u_ple_sq,
@@ -5912,6 +5944,23 @@ def public set_metal_attn_d(on : bool) {
 }
 
 def public get_metal_attn_d() : bool => g_env_attn_d
+
+let ATTN_TILE_FAR = 8192l   //! the keys from which a full-context layer's attention takes the tile form
+var private g_attn_tile_far = ATTN_TILE_FAR   //! ... as set (`set_metal_attn_tile_far`); under 0, never
+
+//! Test and race lever: the deepest row's count from which the single row, the verify's rows and the batch step take the tile
+//! form on a full-context layer (0 = at every depth, under 0 = never)
+[arch(at="../ARCHITECTURE_GPU_BATCH.md#metal-attn-tile")]
+def public set_metal_attn_tile_far(keys : int64) {
+    g_attn_tile_far = keys
+    discard_pre()         // a step encoded under the other form would serve it one step late
+    discard_batch_pre()
+    return if (keys == ATTN_TILE_FAR)
+    let what = keys < 0l ? "never takes the tile form" : "takes the tile form from {keys} keys, not from {ATTN_TILE_FAR}"
+    to_log(LOG_WARNING, "dasLLAMA metal decode: a full-context layer's attention {what}, as asked (set_metal_attn_tile_far; a negative count turns the form off, {ATTN_TILE_FAR} restores the default)\n")
+}
+
+def public get_metal_attn_tile_far() : int64 => g_attn_tile_far
 
 [cold_path]   // one-time env resolution for the batched decode knobs; the caller tests one global
 def private load_batch_knobs() {

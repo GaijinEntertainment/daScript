@@ -599,7 +599,7 @@ def private cont_logits_cell(t : T?; tr, trg : Model; tag : string; tol : float)
     }
 }
 
-[unused_argument(t, path, family, tag, expect_needs, want, kv2, cont_tol)]   // off-Apple the gated body is empty
+[cold_path, unused_argument(t, path, family, tag, expect_needs, want, kv2, cont_tol)]   // off-Apple the gated body is empty
 def private family_cells(t : T?; path, family, tag : string; expect_needs : uint; want : string;
                          kv2 : KVDtype = KVDtype.f16; cont_tol : float = 0.0) {
     // one family's row: pin the metal_needs derivation bits (uint in the signature — MetalNeed
@@ -1132,13 +1132,14 @@ def private qwen2moe_row(t : T?; path : string) {
 //! pair. A model of two head classes names both classes' stamps - the head-of-512 one for the full-context layers, the
 //! head-of-256 one for the sliding class; a head off the 64 lattice names the narrow stamp.
 [unused_argument(t, tr, trg, tag, bar, stamps)]   //! off-Apple the gated body is empty
-def private depth_cell(t : T?; tr, trg : Model; tag : string; bar : float; stamps : array<string>) {
+def private depth_cell(t : T?; tr, trg : Model; tag : string; bar : float; stamps : array<string>; reach_leg : bool = false) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let prompt <- encode(tr, counting_prompt(1, 120), true, false)
         t |> success(long_length(prompt) > 224l, "{tag} depth: the prompt ({long_length(prompt)} tokens) sits past the single-dispatch ceiling")
         let vocab = tr.config.vocab_size
         var maxd = 0.0
         var picks = ""
+        var edge, short : tuple<fused : int64; chunked : int64>   //! the reach leg's steps: the tables' reach at the slice's end, a unit short
         with_dasllama_jobque() {
             var sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
             eval_(tr, sc, prompt)
@@ -1148,15 +1149,41 @@ def private depth_cell(t : T?; tr, trg : Model; tag : string; bar : float; stamp
             set_metal_prefill_min_npos(1l)
             var sg = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
             with_metal_attn_d(true) $ {
-                eval_(trg, sg, prompt)
-                metal_kernel_coverage_reset()
-                for (_i in range(3)) {
-                    var one <- [argmax_of(sc.logits, vocab)]
-                    eval_(tr, sc, one)
-                    eval_(trg, sg, one)
-                    delete one
-                    maxd = max(maxd, logits_maxdiff(sc.logits, sg.logits))   // a NaN on either side reads as infinite
-                    picks += " {argmax_of(sc.logits, vocab)}/{argmax_of(sg.logits, vocab)}"
+                with_metal_attn_tile_far(-1l) {   //! the census reads the fused stamps: the tile form is pinned off, never inherited
+                    eval_(trg, sg, prompt)
+                    if (reach_leg) {   //! three steps: the mirror left standing, the tables' reach at the slice's very end, then a unit short of it
+                        let reach = get_metal_mirror_reach_probe_()
+                        t |> equal(metal_mirror_slice_units_(0xfffffffffffffffful), 0ul, "{tag} depth: a session id the driver never served has no mirror slice")
+                        for (leg in range(3)) {
+                            metal_kernel_coverage_reset()
+                            let units = metal_mirror_slice_units_(sg.uid)
+                            set_metal_mirror_reach_probe_(leg == 0 ? 0ul : leg == 1 ? units : units - 1ul)
+                            var one <- [argmax_of(sc.logits, vocab)]
+                            eval_(tr, sc, one)
+                            eval_(trg, sg, one)
+                            delete one
+                            var fused = 0l
+                            for (stamp in stamps) {
+                                fused += metal_kernel_count(stamp)
+                            }
+                            let chunked = metal_kernel_count("MetalSqAttnPartF16_metal_sq_attn_part")
+                            if (leg == 1) {
+                                edge = (fused = fused, chunked = chunked)
+                            } elif (leg == 2) {
+                                short = (fused = fused, chunked = chunked)
+                            }
+                        }
+                        set_metal_mirror_reach_probe_(reach)
+                    }
+                    metal_kernel_coverage_reset()
+                    for (_i in range(3)) {
+                        var one <- [argmax_of(sc.logits, vocab)]
+                        eval_(tr, sc, one)
+                        eval_(trg, sg, one)
+                        delete one
+                        maxd = max(maxd, logits_maxdiff(sc.logits, sg.logits))   // a NaN on either side reads as infinite
+                        picks += " {argmax_of(sc.logits, vocab)}/{argmax_of(sg.logits, vocab)}"
+                    }
                 }
             }
             restore_metal_overrides(seat)
@@ -1176,6 +1203,12 @@ def private depth_cell(t : T?; tr, trg : Model; tag : string; bar : float; stamp
         to_log(LOG_INFO, "{tag} depth: maxd {maxd} (bar {bar}); argmax cpu/gpu per step{picks}; census{counts}, chunked {chunked}\n")
         t |> success(every && chunked == 0l,
             "{tag} depth: every attention row took the fused stamps under DASLLAMA_METAL_ATTN_D pinned on ({counts}; chunked: {chunked})")
+        if (reach_leg) {
+            t |> success(edge.fused > 0l && edge.chunked == 0l,
+                "{tag} depth: a route table that reaches the slice's very end keeps the single row on the fused stamps ({edge.fused} fused, {edge.chunked} chunked)")
+            t |> success(short.chunked > 0l && short.fused == 0l,
+                "{tag} depth: a route table one unit short of the slice's end sends the single row to the chunked pair ({short.chunked} chunked, {short.fused} fused)")
+        }
     }
 }
 
@@ -1498,7 +1531,7 @@ def private gemma4e_row(t : T?; path, tag : string; bar : float = 8.0;
             t |> success(ids_equal(ids2, ids4), "{tag}: the chained walk emits the unchained walk's tokens")
             restore_metal_overrides(seat)
         }
-        depth_cell(t, tr, trg, tag, bar, ["MetalSqAttnDXF16_metal_sq_attn_d", "MetalSqAttnDWF16_metal_sq_attn_d"])
+        depth_cell(t, tr, trg, tag, bar, ["MetalSqAttnDXF16_metal_sq_attn_d", "MetalSqAttnDWF16_metal_sq_attn_d"], true)
         log_gen_texts(tr, "{tag}", cpu_ids, gpu_ids)
         // the 2B near-ties on the counting continuation (the CPU truth itself leaves the
         // rail at "30", GPU counts on) — token equality is not a valid bar; the forced-feed

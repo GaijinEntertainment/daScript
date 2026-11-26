@@ -525,7 +525,7 @@ let MODULE_WITNESSES <- {
     "dasllama_cuda_dflash" => "test_dflash_drafter.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_qwen3.das",
     "dasllama_vulkan_classes_dflash" => "test_vulkan_tower_kernels.das,test_dflash_drafter.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_qwen3.das",
     "dasllama_cuda_classes_dflash" => "test_cuda_tower_asr.das,test_dflash_drafter.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_qwen3.das",
-    "dasllama_metal_decode" => METAL_WITNESSES, "dasllama_metal_prefill" => METAL_WITNESSES, "dasllama_metal_mtp_gemma" => METAL_WITNESSES,
+    "dasllama_metal_decode" => "{METAL_WITNESSES},test_dflash_drafter.das", "dasllama_metal_prefill" => METAL_WITNESSES, "dasllama_metal_mtp_gemma" => METAL_WITNESSES,
     "dasllama_scheduler" => "test_scheduler.das",
     "dasllama_sampling" => "test_sampling.das,test_mtp_sampled_walk.das,test_mtp_accept_walks.das,test_scheduler.das,test_dflash_drafter.das,test_gpu_resident_gemma4_e2b.das",
     "dasllama_batch" => "test_batch_decode.das,test_matmul_batch.das,test_gpu_resident_llama.das",
