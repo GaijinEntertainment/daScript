@@ -58,6 +58,14 @@ class private TuneShell : AstFunctionAnnotation {
             return true
         }
     }
+    def override patch(var func : FunctionPtr; var group : ModuleGroup;
+                       var args : AnnotationArgumentList; progArgs : AnnotationArgumentList;
+                       var errors : das_string; var astChanged : bool&) : bool {
+        static_if (typeinfo module_exists(llvm_tune)) {
+            tune_carry_annotations(func)
+        }
+        return true
+    }
 }
 
 [structure_macro(name = "tune_scope")]

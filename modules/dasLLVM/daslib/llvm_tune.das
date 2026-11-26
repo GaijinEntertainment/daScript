@@ -1845,9 +1845,9 @@ def private stamp_llvm_code(var fn : FunctionPtr; genKey : string; perm : TunePe
     delete aargs
 }
 
-    // tune/test modes: one `<base>__<suffix>` clone per perm plus the `<base>_variants()`
-    // registry, companions included. The base functions keep their reference bodies as the
-    // oracle rows; clones are annotation-free (applies all ran before the clones were made).
+    // tune/test modes: a `<base>__<suffix>` clone a perm, companions
+    // too, and `<base>_variants()`; bases keep reference bodies (oracle
+    // rows); `tune_carry_annotations` copies a clone's allow-list.
 def private stamp_grid(var func : FunctionPtr; genKey : string; perms : array<TunePerm>; comps : array<TuneCompanion>; var errors : das_string) : bool {
     var mod = compiling_module()
     for (p in perms) {
@@ -1879,6 +1879,64 @@ def private stamp_grid(var func : FunctionPtr; genKey : string; perms : array<Tu
         }
     }
     return true
+}
+
+//! the annotations a [tune] function's own clones take from it: the
+//! ones the JIT reads off a function to emit its code
+let private CLONE_CARRIED_ANNOTATIONS = fixed_array<string>("never_fast_math", "hint")
+
+//! whether `candidate` is a clone `tune_apply` made of `func`:
+//! `<name>__<suffix>` of a perm row, or `<name>__fat_<class>`
+def private is_own_clone(func : FunctionPtr; candidate : FunctionPtr) : bool {
+    return false if (!candidate.flags.generated)
+    let name = "{candidate.name}"
+    return true if (name |> starts_with("{func.name}__fat_"))
+    for (ann in func.annotations) {
+        continue if (ann.annotation.name != "tune_perm")
+        if (name == "{func.name}__{build_perm_row(ann.arguments).suffix}") {
+            return true
+        }
+    }
+    return false
+}
+
+def public annotation_count(fn : FunctionPtr; name : string) : int {
+    var n = 0
+    for (ann in fn.annotations) {
+        n += "{ann.annotation.name}" == name ? 1 : 0
+    }
+    return n
+}
+
+def public tune_carry_into(var clone : FunctionPtr; func : FunctionPtr) {
+    //! `func`'s CLONE_CARRIED_ANNOTATIONS onto `clone`; a name's k-th
+    //! copy lands only while the clone holds fewer than k, so a second
+    //! patch pass adds nothing
+    for (name in CLONE_CARRIED_ANNOTATIONS) {
+        let held = annotation_count(clone, name)
+        var k = 0
+        for (ann in func.annotations) {
+            continue if ("{ann.annotation.name}" != name)
+            k++
+            continue if (k <= held)
+            var aargs <- [for (a in ann.arguments);
+                          (argname = "{a.name}", argvalue = get_annotation_argument_value(a))]
+            clone |> append_annotation("{ann.annotation._module.name}", name, aargs)
+            delete aargs
+        }
+    }
+}
+
+[arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
+def public tune_carry_annotations(func : FunctionPtr) {
+    //! `[tune]`'s patch: copies CLONE_CARRIED_ANNOTATIONS onto `func`'s
+    //! own clones (made before its declared list attached); companions
+    //! keep their own list
+    for_each_function(compiling_module(), "") $(clone) {
+        if (is_own_clone(func, clone)) {
+            tune_carry_into(clone, func)
+        }
+    }
 }
 
 // `<base>_variants() : array<tuple<string; <sig>>>` — ("reference", @@base) first, then one row

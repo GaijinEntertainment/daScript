@@ -964,6 +964,10 @@ let LLVM_HASH_FILE = "modules/dasLLVM/daslib/llvm_jit_run.das"
 let LLVM_TOY_PIN_TEST = ("static const char * EMITTER_FILES[] = \{\n" +
     "    \"llvm_toy.das\",   // \"llvm_commented.das\" must not count\n\};\n")
 
+let LLVM_TUNE_FILE = "modules/dasLLVM/daslib/llvm_tune.das"
+let LLVM_TOY_TUNE = ("options gen2\nlet private CLONE_CARRIED_ANNOTATIONS = " +
+    "fixed_array<string>(\"never_fast_math\", \"hint\")\n")
+
 def reports(t : T?; gate_output, finding : string) {
     t |> success(find(gate_output, finding) >= 0, "finding fired: {finding}\n{gate_output}")
 }
@@ -977,8 +981,9 @@ def make_llvm_fixture(t : T?; tree, root : string) {
         "options gen2\nlet LLVM_JIT_EMITTER_HASH : uint64 = {llvm_toy_pin(LLVM_TOY_EMITTER)}\n")
     write_at(t, root, LLVM_PIN_TEST, LLVM_TOY_PIN_TEST)
     write_at(t, root, "modules/dasLLVM/bindings/llvm_toy_bind.das", "options gen2\n")
+    write_at(t, root, LLVM_TUNE_FILE, LLVM_TOY_TUNE)
     write_at(t, root, "modules/dasLLVM/.das_module",
-        "\"llvm\", \"llvm_toy\", \"llvm_toy_bind\", \"llvm_jit_run\"\n")
+        "\"llvm\", \"llvm_toy\", \"llvm_toy_bind\", \"llvm_jit_run\", \"llvm_tune\"\n")
     write_at(t, root, "modules/dasLLVM/REVIEW.md", "rules\n")
     write_at(t, root, "modules/dasLLVM/tests/llvm_tune_profiles_defaults/arm64.tune-defaults.json", "\{\}\n")
     write_at(t, root, "modules/dasLLVM/tests/llvm_toy_profiles.das", LLVM_TESTS_GREEN)
@@ -1027,6 +1032,44 @@ def test_llvm_gate_fixtures(t : T?) {
                     "names llvm_gone, but no census dir (modules/dasLLVM/daslib, modules/dasLLVM/bindings) holds llvm_gone.das"]) {
         t |> success(find(red.out, needle) >= 0, "finding fired: {needle}")
     }
+
+    t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
+}
+
+[test(description = "the dasLLVM gate reports an annotation the JIT emitter reads by name that a [tune] clone does not carry, keeps one it carries or the clone's own [llvm_code] quiet, and reports a carried list it cannot find", timeout = 1200)]
+def test_llvm_gate_clone_carried(t : T?) {
+    let tree = getcwd()
+    let fixture = repo_fixture(t, "modules/dasLLVM/REVIEW.das", "review_llvm_carry")
+    if (empty(fixture)) return
+    make_llvm_fixture(t, tree, fixture)
+    let gate = [path_join(fixture, "modules/dasLLVM/REVIEW.das")]
+    write_at(t, fixture, "modules/dasLLVM/.das_module",
+        "\"llvm\", \"llvm_toy\", \"llvm_toy_bind\", \"llvm_jit_run\", \"llvm_tune\", " +
+        "\"llvm_jit_reads\"\n")
+
+    let carried_reads = ("options gen2\ndef private reads(fn : FunctionPtr) : bool \{\n" +
+        "    return fn.annotations[0].annotation.name == \"never_fast_math\" " +
+        "|| fn.annotations[0].annotation.name == \"llvm_code\"\n\}\n")
+    write_at(t, fixture, "modules/dasLLVM/daslib/llvm_jit_reads.das", carried_reads)
+    let quiet = spawn_at(fixture, gate)
+    t |> equal(0, quiet.rc,
+        "a carried name and the clone's own [llvm_code] read are quiet: {quiet.out}")
+
+    write_at(t, fixture, "modules/dasLLVM/daslib/llvm_jit_reads.das", carried_reads +
+        "def private reads_toy(fn : FunctionPtr) : bool \{\n" +
+        "    return fn.annotations[0].annotation.name == \"toy_flag\"\n\}\n")
+    let lacking = spawn_at(fixture, gate)
+    t |> equal(1, lacking.rc, "a read the carried list lacks is red")
+    reports(t, lacking.out,
+        "llvm_jit_reads.das:6: the emitter reads the function annotation `toy_flag`, " +
+        "and CLONE_CARRIED_ANNOTATIONS ({LLVM_TUNE_FILE}) lacks it")
+
+    write_at(t, fixture, "modules/dasLLVM/daslib/llvm_jit_reads.das", carried_reads)
+    write_at(t, fixture, LLVM_TUNE_FILE, "options gen2\n")
+    let listless = spawn_at(fixture, gate)
+    t |> equal(1, listless.rc, "a missing carried list is red")
+    reports(t, listless.out,
+        "{LLVM_TUNE_FILE}: CLONE_CARRIED_ANNOTATIONS is not where the gate reads it")
 
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }

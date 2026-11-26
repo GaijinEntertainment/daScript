@@ -24,7 +24,11 @@ pass skips a tagged function whole. The flags live on instructions, so the exemp
 inlining: the function's arithmetic keeps no flags inside whatever loop LLVM inlines it into. The
 AST inliner is the one splice that runs before the tag exists - it would move the arithmetic into
 an unmarked caller - so the annotation implies `[never_inline]` and refuses `[inline]`. A
-lambda or a generator in the body is a function of its own and takes its own annotation. The IR
+lambda or a generator in the body is a function of its own and takes its own annotation. A
+`[tune]` function's grid and fat clones are functions of their own too, made before the
+declared annotations attach; `[tune]`'s patch copies this annotation and `hint(...)` onto them
+(`tune_carry_annotations`, `daslib/llvm_tune.das`), so every clone, generator output or
+reference body, keeps the stamp off as its source does. The IR
 the annotation changes is invisible to the AOT hash, so `fold_function_hints` folds it into both
 cache keys (`ARCHITECTURE.md` sec.2).
 

@@ -9,7 +9,6 @@ require dasllama/dasllama_lint public
 require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_jit_code
 require llvm/daslib/llvm_jit_common
-require llvm/daslib/llvm_jit_plan   // JIT_NEVER_FAST_MATH_ATTR
 require daslib/ast_boost
 require math
 
@@ -228,8 +227,6 @@ def private emit_f32_tile(var gc : LlvmCodeCtx; rows : int) : bool {
     if (!is_f32_tile_signature(gc.fn)) return false
     let p = parse_f32_perm(gc)
     if (f32_perm_declines(gc, p)) return false
-    // a tune or fat clone drops its stub's annotations, so the tile itself keeps fast math off
-    LLVMAddTargetDependentFunctionAttr(gc.impl, JIT_NEVER_FAST_MATH_ATTR, "")
     var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
     LLVMPositionBuilderAtEnd(gc.jit.builder, entry)
     var e = F32Emit(b = gc.jit.builder, ctx = gc.jit.ctx, impl = gc.impl, types = gc.jit.types,

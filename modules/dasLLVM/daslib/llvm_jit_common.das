@@ -1611,3 +1611,32 @@ def public mark_untyped_access(ctx : LLVMOpaqueContext?; inst : LLVMOpaqueValue?
     let kind = LLVMGetMDKindIDInContext(ctx, JIT_UNTYPED_MD, uint(length(JIT_UNTYPED_MD)))
     LLVMSetMetadata(inst, kind, LLVMMetadataAsValue(ctx, LLVMMDNodeInContext2(ctx, null, 0ul)))
 }
+
+//! `!{!"name"}`: a one-operand metadata node holding the string
+//! `name`
+def public loop_md_flag(ctx : LLVMOpaqueContext?; name : string) : LLVMOpaqueMetadata? {
+    var arr : LLVMOpaqueMetadata? [1]
+    arr[0] = LLVMMDStringInContext2(ctx, name, uint64(long_length(name)))
+    return LLVMMDNodeInContext2(ctx, array_data_ptr(arr), 1ul)
+}
+
+//! `!llvm.loop !{self, ops...}` on a loop's backedge branch: the
+//! self-referencing loop node over `ops`, which takes the node's
+//! temporary self operand at its front
+def public attach_loop_ops(ctx : LLVMOpaqueContext?; branch : LLVMOpaqueValue?;
+                           var ops : array<LLVMOpaqueMetadata?>) {
+    ops |> push(LLVMTemporaryMDNode(ctx, null, 0ul), 0)
+    let loop_md = LLVMMDNodeInContext2(ctx, array_data_ptr(ops), uint64(long_length(ops)))
+    LLVMMetadataReplaceAllUsesWith(ops[0], loop_md)   // the replace frees the temporary node
+    let kind = "llvm.loop"
+    let kind_id = LLVMGetMDKindIDInContext(ctx, kind, uint(length(kind)))
+    LLVMSetMetadata(branch, kind_id, LLVMMetadataAsValue(ctx, loop_md))
+}
+
+//! `!llvm.loop !{self, !{"flag"}...}` on a loop's backedge branch,
+//! one flag node a name in `flags`
+def public attach_loop_flags(ctx : LLVMOpaqueContext?; branch : LLVMOpaqueValue?;
+                             flags : array<string>) {
+    var ops <- [for (f in flags); loop_md_flag(ctx, f)]
+    attach_loop_ops(ctx, branch, ops)
+}
