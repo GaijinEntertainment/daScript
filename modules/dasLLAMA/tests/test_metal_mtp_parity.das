@@ -424,12 +424,12 @@ def private has_half_x_rows_sites(t : Model) : bool {   // nolint:LINT012,LINT01
     }
 }
 
-//! the half-x leg: under the k4 / k5 / k6 half-x crowns the verify's two-to-eight-row K-quant sites read the f16 twin, the
-//! MTP head's own q/k/v among them - its rows the head's norm wrote with no twin, so the flag must be clear there, or the
-//! head projects the trunk's last FFN norm and every draft misses silently while the verify still lands the plain tokens;
-//! the witness is the drafted-round count, which must hold up to the uncrowned run's within a fifth
+//! the half-x leg at depth 1 - two verify rows, the count the half-x forms serve on every box (a rows8 box takes k4 / k6 from three rows up):
+//! under the k4 / k5 / k6 crowns the verify's K-quant sites read the f16 twin, the MTP head's q/k/v among them - rows its norm wrote with no twin,
+//! so a set flag there misses every draft silently while the verify lands the plain tokens; the drafted-round count holds to the uncrowned run's within a fifth
 def private half_crown_cell(t : T?; tr, trg : Model; tag : string; count : array<int64>) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
+        let depth = 1l
         let prev_crowns = get_metal_tensor_crowns()
         let prev_pinned = metal_tensor_crowns_pinned()
         let prev_half = get_metal_kq_half()
@@ -439,12 +439,12 @@ def private half_crown_cell(t : T?; tr, trg : Model; tag : string; count : array
         set_metal_kq_half(false)
         metal_prefill_shutdown()   //! both drivers share the device the decode release drops - a live prefill driver would allocate on null
         metal_decode_shutdown()
-        let plain_drafted = count_cell(t, tr, trg, "{tag} plain-crowns", count, 2l)
+        let plain_drafted = count_cell(t, tr, trg, "{tag} plain-crowns", count, depth)
         set_metal_kq_half(true)
         pin_metal_tensor_crowns("{kq_half_crown(KqFmt.k4)},{kq_half_crown(KqFmt.k5)},{kq_half_crown(KqFmt.k6)}")
         metal_prefill_shutdown()
         metal_decode_shutdown()
-        let half_drafted = count_cell(t, tr, trg, "{tag} half-x", count, 2l)
+        let half_drafted = count_cell(t, tr, trg, "{tag} half-x", count, depth)
         let half_stamps = (metal_kernel_count("MetalKqMvW2K4H_metal_kq_mvw_k4") + metal_kernel_count("MetalKqMvW4K4H_metal_kq_mvw_k4")
             + metal_kernel_count("MetalKqMvW8K4H_metal_kq_mvw_k4")
             + metal_kernel_count("MetalKqMvB2K5H_metal_kq_mv_k5") + metal_kernel_count("MetalKqMvB4K5H_metal_kq_mv_k5")

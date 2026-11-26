@@ -276,7 +276,8 @@ alone skips the whole test (`batchB8-kq` is not a substring of `batch`); `--arm 
 arm, and is the way to reach a sub-arm.
 
 MTP parity (`test_metal_mtp_parity.das`, suite `mtp`): `mtp-ffh-<tag>` = the half-x crowns (k4, k5, k6) pinned
-over the counting walk at depth 2: the verify's two-to-eight-row K-quant sites, the MTP head's own q/k/v among
+over the counting walk at depth 1 - a two-row verify, the row count the half-x forms serve on every box (a rows8 box
+takes a k4 or k6 site from three rows up): the verify's K-quant sites, the MTP head's own q/k/v among
 them, read the f16 twin, and the rounds the rail drafts hold up to the uncrowned walk's within a fifth - a head fed
 a stale twin drafts garbage and the count collapses while the verify still lands the plain tokens; the plain leg
 runs with every half-x crown of the box's profile removed and the rail off, so the two legs differ in the crowns
