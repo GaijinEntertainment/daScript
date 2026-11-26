@@ -511,9 +511,10 @@ token-for-token against plain decode on the 64-trunk-layer Qwen3.6-27B-MTP carri
 non-recurrent MTP model, so the only reach of the depth-1 step's shortcut reject (row 0's logits and hidden stand, no
 re-forward): its code fixture runs plain, then again with `set_mtp_force_reject_every(3)` rejecting every third draft, both
 token-for-token against plain decode, the forced run's reject count asserted at a third of its drafts or more (the fixture's
-own reject count rides the kernels' summation order and has read zero). Both are large-tier (`DASLLAMA_PARITY_FULL=1`); the
-invariance pair is `_mtp_cpu_cells.das`'s, and the hyper-connection Qwen3.8-Flash-Next's arm runs on its block's head-pinned
-CPU form (`mtp_flashnext_invariance_cell`, `test_gpu_resident_hc.das`).
+own reject count rides the kernels' summation order and has read zero). The 27B-MTP carrier is the `qwen35-27b` category's and
+the GLM-4.5-Air carrier the `glm45-air` category's: each runs only under a run that names its category
+(`run.das --category`), `DASLLAMA_PARITY_FULL=1` alone opening neither; the invariance pair is `_mtp_cpu_cells.das`'s,
+and the hyper-connection Qwen3.8-Flash-Next's arm runs on its block's head-pinned CPU form (`mtp_flashnext_invariance_cell`, `test_gpu_resident_hc.das`).
 The E2B's DFlash2 cells off the Metal home run in `test_gpu_resident_gemma4_e2b.das`'s block (its entry below): the
 planes-trimmed refusal, the CPU-arm lossless and sampled walks, and the discrete home's legs. A sampled walk's exact arm
 holds its draws and its first id and logs the ids it shares with the plain walk, both decoded: a sampled speculative walk
