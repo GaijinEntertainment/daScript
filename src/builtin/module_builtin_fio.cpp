@@ -594,7 +594,8 @@ namespace das {
 
     static std::string path_to_das ( const std::filesystem::path & p ) {
 #if defined(_WIN32)
-        return das_wide_to_utf8(p.c_str());
+        const string utf8 = das_wide_to_utf8(p.c_str());
+        return std::string(utf8.c_str(), utf8.size());
 #else
         return p.string();
 #endif
