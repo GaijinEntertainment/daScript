@@ -103,6 +103,18 @@ allocates but the sizing of its marked parameter, while a working function that 
 buffer is held to the contract for everything else it does - a fresh local it grows, a log line, a
 `getenv`.
 
+The parameter mark is a promise the caller keeps. On a hot path, a buffer bound to a `@scratch` or
+`@pool` parameter - of a called function, a class method, or a stored function value - must itself be
+declared reused - a marked field, global or parameter, a reference to one, or a loop variable over one -
+or PERF026 reports the argument, naming the parameter and the callee: the helper's sizing of it is
+exempt only on that promise, so on an unmarked buffer it allocates. A by-value local of the calling
+function is made on every call, so neither its own mark nor a mark on one of its fields counts; a
+path through a pointer the local holds reaches the pointee, which keeps its marks. Pass a reused
+buffer, or hoist this one to persistent storage - a mark goes on a field, a global or a parameter;
+the mark travels up a chain of helpers one parameter at a time. A
+`[cold_path]` callee is not checked, and neither is a block invoked through a block parameter: its
+body is the caller's, which the check cannot see from the invoke.
+
 ### `@pool` - declaring a container that owns what it holds
 
 `@scratch` promises the contents are dead when the filling function returns. A free list of
@@ -164,7 +176,9 @@ whichever buffer arrives.
 2. `@scratch` on the destination when it is a reused buffer, `@pool` when it owns what it holds.
 3. `// nolint:PERF026` **with a reason**, honored anywhere along the chain - anchor line, sink
    line, or any call site between. The sink often bottoms out in `daslib/builtin.das`, whose lines
-   are nobody's to annotate, so the call site that owns the decision is the honest place.
+   are nobody's to annotate, so the call site that owns the decision is the honest place. An
+   error message's interpolation on a hot path - a decline or refusal reason - is an accepted
+   suppression: `// nolint:PERF026` at the text, its reason saying it is an error message.
 4. `DAS_LINT_DISABLE=PERF028` for a whole run. With all three codes disabled the closure walk is
    skipped entirely, so this buys compile time and not just quiet.
 
@@ -173,7 +187,9 @@ whichever buffer arrives.
 - **Anything under a `panic(...)` argument** - a panic is fatal, so its interpolated message is on
   the abort path by construction.
 - **Macro-generated subtrees.** A rewritten stub stamps the caller's line onto its splice, so its
-  own machinery would otherwise be blamed on every call site.
+  own machinery would otherwise be blamed on every call site. The block the compiler wraps a
+  function's own statements in (a `=>` body's included) and a class method's `with (self)` are
+  not macro output: what is in them is read.
 - **Indirect calls.** An invoke through a function pointer or lambda cannot be resolved
   statically - annotate the implementations it reaches instead. Taking a function's address is
   not calling it.

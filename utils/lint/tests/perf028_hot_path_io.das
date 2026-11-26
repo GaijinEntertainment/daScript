@@ -251,3 +251,14 @@ def good_method_call_enters_only_that_method() {
 def bad_own_statement_beside_macro_block() {
     g_speaks->mixed_step()
 }
+
+// 13. a plain function whose whole body a macro rewrote into a
+//     `with` keeps it hidden: only a class method's `with` is read
+struct WithSubject {
+    v : int
+}
+
+[no_io]
+def good_macro_with_in_plain_function(var ws : WithSubject) {
+    macro_logged_with(ws)
+}

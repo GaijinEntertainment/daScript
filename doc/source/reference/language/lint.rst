@@ -2422,7 +2422,8 @@ every call site:
 
     // a helper that sizes a caller's buffer marks the PARAMETER, since the
     // destination arrives by reference and the call site cannot see the field;
-    // the helper's body is still scanned, and only the sizing of `a` is exempt in it
+    // the helper's body is still scanned, and only the sizing of `a` is exempt in it;
+    // on a hot path the buffer a caller binds to `a` must be declared reused too
     def overwrite_resize(@scratch var a : array<numT>; need : int64) { ... }
     
     // a clear()-recycled module global is declared the same way (annotation after `var`)
@@ -2434,9 +2435,11 @@ every call site:
 
 **What the scan deliberately ignores.** Arguments to ``panic(...)`` — a panic is
 fatal in daslang, not an exception, so its interpolated message is on the abort
-path. Macro-generated subtrees, since a rewritten stub stamps the caller's line
-onto its splice and would otherwise blame every call site for the machinery it
-expands into. And indirect calls through a function pointer or lambda, which
+path. Macro-generated
+subtrees, since a rewritten stub stamps the caller's line onto its splice and
+would otherwise blame every call site for the machinery it expands into; the
+block the compiler wraps a function's own statements in, and a class method's
+``with (self)``, are read. And indirect calls through a function pointer or lambda, which
 cannot be resolved statically — annotate the implementations they reach.
 
 Escape hatches, in order of preference: ``[cold_path]`` on the callee when the
@@ -2447,7 +2450,8 @@ only what each one frees of its own object is exempt), table indexing, and
 reference bindings to it all count, a ternary binding only when every branch
 carries ``@scratch`` or ``@pool``, while ``@exact_size`` follows either branch);
 ``// nolint``
-with a reason (honored at either end of a chain, so a suppression written where
+with a reason - an error message's interpolation on a hot path is an accepted
+one (honored at either end of a chain, so a suppression written where
 the code lives works even when the report anchors elsewhere); and
 ``DAS_LINT_DISABLE=PERF028`` for a whole run, which needs no source edit and is
 the point when adding a log line to chase a bug.
