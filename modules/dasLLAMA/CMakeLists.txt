@@ -25,6 +25,7 @@ IF(NOT DAS_LLAMA_INCLUDED)
         modules/dasLLAMA/harness/tuner_noise.das
         modules/dasLLAMA/harness/tuner_phrases.das
         modules/dasLLAMA/harness/_gen_probe_fixture.das
+        modules/dasLLAMA/harness/_rm_fixture.das
         modules/dasLLAMA/harness/tune_tb.das
         modules/dasLLAMA/tests/_kq_dot.das
         modules/dasLLAMA/tests/_compares.das
