@@ -40,7 +40,9 @@ options indenting = 4
 // `--behind <ctx>` is a run of its own against a server started with one stream and a slot directory: at each base length
 // the base turn is restored off its slot file or prefilled cold and saved, then timed turns replay it and add 4096 tokens
 // (`pp4096+131072`, `tg128+4096+131072`; `restore131072`, `save131072` and the cold `cold131072` beside them). The pass
-// drops no turn: a timed turn runs behind the base the server already holds.
+// drops no turn: a timed turn runs behind the base the server already holds. `--behind <ctx> --arm <name>` is that pass
+// at a server started to speculate, on the plain pass's slot files (the same `--slot-tag`): the decode row alone, in the
+// arm's long reply (`tg512+4096+65536:<name>`), a restore in place of the prefill; `--arm off` gives the plain row beside it.
 // Exit 1 when a cell was refused, or when a run that times rows reported none (`--only eyeball` times none).
 
 require daslib/clargs
@@ -203,6 +205,9 @@ def bench_turn(url, model_id, prompt : string; budget, timeout_s : int) : BenchT
 def unserved_why(turn : BenchTurn) : string
     => !empty(turn.error) ? turn.error : (turn.ttft_us < 0l ? "the stream carried no reply text" : "")
 
+//! the reply's kept opening `head` is one character alone, `ONE_CHAR_RUN` of it or more
+def one_char_run(head : string) : bool => length(head) >= ONE_CHAR_RUN && head == repeat(slice(head, 0, 1), length(head))
+
 //! why a timed turn cannot enter its cell, "" when it can. `behind`: the behind pass's timed turn, whose base is to come off
 //! the cache - its cache refusal is a base that did not, where any other turn's is a prompt that read off one
 def refusal_of(turn : BenchTurn; budget : int; behind : bool = false) : string {
@@ -214,6 +219,7 @@ def refusal_of(turn : BenchTurn; budget : int; behind : bool = false) : string {
     return "{turn.cached_tokens} of {turn.prompt_tokens} prompt tokens came off a cache" if (!behind && turn.cached_tokens > CACHED_MAX)
     return "the reply ended at {turn.completion_tokens} of {budget} tokens (finish_reason {turn.finish})" if (turn.completion_tokens < int64(budget))
     return "a reply of {turn.completion_tokens} token(s) has no decode span" if (turn.completion_tokens < 2l || turn.gen_us <= 0l)
+    return "the reply is one character repeated ('{slice(turn.reply_head, 0, 1)}'): the model is not answering" if (one_char_run(turn.reply_head))
     return ""
 }
 
@@ -476,6 +482,15 @@ def private server_note(own : float) : string => own > 0.0 ? "  [server's own {o
 
 def private flag_note(flags : string) : string => empty(flags) ? "" : "  FLAGS: {flags}"
 
+//! what a decode row's name carries after its lengths: the arm, nothing for a plain run and for `off`
+def private arm_suffix(arm : string) : string => empty(arm) || arm == "off" ? "" : ":{arm}"
+
+//! a decode row's printed draft counts; an arm whose turns reported none says so
+def private drafts_note(arm : string; draft_n, accepted : int64) : string {
+    return ", {accepted} of {draft_n} drafted tokens accepted" if (draft_n > 0l)
+    return empty(arm_suffix(arm)) ? "" : ", NO draft reported"
+}
+
 //! One rung's cell as its rows, printed and - but in the wide pass, whose one-stream cells are its base alone - recorded:
 //! the prefill row of a context rung of the plain pass, and the decode row with the turn's draft counts.
 def private rung_rows(args : BenchArgs; s : Settings; kinds : RowKinds; row_label, pp_name, tg_name : string; len : int; cell : Cell; last_pp, last_tg : float; doubled, first : bool; var into : RunOut) {
@@ -493,8 +508,7 @@ def private rung_rows(args : BenchArgs; s : Settings; kinds : RowKinds; row_labe
     if (!args.wide) {
         into.tests |> insert(tg_name, tg_row)
     }
-    let drafts = cell.draft_n > 0l ? ", {cell.draft_n_accepted} of {cell.draft_n} drafted tokens accepted" : (empty(args.arm) || args.arm == "off" ? "" : ", NO draft reported")
-    print("{row_label}  {tg_name}: {cell.decode.median:.1f} tok/s (cv {cell.decode.cv:.1f}%) after {cell.prompt_tokens} prompt tokens{drafts}{server_note(cell.server_decode)}{flag_note(tg_flags)}\n")
+    print("{row_label}  {tg_name}: {cell.decode.median:.1f} tok/s (cv {cell.decode.cv:.1f}%) after {cell.prompt_tokens} prompt tokens{drafts_note(args.arm, cell.draft_n, cell.draft_n_accepted)}{server_note(cell.server_decode)}{flag_note(tg_flags)}\n")
 }
 
 [arch(at = "../ARCHITECTURE_MEASUREMENT_SERVED.md#model-bench")]
@@ -515,7 +529,7 @@ def private length_ladder(args : BenchArgs; s : Settings; kinds : RowKinds; row_
             break
         }
         let pp_name = "pp{len}"
-        let arm = empty(args.arm) || args.arm == "off" ? "" : ":{args.arm}"
+        let arm = arm_suffix(args.arm)
         let tg_name = len == 0 ? "tg{s.reply_tokens}{arm}" : "tg{s.reply_tokens}+{len}{arm}"
         let chars = len == 0 ? 0 : int(float(int64(len) - base_tokens) * chars_per_token)
         if (chars > length(base)) {
@@ -725,9 +739,15 @@ def run_eyeball(args : BenchArgs; reply : int; var into : RunOut) : int {
 }
 
 let BEHIND_EXTRA = 4096            //! the tokens a behind row's timed turn adds after its base
+let BEHIND_ROOM = 384              //! the tokens of a timed turn that are no base, no added message and no reply: the template and the replayed reply
+let ONE_CHAR_RUN = 16      //! a reply's kept opening this long or longer, all one character, is a broken model's, not an answer
 let BEHIND_BASE_REPLY = 16         //! the base turn's reply: past one token, so a discrete home's rows come down whole for the save
 let BEHIND_REPLY = "Understood. Send the next files and the task."   //! the base turn's reply as every later turn replays it: a fixed text, the same on any server life
 let BEHIND_FRESH_MAX = 2           //! a timed turn may prefill this many times `BEHIND_EXTRA`: past it the base did not come off the cache
+
+//! the tokens a behind row's timed turn adds after a base of `len`: `BEHIND_EXTRA`, less where a long reply behind the
+//! deepest base leaves less; none (0 or under) where the base leaves the reply no room at all
+def behind_extra(behind, len, reply_tokens : int) : int => min(BEHIND_EXTRA, behind - len - reply_tokens - BEHIND_ROOM)
 
 //! the lengths of `rungs` under `top`, then `top` itself, ascending: a pass's ladder up to the deepest length its context holds
 def private lengths_under(top : int; rungs : array<int>) : array<int> {
@@ -816,15 +836,15 @@ def slot_action(url, action, filename : string) : SlotDone {
 def private slot_row(done : SlotDone) : TestRow
     => TestRow(tok_s = done.ms > 0.0 ? double(done.tokens) * 1000.0lf / double(done.ms) : 0.0lf, prompt_tokens = done.tokens, reps = 1)
 
-//! false where the base neither restored nor ran
+//! A rung's base on the server: restored off `file`, else prefilled cold and saved. `plain` records the base's rows. False
+//! where it neither restored nor ran
 [arch(at = "../ARCHITECTURE_MEASUREMENT_SERVED.md#model-bench")]
-def private behind_rung(args : BenchArgs; s : Settings; row_label, base, run : string; len : int; chars_per_token, cold_rate : float; var into : RunOut) : bool {
-    let chars = int(float(len) * chars_per_token)
-    let file = "{empty(args.slot_tag) ? "slot" : args.slot_tag}-{len}-{chars}.ctx"
-    let base_text = behind_base(base, chars)
+def private behind_base_turn(args : BenchArgs; row_label, base_text, file : string; len : int; cold_rate : float; plain : bool; var into : RunOut) : bool {
     let restored = slot_action(args.url, "restore", file)
     if (empty(restored.why)) {
-        into.tests |> insert("restore{len}", slot_row(restored))
+        if (plain) {
+            into.tests |> insert("restore{len}", slot_row(restored))
+        }
         print("{row_label}  restore{len}: {restored.tokens} tokens off {file} in {restored.ms / 1000.0:.2f} s\n")
     } else {
         print("{row_label}  restore{len}: not restored ({restored.why}) - the base prefills cold\n")
@@ -839,24 +859,42 @@ def private behind_rung(args : BenchArgs; s : Settings; row_label, base, run : s
             print("{row_label}  cold{len}: REFUSED - {why}\n")
             return false
         }
-        into.tests |> insert("cold{len}", TestRow(tok_s = double(prefill_rate(turn)), prompt_tokens = turn.prompt_tokens, reps = 1,
-            cached_tokens = max(turn.cached_tokens, 0l)))
+        if (plain) {
+            into.tests |> insert("cold{len}", TestRow(tok_s = double(prefill_rate(turn)), prompt_tokens = turn.prompt_tokens, reps = 1,
+                cached_tokens = max(turn.cached_tokens, 0l)))
+        }
         print("{row_label}  cold{len}: {prefill_rate(turn):.1f} tok/s over {turn.prompt_tokens} prompt tokens, cold, one turn\n")
         let saved = slot_action(args.url, "save", file)
         if (empty(saved.why)) {
-            into.tests |> insert("save{len}", slot_row(saved))
+            if (plain) {
+                into.tests |> insert("save{len}", slot_row(saved))
+            }
             print("{row_label}  save{len}: {saved.tokens} tokens into {file} in {saved.ms / 1000.0:.2f} s\n")
         } else {
             print("{row_label}  save{len}: not saved ({saved.why}) - the next run prefills this base cold again\n")
         }
     }
+    return true
+}
+
+//! false where the base neither restored nor ran
+[arch(at = "../ARCHITECTURE_MEASUREMENT_SERVED.md#model-bench")]
+def private behind_rung(args : BenchArgs; s : Settings; row_label, base, run : string; len : int; chars_per_token, cold_rate : float; var into : RunOut) : bool {
+    let chars = int(float(len) * chars_per_token)
+    let file = "{empty(args.slot_tag) ? "slot" : args.slot_tag}-{len}-{chars}.ctx"
+    let base_text = behind_base(base, chars)
+    let plain = empty(args.arm)   // an arm's run, and the long plain run beside it, record their decode row alone: the base's rows are the plain run's
+    return false if (!behind_base_turn(args, row_label, base_text, file, len, cold_rate, plain, into))
     var prefill, decode, ttft : array<float>
     var why = ""
     var prompt_tokens = 0l
     var cached = 0l
-    let extra_chars = int(float(BEHIND_EXTRA) * chars_per_token)
-    let pp_name = "pp{BEHIND_EXTRA}+{len}"
-    let tg_name = "tg{s.reply_tokens}+{BEHIND_EXTRA}+{len}"
+    var draft_n = 0l
+    var draft_n_accepted = 0l
+    let extra = behind_extra(args.behind, len, s.reply_tokens)
+    let extra_chars = int(float(extra) * chars_per_token)
+    let pp_name = "pp{extra}+{len}"
+    let tg_name = "tg{s.reply_tokens}+{extra}+{len}{arm_suffix(args.arm)}"
     for (rep in range(s.reps)) {
         var turns <- [ChatMessage(role = "user", content = base_text), ChatMessage(role = "assistant", content = BEHIND_REPLY),
             ChatMessage(role = "user", content = behind_timed_message(base, "{run}-{len}-{rep}", chars + rep * extra_chars, extra_chars))]
@@ -875,6 +913,8 @@ def private behind_rung(args : BenchArgs; s : Settings; row_label, base, run : s
         ttft |> push(float(turn.ttft_us) / 1000.0)
         prompt_tokens = turn.prompt_tokens
         cached = max(turn.cached_tokens, 0l)
+        draft_n += turn.draft_n
+        draft_n_accepted += turn.draft_n_accepted
     }
     if (!empty(why)) {
         into.refused |> push(Refusal(cell = pp_name, why = why))
@@ -886,10 +926,14 @@ def private behind_rung(args : BenchArgs; s : Settings; row_label, base, run : s
         pp_row.cached_tokens = cached
         var tg_row = row_of(tg, prompt_tokens, s.reps, 0.0, flags_of(tg, 0.0, s.cliff_share, false, false))
         tg_row.ttft_ms = double(spread_of(ttft).median)
-        into.tests |> insert(pp_name, pp_row)
+        tg_row.draft_n = draft_n
+        tg_row.draft_n_accepted = draft_n_accepted
+        if (plain) {
+            into.tests |> insert(pp_name, pp_row)
+        }
         into.tests |> insert(tg_name, tg_row)
         print("{row_label}  {pp_name}: {pp.median:.1f} tok/s (cv {pp.cv:.1f}%) over the {prompt_tokens - cached} tokens past {cached} cached, first text after {tg_row.ttft_ms / 1000.0lf:.2f} s\n")
-        print("{row_label}  {tg_name}: {tg.median:.1f} tok/s (cv {tg.cv:.1f}%) after {prompt_tokens} prompt tokens\n")
+        print("{row_label}  {tg_name}: {tg.median:.1f} tok/s (cv {tg.cv:.1f}%) after {prompt_tokens} prompt tokens{drafts_note(args.arm, draft_n, draft_n_accepted)}\n")
     }
     delete prefill
     delete decode
@@ -1025,8 +1069,8 @@ def private named_lengths(text : string; lowest : int64) : array<int> {
 //! none, or the run could not start (the config, the corpus, the calibration turns)
 [arch(at = "../ARCHITECTURE_MEASUREMENT_SERVED.md#model-bench")]
 def run_bench(args : BenchArgs; var res : RunOut) : int {
-    if ((args.ultralong > 0 || args.behind > 0) && (!empty(args.arm) || args.wide || !empty(args.only) || (args.ultralong > 0 && args.behind > 0))) {
-        print("error: --ultralong and --behind are each a run of its own: neither takes --arm, --wide, --only or the other\n")
+    if ((args.ultralong > 0 || args.behind > 0) && (args.wide || !empty(args.only) || (args.ultralong > 0 && (args.behind > 0 || !empty(args.arm))))) {
+        print("error: --ultralong and --behind are each a run of its own: neither takes --wide, --only or the other, and --behind alone takes --arm\n")
         return 1
     }
     let picked = row_kinds_of(args.only)
@@ -1093,6 +1137,11 @@ def private run_behind(args : BenchArgs; s : Settings; row_label, base, run : st
         lengths <- named_lengths(args.lengths, 1l)
     }
     let top = empty(lengths) ? 0 : lengths[length(lengths) - 1]
+    if (top > 0 && behind_extra(args.behind, top, s.reply_tokens) <= 0) {
+        print("REFUSED: {row_label}: a base of {top} tokens leaves a timed turn no room under --behind {args.behind} (a reply of {s.reply_tokens}, {BEHIND_ROOM} kept)\n")
+        delete lengths
+        return 1
+    }
     let context = repeated_corpus(base, int(float(top + (s.reps + 1) * BEHIND_EXTRA) * chars_per_token * 1.05))
     print("model_bench: {row_label} at {args.url}, the behind pass at {lengths} tokens, {s.reps} rep(s) a cell, {BEHIND_EXTRA} tokens added a turn, reply {s.reply_tokens} tokens\n")
     for (len in lengths) {

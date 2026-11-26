@@ -392,6 +392,22 @@ def test_turns_against_a_fake_server(t : T?) {
     }
 }
 
+//! the behind row's refusal of `served` with its reply opening on `head`
+def private head_refusal(served : BenchTurn; head : string) : string {
+    var turn = served
+    turn.reply_head = head
+    return refusal_of(turn, 128, true)
+}
+
+//! the room a base leaves the timed turn behind it
+def private behind_room_cell(t : T?) {
+    t |> run("the text a timed turn adds behind a base: the whole turn, what the context leaves, none") @(t : T?) {
+        t |> equal(behind_extra(140000, 131072, 512), BEHIND_EXTRA, "a base with room adds the whole turn")
+        t |> equal(behind_extra(132000, 131072, 512), 32, "a base near the context adds what is left")
+        t |> success(behind_extra(131500, 131072, 512) <= 0, "a base the reply does not fit behind adds none")
+    }
+}
+
 //! the rules of the bench's own passes: the eyeball's checks, the ultralong pass's lengths and corpus
 def private rules_passes_cell(t : T?) {
     t |> run("the eyeball's checks: the count runs on in order, a reply holds one of its words, an unserved turn names its failure") @(t : T?) {
@@ -464,6 +480,9 @@ def private rules_passes_cell(t : T?) {
         var single = served
         single.completion_tokens = 1l
         t |> success(find(refusal_of(single, 1, true), "no decode span") >= 0, "a reply of one token is refused")
+        t |> success(find(head_refusal(served, "!!!!!!!!!!!!!!!!"), "one character repeated ('!')") >= 0, "a reply of one character repeated is refused")
+        t |> equal(head_refusal(served, "!!!!!!!!!!!!!!!"), "", "fifteen of one character is under the run")
+        t |> equal(head_refusal(served, "----------------\n# a rule, then text"), "", "a reply that opens on a rule and goes on is an answer")
         delete at_140k
         delete at_70k
         delete at_short
@@ -494,7 +513,10 @@ def private rules_settings_cell(t : T?) {
     }
     t |> run("the runner's pass flags: the one-stream passes pin our draft head off, the behind pass names the slot folder, a reference server gets no flag of ours") @(t : T?) {
         let out = path_join(test_temp_dir(), "model_bench_pass_flags_{ref_time_ticks()}")
-        var behind, ultra, off, theirs : array<string>
+        var behind, ultra, off, theirs, armed : array<string>
+        pass_flags(RunnerArgs(), "x", out, armed, true)
+        t |> equal(join(armed, " "), "--slot-save-path {path_join(out, "slots")}", "an arm's start of the behind pass: the slot folder, its draft head left on")
+        delete armed
         pass_flags(RunnerArgs(), "behind", out, behind)
         pass_flags(RunnerArgs(), "ultralong", out, ultra)
         pass_flags(RunnerArgs(), "off", out, off)
@@ -571,6 +593,7 @@ def test_model_bench_rules(t : T?) {
         t |> success(pp_only_reply(128) == PP_ONLY_REPLY && pp_only_reply(3) == 3, "the prefill rows alone cut a long reply and keep a shorter one")
     }
     rules_passes_cell(t)
+    behind_room_cell(t)
     t |> run("the flags of a row") @(t : T?) {
         let calm = (best = 99.0, median = 100.0, cv = 1.0, mean = 100.0, worst = 101.0)
         t |> equal(flags_of(calm, 120.0, 0.6, true, false), "", "control: a calm row five sixths of the rung before it")
@@ -854,11 +877,29 @@ def test_model_bench_behind(t : T?) {
         t |> equal(run_bench(BenchArgs(url = base_url, model_id = "fakesized-fakefailreps", config = config, entry = "stub", behind = 20000, lengths = "6000", slot_tag = "unserved{tag}"), unserved), 1, "a server that fails the cold base turn")
         t |> success(length(unserved.refused) == 1 && unserved.refused[0].cell == "cold6000" && empty(unserved.tests), "... refuses the base's cell and times no turn after it: {unserved.refused}")
         delete unserved
+        var roomless : RunOut
+        t |> equal(run_bench(BenchArgs(url = base_url, model_id = "fakesized", config = config, entry = "stub", behind = 20000, lengths = "19900", slot_tag = "roomless{tag}"), roomless), 1, "a base that leaves the timed turn no room refuses the pass")
+        t |> success(empty(roomless.tests), "... before it sends a turn")
+        delete roomless
         var none : RunOut
         t |> equal(run_bench(BenchArgs(url = base_url, model_id = "fakesized", config = config, entry = "stub", behind = 20000, wide = true), none), 1, "the behind pass is not the wide pass's")
         t |> equal(run_bench(BenchArgs(url = base_url, model_id = "fakesized", config = config, entry = "stub", behind = 20000, only = "pp"), none), 1, "... and takes no --only")
-        t |> equal(run_bench(BenchArgs(url = base_url, model_id = "fakesized", config = config, entry = "stub", behind = 20000, arm = "x"), none), 1, "the behind pass is a run of its own")
         t |> equal(run_bench(BenchArgs(url = base_url, model_id = "fakesized", config = config, entry = "stub", behind = 20000, ultralong = 20000), none), 1, "... and not the ultralong pass's")
+        t |> equal(run_bench(BenchArgs(url = base_url, model_id = "fakesized", config = config, entry = "stub", ultralong = 20000, arm = "x"), none), 1, "the ultralong pass takes no arm")
+        var armed : RunOut
+        t |> equal(run_bench(BenchArgs(url = base_url, model_id = "fakesized fakedrafts", config = config, entry = "stub", behind = 20000, lengths = "6000", slot_tag = tag, arm = "x"), armed), 0, "an arm's run behind the base the plain run saved")
+        var armed_names <- row_names(armed)
+        t |> equal(join(armed_names, " "), "tg3+4096+6000:x", "... records its decode row alone, under the arm's name: no base row, no prefill row")
+        let armed_row = armed.tests?["tg3+4096+6000:x"] ?? TestRow()
+        t |> success(armed_row.draft_n == 8l && armed_row.draft_n_accepted == 5l, "... with the draft counts its turn reported ({armed_row.draft_n}, {armed_row.draft_n_accepted})")
+        var beside : RunOut
+        t |> equal(run_bench(BenchArgs(url = base_url, model_id = "fakesized", config = config, entry = "stub", behind = 20000, lengths = "15700", slot_tag = "deep{tag}", arm = "off"), beside), 0, "the plain run an arm is read against, behind a base near the context's end")
+        var beside_names <- row_names(beside)
+        t |> equal(join(beside_names, " "), "tg3+3913+15700", "... unsuffixed, a cold base with no row of its own, and a timed turn that adds what the context still holds")
+        delete beside_names
+        delete beside
+        delete armed_names
+        delete armed
         delete none
         delete cold
         delete refused_names
@@ -966,6 +1007,18 @@ def private runner_only_cell(t : T?) {
     var whole <- bench_argv(bare, "e", "stem", "ultralong", 8911, 1, false, 131072)
     t |> success(find(join(whole, " "), "--ultralong 131072 --streams 1") >= 0 && find(join(whole, " "), "--arm") < 0 && find(join(whole, " "), "--only") < 0, "the ultralong pass's bench takes its server's context and no kinds: {join(whole, " ")}")
     t |> equal(only_unknown("behind", listed), "", "the behind pass is a word of --only")
+    var passed <- RunnerArgs(only = "behind")
+    var behind_arm <- bench_argv(passed, "e", "dir/e.behind.dflash2", "dflash2", 8911, 1, false, 131072, "e.behind")
+    var behind_long <- bench_argv(passed, "e", "dir/e.behind.long", "behind", 8911, 1, true, 131072, "e.behind")
+    t |> success(find(join(behind_arm, " "), "--arm dflash2 --behind 131072 --slot-tag e.behind") >= 0 && find(join(behind_arm, " "), "--only") < 0, "an arm's start of the behind pass: its rows behind the plain pass's slot files, not its eyeball alone: {join(behind_arm, " ")}")
+    t |> success(find(join(behind_long, " "), "--arm off --behind 131072 --slot-tag e.behind") >= 0, "the plain rows that arm is read against, on the pass's own start: {join(behind_long, " ")}")
+    var three <- ["off", "x", "y"]
+    t |> success(behind_arm_runs("", "x", three) && behind_arm_runs("behind", "x", three) && behind_arm_runs("pp,behind", "y", three), "the behind pass starts every arm where --only names none")
+    t |> success(behind_arm_runs("behind,y", "y", three) && !behind_arm_runs("behind,y", "x", three), "... and the named ones alone where it names one")
+    delete three
+    delete behind_long
+    delete behind_arm
+    delete passed
     var behind <- bench_argv(bare, "e", "dir/e.ref.behind", "behind", 8911, 1, false, 131072)
     t |> success(find(join(behind, " "), "--behind 131072 --slot-tag e.ref.behind") >= 0 && find(join(behind, " "), "--ultralong") < 0, "the behind pass's bench takes its server's context and its side's slot tag: {join(behind, " ")}")
     delete behind
@@ -1232,6 +1285,8 @@ def private runner_passes_cell(t : T?; dir : string) {
     let card = fread(path_join(dir, "stub.card.json"))
     t |> success(fexist(path_join(dir, "stub.behind.bench.json")) && find(card, "\"cold7392\"") >= 0 && find(card, "\"save7392\"") >= 0 && find(card, "\"pp4096+7392\"") >= 0, "its run file, and the card's base and timed rows at the deepest base the context holds")
     t |> success(stat(path_join(dir, "slots")).is_dir, "the slot folder the pass names to its server, under the output folder")
+    t |> success(find(card, "\"tg3+4096+7392:x\"") >= 0, "the pass carries the arm's row behind its deepest base")
+    t |> success(fexist(path_join(dir, "stub.behind.x.server.log")) && fexist(path_join(dir, "stub.behind.long.bench.json")), "... the arm's on a start of its own under the pass's server, the plain long-reply rows on the pass's start")
     let page_path = path_join(dir, "stub.md")
     t |> success(find(fread(page_path), "## Behind a long context") >= 0, "the page gains the section of rows behind a long context")
     remove(page_path)
@@ -1319,7 +1374,7 @@ def test_model_bench_runner_card(t : T?) {
     runner_test_done(dir, config_path)
 }
 
-[test(description = "Against the fake chat server as a child process, the model bench runner starts the ultralong pass and the behind pass each alone under --only, starting no arm, and --report writes the model's page from the folder's files with no start", timeout = 600)]
+[test(description = "Against the fake chat server as a child process, the model bench runner starts the ultralong pass alone under --only with no arm's server, the behind pass alone with its arm's row on a start of its own, and --report writes the model's page from the folder's files with no start", timeout = 600)]
 def test_model_bench_runner_passes(t : T?) {
     let dir = runner_test_dir("model_bench_runner_passes")
     runner_passes_cell(t, dir)

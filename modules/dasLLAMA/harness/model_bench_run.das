@@ -32,6 +32,8 @@ options _dasllama_internal = true
 // rows land in the model's one card; an arm's own files carry its name. A model with arms gets one more bench run at
 // its plain server - the arms' long-reply rows with no drafter (`--arm off`, files `.long`) - so every arm's row has
 // a plain row of the same reply length beside it.
+// `--behind` adds the behind pass: a server start under the entry's `ultralong_server` with a slot folder, and at a model
+// with arms the plain long-reply rows on that start and one more start an arm, each behind the bases the plain rows saved.
 // `--wide` adds the wide pass: one more server start under the entry's `wide_server` - the streams a wide wave takes,
 // each with room for the longest width prompt - and the bench's `--wide` rows (8, 16, 32 streams at once).
 // Exit 1 when a model's server did not serve, its bench reported a refusal, or its card could not be written.
@@ -286,6 +288,16 @@ def arm_runs(only, arm : string) : bool
     => (empty(only) || only_names(only, "eyeball")
         || (arm == "off" ? !empty(bench_kinds_of(only)) || only_names(only, "long") : only_names(only, arm)))
 
+//! whether `arm` gets its start of the behind pass under `only`: every arm where it names none of `arms`, else the ones
+//! it names
+def behind_arm_runs(only, arm : string; arms : array<string>) : bool {
+    return true if (empty(only) || only_names(only, arm))
+    for (other in arms) {
+        return false if (other != "off" && only_names(only, other))
+    }
+    return true
+}
+
 //! `only`'s first word that names no row kind, no pass and no arm of `arms`; "" when every word names something
 def only_unknown(only : string; arms : array<string>) : string {
     var inscope words <- split(only, ",")
@@ -296,7 +308,7 @@ def only_unknown(only : string; arms : array<string>) : string {
 }
 
 //! the bench child's command line against the server at `port`, the runner's own bench flags passed on
-def bench_argv(args : RunnerArgs; entry, stem, arm : string; port, streams : int; long_plain : bool = false; ctx : int = 0) : array<string> {
+def bench_argv(args : RunnerArgs; entry, stem, arm : string; port, streams : int; long_plain : bool = false; ctx : int = 0; behind_tag : string = "") : array<string> {
     var a <- [get_das_exe(), path_join(get_das_root(), "modules/dasLLAMA/harness/model_bench.das"), "-dasroot", get_das_root(), "--",
         "--url", "http://127.0.0.1:{port}", "--model", entry, "--out", "{stem}.bench.json", "--raw", "{stem}.requests.jsonl"]
     if (long_plain) {
@@ -309,11 +321,14 @@ def bench_argv(args : RunnerArgs; entry, stem, arm : string; port, streams : int
         a |> push_from(["--behind", "{ctx}", "--slot-tag", base_name(stem)])
     } elif (arm != "off") {
         a |> push_from(["--arm", arm])
-        if (!empty(args.only) && !only_names(args.only, arm)) {   // started for its eyeball alone
+        if (empty(behind_tag) && !empty(args.only) && !only_names(args.only, arm)) {   // started for its eyeball alone
             a |> push_from(["--only", "eyeball"])
         }
     } elif (!empty(args.only)) {
         a |> push_from(["--only", bench_kinds_of(args.only)])
+    }
+    if (!empty(behind_tag)) {   // an arm's rows, or the plain rows they are read against, behind the plain pass's bases
+        a |> push_from(["--behind", "{ctx}", "--slot-tag", behind_tag])
     }
     if (!empty(args.lengths)) {
         a |> push_from(["--lengths", args.lengths])
@@ -518,27 +533,33 @@ def run_server(server : Server; port, boot_secs : int; log, model : string; benc
 
 //! `--mtp=false` stays one argument: our server reads the flag alone as on
 [arch(at = "../ARCHITECTURE_MEASUREMENT_SERVED.md#model-bench")]
-def pass_flags(args : RunnerArgs; arm, out_dir : string; var extra : array<string>) {
+def pass_flags(args : RunnerArgs; arm, out_dir : string; var extra : array<string>; behind_arm : bool = false) {
     if ((arm == "behind" || arm == "ultralong") && empty(args.llama_server) && empty(args.server_arg)) {
         extra |> push("--mtp=false")
     }
-    if (arm == "behind") {
+    if (arm == "behind" || behind_arm) {
         let slots = empty(args.slot_dir) ? path_join(out_dir, "slots") : args.slot_dir
         mkdir_rec(slots)
         extra |> push_from(["--slot-save-path", slots])
     }
 }
 
+//! a start's files under `out_dir`: the side's name for the plain start, the arm or pass after it for another, and an
+//! arm's start of the behind pass under that pass's name
+def start_stem(out_dir, side, arm : string; behind_arm : bool) : string
+    => path_join(out_dir, arm == "off" ? side : (behind_arm ? "{side}.behind.{arm}" : "{side}.{arm}"))
+
 //! One arm or pass of one model: its server up, the bench against it, the server down - or no start at all, and true, where
 //! `--only` leaves this start no row. The rows join `into`; false when the server did not serve or stop, or the bench
-//! refused a cell. `card` takes the server and command line.
-def run_arm(args : RunnerArgs; var config : BenchConfig; entry, arm, gguf, out_dir : string; s : Settings; var card : CardServer&; var into : RunOut) : bool {
+//! refused a cell. `card` takes the server and command line. `behind_arm` is an arm's start of the behind pass: `s.server`
+//! is that pass's, with its slot folder, and the bench runs the arm behind the plain pass's bases.
+def run_arm(args : RunnerArgs; var config : BenchConfig; entry, arm, gguf, out_dir : string; s : Settings; var card : CardServer&; var into : RunOut; behind_arm : bool = false) : bool {
     let port = args.port > 0 ? args.port : DEFAULT_PORT
     let named = drafter_of(s, arm)
     let drafter = empty(named) ? "" : path_join(empty(args.models_dir) ? models_dir() : args.models_dir, named)
     let drafting = arm != "off" && arm != "wide" && arm != "ultralong" && arm != "behind"
     var inscope extra <- arm_flags(config, arm, drafter, reference_side(args))
-    pass_flags(args, arm, out_dir, extra)
+    pass_flags(args, arm, out_dir, extra, behind_arm)
     if (drafting && empty(extra)) {
         print("model_bench_run: {entry} arm {arm} SKIPPED - the config's arm_flags name no flags for it on this server\n")
         return false
@@ -553,23 +574,24 @@ def run_arm(args : RunnerArgs; var config : BenchConfig; entry, arm, gguf, out_d
         return false
     }
     let side = reference_side(args) ? "{entry}.ref" : entry
-    let stem = path_join(out_dir, arm == "off" ? side : "{side}.{arm}")
+    let stem = start_stem(out_dir, side, arm, behind_arm)
+    let behind_tag = behind_arm || arm == "behind" ? "{side}.behind" : ""   // the plain pass's slot files serve every start of the pass
     let line = line_of(server.argv)
     card = CardServer(engine = server.engine, flavor = server.flavor, sha = server.sha, versioned = server.versioned,
         line = empty(card.line) ? line : "{card.line} ; {line}")
     print("model_bench_run: {entry} [{arm}]: {line}\n")
-    let long_plain = arm == "off" && length(s.arms) > 1 && (empty(args.only) || only_names(args.only, "long"))
+    let long_plain = length(s.arms) > 1 && (arm == "behind" || (arm == "off" && (empty(args.only) || only_names(args.only, "long"))))
     let main_run = arm != "off" || empty(args.only) || !empty(bench_kinds_of(args.only))
     var inscope benches : array<array<string>>
     remove("{stem}.requests.jsonl")
     remove("{stem}.bench.json")
     if (main_run) {
-        benches |> emplace(bench_argv(args, entry, stem, arm, port, s.server.streams, false, s.server.ctx))
+        benches |> emplace(bench_argv(args, entry, stem, arm, port, s.server.streams, false, s.server.ctx, behind_arm ? behind_tag : ""))
     }
     if (long_plain) {
         remove("{stem}.long.bench.json")
         remove("{stem}.long.requests.jsonl")
-        benches |> emplace(bench_argv(args, entry, "{stem}.long", arm, port, s.server.streams, true))
+        benches |> emplace(bench_argv(args, entry, "{stem}.long", arm, port, s.server.streams, true, s.server.ctx, behind_tag))
     }
     if (empty(benches)) {   // --only long at a model with one arm: no long-reply rows to read
         print("model_bench_run: {entry} [{arm}] SKIPPED - nothing of --only {args.only} runs at this start\n")
@@ -633,6 +655,10 @@ def run_model(args : RunnerArgs; var config : BenchConfig; entry : string; s : S
         var whole := s
         whole.server := s.ultralong_server
         ok = run_arm(args, config, entry, "behind", gguf, out_dir, whole, card, all) && ok
+        for (arm in s.arms) {
+            continue if (arm == "off" || !behind_arm_runs(args.only, arm, s.arms))
+            ok = run_arm(args, config, entry, arm, gguf, out_dir, whole, card, all, true) && ok
+        }
         delete whole
     }
     let stem = path_join(out_dir, reference_side(args) ? "{entry}.ref" : entry)

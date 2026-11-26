@@ -141,7 +141,7 @@ class FakeChatServer : HvWebServer {
                 if (find(body, "fakellama") >= 0) {
                     usage = replace(usage, "\"ttft_ms\":12.5,\"gen_ms\":20", "\"prompt_ms\":12.5,\"predicted_ms\":20")
                 }
-                if (find(body, "\"model\":\"drafts\"") >= 0) {
+                if (find(body, "\"model\":\"drafts\"") >= 0 || find(body, "fakedrafts") >= 0) {
                     usage = replace(usage, "\"timings\":\{", "\"timings\":\{\"draft_n\":8,\"draft_n_accepted\":5,")
                 }
                 sse_event(server, writer, slice(usage, 6), "")
