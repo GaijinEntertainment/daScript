@@ -221,7 +221,7 @@ struct das_host_call;
 template <typename R, typename... Args, R (*fn)(Args...)>
 struct das_host_call<R (*)(Args...), fn>
 {
-  static R invoke(Args... args)
+  static R invoke([[maybe_unused]] Args... args)
   {
     if constexpr (DAS_SHOULD_USE_STUBS)
       return jit_stubbed_call<R>();
@@ -233,7 +233,7 @@ struct das_host_call<R (*)(Args...), fn>
 template <typename R, typename CC, typename... Args, R (CC::*fn)(Args...)>
 struct das_host_call<R (CC::*)(Args...), fn>
 {
-  static R invoke(CC &self, Args... args)
+  static R invoke([[maybe_unused]] CC &self, [[maybe_unused]] Args... args)
   {
     if constexpr (DAS_SHOULD_USE_STUBS)
       return jit_stubbed_call<R>();
@@ -245,7 +245,7 @@ struct das_host_call<R (CC::*)(Args...), fn>
 template <typename R, typename CC, typename... Args, R (CC::*fn)(Args...) const>
 struct das_host_call<R (CC::*)(Args...) const, fn>
 {
-  static R invoke(const CC &self, Args... args)
+  static R invoke([[maybe_unused]] const CC &self, [[maybe_unused]] Args... args)
   {
     if constexpr (DAS_SHOULD_USE_STUBS)
       return jit_stubbed_call<R>();

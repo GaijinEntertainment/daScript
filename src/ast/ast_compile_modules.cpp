@@ -377,7 +377,7 @@ namespace das {
             vector<uint64_t>                levels;
             vector<daScriptEnvironment>     envs;
             vector<CompiledModule>          results;
-            vector<std::atomic<int32_t>>    remaining;
+            std::unique_ptr<std::atomic<int32_t>[]> remaining;
             std::atomic<int32_t>            finished{0};
             std::atomic<int32_t>            firstSequential{INT32_MAX};
             Jobserver                       jobserver;
@@ -386,7 +386,7 @@ namespace das {
                     ModuleGroup & libGroup )
                 : modules(mods), dag(d), access(acc), policies(pol), initialModules(libGroup.getModules()),
                   prepared(mods.size()),
-                  envs(mods.size(), *daScriptEnvironment::getBound()), results(mods.size()), remaining(mods.size()) {
+                  envs(mods.size(), *daScriptEnvironment::getBound()), results(mods.size()), remaining(new std::atomic<int32_t>[mods.size()]()) {
                 policies.macro_context_collect = false;
                 auto count = int32_t(modules.size());
                 for ( int32_t node = 0; node != count; ++node ) {
