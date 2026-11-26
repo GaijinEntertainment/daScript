@@ -16,3 +16,19 @@ class private MacroLoggedBlock : AstCallMacro {
         return blk
     }
 }
+
+//! a `with` only the macro flags generated, around its own statement
+[call_macro(name="macro_logged_with")]
+class private MacroLoggedWith : AstCallMacro {
+    def override visit(prog : ProgramPtr; mod : Module?;
+                       var expr : ExprCallMacro?) : ExpressionPtr {
+        var blk = qmacro_block() {
+            with ($e(expr.arguments[0])) {
+                print("macro with\n")
+            }
+        }
+        var w = (blk as ExprBlock).list[0]
+        w.genFlags.generated = true
+        return w
+    }
+}

@@ -47,16 +47,21 @@ style_lint is `ARCHITECTURE_STYLE_LINT.md`.
   rooted at that finalizer's own parameter (`dest_matches` with a root: fields, indexing, casts,
   dereference, reference locals, loop variables) is part of the freeing, not a sink, while
   everything else there is held to the root's contract. The context is part of the visited key, so
-  a recursive type terminates. The block and `with (self)` the compiler wraps a class method's
-  statements in hide none of them; any other generated subtree, a macro's expansion inside a
-  method included, stays hidden. An invoke of a declared class method `c.method` - the class
-  finalizer's dispatch included - enters only the stored functions that implement it; a
-  function-valued data field is followed like a structure's. Inside a helper its own marked
-  parameter is such a destination, so a pure sizing helper reads clean while a working function
-  that takes a reused buffer is held to the contract for everything else it does. A reference
-  local follows its initializer. Through a ternary a reuse mark needs every branch to carry one
-  (`@scratch` and `@pool` mix), since it grants an exemption, while `@exact_size` needs one
-  branch, since it imposes an obligation.
+  a recursive type terminates. The block the compiler wraps a function's own statements in (a `=>`
+  body's included) and a class method's `with (self)` and its block hide none of them; any other
+  generated subtree, a macro's expansion included, stays hidden. An invoke of a declared class
+  method `c.method` - the class finalizer's dispatch included - enters only the stored functions
+  that implement it; a function-valued data field is followed like a structure's. Inside a helper
+  its own marked parameter is such a destination, so a pure sizing helper reads clean while a
+  working function that takes a reused buffer is held to the contract for everything else it does.
+  A reference local follows its initializer. Through a ternary a reuse mark needs every branch to
+  carry one (`@scratch` and `@pool` mix), since it grants an exemption, while `@exact_size` needs
+  one branch, since it imposes an obligation. The parameter mark binds the call site in return: an
+  argument bound to a marked parameter of a non-`[cold_path]` callee - called, or invoked as a
+  class method or a stored function value (`check_invoked_params`) - that is not itself a reused
+  destination is a PERF026 sink at the argument; a block invoked through a parameter is not
+  resolved. A path rooted at a by-value local of the walked function (`rooted_at_call_local`) is
+  never a reused destination, the local made on every call, unless it crosses a pointer.
 - **`delete` lowers to a call, and two sites agree on its names**: `InferTypes::visit(ExprDelete)`
   (src/ast/ast_infer_type.cpp) rewrites it to `_::finalize`, which resolves to a structure's
   `finalize` or to an instance of daslib's generic `finalize` / `finalize_dim`, named

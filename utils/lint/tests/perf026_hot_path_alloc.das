@@ -26,7 +26,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // sink several frames deep is still reported — anchored on the deepest line
 // written in the root's own file, not on the daslib internal that allocates.
 
-expect 31208:20
+expect 31208:34
 
 require daslib/perf_lint
 require strings
@@ -232,6 +232,7 @@ def bad_renamed_dispatch(var a : array<int>) {
 //     miss, and a by-ref helper parameter
 struct FreeList {
     @pool free : array<int>
+    @pool free_f : array<float>
 }
 
 var @pool g_resident : table<int; int>
@@ -539,4 +540,180 @@ def hooked_boot {
 [no_alloc]
 def bad_class_data_field_dispatch(var a : array<float>) {
     invoke(g_hooked.hook, a)
+}
+
+// 25. the call site: a buffer bound to a @scratch / @pool
+//     parameter must itself be declared reused, since the
+//     helper's sizing of it is exempt only on that promise
+def size_pool(@pool var a : array<float>; n : int) {
+    a |> resize(n)
+}
+
+[cold_path]
+def size_room_once(@scratch var a : array<float>; n : int) {
+    a |> resize(n)
+}
+
+var @scratch g_room : array<float>
+
+def forward_room(@scratch var a : array<float>; n : int) {
+    ensure_room(a, n)
+}
+
+[no_alloc]
+def bad_unmarked_into_scratch_param(var sc : Scratch; var plain : array<float>; n : int) {
+    ensure_room(sc.fresh, n)                                  // PERF026: an unmarked field
+    var local : array<float>
+    ensure_room(local, n)                                     // PERF026: an unmarked local
+    ensure_room(plain, n)                                     // PERF026: an unmarked parameter
+}
+
+[no_alloc]
+def good_reused_into_scratch_param(var sc : Scratch; var two : TwoScratch;
+                                   var fl : FreeList; c : bool; n : int) {
+    ensure_room(sc.reused, n)
+    ensure_room(g_room, n)
+    forward_room(sc.reused, n)
+    var r & = unsafe(sc.reused)
+    ensure_room(r, n)
+    ensure_room(c ? two.a : two.b, n)
+    ensure_room(c ? two.a : two.p, n)
+    size_pool(fl.free_f, n)
+    size_room_once(sc.fresh, n)
+}
+
+// 26. a generic helper's instance keeps its parameter's mark
+def size_any(@scratch var a : array<auto(numT)>; n : int) {
+    a |> resize(n)
+}
+
+[no_alloc]
+def bad_unmarked_into_generic_scratch_param(var sc : Scratch; n : int) {
+    size_any(sc.reused, n)
+    size_any(sc.fresh, n)               // PERF026: unmarked, via a generic
+}
+
+// 27. a function's own body block is generated, a `=>` body's
+//     included, but the statements in it are the author's
+[no_alloc]
+def bad_interpolation_in_expression_body(k : int) : string => "k={k}"   // PERF026
+
+[no_alloc]
+def bad_table_index_in_expression_body(k : int) : int => unsafe(g_plain[k])   // PERF026
+
+// 28. an error message's interpolation on a hot path is an
+//     accepted suppression: a nolint at the text, with its reason
+def unserved_reason(ok : bool; k : int) : string
+    => ok ? "" : "k {k} is unserved"    // nolint:PERF026 - an error message
+
+var g_last_text : string
+
+def unserved_with_side_text(ok : bool; k : int) : string {
+    g_last_text = "checked {k}"         // PERF026, not the error message
+    return ok ? "" : "k {k} is unserved"    // nolint:PERF026 - an error message
+}
+
+[no_alloc]
+def good_error_message_text(k : int) : bool => empty(unserved_reason(k > 0, k))
+
+[no_alloc]
+def bad_text_beside_an_error_message(k : int) : bool => empty(unserved_with_side_text(k > 0, k))
+
+// 29. the call site through an invoke: a class method's @scratch
+//     parameter, a function value's, and a @pool parameter
+class Sizer {
+    v : int
+    def size_into(@scratch var a : array<float>; n : int) {
+        a |> resize(n)
+    }
+}
+
+var g_sizer : Sizer?
+
+def size_through_value(@scratch var a : array<float>; n : int64) {
+    a |> resize(n)
+}
+
+struct SizerHook {
+    fill : function<(var a : array<float>; n : int64) : void>
+}
+
+var g_sizer_hook : SizerHook
+
+[init]
+def sizer_boot {
+    g_sizer = new Sizer()
+    g_sizer_hook.fill = @@size_through_value
+}
+
+[no_alloc]
+def bad_unmarked_into_invoked_params(var sc : Scratch; var fl : FreeList; n : int) {
+    g_sizer->size_into(sc.fresh, n)     // PERF026: a class method's @scratch parameter
+    invoke(g_sizer_hook.fill, sc.fresh, int64(n))   // PERF026: a function value's
+    size_pool(sc.fresh, n)              // PERF026: a @pool parameter
+}
+
+[no_alloc]
+def good_reused_into_invoked_params(var sc : Scratch; n : int) {
+    g_sizer->size_into(sc.reused, n)
+    invoke(g_sizer_hook.fill, sc.reused, int64(n))
+}
+
+// 30. text under a panic is on the abort path
+[no_alloc]
+def good_interpolation_under_panic(k : int) {
+    if (k < 0) {
+        panic("negative k {k}")
+    }
+}
+
+// 31. a by-value local is made on every call: a reuse mark on it, or
+//     on a field of it, is not a reused buffer
+[no_alloc]
+def bad_marks_on_per_call_locals(n : int) {
+    var @scratch local : array<float>
+    ensure_room(local, n)                 // PERF026: a @scratch local of this call
+    var fresh_sc : Scratch
+    ensure_room(fresh_sc.reused, n)       // PERF026: a marked field of a local
+    fresh_sc.reused |> resize(n)        // PERF026: its sizing too
+}
+
+var g_scratch_at : Scratch?
+
+[no_alloc]
+def good_marks_through_a_local_pointer(n : int) {
+    var at = g_scratch_at
+    ensure_room(at.reused, n)
+}
+
+struct ScratchHolder {
+    at : Scratch?
+}
+
+// 32. a path through a pointer a by-value local holds reaches the
+//     long-lived pointee, whose marks hold
+[no_alloc]
+def good_marks_through_a_held_pointer(n : int) {
+    var h = ScratchHolder(at = g_scratch_at)
+    ensure_room(h.at.reused, n)
+    ensure_room((*h.at).reused, n)
+}
+
+// 33. a loop variable over a reused container is a reused buffer
+var @scratch g_rooms : array<array<float>>
+var g_plain_rooms : array<array<float>>
+
+[no_alloc]
+def good_loop_alias_of_reused_rooms(n : int) {
+    for (a in g_rooms) {
+        ensure_room(a, n)
+        a |> resize(n)
+    }
+}
+
+[no_alloc]
+def bad_loop_alias_of_plain_rooms(n : int) {
+    for (a in g_plain_rooms) {
+        ensure_room(a, n)               // PERF026: the loop runs over an unmarked container
+    }
 }

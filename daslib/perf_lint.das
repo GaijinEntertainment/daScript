@@ -45,7 +45,7 @@ module perf_lint shared private
 //!
 //! PERF026-028 are annotation-gated: nothing is checked until a function declares a contract.
 //! [cold_path] prunes the walk; @scratch or @pool on a field,
-//! global, local or by-ref parameter declares a reused buffer
+//! global or by-ref parameter declares a reused buffer
 //! whose sizing is intentional - only that sizing is exempt,
 //! and every callee is still walked.
 //! See skills/perf_lint.md.
@@ -162,6 +162,8 @@ struct private HotSink {
     @do_not_delete site : ExpressionPtr
     //! a free rooted at a finalizer's own parameter
     frees_self : bool
+    //! an argument bound to a reuse-marked parameter, itself unmarked
+    unmarked_arg : bool
 }
 
 struct private HotEdge {
@@ -326,24 +328,6 @@ def private query_hit(annotation; v : Variable?; q : DestQuery) : bool {
     return carries_mark(annotation, q.mark)
 }
 
-//! follows an access path through fields, indexing, casts, reference
-//! locals and loop variables (`loop_src`: each to what it iterates)
-def private dest_matches(var expr : Expression?; q : DestQuery;
-                         var loop_src : table<Variable?; Expression?>) : bool {
-    return false if (expr == null)
-    if (expr is ExprField) {
-        var f = expr as ExprField
-        let marked = f.field != null && q.root == null && carries_mark(f.field.annotation, q.mark)
-        return true if (marked)
-        return dest_matches(f.value, q, loop_src)
-    }
-    if (expr is ExprVar) return var_matches((expr as ExprVar).variable, q, loop_src)
-    if (expr is ExprCall) return iterated_matches(expr as ExprCall, q, loop_src)
-    if (expr is ExprOp3) return ternary_matches(expr as ExprOp3, q, loop_src)
-    var inner = path_step(expr)
-    return inner != null && dest_matches(inner, q, loop_src)
-}
-
 //! an access path's next node: indexing, casts, dereference
 def private path_step(var expr : Expression?) : Expression? {
     if (expr is ExprRef2Value) return expr as ExprRef2Value.subexpr
@@ -352,6 +336,42 @@ def private path_step(var expr : Expression?) : Expression? {
     if (expr is ExprCast) return expr as ExprCast.subexpr
     if (expr is ExprPtr2Ref) return expr as ExprPtr2Ref.subexpr
     return null
+}
+
+//! the path starts at a by-value local (not a reference, not a
+//! pointer): made fresh every call, its marks promise nothing; a
+//! dereference on the way hands the path to the pointee, no local
+def private rooted_at_call_local(var expr : Expression?) : bool {
+    var e = expr
+    while (e != null && !(e is ExprVar)) {
+        return false if (e is ExprPtr2Ref || (e._type != null && e._type.baseType == Type.tPointer))
+        e = e is ExprField ? (e as ExprField).value : path_step(e)
+    }
+    return false if (e == null)
+    let v = e as ExprVar
+    return false if (!v.varFlags.local || v.variable == null || v.variable._type == null)
+    let t = v.variable._type
+    return !t.flags.ref && t.baseType != Type.tPointer
+}
+
+//! follows an access path through fields, indexing, casts, reference
+//! locals and loop variables (`loop_src`: each to what it iterates)
+def private dest_matches(var expr : Expression?; q : DestQuery;
+                         var loop_src : table<Variable?; Expression?>) : bool {
+    return false if (expr == null)
+    let wants_reused = q.root == null && q.mark == DestMark.reused
+    if (expr is ExprField) {
+        var f = expr as ExprField
+        let marked = f.field != null && q.root == null && carries_mark(f.field.annotation, q.mark)
+        return true if (marked && !(wants_reused && rooted_at_call_local(f.value)))
+        return dest_matches(f.value, q, loop_src)
+    }
+    return false if (wants_reused && rooted_at_call_local(expr))
+    if (expr is ExprVar) return var_matches((expr as ExprVar).variable, q, loop_src)
+    if (expr is ExprCall) return iterated_matches(expr as ExprCall, q, loop_src)
+    if (expr is ExprOp3) return ternary_matches(expr as ExprOp3, q, loop_src)
+    var inner = path_step(expr)
+    return inner != null && dest_matches(inner, q, loop_src)
 }
 
 def private var_matches(var v : Variable?; q : DestQuery;
@@ -386,8 +406,9 @@ def private is_annotated_dest(var expr : Expression?; mark : DestMark) : bool {
     return dest_matches(expr, DestQuery(mark = mark), no_loops)
 }
 
-def private is_reused_dest(var expr : Expression?) : bool =>
-    is_annotated_dest(expr, DestMark.reused)
+def private is_reused_dest(var expr : Expression?;
+                           var loop_src : table<Variable?; Expression?>) : bool =>
+    dest_matches(expr, DestQuery(mark = DestMark.reused), loop_src)
 
 //! a finalizer's name: a structure's `finalize`, or an instance of
 //! the generic `finalize` / `finalize_dim`
@@ -403,14 +424,21 @@ def private is_delete_lowering(expr : ExprCall?) : bool =>
 //! a sizing call on a reused destination is the owner's
 //! strategy, not heap traffic; freeing the buffer through
 //! `delete` is part of that sizing
-def private is_reused_sizing(var expr : ExprCall?; origin : string) : bool {
+def private is_reused_sizing(var expr : ExprCall?; origin : string;
+                             var loop_src : table<Variable?; Expression?>) : bool {
     return (!empty(expr.arguments) && (is_container_sizing(origin) || is_delete_lowering(expr))
-            && is_reused_dest(expr.arguments[0]))
+            && is_reused_dest(expr.arguments[0], loop_src))
 }
 
 //! the builtins that free their first argument's buffer
 def private is_free_builtin(n : string) : bool =>
     n == "__builtin_array_free" || n == "__builtin_table_free"
+
+//! a parameter's reuse mark by `carries_mark`, or "" without one
+def private reuse_mark_of(param : Variable?) : string {
+    return "" if (!carries_mark(param.annotation, DestMark.reused))
+    return lint_has_annotation(param.annotation, "pool") ? "pool" : "scratch"
+}
 
 def private is_explicit_capacity_call(n : string) : bool {
     return (n == "reserve" || n == "ensure_capacity"
@@ -450,9 +478,9 @@ class HotBodyScan : AstVisitor {
     @do_not_delete self_param : Variable?
     //! each loop variable to what it iterates
     loop_src : table<Variable?; Expression?>
-    //! the block, `with (self)` and its block the compiler wraps a
-    //! class method's statements in: they shield nothing
-    @do_not_delete method_body : Expression?
+    //! the compiler's wrappers around a function's own statements:
+    //! its body block and, in a class method, `with (self)` and its block
+    @do_not_delete fn_body : Expression?
     @do_not_delete method_with : Expression?
     @do_not_delete method_with_body : Expression?
     sinks : array<HotSink>
@@ -462,9 +490,10 @@ class HotBodyScan : AstVisitor {
 
     gen_depth : int = 0
 
-    //! a generated node with generated contents, not a method wrapper
+    //! a generated node with generated contents, not one of
+    //! the function's own wrappers
     def is_generated_subtree(expr : Expression?) : bool {
-        return (expr.genFlags.generated && expr != method_body && expr != method_with
+        return (expr.genFlags.generated && expr != fn_body && expr != method_with
                 && expr != method_with_body)
     }
 
@@ -482,9 +511,10 @@ class HotBodyScan : AstVisitor {
     }
 
     def add_sink(bit : HotBits; what : string; var site : ExpressionPtr;
-                 frees_self : bool = false) {
+                 frees_self : bool = false; unmarked_arg : bool = false) {
         return if (panic_depth > 0 || gen_depth > 0)
-        sinks |> push(HotSink(bit = bit, what = what, site = site, frees_self = frees_self))
+        sinks |> push(HotSink(bit = bit, what = what, site = site, frees_self = frees_self,
+                              unmarked_arg = unmarked_arg))
     }
 
     def rooted_at_self(var e : Expression?) : bool =>
@@ -493,6 +523,33 @@ class HotBodyScan : AstVisitor {
     def override preVisitExprFor(var expr : ExprFor?) : void {
         for (v, src in expr.iteratorVariables, expr.sources) {
             loop_src[v] = src
+        }
+    }
+
+    def check_bound_arg(var arg : Expression?; param : Variable?; callee : Function?) {
+        let mark = reuse_mark_of(param)
+        return if (empty(mark) || is_reused_dest(arg, loop_src))
+        let fn = callee.fromGeneric != null ? callee.fromGeneric : callee
+        let what = ("`{describe(arg)}` is bound to the @{mark} parameter " +
+            "`{param.name}` of `{fn.name}`")
+        add_sink([bit = HotBits.perf026_alloc, what = what, site = arg, unmarked_arg = true])
+    }
+
+    //! a buffer bound to a @scratch / @pool parameter must be
+    //! declared reused itself: the callee's sizing of that
+    //! parameter is exempt only on that promise
+    def check_called_params(var expr : ExprCall?) {
+        return if (is_cold_path(expr.func))
+        for (a, p in expr.arguments, expr.func.arguments) {
+            check_bound_arg(a, p, expr.func)
+        }
+    }
+
+    //! an invoke binds the arguments after the function value in order
+    def check_invoked_params(var call : ExprInvoke?; var target : Function?) {
+        return if (is_cold_path(target))
+        for (p, i in target.arguments, range(1, length(call.arguments))) {
+            check_bound_arg(call.arguments[i], p, target)
         }
     }
 
@@ -512,7 +569,7 @@ class HotBodyScan : AstVisitor {
         }
         return if (panic_depth > 0)
         let origin = string(expr.func.fromGeneric != null ? expr.func.fromGeneric.name : expr.func.name)
-        if (is_reused_sizing(expr, origin)) {
+        if (is_reused_sizing(expr, origin, loop_src)) {
             if (is_delete_lowering(expr)) {
                 edges |> push(HotEdge(fn = expr.func, caller_site = expr, reused_delete = true))
             }
@@ -530,6 +587,7 @@ class HotBodyScan : AstVisitor {
                 && expr.func.result.baseType == Type.tString) {
             add_sink(HotBits.perf026_alloc, "{n}() returns a newly allocated string", expr)
         }
+        check_called_params(expr)
         let frees_self = (!empty(expr.arguments) && is_delete_lowering(expr)
                           && rooted_at_self(expr.arguments[0]))
         edges |> push(HotEdge(fn = expr.func, caller_site = expr, frees_self = frees_self))
@@ -562,7 +620,7 @@ class HotBodyScan : AstVisitor {
 
     def override preVisitExprAt(var expr : ExprAt?) : void {
         if (expr.subexpr == null || expr.subexpr._type == null) return
-        if (expr.subexpr._type.baseType == Type.tTable && !is_reused_dest(expr.subexpr)) {
+        if (expr.subexpr._type.baseType == Type.tTable && !is_reused_dest(expr.subexpr, loop_src)) {
             add_sink(HotBits.perf026_alloc, "table index (inserts a default entry when the key is missing)", expr)
         }
     }
@@ -2901,10 +2959,10 @@ class PerfLintVisitor : AstVisitor {
         let h = fn.getMangledNameHash
         return if (key_exists(hc.sinks_span_by_fn, h))
         var scan = new HotBodyScan()
-        if (fn.flags.isClassMethod && fn.body != null) {
-            scan.method_body = fn.body
+        if (fn.body != null) {
+            scan.fn_body = fn.body
             var blk = fn.body as ExprBlock
-            if (length(blk.list) == 1 && blk.list[0] is ExprWith) {
+            if (fn.flags.isClassMethod && length(blk.list) == 1 && blk.list[0] is ExprWith) {
                 scan.method_with = blk.list[0]
                 scan.method_with_body = (blk.list[0] as ExprWith).body
             }
@@ -2924,6 +2982,7 @@ class PerfLintVisitor : AstVisitor {
                 var fnp = f
                 scan.edges |> push(HotEdge(fn = fnp, caller_site = inv.site,
                                            frees_self = inv.frees_self))
+                scan->check_invoked_params(inv.site as ExprInvoke, fnp)
             }
         }
         hc.sinks_span_by_fn |> insert(h, int2(length(hc.sinks_all), length(scan.sinks)))
@@ -2974,7 +3033,14 @@ class PerfLintVisitor : AstVisitor {
         let esc = "[cold_path] on the callee, // nolint on the line, or DAS_LINT_DISABLE for a whole run"
         let esc_alloc = ("@scratch on the destination field if it is a reused buffer " +
             "(@pool if it owns what it holds across calls), {esc}")
-        if (sink.bit.perf026_alloc) {
+        if (sink.unmarked_arg) {
+            perf_warning("PERF026: {sink.what} on a hot path, via {chain}{sink_pos}, " +
+                "but is not declared reused itself - the callee's sizing of that parameter " +
+                "is exempt only for a reused buffer, so here it allocates. Pass a reused " +
+                "buffer here, or hoist this one to persistent storage: a mark goes on a field, " +
+                "a global, or this function's own parameter - @scratch, or @pool if it owns " +
+                "what it holds across calls. To allow it: {esc}", at)
+        } elif (sink.bit.perf026_alloc) {
             perf_warning("PERF026: {sink.what} allocates or frees on a hot path, via {chain}{sink_pos}; hoist it out of the hot path. To allow it: {esc_alloc}", at)
         } elif (sink.bit.perf027_env) {
             perf_warning("PERF027: {sink.what} reads the environment on a hot path, via {chain}{sink_pos}; getenv allocates a string in the context heap on every call - read it once at init and cache the value. To allow it: {esc}", at)
