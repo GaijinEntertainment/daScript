@@ -40,15 +40,9 @@ def private micro_ready(t : T?) : bool => resident_ready(t, path_join(models_dir
 
 //! the trunk loaded at q8 with the `-hcmixer` head pinned as its head, the head pin put back as it was found
 def private load_micro() : Model {
-    let head_pin = mtp_head_path_pin()
-    set_mtp_head_path(path_join(models_dir(), MICRO_HEAD))
-    var tr <- load_model_(path_join(models_dir(), MICRO_TRUNK), QuantMode.q8)
-    if (head_pin.set) {
-        set_mtp_head_path(head_pin.path)
-    } else {
-        clear_mtp_head_path()
+    return <- with_mtp_head_path(path_join(models_dir(), MICRO_HEAD)) {
+        return <- load_model_(path_join(models_dir(), MICRO_TRUNK), QuantMode.q8)
     }
-    return <- tr
 }
 
 //! the live region's n-gram conv ring off the device: [hist_rows x hc x dim] floats

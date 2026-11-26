@@ -41,14 +41,14 @@ require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 65   // the header records a stamp of the source the image was minted from
+let IMAGE_VERSION = 66   // the header records the split head the image was minted with
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
 //! self-sufficient, so the tag keeps the two flavors' files and identities apart.
 let METAL_IMAGE_TAG = "metal"
 let IMAGE_PAGE = 16384l
-let IMAGE_HEADER_BYTES = 64l     // magic..source stamp, inside page 0
+let IMAGE_HEADER_BYTES = 64l     // magic..source stamp, inside page 0; a split head's record follows it there
 let IMAGE_MAGIC = 0x314D4C44u    // 'DLM1'
 
 // public only for the save_image/load_image generics — they instantiate from caller modules
@@ -113,6 +113,9 @@ def private head_lane_fold(head : string) : string {
     return lane_sanitize((st |> starts_with("mtp-")) ? slice(st, 4, length(st)) : st)
 }
 
+//! the lane's last segment where the head at `head` rides the load
+def private head_lane_suffix(head : string) : string => "-mtp-{head_lane_fold(head)}"
+
 //! `with_head`: a split NextN head rides the load, so the trunk-alone and the headed image never share a path
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-lane-name")]
 def image_lane_name(tag : string = ""; quant : string = "q8"; with_head : bool = false; head : string = "") : string {
@@ -139,7 +142,7 @@ def image_lane_name(tag : string = ""; quant : string = "q8"; with_head : bool =
         lane = "{lane}-{quant}"
     }
     if (with_head) {
-        lane = empty(head) ? "{lane}-mtp" : "{lane}-mtp-{head_lane_fold(head)}"
+        lane = empty(head) ? "{lane}-mtp" : "{lane}{head_lane_suffix(head)}"
     }
     return lane_sanitize(lane)
 }
@@ -185,9 +188,13 @@ struct DlimPeek {
     config_json : string
     layout : uint64       //!< the header's meta-layout fingerprint - what parse_image refuses on
     source_moved : bool   //!< a source stands beside the image and is not the one it was minted from
+    head_moved : bool     //!< the split head the image records stands where it was and is not the one it was minted with
 }
 
-let private IMAGE_STAMP_AT = 56l      //! the header's source stamp
+let private IMAGE_STAMP_AT = 56l        //! the header's source stamp
+let private IMAGE_HEAD_STAMP_AT = 64l   //! the split head's stamp, 0 where the image folds none
+let private IMAGE_HEAD_PATH_AT = 72l    //! the head's path: a 32-bit length, then its bytes, inside page 0
+let private IMAGE_HEAD_PATH_MAX = IMAGE_PAGE - IMAGE_HEAD_PATH_AT - 4l
 let private STAMP_WINDOWS = 16ul
 let private STAMP_WINDOW = 65536ul
 
@@ -276,22 +283,72 @@ def image_source_stamp(source : string) : uint64 {
     return h == 0ul ? 1ul : h
 }
 
-//! Whether the image at `img`, its header at `bp`, was minted from another source than the one beside it now. An image
-//! that recorded no stamp, or stands beside no source, answers false.
+//! Whether the image whose header is at `bp` was minted from another source than `source`, the one beside it now. An
+//! image that recorded no stamp, or stands beside no source, answers false.
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-source-stamp")]
-def private image_source_moved(bp : uint8 const?; img : string) : bool {
+def private image_source_moved(bp : uint8 const?; source : string) : bool {
     let minted_from = read_u64(bp, IMAGE_STAMP_AT)
-    return false if (minted_from == 0ul)
-    let source = image_source_beside(img)
-    return !empty(source) && image_source_stamp(source) != minted_from
+    return minted_from != 0ul && !empty(source) && image_source_stamp(source) != minted_from
 }
 
-//! Panics where the image named by `path` declines because its source was replaced beside it: the one decline of a named
-//! image that moving a file settles, so it is named apart from the box's identity.
+//! The split head `source`'s load resolves now, where the image named `img` is the lane that folds it; "" otherwise.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-head-fold")]
+def private image_lane_head(img, source : string) : string {
+    return "" if (empty(source))
+    let head = mtp_head_sidecar(source)
+    let folds = !empty(head) && (dlim_file_lane(base_name(img)) |> ends_with(head_lane_suffix(head)))
+    return folds ? head : ""
+}
+
+//! The head's record appended to the header `hdr`: its stamp, then its path where that fits the page - its name alone
+//! where it stands beside `source`.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-head-fold")]
+def private store_head_record(var hdr : array<uint8>; head, source : string) {
+    return if (empty(head))
+    let rec = dir_name(head) == dir_name(source) ? base_name(head) : head
+    let n = long_length(rec) <= IMAGE_HEAD_PATH_MAX ? length(rec) : 0
+    let at = int(IMAGE_HEAD_PATH_AT) + 4
+    hdr |> resize(at + n)
+    store_at(hdr, int(IMAGE_HEAD_STAMP_AT), file_stamp(head))
+    store_at(hdr, int(IMAGE_HEAD_PATH_AT), uint(n))
+    for (i, ch in range(n), rec) {
+        hdr[at + i] = uint8(ch)
+    }
+}
+
+//! The split head the header at `bp` records for the image at `img`: its stamp, 0 where it records none, and its file -
+//! a bare name read beside the image, "" where the path was not recorded.
+def private image_recorded_head(bp : uint8 const?; msize : uint64; img : string) : tuple<stamp : uint64; file : string> {
+    return (stamp = 0ul, file = "") if (int64(msize) < IMAGE_PAGE)
+    let stamp = read_u64(bp, IMAGE_HEAD_STAMP_AT)
+    let n = int(read_u32(bp, IMAGE_HEAD_PATH_AT))
+    return (stamp = stamp, file = "") if (stamp == 0ul || n <= 0 || int64(n) > IMAGE_HEAD_PATH_MAX)
+    let text = unsafe(bp + (IMAGE_HEAD_PATH_AT + 4l))
+    let rec = string(unsafe(temp_array(text, n, type<uint8>)))
+    return (stamp = stamp, file = base_name(rec) == rec ? path_join(dir_name(img), rec) : rec)
+}
+
+//! Whether the image at `img`, beside `source`, was minted with another split head than the one it answers for: to a
+//! load, the head its lane folds; otherwise the file its header records, where that file still stands.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-head-fold")]
+def private image_head_moved(bp : uint8 const?; msize : uint64; img, source : string; loading : bool) : bool {
+    return false if (empty(source))
+    let rec = image_recorded_head(bp, msize, img)
+    let riding = loading ? image_lane_head(img, source) : ""
+    return file_stamp(riding) != rec.stamp if (!empty(riding))
+    return fexist(rec.file) && file_stamp(rec.file) != rec.stamp
+}
+
+//! Panics where the image named by `path` declines because its source, or the split head it records, was replaced: the
+//! one decline of a named image that moving a file settles, so it is named apart from the box's identity.
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-source-stamp")]
 def refuse_moved_source(path : string) {
-    if (image_peek(path).source_moved) {
+    let pk = image_peek(path)
+    if (pk.source_moved) {
         panic("dasLLAMA: '{path}' was minted from another file than '{image_source_beside(path)}', which stands beside it now - regenerate the image from that source, or keep it apart from it")
+    }
+    if (pk.head_moved) {
+        panic("dasLLAMA: '{path}' was minted with another split head than the file its header names, which stands there now - regenerate the image from its source and that head")
     }
 }
 
@@ -322,7 +379,10 @@ def image_peek(path : string) : DlimPeek {
     }
     var p = image_peek_memory(base, msize)
     if (base != null) {
-        p.source_moved = p.valid && image_source_moved(unsafe(reinterpret<uint8 const?>(base)), path)
+        let bp = unsafe(reinterpret<uint8 const?>(base))
+        let source = image_source_beside(path)
+        p.source_moved = p.valid && image_source_moved(bp, source)
+        p.head_moved = p.valid && image_head_moved(bp, msize, path, source, false)
         unsafe(fmap_close(base, msize))
     }
     return p
@@ -593,7 +653,7 @@ def dlim_image_verdict(p : DlimPeek; current : table<string>) : string {
     if (dlim_layout_stale(p)) {
         return "STALE layout"
     }
-    if (p.source_moved) {
+    if (p.source_moved || p.head_moved) {
         return "STALE source"
     }
     if (key_exists(current, p.identity)) {
@@ -852,7 +912,7 @@ def private w_close(var w : ImgWriter) : bool {
 def private w_header(var w : ImgWriter; path : string; var hdr : array<uint8>) : bool {
     if (w.chunk_base != null) {
         unsafe {
-            memcpy(w.chunk_base, addr<void?>(hdr[0]), uint64(IMAGE_HEADER_BYTES))
+            memcpy(w.chunk_base, addr<void?>(hdr[0]), uint64(long_length(hdr)))
         }
         return true
     }
@@ -860,7 +920,7 @@ def private w_header(var w : ImgWriter; path : string; var hdr : array<uint8>) :
     fopen(path, "r+b") $(hf) {
         if (hf != null) {
             fseek(hf, 0l, seek_set)
-            ok = (hf |> long_fwrite(hdr)) == IMAGE_HEADER_BYTES
+            ok = (hf |> long_fwrite(hdr)) == long_length(hdr)
         }
     }
     return ok
@@ -1399,7 +1459,9 @@ def private build_image(var t; dst, beside : string; in_mem : bool; extra : uint
         store_at(hdr, 32, fend)
         store_at(hdr, 40, hash(ident))
         store_at(hdr, 48, layout)
-        store_at(hdr, int(IMAGE_STAMP_AT), image_source_stamp(image_source_beside(beside)))
+        let source = image_source_beside(beside)
+        store_at(hdr, int(IMAGE_STAMP_AT), image_source_stamp(source))
+        store_head_record(hdr, image_lane_head(beside, source), source)
         w.ok = w_header(w, dst, hdr)
         if (!w.ok) {
             to_log(LOG_ERROR, "dasLLAMA image: '{dst}' header write failed - image build aborted\n")
@@ -2007,8 +2069,13 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
         to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - baked for '{read ? baked_ident : "(unreadable)"}', this run is '{want_ident}'\n")
         return false
     }
-    if (image_source_moved(bp, path)) {
-        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - '{image_source_beside(path)}' is not the source it was minted from; the load mints it again\n")
+    let source = image_source_beside(path)
+    if (image_source_moved(bp, source)) {
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - '{source}' is not the source it was minted from; the load mints it again\n")
+        return false
+    }
+    if (image_head_moved(bp, msize, path, source, true)) {
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - it was not minted with the split head that rides this load; the load mints it again\n")
         return false
     }
     var meta_blob : array<uint8>

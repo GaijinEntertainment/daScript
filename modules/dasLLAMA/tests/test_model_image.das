@@ -808,6 +808,134 @@ def test_image_answers_for_its_source(t : T?) {
     }
 }
 
+[test(description = "An image whose lane folds a split head records that head: it maps while the head stands as minted, declines once the head is replaced under its name and reads STALE source, maps again with the head restored or gone; a headed lane's image that records no head declines to the load its head rides; a head pinned from another folder is recorded by its path, a same-named head beside the source is another head to the load, and a peek re-reads the pinned one where it was; a head beside its source is recorded by name, so an image copied with both answers for the head beside it; the in-memory build's tee records the head; an image whose lane folds no head, or that stands beside no source, answers for none")]
+def test_image_answers_for_its_head(t : T?) {
+    t |> run("the head beside its trunk: replaced under its name the image declines, restored or gone it maps") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        let source = path_join(test_temp_dir(), "dasllama_head_trunk.gguf")
+        let head = path_join(test_temp_dir(), "mtp-dasllama_head_trunk.gguf")
+        write_source(t, source, 5000)
+        var p <- make_probe()
+        let pin = mtp_head_path_pin()
+        let raised = panic_text() {
+            with_mtp_head_path(head) {
+                panic("a block that leaves by panic")
+            }
+        }
+        let after = mtp_head_path_pin()
+        t |> success(raised |> find("leaves by panic") >= 0 && after.set == pin.set && after.path == pin.path, "a block that panics leaves the head pin as it found it")
+        with_mtp_head_path("") {
+            let bare = image_path_for(source, "img-probe")
+            t |> success(save_image(p, bare, "img-probe"), "the trunk alone mints its image")
+            write_source(t, head, 7000)
+            let img = image_path_for(source, "img-probe")
+            t |> success(img != bare && img |> ends_with("-mtp-dasllama_head_trunk.dlim"), "control: the head takes its own lane ({base_name(img)})")
+            t |> success(probe_maps(bare), "the trunk-alone lane folds no head and answers for none")
+            t |> success(save_image(p, img, "img-probe"), "the headed image is minted")
+            t |> success(probe_maps(img), "the image maps while its head stands as minted")
+            t |> success(listed_verdict(source, base_name(img)) != "STALE source", "control: the inventory does not call it stale")
+            write_source(t, head, 7000, 17)
+            t |> success(!probe_maps(img), "a head replaced under its name declines the image")
+            t |> equal(listed_verdict(source, base_name(img)), "STALE source", "and the inventory names it stale")
+            let refusal = panic_text() {
+                refuse_moved_source(img)
+            }
+            t |> success(refusal |> find("another split head") >= 0, "the named image's refusal names the head: {refusal}")
+            remove(source)
+            t |> success(probe_maps(img), "beside no source the image answers for no head")
+            write_source(t, source, 5000)
+            write_source(t, head, 7000)
+            t |> success(probe_maps(img), "the head restored, the image maps again")
+            remove(img)
+            var src <- make_probe()
+            var cold = ImgProbe()
+            t |> success(image_from_carrier(src, cold, img, "img-probe"), "the in-memory build tees the headed image beside the source")
+            delete cold
+            t |> success(probe_maps(img), "the teed image records its head: it maps")
+            remove(head)
+            t |> success(probe_maps(img), "with the head gone the image maps")
+            t |> success(save_image(p, img, "img-probe"), "the headed lane is minted again with no head beside the trunk")
+            t |> success(probe_maps(img), "control: with no head to ride, the image that records none maps")
+            write_source(t, head, 7000)
+            t |> success(!probe_maps(img), "the load its head rides declines the image that records no head")
+            remove(img)
+            remove(bare)
+        }
+        remove(head)
+        remove(source)
+        delete p
+    }
+    t |> run("the head pinned from another folder: recorded by its path, and a same-named head beside the trunk is another head") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        let source = path_join(test_temp_dir(), "dasllama_head_trunk.gguf")
+        let near = path_join(test_temp_dir(), "mtp-dasllama_head_trunk.gguf")
+        let folder = path_join(test_temp_dir(), "dasllama_head_far")
+        let far = path_join(folder, "mtp-dasllama_head_trunk.gguf")
+        mkdir(folder)
+        write_source(t, source, 5000)
+        write_source(t, near, 7000)
+        write_source(t, far, 7000, 99)
+        var p <- make_probe()
+        var img = ""
+        with_mtp_head_path(far) {
+            img = image_path_for(source, "img-probe")
+            t |> success(save_image(p, img, "img-probe") && probe_maps(img), "the image minted under the pinned head maps under it")
+        }
+        with_mtp_head_path("") {
+            t |> equal(image_path_for(source, "img-probe"), img, "control: the head beside the trunk takes the same lane")
+            t |> success(!probe_maps(img), "the same-named head beside the trunk is not the head the image was minted with")
+            t |> success(listed_verdict(source, base_name(img)) != "STALE source", "the inventory, with no pin, reads the pinned head where it was")
+            write_source(t, far, 7000, 100)
+            t |> equal(listed_verdict(source, base_name(img)), "STALE source", "and names the image stale once that file changes")
+            patch_u32(t, img, 72l, 0x7fffffffu)
+            t |> success(listed_verdict(source, base_name(img)) != "STALE source", "a path length past the page's room reads as no path recorded")
+            t |> success(!probe_maps(img), "and the load still answers for the stamp")
+        }
+        for (f in fixed_array(img, near, far, source)) {
+            remove(f)
+        }
+        rmdir(folder)
+        delete p
+    }
+    t |> run("the head beside its trunk is recorded by name: moved together, the image answers for the head beside it") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        let folder = path_join(test_temp_dir(), "dasllama_head_moved")
+        let names = fixed_array("dasllama_head_trunk.gguf", "mtp-dasllama_head_trunk.gguf")
+        let source = path_join(test_temp_dir(), names[0])
+        let head = path_join(test_temp_dir(), names[1])
+        mkdir(folder)
+        write_source(t, source, 5000)
+        write_source(t, head, 7000)
+        var p <- make_probe()
+        with_mtp_head_path("") {
+            let img = image_path_for(source, "img-probe")
+            let moved = path_join(folder, base_name(img))
+            t |> success(save_image(p, img, "img-probe"), "the headed image is minted")
+            var why : string
+            for (f in fixed_array(names[0], names[1], base_name(img))) {
+                t |> success(copy_file(path_join(test_temp_dir(), f), path_join(folder, f), true, why), "{f} is copied: {why}")
+            }
+            write_source(t, head, 7000, 17)
+            t |> equal(listed_verdict(source, base_name(img)), "STALE source", "control: where the head was replaced the image is stale")
+            t |> success(listed_verdict(path_join(folder, names[0]), base_name(img)) != "STALE source", "the copy reads the head beside it, not the one it was minted beside")
+            t |> success(probe_maps(moved), "and maps")
+            for (f in fixed_array(img, moved, path_join(folder, names[0]), path_join(folder, names[1]))) {
+                remove(f)
+            }
+        }
+        remove(head)
+        remove(source)
+        rmdir(folder)
+        delete p
+    }
+}
+
 [test(description = "On a synthetic carrier the .dlim image round-trips planes and nested fields element-exact, declines wrong tag, version, meta, section-count, size and absent files, tees the cold in-memory build to disk, and spells lanes and rope suffixes")]
 def test_image_mechanics(t : T?) {
     t |> run("synthetic carrier: round trip, nested planes, declines, unmap-remap") @(t : T?) {
