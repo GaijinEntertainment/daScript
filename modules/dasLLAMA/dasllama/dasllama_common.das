@@ -554,17 +554,17 @@ typedef DecodeOverrideFn = function<(t : Model; var s : Session; token, pos : in
 struct BatchWorkspace {
     scr : Session             // *_b scratch, rope tables, ple scratch — no KV cache / sampler state
     scr_codec_uid : uint64
-    positions : array<int64>  // row i's absolute KV position (sessions[i].n_past at entry)
-    row_tokens : array<int64> //! row i's token id this step: a device override gathers a row's own side input from it
-    rope_positions : array<int64>   // row i's ROPE position (n_past + rope_pos_delta — mrope streams diverge)
-    logits_b : array<float>   // B x vocab classifier output, scattered per session after softcap
+    @scratch positions : array<int64>  // row i's absolute KV position (sessions[i].n_past at entry)
+    @scratch row_tokens : array<int64> //! row i's token id this step: a device override gathers a row's own side input from it
+    @scratch rope_positions : array<int64>   // row i's ROPE position (n_past + rope_pos_delta — mrope streams diverge)
+    @scratch @exact_size logits_b : array<float>   // B x vocab classifier output, scattered per session after softcap
     // row i's cache base pointers (into sessions[i]; valid per call). @do_not_delete is load-bearing:
     // delete of a plain array<T?> CASCADES to the pointees, which would free the sessions' cache blobs
-    @do_not_delete kbase : array<uint8?>
-    @do_not_delete vbase : array<uint8?>
-    @do_not_delete lrow : array<float?>   // row i's sessions[i].logits base (the threaded scatter)
-    runs_b : array<KVRun>     // per-row physical runs, flattened rows × max-runs (flat rows: 1 each)
-    nrun_b : array<int64>     // per-row run count
+    @scratch @do_not_delete kbase : array<uint8?>
+    @scratch @do_not_delete vbase : array<uint8?>
+    @scratch @do_not_delete lrow : array<float?>   // row i's sessions[i].logits base (the threaded scatter)
+    @scratch @exact_size runs_b : array<KVRun>     // per-row physical runs, flattened rows × max-runs (flat rows: 1 each)
+    @scratch nrun_b : array<int64>     // per-row run count
 }
 
 typedef BatchDecodeOverrideFn = function<(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool>
@@ -749,7 +749,7 @@ def private mtp_block_rounds_home() : bool => !empty(g_decode_override_name) && 
 
 //! the active home's single-stream verify seat takes a block drafter's round on `t` for `s` (a home with no word says yes)
 def private mtp_block_seat_serves(t : Model; s : Session) : bool
-    => !mtp_block_rounds_home() || invoke(g_mtp_block_rounds[g_decode_override_name].seat_serves, t, s)
+    => !mtp_block_rounds_home() || invoke(g_mtp_block_rounds[g_decode_override_name].seat_serves, t, s)   // nolint:PERF026 — key_exists guards the index, so it cannot insert
 
 //! the block drafter's round of `sessions` runs on the active home's joint verify: the home serves `t` there, and its seat
 //! declines the trunk or the tick carries several streams
@@ -854,11 +854,11 @@ def mtp_seat_accept_walk(var s : Session; k : int64) : int64 {
 
 //! the verify seat took the round's `n` rows `toks` at `pos` (the caller asked `mtp_seated(t, g_mtp_verify_overrides)` first)
 def private mtp_verify_served(t : Model; var s : Session; toks : array<int64>; n, pos : int64; pick_only : bool) : bool
-    => invoke(g_mtp_verify_overrides[g_decode_override_name], t, s, toks, n, pos, pick_only)
+    => invoke(g_mtp_verify_overrides[g_decode_override_name], t, s, toks, n, pos, pick_only)   // nolint:PERF026 — mtp_seated holds key_exists, so the index cannot insert
 
 //! the rollback seat put the session back to the state after verify row `a` (the caller asked `mtp_seated(t, g_mtp_rollback_overrides)` first)
 def private mtp_rollback_served(t : Model; var s : Session; pos, a : int64) : bool
-    => invoke(g_mtp_rollback_overrides[g_decode_override_name], t, s, pos, a)
+    => invoke(g_mtp_rollback_overrides[g_decode_override_name], t, s, pos, a)   // nolint:PERF026 — mtp_seated holds key_exists, so the index cannot insert
 
 //! How a sampled stream's walk judges a draft against its verify row: `exact` accepts where the row's draw equals the draft,
 //! `typical` where the sampler's cuts admit it, `rejection` with probability min(1, p[d] / q[d]) off the head's recorded q,
@@ -966,7 +966,7 @@ def sel_ask_reads_drafts(s : Session) : bool => sel_wanted(s) && !penalties_off(
 var @scratch g_sel_ask_ids : array<int64>
 
 //! the ask words for `nrows` rows of `s`'s step: the temperature and, under a penalty, the recent window's unique ids with `extra[0 .. nextra)`, the same list every row; `words` grown to fit
-def sel_ask_words(s : Session; nrows : int64; extra : array<int64>; nextra : int64; var words : array<uint>) {
+def sel_ask_words(s : Session; nrows : int64; extra : array<int64>; nextra : int64; @scratch var words : array<uint>) {
     let p = deref(s.spec_params)
     words |> grow_resize(SEL_WORDS * nrows)
     g_sel_ask_ids |> clear()
@@ -1769,14 +1769,14 @@ def batch_decode_logits_done() : bool => g_batch_decode_logits_done
 //! Build one position's RoPE cos/sin row into caller arrays — bit-identical to the row forward()
 //! hands the decode override (an encode-ahead driver pre-builds the NEXT position's row; the
 //! global-rope class only — dual-rope configs pre-build the swa row with the twin below).
-def public build_decode_rope_row(t : Model; pos : int64; var cos_tab, sin_tab : array<float>) {
+def public build_decode_rope_row(t : Model; pos : int64; @scratch var cos_tab, sin_tab : array<float>) {
     let c = t.config
     build_rope_table(cos_tab, sin_tab, t, c.rope_freq_base, c.rope_freq_scale, pos, 1l,
                      c.rope_dim > 0l ? c.rope_dim : c.head_size, true)
 }
 
 //! The sliding class's row (dual-rope configs) — bit-identical to forward()'s swa row build.
-def public build_decode_rope_row_swa(t : Model; pos : int64; var cos_tab, sin_tab : array<float>) {
+def public build_decode_rope_row_swa(t : Model; pos : int64; @scratch var cos_tab, sin_tab : array<float>) {
     let c = t.config
     let swa_hs = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
     build_rope_table(cos_tab, sin_tab, t, c.rope_freq_base_swa, c.rope_freq_scale_swa, pos, 1l,
@@ -3350,10 +3350,10 @@ def finalize(var o : SessionOwner) {
 //! the n-gram side input's ring and window. With the K/V rows below `pos` it continues a prompt.
 struct DnSnapshot {
     pos : int64
-    @exact_size conv : array<float>
-    @exact_size state : array<float>
-    @exact_size ple_hist : array<float>
-    @exact_size ple_prev : array<int64>
+    @pool @exact_size conv : array<float>
+    @pool @exact_size state : array<float>
+    @pool @exact_size ple_hist : array<float>
+    @pool @exact_size ple_prev : array<int64>
     @exact_size mtp_h : array<float>   //! the draft head's carry at `pos` - empty when it stood elsewhere
 }
 
@@ -3399,7 +3399,7 @@ struct Session {
     stat_gen_us : int64       // wall time of the generation loop (microseconds)
     stat_ttft_us : int64      // time-to-first-token: prefill + first forward (microseconds)
     x : array<float>          // residual stream (dim)
-    xb : array<float>         // scratch (dim): rmsnorm out, attention out
+    @scratch @exact_size xb : array<float>         // scratch (dim): rmsnorm out, attention out
     xb2 : array<float>        // scratch (dim): attention output projection
     hb : array<float>         // FFN hidden (hidden_dim)
     hb2 : array<float>        // FFN gate (hidden_dim)
@@ -3467,16 +3467,16 @@ struct Session {
     //! set by a caller that reads the whole x_b plane after a prefill: every row of the last layer's FFN tail
     keep_hidden : bool
     // batched prefill scratch — empty until forward_prefill sizes them to npos × ... (see forward_prefill)
-    x_b : array<float>        // residual stream (npos x dim)
-    xb_b : array<float>       // rmsnorm / attention out (npos x dim)
-    xb2_b : array<float>      // attention output projection (npos x dim)
-    q_b : array<float>        // queries (npos x dim)
-    k_b : array<float>        // keys before cache store (npos x kv_dim)
-    v_b : array<float>        // values before cache store (npos x kv_dim)
-    hb_b : array<float>       // FFN hidden (npos x hidden_dim)
-    hb2_b : array<float>      // FFN gate (npos x hidden_dim)
-    xqb : array<int8>         // batched activation Q8 quants (npos x max(dim, hidden_dim))
-    xsb : array<float>        // batched activation Q8 scales (npos x max(dim, hidden_dim) / 32)
+    @pool @exact_size x_b : array<float>        // residual stream (npos x dim)
+    @scratch @exact_size xb_b : array<float>       // rmsnorm / attention out (npos x dim)
+    @scratch @exact_size xb2_b : array<float>      // attention output projection (npos x dim)
+    @scratch @exact_size q_b : array<float>        // queries (npos x dim)
+    @scratch @exact_size k_b : array<float>        // keys before cache store (npos x kv_dim)
+    @scratch @exact_size v_b : array<float>        // values before cache store (npos x kv_dim)
+    @scratch @exact_size hb_b : array<float>       // FFN hidden (npos x hidden_dim)
+    @scratch @exact_size hb2_b : array<float>      // FFN gate (npos x hidden_dim)
+    @scratch @exact_size xqb : array<int8>         // batched activation Q8 quants (npos x max(dim, hidden_dim))
+    @scratch @exact_size xsb : array<float>        // batched activation Q8 scales (npos x max(dim, hidden_dim) / 32)
     @scratch xbsb : array<int>         // batched per-16 activation sums (npos x maxn / 16) — the kq batch tile's offset term
     @scratch kxqb : array<int8>        // batched Q8_K-form quants (kq v2 MoE gather source; lazily sized npos x dim)
     @scratch kxsb : array<float>       // batched Q8_K per-256 scales (npos x dim / 256)
@@ -3492,12 +3492,12 @@ struct Session {
     // RoPE cos/sin table (empty until forward_prefill builds it, sized npos x head_size/2). angle
     // = pos*freq is identical across heads AND layers, precomputed once. Kept LOCAL (run-state, not
     // a module global) so jobque fork-context cloning stays cheap.
-    rope_cos : array<float>
-    rope_sin : array<float>
+    @scratch @exact_size rope_cos : array<float>
+    @scratch @exact_size rope_sin : array<float>
     // second table for sliding layers when the arch ropes them differently (has_dual_rope — Gemma3:
     // θ=10k unscaled local vs θ=1M linear-scaled global); empty otherwise
-    rope_cos_swa : array<float>
-    rope_sin_swa : array<float>
+    @scratch @exact_size rope_cos_swa : array<float>
+    @scratch @exact_size rope_sin_swa : array<float>
     // qwen3vl mrope (rope_sections): rope position = row index + rope_pos_delta — an image span
     // advances the sequence position by max(grid nx, ny), not by its row count, so the delta goes
     // negative after each image. Applies ONLY where rope angles are computed, never to KV indexing.
@@ -3522,13 +3522,13 @@ struct Session {
     moe_acc : array<float>      // weighted expert-output accumulator (dim)
     moe_ao : array<float>       // gemma4 MoE: attn_out held while its two branches read three norms of it (dim; moe_dense_shexp only)
     // decode dispatch-fuse scratch: all k routed experts' projections run as region-list GEMVs
-    moe_offs : array<int64>     // packed (weight, activation) element-offset pairs (2 per region)
-    moe_boffs : array<int64>    // per-region fblob bias offsets for the biased groupn forms (k)
-    moe_gu : array<float>       // fused gate outputs (k x n_ff_exp)
-    moe_gu2 : array<float>      // fused up outputs (k x n_ff_exp)
-    moe_dn : array<float>       // fused down outputs (k x dim)
-    moe_dq : array<int8>        // the k activated-hidden rows requantized (k x n_ff_exp)
-    moe_ds : array<float>       // ... and their scales (k x n_ff_exp / 32)
+    @scratch @exact_size moe_offs : array<int64>     // packed (weight, activation) element-offset pairs (2 per region)
+    @scratch @exact_size moe_boffs : array<int64>    // per-region fblob bias offsets for the biased groupn forms (k)
+    @scratch @exact_size moe_gu : array<float>       // fused gate outputs (k x n_ff_exp)
+    @scratch @exact_size moe_gu2 : array<float>      // fused up outputs (k x n_ff_exp)
+    @scratch @exact_size moe_dn : array<float>       // fused down outputs (k x dim)
+    @scratch @exact_size moe_dq : array<int8>        // the k activated-hidden rows requantized (k x n_ff_exp)
+    @scratch @exact_size moe_ds : array<float>       // ... and their scales (k x n_ff_exp / 32)
     // heat-cache split-FFN scratch (decode: hits ride the GPU chain async, misses stay CPU)
     @scratch moe_hdn : array<float>      // GPU hit-expert down outputs, compacted (nhits x dim)
     @scratch heat_hit : array<int8>      // per routed position: 1 = served by the heat cache
@@ -3541,7 +3541,7 @@ struct Session {
     moe_xs : array<float>       // xb's per-block scales (dim / 32)
     // K-quant activation block sums for the expert dispatch (the moe twins of xbs/xbs2, filled
     // by the bs quantizers only on layers with kq-tagged expert stacks; sized always — ~KB)
-    moe_dbs : array<int>        // per-16 sums of moe_dq (k x n_ff_exp / 16)
+    @scratch @exact_size moe_dbs : array<int>        // per-16 sums of moe_dq (k x n_ff_exp / 16)
     // grouped MoE prefill scratch — sized per prefill by ffn_moe_prefill_grouped; empty for dense
     // arches, decode, and the per-position reference path
     @scratch moe_rlog : array<float>     // batched router logits (npos x n_expert)
@@ -3583,8 +3583,8 @@ struct Session {
     @scratch moe_sh_w : array<float>       //! the device shared expert's unit combine weights (npos; the f16-fed arm)
     ffn_offs : array<int64>     // dense/shexp gate+up fuse: 2 region (weight, activation) offset pairs
     ffn_gu : array<float>       // dense/shexp gate+up fuse output — gate half then up half (2 x max_ffn_width)
-    mx4_wq : array<int8>        // grouped-prefill expansion of ONE native-MXFP4 expert to exact Q8 (dim x n_ff_exp)
-    mx4_ws : array<float>       // ... and its per-block scales (same / 32); see expand_mx4_region_q8
+    @scratch @exact_size mx4_wq : array<int8>        // grouped-prefill expansion of ONE native-MXFP4 expert to exact Q8 (dim x n_ff_exp)
+    @scratch @exact_size mx4_ws : array<float>       // ... and its per-block scales (same / 32); see expand_mx4_region_q8
     // gemma-4 E-series per-layer embeddings (PLE) scratch — empty unless config.n_embd_per_layer > 0.
     // ple_inp holds one (position, layer) side vector per row, POSITION-major: (p, l, i) at
     // p*(n_layers*ple) + l*ple + i. Sized to 1 position in make_run_state, npos in forward_prefill.
@@ -3640,7 +3640,7 @@ struct Session {
     @scratch hc_gate_b : array<float>      // npos x hc x dim
     @scratch hc_inject_b : array<float>    // npos x hc
     // PLE n-gram side input (config.ple_layer >= 0): forward-only state like the deltanet's
-    ple_prev : array<int64>        // the last (ngram_size - 1) token ids, oldest first (-1 = none yet)
+    @pool ple_prev : array<int64>        // the last (ngram_size - 1) token ids, oldest first (-1 = none yet)
     @exact_size ple_conv_hist : array<float>   // the conv's history ring: (taps-1)*dilation + 1 rows of hc x dim
     ple_ring_device : bool         //! the ring's current rows sit in the resident driver's device slot, not here (the driver syncs them up before a token and down before a pass)
     ple_emb : array<float>         // decode: the gathered heads x head_dim row
@@ -3654,18 +3654,18 @@ struct Session {
     // MTP/NextN self-spec state (empty unless config.n_layer_nextn > 0). mtp_h is the trunk's
     // post-output-norm hidden of the LAST evaluated position (the MTP draft-head handoff);
     // mtp_h_pos1 is that position PLUS ONE (0 = cold, keeps Session zero-init-safe).
-    @exact_size mtp_h : array<float>           // h_nextn (dim; hc x dim under hyper-connections - the wide residual before the head mixer)
+    @pool @exact_size mtp_h : array<float>           // h_nextn (dim; hc x dim under hyper-connections - the wide residual before the head mixer)
     mtp_h0 : array<float>          // the verify batch's ROW-0 normed hidden (= h_pos). forward_prefill's
                                    // tail only stashes the LAST row, which a reject discards — this is
                                    // what re-seeds mtp_h so a rejected step needs no re-forward
     mtp_h_pos1 : int64
-    mtp_cat : array<float>         // eh_proj input [enorm(embed(tok)) ; hnorm(h)] (2*dim)
-    mtp_cat_b : array<float>       // prompt-warm eh_proj concat image ((npos-1) x 2*dim, scratch-sized per warm)
+    @scratch @exact_size mtp_cat : array<float>         // eh_proj input [enorm(embed(tok)) ; hnorm(h)] (2*dim)
+    @scratch @exact_size mtp_cat_b : array<float>       // prompt-warm eh_proj concat image ((npos-1) x 2*dim, scratch-sized per warm)
     @scratch mtp_xb_save : array<float>     // prompt-warm x_b preservation (the warm's eh_proj output rides x_b for the arch blocks; consumers like mtp_verify_row0 / embed_forward need the trunk hiddens back)
     @scratch mtp_hc_save : array<float>     // prompt-warm hc_res_b preservation (the warm's eh_proj output is the draft's wide residual rows; the verify reads the trunk's back)
     mtp_logits : array<float>      // verify-batch row-0 logits (vocab; the draft check reads its argmax)
     mtp_vbatch : array<int64>      // the 2-row verify batch [tok, draft] (persistent — no per-step alloc)
-    mtp_norm_b : array<float>      // verify-batch final-normed rows (npos x dim), input to the batched classifier
+    @scratch @exact_size mtp_norm_b : array<float>      // verify-batch final-normed rows (npos x dim), input to the batched classifier
     @scratch @exact_size mtp_logits_b : array<float>   // verify-batch logits (rows x vocab), grown once to the round's width
     @scratch @exact_size mtp_hrows : array<float>      // verify-batch post-final-norm hidden rows (rows x dim) — the drafter's next input / the carry
     @scratch mtp_picks : array<int64>      //! the last served verify seat's per-row picks, each its row's argmax: the greedy walk's truth, and the token a pick-asking round commits
@@ -3827,7 +3827,7 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
     let xdim = max(c.dim, qd)
     let ffw = max_ffn_width(c)   // dense hidden, or the widest expert / shared-expert (MoE)
     s.x |> resize(c.dim)
-    s.xb |> resize(xdim)
+    s.xb |> reserve_resize(xdim)
     s.xb2 |> resize(c.dim)
     s.hb |> resize(ffw)
     s.hb2 |> resize(ffw)
@@ -3850,14 +3850,14 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
         }
         s.moe_xq |> resize(c.dim)
         s.moe_xs |> resize(c.dim / 32l)
-        s.moe_dbs |> resize(c.n_expert_used * c.n_ff_exp / 16l)
-        s.moe_offs |> resize(2l * c.n_expert_used)
-        s.moe_boffs |> resize(c.n_expert_used)
-        s.moe_gu |> resize(c.n_expert_used * c.n_ff_exp)
-        s.moe_gu2 |> resize(c.n_expert_used * c.n_ff_exp)
-        s.moe_dn |> resize(c.n_expert_used * c.dim)
-        s.moe_dq |> resize(c.n_expert_used * c.n_ff_exp)
-        s.moe_ds |> resize(c.n_expert_used * c.n_ff_exp / 32l)
+        s.moe_dbs |> reserve_resize(c.n_expert_used * c.n_ff_exp / 16l)
+        s.moe_offs |> reserve_resize(2l * c.n_expert_used)
+        s.moe_boffs |> reserve_resize(c.n_expert_used)
+        s.moe_gu |> reserve_resize(c.n_expert_used * c.n_ff_exp)
+        s.moe_gu2 |> reserve_resize(c.n_expert_used * c.n_ff_exp)
+        s.moe_dn |> reserve_resize(c.n_expert_used * c.dim)
+        s.moe_dq |> reserve_resize(c.n_expert_used * c.n_ff_exp)
+        s.moe_ds |> reserve_resize(c.n_expert_used * c.n_ff_exp / 32l)
     }
     if (has_ple(c)) {   // gemma-4 E-series PLE decode scratch (one position)
         let all = c.n_layers * c.n_embd_per_layer
@@ -6743,7 +6743,7 @@ def ple_window_seed(var win : array<int64>; tokens : array<int64>; n : int64) {
 }
 
 //! the n-gram window `src` over `dst`: `grow` sizes `dst` to it, else the copy stops at the shorter of the two
-def private ple_window_copy(src : array<int64>; var dst : array<int64>; grow : bool) {
+def private ple_window_copy(src : array<int64>; @pool var dst : array<int64>; grow : bool) {
     if (grow) {
         dst |> overwrite_resize(long_length(src))
     }

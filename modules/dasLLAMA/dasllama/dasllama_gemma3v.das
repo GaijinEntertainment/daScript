@@ -78,17 +78,17 @@ struct Gemma3vTower {
 //! Per-encode scratch, caller-owned like the audio EncoderState; the canvas is fixed so every
 //! buffer sizes once on the first encode.
 struct Gemma3vState {
-    @exact_size x0 : array<float>    // [npos × patch_dim] im2col rows (scaled to [-1, 1])
-    @exact_size x : array<float>     // residual stream [npos × d]
-    @exact_size xb : array<float>    // norm out / GEMM out [npos × d]
-    @exact_size xb2 : array<float>   // attention out [npos × d]
-    @exact_size qq : array<float>
-    @exact_size kk : array<float>
-    @exact_size vv : array<float>
-    @exact_size hp : array<float>    // attention per-head packs
+    @scratch @exact_size x0 : array<float>    // [npos × patch_dim] im2col rows (scaled to [-1, 1])
+    @scratch @exact_size x : array<float>     // residual stream [npos × d]
+    @scratch @exact_size xb : array<float>    // norm out / GEMM out [npos × d]
+    @scratch @exact_size xb2 : array<float>   // attention out [npos × d]
+    @scratch @exact_size qq : array<float>
+    @scratch @exact_size kk : array<float>
+    @scratch @exact_size vv : array<float>
+    @scratch @exact_size hp : array<float>    // attention per-head packs
     @scratch @exact_size att : array<float>   // attention score blocks
-    @exact_size h : array<float>     // ffn hidden [npos × ff]
-    @exact_size pooled : array<float>  // [nout × d]
+    @scratch @exact_size h : array<float>     // ffn hidden [npos × ff]
+    @scratch @exact_size pooled : array<float>  // [nout × d]
     @scratch @exact_size tail : array<float>     // [nout × proj_dim] soft tokens a device chain landed behind its blocks
     tail_ready : bool                //! `tail` holds this encode's soft tokens: the CPU tail stands down
     @scratch @exact_size xqi : array<int8>    // q8 lane: the requantized GEMM input, grown per site
@@ -683,7 +683,7 @@ def private g3v_stem_finish(t : Gemma3vTower; var s : Gemma3vState; npos : int64
 }
 
 // the tail: post-LN → 4×4 mean pool → weighted RMS (soft_emb_norm) → projection into out
-def private g3v_tail(t : Gemma3vTower; var s : Gemma3vState; n_side : int64; var out : array<float>) : int64 {
+def private g3v_tail(t : Gemma3vTower; var s : Gemma3vState; n_side : int64; @scratch var out : array<float>) : int64 {
     tower_cpu_refuse(t, "dasLLAMA gemma3v", "tail")
     let d = t.n_embd
     let npos = n_side * n_side
@@ -700,7 +700,7 @@ def private g3v_tail(t : Gemma3vTower; var s : Gemma3vState; n_side : int64; var
 //! covers exactly that grid); returns nout = (image_px / patch / merge)².
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def gemma3v_encode(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h : int64;
-                   var out : array<float>) : int64 {
+                   @scratch var out : array<float>) : int64 {
     if (w != t.image_px || h != t.image_px) {
         panic("dasLLAMA gemma3v: canvas {w}x{h} - this tower serves exactly {t.image_px}x{t.image_px} (letterbox first)")
     }
@@ -747,7 +747,7 @@ def gemma3v_encode(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>
 //! `gemma3v_encode` into `out` = nout × proj_dim soft tokens (returns nout); `tag` names the
 //! `DASLLAMA_VISION_DUMP` artifact.
 def encode_image_(t : Gemma3vTower; var s : Gemma3vState; img : VisionImage; tag : string;
-                  var out : array<float>) : int64 {
+                  @scratch var out : array<float>) : int64 {
     if (img.width <= 0 || img.height <= 0) {
         panic("dasLLAMA gemma3v: encode_image_ got an empty image (decode failed?)")
     }

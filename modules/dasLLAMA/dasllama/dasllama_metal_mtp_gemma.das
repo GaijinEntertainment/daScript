@@ -64,10 +64,10 @@ struct GemmaDrafterGpu {
     u_scale : array<MetalBuffer?>   // per layer layer_output_scale
     slots : array<GemmaStreamIn>    // a speculating stream's inputs a slot, grown to the tick's streams
     hs_mx : int64
-    cos_tab : array<float>          // host rope rows for an anchor (rebuilt per slot and anchor)
-    sin_tab : array<float>
-    cos_sw : array<float>
-    sin_sw : array<float>
+    @scratch @exact_size cos_tab : array<float>          // host rope rows for an anchor (rebuilt per slot and anchor)
+    @scratch @exact_size sin_tab : array<float>
+    @scratch @exact_size cos_sw : array<float>
+    @scratch @exact_size sin_sw : array<float>
 }
 
 var g_gemma_drafter : GemmaDrafter

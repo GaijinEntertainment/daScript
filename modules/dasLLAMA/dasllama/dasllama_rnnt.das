@@ -64,19 +64,19 @@ struct RnntNet {
 //! The decoder's per-session state: the LSTM's h/c, the projected prediction, the halves the session lays
 //! once a weight plane, and the joint's logit row.
 struct RnntState {
-    h : array<float>          //!< [n_layers × pred_dim]
-    c : array<float>
-    pred : array<float>       //!< joint.pred projection of the last hidden [joint_dim]
-    gates : array<float>      //!< scratch [4 × pred_dim]: the ih and hh dots summed
-    xin : array<float>        //!< scratch [pred_dim]: layer input
-    bias : array<float>       //!< [n_layers][4 pred_dim] each layer's gate bias, packed i, f, o, g
+    @pool @exact_size h : array<float>          //!< [n_layers × pred_dim]
+    @pool @exact_size c : array<float>
+    @pool @exact_size pred : array<float>       //!< joint.pred projection of the last hidden [joint_dim]
+    @scratch @exact_size gates : array<float>      //!< scratch [4 × pred_dim]: the ih and hh dots summed
+    @scratch @exact_size xin : array<float>        //!< scratch [pred_dim]: layer input
+    @pool @exact_size bias : array<float>       //!< [n_layers][4 pred_dim] each layer's gate bias, packed i, f, o, g
     rows_f32 : bool           //!< `wh` and `joint_wt` hold floats, two halfwords an element: the target converts halves in software
-    wh : array<uint16>        //!< the stack's weights as halves, or floats under `rows_f32`: a layer's ih then hh [4 pred_dim][pred_dim], then joint.pred [joint_dim][pred_dim]
+    @pool @exact_size wh : array<uint16>        //!< the stack's weights as halves, or floats under `rows_f32`: a layer's ih then hh [4 pred_dim][pred_dim], then joint.pred [joint_dim][pred_dim]
     wh_key : uint64           //!< the weight plane `wh` was converted from (0 = none)
-    joint_wt : array<uint16>  //!< the joint net's weight as input columns in logit blocks, halves
+    @pool @exact_size joint_wt : array<uint16>  //!< the joint net's weight as input columns in logit blocks, halves
     joint_wt_key : uint64     //!< the weight plane `joint_wt` was laid from (0 = none)
     @scratch dec_stages : array<int3>   //!< a decode step's stage list, int3(range_begin, range_end, num_chunks)
-    logits : array<float>
+    @scratch @exact_size logits : array<float>
 }
 
 let RNNT_JOINT_BLOCK = 256l   //!< the logits a lane's block of the joint table covers: its columns sit back to back, so a lane walks its block forward

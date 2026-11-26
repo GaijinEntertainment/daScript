@@ -230,37 +230,37 @@ def private register_gemma4a_image_tags {
 //! Hot-path scratch for one clip encode — a transcribe allocates nothing per call.
 struct Gemma4aState {
     // mel
-    mel : array<float>        // frame-major [n_len × n_mel]
+    @scratch @exact_size mel : array<float>        // frame-major [n_len × n_mel]
     n_len : int64
     pre : array<float>
-    padded : array<float>
-    xw : array<float>
-    reim : array<float>
+    @scratch @exact_size padded : array<float>
+    @scratch @exact_size xw : array<float>
+    @scratch @exact_size reim : array<float>
     // subsample
-    col : array<float>
-    y0 : array<float>
-    y1 : array<float>
+    @scratch @exact_size col : array<float>
+    @scratch @exact_size y0 : array<float>
+    @scratch @exact_size y1 : array<float>
     // encoder
-    x : array<float>          // residual stream [npos × d_model]
-    xb : array<float>         // norm scratch
-    xc : array<float>         // clamp-input scratch (sized to max width)
-    h : array<float>          // ff hidden [npos × n_ff]
-    glu : array<float>        // conv GLU output [npos × d_model]
-    cvd : array<float>        // depthwise conv output [npos × d_model]
-    qq : array<float>
-    kk : array<float>
-    vv : array<float>
-    ao : array<float>         // attention output [npos × d_model]
-    prpe : array<float>       // projected RPE [13 × d_model]
-    sc : array<float>         // per-query score window
+    @scratch @exact_size x : array<float>          // residual stream [npos × d_model]
+    @scratch @exact_size xb : array<float>         // norm scratch
+    @scratch @exact_size xc : array<float>         // clamp-input scratch (sized to max width)
+    @scratch @exact_size h : array<float>          // ff hidden [npos × n_ff]
+    @scratch @exact_size glu : array<float>        // conv GLU output [npos × d_model]
+    @scratch @exact_size cvd : array<float>        // depthwise conv output [npos × d_model]
+    @scratch @exact_size qq : array<float>
+    @scratch @exact_size kk : array<float>
+    @scratch @exact_size vv : array<float>
+    @scratch @exact_size ao : array<float>         // attention output [npos × d_model]
+    @scratch @exact_size prpe : array<float>       // projected RPE [13 × d_model]
+    @scratch @exact_size sc : array<float>         // per-query score window
     @scratch @exact_size out : array<float>        // projected soft tokens [npos × proj_dim]
     out_ready : bool          //! the device blocks hook ran the projector tail and filled `out`: the CPU tail stands down
-    tmp : array<float>        // output-proj scratch [npos × proj_dim]
-    xqi : array<int8>         // q8 activation image — per-site requant (clamps differ per site)
-    xsi : array<float>
-    posf : array<float>       // RPE table copy + its q8 image, requantized once per encode
-    posq : array<int8>
-    poss : array<float>
+    @scratch @exact_size tmp : array<float>        // output-proj scratch [npos × proj_dim]
+    @scratch @exact_size xqi : array<int8>         // q8 activation image — per-site requant (clamps differ per site)
+    @scratch @exact_size xsi : array<float>
+    @scratch @exact_size posf : array<float>       // RPE table copy + its q8 image, requantized once per encode
+    @scratch @exact_size posq : array<int8>
+    @scratch @exact_size poss : array<float>
 }
 
 // ===== loader =====
@@ -744,7 +744,7 @@ def gemma4a_log_mel(enc : Gemma4aEncoder; samples : array<float> | #; off, len :
 
 // im2col a [ih × iw × cin] image (k3 s2 p1) into st.col, then mm + LayerNorm(cout) + ReLU into out.
 // Weight flat [cout][cin][kh][kw] (= im2col column order). LayerNorm has weight only (no bias).
-def private g4a_conv_stage(enc : Gemma4aEncoder; var st : Gemma4aState; var out : array<float>;
+def private g4a_conv_stage(enc : Gemma4aEncoder; var st : Gemma4aState; @scratch var out : array<float>;
                            x : array<float>; w_off, norm_off, iw, ih, cin, cout : int64) {
     let ow = conv_s2_out(iw)
     let oh = conv_s2_out(ih)

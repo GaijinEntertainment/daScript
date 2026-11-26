@@ -19,8 +19,9 @@ size follows the input - patch count, pixel count, clip frames - is a defect wit
 `@exact_size` on its declaration.**
 
 **A buffer in `dasllama/dasllama_vision_embedder.das` or a vision family file that outlives one
-encode and is reused by the next (a state field, a module global) is a defect unless `@scratch`
-sits on its declaration or on the parameter of every callee that grows it.**
+encode and is reused by the next (a state field, a module global) is a defect unless `@scratch`,
+or `@pool` when the next encode reads what this one left, sits on its declaration or on the
+parameter of every callee that grows it.**
 
 **A debug or profiling code path in `dasllama/dasllama_vision_embedder.das` or a vision family
 file that is not `[cold_path]` is a defect.**

@@ -267,7 +267,7 @@ def private hc_batch_run(m : Model) : HcBatch {
     s.hc_gate_b |> resize(NPOS * HCD)
     s.hc_lo_b |> resize(NPOS * LR)
     s.hc_inject_b |> resize(NPOS * HC)
-    s.xb_b |> resize(NPOS * DIM)
+    s.xb_b |> reserve_resize(NPOS * DIM)
     var seed = HC_ROWS_SEED
     for (i in range64(NPOS * HCD)) {
         s.hc_res_b[i] = lcg(seed) * 4.0

@@ -55,9 +55,9 @@ struct Gemma4uvEmbedder {
 
 //! Per-encode scratch, caller-owned like the audio EncoderState.
 struct Gemma4uvState {
-    x0 : array<float>    // [npos × patch_dim] im2col rows, then their LN
-    x1 : array<float>    // [npos × n_embd]
-    x2 : array<float>    // [npos × n_embd]
+    @scratch @exact_size x0 : array<float>    // [npos × patch_dim] im2col rows, then their LN
+    @scratch @exact_size x1 : array<float>    // [npos × n_embd]
+    @scratch @exact_size x2 : array<float>    // [npos × n_embd]
 }
 
 // the embedder owns exactly one thing — its image backing. Every plane borrows.
@@ -251,7 +251,7 @@ def register_gemma4uv_gpu(fn : Gemma4uvGpuEncodeFn) {
 //! `out` = [npos × proj_dim] soft tokens. Returns npos = (w/48)×(h/48).
 [hot_path]
 def gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<float>; w, h : int64;
-                    var out : array<float>) : int64 {
+                    @scratch var out : array<float>) : int64 {
     if (w % t.patch != 0l || h % t.patch != 0l) {
         panic("dasLLAMA gemma4uv: canvas {w}x{h} is not a multiple of the {t.patch}px superpatch - letterbox first")
     }
@@ -300,7 +300,7 @@ def gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<
 //! `out` = npos × proj_dim soft tokens (returns npos); `tag` names the `DASLLAMA_VISION_DUMP`
 //! artifact. `add_user_image` is this plus queueing onto a chat turn.
 def encode_image_(t : Gemma4uvEmbedder; var s : Gemma4uvState; img : VisionImage; tag : string;
-                  var out : array<float>) : int64 {
+                  @scratch var out : array<float>) : int64 {
     if (img.width <= 0 || img.height <= 0) {
         panic("dasLLAMA gemma4uv: encode_image_ got an empty image (decode failed?)")
     }

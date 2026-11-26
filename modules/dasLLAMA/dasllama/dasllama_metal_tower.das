@@ -1878,7 +1878,7 @@ def private fc_prof_device(c : FcGpuCtx; gpu_ms, rec_ms : double; n_layer : int6
 }
 
 //! The FastConformer chain's one command buffer as `encode` records it, then the readback into `x` with each route's engage counted and the context released; false where the command buffer failed, the decline counted where `counted`.
-def private fc_submit(var c : FcGpuCtx; var x : array<float>; d, n_layer : int64; counted : bool; encode : block<(enc : MetalComputeEncoder?) : void>) : bool {
+def private fc_submit(var c : FcGpuCtx; @scratch var x : array<float>; d, n_layer : int64; counted : bool; encode : block<(enc : MetalComputeEncoder?) : void>) : bool {
     var err = ""
     var gpu_ms = 0.0lf
     var rec_ms = 0.0lf
@@ -1946,7 +1946,7 @@ def metal_tower_enc_rows(gen : uint64; elems : int64) : MetalBuffer?
 def metal_tower_held_rows_elems() : int64 => g_tw_rows != null ? g_tw_rows_elems : 0l
 
 //! the FastConformer chain from the shape gate on as ONE command buffer on the image's lane, the projector behind it under `fc.proj` (its rows into `out`)
-def private fc_run(fc : TwFc; var x : array<float>; @scratch var out : array<float>; npos, ww : int64) : bool {
+def private fc_run(fc : TwFc; @scratch var x : array<float>; @scratch var out : array<float>; npos, ww : int64) : bool {
     let d = fc.d
     let pn = fc.proj.rows
     if (!fc_form_shape_ok(fc.form, d, fc.ff, fc.n_head, fc.nk, npos, ww) || pn % 64l != 0l) {

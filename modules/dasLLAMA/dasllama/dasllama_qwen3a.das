@@ -509,10 +509,10 @@ def register_qwen3a_front_gpu(fn : Qwen3aFrontGpuFn) {
 //! Scratch for the qwen3a conv frontend (sized on first use, reused across windows/calls).
 struct Qwen3aConvState {
     @scratch xin : array<float>    // chunk input [100·128] as [ih][iw][1]
-    col : array<float>
-    y1 : array<float>
-    y2 : array<float>
-    y3 : array<float>
+    @scratch @exact_size col : array<float>
+    @scratch @exact_size y1 : array<float>
+    @scratch @exact_size y2 : array<float>
+    @scratch @exact_size y3 : array<float>
     @scratch feat : array<float>   // [13 × 16·n_ch]
     @scratch crow : array<float>   // conv_out rows for one chunk [13 × d_model]
     // requant image for the cblob trio's activations (sized per encode — never the core's

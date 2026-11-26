@@ -59,8 +59,9 @@ a constant table built from the audio config alone (the window, the DFT twiddles
 filterbank) - in an ASR model file that does not go through `gemm_f32_jo` is a defect,
 hand-written loops included.**
 
-**A buffer reused across calls in an audio-rail file that is not `@scratch` - on its
-declaration, or on the parameter of every callee that grows it - is a defect.**
+**A buffer reused across calls in an audio-rail file that is neither `@scratch` nor `@pool` -
+`@pool` when the next call reads what this one left - on its declaration, or on the parameter of
+every callee that grows it, is a defect.**
 
 **A debug or profiling code path in an audio-rail file whose work is not inside a `[cold_path]`
 function is a defect.** Such a path is a function or branch that runs only while a debug or

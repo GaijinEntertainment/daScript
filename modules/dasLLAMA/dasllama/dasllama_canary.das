@@ -219,47 +219,47 @@ def canary_image_tag(path : string; q8 : bool; dev : TowerDev) : string => canar
 
 //! Every hot-path buffer of the canary encode, so a transcribe allocates nothing per call.
 struct CanaryState {
-    mel : array<float>        // frame-major [n_len × n_mel]
+    @scratch @exact_size mel : array<float>        // frame-major [n_len × n_mel]
     n_len : int64
     n_valid : int64           // real mel frame count (n_in / hop) — drives the conv length mask
     mel_ready : bool          //! the spectrum half ran over the windowed frames (the device front computes its own)
     // mel scratch
-    pre : array<float>
-    padded : array<float>
-    xw : array<float>
-    reim : array<float>
+    @scratch @exact_size pre : array<float>
+    @scratch @exact_size padded : array<float>
+    @scratch @exact_size xw : array<float>
+    @scratch @exact_size reim : array<float>
     // conv scratch
-    col : array<float>
-    y0 : array<float>
-    y2 : array<float>
-    y3 : array<float>
-    y5 : array<float>
-    y6 : array<float>
-    xf : array<float>
+    @scratch @exact_size col : array<float>
+    @scratch @exact_size y0 : array<float>
+    @scratch @exact_size y2 : array<float>
+    @scratch @exact_size y3 : array<float>
+    @scratch @exact_size y5 : array<float>
+    @scratch @exact_size y6 : array<float>
+    @scratch @exact_size xf : array<float>
     // encoder
-    x : array<float>
-    xb : array<float>
-    h : array<float>
-    ao : array<float>
-    qq : array<float>
-    kk : array<float>
-    vv : array<float>
-    pos_emb : array<float>
-    posl : array<float>
-    qu : array<float>
-    qv : array<float>
-    kt : array<float>
-    vh : array<float>
-    posh : array<float>
-    sc : array<float>
-    rl : array<float>
-    oh : array<float>
-    out : array<float>        // projected soft tokens [tt × proj_dim]
-    xqi : array<int8>         // q8 activation image — one requant shared by q/k/v, per-site otherwise
-    xsi : array<float>
-    xbsi : array<int>         //!< the Q8_K image's per-16 sums (a kq-lane tower's; the FC chain passes it, canary never fills it)
-    posq : array<int8>        // pos_emb rows requantized once per encode (layer-invariant input)
-    poss : array<float>
+    @scratch @exact_size x : array<float>
+    @scratch @exact_size xb : array<float>
+    @scratch @exact_size h : array<float>
+    @scratch @exact_size ao : array<float>
+    @scratch @exact_size qq : array<float>
+    @scratch @exact_size kk : array<float>
+    @scratch @exact_size vv : array<float>
+    @scratch @exact_size pos_emb : array<float>
+    @scratch @exact_size posl : array<float>
+    @scratch @exact_size qu : array<float>
+    @scratch @exact_size qv : array<float>
+    @scratch @exact_size kt : array<float>
+    @scratch @exact_size vh : array<float>
+    @scratch @exact_size posh : array<float>
+    @scratch @exact_size sc : array<float>
+    @scratch @exact_size rl : array<float>
+    @scratch @exact_size oh : array<float>
+    @scratch @exact_size out : array<float>        // projected soft tokens [tt × proj_dim]
+    @scratch @exact_size xqi : array<int8>         // q8 activation image — one requant shared by q/k/v, per-site otherwise
+    @scratch @exact_size xsi : array<float>
+    @scratch @exact_size xbsi : array<int>         //!< the Q8_K image's per-16 sums (a kq-lane tower's; the FC chain passes it, canary never fills it)
+    @scratch @exact_size posq : array<int8>        // pos_emb rows requantized once per encode (layer-invariant input)
+    @scratch @exact_size poss : array<float>
 }
 
 // ===== bin container =====
@@ -705,7 +705,7 @@ def private cn_conv0(m : CanaryEncoder; var st : CanaryState; ih, iw : int64) {
 }
 
 // depthwise conv2d k3 s2 p1: per-channel 3x3, + bias, NO relu. w [ch × 9] (kh·3+kw).
-def private cn_conv_dw(m : CanaryEncoder; var out : array<float>; x : array<float>;
+def private cn_conv_dw(m : CanaryEncoder; @scratch var out : array<float>; x : array<float>;
                        w_off, b_off : int64; iw, ih : int64) {
     let ch = m.n_sub_ch
     let ow = conv_s2_out(iw)
@@ -734,8 +734,8 @@ def private cn_conv_dw(m : CanaryEncoder; var out : array<float>; x : array<floa
 }
 
 // pointwise 1x1 conv (channel mix) + bias + relu, over rows
-def private cn_conv_pw(m : CanaryEncoder; var out : array<float>; x : array<float>;
-                       var xq : array<int8>; var xs : array<float>; w_off, b_off, rows : int64) {
+def private cn_conv_pw(m : CanaryEncoder; @scratch var out : array<float>; x : array<float>;
+                       @scratch var xq : array<int8>; @scratch var xs : array<float>; w_off, b_off, rows : int64) {
     let ch = m.n_sub_ch
     ensure_length(out, rows * ch)
     tower_mm_rq(m, out, w_off, x, xq, xs, ch, ch, rows)
