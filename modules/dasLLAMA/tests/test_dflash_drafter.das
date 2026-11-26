@@ -119,6 +119,19 @@ def private load_synth_dflash(bytes : array<uint8>; name : string) : DflashDraft
     return <- load_dflash_drafter(p)
 }
 
+[test(description = "Off the matrix-unit form the Metal verify seat takes a block drafter's round with no depth set at three drafts and their seed, and the round's widest rows on the form, under a set depth, and for a trunk with no block drafter")]
+def test_dflash_metal_seat_rows(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        t |> equal(metal_verify_rows_for(true, false, false), METAL_ROWS_DRAFTS + 1l, "off the form a block drafter's round verifies the row forms' drafts and their seed")
+        t |> equal(METAL_ROWS_DRAFTS, 3l, "... three drafts")
+        t |> equal(metal_verify_rows_for(true, true, false), MTP_MAX_ROWS, "control: on the matrix-unit form the round keeps its widest rows")
+        t |> equal(metal_verify_rows_for(true, false, true), MTP_MAX_ROWS, "control: a set depth takes its own rows")
+        t |> equal(metal_verify_rows_for(false, false, false), MTP_MAX_ROWS, "control: a round with no block drafter keeps its rows")
+    } else {
+        t |> skip("the Metal verify seat's rows: no Metal home in this build")
+    }
+}
+
 [test(description = "`load_dflash_drafter` refuses a missing path, a non-GGUF file, a synthesized drafter with an IQ4_XS fc.weight (naming tensor, disk type and member) and one with a `.scale` beside a Q4_K fc.weight, each with a reason and no weights, while a Q4_K fc.weight passes tagged k4 with no scale (control) and an NVFP4 one passes tagged nv4 carrying the `.scale` beside it, or none where the file has none")]
 def test_dflash_refusals(t : T?) {
     if (!arm_on(t, "dflash-refuse")) {
@@ -707,7 +720,7 @@ def private joint_streams_leg(t : T?; m : Model) {
     }
 }
 
-[test(description = "On gemma-4-E2B's Metal home with its DFlash2 drafter attached through the facade, a two-turn greedy chat's replies and a greedy completion's ids are the plain model's token for token (a driver-against-itself compare, the drafted chat's steps counted on the device), the drafted walks accepting drafts; two streams through the scheduler ride joint rounds, each the plain scheduler's token for token; the stream with a stop id ends on that id's first occurrence; on the same load the exact sampled DFlash walk spends one draw a judged row with drafts accepted and opens on the plain sampled walk's first id, both rejection walks accept some drafts and reject some, drawn drafts end on the device selector, and verify-ahead off or the soft pick off reproduce the same stream")]
+[test(description = "On gemma-4-E2B's Metal home with its DFlash2 drafter attached through the facade, a two-turn greedy chat's replies and a greedy completion's ids are the plain model's token for token (a driver-against-itself compare, the drafted chat's steps counted on the device), the drafted walks accepting drafts; two streams through the scheduler ride joint rounds, each the plain scheduler's token for token; the stream with a stop id ends on that id's first occurrence; on the same load the exact sampled DFlash walk spends one draw a judged row with drafts accepted and opens on the plain sampled walk's first id, both rejection walks accept some drafts and reject some, drawn drafts end on the device selector, and verify-ahead off or the soft pick off reproduce the same stream; over a prompt past one of the drafter's windows the ring that grew its dense layer drafts id for id what a ring reserved that wide drafts, and with every layer held to the window the drafts differ")]
 def test_dflash_e2b_facade_streams(t : T?) {
     if (!arm_on(t, "dflash-e2b-facade") || !family_on(t, "gemma4e")) {
         return
@@ -784,6 +797,9 @@ def private e2b_metal_twins(t : T?; var m : Model) {
     unsafe {   //! the cell captures the loaded trunk by reference
         t |> run("gemma-4-E2B, the sampled DFlash walks on the Metal device arm: the exact walk spends one draw a judged row and opens on the plain sampled walk's first id, a stop id, the rejection walks accept some and reject some, the device selector, verify-ahead and soft pick give the same stream") @capture(& m)(t : T ?) {
             sampled_modes_walk(t, m, E2B_DRAFTER_FILE, true, "E2B sampled metal")
+        }
+        t |> run("gemma-4-E2B on the Metal device arm, over a prompt past one of the DFlash2 drafter's windows: the ring that grew its dense layer drafts id for id what a ring reserved that wide drafts, and with every layer held to the window the drafts differ") @capture(& m)(t : T ?) {
+            dense_ring_leg(t, m, E2B_DRAFTER_FILE, "E2B Metal, the dense layer", METAL_DENSE_ITEMS, HOST_CTX, 1l, true)
         }
     }
 }

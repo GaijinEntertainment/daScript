@@ -1909,7 +1909,7 @@ def private vt_aud_blocks(t : AudioTower; var s : EncoderState; npos : int64; ln
     if (hs != 64l || d % 64l != 0l || ff % 64l != 0l || npos > VT_MAX_ENCODE_ROWS || npos <= 0l) {
         return vt_flush_and_decline(r, TowerDecline.shape)
     }
-    let arm = vt_arm(r)
+    let arm = vt_arm(r, f16w)
     if (!arm.ok) {
         vt_x_flush(r)
         return false

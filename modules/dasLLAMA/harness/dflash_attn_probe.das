@@ -4,18 +4,19 @@ options persistent_heap
 options _dasllama_internal = true
 
 // ATTRIBUTION SWEEP: the block drafter's attention pair - the key-tile kernel and its merge - timed on the CUDA home over
-// synthetic planes at a drafter's geometry (the tile kernel its driver takes there), no model loaded and no output compared: a launch a layer over the layers' rings
+// synthetic planes at a drafter's geometry (rings of halves), no model loaded and no output compared: a launch a layer over the layers' rings
 // in turn, at each ring fill asked for - microseconds a launch, the best of five chains of `--reps` launches after one
 // warm chain it drops, and a pass's layers in milliseconds.
 //
 //   DASLLAMA_GPU=1 DASLLAMA_CUDA=1 bin/daslang -jit modules/dasLLAMA/harness/dflash_attn_probe.das -- [--rows 8]
-//       [--heads 32] [--kv 8] [--fills 0,512,2048] [--grouped]
+//       [--heads 32] [--kv 8] [--fills 0,512,2048]
 
 require dasllama/dasllama_lint public
 require dasllama/dasllama_cuda_common
-require dasllama/dasllama_cuda_classes_dflash   // the stamps, and gk_dflash_attn_heads_wgs through the discrete kernel file
-require dasllama/dasllama_gpu_kernels_common   // GkDflashAttnArgs, gk_dflash_attn_tiles, gk_dflash_attn_partials
+require dasllama/dasllama_cuda_classes_dflash   // the stamps
+require dasllama/dasllama_gpu_kernels_common   // GkDflashAttnArgs, gk_dflash_attn_tiles, gk_dflash_attn_tile_wgs, gk_dflash_attn_partials
 require daslib/clargs
+require daslib/f16_cvt   // f32_to_f16: the rings are halves
 require _cuda_time   // cuda_time_best
 require _race_fixture   // race_fill
 require _prompt_files   // id_list
@@ -39,8 +40,6 @@ struct Args {
     fills : string = "0,256,512,1024,2048"
     @clarg_doc = "Dispatches a timed chain"
     reps : int = 50
-    @clarg_doc = "Time the grouped tile at a geometry whose driver takes the tile a head"
-    grouped : bool
     @clarg_short = "h"
     @clarg_doc = "Show this help and exit"
     help : bool
@@ -54,13 +53,12 @@ def private geometry_refusal(a : Args) : string {
     return ""
 }
 
-//! one tile launch under the kernel a drafter's driver takes: the grouped tile, or the tile a head
-def private enc_tile(grouped : bool; var s : void?; bufs : uint64[6]; var pa : GkDflashAttnArgs; wgs : int64) {
-    if (grouped) {
-        enc_dflash_attn_tile_heads_cls(s, bufs, pa, wgs)
-    } else {
-        enc_dflash_attn_tile_cls(s, bufs, pa, wgs)
-    }
+//! `n` halves off the race's fill
+def private halves_fill(n, salt : int; amp : float) : array<uint16> {
+    var f <- race_fill(n, salt, amp, 0.0)
+    var h <- [for (v in f); uint16(f32_to_f16(v))]
+    delete f
+    return <- h
 }
 
 [export, cold_path]
@@ -80,7 +78,7 @@ def main : int {
         print("error: {refusal}\n")
         return 2
     }
-    if (!cud_init() || !ensure_dflash_attn_tile_cls() || !ensure_dflash_attn_tile_heads_cls() || !ensure_dflash_attn_merge_cls()) {
+    if (!cud_init() || !ensure_dflash_attn_tile_cls() || !ensure_dflash_attn_merge_cls()) {
         print("no CUDA device, or a stamp did not compile\n")
         return 1
     }
@@ -96,8 +94,8 @@ def main : int {
     var q_host <- race_fill(a.rows * qd, 7, 0.4, 0.0)
     var kb_host <- race_fill(int(rows * kvd), 11, 0.4, 0.0)
     var vb_host <- race_fill(int(rows * kvd), 13, 0.6, 0.0)
-    var rk_host <- race_fill(int(layers * w * kvd), 17, 0.4, 0.0)
-    var rv_host <- race_fill(int(layers * w * kvd), 19, 0.6, 0.0)
+    var rk_host <- halves_fill(int(layers * w * kvd), 17, 0.4)
+    var rv_host <- halves_fill(int(layers * w * kvd), 19, 0.6)
     let dq = buf_upload(q_host, s)
     let dkb = buf_upload(kb_host, s)
     let dvb = buf_upload(vb_host, s)
@@ -110,20 +108,19 @@ def main : int {
     delete rv_host
     let dtp = buf_fill(int(gk_dflash_attn_partials(rows, heads, hs)), 0.0, s)
     let dout = buf_fill(a.rows * qd, 0.0, s)
-    let ring_mb = double(w * kvd) * 4.0lf / 1048576.0lf
-    let grouped = a.grouped || gk_dflash_attn_grouped(grp)   // the tile the drafter's driver takes at this geometry, unless forced
-    print("{rows} rows of {heads} heads of {hs} over {a.kv} K/V heads, a window of {w}: {layers} layers' rings, {ring_mb:.1f} MB of K and of V a layer, the {grouped ? "grouped tile" : "tile a head"}\n")
+    let ring_mb = double(w * kvd) * 2.0lf / 1048576.0lf
+    print("{rows} rows of {heads} heads of {hs} over {a.kv} K/V heads, a window of {w}: {layers} layers' rings, {ring_mb:.1f} MB of K and of V a layer in halves\n")
     var measured = 0
     for (nctx in id_list(a.fills, 0l, w)) {
         let tiles = gk_dflash_attn_tiles(nctx + rows)
         var pa = GkDflashAttnArgs(rows = uint(rows), pos0 = uint(nctx), lo = 0u, nctx = uint(nctx), w = uint(w), hs = uint(hs),
             nheads = uint(heads), grp = uint(grp), scale = 1.0 / sqrt(float(hs)), rbase = 0u, koff = 0u, voff = 0u)
-        let wgs = gk_dflash_attn_heads_wgs(rows, heads, grp, tiles)
+        let wgs = gk_dflash_attn_tile_wgs(rows, heads, grp, tiles)
         let us_tile = cuda_time_best(a.reps) $(i) {
             let lbase = uint(int64(i) % layers * w * kvd)
             pa.koff = lbase
             pa.voff = lbase
-            enc_tile(grouped, s, fixed_array(dq, dkb, dvb, drk, drv, dtp), pa, wgs)
+            enc_dflash_attn_tile_cls(s, fixed_array(dq, dkb, dvb, drk, drv, dtp), pa, wgs)
         }
         let us_merge = cuda_time_best(a.reps) $(_i) {
             enc_dflash_attn_merge_cls(s, fixed_array(dtp, dout), pa, heads * rows)

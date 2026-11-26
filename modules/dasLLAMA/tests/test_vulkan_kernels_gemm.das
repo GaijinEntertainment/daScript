@@ -39,10 +39,12 @@ require _discrete_cells   // nolint:STYLE030,LINT019 — the f16 s-column case b
 //! The Vulkan tier's GEMM tile families against their CPU oracles, one cell a class family: the f16 GEMMs on the cm2 tile
 //! and on KHR fragments, the sdot4 and per-32 batch tiles over every kq leaf format, the coopmat batch variants, the KHR
 //! tile and the staged KHR tile over a file's f32 rows, the cm2 l, m, s and e stamps over q8 and every K-quant, IQ, MXFP4
-//! and NVFP4 format, the split-k chunks and the reduce, and the resolved coopmat default ladder with the tile and split
-//! picks. Skips: every cell without dasVulkan or a Vulkan device; the cm2 arms off a coopmat2 device created in cm2 mode;
-//! the KHR arms without KHR cooperative matrices at subgroup 32; the tile-pick cell where DASLLAMA_CM2_TILE or
-//! DASLLAMA_CM2_SPLITK forces the pick; a class rail a device declines.
+//! and NVFP4 format, the split-k chunks and the reduce, the int8 tiles with their feeds, row map and device check, and the
+//! resolved coopmat default ladder with the tile and split picks. Skips: every cell without dasVulkan or a Vulkan device;
+//! the cm2 arms off a coopmat2 device created in cm2 mode; the KHR arms without KHR cooperative matrices at subgroup 32;
+//! the int8 tile cell on a device whose s8 products fail the device check; the tile-pick cell where DASLLAMA_CM2_TILE or
+//! DASLLAMA_CM2_SPLITK forces the pick; the rotated-walk cell under a `DASLLAMA_VK_ALT_STAMPS` pin; a class rail a device
+//! declines.
 
 let private TILE_SLACK_ROWS = int(TILE_READ_SLACK)   //! the cm2 fixtures' rows past the last region, the engine's count: a stamp that loads partial columns unclamped (`STILE`) reads the last region's column rounded up to its BN, so the slack holds while every such stamp keeps BN <= slack + 1
 let private Q8_CELL_K = 544     //! the q8 cm2 s and e cells' K: 512 + 32, off the 64-deep stamp's k grid, so the tile takes its padded edge path (the l and m cells run K = 576, the fast path; TILE_CELL_K, the per-format cells' K, sits in _vk_kq_fixtures)
@@ -695,16 +697,66 @@ def test_vkd_q8_khr_batch(t0 : T?) {
                 t |> skip("the KHR kq tile needs KHR cooperative matrices at subgroup 32")
                 return
             }
-            var wqh, wsh : array<uint>
-            q8_planes(576, 17u, 991u, wqh, wsh)   // K off the 256 lattice: the 32-deep k step runs a tail past the last superblock
-            var f <- tile_fixture(576, 32, wqh, wsh, 3u, 5u)
-            var y_ref <- tile_cell_arms(t, "q8", int(KqFmt.q8), f, [ARM_KHR], @@q8f16_gemm_oracle)
-            // the split arm: the first region alone under two 256-aligned k chunks (512 and 64 deep) into the partial
-            // planes, then the reduce into the y plane - the k0 / k1 / ybase prologue the KHR stamp shares with the cm2 tiles
-            khr_split_arm(t, "q8 KHR tile", f, y_ref, 512l, @@set_q8_batch_khr_cls,
-                @@ < (raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) : void > enc_q8_batch_khr_cls)
-            delete y_ref
-            delete f
+            q8_khr_cell(t)
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the q8 KHR tile's cell body over whichever stamp its slot serves: the two regions whole, then the first region in two k chunks through the reduce
+def private q8_khr_cell(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        var wqh, wsh : array<uint>
+        q8_planes(576, 17u, 991u, wqh, wsh)   // K off the 256 lattice: the 32-deep k step runs a tail past the last superblock
+        var f <- tile_fixture(576, 32, wqh, wsh, 3u, 5u)
+        var y_ref <- tile_cell_arms(t, "q8", int(KqFmt.q8), f, [ARM_KHR], @@q8f16_gemm_oracle)
+        // the split arm: the first region alone under two 256-aligned k chunks (512 and 64 deep) into the partial
+        // planes, then the reduce into the y plane - the k0 / k1 / ybase prologue the KHR stamp shares with the cm2 tiles
+        khr_split_arm(t, "q8 KHR tile", f, y_ref, 512l, @@set_q8_batch_khr_cls,
+            @@ < (raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) : void > enc_q8_batch_khr_cls)
+        delete y_ref
+        delete f
+    }
+}
+
+[test(description = "With the rotated-walk bit in the served set every format's KHR tile slot builds its alternate, with no rebuild asked, and each alternate matches its format's CPU oracle at the coopmat bar over the tile cells' two regions - the second weight tile's walk starting two steps in and wrapping - the q8 one also split into k chunks, the staged f32 one over its one region whole and in two k chunks; the q8 and the f32 alternates take the dispatches and the slots' own stamps none; with the bit off the slot is its own stamp again")]
+def test_vkd_khr_rot_tiles(t0 : T?) {
+    t0 |> run("the KHR tiles' rotated-walk alternates == the CPU oracles") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
+                t |> skip("no Vulkan device")
+                return
+            }
+            if (!khr_kq_tile_on() || vk_alt_pinned()) {
+                t |> skip(vk_alt_pinned() ? "DASLLAMA_VK_ALT_STAMPS pins the served set - the cell needs the knob" : "the KHR kq tile needs KHR cooperative matrices at subgroup 32")
+                return
+            }
+            let saved = vk_alt_stamps()
+            let bit = 1l << int64(VK_ALT_KHR_ROT)
+            set_vk_alt_stamps(saved & ~bit)
+            let own_built = khr_cls_ensure(int(KqFmt.q8)) && ensure_f32_batch_khr_cls()   // the two slots hold their own stamps before the set changes
+            set_vk_alt_stamps(saved | bit)   // the set's change alone rebuilds the slots: the cell asks for no rebuild
+            var rows <- fmt_tile_rows()
+            t |> success(own_built, "with the bit off the q8 and the staged f32 KHR slots build their own stamps")
+            t |> equal(vkd_slot_kernel("q8_batch_khr_cls_spv"), "q8_batch_khr_rot_cls_spv", "the q8 KHR slot serves its rotated alternate under the bit")
+            t |> equal(vkd_slot_kernel("kq_batch_k4_khr_cls_spv"), "kq_batch_k4_khr_rot_cls_spv", "... and a K-quant format's does")
+            t |> equal(vkd_slot_kernel("f32_batch_khr_cls_spv"), "f32_batch_khr_rot_cls_spv", "... and the staged f32 tile's does")
+            vk_kernel_coverage_reset()
+            q8_khr_cell(t)
+            f32_khr_cell(t, "the staged f32 tile's rotated alternate")
+            for (r in rows) {
+                fmt_tile_cell(t, r.fmt)
+            }
+            delete rows
+            for (stem in fixed_array("q8_batch_khr", "f32_batch_khr")) {
+                let alt_runs = vk_kernel_coverage_of("{stem}_rot_cls_spv")
+                let own_runs = vk_kernel_coverage_of("{stem}_cls_spv")
+                t |> success(alt_runs > 0l && own_runs == 0l, "the {stem} slot rebuilt when the set changed: its rotated alternate took the dispatches ({alt_runs}) and its own stamp none ({own_runs})")
+            }
+            set_vk_alt_stamps(saved & ~bit)
+            t |> equal(vkd_slot_kernel("q8_batch_khr_cls_spv"), "q8_batch_khr_cls_spv", "control: with the bit off the q8 KHR slot is its own stamp")
+            set_vk_alt_stamps(saved)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -714,6 +766,32 @@ def test_vkd_q8_khr_batch(t0 : T?) {
 //! the f32 stamp's set off the KHR arm's five planes: it binds no scale plane, so the second plane stays unbound
 def private set_f32_khr_wo_scales(bufs; sizes; gbits) => set_f32_batch_khr_cls(fixed_array(bufs[0], bufs[2], bufs[3], bufs[4]),
     fixed_array(sizes[0], sizes[2], sizes[3], sizes[4]), fixed_array(gbits[0], gbits[2], gbits[3], gbits[4]))
+
+//! the staged f32 tile's cell body over whichever stamp its slot serves: one region of f32 rows whose low mantissa bits the stage
+//! rounds away, whole through the reduce and in two k chunks, against the oracle that rounds each weight to f16
+def private f32_khr_cell(t : T?; tag : string) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let built = ensure_f32_batch_khr_cls()
+        t |> success(built, "{tag}: the class rail engages on a coopmat device")
+        return if (!built)
+        let n = 544   //! seventeen 32-deep k steps, off every 64 and 256 lattice
+        var wqh <- [for (i in range(2 * TILE_CELL_D * n)); float_bits_to_uint(float(hash_word(uint(i) + 71u) % 4001u) * 0.0000317 - 0.0634)]   //! f32 words whose low mantissa bits the stage rounds away
+        var wsh <- [0u, 0u, 0u, 0u]   //! the fixture's scale plane, which the f32 stamp binds no slot for
+        var f <- tile_fixture(n, 4, wqh, wsh, 3u, 5u)
+        let d = TILE_CELL_D
+        var y_ref : array<float>
+        y_ref |> resize(f.rows * d)
+        var recs <- one_region_words(TILE_CELL_ROWS0, ((TILE_CELL_ROWS0 + 127) / 128) * ((d + 127) / 128))
+        f32f16_gemm_oracle(f.wqh, f.wsh, f.xfh, recs, 1, n, d, y_ref)   //! the stamp's one schedule form: a region at row 0, its map at word 4
+        khr_split_arm(t, tag, f, y_ref, 0l, @@ < (bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet > set_f32_khr_wo_scales,
+            @@ < (raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) : void > enc_f32_batch_khr_cls, 1)   // the projection's whole form
+        khr_split_arm(t, tag, f, y_ref, 512l, @@ < (bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet > set_f32_khr_wo_scales,
+            @@ < (raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) : void > enc_f32_batch_khr_cls)   // the window gate's split form
+        delete recs
+        delete y_ref
+        delete f
+    }
+}
 
 [test(description = "The staged KHR tile over f32 rows rounded to f16 on the stage matches the f16-rounding oracle at the coopmat bar over one region, whole through the reduce and in two k chunks")]
 def test_vkd_f32_khr_batch(t0 : T?) {
@@ -727,23 +805,7 @@ def test_vkd_f32_khr_batch(t0 : T?) {
                 t |> skip("the staged f32 tile needs KHR cooperative matrices at subgroup 32")
                 return
             }
-            verify(ensure_f32_batch_khr_cls(), "the staged f32 tile's class rail must engage on a coopmat device")
-            let n = 544   //! seventeen 32-deep k steps, off every 64 and 256 lattice
-            var wqh <- [for (i in range(2 * TILE_CELL_D * n)); float_bits_to_uint(float(hash_word(uint(i) + 71u) % 4001u) * 0.0000317 - 0.0634)]   //! f32 words whose low mantissa bits the stage rounds away
-            var wsh <- [0u, 0u, 0u, 0u]   //! the fixture's scale plane, which the f32 stamp binds no slot for
-            var f <- tile_fixture(n, 4, wqh, wsh, 3u, 5u)
-            let d = TILE_CELL_D
-            var y_ref : array<float>
-            y_ref |> resize(f.rows * d)
-            var recs <- one_region_words(TILE_CELL_ROWS0, ((TILE_CELL_ROWS0 + 127) / 128) * ((d + 127) / 128))
-            f32f16_gemm_oracle(f.wqh, f.wsh, f.xfh, recs, 1, n, d, y_ref)   //! the stamp's one schedule form: a region at row 0, its map at word 4
-            khr_split_arm(t, "the staged f32 tile", f, y_ref, 0l, @@ < (bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet > set_f32_khr_wo_scales,
-                @@ < (raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) : void > enc_f32_batch_khr_cls, 1)   // the projection's whole form
-            khr_split_arm(t, "the staged f32 tile", f, y_ref, 512l, @@ < (bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet > set_f32_khr_wo_scales,
-                @@ < (raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) : void > enc_f32_batch_khr_cls)   // the window gate's split form
-            delete recs
-            delete y_ref
-            delete f
+            f32_khr_cell(t, "the staged f32 tile")
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -1218,6 +1280,285 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
             t |> equal(cm2_tile_cols(3072l, 512l), 256l)    // unknown SM count: l, never a split
             g_gpu.sm_count = saved_sm
             g_gpu.coopmat_mode = saved_mode
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the integer at half `i` of the int8 cells' exact rows, magnitude up to 127, one element of every 32-block at 127: the
+//! halves are these over 1024, so a block's feed quants are the integers themselves and its scale is 1 / 1024
+def private mmq_exact_k(i : int) : int => (i % 32) == (i / 32) % 32 ? 127 : int(hash_word(uint(i) * 5u + 11u) % 255u) - 127
+
+//! `halves` such halves, a pair a word
+def private mmq_exact_halves(halves : int) : array<uint> =>
+    <- [for (i in range(halves / 2)); f32_to_f16(float(mmq_exact_k(i * 2)) / 1024.0) | (f32_to_f16(float(mmq_exact_k(i * 2 + 1)) / 1024.0) << 16u)]
+
+//! an int8 tile cell's fixture: the format's packed planes moved in, the rows int8-exact halves in bucket order
+def private mmq_fixture(n, blk_k : int; var wqh, wsh : array<uint>) : TileFixture {
+    let rows = TILE_CELL_ROWS0 + TILE_CELL_ROWS1
+    var f = TileFixture(n = n, blk_k = blk_k, rows = rows)
+    f.wqh <- wqh
+    f.wsh <- wsh
+    f.xfh <- mmq_exact_halves(rows * n)
+    return <- f
+}
+
+//! the int8 m and s tiles of one format over `f`: the rows laid out in feed order - bucket row b at feed row (11 b + 3)
+//! mod rows - quantized by the f16 feed and read back through that row map, against the format's f16 oracle over the same
+//! rows in bucket order
+def private mmq_tile_arms(t : T?; tag : string; fmt : int; var f : TileFixture;
+                          oracle : function<(wq : array<uint>; wsu : array<uint>; xf : array<uint>; recs : array<uint>; nrec, n, d : int; var y : array<float>) : void>) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let d = TILE_CELL_D
+        let nb = f.n / 32
+        let hw = f.n / 2
+        var inscope tokh, feedh : array<uint>
+        tokh |> resize(f.rows)
+        feedh |> resize(f.rows * hw)
+        for (b in range(f.rows)) {
+            let fr = (b * 11 + 3) % f.rows
+            tokh[b] = uint(fr)
+            for (j in range(hw)) {
+                feedh[fr * hw + j] = f.xfh[b * hw + j]
+            }
+        }
+        var inscope y_ref : array<float>
+        y_ref |> resize(f.rows * d)
+        let tail = 2
+        for (short in fixed_array(false, true)) {
+            verify(mmq_cls_ensure(fmt, short), "the int8 tile's class rail must engage on a device that passed the check")
+            var sr <- two_region_sched(TILE_CELL_ROWS0, TILE_CELL_ROWS1, d * (f.n / f.blk_k), int(short ? SCHED_S_ROWS : SCHED_M_ROWS), (d + 127) / 128, tail)
+            let wgs = sr.wgs
+            var inscope sched <- sr.words
+            for (w in range(wgs, wgs + tail)) {
+                sched[8 + w] = SCHED_NONE
+            }
+            invoke(oracle, f.wqh, f.wsh, f.xfh, sched, 2, f.n, d, y_ref)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let pwq = cp |> in_plain(f.wqh)
+                let pws = cp |> in_plain(f.wsh)
+                let psc = cp |> in_plain(sched)
+                let pxf = cp |> in_plain(feedh)
+                let ptok = cp |> in_plain(tokh)
+                let pxq = cp |> out_words(int64(f.rows * f.n), 0x80808080u)
+                let pxs = cp |> out_words(int64(f.rows * nb) * 8l, NAN_SENTINEL_BITS)
+                let py = cp |> out_(f.rows * d)
+                let fp = fixed_array(pxf, pxq, pxs)
+                var fs = set_mmq_feed16_cls(gather_planes(cp.dev, fp), gather_planes(cp.bytes, fp), gather_planes(cp.hazard_bit, fp))
+                let tp = fixed_array(pwq, pws, psc, pxq, pxs, py, ptok)
+                var sc = mmq_cls_set(fmt, short, gather_planes(cp.dev, tp), gather_planes(cp.bytes, tp), gather_planes(cp.hazard_bit, tp))
+                var pcf = MmqFeedArgs(n = uint(f.n), rows = uint(f.rows))
+                var pc = BatchArgs(n = uint(f.n), d = uint(d), map_off = uint(2 * 4))
+                cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                    enc_mmq_feed16_cls(raw2, h2, fs, pcf, int64((f.rows * nb + 255) / 256))
+                    mmq_cls_enc(fmt, short, raw2, h2, sc, pc, int64(wgs + tail))
+                }
+                check_rows(t, "{tag} int8 {short ? "s" : "m"} tile vs the f16 oracle", cp |> plane_run(py), y_ref, cm_bar(y_ref), d)
+            }
+        }
+    }
+}
+
+[test(description = "The int8 m and s tiles over Q8_0, Q4_K, Q5_K, Q6_K, Q5_1 and per-32 Q5_0 planes - 160 weight rows, two regions of 300 and 260 rows, each format's K of the tile table, the rows int8-exact halves quantized by the f16 feed and read through a row map that is not the identity - match each format's f16 oracle at the coopmat bar")]
+def test_vkd_mmq_tiles(t0 : T?) {
+    t0 |> run("the int8 tiles == the f16 oracles (q8, k4, k5, k6, q51, q5032; the m and s stamps)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
+                t |> skip("no Vulkan device")
+                return
+            }
+            if (!vk_mmq_device_ok()) {
+                t |> skip("the int8 tiles need KHR cooperative matrices at subgroup 32 whose s8 products pass the device check")
+                return
+            }
+            verify(ensure_mmq_feed16_cls(), "the f16 feed's class rail must engage")
+            {
+                var wqh, wsh : array<uint>
+                q8_planes(TILE_CELL_K, 29u, 7u, wqh, wsh)
+                var f <- mmq_fixture(TILE_CELL_K, 32, wqh, wsh)
+                mmq_tile_arms(t, "q8", int(KqFmt.q8), f, @@q8f16_gemm_oracle)
+                delete f
+            }
+            var rows <- fmt_tile_rows()
+            for (fmt in fixed_array(KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q51, KqFmt.q5032)) {
+                let at = find_index_if(rows) $(r : FmtTile) => r.fmt == fmt
+                if (at < 0) panic("format {fmt} has no row in the tile table")
+                var wqh, wsuh : array<uint>
+                fmt_tile_planes(rows[at], wqh, wsuh)
+                var f <- mmq_fixture(rows[at].n, rows[at].blk_k, wqh, wsuh)
+                mmq_tile_arms(t, "{fmt}", int(fmt), f, rows[at].oracle)
+                delete f
+            }
+            delete rows
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+let private MMQ_FEED_ROWS = 6   //! the feed cell's rows: two exact, one hashed, one zero, one hashed, one exact
+let private MMQ_FEED_N = 96     //! ... of three 32-blocks
+
+//! element `i` of the feed cell's rows as a half's value: an exact row's integer over 1024, a zero row's zero, a hashed
+//! row's half of any finite magnitude
+def private mmq_feed_value(i : int) : float {
+    let row = i / MMQ_FEED_N
+    if (row == 3) return 0.0
+    if (row == 2 || row == 4) return f16r(float(int(hash_word(uint(i) * 3u + 17u) % 4001u) - 2000) * 0.00037)
+    return float(mmq_exact_k(i)) / 1024.0
+}
+
+//! the feed's quants further than `tol` from the host's
+def private mmq_quants_off(q : array<uint>; want, tol : array<int>) : int {
+    var off = 0
+    for (i in range(length(want))) {
+        off += abs(byte_s8(q, i) - want[i]) <= tol[i] ? 0 : 1
+    }
+    return off
+}
+
+//! the words of `got` that are not `want`'s
+def private mmq_words_off(got, want : array<uint>) : int {
+    var off = 0
+    for (g, w in got, want) {
+        off += g == w ? 0 : 1
+    }
+    return off
+}
+
+[test(description = "The int8 feeds quantize a 32-block to round(x * 127 / max |x|) beside its scale and the scale times the quants' sum: exact rows give their integers and 1 / 1024, hashed rows the host's quants within one with a consistent sum term, a zero row zeros, and the f16 feed's words equal the f32 feed's over the same values")]
+def test_vkd_mmq_feed(t0 : T?) {
+    t0 |> run("the int8 feeds == the host's quantization (f32 rows and f16 rows)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_mmq_feed_cls() || !ensure_mmq_feed16_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let elems = MMQ_FEED_ROWS * MMQ_FEED_N
+            let nblk = elems / 32
+            var inscope xw <- [for (i in range(elems)); mmq_feed_value(i)]
+            var inscope xh <- [for (i in range(elems / 2)); f32_to_f16(mmq_feed_value(i * 2)) | (f32_to_f16(mmq_feed_value(i * 2 + 1)) << 16u)]
+            with_cell_planes() $(var cp : CellPlanes) {
+                let pxw = cp |> in_plain(xw)
+                let pxh = cp |> in_plain(xh)
+                let pq32 = cp |> out_words(int64(elems), 0x80808080u)
+                let ps32 = cp |> out_words(int64(nblk) * 8l, NAN_SENTINEL_BITS)
+                let pq16 = cp |> out_words(int64(elems), 0x80808080u)
+                let ps16 = cp |> out_words(int64(nblk) * 8l, NAN_SENTINEL_BITS)
+                let p32 = fixed_array(pxw, pq32, ps32)
+                let p16 = fixed_array(pxh, pq16, ps16)
+                var s32 = set_mmq_feed_cls(gather_planes(cp.dev, p32), gather_planes(cp.bytes, p32), gather_planes(cp.hazard_bit, p32))
+                var s16 = set_mmq_feed16_cls(gather_planes(cp.dev, p16), gather_planes(cp.bytes, p16), gather_planes(cp.hazard_bit, p16))
+                var pcf = MmqFeedArgs(n = uint(MMQ_FEED_N), rows = uint(MMQ_FEED_ROWS))
+                cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                    enc_mmq_feed_cls(raw2, h2, s32, pcf, 1l)
+                    enc_mmq_feed16_cls(raw2, h2, s16, pcf, 1l)
+                }
+                var inscope q32 <- cp |> plane_as(pq32, type<uint>, elems / 4)
+                var inscope q16 <- cp |> plane_as(pq16, type<uint>, elems / 4)
+                var inscope sc32 <- cp |> plane_as(ps32, type<float>, nblk * 2)
+                var inscope sc16 <- cp |> plane_as(ps16, type<float>, nblk * 2)
+                var inscope want, tol : array<int>
+                want |> resize(elems)
+                tol |> resize(elems)
+                var sum_off = 0
+                var scale_off = 0
+                for (blk in range(nblk)) {
+                    let row = blk * 32 / MMQ_FEED_N
+                    let exact = row != 2 && row != 4
+                    var amax = 0.0
+                    for (j in range(32)) {
+                        amax = max(amax, abs(xw[blk * 32 + j]))
+                    }
+                    var dsum = 0
+                    for (j in range(32)) {
+                        dsum += byte_s8(q32, blk * 32 + j)
+                        want[blk * 32 + j] = amax > 0.0 ? int(floor(xw[blk * 32 + j] * 127.0 / amax + 0.5)) : 0
+                        tol[blk * 32 + j] = exact ? 0 : 1
+                    }
+                    let want_sc = amax / 127.0
+                    scale_off += abs(sc32[blk * 2] - want_sc) <= want_sc * 1e-6 ? 0 : 1
+                    sum_off += abs(sc32[blk * 2 + 1] - sc32[blk * 2] * float(dsum)) <= abs(sc32[blk * 2] * float(dsum)) * 1e-6 ? 0 : 1
+                }
+                t |> equal(mmq_quants_off(q32, want, tol), 0, "an exact or zero block's quants are its integers, a hashed block's the host's within one")
+                want[5] += 3
+                t |> equal(mmq_quants_off(q32, want, tol), 1, "control: one expected quant moved by three is the one the compare counts")
+                t |> equal(scale_off, 0, "a block's scale is its max magnitude over 127")
+                t |> equal(sum_off, 0, "a block's second word is its scale times the sum of the quants the feed wrote")
+                t |> equal(sc32[0], 1.0 / 1024.0, "an exact block's scale is 1 / 1024")
+                t |> equal(sc32[(3 * MMQ_FEED_N / 32) * 2], 0.0, "a zero block's scale is zero")
+                var words_off = 0
+                for (i in range(elems / 4)) {
+                    words_off += q16[i] == q32[i] ? 0 : 1
+                }
+                for (i in range(nblk * 2)) {
+                    words_off += sc16[i] == sc32[i] ? 0 : 1
+                }
+                t |> equal(words_off, 0, "the f16 feed's quants and scales are the f32 feed's over the same values")
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test(description = "The int8 tiles' row map inverts the schedule's slot grid: a grid entry's bucket row takes the entry's position (entry over slots a position), a sentinel entry writes nothing, and no word past the bucket rows moves")]
+def test_vkd_mmq_inv(t0 : T?) {
+    t0 |> run("the int8 row map == the slot grid inverted") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_mmq_inv_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let nk = 600   // three workgroups, the last partial
+            let k = 4
+            let slack = 8
+            let fill = 0xDEADBEEFu
+            var inscope grid <- [for (r in range(nk)); r % 97 == 5 ? SCHED_NONE : uint((r * 7 + 5) % nk)]
+            with_cell_planes() $(var cp : CellPlanes) {
+                let pg = cp |> in_plain(grid)
+                let pt = cp |> out_words(int64(nk + slack) * 4l, fill)
+                let planes = fixed_array(pg, pt)
+                var sc = set_mmq_inv_cls(gather_planes(cp.dev, planes), gather_planes(cp.bytes, planes), gather_planes(cp.hazard_bit, planes))
+                var pc = MmqInvArgs(nk = uint(nk), k = uint(k))
+                cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                    enc_mmq_inv_cls(raw2, h2, sc, pc, int64((nk + 255) / 256))
+                }
+                var inscope tok <- cp |> plane_as(pt, type<uint>, nk + slack)
+                var inscope want <- [for (_ in range(nk + slack)); fill]
+                for (r in range(nk)) {
+                    if (grid[r] != SCHED_NONE) {
+                        want[int(grid[r])] = uint(r / k)
+                    }
+                }
+                t |> equal(mmq_words_off(tok, want), 0, "every mapped bucket row holds its entry's position; a sentinel entry's row and the words past the rows keep the fill")
+                want[int(grid[0])]++
+                t |> equal(mmq_words_off(tok, want), 1, "control: one expected position moved by one is the one the compare counts")
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test(description = "The int8 tiles' device check passes on an AMD device with KHR cooperative matrices at subgroup 32 - the accumulator lane layout and the two 16-deep s8 products the tiles are written to - and the device rule names no int8 column for any other vendor")]
+def test_vkd_mmq_device_check(t0 : T?) {
+    t0 |> run("the int8 device check on this device") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
+                t |> skip("no Vulkan device")
+                return
+            }
+            if (!khr_kq_tile_on()) {
+                t |> success(!vk_mmq_device_ok(), "a device without KHR cooperative matrices at subgroup 32 fails the check")
+                return
+            }
+            if (g_gpu.vendor == VK_VENDOR_AMD) {
+                t |> success(vk_mmq_device_ok(), "an AMD KHR device's s8 products read as the int8 tiles assume")
+            } else {
+                t |> equal(vk_alt_mmq_by_vendor(g_gpu.vendor), 0l, "the device rule serves no int8 column off AMD, whatever the check answers ({vk_mmq_device_ok()})")
+            }
         } else {
             t |> skip("dasVulkan not present")
         }

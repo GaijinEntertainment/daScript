@@ -2077,6 +2077,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
     if (!partialMint) {
         dasllama_metal_knee_race()
         dasllama_vulkan_knee_race()
+        dasllama_vulkan_alt_race()
         dasllama_cuda_knee_race()
     }
 

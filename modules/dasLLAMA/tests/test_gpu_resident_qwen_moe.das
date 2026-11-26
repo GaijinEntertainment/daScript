@@ -100,6 +100,7 @@ struct QwenMoeRows {
     cuda : bool
     main : MainPair
     carrier : Held
+    main_bar_rel : float = MOE_LOGIT_BAR_REL   //! the default form's bar on the home that served it (`moe_carrier_bar_rel`)
     main_feeds : array<FeedRows>
     cuda_feeds : array<FeedRows>
     cpu_kv : KVDtype
@@ -153,6 +154,7 @@ def private qwen_moe_main_rows(t : T?; var r : QwenMoeRows; m : Model; form : Mo
         census_cell(t, m, path_join(models_dir(), fx.file), "vulkan load", any_sites, bound)
     }
     if (routed) {
+        r.main_bar_rel = moe_carrier_bar_rel()
         moe_prompt_feeds(r.main_feeds, r.carrier, m, form, fx, r.prompts, host_layers)
     }
     if (r.cuda) {
@@ -436,7 +438,7 @@ def private qwen_moe_rows_within(t : T?; tag : string; r : QwenMoeRows) {
     held_within(t, r.pool, "{tag}the pool: ", false)
     held_within(t, r.regions, "{tag}the regions rig: ", false)
     with_dasllama_jobque_() {
-        feeds_within(t, tag, r.main_feeds, r.cpu_feeds, MOE_LOGIT_BAR_REL, "", FED_STEPS)
+        feeds_within(t, tag, r.main_feeds, r.cpu_feeds, r.main_bar_rel, "", FED_STEPS)
         feeds_within(t, "{tag}cuda, ", r.cuda_feeds, r.cpu_feeds, MOE_LOGIT_BAR_REL)
         for (f in r.pool_feeds) {
             let what = "{tag}the pool, {f.nprompt} tokens: "
@@ -689,7 +691,8 @@ def test_gpu_perop_moe_heat(t : T?) {
 // The whole UD-IQ2_XXS file's room-forced host split at 131072 positions (`test_gpu_resident_moe_ctx_strict`) stays
 // on it, the `qwen35moe-35b` category's. Skips: the vk-census arms filtered out, the per-op form under the CUDA ask,
 // the rows leaf on a home with none, the pool assert where the plan seats no pool, the two-window feed where the
-// prompt window is not PF_WINDOW_ROWS rows.
+// prompt window is not PF_WINDOW_ROWS rows, the segmented window's capture cell under DASLLAMA_GPU_DN_SNAPS=1 (a region
+// then keeps one checkpoint row, and the cell plants two).
 
 let private QWEN35MOE_BLOCKS = 4l
 let private Q35_IQ2XXS_CUT = MoeFixture(file = "Qwen3.6-35B-A3B-4L-UD-IQ2_XXS-local.gguf", shexp = true,
@@ -1370,14 +1373,14 @@ def test_gpu_resident_moe_stream_twin_iq(t : T?) {
     }
 }
 
-[test(description = "On Qwen3-30B-A3B-7L Q4_K_M, the seven-block cut of a MoE with no shared expert, the N-row routed block over K-quant stacks fed Q8_K batches two sessions within the wide bar of each alone, at one window and past the unsplit position, the one-token-off control past it; the form loads once")]
+[test(description = "On Qwen3-30B-A3B-7L Q4_K_M, the seven-block cut of a MoE with no shared expert, the N-row routed block over K-quant stacks fed Q8_K batches two sessions within the wide bar of each alone - the routed bar where the N-column leaves walk rotated - at one window and past the unsplit position, the one-token-off control past it; the form loads once")]
 def test_regions_batched_steps_q30(t : T?) {
     return if (!family_on(t, "qwen3moe"))
     var h : Held
     let forms <- [device_form(regions = 2l, ctx = REGIONS_RIG_CTX)]
     let ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-30B-A3B-7L-Q4_K_M-local.gguf", REGIONS_RIG_CTX, forms, false) $(m, _form) {
         cut_held(h, m, QWEN3MOE_BLOCKS, "qwen3moe")
-        regions_batched_rows(h, m, LogitsBar.wide_bar)
+        regions_batched_rows(h, m, home_ncol_rotates() ? LogitsBar.routed_bar : LogitsBar.wide_bar)
         regions_split_rows(h, m, LogitsBar.wide_bar)
     }
     if (ran) {

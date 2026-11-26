@@ -3,7 +3,7 @@
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document carries how
 the Vulkan driver picks a cm2 tile and the served GEMM mode, the short window's split-K under its raced knee
 (`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split`), the class-pipeline build seat both
-shader instruments hang on, and the MoE expert chain on the cooperative-matrix tiles. The tile and GEMV bodies both
+shader instruments hang on, the alternate stamps a class slot serves (`#vk-alt-stamps`), and the MoE expert chain on the cooperative-matrix tiles. The tile and GEMV bodies both
 discrete homes stamp are in `ARCHITECTURE_GPU_SHARED_GEMM.md`: how a cm2 tile decodes its quant bytes
 (`ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes`), the tile body's k step, fast path and loop bounds
 (`ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-tile-body`), the KHR arm's hand-staged tile
@@ -143,7 +143,7 @@ long (the 35B-A3B's 512-row window 160 ms with the twin against 237 without on t
 the tier warns at device init when the driver reports no such extension; which drivers list it,
 and the reference exe's own two arms measured beside ours, are `followup_vulkan.md` item 45. The seat
 is also the in-process A/B: `vkd_pipes_rebuild` marks every class slot stale, so the next ensure
-rebuilds it under whatever `decvec_on` says, which is how the `cm2:<fmt>` probe runs both arms interleaved in one process.
+rebuilds it under whatever `decvec_on` says, which is how the `cm2:<fmt>` probe runs both arms interleaved in one process. A rebuild destroys the slot's pipeline, and the driver may give a destroyed pipeline's handle to the next pipeline built, which can be another kernel's. The census counts dispatches by handle, so `vkd_pipe_register` first moves a count it finds under the new pipeline's handle to the name of the kernel that held it.
 
 **The dump and the keeping seam run before the override:** `DASLLAMA_VK_SPV_DUMP=<dir>` writes the
 EMITTED words as `<dir>/<kernel>.spv`, `g_vkd_spv_keep` keeps the same words in `g_vkd_spv_kept` under
@@ -161,6 +161,102 @@ the model drop's pool reset, so between drops the descriptor pools grow by the s
 **Full subgroups are a whole-run arm, never a per-pipeline one.** `DASLLAMA_VK_FULLSG` on a device
 that reports the feature sets `g_gpu.full_sg_on` once at device init and builds every class pipeline
 with `REQUIRE_FULL_SUBGROUPS`, so an A/B compares two whole runs; plain is the default, since pinned measures slower on the mm_a gate shape.
+
+### A class slot serves an alternate stamp where the box's race picks it {#vk-alt-stamps}
+
+A kernel class tuned on one vendor's driver can lose on another's with nothing wrong in it: the q8 decode GEMV
+(`Q8GemvT`) issues one pass of loads a subgroup, dots it, and loads the next, which a driver that issues a loop's loads
+ahead on its own runs at memory speed and a driver that does not runs at one pass in flight. The class stays as it is. An
+ALTERNATE is a second class with the same bindings, push struct and derived access - `[vk_dispatch(..., alt_of =
+"<class>", alt_bit = N)]`, which the lens checks against the class it names - that keeps its own dispatch surface and
+also joins that class's pipe slot: `vkd_class_pipe` builds the slot from the alternate's words where bit N of the served
+set is on. Every site that dispatches the class then runs the alternate with no edit, since the set, the push constants
+and the grid are the class's own.
+
+**The served set is a raced box knob with a pin over it.** `vk_alt_stamps` (`dasllama_gpu_knee`, the runtime section's
+`vk_alt_stamps`) is the set the box's race picked, 0 by default; `DASLLAMA_VK_ALT_STAMPS` at 0 or above replaces it
+(`vk_alt_served`), and -1 leaves the box's. A changed set marks every class slot stale, as `vkd_pipes_rebuild` does, so
+the next ensure builds under it; a rebuilt slot drops its old pipeline, which a command recorded before the change
+still binds, so the set moves before a load and never under a driver that has recorded its steps.
+`vk_alt_stamp_race` (`dasllama_vulkan_classes`, beside the classes it races; the fat
+start and the mint run it through `dasllama_vulkan_alt_race`) times each alternate against its class through the two
+dispatch surfaces, every slot serving its own stamp while the arms run: the shapes the decode dispatches the class at
+(`ALT_Q8_GEMV_N` wide by `ALT_Q8_GEMV_D` rows - a narrow, a model-width and two wide inputs, and a wide output), the
+weights streamed from a ring of copies past the card's last-level cache, the outputs alternating, `knee_arms_us`'s rounds.
+An alternate serves where its summed time is under 0.97 of the class's. The pin leaves nothing to race. The race loads
+no model: a mint or a fat exe's first start on the Vulkan home holds no weights, and the shapes stand in for them. Where a
+served model gains from an alternate by more than its isolated dispatch does, the race is the wrong instrument and a
+device rule serves the alternate: its bits join the served set as the device comes up (`vk_alt_device_set`: the vendor's
+`vk_alt_rule_bits`, and the int8 columns after their check), whatever set the box stores - on an AMD device the load-ahead
+GEMV, whose isolated chain gains on the Radeon 760M no more than the race's own spread where a served decode gains more (`PERF_LEDGER.md`, the entry on the alternate stamps of the Vulkan class slots: every device reading of this section).
+
+**A class may opt out of the tier's subgroup pin.** `subgroup = "own"` on `[vk_dispatch]` builds that class's pipeline
+with no required subgroup size and specializes its workgroup width (the kernel's `local_size_x_id = 0`, which the lens
+requires) to `vkd_own_wg_x`: the declared width times the device's own subgroup width over the pinned one, so a workgroup
+holds as many subgroups as the pinned one held and the grid the class's sites compute stands. Where the tier pins nothing,
+or the device runs no workgroup that wide, the class builds at the tier's width like any other. The pin exists for the
+coopmat tiles, which own four 32-lane fragments a workgroup; a row kernel that reduces inside one subgroup has no such
+tie, and on a 64-lane device the load-ahead GEMV is faster at the device's own width than at the pinned 32.
+
+**The KHR window tile's alternate rotates its K walk** (`KqCm2BatchT.khr_walk` under the template constant `KROT`, one
+`<format>_batch_khr_rot_cls` beside every format's `<format>_batch_khr_cls`, bit `VK_ALT_KHR_ROT`). The device planes keep a
+weight row's quants K bytes from the next row's, so at a K that is a multiple of 2048 the same column of every row sits a
+whole power of two apart; the tiles of a dispatch all walk K from its first column, every one reading that column of its own
+128 rows at once, and on a device whose caches such reads collide in the tile runs at a fraction of its rate (the Radeon
+8060S: a GEMM at K 4096 costs far more than the same GEMM at K 3840). The alternate starts each tile's walk `KROT` (two)
+32-wide steps a weight tile further into K and wraps, so the tiles of a dispatch read different columns and each element's
+sum is the class's over the same terms in another order. The start is keyed on the weight tile alone: the token tiles of one
+weight-row group stay in step and share its bytes. The tile counts from its plane's first block, the region's base
+included, so the regions of an expert schedule - each expert a few tiles of its own - start apart as the tiles of one dense
+plane do; counted inside its region every expert's first tile would start at the same column. The alternate's subgroups
+also skip the multiply-add rounds and the fragment stores of a 32-token group that holds no row (the barriers stay every
+thread's): in mm mode a short expert piece is an edge tile of the 128-token step, three of its four token groups empty, and
+a routed window is mostly such pieces. A 64-row tile and a tile staging two blocks a step do not move the
+effect; rows stored off a power of two would, at the price of a second plane layout every reader kernel has to know. The
+race times the q8 stamp at `ALT_KHR_N` by `ALT_KHR_D` - K 2048 under 2048 and 8192 rows - at `ALT_KHR_ROWS` rows, the
+weights a ring of copies past the cache. Both rungs sit on K 2048 because a device may collide there alone (the 760M: the
+rotated tile is the faster one at K 2048 and at no other K, where the 8060S gains at
+every multiple of 2048), and rungs off it would vote the alternate down by their count. The bit carries every format's
+stamp: the walk is the template's, the formats differ in the weight decode alone.
+
+**The window's deltanet scan has its alternate in the same set** (bit `VK_ALT_DN_TOKEN`), a second stamp at one site
+and not a slot's: the per-token scan (`dn_scan_cls`) in place of the chunked one (`dn_scan_chunk_cls`), which
+`vk_dn_chunk_wanted` reads where the window binds and dispatches its scan. The chunked form trades the per-token
+recurrence for sixteen-token products on the cooperative tiles, which pays on a device whose tiles outrun its scalar
+lanes and loses on one where they do not (the 8060S and the 760M: a 512-row scan a token at a time takes under half
+the chunked scan's time). The race times both stamps at one recurrent site (`ALT_DN_ROWS` rows, `ALT_DN_KEY_HEADS` key heads over
+`ALT_DN_VALUE_HEADS` value heads of `ALT_DN_HEAD`), each arm's dispatches advancing the state the one before left, and
+the scan's ratio there is the served window's: a scan reads its own rows and state and shares nothing with the tiles
+around it.
+
+**The routed block's int8 columns are four bits of the same set under a second device rule** (`VK_ALT_MMQ_GU_M`,
+`VK_ALT_MMQ_GU_S`, `VK_ALT_MMQ_DN_M`, `VK_ALT_MMQ_DN_S`): a bit moves one column of the routed block from its f16 tile to
+the int8 tile, a second class at the site and not a slot's alternate, since it binds the int8 feed in place of the f16
+image. `vk_alt_stamp_race` sets them by `vk_alt_mmq_by_vendor` on a device in mm mode that passes `vk_mmq_device_ok`; the
+tiles, the check and the rule's measurements are `ARCHITECTURE_GPU_VULKAN_KHR.md#khr-int8-tiles`.
+
+**The KHR flash stamps' tile-first alternates are bit `VK_ALT_FA_TFIRST`** (`vk_alt_fa_by_vendor`, an AMD device, no race):
+`ARCHITECTURE_GPU_SHARED_ATTN.md#flash-attn-tile`.
+
+**The decode's residual GEMV has a rotated alternate** (`Q8GemvArT` under `KROT`, `q8_gemv_ar_rot_cls`, bit
+`VK_ALT_Q8_AR_ROT`): a subgroup is a row, and every row of a dispatch walks K from its first pass, so at a K that is a
+multiple of 2048 the rows read columns a power of two apart at once - the collision of the KHR window tile, on a decode row.
+The alternate starts row r's whole passes r passes into K and wraps; the guarded tail follows as it does in the class, and a
+row's sum is the class's over the same terms in another order, so the one-row command and the N-row command agree within
+the float bar and not bit for bit where the bit serves. On the 8060S the gemma-4-E2B's down step (1536 rows of K 6144) reads
+half the bytes of its gate and up step in the same time, and with the alternate the decode is about a fifth faster;
+on the 760M it gains a few percent. An AMD device serves it by the GEMV's device rule, with no race.
+
+**The decode's alternate is the q8 GEMV's load-ahead form** (`Q8GemvAheadT`, `q8_gemv_ahead_cls`, bit
+`VK_ALT_Q8_GEMV`): steps of four whole passes, then one of two, whose loads all issue ahead of their dots, then
+`Q8GemvT`'s guarded passes for the row's end. Each lane's sum is `Q8GemvT`'s term for term, so at one subgroup width the
+two stamps' rows are equal bit for bit; across widths the lanes partition the row differently and the rows agree within
+the float bar. A step of clamped loads over one loop measured slower than the ladder at 64 lanes (the passes past a short
+row's end are loads the ladder does not issue), and an unrolled loop takes literal bounds, so the two steps are two
+loops. The cells are `test_vkd_q8_gemv_ahead` and `test_vkd_q8_gemv_ar_rot` (`tests/test_vulkan_kernels.das`), `test_vk_own_wg_x` and
+`test_vk_alt_gemv_by_vendor` (`tests/test_gpu_serving_declines.das`), and
+`test_the_vulkan_alt_race_sets_the_served_stamps` and `test_the_dn_token_bit_moves_the_scan`
+(`tests/test_fat_start.das`).
 
 ### The MoE expert batch arm rides the cm2 tiles through a device-side f16 gather {#cm2-expert-chain}
 

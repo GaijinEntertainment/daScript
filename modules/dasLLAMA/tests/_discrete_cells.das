@@ -1986,64 +1986,148 @@ def df_qkn_case(t : T?; var cp : auto(C)) {
     check_exceeds(t, "{tag} control: the rows roped one position on land off the stamp's", y_dev, y_next, NORM_BAR)
 }
 
-//! the block drafter's attention under one tile kernel (`GkDflashAttnTileHeads` grouped, else `GkDflashAttnTile`) and the merge
-//! against `_dflash_oracle.das`'s softmax at one shape, in `want_tiles` key tiles and, grouped, `want_qh` query heads a tile
-//! workgroup - at the panel's first block and its second; the softmax with no window the control
-def private df_attn_shape_tile(t : T?; var cp : auto(C); hs, w, pos0, lo, nctx, want_tiles, nheads, grp, want_qh : int; grouped : bool) {
-    let tag = "dflash_attn hs{hs} w{w} heads {nheads} / {grp} {grouped ? "grouped" : "a head"}"
-    let rows = DF_ATTN_ROWS
+//! whether a key `dist` positions from its query is in view under the window `w` (0 = no window)
+def private key_in_view(dist, w : int) : bool => w == 0 || dist < w
+
+//! a window's name in a message
+def private window_name(w : int) : string => w == 0 ? "no window" : "a window of {w}"
+
+//! one shape of the block drafter's attention: the window `w`, the block at `pos0` .. over the `nctx` ring positions from `lo`,
+//! `nheads` query heads of `hs`, `grp` of them a key-value head, `rows` block rows; `tiles` and `wgs` are the key tiles and the
+//! tile dispatch's workgroups counted by hand; `ctl_w` is the control's window (0 = no window)
+struct private DfAttnShape {
+    hs : int
+    w : int
+    pos0 : int
+    lo : int
+    nctx : int
+    nheads : int
+    grp : int
+    rows : int
+    tiles : int
+    wgs : int
+    ctl_w : int
+}
+
+//! the block drafter's attention (`GkDflashAttnTile`, `GkDflashAttnMerge`) against the in-test softmax at one shape, at the panel's
+//! two blocks. NaN rows follow the block's V rows and sentinel slots the block's partials: a key past the last reads the first,
+//! a chunk's query past the last writes the second, and neither may. The control is the softmax under `ctl_w`
+def private df_attn_shape(t : T?; var cp : auto(C); sh : DfAttnShape) {   // nolint:STYLE037,STYLE038 — one fixture, its two block legs and their control
+    let hs = sh.hs
+    let w = sh.w
+    let pos0 = sh.pos0
+    let lo = sh.lo
+    let nctx = sh.nctx
+    let nheads = sh.nheads
+    let grp = sh.grp
+    let rows = sh.rows
+    let tag = "dflash_attn hs{hs} w{w}, {nheads} heads, {grp} a key-value head, {rows} rows"
+    let kvd = (nheads / grp) * hs
     let qd = nheads * hs
-    t |> equal(gk_dflash_attn_grouped(int64(grp)), want_qh > 1, "{tag}: the driver takes the grouped tile where a K/V head serves two or four heads")
+    let nkeys = nctx + rows
+    let tiles = int(gk_dflash_attn_tiles(int64(nkeys)))
+    let wgs = gk_dflash_attn_tile_wgs(int64(rows), int64(nheads), int64(grp), int64(tiles))
+    t |> equal(tiles, sh.tiles, "{tag}: {nkeys} keys split into the tiles the shape is for")
+    t |> equal(wgs, int64(sh.wgs), "{tag}: the tile dispatch is the workgroups counted by hand")
+    let scale = 1.0 / sqrt(float(hs))
+    let ringoff = w * kvd + 9
+    let v_slack = (256 * tiles - nkeys) * kvd
+    let partials = nheads * rows * tiles * (hs + 2)
     for (arm in range(2)) {
         cp |> cell_clear()
-        var inscope f <- df_attn_fixture(hs, w, pos0, lo, nctx, nheads, grp, arm)
-        let wgs = grouped ? gk_dflash_attn_heads_wgs(int64(rows), int64(nheads), int64(grp), int64(f.tiles)) : int64(rows * nheads * f.tiles)
-        t |> equal(f.tiles, want_tiles, "{tag}: {nctx + rows} keys split into the tiles the shape is for")
-        if (grouped) {
-            t |> equal(wgs, int64(rows * (nheads / want_qh) * f.tiles), "{tag}: a tile workgroup scores {want_qh} query heads")
-        }
         let rbase = arm * rows
-        let qp = cp |> in_(f.q)
-        let kbp = cp |> in_(f.kb)
-        let vbp = cp |> in_(f.vb, 0, df_attn_v_slack(f))
-        let rkp = cp |> in_(f.rk)
-        let rvp = cp |> in_(f.rv)
-        let op = cp |> out_((rbase + rows) * qd)
-        let partials = nheads * rows * f.tiles * (hs + 2)
+        let prow = rbase + rows
+        var inscope q <- row_fill(prow * qd, 31, 11, 0.02, -1.0)
+        var inscope kb <- row_fill(prow * kvd, 17, 5, 0.02, -0.9)
+        var inscope vb <- row_fill(prow * kvd, 23, 3, 0.03, -1.3)
+        var inscope vb_dev <- [for (i in range(prow * kvd + v_slack)); i < prow * kvd ? vb[i] : NAN_SENTINEL]
+        var inscope rk <- row_fill(ringoff + w * kvd, 43, 7, 0.02, -1.1)
+        var inscope rv <- row_fill(ringoff + w * kvd, 19, 13, 0.03, -1.2)
+        var inscope rkh <- [for (v in rk); uint16(f32_to_f16(v))]   // the rings are halves on the device: the oracle reads what they hold
+        var inscope rvh <- [for (v in rv); uint16(f32_to_f16(v))]
+        for (k, v, kh, vh in rk, rv, rkh, rvh) {
+            k = f16_to_f32(uint(kh))
+            v = f16_to_f32(uint(vh))
+        }
+        let qp = cp |> in_(q)
+        let kbp = cp |> in_(kb)
+        let vbp = cp |> in_(vb_dev)
+        let rkp = cp |> in_plain(rkh)
+        let rvp = cp |> in_plain(rvh)
+        let op = cp |> out_(prow * qd)
         let tpp = cp |> out_(partials, 0, partials)
-        var pa = f.pa
+        var pa = GkDflashAttnArgs(rows = uint(rows), pos0 = uint(pos0), lo = uint(lo), nctx = uint(nctx), w = uint(w), hs = uint(hs),
+            nheads = uint(nheads), grp = uint(grp), scale = scale, rbase = uint(rbase), koff = uint(ringoff), voff = uint(ringoff))
         cp |> cell_launch(t, tag) $(var rl) {
-            if (grouped) {
-                enc_dflash_attn_tile_heads_cls(rl, seats(fixed_array(qp, kbp, vbp, rkp, rvp, tpp)), pa, wgs)
-            } else {
-                enc_dflash_attn_tile_cls(rl, seats(fixed_array(qp, kbp, vbp, rkp, rvp, tpp)), pa, wgs)
-            }
+            enc_dflash_attn_tile_cls(rl, seats(fixed_array(qp, kbp, vbp, rkp, rvp, tpp)), pa, wgs)
             enc_dflash_attn_merge_cls(rl, seats(fixed_array(tpp, op)), pa, int64(nheads * rows))
         }
         var inscope o_all <- cp |> plane_run(op)
         var inscope o_dev <- [for (i in range(rows * qd)); o_all[rbase * qd + i]]
-        check_rows(t, "{tag} block {arm} vs the windowed softmax over the ring and the block", o_dev, f.want, BAR_APPROX, qd, hs)
-        check_exceeds(t, "{tag} block {arm} control: the softmax with no window lands off the stamp's", o_dev, f.open, BAR_APPROX)
-        slack_kept(t, "{tag} past the partials", cp, tpp, type<uint>, partials, partials, NAN_SENTINEL_BITS)
+        var inscope o_ref <- plane_of(rows * qd, 0.0)
+        var inscope o_open <- plane_of(rows * qd, 0.0)
+        var sc : array<float>
+        sc |> resize(nkeys)
+        for (windowed in range(2)) {
+            for (r in range(rows)) {
+                for (h in range(nheads)) {
+                    let kh = (h / grp) * hs
+                    var mx = -3.0e38
+                    for (j in range(nkeys)) {
+                        let kpos = j < nctx ? lo + j : pos0 + (j - nctx)
+                        let dist = abs(pos0 + r - kpos)
+                        sc[j] = -3.0e38
+                        if (key_in_view(dist, windowed == 1 ? w : sh.ctl_w)) {
+                            var dot = 0.0
+                            for (e in range(hs)) {
+                                let kv = j < nctx ? rk[ringoff + (kpos % w) * kvd + kh + e] : kb[(rbase + j - nctx) * kvd + kh + e]
+                                dot += q[(rbase + r) * qd + h * hs + e] * kv
+                            }
+                            sc[j] = dot * scale
+                            mx = max(mx, sc[j])
+                        }
+                    }
+                    var tot = 0.0
+                    for (j in range(nkeys)) {
+                        sc[j] = sc[j] <= -1.0e38 ? 0.0 : exp(sc[j] - mx)
+                        tot += sc[j]
+                    }
+                    for (i in range(hs)) {
+                        var acc = 0.0
+                        for (j in range(nkeys)) {
+                            let kpos = j < nctx ? lo + j : pos0 + (j - nctx)
+                            acc += sc[j] * (j < nctx ? rv[ringoff + (kpos % w) * kvd + kh + i] : vb[(rbase + j - nctx) * kvd + kh + i])
+                        }
+                        if (windowed == 1) {
+                            o_ref[r * qd + h * hs + i] = acc / tot
+                        } else {
+                            o_open[r * qd + h * hs + i] = acc / tot
+                        }
+                    }
+                }
+            }
+        }
+        delete sc
+        check_rows(t, "{tag} block {arm} vs the windowed softmax over the ring and the block", o_dev, o_ref, BAR_APPROX, qd, hs)
+        check_exceeds(t, "{tag} block {arm} control: the softmax under {window_name(sh.ctl_w)} lands off the stamp's", o_dev, o_open, BAR_APPROX)
+        slack_kept(t, "{tag} block {arm} past the partials", cp, tpp, type<uint>, partials, partials, NAN_SENTINEL_BITS)
         if (rbase > 0) {
             slack_kept(t, tag, cp, op, type<uint>, 0, rbase * qd, NAN_SENTINEL_BITS)
         }
     }
 }
 
-//! one shape under each tile kernel: either is the softmax at every geometry, whichever the driver takes there
-def private df_attn_shape(t : T?; var cp : auto(C); hs, w, pos0, lo, nctx, want_tiles, nheads, grp, want_qh : int) {
-    df_attn_shape_tile(t, cp, hs, w, pos0, lo, nctx, want_tiles, nheads, grp, want_qh, true)
-    df_attn_shape_tile(t, cp, hs, w, pos0, lo, nctx, want_tiles, nheads, grp, want_qh, false)
-}
-
-//! the attention at one key tile, at two (the tiles' join), at heads of 96 (the value sum's last lanes idle), at two, four and one
-//! query heads a tile workgroup, and at a K/V head of six query heads, three workgroups of two
+//! the attention at a dense layer's shape (nothing masked, three key tiles, the control windowing it), at one key tile, at two,
+//! at two with heads of 96; then a key-value head of four, of one and of six query heads (four chunks of eight queries, one
+//! and six), and the chunks that end short: ten queries (the last chunk holds two) and five (under one chunk)
 def df_attn_case(t : T?; var cp : auto(C)) {
-    df_attn_shape(t, cp, 64, 44, 100, 60, 40, 1, 4, 2, 2)
-    df_attn_shape(t, cp, 64, 300, 400, 101, 299, 2, 4, 2, 2)
-    df_attn_shape(t, cp, 96, 300, 400, 101, 299, 2, 4, 2, 2)
-    df_attn_shape(t, cp, 64, 300, 400, 101, 299, 2, 8, 4, 4)
-    df_attn_shape(t, cp, 96, 44, 100, 60, 40, 1, 3, 1, 1)
-    df_attn_shape(t, cp, 64, 300, 400, 101, 299, 2, 12, 6, 2)
+    df_attn_shape(t, cp, DfAttnShape(hs = 64, w = 1000, pos0 = 700, lo = 0, nctx = 700, nheads = 4, grp = 2, rows = 8, tiles = 3, wgs = 12, ctl_w = 300))
+    df_attn_shape(t, cp, DfAttnShape(hs = 64, w = 44, pos0 = 100, lo = 60, nctx = 40, nheads = 4, grp = 2, rows = 8, tiles = 1, wgs = 4))
+    df_attn_shape(t, cp, DfAttnShape(hs = 64, w = 300, pos0 = 400, lo = 101, nctx = 299, nheads = 4, grp = 2, rows = 8, tiles = 2, wgs = 8))
+    df_attn_shape(t, cp, DfAttnShape(hs = 96, w = 300, pos0 = 400, lo = 101, nctx = 299, nheads = 4, grp = 2, rows = 8, tiles = 2, wgs = 8))
+    df_attn_shape(t, cp, DfAttnShape(hs = 64, w = 300, pos0 = 400, lo = 101, nctx = 299, nheads = 8, grp = 4, rows = 8, tiles = 2, wgs = 16))
+    df_attn_shape(t, cp, DfAttnShape(hs = 96, w = 44, pos0 = 100, lo = 60, nctx = 40, nheads = 3, grp = 1, rows = 8, tiles = 1, wgs = 3))
+    df_attn_shape(t, cp, DfAttnShape(hs = 64, w = 300, pos0 = 400, lo = 101, nctx = 299, nheads = 12, grp = 6, rows = 8, tiles = 2, wgs = 24))
+    df_attn_shape(t, cp, DfAttnShape(hs = 64, w = 300, pos0 = 400, lo = 101, nctx = 299, nheads = 4, grp = 2, rows = 5, tiles = 2, wgs = 8))
+    df_attn_shape(t, cp, DfAttnShape(hs = 96, w = 44, pos0 = 100, lo = 60, nctx = 40, nheads = 3, grp = 1, rows = 5, tiles = 1, wgs = 3))
 }

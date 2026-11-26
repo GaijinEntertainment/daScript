@@ -477,7 +477,7 @@ def private cud_attach(t : Model; path : string) : string {
     delete g_cud_dr
     g_cud_dr <- dr
     gpu_resident_assist_set(true)
-    set_mtp_round_kind(MtpRoundKind.assistant)
+    set_mtp_round_kind(MtpRoundKind.assistant_discrete)
     g_cud_attached = true
     discrete_round_reset(g_cud_round)
     to_log(LOG_INFO, "dasLLAMA gemma drafter attached on the CUDA resident driver: {path} ({g_cud_dr.n_layers} Q-only layers over target layers {g_cud_dr.kv_layer})\n")

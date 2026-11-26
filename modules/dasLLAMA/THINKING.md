@@ -47,7 +47,9 @@ family-blind.
    stop merge key on one predicate - toggle on, the reply markers resolve in the vocab (an inert
    declaration like Qwen2.5's shared ChatML template never arms), and a gate family's gate
    rendered on a consumed turn or renders this turn - and the reply matcher arms on that
-   predicate or on a `stop_nothink` family's instruct turn (item 4). A mid-conversation
+   predicate, on a `stop_nothink` family's instruct turn (item 4), and on every turn of a
+   Harmony family whose vocab carries the markers: gpt-oss opens its analysis channel at any
+   reasoning level, thinking off only lowers the level to `low`. A mid-conversation
    `set_thinking(true)` on gemma-4 therefore stays instruct-shaped (the gate cannot enter an
    already-rendered context) with the framing stops still guarded.
 

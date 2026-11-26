@@ -7,11 +7,11 @@ codebook buffer, the tile probe's shared descriptor set layout, the roster of Vu
 `ARCHITECTURE_GPU_SHARED_ROWS.md#q8-requant-byte-store`, and the flash-attention tile the window's attention runs is
 `ARCHITECTURE_GPU_SHARED_ATTN.md#flash-attn-tile`. The token command's
 attention and the K/V mirror's codecs are in `ARCHITECTURE_GPU_SHARED_ATTN.md`, the attention-side planes the driver
-uploads in `ARCHITECTURE_GPU_VULKAN_ATTN.md`; what the window does a session at a time
+uploads and a one-row step's far row in `ARCHITECTURE_GPU_VULKAN_ATTN.md`; what the window does a session at a time
 is in `ARCHITECTURE_GPU_VULKAN_WINDOW.md`. The routed block of that window and of the token command is in
 `ARCHITECTURE_GPU_VULKAN_MOE.md`. The tile pick and
-the coopmat mode ladder, the short window's split-K (`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split`), the class-pipeline build seat and the MoE expert chain on the cooperative-matrix tiles
-are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, the f32 rows the KHR arm serves
+the coopmat mode ladder, the short window's split-K (`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split`), the class-pipeline build seat, a class slot's alternate stamps and the MoE expert chain on the cooperative-matrix tiles
+are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, the f32 rows the KHR arm serves and the routed block's int8 tiles
 in `ARCHITECTURE_GPU_VULKAN_KHR.md`; the tile bodies - the cm2 decode spelling, the KHR arm's hand-staged tile - and the decode GEMV
 family's lane split by row length (`ARCHITECTURE_GPU_SHARED_GEMM.md#kq-gemv-lanes`) are in `ARCHITECTURE_GPU_SHARED_GEMM.md`. What a
 model has to fit on the card before any of this runs is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` (the room
@@ -22,12 +22,15 @@ the hyper-connection chain with its host-served routed experts is `ARCHITECTURE_
 The decode-era mechanisms of the per-op tier are in `ARCHITECTURE_GPU_VULKAN_DECODE.md`. The GPU
 backend role table these sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
-The module gate's seven Vulkan checks (`REVIEW.das`) read these files. `check_khr_stage16_abstract`
+The module gate's nine Vulkan checks (`REVIEW.das`) read these files. `check_khr_stage16_abstract`
 reads `class template KqCm2BatchT` in `dasllama_gpu_kernels_discrete.das` and licenses no names: its
 `khr_stage16` is declared abstract. `check_ar_max_dim_triple` reads `RDEC_AR_MAX_DIM` in
-`dasllama_gpu_tier.das`, the `row` slab of `ArBase` in `dasllama_gpu_kernels_discrete.das` and the
+`dasllama_gpu_tier.das`, the extent of `ArBase`'s `row` slab (its `ROW_CAP`) in `dasllama_gpu_kernels_discrete.das` and the
 `c.dim` cap of `attn_dec_shape_ok` in `dasllama_blocks.das`, and licenses no names: the three
-numbers agree. `check_cm2_ladder_sets` walks every `class template <Fmt>Cm2T : KqCm2BatchT` in
+numbers agree, and every small-slab stamp's `ROW_CAP` in `dasllama_vulkan_classes.das` is `RDEC_AR_SMALL_DIM`.
+`check_khr_rot_alternates` reads every `[vk_dispatch]` name of the form `<format>_batch_khr_cls` in
+`dasllama_vulkan_classes.das` and requires its `<format>_batch_khr_rot_cls` alternate declared with
+`alt_of` naming it (`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps`); it licenses no names. `check_cm2_ladder_sets` walks every `class template <Fmt>Cm2T : KqCm2BatchT` in
 `dasllama_gpu_kernels_discrete.das` twice (the KHR tile, the e column) and requires the engine's one ladder trio
 (`cm2_cls_*`) stamped by `kq_tile_stamp(fmt, CM2_TILE_NONE, ...)` over its `tile_<verb>()` placeholders, with no
 `<fmt>/<tail>` pair of the `CM2_TILE_NONE` skip list naming a format that has a template on the cm2 base for
@@ -48,7 +51,9 @@ walks `dasllama/` for every `"VK_*"` extension name and every `*_supported` prob
 `check_no_hand_pipelines` walks `dasllama/`, `harness/` and `tests/` for a
 `vkCreateComputePipelines(` call and licenses no names inside them; the two llama.cpp shader ports
 under `performance/` (`coopmat_mulmm_reference.das`, `coopmat_mulmm_port.das`) sit outside the
-walk as reference measurements of another engine's kernels.
+walk as reference measurements of another engine's kernels. `check_vk_census_conditional_blind` reads the Vulkan census's
+two tables in `tests/test_kernel_coverage.das` and requires every key of `VK_CENSUS_PICK_CONDITIONAL` among the entries of
+`VK_CENSUS_NEVER_DISPATCHED`, by its exact text; it licenses no names. The census asserts the same only on a box with a device.
 
 ### The Vulkan resident prefill window chain {#vk-prefill-window-chain}
 
@@ -105,7 +110,16 @@ recording, and the doubling stops at the chunk cap (`pf_chunk_cap`): 8 layers on
 GPU, one layer on an integrated one, `DASLLAMA_VK_CHUNK` naming another. The cap is the device's
 job watchdog in disguise - a Linux amdgpu resets the device under a job past about 10 s, and an
 iGPU's 8-layer chunk of a 512-row window reaches that at a long context, where a discrete card's
-chunk stays at milliseconds. Chunks go out through `submit_nofence`; the
+chunk stays at milliseconds. A layer's attention is one dispatch, so one job however the chain is cut, and it grows with the
+context: on an integrated GPU the window itself comes down as it moves into the context (`pf_window_cap`: rows x keys x the
+widest key row held under `PF_IGPU_KEY_ELEMS`, in steps of 256 rows). On the Radeon 8060S under Windows an uncapped 4096-row
+window of the Llama-3.2-3B loses the device deep in a long prompt, and under the cap the prompt prefills. The per-role GPU
+profile (`DASLLAMA_GPU_PROF`) pins one fenced submit
+on a discrete GPU, so a chunk gap never bills to a role, and keeps the chunks on an integrated one (`pf_window_overlaps`):
+Qwen3.6-35B's 4096-row window as one submit outlasts the Windows driver's limit on the 8060S, and the device is lost;
+a window records in under a millisecond, so no gap shows in its roles. A tower chain is cut the same way (`rail_block_cut`, a submit and a wait between two blocks on an
+integrated GPU): the gemma-3 vision tower's 27 blocks over 4096 rows as one job lose that device (`PERF_LEDGER.md`, the entry
+on the Radeon 8060S losing the device under one long job, for all three). Chunks go out through `submit_nofence`; the
 window's last submit is the `submit_wait` that signals the one fence the caller waits on.
 Ordering between chunks is the hazard rail's: a barrier recorded in chunk N+1 covers the
 writes of chunk N because submission order on one queue spans submits, and the terminal

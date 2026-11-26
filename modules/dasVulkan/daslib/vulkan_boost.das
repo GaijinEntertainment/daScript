@@ -2305,6 +2305,17 @@ def public create_compute_pipeline_subgroup(device : Device; layout : PipelineLa
     return <- build_compute_pipeline(device, layout, shader, entry, full, subgroup, no_spec)
 }
 
+//! `create_compute_pipeline_subgroup` with specialization-constant
+//! overrides - a stage at ``subgroup`` lanes whose workgroup size a
+//! ``local_size_*_id`` axis resizes to match
+[arch(at="../ARCHITECTURE_DEVICE_FEATURES.md#subgroup-pair")]
+def public create_compute_pipeline_subgroup(device : Device; layout : PipelineLayout;
+                                            shader : ShaderModule; subgroup : uint;
+                                            spec : array<SpecConstantValue>;
+                                            full : bool = false;
+                                            entry : string = "main") : Pipeline =>
+    <- build_compute_pipeline(device, layout, shader, entry, full, subgroup, spec)
+
 //! Fully general `transition_image` — caller supplies the `aspectMask` (stencil, combined
 //! depth+stencil, anything the two convenience helpers miss). `levelCount = layerCount = 1`; for mip
 //! chains or array layers drop to a raw `cmd_pipeline_barrier`.

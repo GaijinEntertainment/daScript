@@ -175,8 +175,15 @@ struct public GpuTierEnv {
     @clarg_doc = "The whole-model driver's prompt window in rows: the prefill panels' size, and the rows a hyper-connection model's host expert step and the hot pool's window chain take at once; a longer prompt runs as sequential windows, each paying every routed layer's expert pass again. 0 (the default) lets the driver pick: 4096 where its plan fits with the wider window's scratch, else 2048. Rounded down to a multiple of 128, never under 128; the plan charges the panels at this count, so a wider window shortens the K/V mirror or the pool."
     gpu_pf_rows : int64 = 0l
 
+    @clarg_default_doc = "0"
+    @clarg_doc = "The recurrent-state checkpoint rows a mirror region keeps on the device, 1 to 4: the positions of a parked context a later request can take up without a prefill (a shared opening, a retried or edited last message). Each row is a whole recurrent state a stream. 0 = the plan's pick: 4, or the most it holds whole down to 1."
+    gpu_dn_snaps : int64 = 0l
+
     @clarg_doc = "Stream each routed layer's expert stack to the device for the prompt, where the routed experts serve on the host (a hyper-connection model, or a plain MoE's host layers) - on the Vulkan tier over its transfer queue, on the CUDA home over its copy stream: pinned device-layout mirrors of every routed layer at load, a device slot (a layer's stack, or under DASLLAMA_GPU_MOE_SPLIT the per-expert chain's ring of experts), the copies landing while the chain computes, the host summing what the meet hands it. 0 keeps the host's sums and the hot pool's window chain."
     gpu_pf_stream : bool = true
+
+    @clarg_doc = "The window chain's cut at a shared-K/V tail: where a model's last layers read a donor layer's K/V rows and keep no row state of their own (gemma-4's E series: 20 of E2B's 35 layers), a prompt row whose output nobody reads stops at the last layer that stores K/V rows, and only each segment's last row walks the tail. 0 walks every row through every layer. An embedding's call, the NextN head's prompt warm and a captured layer inside the tail keep every row whatever the value."
+    gpu_pf_tail_cut : bool = true
 
     @clarg_default_doc = "0 (every host layer)"
     @clarg_doc = "Under DASLLAMA_GPU_PF_STREAM, mirror only the first this many host layers' expert stacks; the rest keep the host's sums. A parity cell's lever: a few layers' mirrors beside a planar load, where every layer's would not fit the box."
@@ -600,7 +607,7 @@ struct public VulkanEnv {
     @clarg_doc = "The last layer's FFN runs on the window's last 32 rows only (the classifier reads one); 0 runs it over the whole window for a same-build A/B."
     vk_ffn_slice : bool = true
 
-    @clarg_doc = "Prefill record/execute overlap: the window chain submits in ramped chunks (1,2,4,8 layers) so the GPU starts while the CPU still records; 0 pins the single fenced submit (the per-role GPU profile pins it too, so a chunk gap never bills to a role)."
+    @clarg_doc = "Prefill record/execute overlap: the window chain submits in ramped chunks (1,2,4,8 layers) so the GPU starts while the CPU still records; 0 pins the single fenced submit (the per-role GPU profile pins it too on a discrete GPU, so a chunk gap never bills to a role; on an integrated GPU the profile keeps the chunks, one submit of a long window running past the driver's watchdog)."
     vk_overlap : bool = true
 
     @clarg_doc = "Layers one prefill submit holds at most (the overlap ramp's cap, 1..8); 0 = 1 on an integrated GPU, 8 on a discrete one. A Linux amdgpu resets the device under a job past its watchdog (about 10 s), which an iGPU's 8-layer chunk reaches on a long prompt."
@@ -615,8 +622,29 @@ struct public VulkanEnv {
     @clarg_doc = "The subgroup width every class pipeline pins where the device's own differs and its compute stage may pin it (Vulkan 1.3 subgroupSizeControl; RDNA runs 32 or 64 lanes and defaults to 64): the coopmat tiles, the h128 attention twin and the tower tiles own four 32-lane fragments a workgroup, so a device left at 64 serves the sdot4 tiles and the scalar attention instead. 0 = the device's own width."
     vk_subgroup : int64 = 32l
 
+    @clarg_doc = "The compute shared-memory cap, in bytes, the tier holds its kernel classes to where it is below the device's own maxComputeSharedMemorySize: a class whose workgroup arrays pass the cap declines by name, and a family with a small-slab twin serves from the twin - 32768 runs any device as a driver that reports 32 KiB does. 0, or a value at or above the device's limit, leaves the device's limit."
+    vk_wg_cap : int64 = 0l
+
+    @clarg_doc = "The workgroups the decode attention counts as one wave of the device, in place of the device's own count (0 = the device's: its SM count, or an AMD device's active compute units, or 16 on a device that reports neither): the token command splits a head's keys into pieces to fill two waves, and the N-row command into the pieces its rows leave of one"
+    vk_attn_wave : int64 = 0l
+
+    @clarg_doc = "The decode attention's tile form - the verify's and the peel's rows, the rows of one session, scored with a K/V head's query heads as one flash tile and each K and V row read once: 1 serves it on every layer and device that takes it, 0 never, -1 where the device's prefill flash is the KHR cooperative-matrix arm"
+    vk_attn_tile : int64 = -1l
+
+    @clarg_doc = "The Vulkan one-row command's wide twin (the form past the wide position) attends on the decode tile form on a flat layer of head 512 or 256 wherever the device has the tile's stamps: each K and V row read once for every query head of its K/V head, where the row form reads them once a group of query heads. 0 = the row form's wide pieces."
+    vk_attn_tile_far : int64 = 1l
+
+    @clarg_doc = "The Vulkan home's prefill flash pass at a head of 256 on its wide cm2 stamps - 128 query rows of a head a workgroup, the keys walked once for all of them (the deltanet hybrids' attention, gemma-3's global layers): a whole pass with no softcap. 0 = the 64-row stamps."
+    vk_fa_wide : int64 = 1l
+
+    @clarg_doc = "The alternate stamps the class slots serve, a bit a slot, in place of the box's raced set (the sidecar's vk_alt_stamps): bit 0 the q8 decode GEMV's load-ahead stamp at the device's own subgroup width, bit 1 every format's KHR window tile with its K walk rotated a weight tile, bit 2 the window's deltanet scan on the per-token stamp in place of the chunked one, bit 3 the q8 decode GEMV that carries the residual step with every row's K walk rotated, bits 4 to 7 the routed block's columns on the int8 tiles (the gate and up m pieces, their s pieces, the down's m pieces, its s pieces), bit 8 every KHR flash-attention stamp with its workgroups tile-first, bit 9 the one-row step's routed gate and up on their own dispatches in place of the fused gate-up leaf, bit 10 the N-column GEMV leaves' rotated twins over a plane whose quant rows sit a power of two apart. 0 serves every class its own stamp; -1 leaves the box's set."
+    vk_alt_stamps : int64 = -1l
+
     @clarg_doc = "Place the planes in the ReBAR device-local host-visible memory type (one larger than 1 GB present) and write uploads straight into them. Off by default: on the NVIDIA WDDM driver a mapped plane is a host-side shadow the manager parks in system memory under pressure, and a host-experts plan then decodes at PCIe speed (gemma-4 26B Q8_0 8.1 tok/s mapped against 32.7 staged, the 35B-A3B 38 against 71: debug-jit readings, the ReBAR entry in modules/dasLLAMA/PERF_LEDGER.md) - the default stages every upload into unmapped device-local planes."
     vk_rebar : bool = false
+
+    @clarg_doc = "Where the weight slabs sit on an integrated device whose BIOS sets a dedicated-memory carve-out aside (the UMA frame buffer): 1 = the host heap's memory type, which the kernel never places in the carve-out - a slab placed there reads at about half the rate; 0 = device-local memory like every other buffer; -1 (the default) = 1 on an AMD integrated device whose kernel driver reports a carve-out of 512 MB or less (Linux), 0 on every other device. A discrete card is never touched."
+    vk_carve_out_weights : int64 = -1l
 
     @clarg_doc = "Arm the resident driver with f32 KV mirrors instead of the default codec (A/B instrument; only sessions of the armed codec are served)."
     vk_kv32 : int64 = 0l
@@ -636,10 +664,25 @@ struct public VulkanEnv {
     @clarg_doc = "The CUDA home's window chain on the MMQ GEMMs: the int8 one (`q8_mmq` and the leaves of Q4_K, IQ4_XS, Q4_0, IQ4_NL, Q5_0, Q5_1), the activations requantized to Q8_0 blocks between the GEMMs, as the token step's feeds are; and NVFP4's FP4 tensor leaf (`nv4_mmq`, W4A4: the activations quantized to e2m1 per token); a routed layer's MXFP4 or NVFP4 expert stacks ride the same rung fed from the expert schedule (`mx4_fp4_mmq_moe` / `nv4_fp4_mmq_moe`, the gathered rows as the stacks' FP4 feed; 0 keeps them on the cm2 s and e tiles). 1 = every plane whose format's leaf beat the cm2 tiles in the measured cards' windows, where its shape fits the tile (the output width a multiple of 128, the reduction of 256), runs on that leaf, the other planes on the f16-fed cm2 tiles; 2 = every leaf, the ones the cards split or lost on too (Q5_0, Q5_1) - a new card's own measurement; 0 = the cm2 tiles everywhere (A/B instrument). The FP4 leaf needs compute capability 120; below it an nv4 plane stays on the tiles under every value. The first window reads the value once and keeps it. The load log names the pick, and the value with the setter that gave it (`set_cuda_mmq_pin` under a test's pin)."
     cuda_mmq : int64 = 1l
 
+    @clarg_doc = "The CUDA home's decode attention tile form - the verify's rows, the rows of one session, scored with a K/V head's query heads as one flash tile and each K and V row read once, past the unsplit position, on every layer that takes it (an f16 mirror, a head of 512 or 256, no softcap, no sinks, enough rows to fill its tiles); the block drafter's dense layer rides the same form: 0 = never"
+    cuda_attn_tile : int64 = 1l
+
+    @clarg_doc = "The key count from which the CUDA home's one-row token step attends on the decode tile form on a flat layer the tile's stamps serve: the row form reads the K and V rows once a group of query heads, the tile form once for all of them, so the tile form wins where the keys are many (gemma-4's global layers after a long prompt). -1 (the default) lets the driver pick by the device: 128 from 64 SMs up, 2048 under. 0 = the row form at every position."
+    cuda_attn_tile_far : int64 = -1l
+
+    @clarg_doc = "The key pieces the CUDA home's far row splits a (K/V head, q tile) into, 128 at most. 0 = the driver's pick by the keys an SM serves: a block every second SM, a block an SM, two. A probe's knob."
+    cuda_attn_tile_pieces : int64 = 0l
+
+    @clarg_doc = "The rows from which the CUDA home's N-row step (a verify, a batched step) feeds a routed layer's MXFP4 or NVFP4 expert stacks through the window's FP4 chain - the activations quantized to e2m1, where the one-row step feeds Q8_0. -1 (the default) is the driver's rule over the experts the rows touch; 0 = never, the rows on the one-row step's feed. A test's `set_cuda_moe_fp4_rows` pins over it."
+    cuda_moe_fp4_rows : int64 = -1l
+
+    @clarg_doc = "The CUDA home's prefill flash pass at a head of 512 or 256 on its wide tile - 48 query rows of a head a block at 512 and 96 at 256, the keys walked once for all of them, the K and V rows of a step staged in shared memory (gemma-4's global layers, the deltanet hybrids' attention). 0 = the narrower tiles every home shares."
+    cuda_fa_wide : int64 = 1l
+
     @clarg_doc = "The CUDA home's launches under programmatic dependent launch: a kernel is launched while the one before it in the stream still runs, and its entry wait (`griddepcontrol.wait`, in every emitted kernel on sm_90 and up) holds its reads until that one completes, so the launch latency rides under the predecessor's tail. 1 = on where the card is sm_90 or newer, 0 = plain stream order (A/B instrument). The TTS seats' shots launch in plain stream order under every value (`rail_tts_shot`). The device-ready log line names the state."
     cuda_pdl : int64 = 1l
 
-    @clarg_doc = "The window chain's deltanet scan on the discrete homes: 1 = the chunked form on the 16 x 16 cooperative tiles (`dn_scan_chunk_cls`: sixteen tokens a chunk, the state advanced once a chunk) wherever the device has them - CUDA, and Vulkan with KHR cooperative matrices at subgroup 32 - the per-token scan elsewhere; 0 = the per-token scan everywhere (A/B instrument). The token step's fused scan is not this knob's."
+    @clarg_doc = "The window chain's deltanet scan on the discrete homes: 1 = the chunked form on the 16 x 16 cooperative tiles (`dn_scan_chunk_cls`: sixteen tokens a chunk, the state advanced once a chunk) wherever the device has them - CUDA, and Vulkan with KHR cooperative matrices at subgroup 32 where the box's served set (vk_alt_stamps, bit 2) leaves the scan there - the per-token scan elsewhere; 0 = the per-token scan everywhere (A/B instrument). The token step's fused scan is not this knob's."
     dn_chunk : int64 = 1l
 
     @clarg_doc = "The CUDA home's greedy chain: the next one-row step launched behind the running one on the device's own pick; 0 off, 1 every greedy step, -1 adaptive (backs off after a miss). A sampled session never chains."

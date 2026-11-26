@@ -20,6 +20,7 @@ require ?das_metal dasllama/dasllama_metal_decode  // decode stats + shutdown ra
 require ?das_metal metal/das_metal_boost  // device probe
 require ?vulkan dasllama/dasllama_vulkan_common  // the vulkan census rail (spec-only here)
 require ?vulkan dasllama/dasllama_vulkan_tower   // set_vulkan_tower - the serving census pins the TTS rows' knob ON
+require ?vulkan dasllama/dasllama_vulkan_classes   // the batch tile routers a twin leg of the mode sweep asks first
 require daslib/defer
 require dasllama/dasllama_gpu_resident  // moe_gpu_drop_model_ — the census's model-switch drops
 require dasllama/dasllama_image   // nolint:STYLE030,LINT019 — load_model_uncached: the codec census's load, inside the vulkan static_if
@@ -868,6 +869,7 @@ def private cov_tower_vad(t : T?) {
     }
 }
 
+//! one synthesis a StyleTTS2 file; the rows that ran
 [unused_argument(t)]   //! without a GPU module the gated body is empty
 def private cov_tower_styletts2(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
@@ -1168,7 +1170,8 @@ def test_metal_kernel_coverage(tst : T?) {
 }
 
 // The Vulkan census's DECLARED blind spots, by census name (`<vk_dispatch name>_spv`): kernel
-// classes no zoo row below can dispatch, each with the reason and the kernel-unit cell that does.
+// classes no zoo row below can dispatch, each with the reason and the kernel-unit cell that does. An entry some rows
+// dispatch on one kind of device and no row reaches on another has a line in `VK_CENSUS_PICK_CONDITIONAL` too.
 let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the q51 rail (the 32-block down planes of the 26B-A4B's Q4_K_M, a carrier above the zoo's tier; the dense planes of the
     // Llama-3.2-1B Q5_1 mint, which no zoo row loads) - its l, m and s stamps (the m stamp its e column too) and its decode
@@ -1205,6 +1208,17 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // mx4 stacks, Flash-Next's iq4nl32 stacks - carriers above the zoo's tier); their coverage is the KHR arm of
     // test_vkd_q51_cm2_batch, test_vkd_mx4_cm2_batch and test_vkd_iq4nl32_cm2_batch
     "q51_batch_khr_cls_spv", "mx4_batch_khr_cls_spv", "iq4nl32_batch_khr_cls_spv",
+    // the int8 tiles of the routed block, their feeds, row map and device check: a column of the routed block rides them
+    // where the served set names it (`vk_mmq_any` - an AMD device's own rule `vk_alt_mmq_by_vendor`, no other device's). There
+    // the census's four routed rows (the Qwen1.5-MoE and Qwen3-30B cuts) dispatch the k4, k6, q5032 and q8 stamps their
+    // planes and that rule's columns reach, with the feeds, the row map and the check: those ten are conditional
+    // (`VK_CENSUS_PICK_CONDITIONAL`). The other six no row reaches on any device - no routed row holds a k5 or q51 expert
+    // plane, and the rule leaves the down's m pieces on the f16 tile. Their coverage is test_vkd_mmq_tiles,
+    // test_vkd_mmq_feed, test_vkd_mmq_inv and test_vkd_mmq_device_check in test_vulkan_kernels_gemm.das
+    "kq_batch_k4_mmq_cls_spv", "kq_batch_k4_mmqs_cls_spv", "kq_batch_k5_mmq_cls_spv", "kq_batch_k5_mmqs_cls_spv",
+    "kq_batch_k6_mmq_cls_spv", "kq_batch_k6_mmqs_cls_spv", "q51_batch_mmq_cls_spv", "q51_batch_mmqs_cls_spv",
+    "q5032_batch_mmq_cls_spv", "q5032_batch_mmqs_cls_spv",
+    "q8_batch_mmq_cls_spv", "q8_batch_mmqs_cls_spv", "mmq_feed_cls_spv", "mmq_feed16_cls_spv", "mmq_inv_cls_spv", "mmq_probe_cls_spv",
     // the mx4 experts' fused gate+up+act+requant GEMV (gpt-oss's token command, above the zoo's tier); its coverage is
     // test_vkd_mx4_gemv_gu in test_vulkan_kernels.das
     "mx4_gemv_gu_cls_spv",
@@ -1241,8 +1255,8 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the KHR flash-attention tile's 256 and 512 heads: the mode sweep's mm row reaches the 64 and 128 heads through the
     // zoo's qwens; no zoo row carries a 512 head or an ungated or capped 256 head (the gemmas sit above the tier); the
     // gated 256 keys are the zoo's Qwen3.5-9B's, which the census runs at the box's coopmat mode - cm2 on the pod, so its
-    // row takes the cm2 stamp; a KHR-only box (the zen4 760M) dispatches them through that file and the Qwen3.6-35B-A3B
-    // files; their coverage is test_vkd_fa_khr, test_vkd_fa_khr_h256_softcap and test_vkd_fa_khr_h256_gated in
+    // row takes the cm2 stamp; a KHR-only device runs that file and the Qwen3.6-35B-A3B files on the KHR tile, an AMD one
+    // on the tile-first alternate of the f16-out key (below); their coverage is test_vkd_fa_khr, test_vkd_fa_khr_h256_softcap and test_vkd_fa_khr_h256_gated in
     // test_vulkan_kernels.das
     "fa_khr_h256_cls_spv", "fa_khr_h256_f16_cls_spv", "fa_khr_h256_cap_cls_spv", "fa_khr_h256_cap_f16_cls_spv",
     "fa_khr_h256_g_cls_spv", "fa_khr_h256_g_f16_cls_spv",
@@ -1394,7 +1408,9 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "router_gemv_bf16_hw_cls_spv",
     // the scalar router GEMM: on a cm2 box every MoE carrier whose dim the small f16 GEMM's eight
     // 64-deep chunks divide takes the f16 route, so the scalar tile runs only off it (a dim off
-    // 512, the KHR route). Its coverage is test_vkd_moe_routing's router arm in test_vulkan_kernels.das
+    // 512, the KHR route). The census's four routed rows are 2048 wide: blind on a cm2 device, dispatched by every one of
+    // them on a KHR-route device - conditional (`VK_CENSUS_PICK_CONDITIONAL`). Its coverage is test_vkd_moe_routing's
+    // router arm in test_vulkan_kernels.das
     "router_gemm_cls_spv",
     // the N-column decode GEMV leaves serve only the N-row token command, which the zoo's one-region loads never
     // engage (a batched step here rides f32 sessions on the per-op rails); the q8 row-pair stamps serve only past
@@ -1412,9 +1428,9 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "kq_gemv_iq4nl_n4_cls_spv", "kq_gemv_nv4_n4_cls_spv", "kq_gemv_iq2s_n4_cls_spv", "kq_gemv_iq2xs_n4_cls_spv", "kq_gemv_iq2xxs_n4_cls_spv",
     // the DFlash2 block drafter's pass, top-k and selector walk serve only a drafter attached beside a target, and no census
     // row loads one; their coverage is test_vkt_dflash_pass_kernels, test_vkt_dflash_topk and test_vkt_dflash_walk in
-    // test_vulkan_tower_kernels.das, the stocked carriers the E2B block's drafter form in test_gpu_resident_gemma4_e2b.das (the
-    // tile a head) and the dflash-27b-discrete arm of test_dflash_drafter.das (the grouped tile in the tile a head's place)
-    "dflash_conv_cls_spv", "dflash_qkn_cls_spv", "dflash_attn_tile_cls_spv", "dflash_attn_tile_heads_cls_spv", "dflash_attn_merge_cls_spv", "dflash_topk_slices_cls_spv", "dflash_topk_merge_cls_spv",
+    // test_vulkan_tower_kernels.das, the stocked carriers the E2B block's drafter form in test_gpu_resident_gemma4_e2b.das and
+    // the dflash-27b-discrete arm of test_dflash_drafter.das
+    "dflash_conv_cls_spv", "dflash_qkn_cls_spv", "dflash_attn_tile_cls_spv", "dflash_attn_merge_cls_spv", "dflash_topk_slices_cls_spv", "dflash_topk_merge_cls_spv",
     "dflash_walk_cls_spv",
     // the fused gate-up GEMV's N stamps serve only the N-row token command, which the zoo's one-region load never engages
     // (the batched rows need a region a row; the stocked regions files - test_gpu_resident_qwen3.das and the
@@ -1422,7 +1438,89 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "q8_gemv_gu_n2_cls_spv", "q8_gemv_gu_n4_cls_spv", "q8_gemv_gu_n8_cls_spv",
     // the sink stamps over a block-codec K/V mirror (gpt-oss with the mirror asked in q8_0 or tq4: the census loads no sink
     // carrier); their coverage is the sink arms of test_vkc_q8_da_attn and test_vkc_tq4_da_attn in test_vulkan_kv_codec_kernels.das
-    "da_attn_q8_sink_cls_spv", "da_attn_tq4_sink_cls_spv"]
+    "da_attn_q8_sink_cls_spv", "da_attn_tq4_sink_cls_spv",
+    // the stand-ins of the KHR flash slots listed above (the 256 and 512 heads, the capped 256, the sink 64, the bidirectional
+    // 64 and 128): a slot's tile-first alternate and its small-tile twin serve at that slot's sites alone, which no census row
+    // reaches. The alternate serves under `VK_ALT_FA_TFIRST`, an AMD device's own rule: there every stocked file that reaches a
+    // slot dispatches its alternate in the slot's place - gemma-4-E2B-it-Q8_0.gguf in test_gpu_resident_gemma4_e2b.das the 256
+    // and 512 heads', the other slots' the files their entries name. The twin serves under a shared-memory cap below the
+    // tile's footprint (`FA_KHR_WG_BYTES`) with the bit out of the served set, which no stocked box gives. Their coverage is
+    // test_vkd_fa_khr_tfirst and test_vkd_fa_khr_small_twins in test_vulkan_kernels_attn.das, the bidirectional slots' the
+    // second cell of test_vkt_fa_bidir in test_vulkan_tower_kernels.das. Of the gated 256 slot's two alternates the f32-out
+    // one is an entry and the f16-out one is not: on an AMD device the Qwen3.5-9B row (`run.das --category qwen35-9b`)
+    // dispatches the f16-out alternate in its slot's place - that row's windows take the f16-out form - and no row takes
+    // the f32-out one
+    "fa_khr_h256_tf_cls_spv", "fa_khr_h256_f16_tf_cls_spv", "fa_khr_h256_cap_tf_cls_spv", "fa_khr_h256_cap_f16_tf_cls_spv",
+    "fa_khr_h256_g_tf_cls_spv",
+    "fa_khr_h512_tf_cls_spv", "fa_khr_h512_f16_tf_cls_spv", "fa_khr_h64_sink_tf_cls_spv", "fa_khr_h64_sink_f16_tf_cls_spv",
+    "fa_khr_h64_bidir_tf_cls_spv", "fa_khr_h128_bidir_tf_cls_spv",
+    "fa_khr_h256_cls_s_spv", "fa_khr_h256_f16_cls_s_spv", "fa_khr_h256_cap_cls_s_spv", "fa_khr_h256_cap_f16_cls_s_spv",
+    "fa_khr_h256_g_cls_s_spv", "fa_khr_h256_g_f16_cls_s_spv", "fa_khr_h512_cls_s_spv", "fa_khr_h512_f16_cls_s_spv",
+    "fa_khr_h64_sink_cls_s_spv", "fa_khr_h64_sink_f16_cls_s_spv", "fa_khr_h64_bidir_cls_s_spv", "fa_khr_h128_bidir_cls_s_spv",
+    // the gemma-4 MoE combine's small-slab twins: the three combine slots listed above serve their twin on a device whose
+    // shared-memory cap is under the row slab's (`ROW_SLAB_WG_BYTES`), and the slots' carrier, the 26B-A4B, sits above the
+    // zoo's tier. On such a device the 26B cuts of test_gpu_resident_gemma4_moe.das dispatch them (the gemma4-moe category's
+    // files among them); their coverage is test_vkd_moe_routing's gemma-4 combine arm in test_vulkan_kernels.das, which runs
+    // the twin where the device's cap picks it
+    "cls_ar_comb_g4_s_spv", "cls_ar_comb_g4_f16_b_s_spv", "cls_ar_comb_g4_rq_s_spv",
+    // the rotated-walk alternates of the KHR tiles listed above (the staged f32 tile, the nv4 tile, the per-32 expert rails'
+    // q51, mx4 and iq4nl32 tiles): an alternate serves at its slot's sites alone, under `VK_ALT_KHR_ROT` - a bit only a box's
+    // race or a `DASLLAMA_VK_ALT_STAMPS` pin sets, no device's own rule - so no stocked file dispatches one on a box whose
+    // stored set lacks the bit; their coverage is test_vkd_khr_rot_tiles in test_vulkan_kernels_gemm.das
+    "f32_batch_khr_rot_cls_spv", "kq_batch_nv4_khr_rot_cls_spv", "q51_batch_khr_rot_cls_spv", "mx4_batch_khr_rot_cls_spv",
+    "iq4nl32_batch_khr_rot_cls_spv",
+    // the N-column decode GEMV leaves' rotated twins: they serve the N-row token command, as the N-column leaves listed above
+    // do, and only over a plane whose quant rows collide (`gemv_n_rot_wanted`, `q8_gemv_n_rot_wanted`) under `VK_ALT_N_ROT`, an
+    // AMD device's own rule. On an AMD device the regions files those leaves' entry names dispatch a format's twin over such a
+    // plane - gemma-4-E2B-it-Q8_0.gguf in test_gpu_resident_gemma4_e2b.das takes the q8 `n2r`, `n4r` and `n8r` twins, the
+    // Qwen1.5-MoE-A2.7B-4L cuts of test_gpu_resident_qwen_moe.das `q8_gemv_n2r_cls`; their coverage is the rotated leg of
+    // test_vkd_gemv_ncol in test_vulkan_kernels.das
+    "q8_gemv_n2r_cls_spv", "q8_gemv_n4r_cls_spv", "q8_gemv_n8r_cls_spv", "q8_gemv_n2o_cls_spv", "q8_gemv_n4o_cls_spv", "q8_gemv_n8o_cls_spv",
+    "kq_gemv_k4_nr_cls_spv", "kq_gemv_k4_n4r_cls_spv", "kq_gemv_q40_nr_cls_spv", "kq_gemv_q40_n4r_cls_spv",
+    "kq_gemv_iq4xs_nr_cls_spv", "kq_gemv_iq4xs_n4r_cls_spv", "kq_gemv_iq3s4_nr_cls_spv", "kq_gemv_iq3s4_n4r_cls_spv",
+    "kq_gemv_iq4nl_nr_cls_spv", "kq_gemv_iq4nl_n4r_cls_spv", "kq_gemv_nv4_nr_cls_spv", "kq_gemv_nv4_n4r_cls_spv",
+    "kq_gemv_k2_nr_cls_spv", "kq_gemv_k2_n4r_cls_spv", "kq_gemv_iq2xs_nr_cls_spv", "kq_gemv_iq2xs_n4r_cls_spv",
+    "kq_gemv_iq2xxs_nr_cls_spv", "kq_gemv_iq2xxs_n4r_cls_spv",
+    // the decode form of the KHR flash tile and its small-tile twins: the token command's attention over a verify's rows or a
+    // batched step's, or over one row past the wide position, on a layer of head 512 or 256, and the block drafter's dense
+    // layer at head 128. The census steps one row over a short context and loads no drafter. The stocked carrier is
+    // gemma-4-E2B-it-Q8_0.gguf in test_gpu_resident_gemma4_e2b.das (the far row, the eight-row command, the DFlash2 drafter's
+    // dense tile), which dispatches the twins on a device under the tile's footprint (`FA_KHR_WG_BYTES`); their coverage is
+    // test_vkd_da_attn_tile in test_vulkan_kernels_attn.das
+    "fa_khr_dec_h512_cls_spv", "fa_khr_dec_h256_cls_spv", "fa_khr_dec_h128_cls_spv",
+    "fa_khr_dec_h512_cls_s_spv", "fa_khr_dec_h256_cls_s_spv", "fa_khr_dec_h128_cls_s_spv"]
+
+let private VK_PICK_INT8_COLUMNS = "the int8 columns"     //! `vk_mmq_any`: the served set puts a column of the routed block on the int8 tiles
+let private VK_PICK_SCALAR_ROUTER = "the scalar router"   //! `f16g_shape_ok` false at a routed row's width: the small f16 GEMM leaves that row's router to the scalar GEMM
+
+//! Blind entries some census rows dispatch on one kind of device and no row reaches on another, and the driver pick that
+//! tells the two apart (`vk_census_pick`): where the pick holds its carrier rows dispatch the entry, and where it does not
+//! the entry is blind. `VK_CENSUS_NEVER_DISPATCHED` has no vocabulary for "blind only off this pick", so the pair is
+//! named here.
+let private VK_CENSUS_PICK_CONDITIONAL : table<string; string> <- {
+    "kq_batch_k4_mmq_cls_spv" => VK_PICK_INT8_COLUMNS, "kq_batch_k4_mmqs_cls_spv" => VK_PICK_INT8_COLUMNS,
+    "kq_batch_k6_mmqs_cls_spv" => VK_PICK_INT8_COLUMNS, "q5032_batch_mmqs_cls_spv" => VK_PICK_INT8_COLUMNS,
+    "q8_batch_mmq_cls_spv" => VK_PICK_INT8_COLUMNS, "q8_batch_mmqs_cls_spv" => VK_PICK_INT8_COLUMNS,
+    "mmq_feed_cls_spv" => VK_PICK_INT8_COLUMNS, "mmq_feed16_cls_spv" => VK_PICK_INT8_COLUMNS,
+    "mmq_inv_cls_spv" => VK_PICK_INT8_COLUMNS, "mmq_probe_cls_spv" => VK_PICK_INT8_COLUMNS,
+    "router_gemm_cls_spv" => VK_PICK_SCALAR_ROUTER
+}
+
+let private VK_ROUTED_ROWS = 4   //! the census's routed rows (`vk_cov_routed`): the carriers of the int8 columns' and the scalar router's entries
+
+//! what a run's carrier rows read: the routed rows that ran, and on how many of them the router's route was the scalar GEMM
+struct private VkCarrierRows {
+    routed : int
+    scalar_router : int
+}
+
+//! a driver pick as one run reads it: whether it holds, and how many of the rows that dispatch its entries ran
+struct private VkPickState {
+    holds : bool
+    ran : int
+    rows : int
+    carriers : string
+}
 
 //! a prefill over the counting prompt and two greedy decode steps through `s`
 def private cov_prefill_two_steps(tr : Model; var s : Session) {
@@ -1439,7 +1537,9 @@ def private cov_prefill_two_steps(tr : Model; var s : Session) {
 }
 
 //! one model's sweep with the K/V mirror asked in block codec `kv`, on a session of that codec: a prefill (the window's staged
-//! store, the shadow, the flash tiles over it) and two decode steps (the token store, the codec's attention stamp, tq4's un-rotation)
+//! store, the shadow, the flash tiles over it) and two decode steps (the token store, the codec's attention stamp, tq4's
+//! un-rotation). A model the engine serves no `kv` cache on skips by name: the mirror arms another codec there, and a
+//! session of `kv` would ride the CPU rails
 [unused_argument(t, path, family, kv)]   // without vulkan the gated body is empty
 def private vk_cov_codec_model(t : T?; path, family : string; kv : KVDtype) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1450,25 +1550,61 @@ def private vk_cov_codec_model(t : T?; path, family : string; kv : KVDtype) {
         set_gpu_kv_want(kv)
         var tr <- load_model_uncached(path, QuantMode.q8)
         restore_gpu_kv_want(pin)
-        tr.config.seq_len = min(tr.config.seq_len, 512l)
-        with_dasllama_jobque() {
-            var s = make_run_state(tr.config, kv, kv)
-            cov_prefill_two_steps(tr, s)
-            delete s
+        let unserved = kv_codec_serving_why(tr.config, kv)
+        if (!empty(unserved)) {
+            t |> skip("{base_name(path)}: the {kv} pass skipped, the engine serves no {kv} K/V cache on this model - {unserved}")
+        } else {
+            tr.config.seq_len = min(tr.config.seq_len, 512l)
+            with_dasllama_jobque() {
+                var s = make_run_state(tr.config, kv, kv)
+                cov_prefill_two_steps(tr, s)
+                delete s
+            }
         }
         moe_gpu_drop_model_()
         delete tr
     }
 }
 
-[unused_argument(t, path, family, nbs, blocks)]   // without vulkan the gated body is empty
-def private vk_cov_model(t : T?; path, family : string; nbs : array<int>; blocks : int64 = 0l) {
+let private NO_TWIN = -1   //! `vk_cov_model`'s `twin_fmt` on a row no forced coopmat mode routes to a twin stamp
+
+//! the forced coopmat mode of a twin leg by its `DASLLAMA_COOPMAT` spelling
+def private vk_cov_twin_mode : string {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return g_gpu.coopmat_mode == COOPMAT_F16 ? "f16" : "int8"
+    } else {
+        return ""
+    }
+}
+
+//! whether this device builds the batch tile the forced coopmat mode routes a plane of format `fmt` to: the answer of the
+//! router the window itself asks, read under that mode
+[unused_argument(fmt)]   // without vulkan the gated body is empty
+def private vk_cov_twin_builds(fmt : int) : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (fmt == int(KqFmt.q8)) {
+            return q8_batch_cls_ensure(q8_batch_cls_variant(q8_batch_tile(), false))
+        }
+        return kq_batch_cls_ensure(fmt, kq_batch_q40cm(fmt))
+    } else {
+        return false
+    }
+}
+
+//! `ran` is false where the row's family, arm or file leaves it out, and on a twin leg - `twin_fmt` the plane format whose
+//! coopmat twin the forced mode reaches - where the device declines that twin; `dim` is the model's width
+[unused_argument(t, path, family, nbs, blocks, twin_fmt)]   // without vulkan the gated body is empty
+def private vk_cov_model(t : T?; path, family : string; nbs : array<int>; blocks : int64 = 0l; twin_fmt : int = NO_TWIN) : tuple<ran : bool; dim : int64> {
     // one model's vulkan coverage sweep: GPU prefill (the counting prompt clears the npos gate),
     // two greedy decode steps, a continuation prefill, then one batched step per requested B.
     // No parity asserts — the census wants DISPATCH DIVERSITY, the parity suites own truth.
     static_if (typeinfo builtin_module_exists(vulkan)) {
         if (!family_on(t, family) || !arm_on(t, "coverage-vk") || !model_available(t, path)) {
-            return
+            return (ran = false, dim = 0l)
+        }
+        if (twin_fmt != NO_TWIN && !vk_cov_twin_builds(twin_fmt)) {
+            t |> skip("{base_name(path)}: the {vk_cov_twin_mode()} coopmat mode skipped - this device declines the batch tile that mode routes the file's planes to (the driver's decline line names the stamp and the reason)")
+            return (ran = false, dim = 0l)
         }
         var tr <- load_model_(path, QuantMode.q8)
         if (blocks > 0l) {
@@ -1513,40 +1649,59 @@ def private vk_cov_model(t : T?; path, family : string; nbs : array<int>; blocks
         // first (the slot machinery / server do) — without this the stack table accumulates
         // across the zoo until the MAX_STACKS decline
         moe_gpu_drop_model_()
+        let dim = tr.config.dim
         delete tr
+        return (ran = true, dim = dim)
+    } else {
+        return (ran = false, dim = 0l)
     }
 }
 
-//! the two carriers the block codecs' attention stamps need: the four-head slab (qwen2: fourteen heads over two) and the
-//! two-head slab (gemma-2: eight over four)
+//! one routed row: `vk_cov_model` on the first `blocks` blocks, and where it ran the router's route at the row's width
+[unused_argument(t, rows, path, family, blocks)]   // without vulkan the gated body is empty
+def private vk_cov_routed(t : T?; var rows : VkCarrierRows; path, family : string; blocks : int64) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let none : array<int>
+        let row = vk_cov_model(t, path, family, none, blocks)
+        return if (!row.ran)
+        rows.routed++
+        rows.scalar_router += (vk_moe_init() && !f16g_shape_ok(row.dim)) ? 1 : 0
+    }
+}
+
+//! the carriers the block codecs' attention stamps need: the four-head slab (qwen2: fourteen heads over two) and the
+//! two-head slab (gemma-2: eight over four), each under q8_0 and tq4. The engine serves no tq4 cache on qwen2's biased
+//! attention, so that pass skips by name, and tinyllama (thirty-two heads over four) carries tq4's four-head slab
 [cold_path]
 def private vk_cov_codecs(t : T?) {
     for (kv in [KVDtype.q8_0, KVDtype.tq4]) {
         vk_cov_codec_model(t, path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf"), "qwen2", kv)
         vk_cov_codec_model(t, path_join(models_dir(), "gemma-2-2b-it-Q8_0.gguf"), "gemma2", kv)
     }
+    vk_cov_codec_model(t, path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf"), "llama", KVDtype.tq4)
 }
 
 //! every prefill tile family under the coopmat modes its planes have twins in - the box's resolved mode, mm,
-//! sdot4, and for the q8 and q40 planes the f16 and int8 coopmat twins too; the carriers are the qwen3 files
-//! (the Q8_0 also carries the resident fused qk_norm rail; the Q4_K_M k4/k6 with the Q8_K activation quant
-//! forms and qk_norm on the split rail) and the 1B requants the format arc used
+//! sdot4, and for the q8 and q40 planes the f16 and int8 coopmat twins too (`twin`: the plane format of a row that takes
+//! those two legs); the carriers are the qwen3 files (the Q8_0 also carries the resident fused qk_norm rail; the Q4_K_M
+//! k4/k6 with the Q8_K activation quant forms and qk_norm on the split rail) and the 1B requants the format arc used. The
+//! window asserts its batch tile's rail, so a twin leg asks the device first and skips by name where the twin is declined
 [unused_argument(t)]   // without vulkan the gated body is empty
 def private vk_cov_mode_sweep(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let vehicles = fixed_array(
-            (file = "Qwen3-0.6B-Q8_0.gguf", family = "qwen3", nmodes = 5),
-            (file = "Llama-3.2-1B-Instruct-Q4_0-local.gguf", family = "llama", nmodes = 5),
-            (file = "Qwen3-4B-Instruct-2507-Q4_K_M.gguf", family = "qwen3", nmodes = 3),          // k4 + k6
-            (file = "Llama-3.2-1B-Instruct-IQ4_XS.gguf", family = "llama", nmodes = 3),
-            (file = "Llama-3.2-1B-Instruct-Q3_K_L.gguf", family = "llama", nmodes = 3),           // k3 + k5
-            (file = "Llama-3.2-1B-Instruct-IQ3_M.gguf", family = "llama", nmodes = 3),            // iq3s
-            (file = "Llama-3.2-1B-Instruct-IQ3_XXS-local.gguf", family = "llama", nmodes = 3),
-            (file = "Llama-3.2-1B-Instruct-IQ4_NL-local.gguf", family = "llama", nmodes = 3),
-            (file = "Llama-3.2-1B-Instruct-Q2_K-local.gguf", family = "llama", nmodes = 3),
-            (file = "Llama-3.2-1B-Instruct-IQ2_XS-local.gguf", family = "llama", nmodes = 3),
-            (file = "Llama-3.2-1B-Instruct-IQ2_XXS-local.gguf", family = "llama", nmodes = 3),
-            (file = "Llama-3.2-1B-Instruct.i1-IQ3_XXS.gguf", family = "llama", nmodes = 3))       // iq2s on the attention planes
+            (file = "Qwen3-0.6B-Q8_0.gguf", family = "qwen3", twin = int(KqFmt.q8)),
+            (file = "Llama-3.2-1B-Instruct-Q4_0-local.gguf", family = "llama", twin = int(KqFmt.q40)),
+            (file = "Qwen3-4B-Instruct-2507-Q4_K_M.gguf", family = "qwen3", twin = NO_TWIN),          // k4 + k6
+            (file = "Llama-3.2-1B-Instruct-IQ4_XS.gguf", family = "llama", twin = NO_TWIN),
+            (file = "Llama-3.2-1B-Instruct-Q3_K_L.gguf", family = "llama", twin = NO_TWIN),           // k3 + k5
+            (file = "Llama-3.2-1B-Instruct-IQ3_M.gguf", family = "llama", twin = NO_TWIN),            // iq3s
+            (file = "Llama-3.2-1B-Instruct-IQ3_XXS-local.gguf", family = "llama", twin = NO_TWIN),
+            (file = "Llama-3.2-1B-Instruct-IQ4_NL-local.gguf", family = "llama", twin = NO_TWIN),
+            (file = "Llama-3.2-1B-Instruct-Q2_K-local.gguf", family = "llama", twin = NO_TWIN),
+            (file = "Llama-3.2-1B-Instruct-IQ2_XS-local.gguf", family = "llama", twin = NO_TWIN),
+            (file = "Llama-3.2-1B-Instruct-IQ2_XXS-local.gguf", family = "llama", twin = NO_TWIN),
+            (file = "Llama-3.2-1B-Instruct.i1-IQ3_XXS.gguf", family = "llama", twin = NO_TWIN))       // iq2s on the attention planes
         if (!vk_moe_init()) {   //! the sweep reads the device's resolved mode before its first row loads (a family filter may have skipped every earlier row)
             t |> skip("no Vulkan device for the coopmat mode sweep")
             return
@@ -1554,18 +1709,71 @@ def private vk_cov_mode_sweep(t : T?) {
         let none : array<int>
         let box_mode = g_gpu.coopmat_mode
         let modes = fixed_array(box_mode, COOPMAT_MM, COOPMAT_SDOT4, COOPMAT_F16, COOPMAT_INT8)
+        let common = 3   // the modes every vehicle takes; the two past them are the twin legs
         for (v in vehicles) {
             let vpath = path_join(models_dir(), v.file)
-            for (mi in range(v.nmodes)) {
+            for (mi in range(v.twin == NO_TWIN ? common : length(modes))) {
                 g_gpu.coopmat_mode = modes[mi]
-                vk_cov_model(t, vpath, v.family, none)
+                vk_cov_model(t, vpath, v.family, none, 0l, mi < common ? NO_TWIN : v.twin)
             }
             g_gpu.coopmat_mode = box_mode
         }
     }
 }
 
-[test(description = "The Vulkan serving census over the local zoo, codec carriers, coopmat mode sweep and tower rows dispatches at least 24 distinct kernels, and every declared blind spot names a seeded kernel with zero dispatches")]
+//! the driver pick `pick` on this run, by the answer the driver itself acts on: the served set's int8 columns as the device
+//! stands, the router's route as each routed row that ran read it
+[unused_argument(pick, rows)]   // without vulkan the gated body is empty
+def private vk_census_pick(pick : string; rows : VkCarrierRows) : VkPickState {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (pick == VK_PICK_INT8_COLUMNS) {
+            return VkPickState(holds = vk_mmq_any(), ran = rows.routed, rows = VK_ROUTED_ROWS, carriers = "routed rows")
+        } elif (pick == VK_PICK_SCALAR_ROUTER) {
+            return VkPickState(holds = rows.scalar_router > 0, ran = rows.routed, rows = VK_ROUTED_ROWS, carriers = "routed rows")
+        }
+        panic("the Vulkan census knows no pick '{pick}'")
+    } else {
+        return VkPickState()
+    }
+}
+
+//! The Vulkan blind list drains itself: an entry names a seeded kernel - `cov` carries every seeded kernel at zero, so an
+//! entry matching none names nothing and would sit green forever - and counts no dispatch. A conditional entry whose pick
+//! holds is the other case: its carrier rows dispatch it here, and once every one of them ran it is held to a counted
+//! dispatch; with a carrier row filtered out or its file absent it skips, since its carrier may be the row that did not run.
+[unused_argument(t, cov, rows)]   // without vulkan the gated body is empty
+def private vk_census_blind_drain(t : T?; cov : table<string; int64>; rows : VkCarrierRows) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        var conditional = 0
+        for (blind in VK_CENSUS_NEVER_DISPATCHED) {
+            var named = false
+            for (k in keys(cov)) {
+                if (starts_with(k, blind)) {
+                    named = true
+                }
+            }
+            t |> success(named,
+                "{blind} names no seeded kernel - spell the census key (<vk_dispatch name>_spv)")
+            let hits = named ? vk_kernel_coverage_of(blind) : 0l   // the accessor panics on an unseeded name; the assert above is the legible red
+            let pick = VK_CENSUS_PICK_CONDITIONAL?[blind] ?? ""
+            conditional += empty(pick) ? 0 : 1
+            let state = empty(pick) ? VkPickState() : vk_census_pick(pick, rows)
+            if (!state.holds) {
+                t |> success(hits == 0l,
+                    "{blind} is a DECLARED blind spot - a stocked carrier now dispatches it ({hits}): drop the entry, its census row exists")
+            } elif (state.ran == state.rows) {
+                t |> success(hits > 0l,
+                    "{blind} is conditional on {pick}, which holds on this device, and with every one of the {state.carriers} run no row dispatched it: the entry is blind here too - drop its conditional line")
+                to_log(LOG_INFO, "vulkan kernel coverage: {blind} is blind off {pick} alone - the {state.carriers} dispatch it on this device ({hits})\n")
+            } else {
+                t |> skip("{blind}: {pick} holds on this device, where the {state.carriers} dispatch it ({hits} from the {state.ran} of {state.rows} that ran) - held to a dispatch only once every one of them runs")
+            }
+        }
+        t |> equal(conditional, length(VK_CENSUS_PICK_CONDITIONAL), "every conditional line names a blind entry by its exact text")
+    }
+}
+
+[test(description = "The Vulkan serving census over the local zoo, codec carriers, coopmat mode sweep and tower rows dispatches at least 24 distinct kernels; every declared blind spot names a seeded kernel with zero dispatches, and a conditional one counts a dispatch where its driver pick holds and every carrier row of it ran")]
 def test_vulkan_kernel_coverage_serving(tst : T?) {
     tst |> run("Vulkan serving census: the local zoo across resident/arena/kq/deltanet/MoE") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1589,13 +1797,14 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
             // K-quant deltanet planes on the resident driver
             vk_cov_model(t, path_join(models_dir(), "Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf"), "qwen35", none)
             // the MoE rows (expert FFN/qkv chains + heat cache) sit above the small tier
-            vk_cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-4L-Q8_0-local.gguf"), "qwen2moe", none, 4l)
-            vk_cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-7L-Q4_K_M-local.gguf"), "qwen3moe", none, 7l)
+            var rows : VkCarrierRows
+            vk_cov_routed(t, rows, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-4L-Q8_0-local.gguf"), "qwen2moe", 4l)
+            vk_cov_routed(t, rows, path_join(models_dir(), "Qwen3-30B-A3B-7L-Q4_K_M-local.gguf"), "qwen3moe", 7l)
             // the Q4_K_M twin fits a 16 GB card whole: the whole-model driver's MoE block (the router on the f16
             // cm2 GEMM, the per-row select, the bucket schedule, the combine-folded residual step, the token command's routed block)
-            vk_cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-4L-Q4_K_M-local.gguf"), "qwen2moe", none, 4l)
+            vk_cov_routed(t, rows, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-4L-Q4_K_M-local.gguf"), "qwen2moe", 4l)
             // the UD-IQ2_XXS 30B: the resident MoE block's s and e stamps over iq2xxs expert planes, whole on a 16 GB card
-            vk_cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-7L-UD-IQ2_XXS-local.gguf"), "qwen3moe", none, 7l)
+            vk_cov_routed(t, rows, path_join(models_dir(), "Qwen3-30B-A3B-7L-UD-IQ2_XXS-local.gguf"), "qwen3moe", 7l)
             let knobs = gpu_knobs()   // the TTS rows serve on the tower knob: pinned on, restored after
             set_vulkan_tower(true)
             defer() {
@@ -1610,21 +1819,7 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
                     served++
                 }
             }
-            for (blind in VK_CENSUS_NEVER_DISPATCHED) {
-                var named = false
-                for (k in keys(cov)) {
-                    if (starts_with(k, blind)) {
-                        named = true
-                    }
-                }
-                // the entry must reach a COMPILED key: cov carries every seeded kernel at zero,
-                // so an entry matching none names nothing and would sit green forever
-                t |> success(named,
-                    "{blind} names no seeded kernel - spell the census key (<vk_dispatch name>_spv)")
-                let hits = named ? vk_kernel_coverage_of(blind) : 0l   //! the accessor panics on an unseeded name; the assert above is the legible red
-                t |> success(hits == 0l,
-                    "{blind} is a DECLARED blind spot - a stocked carrier now dispatches it ({hits}): drop the entry, its census row exists")
-            }
+            vk_census_blind_drain(t, cov, rows)
             delete cov
             let famfilter = g_env_test.test_family
             if (empty(famfilter)) {

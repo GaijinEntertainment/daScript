@@ -3372,7 +3372,7 @@ def private atomic_call(var ctx : CudaCtx; ec : ExprCall?; cname : string) : str
 }
 
 //! the CUDA-only intrinsics a body calls as statements
-let private INTRINSIC_STATEMENTS : table<string> <- { "cp_async_16", "cp_async_commit", "cp_async_wait", "ldmatrix", "ldmatrix_trans", "mma_scale_acc", "mma_acc_set", "mma_frag_set", "mma_block_scaled", "mma_block_scaled_mx", "mma_scale_cols", "bar_sync", "cuda_asm" }
+let private INTRINSIC_STATEMENTS : table<string> <- { "cp_async_16", "cp_async_commit", "cp_async_wait", "ldmatrix", "ldmatrix_trans", "mma_scale_acc", "mma_acc_set", "mma_acc_scale_rows", "mma_frag_set", "mma_block_scaled", "mma_block_scaled_mx", "mma_scale_cols", "bar_sync", "cuda_asm" }
 
 [arch(at="../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def private need_arch_a(var ctx : CudaCtx) {
@@ -3451,17 +3451,28 @@ def private cuda_intrinsic_call(var ctx : CudaCtx; ec : ExprCall?; cname : strin
     if (cname == "mma_acc_get" || cname == "mma_acc_set") {   //! the cm2 prelude's element accessors serve the lane element
         let fi = na >= 2 ? coop_type_of(ec.arguments[0]._type) : CoopInfo(ok = false)
         let set = cname == "mma_acc_set"
-        if (!(fi.ok && fi.comp == "f32" && na == (set ? 3 : 2))) {
-            shader_error(ctx, ec.at, "{cname}(f32 accumulator, k{set ? ", value" : ""}): the lane's element k (0..7)")
+        if (!(fi.ok && fi.use == "C" && (fi.comp == "f32" || fi.comp == "f16") && na == (set ? 3 : 2))) {
+            shader_error(ctx, ec.at, "{cname}(f32 or f16 accumulator, k{set ? ", value" : ""}): the lane's element k (0..7)")
             return "/*{cname}*/"
         }
         need_coopmat(ctx)
         need_cm2(ctx)
         census_kind(ctx, "call.{cname}")
         if (set) {
-            return "__das_cmC_set_f32({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])}, {emit_value(ctx, ec.arguments[2])})"
+            return "__das_cmC_set_{fi.comp}({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])}, {emit_value(ctx, ec.arguments[2])})"
         }
-        return "__das_cmC_get_f32({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])})"
+        return "__das_cmC_get_{fi.comp}({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])})"
+    }
+    if (cname == "mma_acc_scale_rows") {
+        let fi = na == 3 ? coop_type_of(ec.arguments[0]._type) : CoopInfo(ok = false)
+        if (!(fi.ok && fi.use == "C" && fi.comp == "f16")) {
+            shader_error(ctx, ec.at, "mma_acc_scale_rows(f16 accumulator, the first row's factor pair, the second row's)")
+            return "/*mma_acc_scale_rows*/"
+        }
+        need_coopmat(ctx)
+        register_helper(ctx, "{HELPER_RANK_INTRINSIC}mma_acc_scale_rows", "__device__ __forceinline__ uint __das_hmul2(uint a, uint b) \{ uint d; asm(\"mul.rn.f16x2 %0, %1, %2;\" : \"=r\"(d) : \"r\"(a), \"r\"(b)); return d; \}\n__device__ __forceinline__ void __das_mma_acc_scale_rows(__das_cmC_f16& f, uint lo, uint hi) \{ f.r[0] = __das_hmul2(f.r[0], lo); f.r[1] = __das_hmul2(f.r[1], hi); f.r[2] = __das_hmul2(f.r[2], lo); f.r[3] = __das_hmul2(f.r[3], hi); \}")
+        census_kind(ctx, "call.mma_acc_scale_rows")
+        return "__das_mma_acc_scale_rows({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])}, {emit_value(ctx, ec.arguments[2])})"
     }
     if (cname == "mma_frag_set") {   //! a lane's fragment word off a register: the word ldmatrix would have loaded there
         let fi = na == 3 ? coop_type_of(ec.arguments[0]._type) : CoopInfo(ok = false)

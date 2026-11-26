@@ -147,7 +147,8 @@ verify row there pays its own experts - and a pinned depth takes the pass whole.
 the tick is one plain batched step (`eval_batch_`): two streams on a trunk with no recurrent layers and on a hybrid of
 routed experts on one residual stream, four on a dense or hyper-connection hybrid (the M5 Max's counts). Off the
 matrix-unit form (`ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit`; an M1 Max) a verify row costs near a plain
-step, so a round there drafts three for one stream and stands down past it (`PERF_LEDGER.md`, the block drafter's entry).
+step, so a round there drafts three for one stream and stands down past it (`PERF_LEDGER.md`, the block drafter's entry);
+the verify seat's own round holds the same three through its rows cap (`metal_verify_rows_for`, `METAL_ROWS_DRAFTS`).
 
 A caller's own stream takes the same round a drawn id at a time (`generate_drafted_`): the ids that end the stream
 are stops the round's walk ends at, and a stop the round accepted is evaled already - its row stands in the session and

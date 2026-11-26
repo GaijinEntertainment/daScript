@@ -229,6 +229,14 @@ def device_soft_picks() : int64 {
     }
 }
 
+//! the times the attached drafter's ring grew its dense layers: the Metal driver's count (`metal`), else the discrete home's
+def private ring_grows(metal : bool) : int64 {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return metal_dflash_ring_grows() if (metal)
+    }
+    return dflash_device_stats().grows
+}
+
 //! the sampled rounds whose pass held with the verify committed behind it so far (0 off the Metal build)
 def sampled_ahead_rounds() : int64 {
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -547,6 +555,99 @@ def discrete_drafter_cell(t : T?; m : Model; title, arm : string; drafters : arr
             t |> run(title) @capture(& m, & drafters)(t : T ?) {
                 return if (!empty(arm) && !arm_on(t, arm))
                 discrete_drafter_cells(t, m, drafters, tag, stop_embed, chat, dflash2)
+            }
+        }
+    } else {
+        skip_cell(t, "{tag}: no discrete GPU home in this build")
+    }
+}
+
+let DENSE_CTX = 8192l                  //! the dense cell's trunk context: a prompt past two of the drafter's windows fits
+let private DENSE_TEXT_ITEMS = 520     //! ... the prompt's items, each a number no neighbour predicts, then the ask to list them again: the walk copies lines only a reading past the window still holds
+let private DENSE_STEPS = 64l          //! ... and the ids each walk generates past it
+
+//! the drafts a greedy speculative walk of DENSE_STEPS ids over `prompt` records on the device trunk `m` (`metal`: the Metal home's), the drafter file
+//! attached on the device arm under the dense reading `dense` with new rings of `reserve` dense slots (0 = the window); the
+//! times the session's ring grew into `grows`, the drafter detached after
+def private dense_walk_drafts(t : T?; m : Model; drafter, tag : string; prompt : array<int64>; dense : bool; reserve : int64; metal : bool; var grows : int64&) : array<int64> {
+    let dense_was = dflash_dense_knob()
+    let reserve_was = dflash_dense_reserve()
+    set_dflash_dense(dense)
+    set_dflash_dense_reserve(reserve)
+    let why = attach_dflash_drafter(m, path_join(_model_tier::models_dir(), drafter))
+    restore_dflash_dense(dense_was)
+    set_dflash_dense_reserve(reserve_was)
+    t |> equal(why, "", "{tag}: the drafter attaches")
+    return <- array<int64>() if (!empty(why))
+    t |> success(dflash_on_device(), "{tag}: the pass runs on the device")
+    set_dflash_record(true)
+    var s = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
+    var nd = 0l
+    var na = 0l
+    var inscope ids <- generate_mtp_greedy(m, s, prompt, long_length(prompt) - 1l + DENSE_STEPS, nd, na)
+    t |> success(nd > 0l, "{tag}: the walk drafted ({na} of {nd} accepted)")
+    let walked = long_length(ids) - long_length(prompt)
+    t |> success(walked >= DENSE_STEPS / 2l, "{tag}: the walk went on past the prompt ({walked} ids of {DENSE_STEPS} asked), no end of turn cutting it short")
+    delete s
+    grows = ring_grows(metal)
+    var drafts <- dflash_recorded_drafts()
+    detach_dflash_drafter()
+    return <- drafts
+}
+
+//! the dense layers on the device trunk `m` (`metal`: the Metal home's) over a prompt of `items` lines past `grows_min` of the
+//! drafter's windows, inside the context `ctx`: the walk whose ring grew to the context drafts id for id what a ring reserved
+//! that wide drafts (the growth's copy, the layers' places); with every layer held to the window the drafts differ - the
+//! control: the dense layer reads past the window
+def dense_ring_leg(t : T?; m : Model; drafter, tag : string; items : int; ctx, grows_min : int64; metal : bool) {
+    return if (!model_available(t, path_join(_model_tier::models_dir(), drafter)))
+    let record0 = dflash_record_on()
+    let device0 = dflash_device_knob()
+    set_dflash_device(true)
+    let text = build_string() $(var w) {
+        for (i in range(items)) {
+            w |> write("item {i + 1}: {(i * 7919 + 13) % 9973}\n")
+        }
+        w |> write("The same items again, in the same order:\nitem 1:")
+    }
+    let prompt <- encode(m, text, true)
+    t |> success(long_length(prompt) > grows_min * DFLASH_RING && long_length(prompt) + DENSE_STEPS < ctx,
+        "{tag}: the prompt of {length(prompt)} ids passes {grows_min} of the drafter's windows and fits the context of {ctx}")
+    var grew = 0l
+    var held = 0l
+    var none = 0l
+    var inscope grown <- dense_walk_drafts(t, m, drafter, "{tag}, a ring grown to the context", prompt, true, 0l, metal, grew)
+    var inscope reserved <- dense_walk_drafts(t, m, drafter, "{tag}, a ring reserved for the context", prompt, true, ctx, metal, held)
+    var inscope windowed <- dense_walk_drafts(t, m, drafter, "{tag}, every layer at the window", prompt, false, 0l, metal, none)
+    set_dflash_record(record0)
+    set_dflash_device(device0)
+    t |> success(grew >= grows_min, "{tag}: the first walk's ring grew past the window ({grew} times, {grows_min} asked)")
+    t |> success(held == 0l && none == 0l, "{tag}: the reserved ring and the windowed ring never grew ({held}, {none})")
+    same_drafts(t, m, grown, reserved, "{tag}: the grown ring's drafts are the reserved ring's")
+    var same = 0
+    while (same < length(grown) && same < length(windowed) && grown[same] == windowed[same]) {
+        same++
+    }
+    t |> success(!empty(windowed) && (same < length(grown) || same < length(windowed)),
+        "{tag}: control - with every layer held to the window the drafts part from the dense reading's at draft {same}")
+}
+
+//! `dense_ring_leg` on a discrete home's trunk: a prompt past two windows inside DENSE_CTX
+def discrete_dense_leg(t : T?; m : Model; drafter, tag : string) {
+    dense_ring_leg(t, m, drafter, tag, DENSE_TEXT_ITEMS, DENSE_CTX, 2l, false)
+}
+
+let METAL_DENSE_ITEMS = 280   //! the Metal dense leg's prompt: past one window, inside HOST_CTX
+
+//! the discrete homes' dense drafter form: the f16 mirror and the host-cached sessions both at DENSE_CTX, asked whole
+def dense_drafter_form() : ModelForm => device_form(ctx = DENSE_CTX, strict_ctx = true) |> asking(KVDtype.f16)
+
+//! `discrete_dense_leg` as the cell `title` on the dense drafter form `m`; a build with no discrete home's drafter arm skips it
+def discrete_dense_cell(t : T?; m : Model; title, drafter, tag : string) {
+    static_if (typeinfo module_exists(dasllama_vulkan_dflash) || typeinfo module_exists(dasllama_cuda_dflash)) {
+        unsafe {   //! the cell captures the loaded trunk by reference
+            t |> run(title) @capture(& m)(t : T ?) {
+                discrete_dense_leg(t, m, drafter, tag)
             }
         }
     } else {

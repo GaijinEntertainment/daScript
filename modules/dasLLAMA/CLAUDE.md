@@ -47,7 +47,7 @@ test child's exe and the entry program's compile record (`CHILD`), and - on a Me
 `DAS_TUNE_MANIFEST`, where the per-box crown file does not match this tree's Metal kernel sources - the crown race
 (`BOXRACE`, once a change to those sources).
 
-**How a run is cut.** Ten files go to a child as one program - the whole suite on the model-free suite - (`--batch N`;
+**How a run is cut.** Ten files go to a child as one program - the whole suite on the model-free suite, sixteen files a child there on Windows - (`--batch N`;
 `--batch 1` is one child a file): the engine's parse and JIT are paid once a batch, each file in a context of its own.
 Outside the full suite a model-free test past 30 s ends the run where it stands (`WALL`). On every run a batch that
 ends without every file's verdict - its program did not compile, or it died midway - ends the run too (`LOST`, the

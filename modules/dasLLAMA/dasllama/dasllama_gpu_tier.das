@@ -164,6 +164,7 @@ def public rdec_norms_final_base(n_layers, dim : int64) : int64 => n_layers * RD
 def public rdec_norm_off(l, kind, dim : int64) : int64 => (l * RDEC_NORM_ROWS + kind) * dim
 
 let public RDEC_AR_MAX_DIM = 8_192l   //! the residual step's row stash: 32 KB of the 48 KiB workgroup memory the tier requires of a device
+let public RDEC_AR_SMALL_DIM = 8_064l   //! the small-slab twins' row stash: the widest whose stamp, with its 512 B of reduce partials, fits a 32 KiB shared-memory cap
 let public RDEC_MIR_SLACK_ROWS = 16l   //! the K/V rows a flash fragment may read past a window's end
 let public RDEC_MIR_SLACK = RDEC_MIR_SLACK_ROWS * RDEC_AR_MAX_DIM   //! slack elements past each K/V mirror's last plane and past a block codec's shadow row
 
@@ -917,6 +918,88 @@ def public rdec_seg_ending_at(segs : array<RdecPfSeg>; w0, row : int64) : int64 
     return -1l
 }
 
+//! the slot of the segment a window part ends - the part's last row is the segment's - else -1; by position, so the part's rows
+//! may sit anywhere in the window's planes
+def public rdec_part_end_slot(segs : array<RdecPfSeg>; part : RdecPfSeg) : int64 =>
+    part.pos0 + part.npos == segs[part.seg].pos0 + segs[part.seg].npos ? part.seg : -1l
+
+var private g_rdec_pf_tail_cut = true   //! the window chain's cut at a shared-K/V tail; off = every row walks every layer (the A/B lever)
+
+//! The window chain's tail cut on or off (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-tail-cut`), under DASLLAMA_GPU_PF_TAIL_CUT
+def public set_rdec_prefill_tail_cut(on : bool) {
+    g_rdec_pf_tail_cut = on
+    to_log(LOG_INFO, "dasLLAMA: set_rdec_prefill_tail_cut({on}) - the window chain's cut at a shared-K/V tail ({on ? "on" : "off: every row walks every layer"})\n")
+}
+
+def public rdec_prefill_tail_cut() : bool => g_rdec_pf_tail_cut && g_env_gpu.gpu_pf_tail_cut
+
+//! DASLLAMA_GPU_PF_TAIL_CUT=0 said at a driver's load on a model with a shared-K/V tail (`tail`): nothing where the knob
+//! stands on in `env` or the model has no tail to cut
+def public rdec_tail_cut_say(env : GpuTierEnv; tail : bool) {
+    if (tail && !env.gpu_pf_tail_cut) {
+        to_log(LOG_INFO, "dasLLAMA: DASLLAMA_GPU_PF_TAIL_CUT=0 - every prompt row walks every layer of the shared-K/V tail (unset it, or set it to 1, to stop a row nobody reads at the last layer that stores K/V rows)\n")
+    }
+}
+
+//! The Vulkan home's decode tile knobs in `env` said at its driver's load, each by its env spelling and only where it moves a
+//! layer's form: `tile_layers` the layers of the tile's shape, `far_layers` the flat ones among them, `cm2_flash` the device's
+//! prefill flash on the cm2 arm, where the unset tile knob leaves the tile form off
+def public vk_attn_knobs_say(env : VulkanEnv; tile_layers, far_layers : int64; cm2_flash : bool) {
+    let tile = env.vk_attn_tile
+    if (tile_layers > 0l && tile >= 0l && (tile == 0l) != cm2_flash) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: DASLLAMA_VK_ATTN_TILE={tile} - the rows of one session attend on the {tile == 0l ? "row form" : "decode tile form"} on {tile_layers} layers (unset it, or set it to -1, for the tile form where the device's prefill flash is the KHR arm)\n")
+    }
+    if (far_layers > 0l && env.vk_attn_tile_far == 0l) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: DASLLAMA_VK_ATTN_TILE_FAR=0 - the one-row step past the wide position attends on the row form's wide pieces on {far_layers} flat layers (unset it, or set it to 1, for the decode tile form)\n")
+    }
+}
+
+//! DASLLAMA_VK_FA_WIDE=0 in `env` said at the Vulkan window's setup on a model with a head-256 layer on the cm2 flash tiles (`h256`)
+def public vk_fa_wide_say(env : VulkanEnv; h256 : bool) {
+    if (h256 && env.vk_fa_wide == 0l) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: DASLLAMA_VK_FA_WIDE=0 - the prefill flash pass at a head of 256 runs the 64-row stamps (unset it, or set it to 1, for the wide cm2 stamps)\n")
+    }
+}
+
+//! The CUDA home's attention knobs in `env` said at its driver's load, each by its env spelling and only where it moves a
+//! layer's form: `tile_layers` the layers the decode tile's stamps serve, `far_layers` the flat ones among them, `wide_layers`
+//! the flat layers at a head of 512 or 256, `pieces_cap` the most key pieces the far row takes
+def public cuda_attn_knobs_say(env : VulkanEnv; tile_layers, far_layers, wide_layers, pieces_cap : int64) {
+    let tile_on = env.cuda_attn_tile != 0l
+    if (tile_layers > 0l && !tile_on) {
+        to_log(LOG_INFO, "dasLLAMA cuda tier: DASLLAMA_CUDA_ATTN_TILE=0 - the rows of one session and the far row attend on the row form on {tile_layers} layers (unset it, or set it to 1, for the decode tile form)\n")
+    }
+    let far = env.cuda_attn_tile_far
+    if (far_layers > 0l && tile_on && far >= 0l) {
+        let reach = far == 0l ? "at no position" : "from {far} keys"
+        to_log(LOG_INFO, "dasLLAMA cuda tier: DASLLAMA_CUDA_ATTN_TILE_FAR={far} - the one-row step attends on the decode tile form {reach} on {far_layers} flat layers (unset it, or set it to -1, for the driver's count by the device)\n")
+    }
+    let pieces = env.cuda_attn_tile_pieces
+    if (far_layers > 0l && tile_on && far != 0l && pieces > 0l) {
+        to_log(LOG_INFO, "dasLLAMA cuda tier: DASLLAMA_CUDA_ATTN_TILE_PIECES={pieces} - the far row splits a K/V head's q tile into {min(pieces, pieces_cap)} key pieces, held to {pieces_cap} at most (unset it, or set it to 0, for the driver's pick by the keys an SM serves)\n")
+    }
+    if (wide_layers > 0l && env.cuda_fa_wide == 0l) {
+        to_log(LOG_INFO, "dasLLAMA cuda tier: DASLLAMA_CUDA_FA_WIDE=0 - the prefill flash pass at a head of 512 or 256 runs the narrower tiles every home shares on {wide_layers} layers (unset it, or set it to 1, for the wide tile)\n")
+    }
+}
+
+//! DASLLAMA_CUDA_MOE_FP4_ROWS in `env` said at the CUDA driver's load on a model with `fp4_layers` routed layers on the FP4 expert chain
+def public cuda_moe_fp4_rows_say(env : VulkanEnv; fp4_layers : int64) {
+    let rows = env.cuda_moe_fp4_rows
+    if (fp4_layers > 0l && rows >= 0l) {
+        let reach = rows == 0l ? "at no row count" : "from {rows} rows"
+        to_log(LOG_INFO, "dasLLAMA cuda tier: DASLLAMA_CUDA_MOE_FP4_ROWS={rows} - the N-row step feeds the FP4 expert chain {reach} on {fp4_layers} routed layers (unset it, or set it to -1, for the driver's rule over the experts the rows touch)\n")
+    }
+}
+
+//! a home's decode tile knob at 0 said at the block drafter's attach, where it leaves a drafter with dense layers at a head
+//! of 128 (`dense_h128`) on the scalar tiles: `knob` the env spelling, `value` its value
+def public dflash_tile_knob_say(home, knob : string; value : int64; dense_h128 : bool) {
+    if (dense_h128 && value == 0l) {
+        to_log(LOG_INFO, "dasLLAMA {home} dflash: {knob}=0 - the block drafter's dense layers attend on the scalar tiles (unset it for the flash tile's decode form)\n")
+    }
+}
+
 //! The segmented resident prefill: every segment's embedded rows (or ids, where the driver gathers) and rope rows back to
 //! back in segment order, each segment's logits at its slot of `logits` (`vocab` floats a slot)
 typedef RdecPrefillSegsFn = function<(x_batch : array<float>; tokens : array<int64>; use_ids : bool; emb_scale : float; cos_batch : array<float>; segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) : void>
@@ -1125,6 +1208,21 @@ def public install_rdec_logits_rows(f : RdecLogitsRowsFn) {
 
 def public rdec_logits_rows_installed() : bool => g_rdec_logits_rows_installed
 
+//! the drafts of a block drafter's pass that was left on the device as the verify's rows, landed into `drafts[1 ..]` once the
+//! verify's wait returned: the drafter's device arm installs it, the verify seat calls it ahead of its own walk over the picks;
+//! false = no pass of `nd` drafts is held
+typedef RdecHeldDraftsFn = function<(var drafts : array<int64>; nd : int64) : bool>
+var g_rdec_held_drafts : RdecHeldDraftsFn
+var g_rdec_held_drafts_installed = false
+
+def public install_rdec_held_drafts(f : RdecHeldDraftsFn) {
+    g_rdec_held_drafts = f
+    g_rdec_held_drafts_installed = true
+}
+
+def public rdec_held_drafts(var drafts : array<int64>; nd : int64) : bool
+    => g_rdec_held_drafts_installed && invoke(g_rdec_held_drafts, drafts, nd)
+
 def public rdec_logits_rows(row0, nrows : int64; var dst : array<float>) {
     invoke(g_rdec_logits_rows, row0, nrows, dst)
 }
@@ -1276,7 +1374,27 @@ def public rdec_chain_charged() : bool => g_rdec_chain_charged
 //! A region's recurrent checkpoints: `save` copies every recurrent layer's state slot and ring pair of the selected region into its
 //! checkpoint row `slot` (one of `RDEC_DN_SNAPS`), `load` copies row `slot` back into the slots and the region's ring parity with it;
 //! false where the driver holds no such row
-let public RDEC_DN_SNAPS = 4   //! the checkpoint rows a mirror region keeps (an LRU), each a whole recurrent state
+let public RDEC_DN_SNAPS = 4   //! the most checkpoint rows a mirror region keeps (an LRU), each a whole recurrent state
+var private g_rdec_dn_snaps = RDEC_DN_SNAPS   //! the rows a region keeps under the standing plan
+
+//! the checkpoint rows a region keeps: the plan's pick before a driver arms, the rows' stride in every driver's plane after
+def public rdec_dn_snaps() : int => g_rdec_dn_snaps
+
+def public set_rdec_dn_snaps(rows : int) {
+    g_rdec_dn_snaps = clamp(rows, 1, RDEC_DN_SNAPS)
+}
+
+//! The rows a region keeps out of the knob's count `asked` (0 = unasked) and `fits`, the plan's answer at a count: a named
+//! count, held to 1 .. `RDEC_DN_SNAPS`, stands whether the plan fits it or not; unasked, the most of `RDEC_DN_SNAPS` down to
+//! one that fits, and one where none does
+def public rdec_dn_snaps_pick(asked : int; fits : block<(rows : int) : bool>) : tuple<rows : int; fits : bool> {
+    var rows = asked > 0 ? clamp(asked, 1, RDEC_DN_SNAPS) : RDEC_DN_SNAPS
+    while (!invoke(fits, rows)) {
+        return (rows = rows, fits = false) if (asked > 0 || rows == 1)
+        rows--
+    }
+    return (rows = rows, fits = true)
+}
 typedef RdecDnSnapFn = function<(slot : int64) : bool>
 [unused_argument(slot)]
 def private rdec_unset_dn_snap(slot : int64) : bool => false
@@ -3498,6 +3616,7 @@ def private gpu_home_reset_flags {
     g_rdec_verify_installed = false
     g_rdec_verify_plain = false
     g_rdec_logits_rows_installed = false
+    g_rdec_held_drafts_installed = false
     g_rdec_rollback_installed = false
     g_rdec_token_seq_installed = false
     g_rdec_chain_charged = false

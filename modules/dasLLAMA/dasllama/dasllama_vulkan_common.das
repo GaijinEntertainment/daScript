@@ -24,6 +24,7 @@ require dasllama/dasllama_config
 require math
 require strings
 require daslib/strings_boost
+require daslib/strings_convert   // try_to_int64, try_to_uint: the kernel driver's counter files
 require daslib/fio
 require daslib/jobque_boost
 require daslib/enum_trait
@@ -150,6 +151,27 @@ def vk_subgroup_width(phys : VkPhysicalDevice) : tuple<width : uint; own : uint>
     }
     return (width = want, own = own)
 }
+
+//! the shared-memory cap the class gates read off a device that reports `device_cap`: that limit, or `pin` (`DASLLAMA_VK_WG_CAP`) where the pin is lower
+def vk_wg_cap(device_cap : uint; pin : int64) : uint => pin > 0l && pin < int64(device_cap) ? uint(pin) : device_cap
+
+let ATTN_WAVE_UNKNOWN = 16   //! the decode attention's wave on a device that reports no core count
+
+//! the workgroups the decode attention counts as one wave of a device: the pin (`DASLLAMA_VK_ATTN_WAVE`) where positive, else
+//! the SM count, else an AMD device's active compute units `amd_cu`, else ATTN_WAVE_UNKNOWN
+def vk_attn_wave(sm_count, amd_cu : int; pin : int64) : int {
+    if (pin > 0l) return int(pin)
+    if (sm_count > 0) return sm_count
+    return amd_cu > 0 ? amd_cu : ATTN_WAVE_UNKNOWN
+}
+
+let ROW_SLAB_WG_BYTES = 33_280u         //! the workgroup footprint of the row-slab stamps' widest, the residual step's: RDEC_AR_MAX_DIM floats and 512 B of reduce partials
+let FA_KHR_WG_BYTES = 38_912u   //! the KHR flash tile's shared-memory footprint; its small-tile twins serve heads to 256 under a cap below it
+let ROW_SLAB_SMALL_WG_BYTES = 32_768u   //! ... and of its small-slab twin, RDEC_AR_SMALL_DIM floats: under it neither serves
+
+//! the widest row the residual step and the attention prep stage under the shared-memory cap `wg_cap`: RDEC_AR_MAX_DIM on
+//! their own stamps, RDEC_AR_SMALL_DIM on their small-slab twins
+def row_slab_dim(wg_cap : uint) : int64 => wg_cap >= ROW_SLAB_WG_BYTES ? RDEC_AR_MAX_DIM : RDEC_AR_SMALL_DIM
 
 //! the per-32 formats and mx4: off the f16 feed their batch tile is the per-32 one (`Blk32BatchT`), under the kq batch rail
 def blk32_rail(fmt : int) : bool => fmt == int(KqFmt.mx4) || kq_dense_b32(fmt)
@@ -475,7 +497,10 @@ struct GpuState {
     rows_per_wg : int64      // subgroups per workgroup = output rows per workgroup
     subgroup_size : int64    // the width the class pipelines run at: the device's own, or `sg_pin` (the KHR kq tile and the h128 twin gate on 32)
     sg_pin : uint            // the width every class pipeline pins (DASLLAMA_VK_SUBGROUP, where the device's own differs and its compute stage may pin); 0 = the device's own
+    sg_own : uint            // the device's own subgroup width: what a class that opts out of the pin runs at (`vkd_own_wg_x`)
+    max_wg_lanes : uint      // the widest one-dimensional workgroup the device runs: maxComputeWorkGroupSize[0] under maxComputeWorkGroupInvocations
     integrated : bool        // VkPhysicalDeviceType INTEGRATED_GPU: the prefill window submits one layer at a time (`pf_chunk_cap`)
+    vendor : uint            // VkPhysicalDeviceProperties.vendorID: an AMD device serves the load-ahead q8 GEMV (`vk_alt_gemv_by_vendor`)
     has_coopmat : bool       // device supports VK_KHR_cooperative_matrix (the f16/int8 tensor tiles)
     has_coopmat2 : bool      // device supports NV_cooperative_matrix2 (tensor-addressed wg tiles + decode fns)
     has_coopmat2_fa : bool   // ... plus the cm2 flash-attention trio (reductions, conversions, per-element ops), on a device created in cm2 mode
@@ -484,6 +509,7 @@ struct GpuState {
     full_sg_on : bool        // DASLLAMA_VK_FULLSG asked and the device has the feature: every class pipeline pins REQUIRE_FULL_SUBGROUPS
     coopmat_mode : int       // the prefill GEMM mode, a COOPMAT_* value (cm2 where the device has it, else mm)
     sm_count : int           // shaderSMCount (VK_NV_shader_sm_builtins; 0 = unknown -> l-tile always, no split-k)
+    attn_wave : int          //! the workgroups the decode attention counts as one wave (`vk_attn_wave`)
     weight_budget : int64    // resident-weight cap — queried heap budget minus reserve, or VRAM_BUDGET
     os_budget_known : bool   // the OS video memory manager answered at init (Windows): the resident plan sizes against the room it reports
     os_shared_base : int64   // the adapter's shared usage at init - the desktop's own, before any buffer of ours
@@ -576,6 +602,7 @@ struct GpuState {
     kq_grid_dev : uint64          // the grid formats' codebook buffer (kq_grid_dev builds it; model-owned, 0 = not yet)
     @scratch dev_mapped : table<uint64; uint64>   // ReBAR: device buffer -> persistent CPU mapping (uploads write direct)
     rebar_type : int = -1         // DL|HV|HC memory type on the full-VRAM heap (-1 = staging path only)
+    weights_host : bool           //! the weight slabs take the host heap's memory type, out of the carve-out (`carve_out_rule`)
     has_memprio : bool            // device enabled VK_EXT_memory_priority — allocations chain priority 1.0
     host_mem : table<uint64; uint64>  // host-visible buffer -> memory: every make_host_buf result except
                                       // the process-lifetime pair (staging, profiler readback) — the
@@ -673,7 +700,7 @@ struct GpuState {
     dn_cls_ready : bool                // the window chain's class sets (built by prefill)
     dn_ready : bool
     dn_shared_ok : bool  //! the device's shared-memory cap fits the 8192-float row slabs the deltanet token command (the add+rms family) and the attention prep stage (false on Apple/MoltenVK)
-    max_wg_bytes : uint  // maxComputeSharedMemorySize — the per-class workgroup-footprint gate reads it
+    max_wg_bytes : uint  // `vk_wg_cap` of maxComputeSharedMemorySize — the per-class workgroup-footprint gate reads it
     // deltanet decode-step state (lazy — first npos == 1 DN dispatch creates it)
     dnd_bg : HostBuf              // per-token raw β/γ + ring-parity staging (copied into the layer smalls)
     dnd_oq_dev : uint64           // the o row's Q8_0 image (fused-step out, the out GEMV's activations)
@@ -816,6 +843,10 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
 //! the soft form: 0 on ERROR_OUT_OF_DEVICE_MEMORY instead of the panic, for the multi-GB allocations a plan may still miss (a heap the last model fragmented, a budget that moved)
 def try_device_buf(bytes : int64) : uint64 => make_device_buf(bytes, false, true)
 
+[cold_path]
+//! the soft form for a weight slab: out of the carve-out on the device `carve_out_rule` names
+def try_weights_buf(bytes : int64) : uint64 => make_device_buf(bytes, false, true, false, true)
+
 //! the soft allocations the tower and ASR-decoder drivers make: a failure marks `oom`, and the caller releases what it got
 [cold_path]
 def soft_device_buf(var oom : bool&; bytes : int64) : uint64 => mark_oom(oom, try_device_buf(bytes))
@@ -908,8 +939,64 @@ def private uma_spill_say(bytes : int64) {
     to_log(LOG_INFO, "dasLLAMA vulkan tier: the device-local heap is full - a {bytes >> 20l} MB device buffer and the ones after it take the integrated device's host heap (one DRAM, the same bandwidth)\n")
 }
 
+let CARVE_OUT_AUTO_MAX_MB = 512l   //! the largest carve-out the auto arm acts on: the measured case; a larger one is the knob's to name
+
+//! the megabytes of the kernel driver's byte counter `text` (a sysfs `mem_info_vram_*` file), -1 where it holds no number
+def carve_out_counter_mb(text : string) : int64 {
+    let bytes = try_to_int64(strip(text))
+    return is_ok(bytes) ? unwrap(bytes) >> 20l : -1l
+}
+
+//! whether the weight slabs take the host heap's memory type, out of the carve-out: `knob` where it names an answer (on an
+//! integrated device alone), else an AMD integrated device whose kernel driver reports a carve-out of
+//! `CARVE_OUT_AUTO_MAX_MB` or less (`total_mb`, -1 where the kernel says nothing)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-carve-out")]
+def carve_out_weights_off(knob : int64; integrated : bool; vendor : uint; total_mb : int64) : bool {
+    return false if (!integrated)
+    return knob != 0l if (knob >= 0l)
+    return vendor == VK_VENDOR_AMD && total_mb > 0l && total_mb <= CARVE_OUT_AUTO_MAX_MB
+}
+
+//! the first line of the kernel's file at `path`, "" where it does not open; the whole-file read does not serve, since
+//! sysfs reports a page's size for a file of a few bytes
+[cold_path]
+def private kernel_file_line(path : string) : string {
+    var line = ""
+    fopen(path, "rb") $(f) {
+        if (f != null) {
+            line = fgets(f)
+        }
+    }
+    return line
+}
+
+//! the megabytes of the carve-out the kernel driver reports for PCI device `vendor`:`device`, -1 where the box has no such
+//! counter (another OS, another driver)
+[cold_path]
+def private carve_out_total_mb(vendor, device : uint) : int64 {
+    for (i in range(16)) {
+        let dir = "/sys/class/drm/card{i}/device"
+        let v = try_to_uint(strip(kernel_file_line("{dir}/vendor")), true)
+        let d = try_to_uint(strip(kernel_file_line("{dir}/device")), true)
+        if (is_ok(v) && is_ok(d) && unwrap(v) == vendor && unwrap(d) == device) {
+            return carve_out_counter_mb(kernel_file_line("{dir}/mem_info_vram_total"))
+        }
+    }
+    return -1l
+}
+
+//! at device init: where the weight slabs sit on PCI device `vendor`:`device`, said once
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-carve-out")]
+def private carve_out_rule(vendor, device : uint) {
+    let total = carve_out_total_mb(vendor, device)
+    g_gpu.weights_host = carve_out_weights_off(g_env_vulkan.vk_carve_out_weights, g_gpu.integrated, vendor, total)
+    if (g_gpu.weights_host) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: the weight slabs take the host heap's memory type, out of the device's dedicated-memory carve-out (the kernel reports {total} MB of it) - a slab placed there reads at about half the rate; every other buffer stays device-local (DASLLAMA_VK_CARVE_OUT_WEIGHTS)\n")
+    }
+}
+
 [cold_path]   // a device allocation is model setup, never a per-token step
-def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = false; per_call : bool = false) : uint64 {
+def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = false; per_call : bool = false; weights : bool = false) : uint64 {
     var bci : BufferCreateInfo
     bci.size = uint64(bytes)
     bci.usage.storage_buffer = true
@@ -950,9 +1037,16 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = fal
             return b._vk
         }
     }
-    var want : VkMemoryPropertyFlags
-    want.device_local = true
-    var ares = device_alloc_bind(b, req, bda, find_memory_type(g_gpu.phys, req.memoryTypeBits, want))
+    var ares = VkResult.ERROR_OUT_OF_DEVICE_MEMORY
+    let off_carve_out = weights && g_gpu.weights_host ? uma_spill_type(g_gpu.phys, req.memoryTypeBits) : -1
+    if (off_carve_out >= 0) {
+        ares = device_alloc_bind(b, req, bda, uint(off_carve_out))
+    }
+    if (ares != VkResult.SUCCESS) {
+        var want : VkMemoryPropertyFlags
+        want.device_local = true
+        ares = device_alloc_bind(b, req, bda, find_memory_type(g_gpu.phys, req.memoryTypeBits, want))
+    }
     if (ares != VkResult.SUCCESS && g_gpu.integrated) {
         let ti = uma_spill_type(g_gpu.phys, req.memoryTypeBits)
         if (ti >= 0) {
@@ -1273,6 +1367,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
     let has_cm = cooperative_matrix_supported(phys)
     let has_cm2 = has_cm && cooperative_matrix2_supported(phys)
     let sm = query_sm_count(phys)
+    let amd_cu = query_amd_cu_count(phys)
     return <- [
         VkExtEntry(name = "the 8/16-bit storage set (storageBuffer16BitAccess, storageBuffer8BitAccess, shaderFloat16, shaderInt8, shaderInt16)",
             present = storage_8_16_supported(phys),
@@ -1300,6 +1395,9 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             rides = "the cm2 tiles' four-wide decode callback; without it the scalar callback serves and a MoE prefill window runs about half again as long"),
         VkExtEntry(name = "VK_NV_shader_sm_builtins", present = device_extension_available(phys, "VK_NV_shader_sm_builtins") && sm > 0,
             rides = "the SM count the dense tile pick, the tower f16 GEMM's column pick (`f16_cm2_col`: the s or the m column by their wave cost), split-k and the decode attention's partials plane read ({sm} here) - past four pieces the token command records a wide twin at eight; without it the l tile serves every dense GEMM, the tower f16 GEMM takes the m column past 64 rows, nothing splits k and the attention stays at four pieces"),
+        VkExtEntry(name = "VK_AMD_shader_core_properties2", present = amd_cu > 0,
+            knob = "DASLLAMA_VK_ATTN_WAVE", off = g_env_vulkan.vk_attn_wave > 0l,
+            rides = "the active compute units an AMD device reports ({amd_cu} here), the decode attention's wave of workgroups on a device that reports no SM count; with neither count a wave of 16 workgroups serves"),
         VkExtEntry(name = "timelineSemaphore (Vulkan 1.2)", present = timeline_semaphore_supported(phys),
             knob = "DASLLAMA_VK_XFERQ", off = !g_env_vulkan.vk_xferq,
             rides = "the transfer queue that overlaps streamed weight copies with compute and lands the resident commands' rows behind a compute-timeline wait - the token command's logits and picks (or, for a sampled stream, the selection's four planes), the NextN draft's and the same-slab verify's, and the carry row every one of them lands beside; the per-expert chain's copies into the ring and the hot pool's DMA fill of a decode step's misses (DASLLAMA_GPU_HOT_DMA) ride it too; without it the compute timeline stands alone, the copies ride the compute queue, each command copies its own landing under its fence, and the pool's misses take the host fill"),
@@ -1326,8 +1424,9 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
         VkExtEntry(name = "minStorageBufferOffsetAlignment dividing {RAIL_META_ALIGN} B",
             present = props.limits.minStorageBufferOffsetAlignment > 0ul && RAIL_META_ALIGN % int64(props.limits.minStorageBufferOffsetAlignment) == 0l,
             rides = "the whisper decoder's GEMV records, each bound as a view of the schedule plane at a {RAIL_META_ALIGN}-byte multiple ({int64(props.limits.minStorageBufferOffsetAlignment)} B here); without it the decoder declines `align` and the CPU chain decodes"),
-        VkExtEntry(name = "maxComputeSharedMemorySize of 33024 B or more", present = props.limits.maxComputeSharedMemorySize >= 33024u,
-            rides = "the 8192-float row slabs of the add+rms family and the prefill-attention prep ({int(props.limits.maxComputeSharedMemorySize)} B here); without them the deltanet and prefill-attention chains stay on the CPU rail"),
+        VkExtEntry(name = "maxComputeSharedMemorySize of {int(ROW_SLAB_SMALL_WG_BYTES)} B or more", present = props.limits.maxComputeSharedMemorySize >= ROW_SLAB_SMALL_WG_BYTES,
+            knob = "DASLLAMA_VK_WG_CAP", off = props.limits.maxComputeSharedMemorySize >= ROW_SLAB_SMALL_WG_BYTES && vk_wg_cap(props.limits.maxComputeSharedMemorySize, g_env_vulkan.vk_wg_cap) < ROW_SLAB_SMALL_WG_BYTES,
+            rides = "the row slabs of the add+rms family and the prefill-attention prep ({int(props.limits.maxComputeSharedMemorySize)} B here): their 8192-float stamps at {int(ROW_SLAB_WG_BYTES)} B or more, their {RDEC_AR_SMALL_DIM}-float twins under it; without either the deltanet and prefill-attention chains stay on the CPU rail"),
         VkExtEntry(name = "VK_NV_cooperative_vector", present = cooperative_vector_supported(phys),
             rides = "enabled on the device; no kernel reads it yet"),
         VkExtEntry(name = "VK_KHR_portability_enumeration (instance)", present = instance_extension_available("VK_KHR_portability_enumeration"),
@@ -1356,6 +1455,18 @@ def private query_sm_count(phys : VkPhysicalDevice) : int {
     return int(sp.shaderSMCount)
 }
 
+//! the compute units an AMD device reports active (VK_AMD_shader_core_properties2); 0 where it reports none
+def private query_amd_cu_count(phys : VkPhysicalDevice) : int {
+    if (!device_extension_available(phys, "VK_AMD_shader_core_properties2")) {
+        return 0
+    }
+    var cp = VkPhysicalDeviceShaderCoreProperties2AMD()
+    var p2 = VkPhysicalDeviceProperties2()
+    p2.pNext = unsafe(addr<void?>(cp))
+    vkGetPhysicalDeviceProperties2(phys, p2)
+    return int(cp.activeComputeUnitCount)
+}
+
 //! the queues the process's device asks of each family: a context takes the next one round robin, and contexts past the count
 //! share a queue, every submit to it under the holder's lock (`vk_queue_submit_locked`)
 let VK_DEVICE_QUEUES = 8u
@@ -1379,6 +1490,9 @@ def private vk_device_flags : bool {
     g_gpu.has_coopmat2_fa = g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2 && cooperative_matrix2_fa_supported(g_gpu.phys)
     g_gpu.decvec_on = g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2 && g_env_vulkan.vk_decvec && cooperative_matrix2_decode_vector_supported(g_gpu.phys)
     g_gpu.sm_count = query_sm_count(g_gpu.phys)
+    let amd_cu = query_amd_cu_count(g_gpu.phys)
+    g_gpu.attn_wave = vk_attn_wave(g_gpu.sm_count, amd_cu, g_env_vulkan.vk_attn_wave)
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: the decode attention's wave is {g_gpu.attn_wave} workgroups (SM count {g_gpu.sm_count}, AMD compute units {amd_cu}, pin {g_env_vulkan.vk_attn_wave})\n")
     g_gpu.has_bda = g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2
     return true
 }
@@ -1549,10 +1663,14 @@ def vk_moe_init : bool {
     g_gpu.rows_per_wg = int64((WG_X + sg - 1u) / sg)   // = gl_NumSubgroups for our 1D workgroup
     g_gpu.subgroup_size = int64(sg)
     g_gpu.sg_pin = sg != sgw.own ? sg : 0u
+    g_gpu.sg_own = sgw.own
     var pdp : VkPhysicalDeviceProperties
     vkGetPhysicalDeviceProperties(g_gpu.phys, pdp)
+    g_gpu.max_wg_lanes = min(pdp.limits.maxComputeWorkGroupSize[0], pdp.limits.maxComputeWorkGroupInvocations)
     g_gpu.msr = int64(pdp.limits.maxStorageBufferRange)
     g_gpu.integrated = pdp.deviceType == VkPhysicalDeviceType.INTEGRATED_GPU
+    g_gpu.vendor = pdp.vendorID
+    carve_out_rule(pdp.vendorID, pdp.deviceID)
     if (g_gpu.integrated) {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: an integrated GPU - the prefill window submits one layer at a time (DASLLAMA_VK_CHUNK)\n")
     }
@@ -1593,13 +1711,16 @@ def vk_moe_init : bool {
     // every kernel is a [vk_dispatch] class (own set/pipeline layouts, pipelines built lazily
     // via ensure_*); only the shared-memory capability gates settle here (the add+rms family and
     // at_* stage 8192-float rows: 33 KB; Apple caps threadgroup memory at 32 KB and pipeline COMPILE fails)
-    g_gpu.max_wg_bytes = pdp.limits.maxComputeSharedMemorySize
-    g_gpu.dn_shared_ok = pdp.limits.maxComputeSharedMemorySize >= 33024u
+    g_gpu.max_wg_bytes = vk_wg_cap(pdp.limits.maxComputeSharedMemorySize, g_env_vulkan.vk_wg_cap)
+    g_gpu.dn_shared_ok = g_gpu.max_wg_bytes >= ROW_SLAB_SMALL_WG_BYTES
+    let cap_pinned = g_gpu.max_wg_bytes < pdp.limits.maxComputeSharedMemorySize ? " (DASLLAMA_VK_WG_CAP, under the device's {int(pdp.limits.maxComputeSharedMemorySize)})" : ""
     if (!g_gpu.dn_shared_ok) {
         set_moe_gpu_dn_route(false)
         set_moe_gpu_dnd_route(false)
         set_moe_gpu_attn_route(false)
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet + prefill-attention chains declined - device shared-memory cap {int(pdp.limits.maxComputeSharedMemorySize)} B < the 33024 B row slab of the add+rms family and the attention prep; those layers stay on the CPU rail\n")
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet + prefill-attention chains declined - device shared-memory cap {int(g_gpu.max_wg_bytes)} B{cap_pinned} < the {int(ROW_SLAB_SMALL_WG_BYTES)} B of the add+rms family's small-slab twins; those layers stay on the CPU rail\n")
+    } elif (g_gpu.max_wg_bytes < ROW_SLAB_WG_BYTES) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: device shared-memory cap {int(g_gpu.max_wg_bytes)} B{cap_pinned} < the {int(ROW_SLAB_WG_BYTES)} B of the add+rms family's row slab - the family and the attention prep serve from their small-slab twins, rows to {RDEC_AR_SMALL_DIM} wide\n")
     }
 
     var fence <- create_fence(g_gpu.device, FenceCreateInfo())   // never finalized (process-lifetime)
@@ -1620,6 +1741,7 @@ def vk_moe_init : bool {
         // storage-range is the limit that actually binds the arena; allocs/descriptors do not
         to_log(LOG_INFO, "dasLLAMA vulkan tier: limits allocs {pdp.limits.maxMemoryAllocationCount} storage-range {pdp.limits.maxStorageBufferRange} desc-storage {pdp.limits.maxDescriptorSetStorageBuffers}\n")
     }
+    vk_alt_device_arm()
     return true
 }
 
@@ -2429,8 +2551,8 @@ def private arena_open_slab(var a : ArenaFmt) : bool {
     }
     let qb = cap * bb.wq
     let sb = ws_floored(round_up(cap * bb.ws, 4l))   // whole words, since a byte-scale plane (mx4) is read four blocks a word
-    let wqbuf = g_gpu.dry ? 0ul : try_device_buf(qb)
-    let wsbuf = g_gpu.dry ? 0ul : try_device_buf(sb)
+    let wqbuf = g_gpu.dry ? 0ul : try_weights_buf(qb)
+    let wsbuf = g_gpu.dry ? 0ul : try_weights_buf(sb)
     if (!g_gpu.dry && (wqbuf == 0ul || wsbuf == 0ul)) {   //! the device had no room for the slab: the placement declines instead of dying mid-upload
         if (wqbuf != 0ul) {
             destroy_device_buf(wqbuf)
@@ -2604,6 +2726,9 @@ struct RLayer {
     s_kv_store : VkDescriptorSet    //! a block codec's store of the staged rows into the mirror
     s_unrot : VkDescriptorSet       //! tq4: the attention rows out of the rotated basis
     s_attn : VkDescriptorSet        // decode attention class set
+    s_attn_tile : VkDescriptorSet   //! the flash tile's decode form over the layer's mirror, its pieces in the attention's partials plane
+    attn_tile : bool                //! the layer's rows of one session attend on the tile form (`rd_attn_tile_ok`)
+    attn_tile_far : bool            //! a flat layer whose one row past the wide position attends on the tile form (`rd_attn_tile_far_ok`)
     s_quant_at : VkDescriptorSet
     s_wo : VkDescriptorSet
     s_gu_n : VkDescriptorSet        //! the fused gate-up GEMV's N-row set over the rows' planes (`Q8GemvGuNT`'s stamps), where `gate_up_fused`
@@ -2712,6 +2837,9 @@ struct RLayer {
     pf_router_set, pf_topk_set, pf_sched_set, pf_gather_set : VkDescriptorSet   //! the window chain's MoE block
     pf_e1_set, pf_e3_set, pf_e2_set : VkDescriptorSet   //! the expert tiles over the device-written schedules: the s column's
     pf_e1m_set, pf_e3m_set, pf_e2m_set : VkDescriptorSet   //! ... and the m column's, over the same planes
+    mmq_gu_m, mmq_gu_s, mmq_dn_m, mmq_dn_s : bool   //! the columns of the layer's routed block that ride the int8 tiles: the gate and up m and s pieces, the down's
+    pf_mmq_feed_set, pf_mmq_inv_set, pf_e1q_set, pf_e1qm_set, pf_e3q_set, pf_e3qm_set : VkDescriptorSet
+    pf_mmq_feed16_set, pf_e2q_set, pf_e2qm_set : VkDescriptorSet
     pf_eact_set : VkDescriptorSet
     pf_grq_set : VkDescriptorSet    //! the Q8-fed chain's requant of the gathered rows into the expert tiles' feed
     pf_arcomb_set, pf_arcomb_f16_set : VkDescriptorSet   //! the residual step with the combine folded in: the f32 and f16 normed-row forms
@@ -2982,6 +3110,7 @@ struct RDec {
     pf_logits_host : HostBuf      //! the window's logits, a slot of `vocab` a segment: `regions` slots, the one-session window at slot 0
     pf_hid_host : HostBuf         //! the window's final residual rows when the chain is asked for them (`vk_rdec_hidden_ask`), made at the first ask
     pf_seg_windows : int64        //! the windows that held several sessions' chunks as segments (a cell's witness)
+    pf_tail_cut_rows : int64      //! the window rows that stopped ahead of a shared-K/V tail (a cell's witness)
     pf_midx_host : HostBuf        //! the last MoE layer's picks, read back for the profile's bucket report
     pf_meta : array<HostBuf>      // one host meta per (layer, role) + prologue/final/cls
     pf_sets : array<VkDescriptorSet>
@@ -3047,6 +3176,8 @@ struct RDec {
     pf_bex : uint64               //! [nk] bucket row -> its expert (the biased act's row map)
     pf_msch1, pf_msch3, pf_msch2 : uint64   //! the three expert planes' device-written schedules
     pf_mxg : uint64               //! [nk + slack x dim] the gathered f16 rows
+    pf_mmq_xq, pf_mmq_xs, pf_mmq_tok : uint64   //! the window's int8 rows, their block scales, and bucket row -> token row
+    pf_mmq_hq, pf_mmq_hs, pf_mmq_ident : uint64   //! the hidden rows' int8 and block scales, bucket order, and the identity row map
     pf_my1, pf_my2 : uint64       //! [nk x nfe] the gate / up rows
     pf_mhf : uint64               //! [nk + slack x nfe] the hidden rows, f16
     pf_mdn : uint64               //! [nk x dim] the routed down rows
@@ -3562,6 +3693,7 @@ var @scratch g_pipe_access : table<uint64; uint2>     // VkPipeline -> (read-bin
 var @scratch g_set_bits : table<uint64; SetBits>      // VkDescriptorSet -> per-binding region-bit masks
 var @scratch g_pipe_names : table<uint64; string>   // VkPipeline -> kernel name (the coverage census)
 var @scratch g_vk_kcov : table<uint64; int64>       // VkPipeline -> dispatches (REVIEW: "A new GPU kernel ships with a small model in the kernel coverage suite")
+var private g_vk_kcov_retired : table<string; int64>   //! kernel name -> the dispatches of its pipelines whose handle another pipeline took since
 
 struct SetBits {
     b : uint[VKD_SET_BINDINGS]   // per-binding region bits
@@ -3623,11 +3755,49 @@ enum VkdBuildDecline {
 var private g_wg_decline : VkDeclineCounter
 var private g_wg_declined : table<string>   //! the classes already declined, so a re-ensure (the TTS stages ask every chunk) builds no string
 
-// the [vk_dispatch]-generated ensure_ calls this BEFORE building the pipeline: a class whose
-// @workgroup members exceed the device's shared-memory cap declines by name instead of dying
-// in vkCreateComputePipelines (MoltenVK: "Threadgroup memory size exceeds the maximum")
+//! a class's small-slab twin: the stamp built into the class's pipe slot where the class's own workgroup footprint passes the cap
+struct private VkdTwin {
+    @do_not_delete spv : array<uint>?   //! the twin's emitted words, its class's blob global
+    kernel : string                     //! the twin's census, dump and override name
+    wg_bytes : int                      //! the twin's `@workgroup` footprint
+    over_bytes : int                    //! the class's own
+}
+
+var private g_vkd_twins : table<string; VkdTwin>   //! by the class's name (`vkd_wg_fits`) and by its kernel name (`vkd_class_pipe`)
+
+//! a `wg_twin_of` class joins its primary at program start (the macro generates an [init] calling this)
+def vkd_twin_seed(primary : string; primary_wg_bytes : int; var spv : array<uint>; kernel : string; wg_bytes : int) {
+    g_vkd_twins[primary] = VkdTwin(spv = unsafe(addr(spv)), kernel = kernel, wg_bytes = wg_bytes, over_bytes = primary_wg_bytes)
+    g_vkd_twins["{primary}_spv"] = VkdTwin(spv = unsafe(addr(spv)), kernel = kernel, wg_bytes = wg_bytes, over_bytes = primary_wg_bytes)
+}
+
+//! a class slot's alternate stamp: the words the slot's pipeline builds from where the served set carries `bit`
+struct private VkdAlt {
+    @do_not_delete spv : array<uint>?   //! the alternate's emitted words, its class's blob global
+    kernel : string                     //! the alternate's census, dump and override name
+    bit : int                           //! its bit of `vk_alt_served`
+    own_wg_x : int                      //! its declared workgroup width where it opts out of the subgroup pin, else 0
+}
+
+var private g_vkd_alts : table<string; VkdAlt>   //! by the class's kernel name
+
+//! an `alt_of` class joins its primary's slot at program start (the macro generates an [init] calling this)
+def vkd_alt_seed(primary : string; var spv : array<uint>; kernel : string; bit, own_wg_x : int) {
+    g_vkd_alts["{primary}_spv"] = VkdAlt(spv = unsafe(addr(spv)), kernel = kernel, bit = bit, own_wg_x = own_wg_x)
+}
+
+//! whether the class or kernel `name` has a twin whose workgroup footprint the device's cap holds
+def private vkd_twin_fits(name : string) : bool {
+    var fits = false
+    g_vkd_twins |> get(name) $(tw) {
+        fits = uint(tw.wg_bytes) <= g_gpu.max_wg_bytes
+    }
+    return fits
+}
+
+//! the generated ensure_'s footprint gate, ahead of the pipeline build: false, declined by name once, where neither the class's @workgroup bytes nor its twin's fit the cap
 def vkd_wg_fits(wg_bytes : int; kname : string) : bool {
-    return true if (uint(wg_bytes) <= g_gpu.max_wg_bytes)
+    return true if (uint(wg_bytes) <= g_gpu.max_wg_bytes || vkd_twin_fits(kname))
     return false if (key_exists(g_wg_declined, kname))
     return vkd_wg_decline(wg_bytes, kname)
 }
@@ -3761,8 +3931,85 @@ def vkd_set(c : VkdClass; set_ : VkDescriptorSet; bufs : uint64 const[]; sizes :
     g_set_bits[intptr(set_)] = sb
 }
 
+var private g_vk_alt_rule = 0l          //! the alternates this device serves by its own rule (`vk_alt_rule_bits`), read once it is up
+var private g_vk_mmq_checked = false    //! the int8 tiles' device check passed on this device, asked once it is up in mm mode
+var private g_vk_alt_device_on = true   //! PROBE SEAM (`set_vk_alt_device_rules_`)
+var private g_vk_mmq_check : function<() : bool>
+var private g_vk_mmq_check_set = false
+
+//! the class module seats the int8 tiles' device check (`vk_mmq_device_ok`), which dispatches its classes
+def register_vk_mmq_device_check(fn : function<() : bool>) {
+    g_vk_mmq_check = fn
+    g_vk_mmq_check_set = true
+}
+
+//! the device's own rules read as it comes up: the vendor's bits, and in mm mode the int8 columns' device check
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps")]
+def private vk_alt_device_arm {
+    g_vk_alt_rule = vk_alt_rule_bits(g_gpu.vendor)
+    g_vk_mmq_checked = (g_gpu.coopmat_mode == COOPMAT_MM && vk_alt_mmq_by_vendor(g_gpu.vendor) != 0l && g_vk_mmq_check_set
+        && invoke(g_vk_mmq_check))
+    if (g_vk_alt_rule != 0l) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: the device's own alternates serve with no race (vk_alt_rule_bits {g_vk_alt_rule}{g_vk_mmq_checked ? ", the int8 columns" : ""}); DASLLAMA_VK_ALT_STAMPS pins another set\n")
+    }
+}
+
+//! the alternates this device serves whatever set the box stores: its vendor's rule bits, and the int8 columns where the
+//! device runs mm mode and passed their check; 0 before a device is up
+def vk_alt_device_set : int64 {
+    return 0l if (g_gpu == null || !g_vk_alt_device_on)
+    return g_vk_alt_rule | (g_vk_mmq_checked && g_gpu.coopmat_mode == COOPMAT_MM ? vk_alt_mmq_by_vendor(g_gpu.vendor) : 0l)
+}
+
+//! PROBE SEAM: the device's own rules off, so a cell's "bit off" leg serves the class's own stamp on any device
+def set_vk_alt_device_rules_(on : bool) {
+    g_vk_alt_device_on = on
+}
+
+//! PROBE SEAM: what `set_vk_alt_device_rules_` last wrote
+def vk_alt_device_rules_() : bool => g_vk_alt_device_on
+
+//! the served set of a pin, a box's stored set and a device's own: the pin's bits alone where it is 0 or more, else the two joined
+def vk_alt_served_of(pin, stored, device : int64) : int64 => pin >= 0l ? pin : (stored | device)
+
+//! the alternate stamps the class slots serve: `DASLLAMA_VK_ALT_STAMPS` where set, else the box's raced set and the
+//! device's own (`vk_alt_device_set`)
+def vk_alt_served : int64 => vk_alt_served_of(g_env_vulkan.vk_alt_stamps, vk_alt_stamps(), vk_alt_device_set())
+
+//! whether `DASLLAMA_VK_ALT_STAMPS` pins the served set: the box's raced set is then unread, and its race has nothing to pick
+def vk_alt_pinned : bool => g_env_vulkan.vk_alt_stamps >= 0l
+
+//! whether the window's deltanet scan runs on the chunked stamp: the knob on, the box's set leaving the scan there, and the
+//! KHR tiles at subgroup 32 - the tests read the same answer the window acts on
+def vk_dn_chunk_wanted : bool => (g_env_vulkan.dn_chunk != 0l && ((vk_alt_served() >> int64(VK_ALT_DN_TOKEN)) & 1l) == 0l
+    && khr_kq_tile_on())
+
+//! the rows of a prefill window on this device, `np` the driver's window: under `pf_igpu_window_rows` on an integrated GPU
+def vk_pf_window_rows(np, keys0, kvd : int64) : int64 => g_gpu.integrated ? pf_igpu_window_rows(np, keys0, kvd) : np
+
+def vk_alt_bit(bit : int) : bool => ((vk_alt_served() >> int64(bit)) & 1l) != 0l
+
+//! whether the box's set puts a column of the routed block on the int8 tile: `down` the down plane's (else the gate
+//! and up planes'), `short` its s pieces (else its m pieces)
+def vk_mmq_col(down, short : bool) : bool => vk_alt_bit(down ? (short ? VK_ALT_MMQ_DN_S : VK_ALT_MMQ_DN_M) : (short ? VK_ALT_MMQ_GU_S : VK_ALT_MMQ_GU_M))
+
+//! whether the one-row step's routed gate and up ride their own dispatches in place of the fused gate-up leaf (`VK_ALT_EGU_SPLIT`)
+def vk_egu_split : bool => vk_alt_bit(VK_ALT_EGU_SPLIT)
+
+//! whether the N-column GEMV leaves take their rotated twins where a plane's rows collide (`VK_ALT_N_ROT`)
+def vk_gemv_n_rot : bool => vk_alt_bit(VK_ALT_N_ROT)
+
+//! whether any of the routed block's columns rides the int8 tiles
+def vk_mmq_any : bool => vk_mmq_col(false, false) || vk_mmq_col(false, true) || vk_mmq_col(true, false) || vk_mmq_col(true, true)
+
+var private g_vkd_alt_built = 0l   //! the served set the live pipe epoch was built under
+
 // true when the kernel's pipe slot is filled (slots fill lazily, one per ensure_<kernel> call)
 def vkd_pipe_made(c : VkdClass; ord : int) : bool {
+    if (vk_alt_served() != g_vkd_alt_built) {
+        g_vkd_alt_built = vk_alt_served()
+        g_vkd_pipe_epoch++
+    }
     if (ord >= length(c.pipes) || intptr(boost_value_to_vk(c.pipes[ord])) == 0ul) return false
     return ord < length(c.pipe_epochs) && c.pipe_epochs[ord] == g_vkd_pipe_epoch
 }
@@ -3789,8 +4036,30 @@ def private spv_override_load(kernel : string; var spv : array<uint>) {
     }
 }
 
+//! the workgroup width a class that opts out of the pin specializes its `declared` width to, the workgroup holding as many
+//! of the device's own subgroups as the pinned one holds pinned ones (so the class's grid stands); 0 where the tier pins
+//! nothing or the device runs no workgroup that wide - the class then builds at the tier's width
+def vkd_own_wg_x(declared : int) : uint => vk_own_wg_x(declared, g_gpu.sg_own, g_gpu.sg_pin, g_gpu.max_wg_lanes)
+
+//! `vkd_own_wg_x` over a device's `own` subgroup width, the width the tier pins (`pin`, 0 = none) and its widest workgroup
+def vk_own_wg_x(declared : int; own, pin, max_lanes : uint) : uint {
+    return 0u if (declared <= 0 || pin == 0u)
+    let x = uint(declared) * own / pin
+    return x <= max_lanes ? x : 0u
+}
+
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-class-pipeline-build")]
-def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wmask : uint; kernel : string) {
+def vkd_pipe_register(pk : uint64; rmask, wmask : uint; kernel : string) {
+    if (key_exists(g_vk_kcov, pk)) {
+        g_vk_kcov_retired[g_pipe_names?[pk] ?? "pipe_{pk}"] += g_vk_kcov?[pk] ?? 0l
+        g_vk_kcov |> erase(pk)
+    }
+    g_pipe_access[pk] = uint2(rmask, wmask)
+    g_pipe_names[pk] = kernel
+}
+
+[cold_path]
+def private vkd_pipe_build(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wmask : uint; kernel : string; own_wg_x : int = 0) {
     if (length(c.pipes) <= ord) {
         c.pipes |> resize(ord + 1)   // empty slots hold null handles until their kernel ensures
         c.pipe_epochs |> resize(ord + 1)
@@ -3813,14 +4082,59 @@ def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wm
     if (intptr(boost_value_to_vk(c.pipes[ord])) != 0ul) {
         delete c.pipes[ord]   // a rebuild (vkd_pipes_rebuild) replaces a live slot; the device is idle by contract
     }
-    c.pipes[ord] <- create_compute_pipeline_subgroup(g_gpu.device, c.pipe_layout, shader, g_gpu.sg_pin, g_gpu.full_sg_on)
+    let own_x = vkd_own_wg_x(own_wg_x)
+    if (own_x != 0u) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: {kernel} builds at the device's own subgroup width {int(g_gpu.sg_own)}, {int(own_x)} lanes a workgroup\n")
+        var spec <- [SpecConstantValue(id = 0u, value = own_x)]
+        c.pipes[ord] <- create_compute_pipeline_subgroup(g_gpu.device, c.pipe_layout, shader, 0u, spec, g_gpu.full_sg_on)
+        delete spec
+    } else {
+        c.pipes[ord] <- create_compute_pipeline_subgroup(g_gpu.device, c.pipe_layout, shader, g_gpu.sg_pin, g_gpu.full_sg_on)
+    }
     delete shader   //! the pipeline holds what it needs of the module
     c.pipe_epochs[ord] = g_vkd_pipe_epoch
     g_vkd_pipe_build_us += get_time_usec(t0)
     g_vkd_pipe_builds++
-    let pk = intptr(boost_value_to_vk(c.pipes[ord]))
-    g_pipe_access[pk] = uint2(rmask, wmask)
-    g_pipe_names[pk] = kernel
+    vkd_pipe_register(intptr(boost_value_to_vk(c.pipes[ord])), rmask, wmask, kernel)
+}
+
+//! the class's pipe slot `ord` built from its own words (`own_wg_x` past 0: at the device's own subgroup width, its declared
+//! workgroup width that), from its twin's where its own workgroup footprint passes the cap, or from its alternate's where the
+//! served set carries the alternate's bit
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-class-pipeline-build")]
+def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wmask : uint; kernel : string; own_wg_x : int = 0) {
+    var si = vkd_stand_in(kernel)
+    if (si.spv != null) {
+        vkd_pipe_build(c, ord, *si.spv, rmask, wmask, si.kernel, si.own_wg_x)
+    } else {
+        vkd_pipe_build(c, ord, spv, rmask, wmask, kernel, own_wg_x)
+    }
+}
+
+//! what stands in for class kernel `kernel` in its pipe slot on this device - its alternate where the served set carries the
+//! alternate's bit, else its twin where its own workgroup footprint passes the cap; a null `spv` where the slot is its own.
+//! The alternate of a class with a twin is declared at the twin's footprint
+def private vkd_stand_in(kernel : string) : tuple<spv : array<uint>?; kernel : string; own_wg_x : int> {
+    var si : tuple<spv : array<uint>?; kernel : string; own_wg_x : int>
+    g_vkd_alts |> get(kernel) $(alt) {
+        if (((vk_alt_served() >> int64(alt.bit)) & 1l) != 0l) {
+            si = (spv = alt.spv, kernel = alt.kernel, own_wg_x = alt.own_wg_x)
+        }
+    }
+    if (si.spv == null) {
+        g_vkd_twins |> get(kernel) $(tw) {
+            if (uint(tw.over_bytes) > g_gpu.max_wg_bytes) {
+                si = (spv = tw.spv, kernel = tw.kernel, own_wg_x = 0)
+            }
+        }
+    }
+    return si
+}
+
+//! PROBE SEAM: the kernel name class kernel `kernel`'s pipe slot builds from on this device - its twin's, its alternate's, or its own
+def vkd_slot_kernel(kernel : string) : string {
+    let si = vkd_stand_in(kernel)
+    return si.spv != null ? si.kernel : kernel
 }
 
 var g_vkd_pipe_build_us : int   //! the driver's share of every class pipeline built so far: the shader module and the pipeline
@@ -3984,6 +4298,9 @@ def public vk_kernel_coverage() : table<string; int64> {
     for (k, n in keys(g_vk_kcov), values(g_vk_kcov)) {
         out[g_pipe_names?[k] ?? "pipe_{k}"] += n
     }
+    for (name, n in keys(g_vk_kcov_retired), values(g_vk_kcov_retired)) {
+        out[name] += n
+    }
     return <- out
 }
 
@@ -3999,6 +4316,7 @@ def public vk_kernel_coverage_of(kernel : string) : int64 {
 
 def public vk_kernel_coverage_reset {
     g_vk_kcov |> clear()
+    g_vk_kcov_retired |> clear()
 }
 
 //! Log the census (`kernel_coverage_report`): every seeded kernel, a never-dispatched one warned.
@@ -4158,6 +4476,14 @@ def cmd_full_barrier(raw : VkCommandBuffer) {
 
 def cmd_close(raw : VkCommandBuffer) {
     vk_check(vkEndCommandBuffer(raw), null)
+}
+
+//! the commands `raw` holds submitted and waited, then `raw` begun again on a fresh hazard rail: a long chain's cut, so no one
+//! job runs past a driver's watchdog
+def cmd_flush(var raw : VkCommandBuffer) : VkHaz {
+    cmd_close(raw)
+    submit_wait(raw)
+    return cmd_open(raw, true)
 }
 
 //! `raw` ended and `next` reset and begun: a recorder's cut between two commands, on a fresh hazard rail

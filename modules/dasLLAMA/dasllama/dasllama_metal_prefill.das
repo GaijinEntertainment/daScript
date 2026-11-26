@@ -7245,6 +7245,7 @@ def public metal_prefill_pso_init : bool => metal_prefill_init()
 
 //! the split-K stamps and their partial-plane scratch
 def private pf_release_split_k {
+    release_handle(g_pf_pso_rows8_mma_q8)
     rows8_release()   //! the rows8 kernels and their x-table scratch go with the split-K scratch they reduce through
     release_handles(g_pf_pso_mm_thsk, g_pf_pso_mm_tsk, g_pf_pso_bf16_mm_tsk, g_pf_pso_bf16_mm_thsk)
     release_handles(g_pf_pso_kq_mm4_thsk, g_pf_pso_kq_mm4_tsk, g_pf_pso_kq_mm5_thsk, g_pf_pso_kq_mm5_tsk, g_pf_pso_kq_mm6_thsk, g_pf_pso_kq_mm6_tsk)
@@ -7664,7 +7665,7 @@ def private pf_compile_split_k_stamps(var ok : bool&) {   // nolint:STYLE037,STY
 }
 
 [cold_path]
-def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compile-per-PSO list
+def private metal_prefill_init : bool {   // nolint:STYLE037,STYLE038 — flat one-compile-per-PSO list
     if (g_pf_inited) {
         return true
     }
@@ -7721,6 +7722,12 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
         to_log(LOG_WARNING, "dasLLAMA metal prefill: half mul_mm toolchain probe failed - dev-W panels, the dequant passes and the split-format MoE expert twins stay off ({perr})\n")
     }
     rows8_init(ok)
+    var mma_ok = true   // its own flag: the form is one arm of the rows sites, never the prefill's condition
+    g_pf_pso_rows8_mma_q8 = compile_stamp(MetalRows8MmaQ8_metal_rows8_mma_msl, mma_ok)
+    if (!mma_ok) {
+        to_log(LOG_WARNING, "dasLLAMA metal prefill: the simdgroup-matrix few-row kernel did not compile - the rows sites keep their other forms\n")
+        release_handle(g_pf_pso_rows8_mma_q8)
+    }
     g_pf_kq_mm4_tensor = metal_tensor_crowned("kq_mulmm_k4")
     if (g_pf_kq_mm4_tensor) {
         g_pf_pso_kq_mm4_t = compile_stamp(MetalKqMulMmK4T_metal_kq_mulmm_t_msl, ok)
@@ -9256,10 +9263,16 @@ class MetalRows8Prep {
 
 //! a lane's eight q8 codes of block `blk` past byte `base` as two words: bytes base + 34 blk + 2 + 8 kq .. + 7, read a byte at a
 //! time - the 34-byte stride leaves a plane's blob base and its blocks on no word boundary
-def rows8_q8_run(wqb : array<uint8>; base, blk, kq : uint) : uint2 {
-    let b0 = base + blk * 34u + 2u + 8u * kq
-    let lo = uint(wqb[b0]) | (uint(wqb[b0 + 1u]) << 8u) | (uint(wqb[b0 + 2u]) << 16u) | (uint(wqb[b0 + 3u]) << 24u)
-    let hi = uint(wqb[b0 + 4u]) | (uint(wqb[b0 + 5u]) << 8u) | (uint(wqb[b0 + 6u]) << 16u) | (uint(wqb[b0 + 7u]) << 24u)
+def rows8_q8_run(wqb : array<uint8>; base, blk, kq : uint; pair : bool = false) : uint2 {
+    //! the x table's slot s holds physical k 8 (s / 4 % 4) + s % 4 under 16, 4 more from 16 (`MetalRows8Prep`): the quad layout's
+    //! lane (slots 4 kq + e and 16 + 4 kq + e) reads eight bytes in a row from 8 kq; the pair layout's (slots 8 j + 2 kq + e) its
+    //! pairs j = 0 .. 3 at 0, 16, 4 and 20 from 8 (kq / 2) + 2 (kq % 2)
+    let b0 = base + blk * 34u + 2u + (pair ? 8u * (kq >> 1u) + 2u * (kq & 1u) : 8u * kq)
+    let o1 = pair ? 16u : 2u
+    let o2 = 4u
+    let o3 = pair ? 20u : 6u
+    let lo = uint(wqb[b0]) | (uint(wqb[b0 + 1u]) << 8u) | (uint(wqb[b0 + o1]) << 16u) | (uint(wqb[b0 + o1 + 1u]) << 24u)
+    let hi = uint(wqb[b0 + o2]) | (uint(wqb[b0 + o2 + 1u]) << 8u) | (uint(wqb[b0 + o3]) << 16u) | (uint(wqb[b0 + o3 + 1u]) << 24u)
     return uint2(lo, hi)
 }
 
@@ -9271,6 +9284,9 @@ def rows8_k6_sc(sv : uint4; s : uint) : float {
 
 //! a lane's four k6 codes of one 16-block as int8 q - 32 a byte: the nibbles of `lo` at `nib` and the 2-bit highs of `hi` at
 //! `hsh`; the subtraction runs with each byte's top bit set, so no borrow crosses a byte
+//! the byte pair at bit `sh` of `a`, then of `b`, as one word
+def rows8_pair_word(a, b, sh : uint) : uint => ((a >> sh) & 0xFFFFu) | (((b >> sh) & 0xFFFFu) << 16u)
+
 def rows8_k6_codes(lo, hi, nib, hsh : uint) : uint {
     let c = ((lo >> nib) & 0x0F0F0F0Fu) | (((hi >> hsh) & 0x03030303u) << 4u)
     return ((c | 0x80808080u) - 0x20202020u) ^ 0x80808080u
@@ -9289,6 +9305,84 @@ struct Rows8HcMix {
     lr : uint
     rows : uint
     eps : float
+}
+
+//! the 8x8 simdgroup matrix elements lane `lane` owns (`sgmma_q8_blk2`'s contract): the row ...
+def sgmma_lane_row(lane : uint) : uint => ((lane / 4u) & 4u) + ((lane / 2u) % 4u)
+
+//! ... and the first of its two columns
+def sgmma_lane_col(lane : uint) : uint => ((lane / 4u) & 2u) * 2u + (lane % 2u) * 2u
+
+struct Rows8MmaArgs {
+    k : uint       //! the plane's row length, whole 32-blocks
+    rows : uint    //! its rows
+    toks : uint    //! the token rows, one to eight
+    ys : uint      //! y's row stride
+}
+
+//! A plane times one to eight token rows on the 8x8 simdgroup matrix, one template over the formats: a threadgroup holds 16
+//! weight rows (a lane's rows `sgmma_lane_row`, its token rows `sgmma_lane_col`), the x rows read as they lie, the simdgroups'
+//! sums meeting in threadgroup memory; a row or a token past the plane's or the step's is clamped for the reads, never stored
+[ |> template_struct_instance]
+class template MetalRows8MmaT {
+    @ssbo @binding = 0 @role = "weight" @off = "boff" @template_gate = Q8F wsh : array<float16>   //!< q8: the 34-byte blocks, half view - block b's scale at 17 b
+    @ssbo @binding = 1 @role = "weight" @off = "boff" @template_gate = Q8F wqb : array<int8>      //!< q8: the same blob, byte view - its codes at 34 b + 2
+    @ssbo @binding = 2 @role = "read" x : array<float>                       //!< the token rows [toks][k]
+    @ssbo @binding = 3 @role = "write" @off = "yoff" y : array<float>        //!< a token row's `rows` outputs, the rows `ys` apart
+    @kargs pa : Rows8MmaArgs
+    @workgroup red : float[1024]   //!< the simdgroups' sums, [simdgroup][lane][4]
+    @template_constant Q8F : bool = false   //!< q8_0: a 32-block a product chain (`sgmma_q8_blk2`: the codes into the matrix unit from registers), the block's scale after it
+
+    [metal_kernel]
+    def metal_rows8_mma {
+        let lane = gl_SubgroupInvocationID
+        let sg = gl_SubgroupID
+        let fm = sgmma_lane_row(lane)
+        let fn = sgmma_lane_col(lane)
+        let nkb = pa.k / 32u
+        let n0 = gl_WorkGroupID.x * 16u
+        let r0 = min(n0 + fm, pa.rows - 1u)
+        let r1 = min(n0 + 8u + fm, pa.rows - 1u)
+        let x0 = min(fn, pa.toks - 1u) * pa.k
+        let x1 = min(fn + 1u, pa.toks - 1u) * pa.k
+        var acc = float4(0.0)
+        var kb = sg
+        while (kb < nkb) {
+            static_if (Q8F) {
+                let b0 = r0 * nkb + kb
+                let b1 = r1 * nkb + kb
+                let p = sgmma_q8_blk2(wqb, b0 * 34u + 2u, b1 * 34u + 2u, x, x0 + kb * 32u, x1 + kb * 32u, lane)
+                let d0 = float(wsh[b0 * 17u])
+                let d1 = float(wsh[b1 * 17u])
+                acc += float4(d0 * p.x, d0 * p.y, d1 * p.z, d1 * p.w)
+            }
+            kb += 8u
+        }
+        let rb = sg * 128u + lane * 4u
+        red[rb] = acc.x
+        red[rb + 1u] = acc.y
+        red[rb + 2u] = acc.z
+        red[rb + 3u] = acc.w
+        barrier()
+        if (sg < 4u) {   // simdgroup i sums and stores element i of every lane: (tile i / 2, token fn + i % 2)
+            let e = lane * 4u + sg
+            var s = red[e]
+            for [unroll] (g in range(1, 8)) {
+                s += red[uint(g) * 128u + e]
+            }
+            let row = n0 + (sg / 2u) * 8u + fm
+            let tok = fn + (sg % 2u)
+            if (row < pa.rows && tok < pa.toks) {
+                y[tok * pa.ys + row] = s
+            }
+        }
+    }
+}
+
+//! the q8 stamp
+[metal_dispatch(name = "enc_rows8_mma_q8_c", pso = "g_pf_pso_rows8_mma_q8", tgmem = "MetalRows8MmaQ8_metal_rows8_mma_msl_tgmem", tg = 256, grid = "ntg", params = "ntg : int64")]
+class MetalRows8MmaQ8 : MetalRows8MmaT {
+    override Q8F = true
 }
 
 //! The rows8 site over eight rows on the matrix unit, one template over the formats: a threadgroup owns 16 weight rows, its eight
@@ -9335,6 +9429,7 @@ class template MetalRows8T {
     @template_constant DEPTH : uint = 64u   //!< a product's K: one scale block
     @template_constant NLOAD : int = 1      //!< code loads a block
     @template_constant NPER : int = 1       //!< products a code load
+    @template_constant PAIR : bool = false  //!< the matrix unit's pair layout (the q8, k4 and k6 arms): a lane's left elements are (row m0 + 8 r, k = 8 j + 2 kq + e) at r 8 + 2 j + e, its four results (row, token 2 kq + e) at 2 r + e, every lane live
 
     //! the K split's segment, the grid's y; 0 on the other stamps
     def seg_of : uint {
@@ -9475,20 +9570,34 @@ class template MetalRows8T {
     [arch(at="../ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit")]
     def codes(blk, kq : uint; l : int; off : uint3; var w : uint4&) {
         static_if (K4F) {
-            let r = kqu2[off.y + blk * 4u + kq]
-            w = uint4(r.x, r.y, 0u, 0u)
+            static_if (PAIR) {   // the pairs j = 0 .. 3 at bytes 0, 16, 4 and 20 from 8 (kq / 2) + 2 (kq % 2) of the quarter's 32 (`rows8_q8_run`'s slot law)
+                let r0 = kqu2[off.y + blk * 4u + (kq >> 1u)]
+                let r1 = kqu2[off.y + blk * 4u + (kq >> 1u) + 2u]
+                let sh = 16u * (kq & 1u)
+                w = uint4((r0.x >> sh) & 0xFFFFu, (r1.x >> sh) & 0xFFFFu, (r0.y >> sh) & 0xFFFFu, (r1.y >> sh) & 0xFFFFu)
+            } else {
+                let r = kqu2[off.y + blk * 4u + kq]
+                w = uint4(r.x, r.y, 0u, 0u)
+            }
         } else {
             static_if (K6F) {
                 let h = int(blk & 1u)
                 let o = 16 * h + 4 * l
-                let p = unsafe(addr(k6q[off.z + (blk >> 1u) * 48u + kq]))
-                w = uint4(unsafe(p[o]), unsafe(p[o + 8]), unsafe(p[32 + 8 * h + 4 * l]), 0u)
+                static_if (PAIR) {   // the lane's codes 2 kq, 2 kq + 1, 8 + 2 kq, 8 + 2 kq + 1 of the sixteen: a byte pair of word kq / 2 and of the word two on, one word
+                    let p = unsafe(addr(k6q[off.z + (blk >> 1u) * 48u + (kq >> 1u)]))
+                    let sh = 16u * (kq & 1u)
+                    w = uint4(rows8_pair_word(unsafe(p[o]), unsafe(p[o + 2]), sh), rows8_pair_word(unsafe(p[o + 8]), unsafe(p[o + 10]), sh),
+                        rows8_pair_word(unsafe(p[32 + 8 * h + 4 * l]), unsafe(p[34 + 8 * h + 4 * l]), sh), 0u)
+                } else {
+                    let p = unsafe(addr(k6q[off.z + (blk >> 1u) * 48u + kq]))
+                    w = uint4(unsafe(p[o]), unsafe(p[o + 8]), unsafe(p[32 + 8 * h + 4 * l]), 0u)
+                }
             } else {
                 static_if (IQ4F) {
                     w = uint4(k6q[off.z + blk * 4u + kq], 0u, 0u, 0u)
                 } else {
                     static_if (Q8F) {
-                        let r = rows8_q8_run(wqb, off.y, blk, kq) ^ uint2(0x80808080u, 0x80808080u)
+                        let r = rows8_q8_run(wqb, off.y, blk, kq, PAIR) ^ uint2(0x80808080u, 0x80808080u)
                         w = uint4(r.x, r.y, 0u, 0u)
                     } else {
                         aff_run(blk, kq, off.y, w)
@@ -9584,7 +9693,7 @@ class template MetalRows8T {
         let lane = gl_SubgroupInvocationID
         let m0 = rows8_m0(lane)
         let kq = rows8_kq(lane)
-        let pad = rows8_pad(lane)
+        let pad = PAIR ? false : rows8_pad(lane)
         let wt = tiles_of()
         let tile = wt.x
         let rt = wt.y
@@ -9601,7 +9710,7 @@ class template MetalRows8T {
             tmm2d_rx_begin(acc, unsafe(addr(xt[xbase])), kdim, 16u, 8u, DEPTH)
         }
         var y8 : float[8]
-        let tq = pad ? 0u : 4u * kq
+        let tq = PAIR ? 2u * kq : (pad ? 0u : 4u * kq)
         let kr = k_range(ks, seg, nb)
         var b = kr.x
         while (b < kr.y) {
@@ -9624,25 +9733,39 @@ class template MetalRows8T {
                         let sca1 = rows8_byte8(sca, s0 + 1u)
                         let scb0 = rows8_byte8(scb, s0)
                         let scb1 = rows8_byte8(scb, s0 + 1u)
-                        for [unroll_full] (q in range(4)) {   //! quad q: word q & 1 of the run, nibble q >> 1 - the first sub-block's low nibbles, the second's high
-                            let wordA = (q & 1) != 0 ? qa.y : qa.x
-                            let wordB = (q & 1) != 0 ? qb.y : qb.x
-                            let nib = 4u * uint(q >> 1)
-                            let sA = (q >> 1) != 0 ? sca1 : sca0
-                            let sB = (q >> 1) != 0 ? scb1 : scb0
-                            let base = uint(q) * 8u
-                            tmm2d_rx_left2(acc, base, base + 2u, (((wordA >> nib) & 0x000F000Fu) * sA) | 0x64006400u)
-                            tmm2d_rx_left2(acc, base + 1u, base + 3u, (((wordA >> (nib + 8u)) & 0x000F000Fu) * sA) | 0x64006400u)
-                            tmm2d_rx_left2(acc, base + 4u, base + 6u, (((wordB >> nib) & 0x000F000Fu) * sB) | 0x64006400u)
-                            tmm2d_rx_left2(acc, base + 5u, base + 7u, (((wordB >> (nib + 8u)) & 0x000F000Fu) * sB) | 0x64006400u)
+                        static_if (PAIR) {
+                            for [unroll_full] (q in range(8)) {   // pair j = q: its sub-block q >> 2 (the low nibbles, then the high), its two codes the pair q & 3's bytes
+                                let nib = 4u * uint(q >> 2)
+                                let sA = (q >> 2) != 0 ? sca1 : sca0
+                                let sB = (q >> 2) != 0 ? scb1 : scb0
+                                let pa = qa[q & 3]
+                                let pb = qb[q & 3]
+                                tmm2d_rx_left2(acc, 2u * uint(q), 2u * uint(q) + 1u,
+                                    (((pa >> nib) & 0xFu) * sA) | ((((pa >> (nib + 8u)) & 0xFu) * sA) << 16u) | 0x64006400u)
+                                tmm2d_rx_left2(acc, 16u + 2u * uint(q), 16u + 2u * uint(q) + 1u,
+                                    (((pb >> nib) & 0xFu) * sB) | ((((pb >> (nib + 8u)) & 0xFu) * sB) << 16u) | 0x64006400u)
+                            }
+                        } else {
+                            for [unroll_full] (q in range(4)) {   //! quad q: word q & 1 of the run, nibble q >> 1 - the first sub-block's low nibbles, the second's high
+                                let wordA = (q & 1) != 0 ? qa.y : qa.x
+                                let wordB = (q & 1) != 0 ? qb.y : qb.x
+                                let nib = 4u * uint(q >> 1)
+                                let sA = (q >> 1) != 0 ? sca1 : sca0
+                                let sB = (q >> 1) != 0 ? scb1 : scb0
+                                let base = uint(q) * 8u
+                                tmm2d_rx_left2(acc, base, base + 2u, (((wordA >> nib) & 0x000F000Fu) * sA) | 0x64006400u)
+                                tmm2d_rx_left2(acc, base + 1u, base + 3u, (((wordA >> (nib + 8u)) & 0x000F000Fu) * sA) | 0x64006400u)
+                                tmm2d_rx_left2(acc, base + 4u, base + 6u, (((wordB >> nib) & 0x000F000Fu) * sB) | 0x64006400u)
+                                tmm2d_rx_left2(acc, base + 5u, base + 7u, (((wordB >> (nib + 8u)) & 0x000F000Fu) * sB) | 0x64006400u)
+                            }
                         }
                     }
                     static_if (Q8F) {
                         for [unroll_full] (h in range(2)) {   //! half h of a word: codes 2 h and 2 h + 1 as the halves 1024 + code
                             let sh = 16u * uint(h)
                             tmm2d_rx_left2(acc, 2u * uint(h), 2u * uint(h) + 1u, 0x64006400u | ((qa.x >> sh) & 0xFFu) | (((qa.x >> sh) & 0xFF00u) << 8u))
-                            tmm2d_rx_left2(acc, 4u + 2u * uint(h), 4u + 2u * uint(h) + 1u, 0x64006400u | ((qb.x >> sh) & 0xFFu) | (((qb.x >> sh) & 0xFF00u) << 8u))
-                            tmm2d_rx_left2(acc, 8u + 2u * uint(h), 8u + 2u * uint(h) + 1u, 0x64006400u | ((qa.y >> sh) & 0xFFu) | (((qa.y >> sh) & 0xFF00u) << 8u))
+                            tmm2d_rx_left2(acc, (PAIR ? 8u : 4u) + 2u * uint(h), (PAIR ? 8u : 4u) + 2u * uint(h) + 1u, 0x64006400u | ((qb.x >> sh) & 0xFFu) | (((qb.x >> sh) & 0xFF00u) << 8u))
+                            tmm2d_rx_left2(acc, (PAIR ? 4u : 8u) + 2u * uint(h), (PAIR ? 4u : 8u) + 2u * uint(h) + 1u, 0x64006400u | ((qa.y >> sh) & 0xFFu) | (((qa.y >> sh) & 0xFF00u) << 8u))
                             tmm2d_rx_left2(acc, 12u + 2u * uint(h), 12u + 2u * uint(h) + 1u, 0x64006400u | ((qb.y >> sh) & 0xFFu) | (((qb.y >> sh) & 0xFF00u) << 8u))
                         }
                     }
@@ -9672,9 +9795,21 @@ class template MetalRows8T {
                     tmm2d_rx_run(acc, k_at(b, l, g))
                     var s0v, s1v : float4
                     sums(b, tq, sbase, s0v, s1v)
-                    for [unroll_full] (i in range(4)) {
-                        epilogue(tmm2d_rx_dest(acc, uint(i)), y8[i], swa, fa, b, l, g, s0v[i], s1v[i])
-                        epilogue(tmm2d_rx_dest(acc, 4u + uint(i)), y8[4 + i], swb, fb, b, l, g, s0v[i], s1v[i])
+                    static_if (PAIR) {   // result 2 r + e is (row r, token tq + e): the lane's two tokens are a float4's low or high pair
+                        let lowp = (tq & 3u) == 0u
+                        let su0 = lowp ? s0v.x : s0v.z
+                        let su1 = lowp ? s0v.y : s0v.w
+                        let sv0 = lowp ? s1v.x : s1v.z
+                        let sv1 = lowp ? s1v.y : s1v.w
+                        epilogue(tmm2d_rx_dest(acc, 0u), y8[0], swa, fa, b, l, g, su0, sv0)
+                        epilogue(tmm2d_rx_dest(acc, 1u), y8[1], swa, fa, b, l, g, su1, sv1)
+                        epilogue(tmm2d_rx_dest(acc, 2u), y8[2], swb, fb, b, l, g, su0, sv0)
+                        epilogue(tmm2d_rx_dest(acc, 3u), y8[3], swb, fb, b, l, g, su1, sv1)
+                    } else {
+                        for [unroll_full] (i in range(4)) {
+                            epilogue(tmm2d_rx_dest(acc, uint(i)), y8[i], swa, fa, b, l, g, s0v[i], s1v[i])
+                            epilogue(tmm2d_rx_dest(acc, 4u + uint(i)), y8[4 + i], swb, fb, b, l, g, s0v[i], s1v[i])
+                        }
                     }
                 }
             }
@@ -9688,14 +9823,14 @@ class template MetalRows8T {
             hc_land(tile * 16u)
             return
         }
-        if (!pad) {   //! simdgroup ks sums element ks of every slice, in slice order
+        if (PAIR ? ks < 4u : !pad) {   // simdgroup ks sums element ks of every slice, in slice order
             let pr = unsafe(addr(red[ks * 32u + lane]))
             var s = unsafe(pr[0])
             for [unroll_full] (k in range(7)) {
                 s += unsafe(pr[256 * k + 256])
             }
-            let t = tq + (ks & 3u)
-            let row = ks < 4u ? ra : rb
+            let t = PAIR ? tq + (ks & 1u) : tq + (ks & 3u)
+            let row = (PAIR ? ks < 2u : ks < 4u) ? ra : rb
             static_if (KSPL) {
                 yk[(seg * 8u + t) * ndim + row] = s
             } else {
@@ -9721,6 +9856,38 @@ class MetalRows8Q8 : MetalRows8T {
     override Q8F = true
     override BLOCK = 32u
     override DEPTH = 32u
+}
+
+//! the k6 arm on the matrix unit's pair layout (`MetalRows8ProbeP`)
+[metal_dispatch(name = "enc_rows8_k6p_c", pso = "g_pf_pso_rows8_k6p", tgmem = "MetalRows8K6P_metal_rows8_msl_tgmem", tg = 256, grid = "ntg",
+                params = "rows : int64, reach : int64, ntg : int64", requires = "rows % 16")]
+class MetalRows8K6P : MetalRows8T {
+    override K6F = true
+    override SPL = true
+    override BLOCK = 128u
+    override DEPTH = 16u
+    override NLOAD = 2
+    override NPER = 4
+    override PAIR = true
+}
+
+//! the k4 arm on the matrix unit's pair layout (`MetalRows8ProbeP`)
+[metal_dispatch(name = "enc_rows8_k4p_c", pso = "g_pf_pso_rows8_k4p", tgmem = "MetalRows8K4P_metal_rows8_msl_tgmem", tg = 256, grid = "ntg",
+                params = "rows : int64, reach : int64, ntg : int64", requires = "rows % 16")]
+class MetalRows8K4P : MetalRows8T {
+    override K4F = true
+    override U2 = true
+    override PAIR = true
+}
+
+//! the q8 arm on the matrix unit's pair layout (`MetalRows8ProbeP`): the boxes whose unit holds pairs, not quads
+[metal_dispatch(name = "enc_rows8_q8p_c", pso = "g_pf_pso_rows8_q8p", tgmem = "MetalRows8Q8P_metal_rows8_msl_tgmem", tg = 256, grid = "ntg",
+                params = "rows : int64, reach : int64, ntg : int64", requires = "rows % 16")]
+class MetalRows8Q8P : MetalRows8T {
+    override Q8F = true
+    override BLOCK = 32u
+    override DEPTH = 32u
+    override PAIR = true
 }
 
 //! the q8 arm over a K split by segment: the eight-row mixer's down, a threadgroup (tile, stream) over the stream's blocks, the
@@ -9971,10 +10138,11 @@ class MetalRows8Mlx6b : MetalRows8T {
 }
 
 //! The layout probe: one simdgroup fills a 16 x 64 left operand with row * 64 + k under the geometry the rows8 kernels assume,
-//! runs it against a table whose token t is one-hot at k0[t], and reads back every destination element it assumes is
-//! (row, token): row * 64 + k0[token]. A lane whose every element agrees, and whose pad columns read invalid, writes 1.
-[metal_dispatch(name = "enc_rows8_probe_c", pso = "g_pf_pso_rows8_probe", tg = 32, grid = "1")]
-class MetalRows8Probe {
+//! runs it against a table whose token t is one-hot at k0[t], and reads back every destination element it assumes is (row, token).
+//! A lane whose every element agrees, and whose pad columns read invalid, writes 1; `PAIR` probes the pair layout, every lane live
+[ |> template_struct_instance]
+class template MetalRows8ProbeT {
+    @template_constant PAIR : bool = false
     @ssbo @binding = 0 @role = "read" xt : array<float16>   //!< [8][64], one-hot rows
     @ssbo @binding = 1 @role = "read" k0 : array<uint>      //!< the eight tokens' hot k
     @ssbo @binding = 2 @role = "write" ok : array<uint>     //!< a lane's verdict
@@ -9984,34 +10152,44 @@ class MetalRows8Probe {
         let lane = gl_SubgroupInvocationID
         let m0 = rows8_m0(lane)
         let kq = rows8_kq(lane)
-        let pad = rows8_pad(lane)
+        let pad = PAIR ? false : rows8_pad(lane)
+        let ndest = PAIR ? 4u : 8u
         var acc : float[128]
         tmm2d_rx_begin(acc, unsafe(addr(xt[0])), 64u, 16u, 8u, 64u)
-        var good = tmm2d_rx_left_count(acc) == 32u && tmm2d_rx_dest_count(acc) == 8u
-        for [unroll_full] (e in range(32)) {   //! element (((c 2 + i) 2 + r) 4 + ee): k = 32 c + 16 i + 4 kq + ee, row m0 + 8 r
-            let ee = uint(e & 3)
-            let r = uint((e >> 2) & 1)
-            let i = uint((e >> 3) & 1)
-            let c = uint(e >> 4)
-            let k = 32u * c + 16u * i + 4u * kq + ee
-            let row = m0 + 8u * r
+        var good = tmm2d_rx_left_count(acc) == 32u && tmm2d_rx_dest_count(acc) == ndest
+        for [unroll_full] (e in range(32)) {
+            let k = PAIR ? 8u * uint((e >> 1) & 7) + 2u * kq + uint(e & 1) : 32u * uint(e >> 4) + 16u * uint((e >> 3) & 1) + 4u * kq + uint(e & 3)
+            let row = m0 + 8u * uint(PAIR ? e >> 4 : (e >> 2) & 1)
             tmm2d_rx_left(acc, uint(e), float16(float(row * 64u + k)))
         }
         tmm2d_rx_run(acc, 0u)
         for [unroll_full] (d in range(8)) {
-            let row = m0 + 8u * uint(d >> 2)
-            let tok = 4u * kq + uint(d & 3)
-            let valid = tmm2d_rx_dest_valid(acc, uint(d))
-            if (pad) {
-                good = good && !valid
-            } else {
-                good = good && valid && tmm2d_rx_dest(acc, uint(d)) == float(row * 64u + k0[tok])
+            if (uint(d) < ndest) {
+                let row = m0 + 8u * uint(PAIR ? d >> 1 : d >> 2)
+                let tok = PAIR ? 2u * kq + uint(d & 1) : 4u * kq + uint(d & 3)
+                let valid = tmm2d_rx_dest_valid(acc, uint(d))
+                if (pad) {
+                    good = good && !valid
+                } else {
+                    good = good && valid && tmm2d_rx_dest(acc, uint(d)) == float(row * 64u + k0[tok])
+                }
             }
         }
         ok[lane] = good ? 1u : 0u
     }
 }
 
+[metal_dispatch(name = "enc_rows8_probe_c", pso = "g_pf_pso_rows8_probe", tg = 32, grid = "1")]
+class MetalRows8Probe : MetalRows8ProbeT {
+}
+
+[metal_dispatch(name = "enc_rows8_probe_p_c", pso = "g_pf_pso_rows8_probe_p", tg = 32, grid = "1")]
+class MetalRows8ProbeP : MetalRows8ProbeT {
+    override PAIR = true
+}
+
+var private g_pf_pso_rows8_q8p, g_pf_pso_rows8_k4p, g_pf_pso_rows8_k6p, g_pf_pso_rows8_probe_p : MetalComputePipeline?   //!< the pair layout's q8, k4 and k6 arms and its probe
+var private g_pf_rows8_pair = false   //!< the pair layout's probe passed: the q8 rows sites ride `MetalRows8Q8P` (every other rows8 consumer stays off)
 var private g_pf_pso_rows8_prep, g_pf_pso_rows8_k4, g_pf_pso_rows8_q8, g_pf_pso_rows8_k6, g_pf_pso_rows8_probe : MetalComputePipeline?
 var private g_pf_pso_rows8_mlx4, g_pf_pso_rows8_mlx8, g_pf_pso_rows8_mlx4b, g_pf_pso_rows8_mlx8b : MetalComputePipeline?
 var private g_pf_pso_rows8_iq4xs : MetalComputePipeline?
@@ -10022,6 +10200,8 @@ var private g_pf_pso_rows8_mlx6b : MetalComputePipeline?
 var private g_pf_rows8_ok = false          //!< the layout probe passed: the rows8 kernels' geometry is this box's
 var private g_rows8_xt, g_rows8_xs : MetalBuffer?   //!< the x table and sums scratch, sized once for ROWS8_KDIM_CAP
 var private g_rows8_sites = 0l
+var private g_rows8_mma_sites = 0l   //! the sites the simdgroup-matrix few-row form encoded
+var private g_pf_pso_rows8_mma_q8 : MetalComputePipeline?   //!< the q8 few-row GEMM on the 8x8 simdgroup matrix
 var private g_rows8_fmt_sites : int64[KQ_FMT_COUNT]
 var private g_rows8_table_sites = 0l   //!< the sites that read a producer's table instead of prepping one
 var private g_rows8_preps = 0l
@@ -10117,6 +10297,12 @@ def public metal_hc_mix8_fmt(f : KqFmt; dim, lr : int64) : bool {
 //! the rows8 sites encoded so far (the engage witness)
 def public metal_rows8_sites : int64 => g_rows8_sites
 
+//! the sites the simdgroup-matrix few-row form encoded since load
+def public metal_rows8_mma_sites : int64 => g_rows8_mma_sites
+
+//! the simdgroup-matrix few-row form is built and not knocked out
+def public metal_rows8_mma_on : bool => g_pf_pso_rows8_mma_q8 != null && g_pf_skip != "rows8nomma"
+
 //! the rows8 sites encoded so far over planes of format `fmt`
 def public metal_rows8_sites_of(fmt : KqFmt) : int64 => g_rows8_fmt_sites[int(fmt)]
 
@@ -10125,6 +10311,11 @@ def public metal_rows8_table_sites : int64 => g_rows8_table_sites
 
 //! whether the rows8 form serves on this box: the knob, the toolchain, and the layout probe
 def public metal_rows8_on : bool => g_pf_rows8_ok
+
+let METAL_ROWS8_PAIR_MIN = 5l   //! the fewest rows a trunk's rows site carries on the pair layout's arm: to four rows one row tile reads the plane once at the same cost
+
+//! the eight-row matrix-unit form serves q8 planes: on the layout the form was built on, or on the pair layout's q8 arm
+def public metal_rows8_q8_on : bool => g_pf_rows8_ok || g_pf_rows8_pair
 
 //! whether a rows8 site of format `fmt` reads its panel's f16 twin in natural order (k6, iq4xs) rather than an x table
 def public metal_rows8_twin_fed(fmt : KqFmt) : bool => g_pf_rows8_ok && rows8_natural(fmt)
@@ -10140,6 +10331,8 @@ def public metal_rows8_iq4xs_on : bool => g_pf_rows8_ok && g_pf_skip != "rows8no
 def public metal_rows8_aff_on(fmt : KqFmt) : bool => g_pf_rows8_ok && kq_mlx_affine(fmt) && g_pf_skip != "rows8nomlx"
 
 def private rows8_release {
+    release_handles(g_pf_pso_rows8_q8p, g_pf_pso_rows8_k4p, g_pf_pso_rows8_k6p, g_pf_pso_rows8_probe_p)
+    g_pf_rows8_pair = false
     release_handle(g_pf_pso_rows8_prep)
     release_handle(g_pf_pso_rows8_k4)
     release_handle(g_pf_pso_rows8_q8)
@@ -10170,7 +10363,7 @@ def private rows8_release {
 }
 
 //! the probe on one one-hot table: every lane's verdict
-def private rows8_probe_once(k0 : array<uint>) : bool {
+def private rows8_probe_once(k0 : array<uint>; pair : bool = false) : bool {
     var xt : array<float16>
     xt |> resize(8 * 64)
     for (t in range(8)) {
@@ -10182,7 +10375,11 @@ def private rows8_probe_once(k0 : array<uint>) : bool {
     var err = ""
     var ms = 0.0lf
     let ran = with_compute_encoder_timed(g_queue, err, ms) $(enc) {
-        enc_rows8_probe_c(enc, bxt, bk0, bok)
+        if (pair) {
+            enc_rows8_probe_p_c(enc, bxt, bk0, bok)
+        } else {
+            enc_rows8_probe_c(enc, bxt, bk0, bok)
+        }
     }
     var good = ran
     if (ran) {
@@ -10253,9 +10450,20 @@ def private rows8_init(var ok : bool&) {
         g_rows8_u_rows |> push(ubuf_u32(uint(8 * i)))
     }
     g_pf_rows8_ok = g_rows8_xt != null && g_rows8_xs != null && rows8_probe_once(a) && rows8_probe_once(b)
-    if (!g_pf_rows8_ok) {
-        to_log(LOG_WARNING, "dasLLAMA metal prefill: the matrix unit's cooperative layout is not the rows8 kernels' - the eight-row stamps serve\n")
-        rows8_release()
+    if (!g_pf_rows8_ok) {   // the quad layout is not this box's: the pair layout's q8 arm where its own probe passes
+        var pp = true
+        g_pf_pso_rows8_q8p = compile_stamp(MetalRows8Q8P_metal_rows8_msl, pp)
+        g_pf_pso_rows8_k4p = compile_stamp(MetalRows8K4P_metal_rows8_msl, pp)
+        g_pf_pso_rows8_k6p = compile_stamp(MetalRows8K6P_metal_rows8_msl, pp)
+        g_pf_pso_rows8_probe_p = compile_stamp(MetalRows8ProbeP_metal_rows8_probe_msl, pp)
+        let pair = pp && g_rows8_xt != null && g_rows8_xs != null && rows8_probe_once(a, true) && rows8_probe_once(b, true)
+        if (!pair) {
+            to_log(LOG_WARNING, "dasLLAMA metal prefill: the matrix unit's cooperative layout is not the rows8 kernels' - the eight-row stamps serve\n")
+            rows8_release()
+        } else {
+            to_log(LOG_INFO, "dasLLAMA metal prefill: the matrix unit holds pairs - the q8, k4 and k6 rows sites ride the pair form, every other rows8 form stays off\n")
+        }
+        g_pf_rows8_pair = pair
     }
     ok = ok && true
 }
@@ -10360,12 +10568,18 @@ def private rows8_dispatch(enc : MetalComputeEncoder?; fmt : KqFmt; pl : Rows8Pl
     let r = (8l * tiles - 1l) * o.ys + o.rows
     let ntg = o.rows / 16l * tiles
     let ut = g_rows8_u_tiles[int(tiles)]
-    if (fmt == KqFmt.k4) {
+    if (fmt == KqFmt.k4 && g_pf_rows8_pair) {
+        enc_rows8_k4p_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, xs, bn, o.bys, ut, o.rows, r, ntg)
+    } elif (fmt == KqFmt.k4) {
         enc_rows8_k4_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, xs, bn, o.bys, ut, o.rows, r, ntg)
+    } elif (fmt == KqFmt.k6 && g_pf_rows8_pair) {
+        enc_rows8_k6p_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, pl.b4.buf, pl.b4.off, bn, o.bys, ut, o.rows, r, ntg)
     } elif (fmt == KqFmt.k6) {
         enc_rows8_k6_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, pl.b4.buf, pl.b4.off, bn, o.bys, ut, o.rows, r, ntg)
     } elif (fmt == KqFmt.iq4xs) {
         enc_rows8_iq4xs_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, pl.b4.buf, pl.b4.off, bn, o.bys, ut, o.rows, r, ntg)
+    } elif (fmt == KqFmt.q8 && g_pf_rows8_pair) {
+        enc_rows8_q8p_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, xt, o.by, o.yoff, xs, bn, o.bys, ut, o.rows, r, ntg)
     } elif (fmt == KqFmt.q8) {
         enc_rows8_q8_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, xt, o.by, o.yoff, xs, bn, o.bys, ut, o.rows, r, ntg)
     } elif (fmt == KqFmt.mlx4) {
@@ -10439,6 +10653,38 @@ def pf_enc_rows8_kq_planes(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBu
 def pf_enc_rows8_q8(enc : MetalComputeEncoder?; bw : MetalBuffer?; wboff : uint64; bx, by : MetalBuffer?; yoff : uint64; bn, bys : MetalBuffer?; n, rows, ys : int64;
                     bxt : MetalBuffer? = null; bxs : MetalBuffer? = null; tiles : int64 = 1l) : bool {
     return false if (!g_pf_rows8_ok || rows8_grid_of(KqFmt.q8, rows, n) == 0l || g_pf_skip == "rows8noq8")
+    return rows8_site(enc, KqFmt.q8, rows8_planes_of(KqFmt.q8, bw, wboff, null, 0ul, 0ul), n, bx, bn, bxt, bxs, null, (rows = rows, by = by, yoff = yoff, ys = ys, bys = bys), tiles)
+}
+
+//! `pf_enc_rows8_kq_planes` on a box whose matrix unit holds pairs: the pair layout's arm of a format that has one (k4, k6), the
+//! site's own prep; a caller tries it behind the eight-row tensor stamps, ahead of the row forms
+def pf_enc_rows8_kq_planes_p(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff : uint64; bs : MetalBuffer?; soff, doff : uint64; rows, n, ys : int64;
+                             bx, by : MetalBuffer?; yoff : uint64; bn, bys : MetalBuffer?; tiles : int64 = 1l) : bool {
+    return false if (!g_pf_rows8_pair || (fmt != KqFmt.k4 && fmt != KqFmt.k6) || rows8_grid_of(fmt, rows, n) == 0l
+        || g_pf_skip == (fmt == KqFmt.k4 ? "rows8nok4" : "rows8nok6"))
+    return rows8_site(enc, fmt, rows8_planes_of(fmt, bq, qoff, bs, soff, doff), n, bx, bn, null, null, null, (rows = rows, by = by, yoff = yoff, ys = ys, bys = bys), tiles)
+}
+
+//! the q8 few-row GEMM on the 8x8 simdgroup matrix serves a plane of `rows` rows and `n` columns: whole 32-blocks and whole
+//! 16-row threadgroups
+def metal_rows8_mma_q8_serves(n, rows : int64) : bool
+    => g_pf_pso_rows8_mma_q8 != null && n % 32l == 0l && rows % 16l == 0l && g_pf_skip != "rows8nomma"
+
+//! A q8 plane times `nrows` (one to eight) rows of x on the 8x8 simdgroup matrix, y the rows `ys` apart at `yoff`: one dispatch,
+//! the plane read once for every row; false where the form declines and nothing was encoded
+def pf_enc_rows8_mma_q8(enc : MetalComputeEncoder?; bw : MetalBuffer?; wboff : uint64; bx, by : MetalBuffer?; yoff : uint64; n, rows, ys, nrows : int64) : bool {
+    return false if (nrows < 1l || nrows > 8l || !metal_rows8_mma_q8_serves(n, rows))
+    var ka = Rows8MmaArgs(k = uint(n), rows = uint(rows), toks = uint(nrows), ys = uint(ys))
+    enc_rows8_mma_q8_c(enc, bw, wboff, bw, bx, by, yoff, ka, rows / 16l)
+    g_rows8_mma_sites++
+    return true
+}
+
+//! `pf_enc_rows8_q8` on a box whose matrix unit holds pairs: the pair layout's arm, the site's own prep; a caller tries it
+//! behind the eight-row tensor stamps, ahead of the row tiles (which read the plane once a tile of four)
+def pf_enc_rows8_q8p(enc : MetalComputeEncoder?; bw : MetalBuffer?; wboff : uint64; bx, by : MetalBuffer?; yoff : uint64; bn, bys : MetalBuffer?; n, rows, ys : int64;
+                     tiles : int64 = 1l; bxt : MetalBuffer? = null; bxs : MetalBuffer? = null) : bool {
+    return false if (!g_pf_rows8_pair || rows8_grid_of(KqFmt.q8, rows, n) == 0l || g_pf_skip == "rows8noq8")
     return rows8_site(enc, KqFmt.q8, rows8_planes_of(KqFmt.q8, bw, wboff, null, 0ul, 0ul), n, bx, bn, bxt, bxs, null, (rows = rows, by = by, yoff = yoff, ys = ys, bys = bys), tiles)
 }
 

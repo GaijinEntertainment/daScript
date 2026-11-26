@@ -221,8 +221,12 @@ def test_golden_disassembly(t : T?) { // nolint:STYLE038 - flat list of golden f
         check(t, "coopmat", coopmat_words())
         // coopmat int8: s8xs8->s32 tile + the signed-components MulAdd operands mask
         check(t, "coopmat_i8", coopmat_i8_words())
+        check(t, "coopmat_i8k16", coopmat_i8k16_words())
         // coopmat load from @workgroup shared memory (Workgroup-storage access chain)
         check(t, "coopmat_sm", coopmat_sm_words())
+        // the wide h256 flash tile: the 128-row cm2 tile types and their
+        // three products
+        check(t, "coopmat2fa256w", coopmat2fa256w_words())
     }
 }
 
@@ -1215,6 +1219,7 @@ def test_opcode_census(t : T?) { // nolint:STYLE038 — a flat one-add_set-per-f
         add_set(present, coopmat_words())
         add_set(present, coopmat_f16acc_words())
         add_set(present, coopmat_i8_words())
+        add_set(present, coopmat_i8k16_words())
         add_set(present, coopmat_sm_words())
         add_set(present, coopmat2_words())
         add_set(present, coopmat2s_words())
@@ -1223,6 +1228,7 @@ def test_opcode_census(t : T?) { // nolint:STYLE038 — a flat one-add_set-per-f
         add_set(present, coopmat2e_words())
         add_set(present, coopmat2fa_words())
         add_set(present, coopmat2fa256_words())
+        add_set(present, coopmat2fa256w_words())
         add_set(present, coopmat2fa512_words())
         add_set(present, q8store_words())
         add_set(present, unpack16_words())

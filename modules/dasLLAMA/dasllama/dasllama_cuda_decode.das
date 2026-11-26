@@ -316,7 +316,7 @@ struct CudRdec {
     cls_fmt : int
     cls_cap : float
     nsupp : int64
-    graphs : table<int; void?>  //! the captured graphs by command, row count, region and mode (`crd_graph_key`)
+    graphs : table<int64; void?>  //! the captured graphs by command, row count, region and mode (`crd_graph_key`)
     ch : CrdChain               //! the greedy chain (`crd_chain_submit`): the chained step's graph launched behind the running one
     ch_stage_host : array<void?>   //! two staging slots, mapped: the chained step's TokMeta block and rope row, the prologue copies them into the in block
     ch_stage_dev : array<uint64>
@@ -327,10 +327,13 @@ struct CudRdec {
     ch_snap_dev : uint64           //! the region's recurrent states as the chained step found them (a miss puts them back)
     unsplit_on : bool           //! the attention's unsplit form is a form of its own: the device split the keys at all
     unsplit_steps : int64       //! the steps the unsplit form served
+    attn_far : CrdFar           //! the command being run is one row past the far key count: its flat layers take the decode tile form at the tier's pieces
+    far_steps : int64           //! the steps that ran so
     tokens_served : int64   //! the positions the driver served, the window chain's and the token step's
     token_steps : int64     //! the token steps alone: the first runs the chain plainly, the second captures the graph
     windows : int64         //! the window chains run
     seg_windows : int64     //! the windows that held several sessions' chunks as segments
+    tail_cut_rows : int64   //! the window rows that stopped ahead of a shared-K/V tail
     //! window buffers (crd_pf_setup): np rows; f16 feeds + read slack
     pf_np : int64
     pf_wlen : int64         //! the rows of the window being run (the plan's rows between calls): the MMQ admission reads it
@@ -599,6 +602,8 @@ def private crd_drop {
     crd_state_settle()
     cud_sync()
     g_crd_relay.serial = -1l   //! the feed's record names the dropped driver's buffers
+    g_crd_dev_ids = 0ul
+    g_crd_dev_ids_n = 0l
     crd_free_buffers(*g_crd)
     unsafe {
         delete g_crd
@@ -756,7 +761,7 @@ def cud_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidd
     r.attn = cud_dev_zeroed(qd * 4l * nb)
     r.attn_nsplit = da_nsplit(n_heads, int64(g_cud.sm_count))
     r.unsplit_on = r.attn_nsplit > 1l
-    r.attn_cnt_off = n_heads * max(r.attn_nsplit, 1l) * (head_size + 2l) * nb   // the pieces of every row; a counter a (row, kv head, slab) group past them
+    r.attn_cnt_off = n_heads * max(r.attn_nsplit, CRD_TILE_SPLIT_MAX) * (head_size + 2l) * nb   // the pieces of every row; a counter a (row, kv head, slab) group past them
     r.attn_part = cud_dev_zeroed((r.attn_cnt_off + n_heads * nb) * 4l)
     r.ar_cnt = cud_dev_zeroed(16l)
     r.aq = cud_dev_zeroed(qd * nb)
@@ -1053,7 +1058,7 @@ def private crd_snap_alloc(var r : CudRdec) {
         off += L.dn[0].slot_state_bytes + 2l * L.dn[0].ring_image_bytes
     }
     r.snap_row_bytes = off
-    let rows = r.regions * int64(RDEC_DN_SNAPS)
+    let rows = r.regions * int64(rdec_dn_snaps())
     r.snap_par |> resize(rows)
     if (off > 0l) {
         r.snap_dev = cud_dev_zeroed(off * rows)
@@ -1245,6 +1250,28 @@ def private crd_layer_fuses(var r : CudRdec) {
     }
 }
 
+//! the attention and routed-chain knobs said once every layer is set (`cuda_attn_knobs_say`, `cuda_moe_fp4_rows_say`): the
+//! layers the decode tile's stamps serve, the flat ones among them, the flat layers at a head of 512 or 256, the FP4 chain's
+def private crd_knobs_say(r : CudRdec) {
+    var tile = 0l
+    var far = 0l
+    var wide = 0l
+    var fp4 = 0l
+    for (L in r.layers) {
+        fp4 += L.moe_mmq ? 1l : 0l
+        continue if (L.recurrent)
+        let flat = L.window == 0l
+        let big = L.hs == 512l || L.hs == 256l
+        wide += big && flat ? 1l : 0l
+        continue if (r.kv_dt != KVDtype.f16 || L.attn_cap != 0.0)
+        let served = big || (flat && (L.hs == 128l || L.hs == 64l))
+        tile += served ? 1l : 0l
+        far += served && flat ? 1l : 0l
+    }
+    cuda_attn_knobs_say(g_env_vulkan, tile, far, wide, CRD_TILE_SPLIT_MAX)
+    cuda_moe_fp4_rows_say(g_env_vulkan, fp4)
+}
+
 def cud_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) {
     return if (g_cud.dry)
     assert(g_crd != null, "cud_rdec_set_cls before prepare")
@@ -1265,6 +1292,7 @@ def cud_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array
     }
     crd_graphs_drop(r)
     r.ready = true
+    crd_knobs_say(r)
 }
 
 //! the one-row command and the ids prefill gather off the table at `emb_block` through `fmt`'s gather leaf (`cud_emb_enc`)
@@ -2065,7 +2093,7 @@ def private crd_host_resume(r : CudRdec; var s : void?; L : CudLayer; l, nrows :
     crd_rq_rows(s, L.fnext, r.xb, r.xq, r.xs, dim * nrows)
 }
 
-//! -1: the driver's rule (`crd_moe_form`), which reads the experts the last step of the width touched
+//! -1: the environment's word (DASLLAMA_CUDA_MOE_FP4_ROWS), itself -1 for the driver's rule (`crd_moe_form`), which reads the experts the last step of the width touched
 var private g_crd_moe_fp4_rows = -1l
 
 //! The rows from which the N-row step's routed sites take the window's FP4 expert chain on a layer whose stacks ride it
@@ -2132,7 +2160,7 @@ def private crd_moe_form(var r : CudRdec; nrows : int64) {
             d = int64(w[0])
         }
     }
-    r.wide_fp4 = crd_wide_ask(g_crd_moe_fp4_rows, nrows, slots, d, r.nfe * r.dim, CRD_WIDE_FP4)
+    r.wide_fp4 = crd_wide_ask(g_crd_moe_fp4_rows >= 0l ? g_crd_moe_fp4_rows : g_env_vulkan.cuda_moe_fp4_rows, nrows, slots, d, r.nfe * r.dim, CRD_WIDE_FP4)
     r.wide_tile = crd_wide_ask(g_crd_moe_tile_rows, nrows, slots, d, r.nfe * r.dim, CRD_WIDE_TILE)
 }
 
@@ -2397,10 +2425,57 @@ def private crd_token_kv(r : CudRdec; var s : void?; l : int64; L : CudLayer; km
     }
 }
 
+let private CRD_TILE_SPLIT_MAX = 128l     //! the tile form's key pieces a (K/V head, q tile), at most: the partials plane sizes to it
+let private CRD_TILE_ROWS_SPLIT = 64l     //! ... and the most a same-slab verify's rows take
+let private CRD_TILE_FLAT_ROWS = 4l       //! the fewest rows the tile form takes on a flat layer: under them the row form's own pieces are as fast
+let private CRD_TILE_WINDOW_ROWS = 6l     //! ... and on a windowed layer, whose few keys the row form walks in one launch where the tile form adds its combine
+
+//! whether a layer's `nrows` rows of one session attend on the flash tile's decode form: the knob's word (DASLLAMA_CUDA_ATTN_TILE), an
+//! f16 mirror, a head of 512 or 256, no softcap, and the rows the form pays from; a sink model's far row combines on its sink stamp
+def private crd_attn_tile_ok(r : CudRdec; L : CudLayer; nrows : int64) : bool
+    => crd_tile_stamps(r, L, r.attn_far != CrdFar.row && L.window == 0l, nrows)
+
+//! `crd_attn_tile_ok` with the far row named: one row over many keys, where the row form's reads a group of query heads cost more than the tile's combine
+def private crd_tile_stamps(r : CudRdec; L : CudLayer; far : bool; nrows : int64) : bool {
+    let short_rows = !far && nrows < (L.window != 0l ? CRD_TILE_WINDOW_ROWS : CRD_TILE_FLAT_ROWS)
+    if (g_env_vulkan.cuda_attn_tile == 0l || r.kv_dt != KVDtype.f16 || L.attn_cap != 0.0 || short_rows) return false
+    if (L.hs == 512l) return ensure_fa_khr_dec_h512_cls()
+    if (L.hs == 256l) return ensure_fa_khr_dec_h256_cls()
+    if (L.hs == 128l) return far && ensure_fa_khr_dec_h128_cls()   // the heads under 256 take the tile for the far row alone
+    return L.hs == 64l && far && ensure_fa_khr_dec_h64_cls()
+}
+
+//! the decode tile's dispatch at head `hs`, one of `crd_attn_tile_ok`'s
+def private crd_tile_enc(var s : void?; hs : int64; bufs : uint64[5]; var pc : FaArgs; wgs : int64) {
+    if (hs == 512l) {
+        enc_fa_khr_dec_h512_cls(s, bufs, pc, wgs)
+    } elif (hs == 256l) {
+        enc_fa_khr_dec_h256_cls(s, bufs, pc, wgs)
+    } elif (hs == 128l) {
+        enc_fa_khr_dec_h128_cls(s, bufs, pc, wgs)
+    } else {
+        enc_fa_khr_dec_h64_cls(s, bufs, pc, wgs)
+    }
+}
+
+//! the tile form's key pieces a (K/V head, q tile) over `groups` of them a piece: a verify's rows two blocks an SM, the far row
+//! its tier's - a block every second SM, a block an SM, two - unless DASLLAMA_CUDA_ATTN_TILE_PIECES names the count; never past
+//! the 64-key steps of a sliding layer's `window`
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#decode-far-row")]
+def private crd_tile_pieces(far : CrdFar; sms, groups, window : int64) : int64 {
+    return fa_dec_pieces(2l * sms, groups, CRD_TILE_ROWS_SPLIT, window) if (far == CrdFar.row)
+    let knob = g_env_vulkan.cuda_attn_tile_pieces
+    return fa_dec_window_pieces(min(knob, CRD_TILE_SPLIT_MAX), window) if (knob > 0l)
+    return fa_dec_pieces(2l * sms, groups, CRD_TILE_SPLIT_MAX, window) if (far == CrdFar.deep)
+    return fa_dec_pieces(sms, groups, CRD_TILE_SPLIT_MAX, window) if (far == CrdFar.full)
+    return fa_dec_pieces(sms / 2l, groups, CRD_TILE_SPLIT_MAX, window)
+}
+
 //! a layer's attention over the mirror into the wo feed, `nrows` rows a row a workgroup: each row's quants, or its floats where the
 //! fold cannot block them (the fold it took, `DA_RQ_*`, returned); the keys in one piece a group under `unsplit` (the Vulkan
 //! home's unsplit twin), else in the device's split, the last-arriving piece combining
-def private crd_token_attn(r : CudRdec; var s : void?; l : int64; L : CudLayer; kmir, vmir : uint64; nrows : int64; unsplit : bool; tok : uint64) : uint {
+def private crd_token_attn(r : CudRdec; var s : void?; l : int64; L : CudLayer; kmir, vmir : uint64; nrows : int64; unsplit : bool; tok : uint64;
+                           tile_rows : bool = false) : uint {
     let hs = uint(L.hs)
     let mir_base = uint(L.mir_base)   // the layer's base: each row's token block adds its region
     let nsplit = unsplit ? 1l : r.attn_nsplit
@@ -2413,6 +2488,26 @@ def private crd_token_attn(r : CudRdec; var s : void?; l : int64; L : CudLayer; 
     var abufs = fixed_array(crd_q_plane(r), kmir, vmir, r.attn, tok, r.attn_part, r.aq, r.as_)
     let g2 = da_slab_is_g2(L.kv_mul)
     let awgs = rowwgs * nrows
+    if (tile_rows && crd_attn_tile_ok(r, L, nrows)) {   // the rows of one session: the tile's pieces, then the combine
+        let groups = fa_dec_groups(L.kvd / L.hs, nrows, L.kv_mul)
+        let pieces = crd_tile_pieces(r.attn_far, int64(g_cud.sm_count), groups, L.window)
+        var pct = FaArgs(rows = uint(nrows), qd = uint(L.qd), kvd = uint(L.kvd), kv_mul = uint(L.kv_mul), kvbase = mir_base, scale = r.scale,
+            qstride = uint(qrow), qhs = uint(crd_q_head_stride(r, L)), window = uint(L.window), ring = uint(L.ring), vbase = mir_base,
+            nsplit = uint(pieces))
+        crd_tile_enc(s, L.hs, fixed_array(crd_q_plane(r), kmir, vmir, r.attn_part, tok), pct, groups * pieces)
+        let rowgroups = da_attn_comb_wgs(r.n_heads)
+        pca.nsplit = da_attn_comb_pieces(pieces)
+        pca.rowwg = uint(rowgroups)
+        pca.comb = 1u
+        if (r.has_sinks) {   // the tile's pieces carry no sink: the sink stamp's combine folds the head's logit in once
+            enc_da_attn_f16_sink_cls(s, fixed_array(abufs[0], abufs[1], abufs[2], abufs[3], abufs[4], abufs[5], abufs[6], abufs[7], r.sinks), pca, rowgroups * nrows)
+        } elif (g2) {
+            enc_da_attn_f16_g2_cls(s, abufs, pca, rowgroups * nrows)
+        } else {
+            enc_da_attn_f16_cls(s, abufs, pca, rowgroups * nrows)
+        }
+        return rqk
+    }
     if (r.has_sinks) {   // the sink stamps (gpt-oss): the head's sink logit in the softmax, one stamp a mirror codec
         var sbufs = fixed_array(abufs[0], abufs[1], abufs[2], abufs[3], abufs[4], abufs[5], abufs[6], abufs[7], r.sinks)
         if (r.kv_dt == KVDtype.f16) {
@@ -2606,7 +2701,8 @@ def private crd_rq_rows(var s : void?; consumer_fmt : int; src, outq, outs : uin
 //! one attention layer over `nrows` rows whose token blocks sit in `tok` (the trunk's rows, or the draft head's a position below): the
 //! projections, the rope and K/V store, the attention, wo and its residual step into the FFN norm, then the FFN tail; `kv_only`
 //! stops after the k and v heads' store - the head re-warm's pass, which attends nothing
-def private crd_attn_layer(r : CudRdec; var s : void?; l : int64; L : CudLayer; nrows : int64; unsplit : bool; tok : uint64; kv_only : bool = false) {
+def private crd_attn_layer(r : CudRdec; var s : void?; l : int64; L : CudLayer; nrows : int64; unsplit : bool; tok : uint64; kv_only : bool = false;
+                           tile_rows : bool = false) {
     let dim = r.dim
     let nr = uint(nrows)
     let qd = L.qd
@@ -2635,7 +2731,7 @@ def private crd_attn_layer(r : CudRdec; var s : void?; l : int64; L : CudLayer; 
     let vmir = r.v_slabs[L.mir_slab]
     crd_token_kv(r, s, l, L, kmir, vmir, kvrow, nrows, tok, kv_only)
     return if (kv_only)
-    let rqk = crd_token_attn(r, s, l, L, kmir, vmir, nrows, unsplit, tok)
+    let rqk = crd_token_attn(r, s, l, L, kmir, vmir, nrows, unsplit, tok, tile_rows)
     if (rqk == DA_RQ_NONE) {   // no fold (a head off the superblock, or tq4): the separate requant in the wo plane's class
         crd_rq_rows(s, L.fo, r.attn, r.aq, r.as_, qd * nrows)
     }
@@ -2772,7 +2868,7 @@ def private crd_chain(var r : CudRdec; seg, nrows : int64; logits_on, gathered, 
             crd_cap(r, s, l, r.x, r.cap_host, CRD_NB, 0l, nrows)
             continue
         }
-        crd_attn_layer(r, s, l, L, nrows, unsplit, r.tok)
+        crd_attn_layer(r, s, l, L, nrows, unsplit, r.tok, false, (verify && !unsplit) || r.attn_far != CrdFar.row)
         if (L.ple) {
             crd_ple_block(r, s, l, L, nrows)
         }
@@ -2816,15 +2912,68 @@ enum private CrdCmd {
     verify_plain   //! the same-slab verify with no head rows: a block drafter's round
 }
 
-//! a captured graph's key: the command, its segment, its row count, the region (a hybrid's verify bakes the region's slot into its
-//! rollback copies) and the mode (bit 0 the logits down, bit 1 the rows gathered off their ids, bit 2 the attention unsplit)
-def private crd_graph_key(cmd : CrdCmd; seg, nrows, region : int64; logits_on, gathered, unsplit : bool) : int {
-    panic("dasLLAMA cuda resident: a graph key field past its bits (segment {seg} of 256, region {region} of 64, rows {nrows} of 256)") if (seg >= 256l || region >= 64l || nrows >= 256l)
-    return (int(cmd) << 26) | (int(seg) << 18) | (int(region) << 12) | (int(nrows) << 4) | (logits_on ? 1 : 0) | (gathered ? 2 : 0) | (unsplit ? 4 : 0)
-}
-
 let private CRD_KEY_WIDE_FP4 = 1 << 29
 let private CRD_KEY_WIDE_TILE = 1 << 30
+let private CRD_KEY_FAR_SHIFT = 32l   //! the far row's tier: the one row's flat layers on the decode tile form, the tier's pieces its text
+
+//! the far row's attention in a command: the row form, or the decode tile form at a tier of pieces (`crd_tile_pieces`)
+enum private CrdFar {
+    row
+    half
+    full
+    deep
+}
+
+//! a captured graph's key: the command, its segment, its row count, the region (a hybrid's verify bakes the region's slot into its
+//! rollback copies) and the mode (bit 0 the logits down, bit 1 the rows gathered off their ids, bit 2 the attention unsplit), the
+//! far row's tier past the low word
+def private crd_graph_key(cmd : CrdCmd; seg, nrows, region : int64; logits_on, gathered, unsplit : bool; far : CrdFar) : int64 {
+    panic("dasLLAMA cuda resident: a graph key field past its bits (segment {seg} of 256, region {region} of 64, rows {nrows} of 256)") if (seg >= 256l || region >= 64l || nrows >= 256l)
+    return (int64((int(cmd) << 26) | (int(seg) << 18) | (int(region) << 12) | (int(nrows) << 4) | (logits_on ? 1 : 0) | (gathered ? 2 : 0) | (unsplit ? 4 : 0))
+        | (int64(far) << CRD_KEY_FAR_SHIFT))
+}
+
+let CUDA_ATTN_TILE_FAR_UNPINNED = -1l   //! `set_cuda_attn_tile_far_pin` with it: the environment's value
+let private CRD_FAR_KEYS = 2048l        //! the far count the driver picks: the row's keys from which the tile form leads on an RTX 5060 Ti (36 SMs)
+let private CRD_FAR_KEYS_WIDE = 128l    //! ... and on a device of `CRD_FAR_WIDE_SMS` SMs or more (an RTX PRO 6000 Blackwell, 188)
+let private CRD_FAR_WIDE_SMS = 64
+let private CRD_FAR_FULL_KEYS = 32l     //! the keys an SM (a K/V head's rows counted each) from which the far row's pieces fill every SM
+let private CRD_FAR_DEEP_KEYS = 384l    //! ... and from which a second piece an SM pays under a head of 256 or wider
+let private CRD_FAR_DEEP_KEYS_NARROW = 64l   //! ... and under a narrower head, whose blocks an SM runs two of from the first
+
+var private g_cuda_attn_tile_far_pin = CUDA_ATTN_TILE_FAR_UNPINNED   //! a test's pin over DASLLAMA_CUDA_ATTN_TILE_FAR
+
+//! pins the key count the one-row token step takes the decode tile form from (0 = never); `CUDA_ATTN_TILE_FAR_UNPINNED` puts the environment's value back
+def public set_cuda_attn_tile_far_pin(keys : int64) {
+    g_cuda_attn_tile_far_pin = keys
+}
+
+//! what `set_cuda_attn_tile_far_pin` last wrote
+def public cuda_attn_tile_far_pin() : int64 => g_cuda_attn_tile_far_pin
+
+//! a one-row token step over `cnt` keys or more than the far count: its flat layers attend on the decode tile form, at the tier
+//! of the keys an SM serves
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#decode-far-row")]
+def private crd_far_row(r : CudRdec; cmd : CrdCmd; nrows, cnt : int64) : CrdFar {
+    let knob = g_cuda_attn_tile_far_pin != CUDA_ATTN_TILE_FAR_UNPINNED ? g_cuda_attn_tile_far_pin : g_env_vulkan.cuda_attn_tile_far
+    let far_keys = knob >= 0l ? knob : (g_cud.sm_count >= CRD_FAR_WIDE_SMS ? CRD_FAR_KEYS_WIDE : CRD_FAR_KEYS)
+    return CrdFar.row if (cmd != CrdCmd.token || nrows != 1l || far_keys <= 0l || cnt < far_keys)
+    let l = crd_far_layer(r)
+    return CrdFar.row if (l < 0l)
+    let L & = unsafe(r.layers[l])
+    let sm_keys = cnt * (L.kvd / L.hs) / max(int64(g_cud.sm_count), 1l)
+    return CrdFar.deep if (sm_keys >= (L.hs >= 256l ? CRD_FAR_DEEP_KEYS : CRD_FAR_DEEP_KEYS_NARROW))
+    return sm_keys >= CRD_FAR_FULL_KEYS ? CrdFar.full : CrdFar.half
+}
+
+//! the model's first flat layer the decode tile's stamps serve for one row; -1 with none, where the far row's graph would be the
+//! row form's again
+def private crd_far_layer(r : CudRdec) : int64 {
+    for (l in range64(long_length(r.layers))) {
+        return l if (r.layers[l].window == 0l && crd_tile_stamps(r, r.layers[l], true, 1l))
+    }
+    return -1l
+}
 
 def private crd_run_cmd(var r : CudRdec; cmd : CrdCmd; seg, nrows : int64; logits_on, gathered, unsplit : bool) {
     g_crd_relay.serial = -1l   // a command records its own feeds: no feed stands across two commands
@@ -2836,10 +2985,10 @@ def private crd_run_cmd(var r : CudRdec; cmd : CrdCmd; seg, nrows : int64; logit
 }
 
 //! the command's segment as a graph, captured on its key's first replay
-def private crd_ensure_graph(var r : CudRdec; cmd : CrdCmd; seg, nrows : int64; logits_on, gathered, unsplit : bool) : int {
+def private crd_ensure_graph(var r : CudRdec; cmd : CrdCmd; seg, nrows : int64; logits_on, gathered, unsplit : bool) : int64 {
     let slab = (cmd == CrdCmd.verify || cmd == CrdCmd.verify_plain) && r.hybrid   //! a hybrid's verify bakes its region's slot and the ring image its conv reads
-    let key = (crd_graph_key(cmd, seg, nrows, slab ? r.region : 0l, logits_on, gathered, unsplit) | (slab ? r.dn_parity[r.region] << 3 : 0)
-        | (r.wide_fp4 ? CRD_KEY_WIDE_FP4 : 0) | (r.wide_tile ? CRD_KEY_WIDE_TILE : 0))   //! the routed sites' form is the command's text
+    let key = (crd_graph_key(cmd, seg, nrows, slab ? r.region : 0l, logits_on, gathered, unsplit, r.attn_far)
+        | int64((slab ? r.dn_parity[r.region] << 3 : 0) | (r.wide_fp4 ? CRD_KEY_WIDE_FP4 : 0) | (r.wide_tile ? CRD_KEY_WIDE_TILE : 0)))   // the routed sites' form is the command's text
     return key if (key_exists(r.graphs, key))
     let g = cuda_graph_capture(g_cud.stream) {
         crd_run_cmd(r, cmd, seg, nrows, logits_on, gathered, unsplit)
@@ -2886,6 +3035,10 @@ def private crd_launch_seg(var r : CudRdec; cmd : CrdCmd; seg, nrows : int64; lo
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
 def private crd_launch(var r : CudRdec; cmd : CrdCmd; nrows : int64; logits_on, gathered : bool; maxcnt : int64; wait : bool; host : block<(l : int64) : void>) {
     let unsplit = r.unsplit_on && maxcnt < RD_UNSPLIT_POS
+    r.attn_far = crd_far_row(r, cmd, nrows, maxcnt)
+    if (r.attn_far != CrdFar.row) {
+        r.far_steps++
+    }
     if (r.nseg == 0l) {
         crd_segments_setup(r)
     }
@@ -3174,6 +3327,19 @@ def cud_rdec_verify_rows : int64 {
 //! Whether the last served verify landed the rows' logits (the tier's `landed_logits` seat)
 def cud_rdec_verify_landed_logits : bool => g_crd != null && g_crd.verify_landed_logits
 
+var private g_crd_dev_ids = 0ul   //! the next verify's draft rows' ids on the device (rows 1 ..), 0 = the host's
+var private g_crd_dev_ids_n = 0l
+
+//! whether the N-row verify takes its draft rows' ids off the device: it gathers the rows itself
+def cud_rdec_verify_takes_dev_ids : bool => g_crd != null && g_crd.ready && g_crd.emb_blk >= 0l && cud_rdec_verify_rows() >= 2l
+
+//! the next verify gathers rows 1 .. `n` off the `n` id words at device `ids`, which a launch queued ahead of it writes: the
+//! stream orders the copy into the in block behind that launch and ahead of the command's own read of it
+def cud_rdec_verify_dev_ids(ids : uint64; n : int64) {
+    g_crd_dev_ids = ids
+    g_crd_dev_ids_n = n
+}
+
 //! the same-slab verify of `n` rows at `pos` in the selected region (`RdecVerifyFn`): the rows' token blocks at their positions, the
 //! head rows' a position below, both rope sets, the rows (or their ids) and the pre-draft carry into the in block, the verify command,
 //! then every row's pick, hidden and - unless `pick_only` - logits off the out block; a hybrid's region moves on `n` rows
@@ -3216,6 +3382,12 @@ def cud_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; ids : array<
         crd_stage_head_rows(r, hcos, pos - 1l, n)
     }
     r.verify_landed_logits = !pick_only
+    if (g_crd_dev_ids != 0ul) {
+        if (gathered) {
+            cuda_memcpy_dtod(r.in_dev + uint64((int64(CRD_IN_ID_WORD) + 1l) * 4l), g_crd_dev_ids, uint64(min(n - 1l, g_crd_dev_ids_n) * 4l), g_cud.stream)
+        }
+        g_crd_dev_ids = 0ul
+    }
     let lt0 = ref_time_ticks()   // clock: control - the command's wall for the stats seat
     crd_launch(r, plain ? CrdCmd.verify_plain : CrdCmd.verify, n, !pick_only, gathered, pos + n, true) $(l : int64) {
         unsafe {
@@ -3346,12 +3518,12 @@ def cud_rdec_commit_kick {
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]   //! once per checkpoint stop, reached through the tier's registered seat
 def cud_rdec_dn_snap_save(slot : int64) : bool {
     crd_state_settle()
-    return false if (g_crd == null || !g_crd.ready || !g_crd.hybrid || slot < 0l || slot >= int64(RDEC_DN_SNAPS))
+    return false if (g_crd == null || !g_crd.ready || !g_crd.hybrid || slot < 0l || slot >= int64(rdec_dn_snaps()))
     var r & = unsafe(*g_crd)
     crd_snap_alloc(r)
     return false if (r.snap_dev == 0ul)
     let reg = r.region
-    let row = reg * int64(RDEC_DN_SNAPS) + slot
+    let row = reg * int64(rdec_dn_snaps()) + slot
     let dst = r.snap_dev + uint64(row * r.snap_row_bytes)
     for (L in r.layers) {
         continue if (!L.recurrent)
@@ -3367,10 +3539,10 @@ def cud_rdec_dn_snap_save(slot : int64) : bool {
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]   //! once per adoption, reached through the tier's registered seat
 def cud_rdec_dn_snap_load(slot : int64) : bool {
     crd_state_settle()
-    return false if (g_crd == null || !g_crd.ready || !g_crd.hybrid || g_crd.snap_dev == 0ul || slot < 0l || slot >= int64(RDEC_DN_SNAPS))
+    return false if (g_crd == null || !g_crd.ready || !g_crd.hybrid || g_crd.snap_dev == 0ul || slot < 0l || slot >= int64(rdec_dn_snaps()))
     var r & = unsafe(*g_crd)
     let reg = r.region
-    let row = reg * int64(RDEC_DN_SNAPS) + slot
+    let row = reg * int64(rdec_dn_snaps()) + slot
     let src = r.snap_dev + uint64(row * r.snap_row_bytes)
     for (L in r.layers) {
         continue if (!L.recurrent)
@@ -3390,10 +3562,10 @@ def cud_rdec_dn_snap_load(slot : int64) : bool {
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]
 def cud_rdec_dn_peek(slot : int64; dsts : array<RdecDnDst>) : bool {
     crd_state_settle()
-    return false if (g_crd == null || !g_crd.ready || !g_crd.hybrid || empty(dsts) || slot >= int64(RDEC_DN_SNAPS) || (slot >= 0l && g_crd.snap_dev == 0ul))
+    return false if (g_crd == null || !g_crd.ready || !g_crd.hybrid || empty(dsts) || slot >= int64(rdec_dn_snaps()) || (slot >= 0l && g_crd.snap_dev == 0ul))
     let r & = unsafe(*g_crd)
     let reg = r.region
-    let row = reg * int64(RDEC_DN_SNAPS) + slot
+    let row = reg * int64(rdec_dn_snaps()) + slot
     for (d in dsts) {
         return false if (d.l < 0l || d.l >= long_length(r.layers) || !r.layers[d.l].recurrent || (slot == -1l && !r.layers[d.l].dn[reg].own.valid))
     }
@@ -3520,8 +3692,8 @@ def private crd_chain_ready(var r : CudRdec; pos_next, cnt : int64; logits_on, g
     return false if (r.nseg != 1l)
     let now_unsplit = r.unsplit_on && cnt < RD_UNSPLIT_POS
     let next_unsplit = r.unsplit_on && pos_next + 1l < RD_UNSPLIT_POS
-    return (key_exists(r.graphs, crd_graph_key(CrdCmd.token, 0l, 1l, 0l, logits_on, true, now_unsplit))
-        && key_exists(r.graphs, crd_graph_key(CrdCmd.token, 0l, 1l, 0l, logits_on, true, next_unsplit)))
+    return (key_exists(r.graphs, crd_graph_key(CrdCmd.token, 0l, 1l, 0l, logits_on, true, now_unsplit, crd_far_row(r, CrdCmd.token, 1l, cnt)))
+        && key_exists(r.graphs, crd_graph_key(CrdCmd.token, 0l, 1l, 0l, logits_on, true, next_unsplit, crd_far_row(r, CrdCmd.token, 1l, pos_next + 1l))))
 }
 
 //! the region's recurrent state slots in layer order with each one's offset in the chain's snapshot
@@ -3567,7 +3739,8 @@ def private crd_chain_submit(var r : CudRdec; pos_next : int64; logits_on : bool
     verify(cuda_event_record(r.ch_landed[slot], s), "cud decode: the chain's landing event did not record")
     r.ch.landed = slot + 1
     let unsplit = r.unsplit_on && pos_next + 1l < RD_UNSPLIT_POS
-    let key = crd_graph_key(CrdCmd.token, 0l, 1l, 0l, logits_on, true, unsplit)
+    let far = crd_far_row(r, CrdCmd.token, 1l, pos_next + 1l)
+    let key = crd_graph_key(CrdCmd.token, 0l, 1l, 0l, logits_on, true, unsplit, far)
     if (!cuda_graph_launch(r.graphs[key], s)) {
         panic("dasLLAMA cuda resident: the chained token command did not launch: {cuda_last_error()}")
     }
@@ -3575,6 +3748,9 @@ def private crd_chain_submit(var r : CudRdec; pos_next : int64; logits_on : bool
     r.token_steps++
     if (unsplit) {
         r.unsplit_steps++
+    }
+    if (far != CrdFar.row) {
+        r.far_steps++
     }
     r.sel_landed = 0l
     r.ch.pend = true
@@ -3901,7 +4077,7 @@ def private crd_hot_stage(r : CudRdec; H : CudHot; nreg, wlen : int64; slots : i
 //! the hit chain launched unwaited on the device stream, so it runs while the host sums the misses; the next segment orders behind it
 def private crd_hot_go(var r : CudRdec; l, nreg, nrows : int64) {
     let H & = unsafe(r.hot[l])
-    let key = (int(CrdCmd.hot) << 26) | (int(l) << 12) | (int(nreg) << 4) | int(nrows)
+    let key = int64((int(CrdCmd.hot) << 26) | (int(l) << 12) | (int(nreg) << 4) | int(nrows))
     if (!key_exists(r.graphs, key)) {
         // the chain's classes load ahead of the capture: a module load inside a capture invalidates it, and a K-quant stack's Q8_K feed may have no launch before the pool's first chain
         verify(ensure_cls_q8k_rq() && ensure_cls_dn_rq() && ensure_q8k_actrq_cls() && ensure_q8_actrq_cls()
@@ -4811,7 +4987,7 @@ def private crd_window_ffn(r : CudRdec; var s : void?; var L : CudLayer; wlen : 
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
-def private crd_window_moe(r : CudRdec; var s : void?; l : int64; var L : CudLayer; w0, wlen : int64; segs, wsegs : array<RdecPfSeg>; experts : RdecHostExpertsRowsFn) {
+def private crd_window_moe(r : CudRdec; var s : void?; l : int64; var L : CudLayer; wlen : int64; segs, wsegs : array<RdecPfSeg>; experts : RdecHostExpertsRowsFn) {
     let dim = r.dim
     let nfe = r.nfe
     let k = r.k
@@ -4820,7 +4996,7 @@ def private crd_window_moe(r : CudRdec; var s : void?; l : int64; var L : CudLay
     var pc8 = crd_wo_ar_args(r, L)
     enc_cls_ar(s, fixed_array(r.pf_x, r.pf_xb2, r.norms, r.pf_xb), pc8, wlen)
     if (L.experts_host) {
-        crd_window_host_cut(r, s, l, L, w0, wlen, segs, wsegs, experts)
+        crd_window_host_cut(r, s, l, L, wlen, segs, wsegs, experts)
         return
     }
     if (L.b1 >= 0l) {
@@ -4889,7 +5065,7 @@ def private crd_window_moe(r : CudRdec; var s : void?; l : int64; var L : CudLay
         crd_x_feeds_from(r, s, r.pf_xb, wlen, crd_head_feeds(r, r.layers[l + 1l]))
         return
     }
-    crd_window_cls_feed(r, s, r.pf_xb, w0, segs, wsegs)
+    crd_window_cls_feed(r, s, r.pf_xb, segs, wsegs)
 }
 
 //! the window's router GEMM over the rows into pf_mlog: the stored normed rows, or (the gemma-4 form) x under a weightless rms and the
@@ -4907,7 +5083,7 @@ def private crd_window_router(r : CudRdec; var s : void?; L : CudLayer; wlen : i
 //! landed and the stream waited, the host's routed sums over every row (`experts`), the sums up, then the combine over them as the one
 //! routed row of weight one a position beside the shared expert's row at its gate, and the next layer's feed
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
-def private crd_window_host_cut(r : CudRdec; var s : void?; l : int64; var L : CudLayer; w0, wlen : int64; segs, wsegs : array<RdecPfSeg>; experts : RdecHostExpertsRowsFn) {
+def private crd_window_host_cut(r : CudRdec; var s : void?; l : int64; var L : CudLayer; wlen : int64; segs, wsegs : array<RdecPfSeg>; experts : RdecHostExpertsRowsFn) {
     let dim = r.dim
     if (L.b1 >= 0l) {
         crd_x_feeds_from(r, s, r.pf_xb, wlen, crd_gu_feeds(r, L))
@@ -4939,33 +5115,105 @@ def private crd_window_host_cut(r : CudRdec; var s : void?; l : int64; var L : C
         crd_x_feeds_from(r, s, r.pf_xb, wlen, crd_head_feeds(r, r.layers[l + 1l]))
         return
     }
-    crd_window_cls_feed(r, s, r.pf_xb, w0, segs, wsegs)
+    crd_window_cls_feed(r, s, r.pf_xb, segs, wsegs)
 }
 
 //! the classifier's feed off each ending segment's last normed row of `hrows`
-def private crd_window_cls_feed(r : CudRdec; var s : void?; hrows : uint64; w0 : int64; segs, wsegs : array<RdecPfSeg>) {
+def private crd_window_cls_feed(r : CudRdec; var s : void?; hrows : uint64; segs, wsegs : array<RdecPfSeg>) {
     let dim = r.dim
     for (ws in wsegs) {
         let lr = ws.row0 + ws.npos - 1l
-        continue if (rdec_seg_ending_at(segs, w0, lr) < 0l)
+        continue if (rdec_part_end_slot(segs, ws) < 0l)
         crd_rq_rows(s, r.cls_fmt, hrows + uint64(lr * dim * 4l), r.pf_xq + uint64(lr * dim), r.pf_xs + uint64(lr * (dim / Q8_BLOCK_ELEMS) * 4l), dim)
     }
 }
 
+//! layer `l` reads a donor layer's K/V rows and keeps no row state, and nothing captures its rows: a row nobody reads may skip it
+def private crd_layer_in_tail(r : CudRdec; l : int64) : bool =>
+    r.layers[l].kv_shared && !r.layers[l].recurrent && !r.layers[l].moe && !rdec_caps_layer(r.cap_slots, l)
+
+//! the layer the window's shared-K/V tail starts at, `n_layers` where every row walks to the end: an embedding's rows (`hidden`)
+//! and the head's prompt warm (`warm`) read every row's last layer
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-tail-cut")]
+def private crd_window_tail_from(r : CudRdec; hidden, warm : bool) : int64 {
+    return r.n_layers if (hidden || warm || !rdec_prefill_tail_cut())
+    var cut = r.n_layers
+    while (cut > 0l && crd_layer_in_tail(r, cut - 1l)) {
+        cut--
+    }
+    return cut > 0l ? cut : r.n_layers
+}
+
+//! the rows that walk the tail from layer `cut`: the last row of each part that ends its segment, gathered to the front of the
+//! window's planes - the residual, the rope rows, the per-layer-embedding side rows - as one-row parts at their own positions in
+//! `tsegs`, and layer `cut`'s head feeds normed over them at the tail's row count; the rows kept
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-tail-cut")]
+def private crd_window_tail_rows(var r : CudRdec; cut, wlen : int64; segs, wsegs : array<RdecPfSeg>; var tsegs : array<RdecPfSeg>) : int64 {
+    var s = g_cud.stream
+    let dim = r.dim
+    tsegs |> clear()
+    for (ws in wsegs) {
+        continue if (rdec_part_end_slot(segs, ws) < 0l)
+        let lr = ws.row0 + ws.npos - 1l
+        let k = long_length(tsegs)
+        if (lr != k) {
+            cuda_memcpy_dtod(r.pf_x + uint64(k * dim * 4l), r.pf_x + uint64(lr * dim * 4l), uint64(dim * 4l), s)
+            cuda_memcpy_dtod(r.pf_cos + uint64(k * r.cos_elems * 4l), r.pf_cos + uint64(lr * r.cos_elems * 4l), uint64(r.cos_elems * 4l), s)
+            if (r.ple > 0l) {
+                cuda_memcpy_dtod(r.pf_ple + uint64(k * r.ple_all * 4l), r.pf_ple + uint64(lr * r.ple_all * 4l), uint64(r.ple_all * 4l), s)
+            }
+        }
+        tsegs |> push(RdecPfSeg(row0 = k, npos = 1l, pos0 = ws.pos0 + ws.npos - 1l, region = ws.region, seg = ws.seg, koff = ws.koff))
+    }
+    let n = long_length(tsegs)
+    r.tail_cut_rows += wlen - n
+    return 0l if (n == 0l)
+    r.pf_wlen = n
+    let pc = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = uint(norm_off(cut, RDEC_NORM_ATT)), eps = r.eps, ascale = 1.0)
+    crd_x_norm(r, s, r.pf_x, pc, n, crd_head_feeds(r, r.layers[cut]))
+    return n
+}
+
+var private @scratch g_crd_tsegs : array<RdecPfSeg>   //! the one-row parts that walk the window's shared-K/V tail
+
 //! a segment ending in the window (`wsegs` its parts, `segs` the call's) takes the classifier at its last row; under `hidden` every
-//! row's final residual stays in pf_x for the host and no classifier runs
+//! row's final residual stays in pf_x for the host and no classifier runs; past a shared-K/V tail's first layer only the ending rows walk on
 def private crd_window(var r : CudRdec; w0, wlen : int64; segs, wsegs : array<RdecPfSeg>; last, hidden : bool; experts : RdecHostExpertsRowsFn) {
     var s = g_cud.stream
     let dim = r.dim
-    let nlfin = uint(rdec_norms_final_base(r.n_layers, dim))
     let warm = !hidden && crd_window_warm_on(r, wsegs)
     if (warm) {   // the window's embed rows before layer 0 overwrites the residual: the head reads them unscaled
         cuda_memcpy_dtod(r.pf_hemb, r.pf_x, uint64(wlen * dim * 4l), s)
     }
-    var hrows = r.pf_xb   // the window's post-norm rows, the head warm's carry halves: the combine's plane on a routed last layer
     let pc_pro = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = r.eps, ascale = 1.0)
     crd_x_norm(r, s, r.pf_x, pc_pro, wlen, crd_head_feeds(r, r.layers[0]))
-    for (l in range64(r.n_layers)) {
+    let cut = crd_window_tail_from(r, hidden, warm)
+    var hrows = crd_window_layers(r, 0l, cut, w0, wlen, segs, wsegs, hidden, warm, experts)
+    return if (hidden)
+    var ends = 0l
+    if (cut < r.n_layers) {
+        let n = crd_window_tail_rows(r, cut, wlen, segs, wsegs, g_crd_tsegs)
+        if (n > 0l) {
+            hrows = crd_window_layers(r, cut, r.n_layers, w0, n, segs, g_crd_tsegs, false, false, experts)
+            ends = crd_window_cls(r, segs, g_crd_tsegs, hrows)
+        }
+    } else {
+        ends = crd_window_cls(r, segs, wsegs, hrows)
+    }
+    verify(!last || ends > 0l, "cud prefill: the last window ends no segment")
+    if (warm) {
+        crd_window_head_warm(r, w0, wlen, wsegs[0], hrows)
+    }
+}
+
+//! layers `lo` up to `hi` of the window chain over `wlen` rows, `wsegs` their parts; the window's post-norm rows' plane - the head
+//! warm's carry halves, the combine's plane on a routed last layer
+def private crd_window_layers(var r : CudRdec; lo, hi, w0, wlen : int64; segs, wsegs : array<RdecPfSeg>; hidden, warm : bool; experts : RdecHostExpertsRowsFn) : uint64 {
+    var s = g_cud.stream
+    let dim = r.dim
+    let nlfin = uint(rdec_norms_final_base(r.n_layers, dim))
+    var hrows = r.pf_xb
+    for (l in range64(lo, hi)) {
         var L & = unsafe(r.layers[l])
         let qd = L.qd
         if (L.recurrent) {
@@ -4979,7 +5227,7 @@ def private crd_window(var r : CudRdec; w0, wlen : int64; segs, wsegs : array<Rd
         crd_site(r, L.sch[SCH_O], L.fo, L.bo, r.pf_af, r.pf_aq, r.pf_as, r.pf_asum, r.pf_a4q, r.pf_a4s, r.pf_ars, r.pf_xb2, qd, dim, wlen)
         }
         if (L.moe) {
-            crd_window_moe(r, s, l, L, w0, wlen, segs, wsegs, experts)
+            crd_window_moe(r, s, l, L, wlen, segs, wsegs, experts)
             crd_cap_win(r, s, l, w0, wlen, hidden)   // the combine left the layer's rows in pf_x
             continue
         }
@@ -5005,12 +5253,12 @@ def private crd_window(var r : CudRdec; w0, wlen : int64; segs, wsegs : array<Rd
         } elif (warm || r.carry || rdec_caps_layer(r.cap_slots, l)) {   // the final norm over every row as floats (the head reads them all, the carry lands the ending rows', a captured last layer needs every row's residual), the ending rows' classifier feed off the normed rows
             enc_cls_ar(s, fixed_array(r.pf_x, r.pf_ffnout, r.norms, r.pf_xb2), pc14, wlen)
             hrows = r.pf_xb2
-            crd_window_cls_feed(r, s, hrows, w0, segs, wsegs)
+            crd_window_cls_feed(r, s, hrows, segs, wsegs)
             crd_cap_win(r, s, l, w0, wlen, hidden)
         } else {
             for (ws in wsegs) {
                 let lr = ws.row0 + ws.npos - 1l
-                continue if (rdec_seg_ending_at(segs, w0, lr) < 0l)
+                continue if (rdec_part_end_slot(segs, ws) < 0l)
                 var cbufs = fixed_array(r.pf_x + uint64(lr * dim * 4l), r.pf_ffnout + uint64(lr * dim * 4l), r.norms, r.pf_xq + uint64(lr * dim), r.pf_xs + uint64(lr * (dim / Q8_BLOCK_ELEMS) * 4l))
                 if (kq_sb(r.cls_fmt)) {
                     enc_cls_ar_rqk(s, cbufs, pc14, 1l)
@@ -5020,12 +5268,7 @@ def private crd_window(var r : CudRdec; w0, wlen : int64; segs, wsegs : array<Rd
             }
         }
     }
-    return if (hidden)
-    let ends = crd_window_cls(r, w0, segs, wsegs, hrows)
-    verify(!last || ends > 0l, "cud prefill: the last window ends no segment")
-    if (warm) {
-        crd_window_head_warm(r, w0, wlen, wsegs[0], hrows)
-    }
+    return hrows
 }
 
 //! the head's prompt warm runs over this window: asked by the engine, the head on the device, the planes made, and the window one
@@ -5188,7 +5431,7 @@ def private crd_window_caps(r : CudRdec; w0 : int64; segs, wsegs : array<RdecPfS
         for (cap in g_crd_caps) {
             continue if (cap.seg != ws.seg || cap.row <= part_row0_in_seg || cap.row >= part_row0_in_seg + ws.npos)
             g_crd_cap_words |> push(uint(cap.row - part_row0_in_seg))
-            g_crd_cap_words |> push(uint(((ws.region * int64(RDEC_DN_SNAPS) + cap.slot) * r.snap_row_bytes) / 4l))
+            g_crd_cap_words |> push(uint(((ws.region * int64(rdec_dn_snaps()) + cap.slot) * r.snap_row_bytes) / 4l))
             n++
         }
         g_crd_wcaps |> push((n = n, rec = rec))
@@ -5294,13 +5537,13 @@ def private crd_window_dn(r : CudRdec; var L : CudLayer; wlen : int64; wsegs : a
 
 //! the classifier over each ending segment's last-row quants and its epilogue, the logits down into the segment's slot of the
 //! out block, the carry's row beside them off `hrows` (the window's post-norm floats) under the carry; the segments ended
-def private crd_window_cls(r : CudRdec; w0 : int64; segs, wsegs : array<RdecPfSeg>; hrows : uint64) : int64 {
+def private crd_window_cls(r : CudRdec; segs, wsegs : array<RdecPfSeg>; hrows : uint64) : int64 {
     var s = g_cud.stream
     let dim = r.dim
     var ends = 0l
     for (ws in wsegs) {
         let lr = ws.row0 + ws.npos - 1l
-        let slot = rdec_seg_ending_at(segs, w0, lr)
+        let slot = rdec_part_end_slot(segs, ws)
         continue if (slot < 0l)
         ends++
         if (r.carry) {   // the segment's carry: its last row's post-norm floats at its slot of the out block
@@ -5398,7 +5641,7 @@ def private crd_prefill_windows(var r : CudRdec; cos_batch : array<float>; segs 
     if (r.hybrid) {
         crd_dn_end(r, segs)
         for (cap in g_crd_caps) {   // a captured row's ring parity is image 0: the capture tail wrote it there
-            r.snap_par[segs[cap.seg].region * int64(RDEC_DN_SNAPS) + cap.slot] = 0
+            r.snap_par[segs[cap.seg].region * int64(rdec_dn_snaps()) + cap.slot] = 0
         }
         g_crd_caps |> clear()
     }
@@ -5491,6 +5734,9 @@ def cud_rdec_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_ids
 //! the windows that held several sessions' chunks as segments in this process (a cell's witness)
 def cud_rdec_prefill_segment_windows : int64 => g_crd != null ? g_crd.seg_windows : 0l
 
+//! the window rows that stopped ahead of a shared-K/V tail in this process (a cell's witness)
+def cud_rdec_prefill_tail_cut_rows : int64 => g_crd != null ? g_crd.tail_cut_rows : 0l
+
 //! the next prefill call's checkpoint captures (`RdecPrefillCapsFn`): a capture's state and conv history land in its checkpoint row
 //! from inside the window (the scan's capture arm, the capture tail)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
@@ -5581,6 +5827,9 @@ def cud_rdec_attn_nsplit : int64 => g_crd != null ? g_crd.attn_nsplit : 0l
 
 //! the token steps the attention's unsplit form served so far (a cell's witness)
 def cud_rdec_unsplit_tokens : int64 => g_crd != null ? g_crd.unsplit_steps : 0l
+
+//! the one-row token steps whose flat layers took the decode tile form so far (a cell's witness)
+def cud_rdec_far_tokens : int64 => g_crd != null ? g_crd.far_steps : 0l
 
 //! the driver's counters; `unsplit_form` says the device splits the keys at all, so the unsplit form is a form of its own
 def cud_rdec_stats : tuple<tokens : int64; graph : bool; windows : int64; unsplit : int64; unsplit_form : bool> =>

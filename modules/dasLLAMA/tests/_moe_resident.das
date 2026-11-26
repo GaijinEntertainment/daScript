@@ -57,11 +57,12 @@ struct MoeFixture {
 }
 
 //! the chunked deltanet scan serves the window on this home: the knob on, and on the Vulkan home the KHR tiles at subgroup 32
+//! under a served set that leaves the scan on the chunked stamp
 def private dn_chunk_served() : bool {
     return false if (g_env_vulkan.dn_chunk == 0l)
     return true if (gpu_want_cuda())
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        return khr_kq_tile_on()
+        return vk_dn_chunk_wanted()
     } else {
         return false
     }
@@ -89,6 +90,14 @@ def private fp4_chain_served() : bool {
 //! two-window step 4 sits on a router near-tie that any change of the device's summation order flips (0.04 under one order,
 //! 0.155-0.16 under two others); the one-step-off control reads 0.42-0.95, so the bar discriminates it by 2x and more
 let MOE_LOGIT_BAR_REL = 0.20
+//! ... on a device whose compiler rounds a shader at a time (`home_rounds_alike`): on the Radeon 8060S the Qwen3-30B
+//! seven-block cut's 40-token prefill row reads past the bar above under every alternate set, its argmax across a
+//! near-tie; the one-step-off control reads well past this bar
+let MOE_LOGIT_BAR_REL_APART = 0.25
+
+//! the routed bar a carrier's device feeds hold against the CPU chain on the armed home - read while the device is up: a
+//! compare made after the load is down sees no device
+def moe_carrier_bar_rel() : float => home_rounds_alike() ? MOE_LOGIT_BAR_REL : MOE_LOGIT_BAR_REL_APART
 
 //! the rarest experts the meet hands the host before the device
 //! claims: the host's rows on every carrier
@@ -310,6 +319,14 @@ struct private MoeCensusAt {
 //! twin under its own name
 let private DN_CHUNK_KEY = "dn_scan_chunk_cls_spv"
 
+//! the bucket schedule's dispatches under `key` and under its slot-row-order twin, the stamp a layer with int8 expert
+//! tiles takes (`moe_sched_enc`'s `ordered`); the plain count alone on a home with no such twin
+def private sched_census(key : string) : int64 {
+    let plain = census(key)
+    let ordered = census(replace(key, "_cls_spv", "_ord_cls_spv"))
+    return (plain == NO_CENSUS || ordered == NO_CENSUS) ? plain : plain + ordered
+}
+
 def private moe_census_at(tr : Model; host_layers : int64) : MoeCensusAt {
     let deep = tr.config.n_expert > 256l   //! the deep twins serve past 256 experts
     let ecol = expert_column()
@@ -318,7 +335,7 @@ def private moe_census_at(tr : Model; host_layers : int64) : MoeCensusAt {
         topk_key = deep ? "topk_n2_cls_spv" : "topk_n_cls_spv",
         col = ecol.col, per_plane = ecol.per_plane, host_layers = host_layers,
         device_routed_layers = tr.config.n_layers - host_layers)
-    at.sched = census(at.sched_key)
+    at.sched = sched_census(at.sched_key)
     at.rows = census(at.rows_key)
     at.topk = census(at.topk_key)
     at.pieces = column_census(ecol.col)
@@ -348,8 +365,8 @@ def private moe_census_rows(var h : Held; at : MoeCensusAt; fx : MoeFixture; n, 
             "rows")
     }
     return if (at.sched == NO_CENSUS)
-    h |> held_equal(census(at.sched_key) - at.sched, at.device_routed_layers * windows,
-        "the device bucket schedule ({at.sched_key}) ran once per device-routed layer per " +
+    h |> held_equal(sched_census(at.sched_key) - at.sched, at.device_routed_layers * windows,
+        "the device bucket schedule ({at.sched_key} or its slot-row-order twin) ran once per device-routed layer per " +
         "window ({at.device_routed_layers} layers, {windows} windows)")
     h |> held_equal(census(at.rows_key) - at.rows, at.device_routed_layers * windows,
         "the window's per-row select ({at.rows_key}) ran once per device-routed layer per " +

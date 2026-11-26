@@ -70,8 +70,9 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     // the residual-stream kernels stage a whole row in ar_row, and the per-head ones a whole head
     // in their row slabs — over either slab they would write past the workgroup array with no diagnostic;
     // the mirror slack covers a flash fragment at a KV row up to RDEC_AR_MAX_DIM wide
-    if (dim > RDEC_AR_MAX_DIM || head_size > 512l || kv_dim > RDEC_AR_MAX_DIM) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: dim {dim} or kv_dim {kv_dim} > {RDEC_AR_MAX_DIM}, or head_size {head_size} > 512, exceeds the workgroup row slabs and the mirror slack\n")
+    let slab_dim = g_gpu.dry && !g_gpu.holds_device ? RDEC_AR_MAX_DIM : row_slab_dim(g_gpu.max_wg_bytes)   // the offline bake's tier carries no cap
+    if (dim > slab_dim || head_size > 512l || kv_dim > slab_dim) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: dim {dim} or kv_dim {kv_dim} > {slab_dim}, or head_size {head_size} > 512, exceeds the workgroup row slabs and the mirror slack\n")
         return false
     }
     let hybrid = dn.cd > 0l
@@ -156,8 +157,8 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.kv_dev = make_device_buf((qd + 2l * kv_dim) * 4l * nb)
     r.q_dev = q_gated ? make_device_buf(2l * qd * 4l * nb) : r.kv_dev   //! an ungated q row is the k/v row's front (its first qd elements): one q+k+v GEMV dispatch lands all three
     r.attn_dev = make_device_buf(qd * 4l * nb)
-    r.attn_nsplit = da_nsplit(da_attn_row_wgs(n_heads, n_heads / (kv_dim / head_size), 1l), int64(g_gpu.sm_count))
-    r.attn_cnt_off = n_heads * max(r.attn_nsplit, 1l) * (head_size + 2l) * nb   //! the pieces: no dispatch splits past the one-row form's count
+    r.attn_nsplit = da_nsplit(da_attn_row_wgs(n_heads, n_heads / (kv_dim / head_size), 1l), int64(g_gpu.attn_wave))
+    r.attn_cnt_off = n_heads * max(r.attn_nsplit, RD_TILE_FAR_PIECES) * (head_size + 2l) * nb   // the pieces: no dispatch splits past the one-row form's count or the far row's
     r.attn_part_dev = make_device_buf((r.attn_cnt_off + n_heads * nb) * 4l)   //! a counter a (row, kv head, slab) group: a head a group at most, whatever a layer's GQA group
     upload_zeros(r.attn_part_dev, r.attn_cnt_off * 4l, n_heads * nb * 4l)   //! the arrival counters start at rest; the last piece of each group rearms its own
     r.ar_cnt_dev = make_device_buf(16l)
@@ -564,6 +565,12 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
             fixed_array(g_rd.q_dev, kmir, vmir, g_rd.attn_dev, tok, g_rd.attn_part_dev, g_rd.aq_dev, g_rd.as_dev, g_rd.sinks_dev),
             fixed_array(qplane, mirbytes, mirbytes, qd * 4l * nb, TOK_META_BYTES * nb, partbytes, qd * nb, (qd / 32l) * 4l * nb, g_rd.sinks_bytes),
             fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT, VHZ_AQ, VHZ_AQ, 0u))
+        L.attn_tile = rd_attn_tile_ok(L)
+        L.attn_tile_far = rd_attn_tile_far_ok(L)
+        if (L.attn_tile || L.attn_tile_far) {
+            L.s_attn_tile = set_fa_khr_dec_cls(fixed_array(g_rd.q_dev, kmir, vmir, g_rd.attn_part_dev, tok),
+                fixed_array(qplane, mirbytes, mirbytes, partbytes, TOK_META_BYTES * nb), fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u))
+        }
         // quantize attn -> aq/as
         L.s_quant_at = rd_rq_set(g_rd.attn_dev, VHZ_ATT, g_rd.aq_dev, g_rd.as_dev, VHZ_AQ, qd)
         // wo GEMV -> xb2
@@ -770,7 +777,7 @@ def private rd_moe_sets(var L : RLayer) {
     //! gemma-4's MXFP4 stacks) carries both, under its own set layout
     let gu_b32 = !kq_sb(L.fe1)
     L.egu = (L.fe1 == L.fe3 && gemv_shell_fmt(L.fe1, GEMV_SHELL_GU) && !kq_sb(L.fe2) && nfe % Q8_BLOCK_ELEMS == 0l && pe1.wq == pe3.wq
-        && (gu_b32 || !g_rd.exps_bias && !g_rd.act_oai) && vk_fuse_on() && gemv_shell_ensure(L.fe1, GEMV_SHELL_GU))
+        && (gu_b32 || !g_rd.exps_bias && !g_rd.act_oai) && vk_fuse_on() && !vk_egu_split() && gemv_shell_ensure(L.fe1, GEMV_SHELL_GU))
     if (L.egu && gu_b32) {
         L.s_egu = set_mx4_gemv_gu_cls(fixed_array(pe1.wq, pe1.ws, g_rd.moe_meta1_dev, xqb, xsb, g_rd.egate_dev, g_rd.moe_meta3_dev, g_rd.moe_gb_dev, g_rd.moe_ub_dev, g_rd.moe_eidx_dev, g_gpu.hq_dev, g_gpu.hs_dev),
             fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / Q8_BLOCK_ELEMS) * 4l, k * nfe * 4l, META_BYTES, g_rd.moe_gub_bytes, g_rd.moe_gub_bytes, MAX_ROUTED_SLOTS * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
@@ -1241,6 +1248,7 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<
         rd_invalidate_token()   // the recorded chain references the replaced cls/prologue sets
         g_rd.ready = true
     }
+    rd_attn_knobs_say()
 }
 
 //! a q8 mixer plane's GEMV set over the arena block `blk`: the feed pair `xq`/`xs` of `n` elements into `y` of `d` rows
@@ -2167,7 +2175,7 @@ def private rd_pieces_for_span(span : int64) : int64 {
 [arch(at="../ARCHITECTURE_GPU_SHARED_ATTN.md#vk-decode-attn-split")]
 def private rd_layer_pieces(L : RLayer; nsplit, rows : int64) : int64 {
     let span = L.window == 0l ? nsplit : min(nsplit, rd_pieces_for_span(L.window))
-    let wave = max(1l, int64(g_gpu.sm_count) / (da_attn_row_wgs(g_rd.n_heads, L.kv_mul, 1l) * max(rows, 1l)))   //! the command's own rows, never the planes' height
+    let wave = max(1l, int64(g_gpu.attn_wave) / (da_attn_row_wgs(g_rd.n_heads, L.kv_mul, 1l) * max(rows, 1l)))   // the command's own rows, never the planes' height
     return min(span, wave)
 }
 
@@ -2397,6 +2405,15 @@ def private rd_ensure_fused_sets {
     rd_announce_fuse_bisect()
 }
 
+//! PROBE SEAM: the routed layers whose one-row step takes the fused gate-up leaf
+def rd_egu_layers_ : int64 {
+    var n = 0l
+    for (L in g_rd.layers) {
+        n += L.egu ? 1l : 0l
+    }
+    return n
+}
+
 //! the fused sites' announce: every site fused, or the bits DASLLAMA_VK_FUSE_BISECT keeps split, each named as taken or inert here
 def private rd_announce_fuse_bisect {
     let bx = vk_fuse_bisect_bits()
@@ -2471,10 +2488,54 @@ def rd_enc_tq4_unrot(raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorS
     enc_kv_tq4_unrot_cls(raw, h, s, pcu, g_rd.n_heads * rows)
 }
 
+//! whether a layer's rows of one session attend on the flash tile's decode form: an f16 mirror, a head of 512 or 256, no
+//! softcap and no sinks (the tile's decode stamps carry neither), KHR cooperative matrices, and the knob's word
+//! (DASLLAMA_VK_ATTN_TILE; unset, a device whose prefill flash is the KHR arm)
+def private rd_attn_tile_ok(L : RLayer) : bool {
+    let knob = g_env_vulkan.vk_attn_tile
+    if (knob == 0l || (knob < 0l && cm2_fa_on())) return false
+    return rd_attn_tile_stamps(L)
+}
+
+//! the layer is of the tile's shape: an f16 mirror, a head of 512 or 256, no softcap and no sinks, KHR cooperative matrices
+def private rd_attn_tile_shape(L : RLayer) : bool
+    => rd_kv16() && !g_rd.has_sinks && L.attn_cap == 0.0 && khr_kq_tile_on() && (L.hs == 512l || L.hs == 256l)
+
+//! the layer has the tile's decode stamps: its shape (`rd_attn_tile_shape`), and the stamp of its head built
+def private rd_attn_tile_stamps(L : RLayer) : bool {
+    if (!rd_attn_tile_shape(L)) return false
+    return L.hs == 512l ? ensure_fa_khr_dec_h512_cls() : ensure_fa_khr_dec_h256_cls()
+}
+
+//! the decode tile knobs said once every layer is set (`vk_attn_knobs_say`)
+def private rd_attn_knobs_say {
+    var tile = 0l
+    var far = 0l
+    for (L in g_rd.layers) {
+        continue if (L.recurrent || !rd_attn_tile_shape(L))
+        tile++
+        far += L.window == 0l ? 1l : 0l
+    }
+    vk_attn_knobs_say(g_env_vulkan, tile, far, cm2_fa_on())
+}
+
+//! whether a flat layer's one row past the wide position attends on the tile form (DASLLAMA_VK_ATTN_TILE_FAR): the row form reads
+//! the K and V rows once a group of query heads, the tile once, and past the wide position the keys are many
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#decode-far-row")]
+def private rd_attn_tile_far_ok(L : RLayer) : bool => g_env_vulkan.vk_attn_tile_far != 0l && L.window == 0l && rd_attn_tile_stamps(L)
+
+let private RD_TILE_FAR_PIECES = 64l   //! the far row's key pieces a (K/V head, q tile), at most: the partials plane sizes to it
+
+//! the tile form's key pieces over `groups` (kv head, q tile) workgroups a piece: two waves of the device, never past the
+//! one-row form's pieces a head - the far row's own cap for `one` row - or the 64-key steps of a sliding layer's window
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#decode-far-row")]
+def private rd_tile_pieces(L : RLayer; groups : int64; one : bool) : int64
+    => fa_dec_pieces(2l * int64(g_gpu.attn_wave), groups, one ? RD_TILE_FAR_PIECES : max(g_rd.attn_nsplit, 1l), L.window)
+
 //! `ncols` the GEMV leaves' columns and `nrow_bx` the N-row bisect bits (the one-row values at one row); `kv_only` the verify's head re-warm, its stamps under `pfx`
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command"), arch(at="../ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-block-codecs"), arch(at="../ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-tq4-basis")]
 def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l : int64; fuse_qkr : bool; nlfin, nsplit, nrows : int64; ncols : uint; nrow_bx : int;
-                                kv_only : bool = false; pfx : string = "a:") {
+                                kv_only : bool = false; pfx : string = "a:"; tile_rows : bool = false) {
     let dim = g_rd.dim
     let qd = L.qd
     let kvd = L.kvd
@@ -2564,7 +2625,22 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         kbase = mirbase, vbase = mirbase, scale = g_rd.scale, qstride = qstride, gated = rd_attn_gated() ? 1u : 0u,
         window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit), rqk = rqk, sinkoff = uint(l * g_rd.n_heads),
         rowwg = uint(rowwgs), qrow = q_plane_row, cntoff = uint(g_rd.attn_cnt_off), ring = uint(L.ring))
-    if ((nrow_bx & NROW_BX_ATTN) == 0) {
+    if ((nrow_bx & NROW_BX_ATTN) == 0 && tile_rows) {   // the rows of one session: the tile's pieces, then the combine
+        let groups = fa_dec_groups(kvd / hs, nrows, L.kv_mul)
+        let pieces = rd_tile_pieces(L, groups, nrows == 1l)
+        var pct = FaArgs(rows = nr, qd = uint(qd), kvd = uint(kvd), kv_mul = uint(L.kv_mul), kvbase = mirbase, scale = g_rd.scale,
+            qstride = q_plane_row, qhs = qstride, window = uint(L.window), ring = uint(L.ring), vbase = mirbase, nsplit = uint(pieces))
+        if (hs == 512l) {
+            enc_fa_khr_dec_h512_cls(raw, h, L.s_attn_tile, pct, groups * pieces)
+        } else {
+            enc_fa_khr_dec_h256_cls(raw, h, L.s_attn_tile, pct, groups * pieces)
+        }
+        let rowgroups = da_attn_comb_wgs(g_rd.n_heads)
+        pca.nsplit = da_attn_comb_pieces(pieces)
+        pca.rowwg = uint(rowgroups)
+        pca.comb = 1u
+        da_attn_stamp_enc(g_rd.kv_dt, da_slab_of(g_rd.has_sinks, L.kv_mul), raw, h, L.s_attn, pca, rowgroups * nrows)
+    } elif ((nrow_bx & NROW_BX_ATTN) == 0) {
         da_attn_stamp_enc(g_rd.kv_dt, da_slab_of(g_rd.has_sinks, L.kv_mul), raw, h, L.s_attn, pca, rowwgs * nrows)
         if (rd_kvtq4()) {
             rd_enc_tq4_unrot(raw, h, L.s_unrot, hs, nrows, uint(qd), q_plane_row, qstride)
@@ -3063,7 +3139,8 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
             if (L.recurrent) {
                 rd_encode_dn_head(raw, h, L, nrows, ncols, verify || seq, verify)
             } else {
-                rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, nsplit, nrows), nrows, ncols, nrow_bx)
+                let far_row = one && !verify && !seq && L.attn_tile_far && nsplit == rd_wide_pieces() && nsplit > rd_split_pieces()   // the wide twin's record
+                rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, nsplit, nrows), nrows, ncols, nrow_bx, false, "a:", ((verify || seq) && nsplit > 1l && L.attn_tile) || far_row)   // the tile form past the unsplit position: under it the rows' spans are a few steps and the unsplit pass is the faster
             }
             var pc8 = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
                 pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)),
@@ -4418,6 +4495,17 @@ def private rd_v_rows_mismatch(n : int64) : bool {
     return false
 }
 
+var private g_rd_v_dev_ids = false   //! a command queued ahead of the next verify writes its draft rows' ids into the staging
+
+//! whether the N-row verify takes its draft rows' ids off the device: it gathers the rows itself, on the plain rail
+def vk_rdec_verify_takes_dev_ids : bool => g_rd != null && g_rd.ready && !g_rd.hc && rd_emb_on() && vk_rdec_verify_rows() >= 2l
+
+//! the next verify's draft rows gather off ids a command ahead of it on the queue copies into `g_rd.tok_ids_host` from word 1:
+//! the host stages row 0's id alone, since a host write after that copy would undo it
+def vk_rdec_verify_dev_ids {
+    g_rd_v_dev_ids = true
+}
+
 //! the verify's rows up: the host's rows, or - `ids` not empty - every row's token id, the trunk row and the head's embed half gathered off it
 def private rd_verify_stage(x, cossin, hcos : array<float>; ids : array<int64>; pos, n : int64; plain : bool = false) {
     let r = g_rd.region
@@ -4427,7 +4515,9 @@ def private rd_verify_stage(x, cossin, hcos : array<float>; ids : array<int64>; 
             memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l * n)
         } else {
             var idp = reinterpret<uint?>(g_rd.tok_ids_host.mapped)
-            for (i in range64(n)) {
+            let staged = g_rd_v_dev_ids ? 1l : n
+            g_rd_v_dev_ids = false
+            for (i in range64(staged)) {
                 idp[i] = uint(ids[i])
             }
             g_rdec_nrow_emb_gathered += n
@@ -4706,7 +4796,7 @@ def rd_snap_alloc {
         off += rd_ngram_ring_bytes()
     }
     g_rd.snap_row_bytes = off
-    let rows = g_rd.regions * int64(RDEC_DN_SNAPS)
+    let rows = g_rd.regions * int64(rdec_dn_snaps())
     g_rd.snap_par |> resize(rows)
     if (off > 0l) {
         g_rd.snap_dev = make_device_buf(off * rows)
@@ -4717,13 +4807,13 @@ def rd_snap_alloc {
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]   //! once per checkpoint stop, reached through the tier's registered seat
 def vk_rdec_dn_snap_save(slot : int64) : bool {
     rd_chain_settle()
-    return false if (g_rd == null || !g_rd.ready || !g_rd.hybrid || slot < 0l || slot >= int64(RDEC_DN_SNAPS))
+    return false if (g_rd == null || !g_rd.ready || !g_rd.hybrid || slot < 0l || slot >= int64(rdec_dn_snaps()))
     if (g_rd.snap_dev == 0ul) {
         rd_snap_alloc()
     }
     return false if (g_rd.snap_dev == 0ul)
     let r = g_rd.region
-    let row = r * int64(RDEC_DN_SNAPS) + slot
+    let row = r * int64(rdec_dn_snaps()) + slot
     let dst = row * g_rd.snap_row_bytes
     batch_cmd_one_shot() $(raw : VkCommandBuffer) {
         for (L in g_rd.layers) {
@@ -4748,13 +4838,13 @@ def private rd_ngram_ring_bytes() : int64 => g_rd.ngram_nrows * g_rd.hc_n * g_rd
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]
 def vk_rdec_dn_snap_ring(slot : int64; var host : float?) : bool {
     rd_chain_settle()
-    return false if (g_rd == null || !g_rd.ready || !g_rd.ngram || slot >= int64(RDEC_DN_SNAPS) || (slot >= 0l && g_rd.snap_dev == 0ul))
+    return false if (g_rd == null || !g_rd.ready || !g_rd.ngram || slot >= int64(rdec_dn_snaps()) || (slot >= 0l && g_rd.snap_dev == 0ul))
     let rb = rd_ngram_ring_bytes()
     var stage = make_host_buf(rb, false, [cached = true])
     if (slot < 0l) {
         readback_range(g_rd.plehist_dev, VHZ_DNSM, g_rd.region * rb, stage, host, rb)
     } else {
-        readback_range(g_rd.snap_dev, VHZ_DNSM, (g_rd.region * int64(RDEC_DN_SNAPS) + slot) * g_rd.snap_row_bytes + g_rd.snap_ring_off, stage, host, rb)
+        readback_range(g_rd.snap_dev, VHZ_DNSM, (g_rd.region * int64(rdec_dn_snaps()) + slot) * g_rd.snap_row_bytes + g_rd.snap_ring_off, stage, host, rb)
     }
     destroy_host_buf(stage)
     return true
@@ -4764,9 +4854,9 @@ def vk_rdec_dn_snap_ring(slot : int64; var host : float?) : bool {
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]   //! once per adoption, reached through the tier's registered seat
 def vk_rdec_dn_snap_load(slot : int64) : bool {
     rd_chain_settle()
-    return false if (g_rd == null || !g_rd.ready || !g_rd.hybrid || g_rd.snap_dev == 0ul || slot < 0l || slot >= int64(RDEC_DN_SNAPS))
+    return false if (g_rd == null || !g_rd.ready || !g_rd.hybrid || g_rd.snap_dev == 0ul || slot < 0l || slot >= int64(rdec_dn_snaps()))
     let r = g_rd.region
-    let row = r * int64(RDEC_DN_SNAPS) + slot
+    let row = r * int64(rdec_dn_snaps()) + slot
     let src = row * g_rd.snap_row_bytes
     batch_cmd_one_shot() $(raw : VkCommandBuffer) {
         for (L in g_rd.layers) {
@@ -5363,8 +5453,8 @@ def private dnd_flush_down(st : DnStep) {
 [cold_path, arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]   //! once per pooled checkpoint, reached through the tier's registered seat
 def vk_rdec_dn_peek(slot : int64; dsts : array<RdecDnDst>) : bool {
     rd_chain_settle()
-    return false if (g_rd == null || !g_rd.ready || !g_rd.hybrid || empty(dsts) || slot >= int64(RDEC_DN_SNAPS) || (slot >= 0l && g_rd.snap_dev == 0ul))
-    let row = g_rd.region * int64(RDEC_DN_SNAPS) + slot
+    return false if (g_rd == null || !g_rd.ready || !g_rd.hybrid || empty(dsts) || slot >= int64(rdec_dn_snaps()) || (slot >= 0l && g_rd.snap_dev == 0ul))
+    let row = g_rd.region * int64(rdec_dn_snaps()) + slot
     var bytes = 0l
     for (d in dsts) {
         return false if (d.l < 0l || d.l >= long_length(g_rd.layers) || !g_rd.layers[d.l].recurrent || (slot == -1l && !g_rd.layers[d.l].dn[g_rd.region].own.valid))
@@ -6493,8 +6583,14 @@ def private rd_sel_forget {
     g_rd_sel_landed = 0l
 }
 
+//! a verify's device ids asked of the dropped driver are that driver's: the next driver's first verify stages every row's id
+def private rd_v_dev_ids_forget {
+    g_rd_v_dev_ids = false
+}
+
 [init]
 def private rd_register_drop_hooks {
     register_vk_drop_hook(@@rd_hot_dma_forget)
     register_vk_drop_hook(@@rd_sel_forget)
+    register_vk_drop_hook(@@rd_v_dev_ids_forget)
 }

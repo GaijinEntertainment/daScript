@@ -87,7 +87,7 @@ var private FACADE_DEFS_WITHOUT_TUTORIAL <- {
     "finalize", "tts_finish_styletts2", "tts_ru_stress_model_path",   //! the runtime or a loader chain calls them, never a user - `ARCHITECTURE_TTS.md#text-to-speech` lists them
     "gpu_resident_mtp_device_home", "gpu_device_prefill_segments",   //! the scheduler's device-mode and segmented-window decisions; a user's program asks the scheduler
     "gpu_device_kv_claim", "gpu_device_kv_victim_claims", "gpu_device_kv_parked_pos",   //! the scheduler's region bookkeeping behind park and adopt
-    "gpu_device_kv_checkpoint", "gpu_device_kv_checkpoints",   //! the scheduler's recurrent checkpoints on a parked region
+    "gpu_device_kv_checkpoint", "gpu_device_kv_checkpoints", "gpu_device_kv_checkpoint_rows",   //! the scheduler's recurrent checkpoints on a parked region, and how many a region keeps
     "gpu_device_kv_export", "gpu_device_kv_import",   //! the scheduler's moves between a region and its paged prefix pool
     "gpu_device_kv_snapshot", "gpu_device_kv_parked_snapshot", "prefix_take_spare",   //! the scheduler's recurrent-state copies off a region into its prefix cache
     "prefix_state_match_len", "prefix_attach_state_split", "prefix_state_touch",   //! the scheduler's lookups of a recurrent checkpoint in its prefix cache
@@ -1649,6 +1649,7 @@ let private DISCRETE_KERNELS = "modules/dasLLAMA/dasllama/dasllama_gpu_kernels_d
 let private KQ_FORMAT = "modules/dasLLAMA/dasllama/dasllama_kqformat.das"
 let private VK_COMMON = "modules/dasLLAMA/dasllama/dasllama_vulkan_common.das"
 let private GPU_TIER = "modules/dasLLAMA/dasllama/dasllama_gpu_tier.das"   //! the constants both discrete homes' drivers read
+let private GPU_KNEE = "modules/dasLLAMA/dasllama/dasllama_gpu_knee.das"   //! the served alternate set's bit numbers
 let private BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_blocks.das"
 
 // a das integer literal's value at the head of `s` (digit separators and the l/u suffix dropped), -1 when none
@@ -1711,13 +1712,45 @@ def private literal_after(lines : array<string>; marker : string) : int {
     return -1
 }
 
-// The add+rms row slab triple agrees: the constant, ArBase's @workgroup row slab, and the dense-width
-// cap of the Vulkan servability gate. A cap raised without the slab writes past the slab's end on the device.
+//! every `override ROW_CAP = N` of the Vulkan stamps is `small_dim`: a small-slab twin's row stash holds what the tier admits to it
+def private check_small_row_caps(small_dim : int) {
+    if (small_dim < 0) {
+        gate_finding(GPU_TIER, "no `let public RDEC_AR_SMALL_DIM = N` line - the small-slab twins' row stash has no constant to compare with; keep the spelling or move this check with it")
+        return
+    }
+    let marker = "override ROW_CAP = "
+    var stamps = 0
+    for (line in split(strip_line_comments(fread(VK_CLASSES)), "\n")) {
+        let s = strip(line)
+        continue if (!(s |> starts_with(marker)))
+        stamps++
+        let cap = int_literal(slice(s, length(marker)))
+        if (cap != small_dim) {
+            gate_finding(VK_CLASSES, "a small-slab twin's row stash disagrees: RDEC_AR_SMALL_DIM {small_dim} (dasllama_gpu_tier.das), a stamp's `override ROW_CAP = {cap}` - a row the tier admits past the twin's slab writes past its end on the device; change the two together")
+        }
+    }
+    if (stamps == 0) {
+        gate_finding(VK_CLASSES, "no `override ROW_CAP = N` stamp - the small-slab twins' row stash has nothing to compare with RDEC_AR_SMALL_DIM; keep the spelling or move this check with it")
+    }
+}
+
+//! the extent of the `row : float[int(ROW_CAP)]` slab a class's `lines` declare - the class's ROW_CAP default - or -1
+//! where they declare no such slab
+def private row_cap_default(lines : array<string>) : int {
+    for (line in lines) {
+        return literal_after(lines, "@template_constant ROW_CAP : uint = ") if (find(line, " row : float[int(ROW_CAP)]") >= 0)
+    }
+    return -1
+}
+
+// The add+rms row slab triple agrees: the constant, the extent of ArBase's @workgroup row slab (its ROW_CAP), and the
+// dense-width cap of the Vulkan servability gate. A cap raised without the slab writes past the slab's end on the device.
 def private check_ar_max_dim_triple {
     var inscope common_lines <- split(strip_line_comments(fread(GPU_TIER)), "\n")
     let constant = literal_after(common_lines, "let public RDEC_AR_MAX_DIM = ")
     var inscope ar_lines <- class_lines(DISCRETE_KERNELS, "class template ArBase")
-    let slab = literal_after(ar_lines, "@workgroup row : float[")
+    let slab = row_cap_default(ar_lines)
+    check_small_row_caps(literal_after(common_lines, "let public RDEC_AR_SMALL_DIM = "))
     var gate = -1
     var inscope fns <- function_bodies(BLOCKS_FILE) $(header) {
         return header |> starts_with("def private attn_dec_shape_ok") || header |> starts_with("def attn_dec_shape_ok")
@@ -1730,14 +1763,54 @@ def private check_ar_max_dim_triple {
         gate_finding(GPU_TIER, "no `let public RDEC_AR_MAX_DIM = N` line - the add+rms slab triple has no constant to compare against")
     }
     if (slab < 0) {
-        gate_finding(DISCRETE_KERNELS, "no `@workgroup row : float[N]` inside `class template ArBase` - the add+rms slab triple has no slab to compare")
+        gate_finding(DISCRETE_KERNELS, "no `row : float[int(ROW_CAP)]` member with a `@template_constant ROW_CAP : uint = N` inside `class template ArBase` - the add+rms slab triple has no slab to compare")
     }
     if (gate < 0) {
         gate_finding(BLOCKS_FILE, "no `c.dim > N` inside attn_dec_shape_ok - the add+rms slab triple has no servability cap to compare")
     }
     return if (constant < 0 || slab < 0 || gate < 0)
+    for (stash in fixed_array((path = DISCRETE_KERNELS, header = "class template ArCombG4T"), (path = VK_CLASSES, header = "class template AtPrepT"))) {
+        var inscope stash_lines <- class_lines(stash.path, stash.header)
+        let cap = row_cap_default(stash_lines)
+        if (cap != constant) {
+            gate_finding(stash.path, "`{stash.header}`'s row stash disagrees with the add+rms slab: RDEC_AR_MAX_DIM {constant} (dasllama_gpu_tier.das), the class's ROW_CAP default {cap} (-1: no `row : float[int(ROW_CAP)]` member with a `@template_constant ROW_CAP : uint = N` in the class) - a row the tier admits past the stash writes past its end on the device; keep the two equal")
+        }
+    }
     if (constant != slab || constant != gate) {
-        gate_finding(VK_CLASSES, "the add+rms row slab triple disagrees: RDEC_AR_MAX_DIM {constant} (dasllama_gpu_tier.das), ArBase.row[{slab}], attn_dec_shape_ok's c.dim cap {gate} (dasllama_blocks.das) - a cap past the slab writes past its end on the device; change the three together")
+        gate_finding(VK_CLASSES, "the add+rms row slab triple disagrees: RDEC_AR_MAX_DIM {constant} (dasllama_gpu_tier.das), ArBase's ROW_CAP {slab}, attn_dec_shape_ok's c.dim cap {gate} (dasllama_blocks.das) - a cap past the slab writes past its end on the device; change the three together")
+    }
+}
+
+//! every format's KHR window tile has a rotated-walk alternate: the served bit covers the family, a stamp without one walks unrotated
+[arch(at = "ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps")]
+def private check_khr_rot_alternates {
+    var stamps = 0
+    var inscope knee_lines <- split(strip_line_comments(fread(GPU_KNEE)), "\n")
+    let bit = literal_after(knee_lines, "let VK_ALT_KHR_ROT = ")
+    if (bit < 0) {
+        gate_finding(GPU_KNEE, "no `let VK_ALT_KHR_ROT = N` line - the rotated-walk alternates' rule has no bit to compare a stamp's `alt_bit` with; keep the spelling or move this check with it")
+        return
+    }
+    var inscope lines <- split(strip_line_comments(fread(VK_CLASSES)), "\n")
+    for (line in lines) {
+        let head = "[vk_dispatch(name = \""
+        continue if (!(line |> starts_with(head)))
+        let name = slice(line, length(head), find(line, "\"", length(head)))
+        continue if (find(name, "_batch_") < 0 || !(name |> ends_with("_khr_cls")))
+        stamps++
+        let rot_head = "{head}{slice(name, 0, length(name) - 4)}_rot_cls\""
+        var tied = false   // the alternate's own declaration names this stamp and the family's bit
+        for (decl in lines) {
+            if (decl |> starts_with(rot_head)) {
+                tied = find(decl, "alt_of = \"{name}\"") >= 0 && (find(decl, "alt_bit = {bit})") >= 0 || find(decl, "alt_bit = {bit},") >= 0)
+            }
+        }
+        if (!tied) {
+            gate_finding(VK_CLASSES, "{name} has no rotated-walk alternate tied to it - the `[vk_dispatch]` line of `{slice(name, 0, length(name) - 4)}_rot_cls` must carry `alt_of = \"{name}\"` and `alt_bit = {bit}` (VK_ALT_KHR_ROT); declare it beside the stamp, the same class with `override KROT`, `alt_of = \"{name}\"` and the family's `alt_bit` (ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps)")
+        }
+    }
+    if (stamps == 0) {
+        gate_finding(VK_CLASSES, "no `<format>_batch_khr_cls` [vk_dispatch] line - the rotated-walk alternates' rule has nothing to read; keep the spelling or move this check with it")
     }
 }
 
@@ -3319,6 +3392,47 @@ def private check_census_evidence_pinned {
     }
 }
 
+let private VK_BLIND_TABLE = "let private VK_CENSUS_NEVER_DISPATCHED <- ["
+let private VK_CONDITIONAL_TABLE = "let private VK_CENSUS_PICK_CONDITIONAL : table<string; string> <- \{"
+
+//! the quoted entries of the Vulkan blind list that opens at line `from` of the coverage file's comment-stripped `lines`
+def private vk_blind_entries(lines : array<string>; from : int) : table<string> {
+    var out : table<string>
+    for (i in range(from - 1, length(lines))) {
+        for (name in quoted_segments(lines[i])) {
+            out |> insert(name)
+        }
+        break if (find(lines[i], "\"]") >= 0 || strip(lines[i]) |> starts_with("]"))
+    }
+    return <- out
+}
+
+//! every key of the Vulkan census's conditional table is an entry of its blind list, by its exact text: the census asserts it only where a device runs it
+def private check_vk_census_conditional_blind {
+    return if (!fexist(COVERAGE_FILE))
+    let text = strip_line_comments(read_lf(COVERAGE_FILE))
+    let blind_at = find_line(text, VK_BLIND_TABLE)
+    let cond_at = find_line(text, VK_CONDITIONAL_TABLE)
+    if (blind_at <= 0 || cond_at <= 0) {
+        gate_finding(COVERAGE_FILE, "no `{blind_at <= 0 ? VK_BLIND_TABLE : VK_CONDITIONAL_TABLE}` line - the check that every conditional key of the Vulkan census is a blind entry has no table to read; keep the spelling or move this check with it")
+        return
+    }
+    var inscope lines <- split(text, "\n")
+    var inscope blind <- vk_blind_entries(lines, blind_at)
+    for (i in range(cond_at, length(lines))) {
+        break if (lines[i] |> starts_with("}"))
+        var inscope parts <- split(lines[i], "=>")
+        for (p in range(length(parts) - 1)) {
+            var inscope names <- quoted_segments(parts[p])
+            continue if (empty(names))
+            let key = names[length(names) - 1]
+            if (!key_exists(blind, key)) {
+                gate_finding(COVERAGE_FILE, i + 1, "`{key}` is a key of VK_CENSUS_PICK_CONDITIONAL and no entry of VK_CENSUS_NEVER_DISPATCHED spells it - a conditional line marks a blind entry that census rows dispatch where its driver pick holds, so it names an entry of the blind list by that entry's exact text, and the census itself asserts this only on a box with a Vulkan device; add `{key}` to VK_CENSUS_NEVER_DISPATCHED with its reason and its cell, or drop the conditional line")
+            }
+        }
+    }
+}
+
 let private LOAD_FILE = "modules/dasLLAMA/dasllama/dasllama_load.das"
 
 //! the top-level argument count of the call whose `(` sits at `open`
@@ -3828,6 +3942,7 @@ def main() : int {
     check_image_backing_release()
     check_khr_stage16_abstract()
     check_ar_max_dim_triple()
+    check_khr_rot_alternates()
     check_cm2_ladder_sets()
     check_cm2_stamp_tiles()
     check_kq_gemv_grid_literals()
@@ -3855,6 +3970,7 @@ def main() : int {
     check_bench_stamps()
     check_running_max_nan()
     check_census_evidence_pinned()
+    check_vk_census_conditional_blind()
     check_load_big_format()
     check_rdec_pass_words()
     check_tests_doc()

@@ -107,8 +107,11 @@ let DASLLAMA_META_GREEN = "options gen2\n\nstruct Thing \{\n    a : int\n    b :
 let DASLLAMA_META_RED = "options gen2\n\nstruct Thing \{\n    a : int\n    b : array<int>\n\}\n\ndef private serialize_meta(var arch : Archive; var t : Thing) \{\n    serialize(arch, t.a)\n    serialize_pod_array(arch, t.b)\n\}\n"
 
 //! one cm2 batch stamp of the fixture's classes file: `cls` on `base` at BN x BK with its four tile typedefs (a wrong tile is written by hand where a red twin wants one)
-def private vk_stamp(name, cls, base : string; bn, bk : int; unr : int = -1) : string {
-    var s = "[vk_dispatch(name = \"{name}\", kernel = \"run\")]\nclass {cls} : {base} \{\n    override BN = {bn}u\n"
+//! - `alt` the rest of an alternate's dispatch line
+def private vk_stamp(name, cls, base : string; bn, bk : int; unr : int = -1;
+                     alt : string = "") : string {
+    var s = ("[vk_dispatch(name = \"{name}\", kernel = \"run\"{alt})]\n" +
+        "class {cls} : {base} \{\n    override BN = {bn}u\n")
     if (bk != 64) {
         s += "    override BK = {bk}u\n"
     }
@@ -118,6 +121,22 @@ def private vk_stamp(name, cls, base : string; bn, bk : int; unr : int = -1) : s
     s += "    typedef AT = coopmatWgA_f16_128x{bk}\n    typedef BT = coopmatWgB_f16_{bk}x{bn}\n    typedef ACC = coopmatWgAcc_f16_128x{bn}\n    typedef ACCW = coopmatWgAcc_f32_128x{bn}\n\}\n\n"
     return s
 }
+
+//! the family bit of the fixture's knee file, which every
+//! rotated-walk alternate of the green classes carries
+let VK_ROT_BIT = 1
+
+//! the rotated-walk alternate of the KHR stamp `of`: the same tile
+//! under `<stem>_khr_rot_cls`, tied to `of` by the family bit
+def private vk_rot_stamp(stem, pfx, of : string) : string =>
+    vk_stamp("{stem}_khr_rot_cls", "{pfx}KhrBatchRot", "{pfx}Cm2T", 128, 64, -1,
+        ", alt_of = \"{of}\", alt_bit = {VK_ROT_BIT}")
+
+//! a class template whose row stash holds `cap` floats: the slab and
+//! its ROW_CAP default, spelled as the slab checks read them
+def private row_stash_class(header, cap : string) : string =>
+    ("class template {header} \{\n    @workgroup row : float[int(ROW_CAP)]\n" +
+        "    @template_constant ROW_CAP : uint = {cap}\n\}\n\n")
 
 //! the engine's cm2 ladder trio `cm2_cls_*`: stamped by `kq_tile_stamp(fmt, CM2_TILE_NONE, ...)` over its `tile_<verb>()` placeholders,
 //! the skip list a module `let` of `<fmt>/<tail>` pairs (`skip` its words)
@@ -139,16 +158,17 @@ def private vk_ladder(prefix, tail : string; stamped : bool; skip : string = "")
 }
 
 //! the discrete file's templates (the shared bodies both discrete
-//! homes stamp): ArBase's row slab, the cm2 base with its template
-//! constants and the KHR stage, the k4 and q8 cm2 templates, one GEMV
-//! leaf template. Green: the KHR stage abstract. Red: the KHR stage
-//! bodied; the K5 / K6 / K3 / K2 cm2 templates
-//! `vk_classes_text(true)` stamps (or leaves unstamped)
+//! homes stamp): the row stashes of ArBase and ArCombG4T, the cm2
+//! base with its template constants and the KHR stage, the k4 and q8
+//! cm2 templates, one GEMV leaf template. Green: the KHR stage
+//! abstract. Red: the KHR stage bodied; the K5 / K6 / K3 / K2 cm2
+//! templates `vk_classes_text(true)` stamps (or leaves unstamped)
 def private discrete_kernels_text(red : bool) : string {
     var parts <- [
         ("options gen2\n\nrequire spirv/spirv_markers\n\n" +
             "let SCHED_S_ROWS = 32u\nlet SCHED_M_ROWS = 128u\nlet KQ_N_RR = 2\n\n" +
-            "class template ArBase : ResidualT \{\n    @workgroup row : float[8192]\n\}\n\n"),
+            row_stash_class("ArBase : ResidualT", "8192u") +
+            row_stash_class("ArCombG4T : GkMoeCombG4", "8192u")),
         "class template KqCm2BatchT : MoeCmBase \{\n    @template_constant BN : uint = 256u\n    @template_constant BK : uint = 64u\n    @template_constant UNR : uint = 4u\n",
         red ? "    def khr_stage16(blk, e0, sbase : uint) : void \{\n    \}\n\}\n\n" : "    def abstract khr_stage16(blk, e0, sbase : uint) : void\n\}\n\n",
         "class template K4Cm2T : KqCm2BatchT \{\n\}\n\nclass template Q8Cm2T : KqCm2BatchT \{\n\}\n\nclass template K4GemvT : KqGemvLeafT \{\n\}\n\n"]
@@ -161,14 +181,17 @@ def private discrete_kernels_text(red : bool) : string {
 //! the CUDA home's stamps of every green discrete template, so the
 //! shared-template homes check sees both discrete homes stamp each
 let CUDA_CLASSES_TEXT = ("options gen2\n\nrequire spirv/spirv_markers\n\n" +
-    "class CuArRows : ArBase \{\n\}\n\nclass CuK4Khr : K4Cm2T \{\n\}\n\n" +
+    "class CuArRows : ArBase \{\n\}\n\nclass CuArComb : ArCombG4T \{\n\}\n\n" +
+    "class CuK4Khr : K4Cm2T \{\n\}\n\n" +
     "class CuQ8Khr : Q8Cm2T \{\n\}\n\nclass CuK4Gemv : K4GemvT \{\n    override RR = 2\n\}\n")
 
 //! the Vulkan home's class surface over `discrete_kernels_text`'s
 //! templates (the schedule widths, the e-column alias roster is the
-//! kqformat fixture). Green: the row-slab and GEMV stamps, the k4 and
+//! kqformat fixture). Green: the row-slab stamps, one of them a
+//! small-slab twin, AtPrepT's row stash, the GEMV stamp, the k4 and
 //! q8 khr / m / s stamps (both formats alias the m stamp, so no e
-//! stamp), both ladder trios stamped. Red: no stamp of K5; a K4 e
+//! stamp), each khr stamp with its rotated-walk alternate, both
+//! ladder trios stamped. Red: no stamp of K5; a K4 e
 //! stamp the aliasing ladder never picks, its A tile and unroll
 //! contradicting its BK 32; a K6 whose s stamp steps 32 while the
 //! roster aliases it; no m stamp of K3, which sits on the roster; a
@@ -177,10 +200,14 @@ let CUDA_CLASSES_TEXT = ("options gen2\n\nrequire spirv/spirv_markers\n\n" +
 def private vk_classes_text(red : bool) : string {
     var parts <- [("options gen2\n\n" +
         "class VkArRows : ArBase \{\n\}\n\n" +
+        "class VkArRowsSmall : ArBase \{\n    override ROW_CAP = 2048u\n\}\n\n" +
+        "class VkArComb : ArCombG4T \{\n\}\n\n" +
+        row_stash_class("AtPrepT", "8192u") +
         "class VkK4Gemv : K4GemvT \{\n    override RR = 2\n\}\n\n")]
     parts |> reserve(24)
     for (fmt in fixed_array((stem = "kq_batch_k4", pfx = "K4"), (stem = "q8_batch", pfx = "Q8"))) {
         parts |> push(vk_stamp("{fmt.stem}_khr_cls", "{fmt.pfx}KhrBatch", "{fmt.pfx}Cm2T", 128, 64))
+        parts |> push(vk_rot_stamp(fmt.stem, fmt.pfx, "{fmt.stem}_khr_cls"))
         parts |> push(vk_stamp("{fmt.stem}_cm2m_cls", "{fmt.pfx}Cm2MBatch", "{fmt.pfx}Cm2T", 128, 64))
         parts |> push(vk_stamp("{fmt.stem}_cm2s_cls", "{fmt.pfx}Cm2SBatch", "{fmt.pfx}Cm2T", 32, 64))
     }
@@ -199,16 +226,23 @@ def private vk_classes_text(red : bool) : string {
 //! the kqformat fixture: the e-column alias roster the gate reads (`aliases` its words)
 def private kqformat_text(aliases : string) : string => "options gen2\n\nlet KQ_CM2E_ALIASES_M = \"{aliases}\"\n"
 
-//! the tier constant of the add+rms slab triple (`dim` its value)
-def private gpu_tier_text(dim : string) : string
-    => "options gen2\n\nlet public RDEC_AR_MAX_DIM = {dim}\n"
+//! the tier's two row-stash constants: the add+rms slab triple's
+//! (`dim` its value) and the small-slab twins'
+def private gpu_tier_text(dim : string) : string =>
+    ("options gen2\n\nlet public RDEC_AR_MAX_DIM = {dim}\n" +
+        "let public RDEC_AR_SMALL_DIM = 2_048l\n")
+
+//! the knee file's one line the gate reads: the rotated-walk
+//! alternates' bit
+let GPU_KNEE_TEXT = "options gen2\n\nlet VK_ALT_KHR_ROT = {VK_ROT_BIT}\n"
 
 let DASLLAMA_MODULE_LIST = ("\"dasllama\", \"dasllama_audio_embedder\", " +
     "\"dasllama_vision_embedder\", \"dasllama_toyfam\", \"dasllama_toyvis\", " +
     "\"dasllama_image\", \"dasllama_meta\", \"dasllama_vulkan_common\", " +
     "\"dasllama_vulkan_classes\", \"dasllama_vulkan_prefill\", \"dasllama_kqformat\", " +
     "\"dasllama_blocks\", \"dasllama_gpu_kernels_discrete\", " +
-    "\"dasllama_gpu_kernels_common\", \"dasllama_cuda_classes\", \"dasllama_gpu_tier\"\n")
+    "\"dasllama_gpu_kernels_common\", \"dasllama_cuda_classes\", \"dasllama_gpu_tier\", " +
+    "\"dasllama_gpu_knee\"\n")
 
 //! the one vulkan_boost probe the fixture's tier calls
 let VK_BOOST_TEXT = "options gen2\n\ndef public cooperative_matrix_supported(phys : int) : bool \{\n    return true\n\}\n"
@@ -232,6 +266,7 @@ def make_dasllama_fixture(t : T?; tree, root : string) {
         "options gen2\n\nrequire spirv/spirv_markers\n")
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_cuda_classes.das", CUDA_CLASSES_TEXT)
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_gpu_tier.das", gpu_tier_text("8_192l"))
+    write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_gpu_knee.das", GPU_KNEE_TEXT)
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_vulkan_prefill.das", "options gen2\n")
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_kqformat.das", kqformat_text("q8 k4"))
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_blocks.das", "options gen2\n\ndef private attn_dec_shape_ok(c : Config) : bool \{\n    return !(c.dim > 8192l)\n\}\n")
@@ -319,7 +354,7 @@ def test_dasllama_gate_fixtures(t : T?) {
             "\"dasllama_vulkan_common\", \"dasllama_vulkan_classes\", " +
             "\"dasllama_vulkan_prefill\", \"dasllama_kqformat\", \"dasllama_blocks\", " +
             "\"dasllama_gpu_kernels_discrete\", \"dasllama_gpu_kernels_common\", " +
-            "\"dasllama_cuda_classes\", \"dasllama_gpu_tier\"\n" +
+            "\"dasllama_cuda_classes\", \"dasllama_gpu_tier\", \"dasllama_gpu_knee\"\n" +
             "// \"dasllama_toyvis\" commented out must not count\n"))
     // a moved layout constant and a changed layout helper, with the stamp left where it was
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_image.das", dasllama_image_text("128l", "cur + 1ul", "2"))
@@ -362,7 +397,11 @@ let DASLLAMA_RED_NEEDLE_CENSUS <- [
     "dasllama_image.das: the image layout closure changed",
     "dasllama_gpu_kernels_discrete.das: khr_stage16 on KqCm2BatchT has a body",
     ("the add+rms row slab triple disagrees: RDEC_AR_MAX_DIM 4096 (dasllama_gpu_tier.das), " +
-        "ArBase.row[8192], attn_dec_shape_ok's c.dim cap 8192"),
+        "ArBase's ROW_CAP 8192, attn_dec_shape_ok's c.dim cap 8192"),
+    ("`class template ArCombG4T`'s row stash disagrees with the add+rms slab: " +
+        "RDEC_AR_MAX_DIM 4096 (dasllama_gpu_tier.das), the class's ROW_CAP default 8192"),
+    ("`class template AtPrepT`'s row stash disagrees with the add+rms slab: " +
+        "RDEC_AR_MAX_DIM 4096 (dasllama_gpu_tier.das), the class's ROW_CAP default 8192"),
     "K5Cm2T has no `class K5KhrBatch : K5Cm2T`",
     "K5Cm2T has no `[vk_dispatch(name = \"kq_batch_k5_khr_cls\"` stamp",
     "khr_cls_ensure is not stamped by `kq_tile_stamp` over `tile_ensure_khr_cls(`",
@@ -493,14 +532,26 @@ let LEG_TESTS_DOC = ("# tests\n\nArms: `alpha beta-<tag>`.\n\n"
 
 def private leg_resident(extra : string) : string => replace(LEG_RESIDENT, "\{EXTRA\}", extra)
 
+//! the coverage file's two Vulkan census tables: the blind list - one
+//! entry under its evidence comment, `cite` one more comment line -
+//! and the conditional table, whose first key is that entry (`cond`
+//! the rest of its line)
+def private vk_coverage_text(cite, cond : string) : string =>
+    ("options gen2\n\nlet private VK_CENSUS_NEVER_DISPATCHED <- [\n" +
+        "    // its coverage is test_vkd_pinned_cell in test_vulkan_kernels.das\n{cite}" +
+        "    \"a_cls_spv\"]\n\n" +
+        "let private VK_CENSUS_PICK_CONDITIONAL : table<string; string> <- \{\n" +
+        "    \"a_cls_spv\" => VK_PICK_TOY{cond}\n\}\n")
+
 //! the leg's dasllama gates on one planted tree: the green run
 //! carries a clean control per gate (a race stamp one constant off
 //! the
 //! stamp it names, a probe naming none, a NaN-wide running max, a
-//! pinned evidence cell, a format-named `load_big`, a worded pass
+//! pinned evidence cell, a conditional census key a blind entry
+//! spells, a format-named `load_big`, a worded pass
 //! reason, a documented arm, resolving names, a regions entry naming
 //! its cells by the lead's names); the red run one plant per arm
-[test(description = "the dasLLAMA leg gates are green on their controls and flag a drifted race stamp, a running max difference, a stale coverage citation, an untyped load, a missing pass arm and an unlisted resident cell", timeout = 1200)]
+[test(description = "the dasLLAMA leg gates are green on their controls and flag a drifted race stamp, a running max difference, a stale coverage citation, a conditional census key off the blind list, an untyped load, a missing pass arm and an unlisted resident cell", timeout = 1200)]
 def test_dasllama_leg_gates(t : T?) {   // nolint:STYLE038 - one planted tree, read in gate order
     let tree = getcwd()
     let fixture = repo_fixture(t, "modules/dasLLAMA/REVIEW.das", "review_dasllama_leg")
@@ -522,9 +573,7 @@ def test_dasllama_leg_gates(t : T?) {   // nolint:STYLE038 - one planted tree, r
                                                             + "        p = max(p, abs(a[i]))\n"
                                                             + "    \}\n\}\n")
     write_at(t, fixture, "modules/dasLLAMA/tests/test_kernel_coverage.das",
-        "options gen2\n\nlet private VK_CENSUS_NEVER_DISPATCHED <- [\n"
-        + "    // its coverage is test_vkd_pinned_cell in test_vulkan_kernels.das\n"
-        + "    \"a_cls_spv\"]\n")
+        vk_coverage_text("", ""))
     write_at(t, fixture, "modules/dasLLAMA/tests/_vk_cells.das", "options gen2\n\n"
                                                                + "def test_vkd_pinned_cell(t : T?) "
                                                                + "\{\n\}\n\n"
@@ -570,10 +619,8 @@ def test_dasllama_leg_gates(t : T?) {   // nolint:STYLE038 - one planted tree, r
                                                             + "        m = max(m, abs(a[i] - "
                                                             + "b[i]))\n    \}\n\}\n")
     write_at(t, fixture, "modules/dasLLAMA/tests/test_kernel_coverage.das",
-        "options gen2\n\nlet private VK_CENSUS_NEVER_DISPATCHED <- [\n"
-        + "    // its coverage is test_vkd_pinned_cell in test_vulkan_kernels.das\n"
-        + "    // their coverage is test_vkd_loose_cell and test_vkd_ghost_cell\n"
-        + "    \"a_cls_spv\"]\n")
+        vk_coverage_text("    // their coverage is test_vkd_loose_cell and test_vkd_ghost_cell\n",
+            ", \"b_cls_spv\" => VK_PICK_TOY"))
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_load.das", "options gen2\n\n"
                                                                       + "def private load_big(m : "
                                                                       + "int; fmt : KqFmt = "
@@ -617,6 +664,9 @@ def test_dasllama_leg_gates(t : T?) {   // nolint:STYLE038 - one planted tree, r
                   + "it",
                     "test_kernel_coverage.das:5: a census table cites `test_vkd_ghost_cell` as "
                   + "evidence and no file under tests/ defines it",
+                    "test_kernel_coverage.das:9: `b_cls_spv` is a key of " +
+                    "VK_CENSUS_PICK_CONDITIONAL and no entry of VK_CENSUS_NEVER_DISPATCHED " +
+                    "spells it",
                     "dasllama_load.das:8: a `load_big` call with no format",
                     "dasllama_gpu_resident.das:6: `RdecPass.busy` has no arm in `rdec_pass_words`",
                     "_arms.das:4: arm `gamma` appears in no backtick span of tests/CLAUDE.md",
@@ -629,13 +679,125 @@ def test_dasllama_leg_gates(t : T?) {   // nolint:STYLE038 - one planted tree, r
                     "`test_gpu_resident_regions_none.das` has no entry"]) {
         t |> success(find(red.out, needle) >= 0, "finding fired: {needle}")
     }
-    for (quiet in ["BenchToyA2", "ProbeToy", "test_vkd_pinned_cell", "dasllama_load.das:7",
+    for (quiet in ["BenchToyA2", "ProbeToy", "test_vkd_pinned_cell", "`a_cls_spv` is a key",
+                   "dasllama_load.das:7",
                    "RdecPass.gap", "arm `alpha`", "arm `beta",
                    "`test_dummy_cell` names", "`cell_toy` names", "`test_dummy_file.das` names",
                    "calls `cell_toy`", "calls `cell_other`"]) {
         t |> success(find(red.out, quiet) < 0, "the control drew no finding beside the plants: "
                                              + "{quiet}")
     }
+
+    t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
+}
+
+//! one planted violation: `from` of the green text of the fixture
+//! file `at` becomes `to`, and the gate's finding carries `needle`
+struct GatePlant {
+    at : tuple<rel : string; text : string>
+    from : string
+    to : string
+    needle : string
+}
+
+let DASLLAMA_ENGINE = "modules/dasLLAMA/dasllama"
+let DASLLAMA_COVERAGE = "modules/dasLLAMA/tests/test_kernel_coverage.das"
+
+//! the row-stash plants: a small-slab stamp off the tier's small dim,
+//! none at all, no small dim to compare, a stash default off the slab
+//! constant, a stash class with no slab, ArBase's slab in a spelling
+//! the gate does not read
+def private dasllama_slab_plants() : array<GatePlant> {
+    let classes = (rel = "{DASLLAMA_ENGINE}/dasllama_vulkan_classes.das",
+        text = vk_classes_text(false))
+    let discrete = (rel = "{DASLLAMA_ENGINE}/dasllama_gpu_kernels_discrete.das",
+        text = discrete_kernels_text(false))
+    let tier = (rel = "{DASLLAMA_ENGINE}/dasllama_gpu_tier.das", text = gpu_tier_text("8_192l"))
+    let stash = "row stash disagrees with the add+rms slab: RDEC_AR_MAX_DIM 8192"
+    return <- [
+        GatePlant(at = classes, from = "override ROW_CAP = 2048u", to = "override ROW_CAP = 1024u",
+            needle = "a small-slab twin's row stash disagrees: RDEC_AR_SMALL_DIM 2048 " +
+            "(dasllama_gpu_tier.das), a stamp's `override ROW_CAP = 1024`"),
+        GatePlant(at = classes, from = "    override ROW_CAP = 2048u\n", to = "",
+            needle = "dasllama_vulkan_classes.das: no `override ROW_CAP = N` stamp"),
+        GatePlant(at = tier, from = "let public RDEC_AR_SMALL_DIM = 2_048l\n", to = "",
+            needle = "dasllama_gpu_tier.das: no `let public RDEC_AR_SMALL_DIM = N` line"),
+        GatePlant(at = discrete, from = row_stash_class("ArCombG4T : GkMoeCombG4", "8192u"),
+            to = row_stash_class("ArCombG4T : GkMoeCombG4", "4096u"),
+            needle = "`class template ArCombG4T`'s {stash} (dasllama_gpu_tier.das), " +
+            "the class's ROW_CAP default 4096"),
+        GatePlant(at = classes, from = row_stash_class("AtPrepT", "8192u"),
+            to = "class template AtPrepT \{\n\}\n\n",
+            needle = "`class template AtPrepT`'s {stash} (dasllama_gpu_tier.das), " +
+            "the class's ROW_CAP default -1"),
+        GatePlant(at = discrete, from = row_stash_class("ArBase : ResidualT", "8192u"),
+            to = "class template ArBase : ResidualT \{\n    @workgroup row : float[8192]\n\}\n\n",
+            needle = "dasllama_gpu_kernels_discrete.das: no `row : float[int(ROW_CAP)]` member " +
+            "with a `@template_constant ROW_CAP : uint = N` inside `class template ArBase`")]
+}
+
+//! the rotated-walk alternate plants - no family bit to read, an
+//! alternate missing, tied to another stamp, on another bit, no KHR
+//! stamp at all - and the census check's two unreadable tables
+def private dasllama_alt_plants() : array<GatePlant> {
+    let classes = (rel = "{DASLLAMA_ENGINE}/dasllama_vulkan_classes.das",
+        text = vk_classes_text(false))
+    let knee = (rel = "{DASLLAMA_ENGINE}/dasllama_gpu_knee.das", text = GPU_KNEE_TEXT)
+    let coverage = (rel = DASLLAMA_COVERAGE, text = vk_coverage_text("", ""))
+    let untied = "has no rotated-walk alternate tied to it"
+    let q8_tie = "alt_of = \"q8_batch_khr_cls\", alt_bit = "
+    return <- [
+        GatePlant(at = knee, from = "let VK_ALT_KHR_ROT = ", to = "let VK_ALT_ROT = ",
+            needle = "dasllama_gpu_knee.das: no `let VK_ALT_KHR_ROT = N` line"),
+        GatePlant(at = classes, from = vk_rot_stamp("q8_batch", "Q8", "q8_batch_khr_cls"), to = "",
+            needle = "q8_batch_khr_cls {untied}"),
+        GatePlant(at = classes, from = "alt_of = \"kq_batch_k4_khr_cls\"",
+            to = "alt_of = \"q8_batch_khr_cls\"", needle = "kq_batch_k4_khr_cls {untied}"),
+        GatePlant(at = classes, from = "{q8_tie}{VK_ROT_BIT}", to = "{q8_tie}{VK_ROT_BIT + 1}",
+            needle = "q8_batch_khr_cls {untied} - the `[vk_dispatch]` line of " +
+            "`q8_batch_khr_rot_cls` must carry `alt_of = \"q8_batch_khr_cls\"` and " +
+            "`alt_bit = {VK_ROT_BIT}` (VK_ALT_KHR_ROT)"),
+        GatePlant(at = classes, from = "_khr_cls\"", to = "_khw_cls\"",
+            needle = "no `<format>_batch_khr_cls` [vk_dispatch] line"),
+        GatePlant(at = coverage, from = "VK_CENSUS_PICK_CONDITIONAL", to = "VK_CENSUS_PICK_COND",
+            needle = "test_kernel_coverage.das: no `let private VK_CENSUS_PICK_CONDITIONAL : " +
+            "table<string; string> <- \{` line"),
+        GatePlant(at = coverage, from = "VK_CENSUS_NEVER_DISPATCHED", to = "VK_CENSUS_BLIND",
+            needle = "test_kernel_coverage.das: no `let private VK_CENSUS_NEVER_DISPATCHED <- [` " +
+            "line")]
+}
+
+//! each plant alone on the green tree at `root`: the gate is red, the
+//! plant's finding fires once, and the file gets its green text back
+def private fire_plants(t : T?; root, gate : string; plants : array<GatePlant>) {
+    for (p in plants) {
+        let planted = replace(p.at.text, p.from, p.to)
+        t |> success(planted != p.at.text, "the plant changes {p.at.rel}: {p.needle}")
+        write_at(t, root, p.at.rel, planted)
+        let red = spawn_at(root, [gate])
+        t |> equal(1, red.rc, "the plant is red: {p.needle}")
+        t |> equal(1, count(red.out, p.needle), "finding fired once: {p.needle}\n{red.out}")
+        write_at(t, root, p.at.rel, p.at.text)
+    }
+}
+
+[test(description = "the dasLLAMA row-stash, rotated-alternate and census-table gates each fire once on their own plant alone, and the covered tree is green before the plants and after them", timeout = 1200)]
+def test_dasllama_slab_alt_gates(t : T?) {
+    let tree = getcwd()
+    let fixture = repo_fixture(t, "modules/dasLLAMA/REVIEW.das", "review_dasllama_slab")
+    if (empty(fixture)) return
+    make_dasllama_fixture(t, tree, fixture)
+    restamp_dasllama_gate(t, fixture)
+    let gate = path_join(fixture, "modules/dasLLAMA/REVIEW.das")
+    write_at(t, fixture, DASLLAMA_COVERAGE, vk_coverage_text("", ""))
+    let green = spawn_at(fixture, [gate])
+    t |> equal(0, green.rc, "the covered fixture is green: {green.out}")
+
+    fire_plants(t, fixture, gate, dasllama_slab_plants())
+    fire_plants(t, fixture, gate, dasllama_alt_plants())
+
+    let restored = spawn_at(fixture, [gate])
+    t |> equal(0, restored.rc, "the covered fixture is green after the plants: {restored.out}")
 
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }

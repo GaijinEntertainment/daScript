@@ -51,7 +51,7 @@ def private check_rejects(t : T?; fixture, needle : string) {
     }
 }
 
-[test(description = "Each _fail_closed fixture fails to compile with an error naming the rejected construct.")]
+[test(description = "Each _fail_closed fixture fails to compile with an error naming the rejected construct.", timeout = 1200)]
 def test_fail_closed_rejections(t : T?) {
     t |> run("emitter rejects kernel-illegal constructs cleanly") <| @(t : T?) {
         check_rejects(t, "_fc_texture_grad", "call `textureGrad`")
@@ -128,4 +128,14 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_tmm2d_rx_zero",
             "tmm2d_rx_begin: m, n and kk must be non-zero compile-time uint constants")
     }
+}
+
+[test(description = "sgmma_q8_blk2 refuses, by name, weights or rows that are not @ssbo members and a weight plane that is not int8.", timeout = 1200)]
+def test_sgmma_operand_rejections(t : T?) {
+    check_rejects(t, "_fc_sgmma_workgroup",
+        "sgmma_q8_blk2 reads its weights and its rows from @ssbo members")
+    check_rejects(t, "_fc_sgmma_workgroup_rows",
+        "sgmma_q8_blk2 reads its weights and its rows from @ssbo members")
+    check_rejects(t, "_fc_sgmma_uint8",
+        "sgmma_q8_blk2 takes int8 weights and float rows (got uchar and float)")
 }

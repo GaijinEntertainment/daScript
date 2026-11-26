@@ -37,7 +37,8 @@ require _discrete_cells   // nolint:STYLE030,LINT019 — the cells both homes ru
 //! gated, softcapped), the batched decode and chunked attention tiles, the h128 coopmat tile and the f16-mirror reader
 //! stamps. Skips: every cell without dasVulkan or a Vulkan device; the cm2 arms off a coopmat2 device created in cm2 mode;
 //! the KHR arms without KHR cooperative matrices at subgroup 32; the batched decode attention cells on a device under the
-//! classes' workgroup footprint; a class rail a device declines.
+//! classes' workgroup footprint; the cells that move the KHR flash slots between their stand-ins (the tile-first alternates,
+//! the small-tile twins) under a `DASLLAMA_VK_ALT_STAMPS` pin; a class rail a device declines.
 
 //! the kernel cells' approx bar with a poison past the expectation's largest magnitude, outside the bar at any scale
 let private BAR_APPROX_CTRL = Bar(rel = APPROX_REL, poison_of_max = true, poison_abs = 0.5)
@@ -111,6 +112,37 @@ def test_vkd_da_attn_shapes(t0 : T?) {
             codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 2, nrows = 2, g4_twin = true))
             codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 2, nrows = 2, nsplit = 4, resubmit = true, g4_twin = true))
             codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 2, nrows = 4, nsplit = 4, resubmit = true))
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test(description = "The decode form of the KHR flash tile with the decode attention's combine-only dispatch matches the CPU attention a row within 2e-3: the rows of one session over one mirror region, each its own count of keys, heads of 512 and 256, one row to eight, the keys whole and in pieces, a gate and a window; every row at the last row's count lands outside the bar; each arm's dispatch, the drivers' grid, is the workgroups counted by hand")]
+def test_vkd_da_attn_tile(t0 : T?) {
+    t0 |> run("the flash tile's decode form + the combine-only dispatch == the CPU attention a row") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!da_attn_stamps_ensure(KVDtype.f16)) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            if (!khr_kq_tile_on()) {
+                t |> skip("device lacks KHR cooperative matrices at subgroup 32")
+                return
+            }
+            if (!(ensure_fa_khr_dec_h512_cls() && ensure_fa_khr_dec_h256_cls() && ensure_fa_khr_dec_h128_cls())) {
+                t |> skip("the flash tile's decode stamps decline on this device")
+                return
+            }
+            tile_attn_arm(t, CodecAttn(kv = KVDtype.f16, hs = 512, nheads = 8, kv_mul = 8, nrows = 8), 4l)   // gemma-4 E2B's global layer: 64 pairs, four tiles a kv head
+            tile_attn_arm(t, CodecAttn(kv = KVDtype.f16, hs = 512, nheads = 8, kv_mul = 8, nrows = 8, nsplit = 4), 16l)   // ... the keys in pieces
+            tile_attn_arm(t, CodecAttn(kv = KVDtype.f16, hs = 512, nheads = 8, kv_mul = 8, nrows = 1, keys = 320), 1l)   // one row: half a tile live, the region ending on a step
+            tile_attn_arm(t, CodecAttn(kv = KVDtype.f16, hs = 512, nheads = 8, kv_mul = 8, nrows = 3, nsplit = 8), 16l)   // a short last tile, more pieces than steps: empty pieces
+            tile_attn_arm(t, CodecAttn(kv = KVDtype.f16, hs = 256, nheads = 8, kv_mul = 2, nrows = 8), 4l)   // its sliding layer: four kv heads, a tile each
+            tile_attn_arm(t, CodecAttn(kv = KVDtype.f16, hs = 256, nheads = 8, kv_mul = 2, nrows = 4, nsplit = 2, window = 128), 8l)   // a window: each row's lower limit its own
+            tile_attn_arm(t, CodecAttn(kv = KVDtype.f16, hs = 256, nheads = 4, kv_mul = 4, nrows = 5, nsplit = 3, gated = true), 6l)   // a gate at the combine, a pair count off a tile
+            tile_attn_arm(t, CodecAttn(kv = KVDtype.f16, hs = 128, nheads = 8, kv_mul = 4, nrows = 8, nsplit = 4, fixcnt = true), 16l)   // the block drafter's dense layer: every row over the same keys, the token block unread
+            tile_attn_arm(t, CodecAttn(kv = KVDtype.f16, hs = 128, nheads = 4, kv_mul = 2, nrows = 5, fixcnt = true), 2l)   // ... a short tile
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -262,9 +294,10 @@ def private fa_flat_read(var cp; khr : bool; hs : int; sink : bool; var sfa; pcf
     return <- cp |> plane_run(py)
 }
 
-def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037,LINT019 — one arm table over both flash arms; the head-96 skip is its one branch past the limit
+//! `form` names the stand-in the KHR slots serve, in every message of the run
+def private fa_tile_run(t : T?; khr : bool; form : string = "") {   // nolint:STYLE037,LINT019 — one arm table over both flash arms; the head-96 skip is its one branch past the limit
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let tag = khr ? "fa_khr" : "fa_cm2"
+        let tag = khr ? "fa_khr{form}" : "fa_cm2"
         let once = f16_store_rounds_once()
         let nheads = 4
         let kv_mul = 2
@@ -454,15 +487,104 @@ def test_vkd_fa_khr(t0 : T?) {
     }
 }
 
+let private FA_KHR_STEMS = fixed_array("h64", "h64_f16", "h64_sink", "h64_sink_f16", "h128", "h128_f16", "h256", "h256_f16", "h256_g", "h256_g_f16",
+    "h256_cap", "h256_cap_f16", "h512", "h512_f16")   //! every KHR flash slot of the prefill's ladder; the two bidirectional slots are the tower file's
+
+//! whether a cell that moves the KHR flash slots between their stand-ins can run on this device; where not, its skip is registered
+def private fa_khr_slot_cell_on(t : T?) : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (!ensure_tower_clamp_cvt_cls()) {
+            t |> skip("no Vulkan device")
+            return false
+        }
+        if (!khr_kq_tile_on()) {
+            t |> skip("device lacks KHR cooperative matrices at subgroup 32")
+            return false
+        }
+        if (vk_alt_pinned()) {
+            t |> skip("DASLLAMA_VK_ALT_STAMPS pins the set: the slot legs cannot toggle it")
+            return false
+        }
+        return true
+    } else {
+        t |> skip("dasVulkan not present")
+        return false
+    }
+}
+
+//! the KHR flash family with every slot on one stand-in - `suffix` "tf_cls" the tile-first alternates, "cls_s" the small-tile
+//! twins, `what` the stand-in's name in a message: every slot names its stand-in, the plain, gated and softcap cells hold on
+//! it, and every stand-in takes dispatches (the counts start at zero once the slots are built); a cap that holds no twin skips
+def private fa_khr_stand_in_cells(t : T?; suffix, what : string) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (!(fa_arm_ensure(true) && fa_stamp_pair_ensure(true, 256l, true, false, false, true) && fa_stamp_pair_ensure(true, 256l, false, true, false, true))) {
+            if (g_gpu.max_wg_bytes >= ROW_SLAB_SMALL_WG_BYTES) {
+                t |> failure("a shared-memory cap of {int(g_gpu.max_wg_bytes)} B holds every {what}: a slot that declines there has lost its stand-in")
+            } else {
+                t |> skip("the device's shared-memory cap ({int(g_gpu.max_wg_bytes)} B) is under the KHR flash twins' footprint")
+            }
+            return
+        }
+        for (stem in FA_KHR_STEMS) {
+            t |> equal(vkd_slot_kernel("fa_khr_{stem}_cls_spv"), "fa_khr_{stem}_{suffix}_spv", "the {stem} slot serves its {what}")
+        }
+        vk_kernel_coverage_reset()
+        fa_tile_run(t, true, ", the {what}s")
+        fa_h256_gated_cell(t, "fa_khr h256 gated, the {what}s", 4, 2, 77, 64, true)
+        fa_h256_softcap_cell(t, true, ", the {what}s")
+        for (stem in FA_KHR_STEMS) {
+            let kernel = "fa_khr_{stem}_{suffix}_spv"
+            let runs = vk_kernel_coverage_of(kernel)
+            t |> success(runs > 0l, "the {stem} slot's {what} `{kernel}` took the slot's dispatches ({runs})")
+        }
+    }
+}
+
+[test(description = "Under `VK_ALT_FA_TFIRST` every KHR flash slot serves its tile-first alternate - a workgroup's index counting the heads of one query tile before the next tile - the gated and the softcap h256 slots among them, each alternate takes its slot's dispatches, and the family matches the f16-grid oracle within 2e-3 plain, windowed, with sinks, at a row base past poison lead rows, over a ring, gated and under the softcap, as the slots' own stamps do; with the bit off no slot serves an alternate")]
+def test_vkd_fa_khr_tfirst(t0 : T?) {
+    t0 |> run("the tile-first KHR flash alternates serve their slots under the bit and == the CPU oracle") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            return if (!fa_khr_slot_cell_on(t))
+            with_fa_khr_slots(true, g_gpu.max_wg_bytes) {
+                fa_khr_stand_in_cells(t, "tf_cls", "tile-first alternate")
+            }
+            with_fa_khr_slots(false, g_gpu.max_wg_bytes) {
+                if (fa_arm_ensure(true)) {
+                    for (stem in fixed_array("h64", "h128", "h256", "h512")) {
+                        t |> success(vkd_slot_kernel("fa_khr_{stem}_cls_spv") != "fa_khr_{stem}_tf_cls_spv", "control: with the bit off the {stem} slot serves no alternate")
+                    }
+                }
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test(description = "Under a shared-memory cap below the KHR flash tile's footprint, with no alternate in the served set, every KHR flash slot builds its small-tile twin, each twin takes its slot's dispatches, and the family matches the f16-grid oracle within 2e-3 plain, windowed, with sinks, at a row base past poison lead rows, over a ring, gated and under the softcap")]
+def test_vkd_fa_khr_small_twins(t0 : T?) {
+    t0 |> run("the KHR flash tiles' small-tile twins serve their slots under the cap and == the CPU oracle") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            return if (!fa_khr_slot_cell_on(t))
+            with_fa_khr_slots(false, ROW_SLAB_SMALL_WG_BYTES) {
+                fa_khr_stand_in_cells(t, "cls_s", "small-tile twin")
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 //! the h256 flash stamps at one geometry, the f32 and f16-out twins against the CPU oracle over the kernel's f16 grid. `gated`:
 //! a [q | gate] q panel (per-head stride 2 x hs), the oracle scaled by the sigmoid of the gate half - the Qwen3.5 attention shape;
 //! else the softcap stamps at gemma-2's shape, wide q and k values whose scaled scores run past `cap`, the oracle under the same
 //! cap. The control is the plain oracle - ungated, or uncapped - which must miss the kernel. Returns (f32 mismatches, f16-vs-f32
 //! mismatches, outputs compared - 0 when the control does not miss, f32 mismatches with one oracle element poisoned, f16-vs-f32
 //! mismatches with one f32 element poisoned, and the out planes' elements past the rows the last tile covers that moved).
-def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : float; khr : bool) : tuple<bad : int; bad16 : int; n : int; poisoned : int; poisoned16 : int; slack_moved : int> {
+def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : float; khr : bool; wide : bool = false) : tuple<bad : int; bad16 : int; n : int; poisoned : int; poisoned16 : int; slack_moved : int> {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let rows_pad = ((rows + 63) / 64) * 64   //! the cm2 tile covers 64 rows, the KHR tile 16: the out planes carry the larger tile's rows past `rows`
+        let tile_rows = wide ? 128 : 64   // the cm2 tile covers 64 rows (its wide stamps 128), the KHR tile 16: the out planes carry the larger tile's rows past `rows`
+        let rows_pad = ((rows + tile_rows - 1) / tile_rows) * tile_rows
         var slack_moved = 0
         let hs = 256
         let qhs = gated ? 2 * hs : hs
@@ -496,12 +618,18 @@ def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : floa
             let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
             var pcf = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u,
                 scale = scale, cap = cap, qstride = gated ? uint(qrow) : 0u, qhs = gated ? uint(qhs) : 0u)
-            let capped = !gated
+            let capped = !gated && !wide
+            let wide_wgs = fa_stamp_wgs(false, int64(nheads), int64(rows), true)
             cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                 enc_tower_clamp_cvt_cls(raw2, h2, sck, pcv, cvtwgs)
                 enc_tower_clamp_cvt_cls(raw2, h2, scv, pcv, cvtwgs)
-                enc_fa_tile(khr, hs, gated, capped, false, false, raw2, h2, sfa, pcf, nheads, rows)
-                enc_fa_tile(khr, hs, gated, capped, false, true, raw2, h2, sfa16, pcf, nheads, rows)
+                if (wide) {
+                    fa_stamp_enc(false, 256l, gated, false, false, false, raw2, h2, sfa, pcf, wide_wgs, false, true)
+                    fa_stamp_enc(false, 256l, gated, false, false, true, raw2, h2, sfa16, pcf, wide_wgs, false, true)
+                } else {
+                    enc_fa_tile(khr, hs, gated, capped, false, false, raw2, h2, sfa, pcf, nheads, rows)
+                    enc_fa_tile(khr, hs, gated, capped, false, true, raw2, h2, sfa16, pcf, nheads, rows)
+                }
             }
             delete y_cls
             delete y16
@@ -616,6 +744,41 @@ def test_vkd_fa_cm2_h256_gated(t0 : T?) {
     }
 }
 
+//! the wide cm2 h256 stamps at 141 rows from position 64 - a full 128-row tile and a partial one - plain or gated: the kernel
+//! matches the oracle, the gated rows miss the ungated one, the bar reds one poisoned element, the f16-out twin matches the f32
+//! stamp rounded, the slack rows stay under the sentinel
+def private fa_h256_wide_cell(t : T?; gated : bool) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (!ensure_tower_clamp_cvt_cls()) {
+            t |> skip("no Vulkan device")
+            return
+        }
+        if (!g_gpu.has_coopmat2_fa) {
+            t |> skip("device lacks the cm2 flash-attention trio")
+            return
+        }
+        let tag = "fa_cm2 h256 wide{gated ? " gated" : ""}"
+        verify(fa_stamp_wide_ensure(gated, true), "the wide h256 fa stamps must build on a device that serves the cm2 tile")
+        let r = fa_h256_run(4, 2, 141, 64, gated, 0.0, false, true)
+        t |> success(r.n > 0 || !gated, "{tag}: the gate moves the output (the ungated oracle misses the kernel)")
+        t |> success(r.bad == 0, "{tag}: matches the CPU oracle ({r.bad} off)")
+        t |> equal(r.poisoned, 1, "{tag}: the bar reds one poisoned oracle element")
+        t |> success(r.bad16 == 0, "{tag}: f16-out twin == the f32 stamp rounded ({r.bad16} off)")
+        t |> equal(r.poisoned16, r.bad16 + 1, "{tag}: the f16 bar reds one poisoned f32 element")
+        t |> equal(r.slack_moved, 0, "{tag}: the out planes' rows past the last tile's rows stay under the sentinel ({r.slack_moved} moved)")
+    } else {
+        t |> skip("dasVulkan not present")
+    }
+}
+
+[test(description = "The wide cm2 h256 flash stamps (128 query rows a workgroup), plain and gated, match the CPU oracle within 2e-3 on 141 rows from position 64 (a full tile and a partial one), the gated rows off the ungated oracle, the f16-out twins within 2e-3 of the f32 stamps, the slack rows untouched")]
+def test_vkd_fa_cm2_h256_wide(t0 : T?) {
+    t0 |> run("cm2 flash-attention h256 at 128 query rows a workgroup, plain and gated == the CPU oracle") <| @(t : T?) {
+        fa_h256_wide_cell(t, false)
+        fa_h256_wide_cell(t, true)
+    }
+}
+
 [test(description = "The KHR gated h256 flash stamp matches the gated oracle within 2e-3 on a partial tile and at the 35B-A3B geometry, the ungated oracle missing, its f16 twin within 2e-3 and the slack rows untouched")]
 def test_vkd_fa_khr_h256_gated(t0 : T?) {
     t0 |> run("KHR flash-attention h256 gated == the CPU oracle (q at the head's stride, sigmoid gate on the output)") <| @(t : T?) {
@@ -629,7 +792,7 @@ def test_vkd_fa_khr_h256_gated(t0 : T?) {
 //! the h256 softcap stamps under cap 50 on the cm2 tile or the KHR one (`khr`), 4 heads over 2 kv heads at 77 rows from
 //! position 64 (a partial 64-tile, a nonzero window base): the capped oracle matches, the uncapped one misses, the f16-out twin
 //! matches the f32 stamp rounded
-def private fa_h256_softcap_cell(t : T?; khr : bool) {
+def private fa_h256_softcap_cell(t : T?; khr : bool; form : string = "") {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         if (!ensure_tower_clamp_cvt_cls()) {
             t |> skip("no Vulkan device")
@@ -639,10 +802,10 @@ def private fa_h256_softcap_cell(t : T?; khr : bool) {
             t |> skip(khr ? "device lacks KHR cooperative matrices at subgroup 32" : "device lacks the cm2 flash-attention trio")
             return
         }
-        let tag = khr ? "fa_khr" : "fa_cm2"
+        let tag = khr ? "fa_khr{form}" : "fa_cm2"
         verify(fa_stamp_pair_ensure(khr, 256l, false, true, false, true), "the softcap h256 fa rails must engage on a device that serves the tile")
         let r = fa_h256_run(4, 2, 77, 64, false, 50.0, khr)
-        t |> success(r.n > 0, "the softcap fixture's scores reach the cap (the uncapped oracle misses the kernel)")
+        t |> success(r.n > 0, "{tag} h256 softcap: the fixture's scores reach the cap (the uncapped oracle misses the kernel)")
         t |> success(r.bad == 0, "{tag} h256 softcap matches the capped CPU oracle ({r.bad} of {r.n} off)")
         t |> equal(r.poisoned, 1, "{tag} h256 softcap: the bar reds one poisoned oracle element")
         t |> success(r.bad16 == 0, "{tag} h256 softcap f16-out twin == the f32 stamp rounded ({r.bad16} of {r.n} off)")

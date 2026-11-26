@@ -1419,7 +1419,8 @@ def private stop_state(sch : Scheduler; at : int64) : StopState {
 //! the other stops ride their windows. Four checkpoints and the finished turn's stand, each of its kind, the window's reply is
 //! an uncached scheduler's, and a prompt sharing each interior stop's opening attaches that checkpoint whole and continues as an
 //! uncached one-window prefill does. Answers the states the first two stops' checkpoints hold.
-def capture_stops_leg(t : T?; m : Model; prompt, stops : array<int64>; chunk : int64; tag : string) : array<StopState> {
+//! With `cut` the first window must end at that row - the stop past the rows a region keeps - the rest riding the windows after it.
+def capture_stops_leg(t : T?; m : Model; prompt, stops : array<int64>; chunk : int64; tag : string; cut : int64 = 0l) : array<StopState> {
     let np = long_length(prompt)
     var sch <- create_scheduler(m, 1l, 4l, chunk, 16l, [idle_chunk_tokens = 0l])
     var none : array<int64>
@@ -1431,8 +1432,13 @@ def capture_stops_leg(t : T?; m : Model; prompt, stops : array<int64>; chunk : i
     var events : array<SchedEvent>
     submit(m, sch, req)
     let evals0 = sch.prefill_evals
+    if (cut > 0l) {
+        let rows0 = sch.prefill_tokens
+        scheduler_step(m, sch, events)
+        t |> equal(sch.prefill_tokens - rows0, cut, "{tag}: the first window ends at row {cut}, the stop past the rows a region keeps")
+    }
     drain(m, sch, events)
-    let windows = (np + chunk - 1l) / chunk
+    let windows = cut > 0l ? 1l + (np - cut + chunk - 1l) / chunk : (np + chunk - 1l) / chunk
     t |> equal(sch.prefill_evals - evals0, windows, "{tag}: the prompt prefilled in {windows} window(s) of {chunk} rows")
     t |> equal(long_length(sch.prefix.states), 5l, "{tag}: four stops captured and the finished turn kept ({length(sch.prefix.states)} checkpoints)")
     check_capture_kinds(t, sch, stops, tag)
@@ -1466,11 +1472,14 @@ def capture_stops_leg(t : T?; m : Model; prompt, stops : array<int64>; chunk : i
     return <- held
 }
 
-//! Under recurrent and chunked deltanet prefill, four checkpoint stops captured inside one window stand with the right kinds, attach and continue as a fresh prefill does, and the captured state equals a window ending there bit for bit, `m`'s context cut to 1024 for it
+//! Under recurrent and chunked deltanet prefill, four checkpoint stops captured inside one window stand with the right kinds, attach and continue as a fresh prefill does, and the captured state equals a window ending there bit for bit, `m`'s context cut to 1024 for it; with a region's checkpoint rows pinned to two the first window ends at the third stop and every stop still attaches
 def scheduler_capture_stops_cell(t : T?; var m : Model) {
     with_ctx_cut(m, 1024l) {
         unsafe {
-            t |> run("recurrent prefill: three checkpoint stops ride ONE window, each attaches and continues as a fresh prefill does (needs Qwen3.5-0.8B-MTP)") @capture(& m)(t : T ?) {
+            t |> run("recurrent prefill: three checkpoint stops ride ONE window, each attaches and continues as a fresh prefill does; under two checkpoint rows a region the window ends at the third stop (needs Qwen3.5-0.8B-MTP)") @capture(& m)(t : T ?) {
+                t |> success(!moe_gpu_resident_active(), "no resident driver is armed: the rows this cell pins are a device plane's stride there")
+                let rows_was = rdec_dn_snaps()
+                set_rdec_dn_snaps(RDEC_DN_SNAPS)   // the one window holds every stop, a row each
                 let pins = pin_spec_kernels()
                 var prompt <- counting_prompt(m, 120)
                 let np = long_length(prompt)
@@ -1494,8 +1503,13 @@ def scheduler_capture_stops_cell(t : T?; var m : Model) {
                     t |> success(mismatch_exact(cap[0].conv, live[1].conv) > 0, "{form}: control - stop {stops[0]}'s conv history is not stop {at}'s")
                     delete live
                     delete cap
+                    set_rdec_dn_snaps(2)
+                    var third <- capture_stops_leg(t, m, prompt, stops, 1024l, "{form}, two checkpoint rows a region", stops[2])
+                    set_rdec_dn_snaps(RDEC_DN_SNAPS)
+                    delete third
                 }
                 delete prompt
+                set_rdec_dn_snaps(rows_was)
                 restore_spec_pins(pins)
             }
         }
@@ -1503,6 +1517,13 @@ def scheduler_capture_stops_cell(t : T?; var m : Model) {
 }
 
 // ===== the speculative tick under the resident driver: a greedy stream asks a pick every tick and consumes it =====
+
+//! `verifies` device verifies answer `drafted` drafts at the armed home's round depth: a verify a round, a round one to
+//! `get_mtp_depth()` drafts - at depth 1 the two counts are equal
+def private verifies_cover(t : T?; verifies, drafted : int64; what : string) {
+    let k = get_mtp_depth()
+    t |> success(verifies <= drafted && drafted <= verifies * k, "{what}: {verifies} verifies for {drafted} drafts at depth {k}, a verify a round and a round one to {k} drafts")
+}
 
 //! Under the resident GPU driver a greedy MTP stream equals the plain scheduler's stream token for token, and every drafted round's verify is served on the device with its pick consumed
 def test_scheduler_mtp_resident_picks(t : T?; m : Model) {
@@ -1536,7 +1557,7 @@ def test_scheduler_mtp_resident_picks(t : T?; m : Model) {
             t |> equal(finished_of(events, 2l).n_gen, 24l)
             t |> success(sch.mtp_drafted > 0l, "the speculative tick drafted ({sch.mtp_drafted} drafts, {sch.mtp_accepted} accepted)")
             let served = moe_gpu_resident_verifies() - verifies0
-            t |> equal(served, sch.mtp_drafted, "every drafted round's verify served on the device under the tick's pick ask ({served} of {sch.mtp_drafted}); a pick left unconsumed would have refused the next round's opening")
+            verifies_cover(t, served, sch.mtp_drafted, "every drafted round's verify served on the device under the tick's pick ask (a pick left unconsumed would have refused the next round's opening)")
             delete got
             delete events
             delete sch
@@ -1583,7 +1604,7 @@ def test_scheduler_mtp_device_home(t : T?; m : Model) {
             t |> equal(finished_of(events, 2l).n_gen, 24l)
             t |> success(sch.mtp_drafted > 0l, "the speculative tick drafted ({sch.mtp_drafted} drafts, {sch.mtp_accepted} accepted)")
             t |> equal(moe_gpu_resident_drafts() - drafts0, sch.mtp_drafted, "every drafted round's draft ran on the device's NextN head")
-            t |> equal(moe_gpu_resident_verifies() - verifies0, sch.mtp_drafted, "every drafted round's verify ran on the device")
+            verifies_cover(t, moe_gpu_resident_verifies() - verifies0, sch.mtp_drafted, "every drafted round's verify ran on the device")
             var passes <- gpu_cpu_passes_()
             t |> equal(length(passes), 0, "no call passed to the CPU rails: {passes}")
             delete passes

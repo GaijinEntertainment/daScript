@@ -61,7 +61,7 @@ var private g_dn_chunk_announced = false
 
 //! the chunked scan serves the window's recurrent layers: the knob on and the KHR tiles present; the form announced once, with why not
 def private vk_dn_chunk_on : bool {
-    let on = g_env_vulkan.dn_chunk != 0l && khr_kq_tile_on() && ensure_dn_scan_chunk_cls()
+    let on = vk_dn_chunk_wanted() && ensure_dn_scan_chunk_cls()
     announce_dn_chunk(on) if (!g_dn_chunk_announced)
     return on
 }
@@ -69,7 +69,9 @@ def private vk_dn_chunk_on : bool {
 [cold_path]
 def private announce_dn_chunk(on : bool) {
     g_dn_chunk_announced = true
-    let form = on ? "the chunked form" : (g_env_vulkan.dn_chunk == 0l ? "a token at a time (DASLLAMA_DN_CHUNK=0)" : "a token at a time (no KHR cooperative-matrix tile at subgroup 32)")
+    let why = (g_env_vulkan.dn_chunk == 0l ? "DASLLAMA_DN_CHUNK=0"
+        : (!khr_kq_tile_on() ? "no KHR cooperative-matrix tile at subgroup 32" : "the box's served set, vk_alt_stamps"))
+    let form = on ? "the chunked form" : "a token at a time ({why})"
     to_log(LOG_INFO, "dasLLAMA vulkan tier: the window's deltanet scan: {form}\n")
 }
 
@@ -94,6 +96,12 @@ def pf_chunk_cap : int64 {
     if (e > 0l) return min(e, PF_CHUNK_MAX)
     return g_gpu.integrated ? 1l : PF_CHUNK_MAX
 }
+
+//! whether the window chain submits in chunks while the host still records: the knob on and no host-served expert layer;
+//! the per-role profile pins one fenced submit on a discrete device, so a chunk gap never bills to a role, and keeps the
+//! chunks on an integrated one, whose driver resets the device under one submit past its watchdog
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+def pf_window_overlaps(knob, prof, integrated, experts_host : bool) : bool => knob && !experts_host && (!prof || integrated)
 
 var private @scratch g_pf_segs : array<RdecPfSeg>    //! the call's segments (`RdecPfSeg`), rows over the whole call; a one-session call is one segment at row 0
 var private @scratch g_pf_wsegs : array<RdecPfSeg>   //! the parts of them inside the window being recorded, `row0` window-local, `npos` the part's rows
@@ -137,7 +145,7 @@ def private pf_window_caps(w0 : int64) {
         for (cap in g_pf_caps) {
             continue if (cap.seg != ws.seg || cap.row <= part_row0_in_seg || cap.row >= part_row0_in_seg + ws.npos)
             g_pf_cap_words |> push(uint(cap.row - part_row0_in_seg))
-            g_pf_cap_words |> push(uint(((ws.region * int64(RDEC_DN_SNAPS) + cap.slot) * g_rd.snap_row_bytes) / 4l))
+            g_pf_cap_words |> push(uint(((ws.region * int64(rdec_dn_snaps()) + cap.slot) * g_rd.snap_row_bytes) / 4l))
             n++
         }
         g_pf_wcaps |> push((n = n, rec = rec))
@@ -153,7 +161,7 @@ def private pf_window_caps(w0 : int64) {
 def private pf_caps_done {
     for (cap in g_pf_caps) {
         let sg = g_pf_segs[cap.seg]
-        g_rd.snap_par[sg.region * int64(RDEC_DN_SNAPS) + cap.slot] = 0
+        g_rd.snap_par[sg.region * int64(rdec_dn_snaps()) + cap.slot] = 0
     }
     g_pf_caps |> clear()
 }
@@ -170,8 +178,66 @@ def private pf_register_drop_hooks {
     register_vk_drop_hook(@@pf_caps_forget)
 }
 
-//! the slot of the segment whose last row is window row `row` of the window at `w0`, else -1
-def private pf_seg_ending_at(w0, row : int64) : int64 => rdec_seg_ending_at(g_pf_segs, w0, row)
+//! layer `l` reads a donor layer's K/V rows and keeps no row state, and nothing captures its rows: a row nobody reads may skip it
+def private pf_layer_in_tail(l : int64) : bool =>
+    g_rd.layers[l].kv_shared && !g_rd.layers[l].recurrent && !g_rd.layers[l].moe && !rdec_caps_layer(g_rd.cap_slots, l)
+
+//! the layer the window's shared-K/V tail starts at, `n_layers` where every row walks to the end: an embedding's rows (`hidden`)
+//! and the head's prompt warm (`warm`) read every row's last layer, a block codec stages its rows window-local, and a routed
+//! layer under the tail hands the next feed its own way
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-tail-cut")]
+def private pf_tail_from(hidden, warm : bool) : int64 {
+    let n = g_rd.n_layers
+    return n if (hidden || warm || !rdec_prefill_tail_cut() || rd_kv_block_codec())
+    var cut = n
+    while (cut > 0l && pf_layer_in_tail(cut - 1l)) {
+        cut--
+    }
+    return cut > 0l && !g_rd.layers[cut - 1l].moe ? cut : n
+}
+
+//! the rows that walk the tail from layer `cut`: the last row of each part that ends its segment, gathered to the front of the
+//! window's planes - the residual, the rope rows, the per-layer-embedding side rows - as one-row parts at their own positions,
+//! the window's parts from here on (the list untouched where no part ends), and layer `cut`'s head feed normed over them; the rows kept
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-tail-cut")]
+def private pf_tail_rows(raw : VkCommandBuffer; var h : VkHaz; cut, wlen : int64) : int64 {
+    let dim = g_rd.dim
+    let cos_bytes = g_rd.cos_elems * 4l
+    let ple_bytes = g_rd.n_layers * g_rd.ple * 4l
+    var moved = false
+    var n = 0l   // the parts kept so far: part `n` of the list is rewritten in place, never ahead of the part being read
+    for (part in g_pf_wsegs) {
+        let ws = part   // a copy: the list's part `n` below may be this very part
+        continue if (rdec_part_end_slot(g_pf_segs, ws) < 0l)
+        let lr = ws.row0 + ws.npos - 1l
+        let k = n
+        if (lr != k) {
+            if (!moved) {   // every plane at once: the copies sit behind all the window's writes and ahead of all its reads
+                vhz_dep(raw, h, 0xffffffffu, 0xffffffffu, true)
+                moved = true
+            }
+            cmd_copy_range(raw, g_rd.pf_x, lr * dim * 4l, g_rd.pf_x, k * dim * 4l, dim * 4l)
+            cmd_copy_range(raw, g_rd.pf_cos, lr * cos_bytes, g_rd.pf_cos, k * cos_bytes, cos_bytes)
+            if (g_rd.ple > 0l) {
+                cmd_copy_range(raw, g_rd.pf_ple, lr * ple_bytes, g_rd.pf_ple, k * ple_bytes, ple_bytes)
+            }
+        }
+        g_pf_wsegs[n] = RdecPfSeg(row0 = k, npos = 1l, pos0 = ws.pos0 + ws.npos - 1l, region = ws.region, seg = ws.seg, koff = ws.koff)
+        n++
+    }
+    g_rd.pf_tail_cut_rows += wlen - n
+    return 0l if (n == 0l)
+    g_pf_wsegs |> resize(n)
+    var pcn = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(cut, RD_NORM_ATT)), eps = g_rd.eps, ascale = 1.0)
+    if (!pf_qkv_feed_fused(cut)) {
+        enc_cls_ar(raw, h, g_rd.pf_sets[int((cut - 1l) * PF_ROLES) + 14], pcn, n)
+    } elif (pf_qkv6(cut)) {
+        enc_cls_ar_f16_b(raw, h, g_rd.pf_arq_sets[int((cut - 1l) * 2l + 1l)], pcn, n)
+    } else {
+        enc_cls_ar_rq_b(raw, h, g_rd.pf_arq_sets[int((cut - 1l) * 2l + 1l)], pcn, n)
+    }
+    return n
+}
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private pf_kv_merged(l, dim, kvd : int64) : bool {
@@ -193,10 +259,21 @@ def pf_ffn_slice_row0(l, n_layers, wlen : int64; f16_gate, f16_down : bool) : in
 //! the h128 coopmat twin serves a 128-head layer where the cm2 flash tiles do not
 def private pf_fa128s : bool => !(cm2_fa_on() && vk_fa_on() && rd_pf_reads_f16()) && h128_twin_on()
 
-//! a window's rows from `w0`: the last window keeps at least the conv taps, so only window 0 can be shorter, and its history is zero
-def private pf_window_len(npos, w0 : int64) : int64 {
+//! the rows a window may hold that starts `keys0` positions into its context: the driver's window, on an integrated GPU
+//! brought down at the model's widest key row (`vk_pf_window_rows`)
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+def pf_window_cap(keys0 : int64) : int64 {
+    var kvd = 1l
+    for (L in g_rd.layers) {
+        kvd = max(kvd, L.kvd)
+    }
+    return vk_pf_window_rows(g_rd.pf_np, keys0, kvd)
+}
+
+//! a window's rows from `w0`, `keys0` positions into its context: the last window keeps at least the conv taps, so only window 0 can be shorter, and its history is zero
+def private pf_window_len(npos, w0, keys0 : int64) : int64 {
     let taps = max(g_rd.dn_dconv - 1l, 0l)
-    var wlen = min(g_rd.pf_np, npos - w0)
+    var wlen = min(pf_window_cap(keys0), npos - w0)
     if (g_rd.hybrid) {   //! a recurrent window is one deltanet chunk: the smalls planes (beta, g) and the scan workspace hold DN_WINDOW rows
         wlen = min(wlen, DN_WINDOW)
     }
@@ -276,7 +353,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
         }
     } elif (kq_sb(fmt) || blk32_rail(fmt)) {
         // the role's format is static, so the slot never collides with the q8 router's variants
-        let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == COOPMAT_F16
+        let q40cm = kq_batch_q40cm(fmt)
         var kset = cached(g_rd.pf_cls_gemm, idx * 16 + 6) $ {
             verify(kq_batch_cls_ensure(fmt, q40cm), "vk prefill: the kq batch class rail must engage")
             return kq_batch_cls_set_for(fmt, q40cm,
@@ -351,9 +428,9 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
         fixed_array(VHZ_DNP, VHZ_DNC, VHZ_DNSM))
     let snap_dev = g_rd.snap_dev != 0ul ? g_rd.snap_dev : smalls_dev
     g_rd.pf_snap_bound = g_rd.snap_dev
-    let snap_bytes = g_rd.snap_dev != 0ul ? g_rd.snap_row_bytes * g_rd.regions * int64(RDEC_DN_SNAPS) : smalls_bytes
+    let snap_bytes = g_rd.snap_dev != 0ul ? g_rd.snap_row_bytes * g_rd.regions * int64(rdec_dn_snaps()) : smalls_bytes
     if (!vk_range_ok(snap_bytes)) {   //! the scan and the cap tail bind the checkpoint rows whole
-        panic("dasLLAMA vulkan prefill: the checkpoint rows ({snap_bytes} bytes: {g_rd.regions} regions x {RDEC_DN_SNAPS} rows of {g_rd.snap_row_bytes}) pass the device's storage range {vk_max_storage_range()}")
+        panic("dasLLAMA vulkan prefill: the checkpoint rows ({snap_bytes} bytes: {g_rd.regions} regions x {rdec_dn_snaps()} rows of {g_rd.snap_row_bytes}) pass the device's storage range {vk_max_storage_range()}")
     }
     L.pf_dn_scan_set = set_dn_scan_cls(
         fixed_array(g_rd.pf_dnconv, dn0.state_dev, smalls_dev, g_gpu.dn_ws_dev, g_rd.pf_cap_dev, snap_dev),
@@ -687,6 +764,15 @@ def private pf_moe_setup {
     if (!q8c) {
         g_rd.pf_mxg = make_device_buf((nk + TILE_READ_SLACK) * dim * 2l)
         g_rd.pf_mhf = make_device_buf((nk + TILE_READ_SLACK) * nfe * 2l)
+        if (vk_mmq_any()) {
+            verify(ensure_mmq_feed_cls() && ensure_mmq_feed16_cls() && ensure_mmq_inv_cls(), "vk prefill: the int8 feed's class rails must engage")
+            g_rd.pf_mmq_xq = make_device_buf(np * dim)
+            g_rd.pf_mmq_xs = make_device_buf(np * (dim / Q8_BLOCK_ELEMS) * 8l)
+            g_rd.pf_mmq_tok = make_device_buf(nk * 4l)
+            g_rd.pf_mmq_hq = make_device_buf(nk * nfe)
+            g_rd.pf_mmq_hs = make_device_buf(nk * (nfe / Q8_BLOCK_ELEMS) * 8l)
+            g_rd.pf_mmq_ident = make_ramp_buf(nk, 0l)
+        }
     }
     g_rd.pf_my1 = make_device_buf(nk * nfe * 4l)
     g_rd.pf_my2 = make_device_buf(nk * nfe * 4l)
@@ -698,6 +784,51 @@ def private pf_moe_setup {
         g_rd.pf_mgs = make_device_buf((nk + TILE_READ_SLACK) * (dim / 32l) * 4l)
         assert(nk * nfe <= BATCH_HQ_BYTES, "dasLLAMA vulkan tier: the Q8-fed chain's hidden rows exceed the act's quant plane")
     }
+}
+
+//! one expert plane's two columns of a window - the m pieces, then the s pieces - each on its int8 tile where the layer
+//! rides it there, else on the f16 tile of its column
+[arch(at = "../ARCHITECTURE_GPU_VULKAN_KHR.md#khr-int8-tiles")]
+def private pf_expert_cols(raw : VkCommandBuffer; var h : VkHaz; fmt : int; i8_m, i8_s : bool; var f16_m, f16_s, i8_m_set, i8_s_set : VkDescriptorSet;
+                           var pc_m, pc_s : BatchArgs; groups_m, groups_s : int64) {
+    if (i8_m) {
+        mmq_cls_enc(fmt, false, raw, h, i8_m_set, pc_m, groups_m)
+    } else {
+        cm2_cls_enc(fmt, CM2_TC_E, raw, h, f16_m, pc_m, groups_m)
+    }
+    if (i8_s) {
+        mmq_cls_enc(fmt, true, raw, h, i8_s_set, pc_s, groups_s)
+    } else {
+        cm2_cls_enc(fmt, int64(SCHED_S_ROWS), raw, h, f16_s, pc_s, groups_s)
+    }
+}
+
+//! whether a column of the layer's routed block rides an int8 tile: its bucket schedule then keeps slot-row order
+[arch(at = "../ARCHITECTURE_GPU_VULKAN_KHR.md#khr-int8-tiles")]
+def private pf_rides_int8(L : RLayer) : bool => L.mmq_gu_m || L.mmq_gu_s || L.mmq_dn_m || L.mmq_dn_s
+
+//! the int8 tiles' sets for a layer's gate and up pieces, their feed's and their row map's
+def private pf_mmq_layer_sets(var L : RLayer; pe1, pe3 : tuple<wq : uint64; ws : uint64; wqb : int64; wsb : int64>) {
+    let np = g_rd.pf_np
+    let dim = g_rd.dim
+    let nk = g_rd.pf_nk
+    let y_bytes = nk * g_rd.nfe * 4l
+    let xq_bytes = np * dim
+    let xs_bytes = np * (dim / Q8_BLOCK_ELEMS) * 8l
+    L.pf_mmq_feed_set = set_mmq_feed_cls(fixed_array(g_rd.pf_xb, g_rd.pf_mmq_xq, g_rd.pf_mmq_xs),
+        fixed_array(np * dim * 4l, xq_bytes, xs_bytes), fixed_array(VHZ_XB, VHZ_MXG, VHZ_MXG))
+    L.pf_mmq_inv_set = set_mmq_inv_cls(fixed_array(g_rd.pf_minv, g_rd.pf_mmq_tok),
+        fixed_array(nk * 4l, nk * 4l), fixed_array(VHZ_MRT, VHZ_MXG))
+    let sizes1 = fixed_array(pe1.wqb, pe1.wsb, BATCH_META_BYTES, xq_bytes, xs_bytes, y_bytes, nk * 4l)
+    let sizes3 = fixed_array(pe3.wqb, pe3.wsb, BATCH_META_BYTES, xq_bytes, xs_bytes, y_bytes, nk * 4l)
+    L.pf_e1q_set = mmq_cls_set(L.fe1, true, fixed_array(pe1.wq, pe1.ws, g_rd.pf_msch1, g_rd.pf_mmq_xq, g_rd.pf_mmq_xs, g_rd.pf_my1, g_rd.pf_mmq_tok),
+        sizes1, fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_MXG, VHZ_GATE, VHZ_MXG))
+    L.pf_e1qm_set = mmq_cls_set(L.fe1, false, fixed_array(pe1.wq, pe1.ws, g_rd.pf_msch1, g_rd.pf_mmq_xq, g_rd.pf_mmq_xs, g_rd.pf_my1, g_rd.pf_mmq_tok),
+        sizes1, fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_MXG, VHZ_GATE_M, VHZ_MXG))
+    L.pf_e3q_set = mmq_cls_set(L.fe3, true, fixed_array(pe3.wq, pe3.ws, g_rd.pf_msch3, g_rd.pf_mmq_xq, g_rd.pf_mmq_xs, g_rd.pf_my2, g_rd.pf_mmq_tok),
+        sizes3, fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_MXG, VHZ_UP, VHZ_MXG))
+    L.pf_e3qm_set = mmq_cls_set(L.fe3, false, fixed_array(pe3.wq, pe3.ws, g_rd.pf_msch3, g_rd.pf_mmq_xq, g_rd.pf_mmq_xs, g_rd.pf_my2, g_rd.pf_mmq_tok),
+        sizes3, fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_MXG, VHZ_UP_M, VHZ_MXG))
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
@@ -780,6 +911,33 @@ def private pf_moe_layer_sets(l : int64) {
             fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hf_bytes, dn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_MDN))
         L.pf_e2m_set = cm2_cls_set(L.fe2, tce, fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mhf, g_rd.pf_mdn),
             fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hf_bytes, dn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_MDN_M))
+        //! a column rides the int8 tile where the box's set names it, the planes' formats have the tile, and the widths are whole steps of it
+        let i8 = g_gpu.coopmat_mode == COOPMAT_MM && vk_mmq_any() && vk_mmq_device_ok()
+        let gu_fits = i8 && mmq_cls_fits(L.fe1, dim) && mmq_cls_fits(L.fe3, dim) && !g_rd.exps_bias
+        let dn_fits = i8 && mmq_cls_fits(L.fe2, nfe)
+        L.mmq_gu_m = gu_fits && vk_mmq_col(false, false)
+        L.mmq_gu_s = gu_fits && vk_mmq_col(false, true)
+        L.mmq_dn_m = dn_fits && vk_mmq_col(true, false)
+        L.mmq_dn_s = dn_fits && vk_mmq_col(true, true)
+        if (pf_rides_int8(L)) {
+            verify(moe_sched_ensure(g_rd.ne, true), "vk prefill: the ordered bucket schedule's class rail must engage")
+        }
+        if (L.mmq_gu_m || L.mmq_gu_s) {
+            verify(mmq_cls_ensure(L.fe1, false) && mmq_cls_ensure(L.fe1, true) && mmq_cls_ensure(L.fe3, false) && mmq_cls_ensure(L.fe3, true),
+                "vk prefill: the int8 expert tile class rails must engage")
+            pf_mmq_layer_sets(L, pe1, pe3)
+        }
+        if (L.mmq_dn_m || L.mmq_dn_s) {
+            verify(mmq_cls_ensure(L.fe2, false) && mmq_cls_ensure(L.fe2, true), "vk prefill: the int8 expert tile class rails must engage")
+            let hq_bytes = nk * nfe
+            let hs_bytes = nk * (nfe / Q8_BLOCK_ELEMS) * 8l
+            L.pf_mmq_feed16_set = set_mmq_feed16_cls(fixed_array(g_rd.pf_mhf, g_rd.pf_mmq_hq, g_rd.pf_mmq_hs),
+                fixed_array(hf_bytes, hq_bytes, hs_bytes), fixed_array(VHZ_HQ, VHZ_MXG, VHZ_MXG))
+            let dn_bufs = fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mmq_hq, g_rd.pf_mmq_hs, g_rd.pf_mdn, g_rd.pf_mmq_ident)
+            let dn_sizes = fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hq_bytes, hs_bytes, dn_bytes, nk * 4l)
+            L.pf_e2q_set = mmq_cls_set(L.fe2, true, dn_bufs, dn_sizes, fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_MXG, VHZ_MDN, 0u))
+            L.pf_e2qm_set = mmq_cls_set(L.fe2, false, dn_bufs, dn_sizes, fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_MXG, VHZ_MDN_M, 0u))
+        }
     }
     if (L.moe_g4) {
         verify(ensure_cls_ar_comb_g4() && ensure_cls_ar_comb_g4_f16_b(), "vk prefill: the gemma-4 combine class rails must engage on a live device")
@@ -930,13 +1088,11 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
         pf_moe_g4_feed(raw, h, l, wlen)
     }
     let bounds = pf_moe_bounds(nk)
-    let tcs = int64(SCHED_S_ROWS)
-    let tce = CM2_TC_E
     let map_m_gu = uint(MOE_SCHED_MAP_OFF + bounds.gu)   //! the m dispatch's maps follow the s dispatch's
     let map_m_dn = uint(MOE_SCHED_MAP_OFF + bounds.dn)
     let wcol = g_rd.pf_moe_q8 ? 32u : 128u   //! the expert tiles' output columns: the sdot4 tile's 32, the cm2 and KHR tiles' 128
     var pcs = gk_sched_args(nk, ne, nfe, dim, wcol, g_rd.pf_moe_q8, bounds, arena_local_blk(L.be1), arena_local_blk(L.be3), arena_local_blk(L.be2), L.fe1, L.fe3, L.fe2)
-    moe_sched_enc(ne, raw, h, L.pf_sched_set, pcs)
+    moe_sched_enc(ne, raw, h, L.pf_sched_set, pcs, pf_rides_int8(L))
     pfq_ts(raw)
     var pcg = GatherArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(nk))
     if (g_rd.pf_moe_q8) {
@@ -945,15 +1101,21 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
         pf_moe_q8_experts(raw, h, l, nk, bounds)
         return
     }
-    enc_moe_gather_f16_cls(raw, h, L.pf_gather_set, pcg, nk)
-    pfq_ts(raw)
     var pc1 = BatchArgs(n = uint(dim), d = uint(nfe), map_off = uint(MOE_SCHED_MAP_OFF), ksplit = 0u)
     var pc1m = BatchArgs(n = uint(dim), d = uint(nfe), map_off = map_m_gu, ksplit = 0u)
-    cm2_cls_enc(L.fe1, tce, raw, h, L.pf_e1m_set, pc1m, bounds.mgu)
-    cm2_cls_enc(L.fe1, tcs, raw, h, L.pf_e1_set, pc1, bounds.gu)
+    if (L.mmq_gu_m || L.mmq_gu_s) {
+        var pcf = MmqFeedArgs(n = uint(dim), rows = uint(wlen))
+        enc_mmq_feed_cls(raw, h, L.pf_mmq_feed_set, pcf, (wlen * (dim / Q8_BLOCK_ELEMS) + 255l) / 256l)
+        var pci = MmqInvArgs(nk = uint(nk), k = uint(k))
+        enc_mmq_inv_cls(raw, h, L.pf_mmq_inv_set, pci, (nk + 255l) / 256l)
+    }
+    if (!(L.mmq_gu_m && L.mmq_gu_s)) {
+        enc_moe_gather_f16_cls(raw, h, L.pf_gather_set, pcg, nk)
+    }
     pfq_ts(raw)
-    cm2_cls_enc(L.fe3, tce, raw, h, L.pf_e3m_set, pc1m, bounds.mgu)
-    cm2_cls_enc(L.fe3, tcs, raw, h, L.pf_e3_set, pc1, bounds.gu)
+    pf_expert_cols(raw, h, L.fe1, L.mmq_gu_m, L.mmq_gu_s, L.pf_e1m_set, L.pf_e1_set, L.pf_e1qm_set, L.pf_e1q_set, pc1m, pc1, bounds.mgu, bounds.gu)
+    pfq_ts(raw)
+    pf_expert_cols(raw, h, L.fe3, L.mmq_gu_m, L.mmq_gu_s, L.pf_e3m_set, L.pf_e3_set, L.pf_e3qm_set, L.pf_e3q_set, pc1m, pc1, bounds.mgu, bounds.gu)
     pfq_ts(raw)
     var pca = ActArgs(nelem = uint(nk * nfe), act = act_code(g_rd.act_oai, g_rd.is_gelu), nblk = uint(nk * nfe / 32l), elem0 = 0u,
         bias_on = g_rd.exps_bias ? 1u : 0u, gboff = uint(L.router_slot * ne * nfe), brow = uint(nfe))
@@ -965,8 +1127,11 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     pfq_ts(raw)
     var pc2 = BatchArgs(n = uint(nfe), d = uint(dim), map_off = uint(MOE_SCHED_MAP_OFF), ksplit = 0u)
     var pc2m = BatchArgs(n = uint(nfe), d = uint(dim), map_off = map_m_dn, ksplit = 0u)
-    cm2_cls_enc(L.fe2, tce, raw, h, L.pf_e2m_set, pc2m, bounds.mdn)
-    cm2_cls_enc(L.fe2, tcs, raw, h, L.pf_e2_set, pc2, bounds.dn)
+    if (L.mmq_dn_m || L.mmq_dn_s) {
+        var pcf = MmqFeedArgs(n = uint(nfe), rows = uint(nk))
+        enc_mmq_feed16_cls(raw, h, L.pf_mmq_feed16_set, pcf, (nk * (nfe / Q8_BLOCK_ELEMS) + 255l) / 256l)
+    }
+    pf_expert_cols(raw, h, L.fe2, L.mmq_dn_m, L.mmq_dn_s, L.pf_e2m_set, L.pf_e2_set, L.pf_e2qm_set, L.pf_e2q_set, pc2m, pc2, bounds.mdn, bounds.dn)
     pfq_ts(raw)
 }
 
@@ -1304,6 +1469,7 @@ def private pf_setup {
         && (!key_exists(fa_hs, 96l) || fa_stamp_pair_ensure(false, 96l, false, false, false, any_f16_feed))
         && (!key_exists(fa_hs, 128l) || fa_stamp_pair_ensure(false, 128l, false, false, false, any_f16_feed))
         && (!key_exists(fa_hs, 256l) || fa_stamp_pair_ensure(false, 256l, gated_stamp, false, false, any_f16_feed))
+        && (!key_exists(fa_hs, 256l) || g_env_vulkan.vk_fa_wide == 0l || fa_stamp_wide_ensure(gated_stamp, any_f16_feed))
         && (!any_cap || fa_stamp_pair_ensure(false, 256l, false, true, false, any_f16_feed))
         && (!key_exists(fa_hs, 512l) || fa_stamp_pair_ensure(false, 512l, false, false, false, any_f16_feed))
         && (!key_exists(fakhr_hs, 64l) || fa_stamp_pair_ensure(true, 64l, false, false, sinks, any_f16_feed))
@@ -1323,6 +1489,7 @@ def private pf_setup {
     if (g_rd.pf_fakhr) {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: KHR flash attention armed ({long_length(fakhr_hs)} head size(s), {kvq ? "the block-codec mirrors' f16 shadow" : "native f16 mirrors"}; {long_length(chunked_hs)} on the chunked pair)\n")
     }
+    vk_fa_wide_say(g_env_vulkan, key_exists(fa_hs, 256l))
     for (k, v in keys(chunked_why), values(chunked_why)) {   //! one line a reason, whether or not any layer armed a tile
         to_log(LOG_INFO, "dasLLAMA vulkan tier: {v} attention layer(s) on the chunked pair, off the flash tiles: {k}\n")
     }
@@ -1972,6 +2139,9 @@ def vk_rdec_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_ids 
 //! The windows that held several sessions' chunks as segments in this process (a cell's witness)
 def vk_rdec_prefill_segment_windows : int64 => g_rd != null ? g_rd.pf_seg_windows : 0l
 
+//! the window rows that stopped ahead of a shared-K/V tail in this process (a cell's witness)
+def vk_rdec_prefill_tail_cut_rows : int64 => g_rd != null ? g_rd.pf_tail_cut_rows : 0l
+
 //! After a resident prefill, hand recurrent layer `l`'s device slot to the session `stp`/`histp` name (valid, dirty, bound)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def vk_rdec_prefill_dn_own(l : int64; stp : float?; histp : float?) {
@@ -2245,7 +2415,7 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
     unsafe {
         var w0 = 0l
         while (w0 < npos) {
-            let wlen = pf_window_len(npos, w0)
+            let wlen = pf_window_len(npos, w0, pos0 + w0)
             let last = w0 + wlen >= npos
             let pos0w = pos0 + w0
             pf_window_segs(w0, wlen)
@@ -2456,8 +2626,9 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
                 kvd = uint(kvd), kv_mul = kv_mul, kvbase = kv_base,
                 scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window, cap = g_rd.layers[l].attn_cap,
                 sinkoff = uint(l * g_rd.n_heads), row0 = uint(sg.row0), ring = kv_ring)
+            let fa_wide = g_env_vulkan.vk_fa_wide != 0l && fa_stamp_wide(khr, hs, g_rd.has_sinks, pcf)
             fa_stamp_enc(khr, hs, hs == 256l && rd_attn_gated(), pcf.cap != 0.0, g_rd.has_sinks, fa_lands_f16, raw, h, g_rd.pf_sets[b + 5], pcf,
-                fa_stamp_wgs(khr, g_rd.n_heads, sg.npos))
+                fa_stamp_wgs(khr, g_rd.n_heads, sg.npos, fa_wide), false, fa_wide)
         } else {
             let attnwg = fa128 ? g_rd.n_heads * ((sg.npos + 31l) / 32l) : at_attn_tile_wgs(g_rd.n_heads, sg.npos, wide ? 4l : 8l)
             var pca = DaAttnBArgs(npos = uint(sg.npos), nh = uint(g_rd.n_heads), kvd = uint(kvd),
@@ -2553,11 +2724,12 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
         var last_wlen = 0l
         while (w0 < npos) {
             let tp0 = ref_time_ticks()
-            let wlen = pf_window_len(npos, w0)
+            let wfull = pf_window_len(npos, w0, pos0 + w0)
+            var wlen = wfull   // the rows the layers run over: past a shared-K/V tail's first layer, the ending rows alone
             let last = w0 + wlen >= npos
             pf_window_segs(w0, wlen)
             pf_window_caps(w0)
-            let nwseg = long_length(g_pf_wsegs)
+            var nwseg = long_length(g_pf_wsegs)
             if (nwseg > 1l) {
                 g_rd.pf_seg_windows++
             }
@@ -2627,12 +2799,18 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             var pc_pro = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
             enc_cls_ar(raw, h, g_rd.pf_sets[bp + 0], pc_pro, wlen)   // prologue norm
             pfq_ts(raw)
-            let overlap = g_env_vulkan.vk_overlap && !vk_prof() && !g_rd.experts_host
+            let overlap = pf_window_overlaps(g_env_vulkan.vk_overlap, vk_prof(), g_gpu.integrated, g_rd.experts_host)
             let fuse_arq = g_env_vulkan.vk_fuse
             var nextb = 1l
             var cstep = 1l
             var nchunk = 0
+            let cut = pf_tail_from(hidden, warm)
             for (l in range64(g_rd.n_layers)) {
+                if (l == cut) {
+                    wlen = pf_tail_rows(raw, h, cut, wfull)
+                    break if (wlen == 0l)
+                    nwseg = wlen
+                }
                 if (overlap && l == nextb) {
                     cmd_close(raw)
                     submit_nofence(raw)
@@ -2726,7 +2904,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             for (ws in g_pf_wsegs) {
                 break if (hidden)
                 let row = ws.row0 + ws.npos - 1l
-                let slot = pf_seg_ending_at(w0, row)
+                let slot = rdec_part_end_slot(g_pf_segs, ws)
                 continue if (slot < 0l)
                 ends++
                 rq_enc(raw, h, g_rd.pf_sets[bp + 1], kq_sb(g_rd.cls_fmt_marker), row * dim, dim)
@@ -2769,10 +2947,10 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 host_buf_read(g_rd.pf_hid_host, addr<void?>(g_pf_hidden[w0 * dim]), wlen * dim * 4l)
             }
             if (vk_prof()) {
-                to_log(LOG_INFO, "vk_rdpf w0 {w0} rows {wlen} prep {t_prep} record {t_record} submit {get_time_usec(tp0) - t_prep - t_record}\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
+                to_log(LOG_INFO, "vk_rdpf w0 {w0} rows {wfull} prep {t_prep} record {t_record} submit {get_time_usec(tp0) - t_prep - t_record}\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
             }
-            w0 += wlen
-            last_wlen = wlen
+            w0 += wfull
+            last_wlen = wfull
         }
         if (g_rd.hybrid) {
             pf_dn_end()
@@ -3306,7 +3484,7 @@ def private stack_batch_enc(raw : VkCommandBuffer; var h : VkHaz; si : int; nwg 
     var st & = unsafe(g_gpu.stacks[si])
     let fmt = st.fmt
     // Q4_0 rides the f16 coopmat arm too (no s8-native for nibbles — mode 2 falls back to sdot4)
-    let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == COOPMAT_F16
+    let q40cm = kq_batch_q40cm(fmt)
     var v = 6   // the stack's fixed class (kq); 5 = the q40 f16 MMA twin
     if (fmt == int(KqFmt.q8)) {
         v = q8_batch_cls_variant(st.batch_tile, st.batch_aligned)
@@ -3849,7 +4027,8 @@ def vk_moe_attn(var yp : float?; var kp : float?; var vp : float?;
     let half = rot / 2l
     let n_kv = kv_dim / hs
     let kv_mul = n_kv > 0l ? n_heads / n_kv : 0l
-    assert(npos <= AT_CTX && qd <= AT_MAX_QD && kv_dim <= AT_MAX_KV
+    let qd_cap = min(AT_MAX_QD, row_slab_dim(g_gpu.max_wg_bytes))   // the prep's row: its small-slab twin holds less
+    assert(npos <= AT_CTX && qd <= qd_cap && kv_dim <= AT_MAX_KV
            && (hs == 128l || hs == 256l) && half >= 1l && 2l * half <= hs
            && n_heads * hs == qd && n_kv * hs == kv_dim && n_heads == n_kv * kv_mul
            && n_heads <= 64l && dim % 32l == 0l && kv_dim % 32l == 0l

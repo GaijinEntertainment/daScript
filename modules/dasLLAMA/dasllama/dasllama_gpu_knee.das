@@ -236,6 +236,96 @@ def set_vk_split_k_tgs(v : int64) {
 
 def vk_split_k_tgs : int64 => g_vk_split_k_tgs
 
+//! The alternate stamps the Vulkan home's class slots serve on this box (`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps`), a
+//! bit a slot: a set bit builds the slot's pipeline from its alternate's words in place of the class's own. Raced by the mint
+//! (`vk_alt_stamp_race`); read at every pipeline build. 0 serves every class its own stamp.
+var private g_vk_alt_stamps = 0l
+
+let VK_ALT_Q8_GEMV = 0   //! the q8 decode GEMV's load-ahead stamp
+let VK_ALT_KHR_ROT = 1   //! every format's KHR window tile with its K walk rotated a weight tile
+let VK_ALT_DN_TOKEN = 2   //! the window's deltanet scan on the per-token stamp (`dn_scan_cls`) in place of the chunked one
+let VK_ALT_Q8_AR_ROT = 3  //! the q8 decode GEMV that carries the residual step, every row's K walk rotated by its index (`q8_gemv_ar_rot_cls`)
+let VK_ALT_MMQ_GU_M = 4   //! the routed block's gate and up m pieces on the int8 tile (`<format>_batch_mmq_cls`)
+let VK_ALT_MMQ_GU_S = 5   //! ... their s pieces (`<format>_batch_mmqs_cls`)
+let VK_ALT_MMQ_DN_M = 6   //! the routed block's down m pieces on the int8 tile
+let VK_ALT_MMQ_DN_S = 7   //! ... its s pieces
+let VK_ALT_FA_TFIRST = 8  //! every KHR flash stamp with its workgroups tile-first (`fa_khr_<stamp>_tf_cls`)
+let VK_ALT_EGU_SPLIT = 9  //! the one-row step's routed gate and up on their own dispatches, in place of the fused gate-up leaf
+let VK_ALT_N_ROT = 10     //! the N-column GEMV leaves' rotated twins over a plane whose quant rows sit a power of two apart
+
+let PF_IGPU_KEY_ELEMS = 32_000_000_000l   //! an integrated GPU's cap on a prefill window's rows x keys x key-row width: under it a layer's attention is a short job on the 8060S
+let PF_IGPU_ROWS_STEP = 256l              //! the step a window comes down in, and its floor: a whole l column of the window tiles
+
+//! the rows of a prefill window on an integrated GPU, `np` the driver's window, `keys0` the positions before it, `kvd` the
+//! model's widest key row: `np` down in `PF_IGPU_ROWS_STEP` rows until the window's rows x the keys they attend x `kvd` is
+//! under `PF_IGPU_KEY_ELEMS`. A layer's attention over a window is one dispatch, so one job, and a driver's watchdog resets
+//! the device under a job that runs past it
+def pf_igpu_window_rows(np, keys0, kvd : int64) : int64 {
+    var rows = np
+    while (rows > PF_IGPU_ROWS_STEP && rows * (keys0 + rows) * kvd > PF_IGPU_KEY_ELEMS) {
+        rows -= PF_IGPU_ROWS_STEP
+    }
+    return rows
+}
+
+let VK_VENDOR_AMD = 0x1002u   //! `VkPhysicalDeviceProperties.vendorID` of an AMD device, under either of its drivers
+
+//! whether a device of `vendor` serves the tile-first flash stamps with no race: an AMD device reads one key head's slice of
+//! every K/V row for as long as one head's tiles run, and whole rows where the heads of a tile run together
+def vk_alt_fa_by_vendor(vendor : uint) : bool => vendor == VK_VENDOR_AMD
+
+//! whether a device of `vendor` serves the one-row routed gate and up split with no race: an AMD device reads the two
+//! planes faster as two GEMVs than through the fused leaf
+def vk_alt_egu_by_vendor(vendor : uint) : bool => vendor == VK_VENDOR_AMD
+
+//! whether a device of `vendor` serves the N-column leaves' rotated twins with no race: an AMD device's rows of a
+//! workgroup collide where they read one column a power of two apart at once
+def vk_alt_nrot_by_vendor(vendor : uint) : bool => vendor == VK_VENDOR_AMD
+
+//! whether a device of `vendor` serves the q8 GEMV's load-ahead stamp with no race
+def vk_alt_gemv_by_vendor(vendor : uint) : bool => vendor == VK_VENDOR_AMD
+
+//! the routed block's columns an AMD device serves on the int8 tiles: the gate and up pieces whole, the down's s pieces
+let VK_ALT_MMQ_AMD = (1l << int64(VK_ALT_MMQ_GU_M)) | (1l << int64(VK_ALT_MMQ_GU_S)) | (1l << int64(VK_ALT_MMQ_DN_S))
+
+//! the alternates a device of `vendor` serves by its own rule, with no race and no device check: the load-ahead and the
+//! rotated residual GEMV, the tile-first flash stamps, the split routed gate-up and the rotated N-column leaves on an AMD
+//! device, none elsewhere
+def vk_alt_rule_bits(vendor : uint) : int64 {
+    let gemv = vk_alt_gemv_by_vendor(vendor) ? (1l << int64(VK_ALT_Q8_GEMV)) | (1l << int64(VK_ALT_Q8_AR_ROT)) : 0l
+    let egu = vk_alt_egu_by_vendor(vendor) ? 1l << int64(VK_ALT_EGU_SPLIT) : 0l
+    let nrot = vk_alt_nrot_by_vendor(vendor) ? 1l << int64(VK_ALT_N_ROT) : 0l
+    return gemv | egu | nrot | (vk_alt_fa_by_vendor(vendor) ? 1l << int64(VK_ALT_FA_TFIRST) : 0l)
+}
+
+//! the int8 columns a device of `vendor` serves with no race: `VK_ALT_MMQ_AMD` on AMD, none elsewhere
+def vk_alt_mmq_by_vendor(vendor : uint) : int64 => vendor == VK_VENDOR_AMD ? VK_ALT_MMQ_AMD : 0l
+
+//! the q8 decode GEMV shapes the alternate-stamp race times, a column count over a row count: a narrow, a model-width and two
+//! wide inputs at a model width's rows, and a wide output
+let ALT_Q8_GEMV_N = fixed_array(1024l, 2048l, 4096l, 8192l, 2048l)
+let ALT_Q8_GEMV_D = fixed_array(2048l, 2048l, 2048l, 2048l, 8192l)
+
+//! the window shapes the race times the KHR tile's rotated walk at, a K over a row count at `ALT_KHR_ROWS` token rows: K
+//! 2048, where the planes' row stride puts a column of every row a power of two apart on every device the walk answers,
+//! under a model-width and a wide row count
+let ALT_KHR_N = fixed_array(2048l, 2048l)
+let ALT_KHR_D = fixed_array(2048l, 8192l)
+let ALT_KHR_ROWS = 512l
+
+//! the recurrent site the race times the window's two scan stamps at: this many rows of `ALT_DN_KEY_HEADS` key heads over
+//! `ALT_DN_VALUE_HEADS` value heads, a head `ALT_DN_HEAD` wide
+let ALT_DN_ROWS = 512l
+let ALT_DN_KEY_HEADS = 16l
+let ALT_DN_VALUE_HEADS = 32l
+let ALT_DN_HEAD = 128l
+
+def set_vk_alt_stamps(v : int64) {
+    set_raced_knob(g_vk_alt_stamps, v, 0l, "set_vk_alt_stamps")
+}
+
+def vk_alt_stamps : int64 => g_vk_alt_stamps
+
 //! The CUDA short window's split-K knee, the Vulkan knob's twin over the CUDA home's own stamps: a window the s column serves
 //! whose tile grid is at most half this many blocks splits its K; 0 leaves those windows whole. Raced by the mint
 //! (`cud_split_knee_race`); read at every pick. The default is the race's pick on the RTX PRO 4500 and the RTX 5060 Ti alike.

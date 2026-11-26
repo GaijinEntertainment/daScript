@@ -244,8 +244,8 @@ session runs the draft command at row `pos - 1` instead (`vulkan_resident_seam`)
 counted as no draft. A seat that declines such a session panics by name (`rdec_device_home_guard`),
 as a declined decode or prefill does. The engine answers whether the installed model's round can run
 so (`gpu_resident_mtp_device_home_`: a verify seat of two rows or more, a recurrent model's rollback
-seat, and the draft's own seat - the head armed, or a block drafter whose layer rows the driver
-captures and whose verify steps with no head row), and the server homes a speculating slot's streams
+seat, and the draft's own seat - the head armed, an attached assistant drafter (its draft a command of its own, its verify on
+the N-row token command), or a block drafter whose layer rows the driver captures and whose verify steps with no head row), and the server homes a speculating slot's streams
 there only then (`slot_wants_device_kv`). The device-home round runs the same commands over the same
 rows as the host-cached round, so the two sessions draft, accept and stand alike round for round
 (`test_gpu_resident_format_census.das`' NextN cell; `test_scheduler.das`' device-mode cell holds the

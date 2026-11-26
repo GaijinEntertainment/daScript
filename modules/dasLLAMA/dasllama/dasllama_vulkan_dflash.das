@@ -21,6 +21,7 @@ require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_vulkan_classes_dflash
+require dasllama/dasllama_env   // g_env_vulkan: the tile form's knob
 require dasllama/dasllama_vulkan_decode   // rd_chain_settle
 
 // The block drafter (DFlash, DFlash2) on the Vulkan resident driver, the CUDA home's driver on this home's plumbing: the
@@ -63,17 +64,22 @@ struct private DfSite {
     d : int64
 }
 
-//! a session's ring on the device - a layer's K and V rows a slot, [L][window][n_kv * hs] each - with the sets that bind it
+//! a session's ring on the device - a layer's K and V rows a slot, the engine's layout (`dflash_ring_off`) - with the sets that
+//! bind it
 struct private DfRing {
     rk : uint64
     rv : uint64
-    s_qkn : VkDescriptorSet    //! the commit's K rows normed and roped into the ring
+    cap : int64      //! the slots a dense layer holds: grown as the context does
+    tp_gen : int     //! the partials plane `s_attn_tile` binds (`DflashVk.tp_gen`)
+    s_cvt_k : VkDescriptorSet       //! the scratch K rows (`kn`) as halves into the ring
+    s_cvt_v : VkDescriptorSet       //! the scratch V rows (`vb`) as halves into the ring
+    s_dense_tile : VkDescriptorSet  //! the flash tile's decode form over the ring, its pieces in the partials plane (`DflashVk.dense_tile`)
     s_attn_tile : VkDescriptorSet
-    s_attn_tile_heads : VkDescriptorSet   //! the same planes under the grouped tile's stamp
 }
 
 struct private DflashVk {
     ready : bool
+    dense_tile : bool   //! a dense layer attends on the flash tile's decode form (`df_dense_tile_on`), else on the scalar tiles
     fq, fs : uint64[KQ_FMT_COUNT]     //! a format's quant and scale planes in the device layout, its tensors' blocks one after another (0 = no plane of it)
     fqb, fsb : int64[KQ_FMT_COUNT]    //! ... their bytes
     fblob, invf : uint64              //! the drafter's f32 rows (the norms, the conv bases), the rope's inverse frequencies
@@ -92,6 +98,7 @@ struct private DflashVk {
     row_bytes, dyn_bytes, q_bytes, kv_bytes, hid_bytes, capf_bytes, logits_bytes, hsel_bytes, list_bytes, row_list_bytes, wids_bytes : int64
     sel_ok : bool                     //! the device top-k serves this drafter's top-k
     walk_ok : bool                    //! ... and the selector's walk runs there too
+    dr : DflashDrafter const?         //! the drafter of the pass now held (the landing's decode reads its shape); null = none held yet
     cb : uint64[4]                    //! the predecessor codebook's quant bytes and scale rows, then the successor's (a Q8_0 codebook's scale rows its own bytes)
     cbb : int64[4]
     walk : GkDflashWalkArgs
@@ -101,6 +108,8 @@ struct private DflashVk {
     rings : table<uint64; DfRing>
     ring_bytes : int64
     ring_said : bool           //! a session found no room for its ring, and the attach said so
+    tp_keys : int64            //! the keys a (row, head) attends at most within the partials plane
+    tp_gen : int               //! ... and how many times the plane was remade: a ring's tile set binds one of them
     s_ar_xx, s_ar_xo, s_ar_xcv, s_ar_oo : VkDescriptorSet   //! the norm's sets by (rows, add partner): into `hn` every one
     s_conv_hn, s_conv_o : VkDescriptorSet
     s_qkn_q, s_qkn_k, s_attn_merge : VkDescriptorSet
@@ -111,16 +120,19 @@ struct private DflashVk {
     feed_base, feed_elems : int64
     feed_kq : int                     //! the feed's class: 1 = Q8_K (a superblock site reads it), 0 = Q8_0, -1 = unknown
     passes, commits, selected, walked : int64
+    grows : int64   //! the times a session's ring grew its dense layers
     pass_us, commit_us : int64
 }
 
 var private g_df : DflashVk
 
 def private df_stats : DflashDeviceStats => DflashDeviceStats(passes = g_df.passes, commits = g_df.commits, pass_us = g_df.pass_us,
-    commit_us = g_df.commit_us, selected = g_df.selected, walked = g_df.walked)
+    commit_us = g_df.commit_us, selected = g_df.selected, walked = g_df.walked, grows = g_df.grows)
 
 //! every handle dropped, nothing destroyed: the model drop already swept the device
 def private df_forget(var g : DflashVk) {
+    g.dr = null
+    g_df_held = DflashHeldPass()
     g.sites |> clear()
     g.rings |> clear()
     for (i in range(KQ_FMT_COUNT)) {
@@ -203,7 +215,7 @@ def private df_why(dr : DflashDrafter) : string {
     delete sites
     return "a weight plane's decode GEMV did not build on this device" if (!served)
     let cls_fmt = g_rd.cls_fmt_marker
-    let stamps = (ensure_dflash_conv_cls() && ensure_dflash_qkn_cls() && ensure_dflash_attn_tile_cls() && ensure_dflash_attn_tile_heads_cls() && ensure_dflash_attn_merge_cls() && ensure_cls_ar() && ensure_cls_dn_rq()
+    let stamps = (ensure_dflash_conv_cls() && ensure_dflash_qkn_cls() && ensure_dflash_attn_tile_cls() && ensure_dflash_attn_merge_cls() && ensure_tower_clamp_cvt_cls() && ensure_cls_ar() && ensure_cls_dn_rq()
         && ensure_cls_q8k_rq() && ensure_q8_actrq_cls() && ensure_q8k_actrq_cls() && gemv_cls_ensure(cls_fmt) && gemv_cls_ensure_n(cls_fmt)
         && (g_rd.emb_blk < 0l || emb_cls_ensure(g_rd.emb_fmt)) && (g_rd.emb_f32 == 0ul || ensure_emb_gather_f32_cls()))
     return "a kernel of the pass did not build on this device" if (!stamps)
@@ -273,7 +285,9 @@ def private df_buffers(t : Model; dr : DflashDrafter; var g : DflashVk) : bool {
     g.q = soft_device_buf(oom, g.q_bytes)
     g.qn = soft_device_buf(oom, g.q_bytes)
     g.att = soft_device_buf(oom, g.q_bytes)
-    g.tp_bytes = gk_dflash_attn_partials(DF_ROWS, dr.n_heads, dr.hs) * 4l
+    g.tp_keys = max(int64(GK_DFLASH_ATTN_KEYS), dflash_ring_first(dr) + DF_ROWS)
+    g.tp_gen = 0
+    g.tp_bytes = gk_dflash_attn_partials(DF_ROWS, dr.n_heads, dr.hs, g.tp_keys) * 4l
     g.tp = soft_device_buf(oom, g.tp_bytes)
     g.kv_bytes = DF_ROWS * kvd * 4l
     g.kb = soft_device_buf(oom, g.kv_bytes)
@@ -303,7 +317,8 @@ def private df_buffers(t : Model; dr : DflashDrafter; var g : DflashVk) : bool {
         g.cval = soft_device_buf(oom, g.row_list_bytes)
     }
     g.walk_ok = g.sel_ok && dr.v2 && df_walk_books(dr, g, vocab, oom)
-    g.ring_bytes = dr.n_layers * dr.window * kvd * 4l
+    g.dense_tile = df_dense_tile_on(dr)
+    g.ring_bytes = df_ring_bytes(dr, dflash_ring_first(dr))
     let widest = max(max(max(g.logits_bytes, g.ring_bytes), max(g.capf_bytes, g.xq_bytes)),
         max(max(g.hid_bytes, g.row_bytes), max(max(g.q_bytes, g.kv_bytes), max(g.dyn_bytes, g.tp_bytes))))
     return false if (oom || !vk_range_ok(widest))   //! every plane a set binds whole sits inside the device's storage range
@@ -492,10 +507,12 @@ def private df_ready(t : Model; dr : DflashDrafter) : bool {
     g.feed_live = false
     g.passes = 0l
     g.commits = 0l
+    g.grows = 0l
     g.selected = 0l
     g.walked = 0l
     g.ring_said = false
     g.ready = true
+    dflash_tile_knob_say("vulkan", "DASLLAMA_VK_ATTN_TILE", g_env_vulkan.vk_attn_tile, dr.n_win < dr.n_layers && dr.hs == 128l && khr_kq_tile_on())
     return true
 }
 
@@ -574,27 +591,39 @@ def private df_branch_norm(var g : DflashVk; dr : DflashDrafter; raw : VkCommand
 
 //! layer `l` over the block's `rows` at `pos`: on entry hn holds the rows under the layer's attention norm, on exit under the
 //! next layer's (the final norm past the last)
-def private df_layer(var g : DflashVk; dr : DflashDrafter; raw : VkCommandBuffer; var h : VkHaz; var ring : DfRing; l, rows, pos, lo, nctx : int64) {
+def private df_layer(var g : DflashVk; dr : DflashDrafter; raw : VkCommandBuffer; var h : VkHaz; var ring : DfRing; l, rows, pos, lo, nctx, dlo : int64) {
     let qd = dr.n_heads * dr.hs
-    let kvd = uint(dr.n_kv * dr.hs)
     df_feed(g, dr, raw, h, dflash_site(l, 0), dr.v2 ? dr.aconv_base_offs[l] : 0l, rows)
     df_gemv(g, raw, h, dflash_site(l, 1), rows)
     df_gemv(g, raw, h, dflash_site(l, 2), rows)
     df_gemv(g, raw, h, dflash_site(l, 3), rows)
     df_qkn(dr, raw, h, g.s_qkn_q, dr.n_heads, dr.qn_offs[l], 0l, pos, rows)
     df_qkn(dr, raw, h, g.s_qkn_k, dr.n_kv, dr.kn_offs[l], 0l, pos, rows)
-    let lbase = uint(l * dr.window) * kvd
-    let tiles = gk_dflash_attn_tiles(nctx + rows)
-    var pa = GkDflashAttnArgs(rows = uint(rows), pos0 = uint(pos), lo = uint(lo), nctx = uint(nctx), w = uint(dr.window), hs = uint(dr.hs),
+    let lbase = uint(dflash_ring_off(dr, l, ring.cap))
+    let span = dflash_layer_span(dr, l, lo, nctx, dlo)
+    let tiles = gk_dflash_attn_tiles(span.nctx + rows)
+    var pa = GkDflashAttnArgs(rows = uint(rows), pos0 = uint(pos), lo = uint(span.lo), nctx = uint(span.nctx),
+        w = uint(dflash_ring_slots(dr, l, ring.cap)), hs = uint(dr.hs),
         nheads = uint(dr.n_heads), grp = uint(dr.n_heads / dr.n_kv), scale = dr.attn_scale, rbase = 0u,
         koff = lbase, voff = lbase)
-    let wgs = gk_dflash_attn_heads_wgs(rows, dr.n_heads, dr.n_heads / dr.n_kv, tiles)
-    if (gk_dflash_attn_grouped(dr.n_heads / dr.n_kv)) {
-        enc_dflash_attn_tile_heads_cls(raw, h, ring.s_attn_tile_heads, pa, wgs)
+    if (dr.dense[l] && g.dense_tile) {   // the block's own rows joined to the ring past the context, every row attending them all on the flash tile's decode form
+        let kvd = dr.n_kv * dr.hs
+        let grp = dr.n_heads / dr.n_kv
+        let k0 = int64(lbase) + span.lo * kvd
+        df_halves(raw, h, ring.s_cvt_k, k0 + span.nctx * kvd, rows * kvd)
+        df_halves(raw, h, ring.s_cvt_v, k0 + span.nctx * kvd, rows * kvd)
+        let groups = fa_dec_groups(dr.n_kv, rows, grp)
+        let pieces = fa_dec_pieces(2l * int64(g_gpu.attn_wave), groups, clamp(g.tp_keys / 256l, 1l, 16l))
+        var pt = FaArgs(rows = uint(rows), qd = uint(qd), kvd = uint(kvd), kv_mul = uint(grp), kvbase = uint(k0), scale = dr.attn_scale,
+            qstride = uint(qd), qhs = uint(dr.hs), vbase = uint(k0), nsplit = uint(pieces), fixcnt = uint(span.nctx + rows))
+        enc_fa_khr_dec_h128_cls(raw, h, ring.s_dense_tile, pt, groups * pieces)
+        var pm = pa   // the merge reads the tile form's pieces as its key tiles
+        pm.nctx = uint(pieces * 256l - rows)
+        enc_dflash_attn_merge_cls(raw, h, g.s_attn_merge, pm, dr.n_heads * rows)
     } else {
-        enc_dflash_attn_tile_cls(raw, h, ring.s_attn_tile, pa, wgs)
+        enc_dflash_attn_tile_cls(raw, h, ring.s_attn_tile, pa, gk_dflash_attn_tile_wgs(rows, dr.n_heads, dr.n_heads / dr.n_kv, tiles))
+        enc_dflash_attn_merge_cls(raw, h, g.s_attn_merge, pa, dr.n_heads * rows)
     }
-    enc_dflash_attn_merge_cls(raw, h, g.s_attn_merge, pa, dr.n_heads * rows)
     df_rq(g, raw, h, g.s_rq_att, 0l, rows * qd, g.sites[dflash_site(l, 4)].fmt)
     df_gemv(g, raw, h, dflash_site(l, 4), rows)
     df_branch_norm(g, dr, raw, h, dr.v2 ? dr.aconv_base_offs[l] : 0l, dr.ffn_norm_offs[l], rows)
@@ -610,6 +639,20 @@ def private df_layer(var g : DflashVk; dr : DflashDrafter; raw : VkCommandBuffer
     df_gemv(g, raw, h, dflash_site(l, 8), rows)
     let nxt = l + 1l < dr.n_layers ? dr.attn_norm_offs[l + 1l] : dr.norm_off
     df_branch_norm(g, dr, raw, h, dr.v2 ? dr.fconv_base_offs[l] : 0l, nxt, rows)
+}
+
+//! whether a drafter's dense layers attend on the flash tile's decode form: a dense layer, a head of 128, KHR cooperative
+//! matrices, the knob DASLLAMA_VK_ATTN_TILE not at 0, and the stamp on this device
+def private df_dense_tile_on(dr : DflashDrafter) : bool
+    => dr.n_win < dr.n_layers && dr.hs == 128l && khr_kq_tile_on() && g_env_vulkan.vk_attn_tile != 0l && ensure_fa_khr_dec_h128_cls()
+
+//! a ring plane's bytes for dense layers of `cap` slots: the engine's, a block's own rows joined past a dense layer's context
+def private df_ring_bytes(dr : DflashDrafter; cap : int64) : int64 => dflash_ring_bytes(dr, cap, DF_ROWS)
+
+//! `n` elements of a scratch plane's rows as halves at the ring's element `at`
+def private df_halves(raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; at, n : int64) {
+    var pc = gk_f16_rows_args(uint(n), 1.0, uint(at))
+    enc_tower_clamp_cvt_cls(raw, h, s, pc, (n / 4l + 255l) / 256l)
 }
 
 //! a ring's K and V planes, both or neither (`k` 0 where the card has no room)
@@ -635,7 +678,7 @@ def private df_ring_room(g : DflashVk) : bool {
 }
 
 //! the session's ring, made zeroed on its first use with its sets (`rk` 0 where the card has no room)
-def private df_ring(var g : DflashVk; uid : uint64) : DfRing {
+def private df_ring(dr : DflashDrafter; var g : DflashVk; uid : uint64) : DfRing {
     if (!key_exists(g.rings, uid)) {
         let pl = df_ring_planes(g)
         if (pl.k == 0ul) {
@@ -649,15 +692,82 @@ def private df_ring(var g : DflashVk; uid : uint64) : DfRing {
         let rv = pl.v
         upload_zeros(rk, 0l, g.ring_bytes)
         upload_zeros(rv, 0l, g.ring_bytes)
-        g.rings[uid] = DfRing(rk = rk, rv = rv,
-            s_qkn = set_dflash_qkn_cls(fixed_array(g.kb, g.fblob, g.invf, rk), fixed_array(g.kv_bytes, g.fblob_bytes, g.invf_bytes, g.ring_bytes),
-                fixed_array(B_KB, 0u, 0u, B_RING)),
-            s_attn_tile = set_dflash_attn_tile_cls(fixed_array(g.qn, g.kn, g.vb, rk, rv, g.tp),
-                fixed_array(g.q_bytes, g.kv_bytes, g.kv_bytes, g.ring_bytes, g.ring_bytes, g.tp_bytes), fixed_array(B_QN, B_KN, B_VB, B_RING, B_RING, B_TP)),
-            s_attn_tile_heads = set_dflash_attn_tile_heads_cls(fixed_array(g.qn, g.kn, g.vb, rk, rv, g.tp),
-                fixed_array(g.q_bytes, g.kv_bytes, g.kv_bytes, g.ring_bytes, g.ring_bytes, g.tp_bytes), fixed_array(B_QN, B_KN, B_VB, B_RING, B_RING, B_TP)))
+        g.rings[uid] = df_ring_bound(g, rk, rv, dflash_ring_first(dr), g.ring_bytes)
     }
-    return g.rings?[uid] ?? DfRing()
+    var ring = g.rings?[uid] ?? DfRing()
+    if (ring.rk != 0ul && ring.tp_gen != g.tp_gen) {   // another session's growth remade the partials plane
+        ring = df_ring_bound(g, ring.rk, ring.rv, ring.cap, df_ring_bytes(dr, ring.cap))
+        g.rings[uid] = ring
+    }
+    return ring
+}
+
+//! a ring over the planes `rk` / `rv` of `bytes` each whose dense layers hold `cap` slots, its sets bound
+def private df_ring_bound(g : DflashVk; rk, rv : uint64; cap, bytes : int64) : DfRing {
+    var st = VkDescriptorSet()
+    if (g.dense_tile) {
+        st = set_fa_khr_dec_cls(fixed_array(g.qn, rk, rv, g.tp, g.fblob), fixed_array(g.q_bytes, bytes, bytes, g.tp_bytes, g.fblob_bytes),
+            fixed_array(B_QN, B_RING, B_RING, B_TP, 0u))
+    }
+    return DfRing(rk = rk, rv = rv, cap = cap, tp_gen = g.tp_gen, s_dense_tile = st,
+        s_cvt_k = set_tower_clamp_cvt_cls(fixed_array(g.kn, rk), fixed_array(g.kv_bytes, bytes), fixed_array(B_KN, B_RING)),
+        s_cvt_v = set_tower_clamp_cvt_cls(fixed_array(g.vb, rv), fixed_array(g.kv_bytes, bytes), fixed_array(B_VB, B_RING)),
+        s_attn_tile = set_dflash_attn_tile_cls(fixed_array(g.qn, g.kn, g.vb, rk, rv, g.tp),
+            fixed_array(g.q_bytes, g.kv_bytes, g.kv_bytes, bytes, bytes, g.tp_bytes), fixed_array(B_QN, B_KN, B_VB, B_RING, B_RING, B_TP)))
+}
+
+//! the session's ring holds positions under `need`: its dense layers' slots grown into new planes (the rows copied to their new
+//! places) and the partials plane remade for the keys a dense layer then attends; false where the card has no room
+[cold_path]
+def private df_ring_grow(dr : DflashDrafter; var g : DflashVk; uid : uint64; need : int64) : bool {
+    let old = g.rings?[uid] ?? DfRing()
+    let cap = dflash_ring_grown(dr, old.cap, need)
+    g.grows++
+    let bytes = df_ring_bytes(dr, cap)
+    let keys = cap + DF_ROWS
+    let tp_bytes = gk_dflash_attn_partials(DF_ROWS, dr.n_heads, dr.hs, keys) * 4l
+    return false if (!vk_range_ok(bytes) || !vk_range_ok(tp_bytes))
+    var oom = false
+    var rk = soft_device_buf(oom, bytes)
+    var rv = soft_device_buf(oom, bytes)
+    var tp = keys > g.tp_keys ? soft_device_buf(oom, tp_bytes) : 0ul
+    if (oom) {
+        release_device_buf(rk)
+        release_device_buf(rv)
+        release_device_buf(tp)
+        return false
+    }
+    var h = cmd_open(g.cmd, true)
+    vhz_dep(g.cmd, h, B_RING, 0u, true)
+    dflash_ring_moves(dr, old.cap, cap) $(from, to, n) {
+        cmd_copy_range(g.cmd, old.rk, from * 2l, rk, to * 2l, n * 2l)
+        cmd_copy_range(g.cmd, old.rv, from * 2l, rv, to * 2l, n * 2l)
+    }
+    cmd_close(g.cmd)
+    submit_wait(g.cmd)
+    var old_k = old.rk
+    var old_v = old.rv
+    release_device_buf(old_k)
+    release_device_buf(old_v)
+    if (tp != 0ul) {
+        release_device_buf(g.tp)
+        g.tp = tp
+        g.tp_bytes = tp_bytes
+        g.tp_keys = keys
+        g.tp_gen++
+        g.s_attn_merge = set_dflash_attn_merge_cls(fixed_array(g.tp, g.att), fixed_array(g.tp_bytes, g.q_bytes), fixed_array(B_TP, B_ATT))
+    }
+    g.rings[uid] = df_ring_bound(g, rk, rv, cap, bytes)
+    return true
+}
+
+//! the session's ring holding positions under `need`: made at its first use, its dense layers grown where it is short; no
+//! planes (`rk` 0) where the card has no room for either
+def private df_ring_reach(dr : DflashDrafter; var g : DflashVk; uid : uint64; need : int64) : DfRing {
+    var ring = df_ring(dr, g, uid)
+    return ring if (ring.rk == 0ul || !dflash_ring_short(dr, ring.cap, need))
+    return DfRing() if (!df_ring_grow(dr, g, uid, need))
+    return df_ring(dr, g, uid)
 }
 
 def private df_drop(uid : uint64) {
@@ -671,7 +781,7 @@ def private df_drop(uid : uint64) {
 
 //! the pass's dispatches over `rows` token rows from the anchor `tok` at `pos`: the rows embedded, the layers over the session's
 //! ring, the `nd` draft rows through the trunk's classifier into `logits` and, on a selector file, their selector rows into `hsel`
-def private df_pass_enc(t : Model; dr : DflashDrafter; var g : DflashVk; var ring : DfRing; raw : VkCommandBuffer; var h : VkHaz; tok, pos, rows, nd, lo, nctx : int64) {
+def private df_pass_enc(t : Model; dr : DflashDrafter; var g : DflashVk; var ring : DfRing; raw : VkCommandBuffer; var h : VkHaz; tok, pos, rows, nd, lo, nctx, dlo : int64) {
     let d = dr.dim
     unsafe {
         var w = reinterpret<uint?>(g.idin.mapped)
@@ -701,7 +811,7 @@ def private df_pass_enc(t : Model; dr : DflashDrafter; var g : DflashVk; var rin
     }
     df_norm(dr, raw, h, g.s_ar_xx, false, dr.attn_norm_offs[0], rows)
     for (l in range64(dr.n_layers)) {
-        df_layer(g, dr, raw, h, ring, l, rows, pos, lo, nctx)
+        df_layer(g, dr, raw, h, ring, l, rows, pos, lo, nctx, dlo)
     }
     // row 0 is the anchor's: the drafts are the rows after it
     let cls_fmt = g_rd.cls_fmt_marker
@@ -715,16 +825,16 @@ def private df_pass_enc(t : Model; dr : DflashDrafter; var g : DflashVk; var rin
     g.feed_live = false
 }
 
-def private df_pass(t : Model; dr : DflashDrafter; uid : uint64; tok, pos, rows, nd, lo, nctx : int64; var logits : array<float>; var hsel : array<float>) : bool {
+def private df_pass(t : Model; dr : DflashDrafter; uid : uint64; tok, pos, rows, nd, lo, nctx, dlo : int64; var logits : array<float>; var hsel : array<float>) : bool {
     var g & = unsafe(g_df)
     return false if (!g.ready || rows > DF_ROWS || nd < 1l || nd >= rows || nd >= dr.nblock)
     let t0 = ref_time_ticks()   // clock: control - the pass's wall for the stats seat, never a decision
     rd_chain_settle()
-    var ring = df_ring(g, uid)
+    var ring = g.dense_tile ? df_ring_reach(dr, g, uid, lo + nctx + rows) : df_ring(dr, g, uid)
     return false if (ring.rk == 0ul)
     let vocab = t.config.vocab_size
     var h = cmd_open(g.cmd, true)
-    df_pass_enc(t, dr, g, ring, g.cmd, h, tok, pos, rows, nd, lo, nctx)
+    df_pass_enc(t, dr, g, ring, g.cmd, h, tok, pos, rows, nd, lo, nctx, dlo)
     vhz_dep(g.cmd, h, B_LOG | B_HSEL, 0u, true)
     cmd_copy_range(g.cmd, g.logits, 0l, g.land.buf, 0l, nd * vocab * 4l)
     if (dr.v2) {
@@ -751,7 +861,7 @@ def private df_commit(dr : DflashDrafter; uid : uint64; caps : array<float>; row
     return false if (!g.ready)
     let t0 = ref_time_ticks()   // clock: control - the commit's wall for the stats seat, never a decision
     rd_chain_settle()
-    var ring = df_ring(g, uid)
+    var ring = df_ring_reach(dr, g, uid, pos0 + rows)
     return false if (ring.rk == 0ul)
     let d = dr.dim
     let kvd = dr.n_kv * dr.hs
@@ -773,12 +883,12 @@ def private df_commit(dr : DflashDrafter; uid : uint64; caps : array<float>; row
         df_norm(dr, g.cmd, h, g.s_ar_oo, false, dr.hnorm_off, n)
         df_rq(g, g.cmd, h, g.s_rq_hn, 0l, n * d, g.sites[dflash_site(0l, 2)].fmt)
         for (l in range64(dr.n_layers)) {
-            let at = l * w * kvd + slot * kvd
+            let at = dflash_ring_off(dr, l, ring.cap) + (pos % dflash_ring_slots(dr, l, ring.cap)) * kvd
             df_gemv(g, g.cmd, h, dflash_site(l, 2), n)
-            df_qkn(dr, g.cmd, h, ring.s_qkn, dr.n_kv, dr.kn_offs[l], at, pos, n)
+            df_qkn(dr, g.cmd, h, g.s_qkn_k, dr.n_kv, dr.kn_offs[l], 0l, pos, n)
+            df_halves(g.cmd, h, ring.s_cvt_k, at, n * kvd)
             df_gemv(g, g.cmd, h, dflash_site(l, 3), n)
-            vhz_dep(g.cmd, h, B_VB, B_RING, true)
-            cmd_copy_range(g.cmd, g.vb, 0l, ring.rv, at * 4l, n * kvd * 4l)
+            df_halves(g.cmd, h, ring.s_cvt_v, at, n * kvd)
         }
         g.feed_kq = -1
         g.feed_live = false
@@ -793,17 +903,33 @@ def private df_commit(dr : DflashDrafter; uid : uint64; caps : array<float>; row
 
 def private df_selects(soft : bool) : bool => dflash_device_selects(soft, g_df.ready && g_df.sel_ok)
 
+var private g_df_held : DflashHeldPass   //! the pass this home submitted unwaited
+
+//! RdecHeldDraftsFn: the held pass's drafts once the verify's wait returned - the same queue ran the pass ahead of it
+def private df_held_drafts(var drafts : array<int64>; nd : int64) : bool
+    => dflash_held_drafts(g_df_held, g_df.dr, g_df.land.mapped, drafts, nd)
+
+//! the `land` seam: a held pass's drafts; where no verify came for them the queue is waited here
+[unused_argument(rng, cids, qs)]
+def private df_land(var drafts : array<int64>; nd : int64; var rng : int4&; var cids : array<int64>; var qs : array<float>) : double {
+    return dflash_held_land(g_df_held, g_df.dr, g_df.land.mapped, drafts, nd) $ {
+        return vk_queue_wait_idle_locked(g_gpu.queue) == VkResult.SUCCESS
+    }
+}
+
 //! the pass with the selector's top-k on the device: each draft row's `topk` best logits (a list a slice, the slices' lists
 //! merged) and its selector row - kilobytes where the rows' logits are megabytes - then the walk over them on the device
-//! where the codebooks let it, the picks alone landed, else the host's own (`dflash_walk`)
-[unused_argument(may_hold, may_hold_ahead, temp, rng, cids, qs)]
-def private df_select_pass(t : Model; dr : DflashDrafter; uid : uint64; tok, pos, rows, nd, lo, nctx : int64; may_hold, may_hold_ahead : bool; temp : float;
+//! where the codebooks let it, the picks alone landed, else the host's own (`dflash_walk`). Where the round lets it hold and
+//! the verify takes its rows' ids off the device, the pass is submitted unwaited: its command copies the drafts - the walk's
+//! picks, or a selector-less file's one candidate a row - into the verify's id staging, and the verify's wait covers both
+[unused_argument(may_hold_ahead, temp, rng, cids, qs), arch(at="../ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries")]
+def private df_select_pass(t : Model; dr : DflashDrafter; uid : uint64; tok, pos, rows, nd, lo, nctx, dlo : int64; may_hold, may_hold_ahead : bool; temp : float;
                            var rng : int4&; var drafts : array<int64>; var cids : array<int64>; var qs : array<float>) : DflashSelect {
     var g & = unsafe(g_df)
     return DflashSelect.failed if (rows > DF_ROWS || nd < 1l || nd >= rows || nd >= dr.nblock)
     let t0 = ref_time_ticks()   // clock: control - the pass's wall for the stats seat, never a decision
     rd_chain_settle()
-    var ring = df_ring(g, uid)
+    var ring = g.dense_tile ? df_ring_reach(dr, g, uid, lo + nctx + rows) : df_ring(dr, g, uid)
     return DflashSelect.failed if (ring.rk == 0ul)
     let k = dr.topk
     let vocab = t.config.vocab_size
@@ -811,8 +937,11 @@ def private df_select_pass(t : Model; dr : DflashDrafter; uid : uint64; tok, pos
     let rank = dr.v2 ? dr.rank : 0l
     let lists = nd * k * 4l
     let on_device = g.walk_ok && dflash_device_walk_on()
+    let top1 = !dr.v2 && k == 1l   // no selector and one candidate a row: the list is the drafts
+    let hold = (may_hold && (on_device || top1) && !has_ple_ngram(t.config) && !t.config.hyper_conn && vk_rdec_verify_takes_dev_ids()
+        && nd < g_rd.nb)
     var h = cmd_open(g.cmd, true)
-    df_pass_enc(t, dr, g, ring, g.cmd, h, tok, pos, rows, nd, lo, nctx)
+    df_pass_enc(t, dr, g, ring, g.cmd, h, tok, pos, rows, nd, lo, nctx, dlo)
     var ka = gk_dflash_topk_args(vocab, k)
     enc_dflash_topk_slices_cls(g.cmd, h, g.s_topk_s, ka.slices, nsl * nd)
     enc_dflash_topk_merge_cls(g.cmd, h, g.s_topk_m, ka.merge, nd)
@@ -830,25 +959,25 @@ def private df_select_pass(t : Model; dr : DflashDrafter; uid : uint64; tok, pos
             cmd_copy_range(g.cmd, g.hsel, 0l, g.land.buf, 2l * lists, nd * rank * 4l)
         }
     }
-    cmd_close(g.cmd)
-    submit_wait(g.cmd)
-    if (on_device) {
-        unsafe {
-            let idw = reinterpret<uint?>(g.land.mapped)
-            for (r in range64(nd)) {
-                drafts[r + 1l] = dflash_slot_id(idw[r + 1l])
-            }
-        }
-        g.walked++
-    } else {
-        unsafe {
-            let host = reinterpret<uint8?>(g.land.mapped)
-            dflash_drafts_of_landing(dr, tok, nd, reinterpret<uint const?>(host), reinterpret<float const?>(host + lists),
-                reinterpret<float const?>(host + 2l * lists), drafts)
-        }
+    if (hold) {
+        cmd_copy_range(g.cmd, on_device ? g.wids : g.cid, on_device ? 4l : 0l, g_rd.tok_ids_host.buf, 4l, nd * 4l)
     }
+    cmd_close(g.cmd)
     g.passes++
     g.selected++
+    if (on_device) {
+        g.walked++
+    }
+    if (hold) {
+        submit_nofence(g.cmd)
+        vk_rdec_verify_dev_ids()
+        g.dr = unsafe(addr(dr))
+        g_df_held = DflashHeldPass(nd = nd, tok = tok, walked = on_device)
+        g.pass_us += int64(get_time_usec(t0))
+        return DflashSelect.held
+    }
+    submit_wait(g.cmd)
+    dflash_landed_drafts(dr, tok, nd, on_device, g.land.mapped, drafts)
     g.pass_us += int64(get_time_usec(t0))
     return DflashSelect.landed
 }
@@ -865,10 +994,11 @@ def private vk_dflash_init {
 //! the Vulkan arm's seams under the resident driver's decode override: at [init], or when `set_gpu_home("vulkan")` moves the
 //! tier back here
 def private vk_dflash_install {
+    install_rdec_held_drafts(@@df_held_drafts)
     if (!g_df_hooked) {
         g_df_hooked = true
         register_vk_drop_hook(@@df_drop_forget)
     }
     register_dflash_device("vulkan", DflashDeviceSeams(ready = @@df_ready, commit = @@df_commit, draft_pass = @@df_pass, selects = @@df_selects,
-        select_pass = @@df_select_pass, land = @@dflash_land_none, drop = @@df_drop, detach = @@df_detach, stats = @@df_stats))
+        select_pass = @@df_select_pass, land = @@df_land, drop = @@df_drop, detach = @@df_detach, stats = @@df_stats))
 }

@@ -157,6 +157,21 @@ def public sgmat_to_half(var d : simdgroup_half8x8; s : simdgroup_float8x8) {
     }
 }
 
+//! one q8_0 32-block of two weight rows against two token rows:
+//! float4(q0 . x0, q0 . x1, q1 . x0, q1 . x1), unscaled
+[unused_argument(lane), arch(at="../ARCHITECTURE.md#sgmma-q8-blk2")]
+def public sgmma_q8_blk2(wq; q0, q1 : uint; x; x0, x1 : uint; lane : uint) : float4 {
+    var r = float4(0.0)
+    for (k in range(32)) {
+        let a = float(wq[int(q0) + k])
+        let b = float(wq[int(q1) + k])
+        let u = x[int(x0) + k]
+        let v = x[int(x1) + k]
+        r += float4(a * u, a * v, b * u, b * v)
+    }
+    return r
+}
+
 // simdgroup_multiply_accumulate(d, a, b, c): d = a*b + c. d may alias c (each element is read
 // before its slot is written). The mixed overload is the GEMM workhorse: f16 operand tiles into
 // f32 accumulators — an f16 product is exact in f32, matching the hardware's widened MAC.

@@ -4,8 +4,6 @@ options _dasllama_internal = true
 options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
-module test_vulkan_dec_tail
-
 require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default   // dot_mx4q8_scalar: the routed mx4 cell's reference dot

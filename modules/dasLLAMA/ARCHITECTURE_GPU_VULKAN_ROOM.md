@@ -4,10 +4,11 @@ Companion to `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; a section is cited by its a
 what the residency plan of `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan` may fill on a card that
 shares itself with a desktop: the room the OS reports and the headroom where none does, the two guards
 that stand whatever the plan decided, and the two allocation shapes the Windows memory manager pages out
-from under a running model - the priority tag and the mapped memory type - both opt-ins, and the
-per-call buffers the mapped type never serves. Every rate in
-this document is a `benchmarks/lcpp_bench.das` reading (`-jit --for-debug-purposes`, `DASLLAMA_IMAGE=0`,
-`DASLLAMA_GPU=1`, 16 threads) on the zen2 box's RTX 5060 Ti 16 GB, driver 616.56.
+from under a running model - the priority tag and the mapped memory type - both opt-ins, the
+per-call buffers the mapped type never serves, and the carve-out of an AMD integrated device that the
+weight slabs keep out of (`#vk-carve-out`). A rate in this document is a `benchmarks/lcpp_bench.das` reading
+(`-jit --for-debug-purposes`, `DASLLAMA_IMAGE=0`, `DASLLAMA_GPU=1`, 16 threads) on the zen2 box's RTX 5060 Ti
+16 GB, driver 616.56, where its sentence names no other box; the carve-out's readings are a Radeon 780M's.
 
 ### The plan's room: the OS's answer, the headroom, the pageable sets {#vk-plan-room}
 
@@ -130,3 +131,24 @@ touch), and an upload into a parameter of the uploading function (a wrapper; its
 uploads are the ones checked). A per-call refill on a cold leg - the n-gram ring's `up`, the
 remedy hydrate, the hot pool's placement, the TTS voice slot - is outside its reach and carries
 the property by the allocation sites above.
+
+### The weight slabs keep out of the carve-out {#vk-carve-out}
+
+An integrated GPU's BIOS sets aside a small block of DRAM as dedicated video memory - the UMA
+frame buffer, 512 MB by default on the AMD parts. Vulkan cannot see it: RADV reports two nominal
+heaps that split the system's memory, and the kernel places every device-local allocation in the
+carve-out while one fits and in system memory after. Which buffer lands there follows from the
+sizes allocated ahead of it, so the same model decodes at one rate at one context size and
+another at the next. On the Radeon 780M a weight slab that lands there reads at about half the rate
+of the same slab in system memory, while the small buffers a step writes and reads (the scratch
+planes, a K/V side) run no slower there, and a drafter's rounds run a little faster with them in it
+(`PERF_LEDGER.md`, the entry on an AMD integrated device's carve-out).
+
+So the arena's slabs alone leave it: on the device `carve_out_rule` names, a weight slab takes the
+host heap's memory type (`uma_spill_type`, the type an integrated device's spilled buffers take),
+which the kernel never places in the carve-out, and every other buffer stays device-local and
+fills the carve-out as before. The auto arm (`carve_out_weights_off`) names an AMD integrated
+device whose kernel driver reports a carve-out of 512 MB or less - `mem_info_vram_total` under
+the card's sysfs folder, matched by PCI vendor and device id - the case that is measured; no other
+vendor, no discrete card and no box without the counter (another OS, another driver) is touched.
+`DASLLAMA_VK_CARVE_OUT_WEIGHTS` pins the answer on any integrated device.

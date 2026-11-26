@@ -123,6 +123,26 @@ def private lens_push_member(field : FieldDeclaration; var s : LensScan; w : Len
     return true
 }
 
+//! a fixed array's extent where it is one integer literal, bare or under `int(...)` / `uint(...)` - what a template constant
+//! leaves in `T[int(CONST)]`; -1 for any other expression
+def private lens_literal_extent(e : ExpressionPtr) : int {
+    return (e as ExprConstInt).value if (e is ExprConstInt)
+    return int((e as ExprConstUInt).value) if (e is ExprConstUInt)
+    if (e is ExprCall) {
+        let c = e as ExprCall
+        return lens_literal_extent(c.arguments[0]) if ((c.name == "int" || c.name == "uint") && length(c.arguments) == 1)
+    }
+    return -1
+}
+
+//! a @workgroup member's bytes. The lens reads a class ahead of inference, where a fixed array whose extent is an
+//! expression has no size yet: an extent `lens_literal_extent` reads counts, any other expression counts as no bytes
+def private lens_wg_bytes(t : TypeDeclPtr) : int {
+    return t.sizeOf if (t.baseType != Type.tFixedArray)
+    let n = t.fixedDim > 0 || t.fixedDimExpr == null ? t.fixedDim : lens_literal_extent(t.fixedDimExpr)
+    return n > 0 ? n * lens_wg_bytes(t.firstType) : 0
+}
+
 //! the member walk: the @ssbo members with their bindings and roles, the args member, the @workgroup footprint; false with
 //! `errors` set at the first refusal
 def private lens_members(st : StructurePtr; var s : LensScan; w : LensWords; var errors : das_string) : bool {
@@ -143,7 +163,7 @@ def private lens_members(st : StructurePtr; var s : LensScan; w : LensWords; var
             }
         }
         if (is_wg) {
-            s.wg_bytes += field._type.sizeOf
+            s.wg_bytes += lens_wg_bytes(field._type)
             continue
         }
         if (is_push) {

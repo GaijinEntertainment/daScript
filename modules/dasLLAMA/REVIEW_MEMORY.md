@@ -87,6 +87,15 @@ test's compare (`set_host_planes`, `set_vulkan_trim(false)`) is a defect.**
 next tensor read begins (a read nested inside another is part of it) - open a gguf through `gguf_source_begin`, which
 does this; a mapping that holds its pages until it closes is a defect.** Every page a read touches stays resident until something releases it.
 
+**A diff that widens a data format - makes a buffer hold its values in more bits a value than the buffer held them in
+before the diff, or than the format the values are read or converted from - is a defect unless a `PERF_LEDGER.md` row
+records the narrow and the wide figure, measured on the platform the wider format serves, and the wide one is faster
+there.** Where a read is bound by memory bandwidth, a wider format costs time in proportion to its bytes.
+
+**A diff that adds a lasting allocation holding rows that attention reads as its keys or values on a later step, of the
+model or of a drafter, in a format wider than f16 is a defect unless a `PERF_LEDGER.md` row records the f16 and the
+wider figure, measured on the platform the allocation serves, and the wider one is faster there.**
+
 **A diff that changes what a load or a session holds on the host records in a `PERF_LEDGER.md` row the peak footprint
 and the resident memory after the load, each before and after the diff, on each backend it touches, measured with no
 lever set.** A figure taken under a lever shows a path the product does not take.

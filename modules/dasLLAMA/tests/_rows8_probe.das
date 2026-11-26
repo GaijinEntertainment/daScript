@@ -13,9 +13,9 @@ require ?das_metal _metal_kernel_common   // the MetalCell record, kernel_of
 
 //! the rows8 matrix-unit form's layout probe on this box: the probe stamp over the engine's two one-hot tables; false where the
 //! cooperative layout is another generation's (the engine keeps the form off there too), null pipeline where Metal 4 is absent;
-//! `mc` a `MetalCell`, untyped so the signature names nothing of the optional module
-def public rows8_probe_ok(t : T?; var mc; var err : string&) : bool {
-    let kb = kernel_of(@@enc_rows8_probe_c)
+//! `mc` a `MetalCell`, untyped so the signature names nothing of the optional module; `pair` probes the pair layout's stamp
+def public rows8_probe_ok(t : T?; var mc; var err : string&; pair : bool = false) : bool {
+    let kb = pair ? kernel_of(@@enc_rows8_probe_p_c) : kernel_of(@@enc_rows8_probe_c)
     var pso = mc |> keep_stamp(kb, err)
     return false if (pso == null)
     var good = true

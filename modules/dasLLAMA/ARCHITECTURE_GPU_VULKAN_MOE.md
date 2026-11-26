@@ -81,7 +81,10 @@ except where a probe arm is named.
   reader's barrier covers both - the act writes the f16 hidden rows, and down runs the tiles
   again. The window planes carry 128 rows of read slack past the last bucket row (the s and m
   tiles load a partial column unclamped, `ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`) and hold a
-  whole window of `pf_window_rows() x k` bucket rows, so the block never chunks.
+  whole window of `pf_window_rows() x k` bucket rows, so the block never chunks. In mm mode a column the served set
+  names runs the int8 tile in place of the KHR one (`pf_expert_cols`, a plane's m pieces then its s pieces, each on the
+  tile of its column): an int8 gate or up column reads the window's rows through the int8 feed and the row map, and the
+  gather is dispatched only while one of the two columns is f16 (`ARCHITECTURE_GPU_VULKAN_KHR.md#khr-int8-tiles`).
 - **The combine rides the residual step:** `ARCHITECTURE_GPU_SHARED_ROWS.md#moe-combine-row`.
 
 The router reads the f32 normed rows, so an MoE layer takes the split add+rms arm at the FFN
@@ -148,6 +151,13 @@ softmax over every expert renormalized over the picks - the weights the `norm_to
 computes - so the host passes `norm_topk` for it and the top-k kernels carry no second gate.
 Native-MXFP4 routed stacks take `KqGemvK4Gu`'s fusion (`ARCHITECTURE_GPU_SHARED_GEMM.md#moe-gate-up-fused`). The slot regions are
 device buffers the top-k fills each token; the dense triple's host-filled regions stay what they are.
+
+**An AMD device runs the one-row gate and up as two GEMVs, not the fused arm** (`VK_ALT_EGU_SPLIT`, `vk_alt_egu_by_vendor`,
+`vk_egu_split`; no race, `DASLLAMA_VK_ALT_STAMPS` pins the other form). The fused arm saves two dispatches, which is what a
+device bound by launches wants; the Radeon 8060S is bound by what a step reads, and it reads the two stacks faster as two
+GEMVs and an act, on gemma-4 26B's Q4_K stacks and on gpt-oss-20b's MXFP4 stacks alike, and the token step is the shorter
+for it (`PERF_LEDGER.md`, the entry on the one-row routed gate and up as two GEMVs). The N-row command
+never takes the fused arm, so the rule moves the one-row step alone.
 
 **A recurrent MoE layer takes the routed block after its deltanet head** (the hybrid MoE,
 `ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`'s head with this section's tail): the deltanet

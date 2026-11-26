@@ -281,6 +281,50 @@ class GExt : GKernT {
     override EXT = true
 }
 
+[ |> template_struct_instance]
+struct template GateBothT {
+    a : KT
+    @template_gate = "WIDE&!SMALL" big : KT
+    @template_gate = "WIDE & SMALL" little : KT
+    @template_constant WIDE : bool = false
+    @template_constant SMALL : bool = false
+}
+
+struct GateNarrow : GateBothT {
+    typedef KT = int
+}
+
+struct GateNarrowSmall : GateBothT {
+    typedef KT = int
+    override SMALL = true
+}
+
+struct GateWide : GateBothT {
+    typedef KT = int
+    override WIDE = true
+}
+
+struct GateWideSmall : GateBothT {
+    typedef KT = int
+    override WIDE = true
+    override SMALL = true
+}
+
+[test(description = "a gate of terms joined by & keeps its field only where every term holds, a term inverted by ! included")]
+def test_tsi_gate_conjunction(t : T?) {
+    t |> run("the field exists where both terms hold and nowhere else") @(t : T?) {
+        t |> equal(typeinfo sizeof(type<GateNarrow>), 4, "WIDE off: neither gated field")
+        t |> equal(typeinfo sizeof(type<GateNarrowSmall>), 4,
+            "SMALL alone holds one term of each gate: neither field")
+        t |> equal(typeinfo sizeof(type<GateWide>), 8)
+        t |> equal(typeinfo sizeof(type<GateWideSmall>), 8)
+        let wide = GateWide(a = 1, big = 2)   // named-arg construction pins WHICH field survived
+        let small = GateWideSmall(a = 1, little = 3)
+        t |> equal(wide.a + wide.big, 3)
+        t |> equal(small.a + small.little, 4)
+    }
+}
+
 [test(description = "a gated field exists only where its axis enables it, in both polarities, and a dead static_if arm may reference a gated-off field")]
 def test_tsi_gated_fields(t : T?) {
     t |> run("a gated field exists only where its axis says so, both polarities") @(t : T?) {

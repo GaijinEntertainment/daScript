@@ -6333,103 +6333,146 @@ let GK_DFLASH_ATTN_TILE = 256u   //! the keys a tile workgroup scores, a lane a 
 //! the tiles the `nkeys` keys of a (head, row) split into
 def public gk_dflash_attn_tiles(nkeys : int64) : int64 => (nkeys + int64(GK_DFLASH_ATTN_TILE) - 1l) / int64(GK_DFLASH_ATTN_TILE)
 
-//! the floats of the tiles' partials plane over `rows` rows of `n_heads` heads `hs` wide, at the key cap: a tile's max, its
-//! weights' sum and its weighted V row
-def public gk_dflash_attn_partials(rows, n_heads, hs : int64) : int64
-    => rows * n_heads * gk_dflash_attn_tiles(int64(GK_DFLASH_ATTN_KEYS)) * (hs + 2l)
+//! the floats of the tiles' partials plane over `rows` rows of `n_heads` heads `hs` wide attending `keys` keys at most (the
+//! windowed cap where none is named): a tile's max, its weights' sum and its weighted V row
+def public gk_dflash_attn_partials(rows, n_heads, hs : int64; keys : int64 = int64(GK_DFLASH_ATTN_KEYS)) : int64
+    => rows * n_heads * gk_dflash_attn_tiles(keys) * (hs + 2l)
+
+let GK_DFLASH_ATTN_Q = 8u   //! the (row, head) queries of one K/V head a tile workgroup scores off one read of its keys
+
+//! the tile dispatch's workgroups over `tiles` key tiles: a (kv head, chunk of GK_DFLASH_ATTN_Q queries, key tile) each
+def public gk_dflash_attn_tile_wgs(rows, n_heads, grp, tiles : int64) : int64
+    => n_heads / grp * ((rows * grp + int64(GK_DFLASH_ATTN_Q) - 1l) / int64(GK_DFLASH_ATTN_Q)) * tiles
 
 [ |> template_struct_instance]
 class template GkDflashAttnTile : GkWgReduce {
     @ssbo @binding = 0 @role = "read" q : array<float>    //! [rows][nheads][hs]
     @ssbo @binding = 1 @role = "read" kb : array<float>   //! the block's K, [rows][nheads / grp][hs]
     @ssbo @binding = 2 @role = "read" vb : array<float>
-    @ssbo @binding = 3 @role = "read" rk : array<float>   //! the rings' K, a layer's at `koff`
-    @ssbo @binding = 4 @role = "read" rv : array<float>
+    @ssbo @binding = 3 @role = "read" rk : array<float16>   //! the rings' K as halves, a layer's at `koff`
+    @ssbo @binding = 4 @role = "read" rv : array<float16>
     @ssbo @binding = 5 @role = "write" tp : array<float>  //! [rows][nheads][tiles][2 + hs]: a tile's max, its weights' sum, its weighted V
     @kargs pa : GkDflashAttnArgs
-    @workgroup qs : float[256]   //! == GK_DFLASH_HS, the array's literal
-    @workgroup sc : float[256]   //! == GK_DFLASH_ATTN_TILE, the array's literal
-    @workgroup va : float[256]
+    @workgroup qs : float[2048]   //! the chunk's query rows, GK_DFLASH_ATTN_Q x GK_DFLASH_HS (the array's literal)
+    @workgroup sc : float[2048]   //! ... their weights over the tile's keys, GK_DFLASH_ATTN_Q x GK_DFLASH_ATTN_TILE
+    @workgroup va : float[2048]   //! ... and their weighted V stripes
 
     [arch(at="../ARCHITECTURE_GPU_SHARED_DRAFTER.md#dflash-attn-tiles")]
-    def dflash_attn_tile_body {
+    def dflash_attn_tile_body {   // nolint:STYLE037,STYLE038 — a chunk's queries, its scores over a tile and their V stripes share one workgroup's staging
         let tiles = max(1u, (pa.nctx + pa.rows + 255u) / 256u)
+        let grp = max(1u, pa.grp)
+        let nq = pa.rows * grp   // a K/V head's queries: row t's head g of the group at t * grp + g
+        let chunks = max(1u, (nq + 7u) / 8u)   // 8 == GK_DFLASH_ATTN_Q, the literal a kernel body carries
         let wg = gl_WorkGroupID.x
         let tile = wg % tiles
-        let hr = wg / tiles
-        let h = hr % max(1u, pa.nheads)
-        let t = hr / max(1u, pa.nheads)
+        let c0 = ((wg / tiles) % chunks) * 8u
+        let kvh = wg / tiles / chunks
         let i = gl_LocalInvocationID.x
         let hs = pa.hs
-        let kvd = (pa.nheads / max(1u, pa.grp)) * hs
-        let kh = (h / max(1u, pa.grp)) * hs
-        let qpos = int(pa.pos0 + t)
+        let kvd = (pa.nheads / grp) * hs
+        let kh = kvh * hs
         if (i < hs) {
-            qs[i] = q[(pa.rbase + t) * pa.nheads * hs + h * hs + i]
+            for [unroll] (u in range(8)) {
+                let qi = c0 + uint(u)
+                var qv = 0.0
+                if (qi < nq) {
+                    qv = q[(pa.rbase + qi / grp) * pa.nheads * hs + (kvh * grp + qi % grp) * hs + i]
+                }
+                qs[uint(u) * 256u + i] = qv
+            }
         }
         barrier()
         let j = tile * 256u + i
-        var s = -3.0e38
         let ring = j < pa.nctx
         let kpos = ring ? int(pa.lo + j) : int(pa.pos0 + j) - int(pa.nctx)
-        if (j < pa.nctx + pa.rows && qpos - kpos < int(pa.w) && kpos - qpos < int(pa.w)) {
-            var dot = 0.0
+        let inkeys = j < pa.nctx + pa.rows
+        var dot : float[8]
+        for [unroll] (u in range(8)) {
+            dot[u] = 0.0
+        }
+        if (inkeys) {
             var e = 0u
             if (ring) {
                 let kb0 = pa.koff + (uint(kpos) % max(1u, pa.w)) * kvd + kh
                 while (e < hs) {
-                    dot += qs[e] * rk[kb0 + e]
+                    let kv = float(rk[kb0 + e])
+                    for [unroll] (u in range(8)) {
+                        dot[u] += qs[uint(u) * 256u + e] * kv
+                    }
                     e++
                 }
             } else {
                 let kb0 = (pa.rbase + j - pa.nctx) * kvd + kh
                 while (e < hs) {
-                    dot += qs[e] * kb[kb0 + e]
+                    let kv = kb[kb0 + e]
+                    for [unroll] (u in range(8)) {
+                        dot[u] += qs[uint(u) * 256u + e] * kv
+                    }
                     e++
                 }
             }
-            s = dot * pa.scale
         }
-        var mall = 0.0
-        wg_max_into(s, 0u, mall)
-        let p = s <= -1.0e38 ? 0.0 : exp(s - mall)
-        sc[i] = p
-        var tot = 0.0
-        wg_sum_into(p, 1u, tot)   // its barrier also lands every lane's weight before the value loop reads them across lanes
+        var mall, tot : float[8]
+        for [unroll] (u in range(8)) {
+            let qi = c0 + uint(u)
+            let qpos = int(pa.pos0 + qi / grp)
+            let s = (inkeys && qi < nq && qpos - kpos < int(pa.w) && kpos - qpos < int(pa.w)) ? dot[u] * pa.scale : -3.0e38
+            var m = 0.0
+            wg_max_into(s, 0u, m)
+            mall[u] = m
+            let p = s <= -1.0e38 ? 0.0 : exp(s - m)
+            sc[uint(u) * 256u + i] = p
+            var tsum = 0.0
+            wg_sum_into(p, 1u, tsum)   // its barrier also lands every lane's weight before the value loop reads them across lanes
+            tot[u] = tsum
+        }
         let stripes = max(1u, 256u / max(1u, hs))
         let c = i % max(1u, hs)
         let st = i / max(1u, hs)
-        var acc = 0.0
+        var acc : float[8]
+        for [unroll] (u in range(8)) {
+            acc[u] = 0.0
+        }
         if (st < stripes) {
             var k = st
             while (k < 256u) {
-                let pk = sc[k]
-                if (pk != 0.0) {
-                    let jk = tile * 256u + k
+                let jk = tile * 256u + k
+                if (jk < pa.nctx + pa.rows) {
+                    var v = 0.0
                     if (jk < pa.nctx) {
-                        acc += pk * rv[pa.voff + ((pa.lo + jk) % max(1u, pa.w)) * kvd + kh + c]
+                        v = float(rv[pa.voff + ((pa.lo + jk) % max(1u, pa.w)) * kvd + kh + c])
                     } else {
-                        acc += pk * vb[(pa.rbase + jk - pa.nctx) * kvd + kh + c]
+                        v = vb[(pa.rbase + jk - pa.nctx) * kvd + kh + c]
+                    }
+                    for [unroll] (u in range(8)) {
+                        acc[u] += sc[uint(u) * 256u + k] * v
                     }
                 }
                 k += stripes
             }
         }
-        va[i] = acc
-        barrier()
-        let base = wg * (hs + 2u)
-        if (i == 0u) {
-            tp[base] = mall
-            tp[base + 1u] = tot
+        for [unroll] (u in range(8)) {
+            va[uint(u) * 256u + i] = acc[u]
         }
-        if (i < hs) {
-            var sum = 0.0
-            var sx = 0u
-            while (sx < stripes) {
-                sum += va[sx * hs + i]
-                sx++
+        barrier()
+        for [unroll] (u in range(8)) {
+            let qi = c0 + uint(u)
+            if (qi < nq) {
+                let base = (((qi / grp) * pa.nheads + kvh * grp + qi % grp) * tiles + tile) * (hs + 2u)
+                if (i == 0u) {
+                    tp[base] = mall[u]
+                    tp[base + 1u] = tot[u]
+                }
+                if (i < hs) {
+                    var sum = 0.0
+                    var sx = 0u
+                    while (sx < stripes) {
+                        sum += va[uint(u) * 256u + sx * hs + i]
+                        sx++
+                    }
+                    tp[base + 2u + i] = sum
+                }
             }
-            tp[base + 2u + i] = sum
         }
     }
 }

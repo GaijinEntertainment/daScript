@@ -380,6 +380,43 @@ def prose_forced_nll(tr : Model; kv : KVDtype; n, steps : int64) : ForcedNll {
     return r
 }
 
+//! the last row's logits of `n` prose ids prefilled on a fresh session of the armed home
+def private prefill_logits(tr : Model; ids : array<int64>; n : int64) : array<float> {
+    var s <- create_session(tr, mirror_kv_dtype())
+    var prompt <- [for (i in range64(n)); ids[i]]
+    forward_prefill(tr, s, prompt, n, 0l)
+    var out := s.logits
+    delete prompt
+    delete s
+    return <- out
+}
+
+//! the words of `a` that are not `b`'s
+def private words_off(a, b : array<float>) : int64 {
+    var off = 0l
+    for (x, y in a, b) {
+        off += x != y ? 1l : 0l
+    }
+    return off
+}
+
+//! `n` prose ids prefilled twice on fresh sessions read one set of logits, word for word: a routed bucket's rows ride m and
+//! s tiles by their place in the bucket, the two tiles need not round alike, so the place holds from pass to pass; the
+//! control is the prompt one id shorter, which reads other logits
+def prefill_repeats(t : T?; tr : Model; n : int64; what : string) {
+    var ids <- prose_tokens(tr, n + 1l)
+    var first <- prefill_logits(tr, ids, n)
+    var again <- prefill_logits(tr, ids, n)
+    var shorter <- prefill_logits(tr, ids, n - 1l)
+    let off = words_off(first, again)
+    t |> equal(off, 0l, "{what}: {n} ids prefilled twice on fresh sessions read the same logits word for word ({off} of {length(first)} differ)")
+    t |> success(words_off(first, shorter) > 0l, "{what}, repeat control: the prompt one id shorter reads other logits")
+    delete ids
+    delete first
+    delete again
+    delete shorter
+}
+
 //! the resident walk `g` against the CPU chain's `c` as perplexities over `steps` positions past an `n`-id prefill: the
 //! resident within `ppl_ratio` of the CPU chain's, its argmax hits within `hits_slack`, and the one-position-off controls
 def ppl_within(t : T?; n, steps : int64; g, c : ForcedNll; hits_slack : int64 = 3l; ppl_ratio : float = GEMMA_PPL_RATIO) {
@@ -507,6 +544,9 @@ def gemma_walk_twin_within(t : T?; tag : string; r : GemmaWalkRows; walks; i : i
 def ppl_compare(t : T?; n, steps : int64; gf : GemmaFile; hits_slack : int64 = 3l; ppl_ratio : float = GEMMA_PPL_RATIO) {
     with_gemma_rig(t, gf) $(tr) {
         var ids <- prose_tokens(tr, n + steps + 1l)
+        static_if (typeinfo builtin_module_exists(vulkan)) {   // the discrete homes: the Metal home's repeat is its own pass
+            prefill_repeats(t, tr, n, gf.file)
+        }
         var sg <- create_session(tr, mirror_kv_dtype())
         let served0 = gpu_resident_prefills_()
         let c0 = cuda_positions_served()
