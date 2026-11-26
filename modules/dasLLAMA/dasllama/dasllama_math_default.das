@@ -170,7 +170,7 @@ def dot_q8q8_idot4_ps_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const
 
 //! a def, not a module global: team lanes run no global initializers, and the fold below is a
 //! compile-time constant either way
-def private wasm_target() : bool => get_target_architecture_name() == "wasm64" || get_target_architecture_name() == "wasm32"
+def private wasm_target() : bool => get_target_architecture_name() == "wasm64" || get_target_architecture_name() == "wasm32"   // nolint:PERF026 — the compare folds to a constant at compile time; no string is built at run time
 
 [arch(at = "../ARCHITECTURE_CPU_KERNELS.md#cpu-tier-target-select")]
 def private dot_q8q8_p(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float =>
@@ -178,37 +178,6 @@ def private dot_q8q8_p(wq : int8 const?; ws : float const?; xq : int8 const?; xs
 
 def private dot_q8q8_f16s_p(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float =>
     wasm_target() ? dot_q8q8_idot4_ps_f16s(wq, ws, xq, xs, n) : dot_q8q8_f16s(wq, ws, xq, xs, n)
-
-// ----- parallel_for dispatch profiler (off by default) -----
-// Records each worker's start time (rel. to pf-start) into g_pf_ws[rb]; a large first/last-worker gap
-// = workers trickling in (job pool waking from sleep) — the suspected prefill stall.
-var g_pf_prof = false
-var g_pf_ws : array<int64>   // per-call worker start (ns, relative to pf-start), indexed by chunk start row
-var g_pf_first_sum = 0l      // Σ first-worker start (us) over calls
-var g_pf_last_sum = 0l       // Σ last-worker start (us) over calls
-var g_pf_wall_sum = 0l       // Σ parallel_for wall (us) over calls
-var g_pf_n = 0l
-
-//! Enable/disable the parallel_for dispatch profiler. max_rows must be >= the largest matmul output d.
-def pf_prof_enable(on : bool; max_rows : int64) {
-    g_pf_prof = on
-    g_pf_ws |> resize(max_rows)
-    g_pf_first_sum = 0l
-    g_pf_last_sum = 0l
-    g_pf_wall_sum = 0l
-    g_pf_n = 0l
-}
-
-def pf_prof_report() {
-    if (g_pf_n == 0l) {
-        return
-    }
-    to_log(LOG_INFO, "=== parallel_for dispatch ({g_pf_n} batch-matmul calls) ===\n")
-    to_log(LOG_INFO, "  avg first-worker start = {g_pf_first_sum / g_pf_n} us\n")
-    to_log(LOG_INFO, "  avg last-worker start  = {g_pf_last_sum / g_pf_n} us  (time to full parallelism)\n")
-    to_log(LOG_INFO, "  avg parallel_for wall  = {g_pf_wall_sum / g_pf_n} us\n")
-    to_log(LOG_INFO, "  last-start as % of wall = {100l * g_pf_last_sum / max(g_pf_wall_sum, 1l)}% (high = workers trickle in / pool wake-up stall)\n")
-}
 
 //! The chunk oversplit the idot4 stamps bind: the batch-chunks knob, group3 only under team
 //! dispatch (x4 costs the fifo path ~20% but wins ~19% under team: 1B mm_qkv 86.6k -> 108k us).
@@ -231,47 +200,6 @@ def template q8q8_kernel_template(var yp : float ?; wp : int8 const ?; sp : floa
 def template q8q8_batch_kernel_template(var yp : float ?; wp : int8 const ?; sp : float const ?; xqp : int8 const ?; xsp : float const ?; n, d, ntok : int64) : void {
     let nb = n / 32l
     var myp = yp
-    // the raw parallel_for below is a dispatch single-thread mode admits no exception for
-    if (g_pf_prof && !get_single_thread_()) {
-        // instrumented path: raw parallel_for + per-worker start capture (see pf_prof_report)
-        var wsp0 = unsafe(addr<int64?>(g_pf_ws[0]))
-        for (k in range64(d)) {
-            unsafe(wsp0[k]) = 0l
-        }
-        let pf0 = ref_time_ticks()
-        unsafe {
-            let wsbase = addr(g_pf_ws[0])
-            parallel_for(0, int(d), matmul_chunks(int(d), get_q8_batch_chunks_per_job(), n * d * ntok)) $(rb, re, wg) {
-                unsafe {
-                    var wsw = reinterpret<int64?>(wsbase)
-                    wsw[rb] = ref_time_ticks() - pf0
-                    for (i in range(rb, re)) {
-                        let wrow = wp + int64(i) * n
-                        let srow = sp + int64(i) * nb
-                        for (tk in range64(ntok)) {
-                            myp[tk * d + int64(i)] = Q8DOT(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
-                        }
-                    }
-                }
-                wg |> notify_and_release
-            }
-        }
-        let wall = (ref_time_ticks() - pf0) / 1000l
-        var fs = 1l << 62l
-        var ls = 0l
-        for (k in range64(d)) {
-            let v = g_pf_ws[k]
-            if (v != 0l) {
-                fs = min(fs, v)
-                ls = max(ls, v)
-            }
-        }
-        g_pf_first_sum += fs / 1000l
-        g_pf_last_sum += ls / 1000l
-        g_pf_wall_sum += wall
-        g_pf_n ++
-        return
-    }
     maybe_parallel_for(0, int(d), matmul_chunks(int(d), get_q8_batch_chunks_per_job(), n * d * ntok)) $(rb, re) {
         unsafe {
             for (i in range(rb, re)) {
@@ -381,11 +309,13 @@ def set_q8_batch_gen(fn : Q8BatchGenFn; fn16 : Q8BatchGenFnS16) {
 }
 
 //! the portable backend's batch slot: the generated tier's kernel where one serves the call, the portable kernel otherwise
+[hot_path]
 def private q8q8_batch_served(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
     if (g_q8_batch_gen != null && invoke(g_q8_batch_gen, yp, wp, sp, xqp, xsp, n, d, ntok)) return
     q8q8_batch_kernel(yp, wp, sp, xqp, xsp, n, d, ntok)
 }
 
+[hot_path]
 def private q8q8_batch_served_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
     if (g_q8_batch_gen_s16 != null && invoke(g_q8_batch_gen_s16, yp, wp, sp, xqp, xsp, n, d, ntok)) return
     q8q8_batch_kernel_s16(yp, wp, sp, xqp, xsp, n, d, ntok)
