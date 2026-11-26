@@ -4076,6 +4076,9 @@ run as a child over fixture files written under the test's temp dir (its `--howt
 defect, each red on its own finding, and a clean one green. `test_ncol_rr_gate`: the N-column row-group check over its
 `--ncol-rr <kernels> <home>...` rail - two stamp files whose `override RR` is the kernel file's `KQ_N_RR` green, a stamp of
 another RR and a stamp file with no `override RR` each one finding, a kernel file with no `KQ_N_RR` a finding.
+`test_pso_release_gate`: the Metal pipeline-release check over its `--pso-release <file>...` rail - a source whose pipeline
+globals are each named in a release call green (a call across two lines, a line declaring two), a global whose only release
+sits in a comment one finding, the first of two a line declares one finding.
 `test_load_once_gate`: the load-once check of this folder's `REVIEW.das` over its `--load-once <file>...` rail, the files
 read as one llm area, `--loaders <name>...` the loader list in `LOADERS`' place (the stale-loader check over it) and
 `--area-run <run.das>` the runner whose `area_tests` lists the area's files - a block alone, a second load under `own_load`

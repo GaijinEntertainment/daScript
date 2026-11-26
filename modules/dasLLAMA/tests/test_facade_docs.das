@@ -263,10 +263,8 @@ def test_program_roots(t : T?) {
     }
 }
 
-// Two checks of modules/dasLLAMA/REVIEW.das over fixture files written under the test's temp dir - the HOW_TO check and
-// the unlocked-queue-call check: one file a defect, each red on its own finding, and a clean one green. The gate runs as a
-// child: REVIEW.das is a program root whose checks are private to it, and its `-- --howto <doc>...` and
-// `-- --queue-calls <file>...` rails read only the named files.
+// Checks of modules/dasLLAMA/REVIEW.das over fixture files written under the test's temp dir: one file a defect, each red on its own finding,
+// and a clean one green. The gate runs as a child: REVIEW.das is a program root whose checks are private to it, and each rail reads only the files it names.
 
 struct private GateRun {
     rc : int
@@ -377,6 +375,24 @@ def test_ncol_rr_gate(t : T?) {
         let run = run_gate_files("--ncol-rr", [fixture("rr_nocount.das", "let KQ_N_ROWS = 2\n"), fixture("rr_c.das", RR_STAMP)])
         t |> equal(run.rc, 1, "the gate's exit code\n{run.output}")
         t |> success(find(run.output, "no `let KQ_N_RR` found") >= 0, "the finding says the count is gone\n{run.output}")
+    }
+}
+
+let private PSO_CLEAN = "var g_fx_count : int\ndef fx_pick(p : MetalComputePipeline?) : MetalComputePipeline? => p\nvar private g_fx_pso_a : MetalComputePipeline?\nvar g_fx_pso_b, g_fx_pso_e : MetalComputePipeline?\ndef fx_shutdown \{\n    release_handles(fx_pick(g_fx_pso_a),\n        g_fx_pso_b)\n    metal_release(g_fx_pso_e)\n\}\n"
+
+[test(description = "The REVIEW.das pipeline-release gate passes a source whose Metal pipeline globals are each named in a release call - one call across two lines after a nested call, one line declaring two - and fails with one finding naming a global whose only release sits in a comment, or the first of two a line declares", timeout = 1200)]
+def test_pso_release_gate(t : T?) {
+    t |> run("every pipeline global named in a release call passes") @(t : T?) {
+        let run = run_gate("--pso-release", fixture("pso_clean.das", PSO_CLEAN))
+        t |> equal(run.rc, 0, "the gate's exit code\n{run.output}")
+    }
+    t |> run("a pipeline global no release call names is a finding") @(t : T?) {
+        red_on(t, "pso_leak.das", "{PSO_CLEAN}var private g_fx_pso_c : MetalComputePipeline?\n// release_handle(g_fx_pso_c) in a comment releases nothing\n",
+            "Metal pipeline `g_fx_pso_c` is named in no release call", "--pso-release")
+    }
+    t |> run("the first of two pipeline globals a line declares, unreleased, is a finding") @(t : T?) {
+        red_on(t, "pso_pair.das", "{PSO_CLEAN}var g_fx_pso_f, g_fx_pso_a2 : MetalComputePipeline?\ndef fx_drop \{\n    release_handle(g_fx_pso_a2)\n\}\n",
+            "Metal pipeline `g_fx_pso_f` is named in no release call", "--pso-release")
     }
 }
 
