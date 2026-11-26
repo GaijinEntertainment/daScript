@@ -53,3 +53,4 @@ name it.
 | `llama33-70b` | `Llama-3.3-70B` | the Metal dim ladder at the 70B's 8192-wide rows, nested in the 1B's tests: the decode parity's 70B decode served on the GPU, the support matrix's 70B K-quant matrix cell and batched dim ladder on the kq mul_mm twin | `Llama-3.2-1B-Instruct-Q8_0` |
 | `mistral-7b` | `Mistral-7B-Instruct-v0.3-Q8_0` | the Mistral v0.3 decoder's frozen greedy fixture, the v0.3 vocabulary's byte pieces past its 768 control tokens |  |
 | `mistral3-24b` | `Mistral-Small-3.1-24B` | the mistral3 decoder on the tekken vocabulary: its frozen greedy fixture |  |
+| `glm45-air` | `GLM-4.5-Air` | the only non-recurrent NextN file, with qkv bias at the draft block: self-speculative decode token for token against plain decode, the recr_mask-zero reject branch forced on every third draft |  |

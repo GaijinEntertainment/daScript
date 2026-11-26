@@ -110,7 +110,11 @@ def model_categories() : array<ModelCategory> {
             topics = ("the Mistral v0.3 decoder's frozen greedy fixture, the v0.3 vocabulary's "
                 + "byte pieces past its 768 control tokens")),
         (name = "mistral3-24b", stems = "Mistral-Small-3.1-24B", opens = "",
-            topics = "the mistral3 decoder on the tekken vocabulary: its frozen greedy fixture")
+            topics = "the mistral3 decoder on the tekken vocabulary: its frozen greedy fixture"),
+        (name = "glm45-air", stems = "GLM-4.5-Air", opens = "",
+            topics = ("the only non-recurrent NextN file, with qkv bias at the draft block: "
+                + "self-speculative decode token for token against plain decode, the "
+                + "recr_mask-zero reject branch forced on every third draft"))
     ]
 }
 
