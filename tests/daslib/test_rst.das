@@ -201,7 +201,7 @@ def test_distinct_accessors_reject_other_annotations(t : T?) {
     t |> success(checked, "rtti_core carries no annotation to try")
 }
 
-[test(description = "the trailing doc comment of a distinct typedef reaches its typedef topic, and a daslib module required beside the reader gets topics for its body doc comments", timeout = 1200)]
+[test(description = "the trailing doc comment of a distinct typedef reaches its typedef topic, that of a global constant reaches its Variable topic, and a daslib module required beside the reader gets topics for its body doc comments", timeout = 1200)]
 def test_rst_comment_reads_distinct_typedef(t : T?) {
     var err : string
     let root = create_temp_directory("das_rst_comment", err)
@@ -225,6 +225,20 @@ def test_rst_comment_reads_distinct_typedef(t : T?) {
         }
         t |> success(lower_bound_topics > 0,
             "no function-algorithm-lower_bound detail topic; output: {output}")
+    }
+    t |> run("the trailing //! of a global constant reaches its Variable topic") @(t : T?) {
+        var names : array<string>
+        dir("{root}/detail") $(name) {
+            if (name |> find("RST_LONGEST_WALK") >= 0) {
+                names |> push(name)
+            }
+        }
+        t |> equal(length(names), 1, "detail files: {names}; output: {output}")
+        if (length(names) == 1) {
+            t |> equal(names[0], "Variable-_rst_distinct_mod-RST_LONGEST_WALK.rst")
+            let detail = fread("{root}/detail/{names[0]}")
+            t |> success(find(detail, "The longest walk") >= 0, "detail: '{detail}'")
+        }
     }
     rmdir_rec(root, err)
 }
