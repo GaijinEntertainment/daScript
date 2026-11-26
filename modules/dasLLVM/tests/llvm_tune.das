@@ -653,7 +653,8 @@ def test_llvm_tune_carry_into_per_annotation(t : T?) {
     let args <- get_command_line_arguments()
     var lines : array<string>
     let client = "{get_this_module_dir()}/_llvm_tune_carry_client.das"
-    let rc = spawn_child("\"{args[0]}\" -no-module-cache \"{client}\"", lines)
+    let child = "\"{args[0]}\" -no-module-cache \"{client}\""
+    let rc = spawn_child(get_platform_name() == "windows" ? "\"{child}\"" : child, lines)
     t |> equal(rc, 0, "the carry client compiles and runs\n{join(lines, "\n")}")
     t |> success(lines |> has("CARRY never_fast_math 1 hint 1 never_inline true"),
         "one never_fast_math, one hint, never-inline set, after two passes\n{join(lines, "\n")}")
