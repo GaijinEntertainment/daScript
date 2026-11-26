@@ -816,6 +816,7 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
         let failuresOnlyFlag = test_args.failures_only ? " --failures-only" : ""
         let useAotFlag = test_args.use_aot ? " --use-aot" : ""
         let compileOnlyFlag = test_args.compile_only ? " --compile-only" : ""
+        let compileThreadsFlag = " --compile-threads {test_args.compile_threads}"
         let persistentHeapFlag = test_args.persistent_heap ? " --persistent-heap" : ""
         //! the JIT reads its --jit-* flags off the worker's own command line,
         //! so each one crosses to the worker
@@ -843,8 +844,8 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
             " --worker-policy {base64_encode(pair)}"], "")
         let cmdSuffix = (" {benchstr}{log::useTtyColors ? " --color" : ""}"
             + "{headlessFlag}{stackExcFlag}{failuresOnlyFlag}"
-            + "{useAotFlag}{compileOnlyFlag}{jitFlags}{moduleCacheFlag}{passStampFlag}"
-            + "{runEnvFlags}{policyFlags}")
+            + "{useAotFlag}{compileOnlyFlag}{compileThreadsFlag}{jitFlags}{moduleCacheFlag}"
+            + "{passStampFlag}{runEnvFlags}{policyFlags}")
         let batchSize = max(1, test_args.batch)
         // Each batch is run by one worker subprocess (batchCmd); per-file
         // singleCmds are kept so a crash can be re-dispatched

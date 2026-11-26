@@ -141,4 +141,15 @@ if(NOT DAS_TOOLS_DISABLED)
             modules/dasLLAMA/tests/failed_dasllama_lint_require.das
             modules/dasLLAMA/tests/failed_dasllama_lint_sidedoor.das
             modules/dasLLAMA/tests/test_dasllama_lint_contracts.das)
+
+    # every test file compiled, none run: one program on the job queue's threads, so the engine
+    # compiles once. A linux cell compiles the branches under the Vulkan and CUDA module checks
+    # and the not-Metal ones, a darwin cell the Metal ones
+    if(NOT DAS_LLVM_DISABLED)
+        file(GLOB _dasllama_test_files RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS
+            ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/tests/test_*.das)
+        das_lane_dastest_target(run_tests_dasllama_compile COMMENT "Compiling every dasLLAMA test" TOGETHER
+            COMPILE_ONLY_FILES ${_dasllama_test_files}
+            ARGS --compile-threads 0)
+    endif()
 endif()

@@ -54,6 +54,7 @@ Any other argument, or a wrong type, is a compile error from the macro.
 - `--verbose`: Print verbose output
 - `--failures-only`: Only print output for failed tests, suppressing successful ones
 - `--compile-only`: Compile test files without executing them
+- `--compile-threads <n>`: Threads a test program's modules compile on, as jobs on their require graph (the `compile_threads` policy). `1` (default) compiles them one after another; `0` is the job queue's thread count. It reaches `--together` runs and isolated workers. With `--together` the whole list is one require graph, so one compile of the shared modules spreads over the threads
 - `--json-file <path>`: Path to write the JSON test results report to
 - `--cov-path <path>`: Path to write coverage report data to
 - `--timing-outliers <n>`: Print the top N slowest test files and highlight statistical timing outliers (above mean + 2x stddev). `0` (default) prints none
