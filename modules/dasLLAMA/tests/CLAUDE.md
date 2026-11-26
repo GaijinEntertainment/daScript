@@ -4186,7 +4186,8 @@ window server (it opens the example's window for about a minute and plays the En
 (`test_nmt_exact_lane`) on each `f32` form, the q8 lane's (`test_nmt_q8_lane`) on each `q8` form and its control on
 `q8_cls_zeroed`, the device seat's (`test_nmt_device`) on each `device` form, the facade's two student cells on ru-en's
 `image` and `image_f32` forms - with en-ru's block called from ru-en's device form (after ru-en's block where that form
-did not run), and every compare between two forms of a file made after the blocks on the ids the cells kept;
+did not run), every compare between two forms of a file made after the blocks on the ids the cells kept, and no Metal
+object left once the seat and the decode and prefill drivers are down;
 `test_nmt_exact_students` holds the blocks of en-ru base, ru-en tiny and en-de base-memory, the exact lane's cell on
 each; `test_nmt_chat_translator` and `test_nmt_chat_thinking_off` each hold their chat decoder's block (`image`), under
 the decoder's family tag (`qwen3`, `qwen35`);
@@ -4212,7 +4213,8 @@ shutdown between (the weight-reuse key's model swap), both sides logged; the con
 en-ru's where it stands attached, ru-en's after the swap back - every
 line then differing; on the Metal seat a scratch take past a 512-byte stand-in for the device's largest buffer
 (`set_metal_take_max_probe_`) declining `device` and translating on the CPU; a source past `NMT_DEVICE_SRC_CAP` tokens
-declining `length`; on ru-en's `f32` form the exact lane declining `quant_mode` and
+declining `length`; the seat shut down and the next sentence served on the device again (the attach compiles its
+pipelines anew); on ru-en's `f32` form the exact lane declining `quant_mode` and
 translating on the CPU. The loader's refusals over synthetic files written to the test's temp directory
 (`test_nmt_loader_refusals`, `test_nmt_spm_file_refusals`): a Marian student of one encoder and one decoder layer at d 32, each
 fixture differing from a well-formed one (which stages - the control) in one fact - the version word, the blobs past the file's

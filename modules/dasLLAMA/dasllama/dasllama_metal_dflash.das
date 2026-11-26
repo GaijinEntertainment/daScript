@@ -894,7 +894,7 @@ def private df_detach {
 //! rail, as `metal_decode_shutdown`. The next attach compiles the pipelines again.
 def public metal_dflash_shutdown {
     df_detach()
-    release_handles(g_df_pso_conv, g_df_pso_qkn, g_df_pso_attn_tile, g_df_pso_attn_merge)
+    release_handles(g_df_pso_conv, g_df_pso_qkn, g_df_pso_attn_tile, g_df_pso_attn_merge, g_df_pso_flash)
     release_handles(g_df_pso_topk_slices, g_df_pso_topk_merge, g_df_pso_walk, g_df_pso_walk_soft, g_df_pso_accept)
     g_df_tried = false
 }

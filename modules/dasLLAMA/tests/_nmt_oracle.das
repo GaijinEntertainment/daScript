@@ -13,6 +13,9 @@ require _compares   // check_exact, sentinel_off: the cells' shared verdicts
 require dasllama/dasllama_nmt   // NmtModel: the seat's poison seam reads its classifier
 require ?das_metal dasllama/dasllama_metal_nmt      // the Metal translation seat's knob, counters, poison seam and shutdown
 require ?das_metal dasllama/dasllama_metal_common   // metal_common_init: whether the box has a Metal device
+require ?das_metal dasllama/dasllama_metal_decode   // metal_decode_shutdown: the leak count follows every driver's release
+require ?das_metal dasllama/dasllama_metal_prefill  // metal_prefill_shutdown: the same
+require ?das_metal metal/das_metal_boost            // metal_log_leaks_if_any
 require ?vulkan dasllama/dasllama_vulkan_nmt        // the Vulkan seat's, on a build without das_metal
 require ?vulkan dasllama/dasllama_vulkan_tower      // vulkan_tower_arms: whether the tier serves on this box
 
@@ -125,6 +128,18 @@ def nmt_seat_shutdown {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             vulkan_nmt_shutdown()
         }
+    }
+}
+
+//! the Metal objects left with the seat down and the decode and prefill drivers after it, each logged; 0 on a build with no das_metal
+def nmt_seat_shutdown_leaks : int64 {
+    nmt_seat_shutdown()
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        metal_decode_shutdown()
+        metal_prefill_shutdown()
+        return metal_log_leaks_if_any()
+    } else {
+        return 0l
     }
 }
 
