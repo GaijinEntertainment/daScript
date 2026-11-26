@@ -101,8 +101,8 @@ def row_key(name : string) : RowKey {
 
 def private section_of(key : RowKey) : Section {
     return Section.other if (!key.known)
-    return Section.behind if (key.behind > 0)
     return Section.arms if (!empty(key.arm))
+    return Section.behind if (key.behind > 0)
     return Section.streams if (key.width > 1)
     return key.decode ? Section.decode : Section.prefill
 }

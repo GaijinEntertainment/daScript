@@ -133,7 +133,8 @@ untimed turn a cell reads the tokens its cut makes, so a cell's prompts land wit
 the length it names. The ladder climbs the config's lengths and stops at the first cell its own
 measured rates predict past the cell's time, and a turn that outlasts three times its prediction is
 cut off: a slow box gets a shorter ladder, and a collapse is a refused cell, not a hang. A cell that
-a turn failed, cut short or read off a cache is refused with its reason and never averaged in.
+a turn failed, cut short, read off a cache or answered in one character repeated is refused with its reason and never
+averaged in.
 
 The width rows send a wave of streams at once, each its own prompt and its own task (`wave_task`: a subject a stream, a
 language every eighth stream on), at two lengths. Copies of one task decode one reply in step, and a routed model's
@@ -179,12 +180,25 @@ route moved over the milliseconds the server reports for the move (`timings.rest
 clock, not the client's. The timed turns replay that turn, a fixed reply after it, and add a
 message of 4096 new tokens under a fresh id: `pp4096+<base>` is the tokens prefilled past the cache over the time to the
 first text - the cached share's attach is inside that time, as a user's turn pays it - and `tg<reply>+4096+<base>` the
-decode after them; a turn whose base did not come off the cache refuses its cell. The base carries no id and its characters
+decode after them; a turn whose base did not come off the cache refuses its cell, as does any timed turn whose reply's
+kept opening is one character alone, sixteen of it or more (`ONE_CHAR_RUN`) - a model that is not answering decodes at
+full speed - and a base that leaves the timed turn no room refuses the pass. The base carries no id and its characters
 come from the run's own calibration, so one server life's file opens the next life's prompt; the files stay in the
 runner's `--slot-dir` from run to run, a tag a model and side. A restored base carries the rounding of the build that
 recorded it (`ARCHITECTURE_ENGINE_SERVING.md#context-file`): the pass times what follows a long context and is no
 correctness cell. Our server arms a NextN head by itself for a slot of one stream, so the runner starts this pass and the
 ultralong one with `--mtp=false`: their decode rows are plain rows, as the reference's are.
+
+At a model with arms the behind pass carries their rows too, and that is where a drafter is read at depth: a round's
+verify pays attention over the whole context a row, so the depth where an arm stops paying is a row no short ladder holds,
+and a restored base reaches it without the prefill. The pass's plain start takes one more bench run for the long reply
+(`--arm off --behind`: `tg512+4096+65536`), and every arm gets a start of its own under `ultralong_server` with its
+`arm_flags` and the slot folder (`--arm <name> --behind`: `tg512+4096+65536:dflash2`; files `<entry>.behind.<arm>.*`).
+Each of those runs names the plain pass's slot tag, so it restores the bases that pass saved; it records its decode row
+alone, with the draft counts, since the base's rows and the prefill row are the plain pass's. Behind the deepest base a
+long reply leaves the timed turn less than 4096 tokens to add, and the row's name carries what it added
+(`tg512+3712+126464:dflash2`). `--only behind` runs every arm's start; with an arm named beside it, that arm's alone. The
+page lists these rows with the arms, each over its plain row.
 
 A run takes a part of that on request, for a change that moves one kind of row. `--only` names the row kinds of a plain
 run - `pp`, `tg`, `width`, or `eyeball` for the eyeball and no timed cell - and `--lengths` names the ladder in the config's place. The prefill rows asked for alone cut each
