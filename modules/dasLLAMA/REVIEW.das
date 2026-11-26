@@ -2492,6 +2492,59 @@ def private check_locked_queue_calls {
     delete files
 }
 
+let private PSO_SECTION = "ARCHITECTURE_GPU_METAL_LIFECYCLE.md#metal-family-lifecycle"
+let private PSO_RELEASE_CALLS = ["release_handles(", "release_handle(", "metal_release("]
+
+//! the argument text of every release call in `text`, a call's arguments on any number of lines
+def private pso_release_text(text : string) : string {
+    var inscope spans : array<string>
+    peek_data(text) $(d) {
+        for (call in PSO_RELEASE_CALLS) {
+            var at = find(text, call)
+            while (at >= 0) {
+                let open = at + length(call) - 1
+                let close = paren_close(d, open)
+                if (close >= 0) {
+                    spans |> push(slice(d, open + 1, close))
+                }
+                at = find(text, call, open)
+            }
+        }
+    }
+    return join(spans, "\n")
+}
+
+//! the pipeline globals a line declares - `var [private] <name>[, <name>...] : MetalComputePipeline?` - none on any other line
+def private pso_globals_of(line : string) : array<string> {
+    return <- array<string>() if (!(line |> starts_with("var ")) || find(line, ": MetalComputePipeline?") < 0)
+    return <- [for (decl in split(slice(line, 0, find(line, ":")), ",")); ident_suffix(strip(decl))]
+}
+
+//! every Metal pipeline global of `files` is named in a release call of one of them: a pipeline a driver compiles and no
+//! shutdown releases outlives the driver and fails the leak gate of whatever runs next in the process
+def private check_pso_release(files : array<string>) {
+    var inscope texts <- [for (p in files); strip_line_comments(read_lf(p))]
+    let released = join([for (text in texts); pso_release_text(text)], "\n")
+    for (p, text in files, texts) {
+        var line_no = 0
+        for (line in split(text, "\n")) {
+            line_no++
+            for (name in pso_globals_of(line)) {
+                continue if (contains_word(released, name))
+                gate_finding(p, line_no,
+                    "Metal pipeline `{name}` is named in no release call (release_handles, release_handle, metal_release): it outlives its driver's shutdown and the next leak gate counts it - release it in the shutdown of the file that compiles it ({PSO_SECTION})")
+            }
+        }
+    }
+}
+
+def private check_pso_release {
+    var files : array<string>
+    collect_das_files("modules/dasLLAMA/dasllama", files)
+    check_pso_release(files)
+    delete files
+}
+
 let private RESIDENT_FILE = "modules/dasLLAMA/dasllama/dasllama_gpu_resident.das"
 
 //! the resident verify seat in call order: the gated entry, then the body it calls. Every decline in either - a `return`
@@ -3896,9 +3949,7 @@ def private check_howto_docs {
     }
 }
 
-//! the fixture rails' run: a rail's verdict, or -1 where the command line names none. `-- --howto <doc>...` reads only the
-//! named documents as HOW_TO documents, `-- --queue-calls <file>...` scans only the named sources for unlocked queue calls,
-//! `-- --ncol-rr <kernels> <home>...` holds the named stamp files' `override RR` literals to the named kernel file's `KQ_N_RR`
+//! the fixture rails' run: a rail's verdict, or -1 where the command line names none; each rail reads only the files it names
 def private fixture_rail_verdict : int {
     let fixtures <- gate_flag_args("--howto")
     if (!empty(fixtures)) {
@@ -3916,6 +3967,11 @@ def private fixture_rail_verdict : int {
     if (length(rr_fixtures) >= 2) {
         check_ncol_rr_literal(rr_fixtures[0], [for (f, i in rr_fixtures, count()); f; where i > 0])
         return gate_verdict("dasllama --ncol-rr")
+    }
+    let pso_fixtures <- gate_flag_args("--pso-release")
+    if (!empty(pso_fixtures)) {
+        check_pso_release(pso_fixtures)
+        return gate_verdict("dasllama --pso-release")
     }
     return -1
 }
@@ -3954,6 +4010,7 @@ def main() : int {
     check_discrete_seat_parity()
     check_no_hand_pipelines()
     check_locked_queue_calls()
+    check_pso_release()
     check_verify_decline_before_state_move()
     check_vk_scratch_cap_order()
     check_test_file_placement()

@@ -12,6 +12,10 @@ PSO set lives as `g_pso_*` in `dasllama_metal_common`, is compiled by `metal_dec
 `dasllama_metal_kernels` and released by `metal_kernels_release` there - the kernels module owns
 its set's lifecycle even though the vars live with the device state. Prefill's `g_pf_pso_*` set
 is prefill-private end to end: `metal_prefill_init` compiles, `metal_prefill_shutdown` releases.
+A driver with pipelines of its own - the block drafter's, the translator's - compiles them at its
+first attach and releases every one in its shutdown, which its `[finalize]` context shutdown calls.
+`check_pso_release` (`REVIEW.das`) holds every `MetalComputePipeline?` global of `dasllama/` to a
+release call that names it, and licenses none.
 
 **Metal device memory is the drivers', never the model's.** A model's weight regions, whole-plane buffers and concat
 regions sit in `dasllama_metal_common`'s address-keyed tables, and a `Model` holds no Metal handle, so `delete` of a model
