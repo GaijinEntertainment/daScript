@@ -7,7 +7,6 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
-require dasllama/dasllama_gpu_tier   // gpu_want_cuda: the split cell's skip
 require daslib/algorithm
 require ?vulkan dasllama/dasllama_math_vulkan  // the MoE GPU tier under test; the test installs its hooks explicitly (no env gate)
 require _vk_kq_fixtures
@@ -200,10 +199,7 @@ def test_vulkan_moe_cm2_streamed(t : T?) {
 def test_vulkan_moe_cm2_split(t : T?) {
     t |> run("cm2 expert chain async arm: a region head (the streamed-layer split's GPU share, an expert a copy and a submit) == the CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (gpu_want_cuda()) {
-                t |> skip("under the CUDA ask (DASLLAMA_CUDA=1) the Vulkan per-op tier stands aside: no streamed stack is set up for the split to read")
-                return
-            }
+            return if (vulkan_home_skipped(t, "cm2 expert chain async arm"))
             install_vk_moe_hooks()
             t |> success(moe_gpu_ffn_xf_async_rows(512l, 512l) >= 128l, "the async arm serves a window of bucket rows")
             // resident: the async begin/join over region A only

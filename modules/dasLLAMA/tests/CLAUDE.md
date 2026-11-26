@@ -461,7 +461,7 @@ knobs - before its first walk and puts each back at the value its getter read be
   exact walk's to compare; the closed form is `test_mtp_accept_walks.das`'s), the three rates logged, both streams
   decoded in the log; on the device arm the exact walk's passes ending on the device selector and the drawn drafts' none
   (the control);
-- `dflash-26b-capture` (family `gemma4moe`, large tier: gemma-4-26B-A4B Q4_K_M with its DFlash Q8_0 drafter, a drafter
+- `dflash-26b-capture` (family `gemma4moe`, the `gemma4-moe` category's: gemma-4-26B-A4B Q4_K_M with its DFlash Q8_0 drafter, a drafter
   with no selector) - the Metal prefill window hands the drafter the prompt's layer rows on a trunk whose layers close on
   the gemma MoE step: the prompt commit's last row, a sum of magnitudes a captured layer (`dflash_recorded_prompt_sums`),
   is the CPU route's within 5% at every captured layer, the prompt counted as a device prefill; the CPU route's row for a
@@ -484,7 +484,7 @@ knobs - before its first walk and puts each back at the value its getter read be
   occurrence, the stopless stream running past it (the control); then, on the same load, `dflash-27b-sampled-metal`'s
   walks over the E2B's Q8_0 drafter (`sampled_modes_walk`, tag `E2B sampled metal`), the exact walk held by its draws and
   its first id, not token for token, and no sampled round holding its pass (its rounds are joint); skips without das_metal;
-- `dflash-27b-discrete` (large tier; the Q8_0, Q4_K_M and NVFP4 drafters over one trunk load) - the device arm on the serving discrete home (the CUDA home under its ask, else Vulkan) over the
+- `dflash-27b-discrete` (the `qwen35-27b` category's; the Q8_0, Q4_K_M and NVFP4 drafters over one trunk load) - the device arm on the serving discrete home (the CUDA home under its ask, else Vulkan) over the
   resident trunk (`resident_trunk`, an f16 mirror): a counting walk - one with no near tie, the home's rows and its one-row
   step rounding apart - the plain walk's token for token with drafts accepted (a driver-against-itself compare, the
   speculative walk against the plain walk on the same device), the pass counted on the device (the commits logged: a plain
@@ -1649,7 +1649,8 @@ device-side f16 gather, the streamed-group slot hand-off, the streamed split's h
 per-expert chain (one expert, and two experts through the ring - each its own copy and submit;
 the head's routing puts one slot a region, since the by-row combine adds a region's rows onto
 their positions at once), and the shared expert's call shape - one region over every position,
-the identity slot map at unit weight.
+the identity slot map at unit weight. The split's head is the Vulkan home's - it reads a streamed stack - and skips where the run
+armed the CUDA home (`vulkan_home_skipped`).
 `test_vulkan_kernels.das`, `test_vulkan_kernels_gemm.das` (the batch and cm2 / KHR tile cells,
 the f16 GEMM cells and the tile-pick cell) and `test_vulkan_kernels_attn.das` (the decode, prefill
 and flash attention cells and `test_vkd_kv16_readers`) - one census over three files, every other
@@ -1661,7 +1662,7 @@ ladders' refusal cell `test_vkd_fa_stamp_refusals` need only the dasVulkan modul
 per-class CPU-oracle units of the Vulkan kernel census (`_vkd_oracles.das` runs the class methods on the CPU as the
 oracle; `_vkd_toy.das` is the `[vk_dispatch]` bring-up fixture; `_vk_kq_fixtures.das` holds the
 synthetic K-quant expert stacks in the tier's device layout for `test_vulkan_tier` and `test_vulkan_moe_cm2`, and
-`vulkan_home_skipped`, the skip of the cells of `test_vulkan_tier` and `test_vulkan_dec_tail` that need the Vulkan home's seats,
+`vulkan_home_skipped`, the skip of the cells of `test_vulkan_tier`, `test_vulkan_dec_tail` and `test_vulkan_moe_cm2` that need the Vulkan home's seats,
 and `../harness/_vk_probe_fixture.das` re-exports it for the Vulkan probes with the word-hash quant
 bytes, the packed f16-pair scale word and the device-timestamp scaffold around a recorded command). The per-format tile cells
 (`test_vkd_<fmt>_cm2_batch`, one per `kq_sb` format; q8's cm2 tiles ride their own fmt-0 cells
