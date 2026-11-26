@@ -120,8 +120,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_GPU_QUANT_PLANES.md` - the Metal kq split scale plane (`#metal-kq-split-scale-plane`), the iquant GEMV grid read with its f4-slab twin (`#metal-iquant-gemv-grid`), the Metal GEMV site abstraction (`#metal-gemv-site`), the fat iq4xs GEMV (`#metal-kq-fat-gemv`), the per-32 small-batch form (`#metal-b32-small-batch`), the wide (`#metal-b32-wide-gemv`) and fused gate|up (`#metal-b32-glu`) per-32 GEMVs, and the form matrix every Metal GEMM stamp family keeps (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-form-matrix`).
 - `ARCHITECTURE_GPU_BATCH.md` - the per-layer FFN widths on the Metal drivers and the Vulkan
   whole-model driver, and the Metal batch driver's row shapes - the E-series rows, a MoE's shared
-  expert, a deltanet hybrid's recurrent rows, and the split single-pass attention the single row
-  and the verify rows take too (`ARCHITECTURE_GPU_BATCH.md#metal-batch-row-shapes`).
+  expert, a deltanet hybrid's recurrent rows, the split single-pass attention the single row and the
+  verify rows take too (`ARCHITECTURE_GPU_BATCH.md#metal-batch-row-shapes`), and its tile form at depth (`#metal-attn-tile`).
 - `ARCHITECTURE_GPU_PREFILL.md` - the Metal prefill driver's attention slab, pad rows, chunked
   submission, the f16 twin dual-store, the last-layer FFN tail, the hyper-connection window, and an
   embedding's hidden-only window (`ARCHITECTURE_GPU_PREFILL.md#prefill-hidden-only`).

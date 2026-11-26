@@ -27,6 +27,7 @@ require _scratch_dir   // scratch_path / scratch_file: the refusal fixtures' fil
 require _dflash_cells   // the walks every trunk runs: lossless, sampled, the planes' tags, the discrete legs
 require _mtp_cpu_cells   // invariance_ok, forced_invariance_ok, MTP_PROMPT: the NextN head's invariance pair on the large -MTP- carriers
 require _compares   // first_mismatch: the facade streams' ids
+require _metal_blob_twin   // metal_kernel_count: the tile attention's dispatches
 require dasllama/dasllama_scheduler   // the joint round's two streams
 require _scheduler_rig   // make_req, drain, toks_of
 require _resident_feed   // resident_trunk, load_resident_at: the discrete homes' trunk
@@ -786,6 +787,7 @@ def test_dflash_e2b_facade_streams(t : T?) {
             t |> equal(length(stopped_ids), first, "the stopped stream emits the ids before the stop's first occurrence ({first})")
             t |> success(first < length(plain_ids) - 1, "the stop sits inside the budget (the control: the stopless stream ran past it)")
             delete s3
+            tile_attention_leg(t, m, prompt, plain_ids)
             joint_streams_leg(t, m)
             detach_block_drafter()
             t |> success(!block_drafter_attached(m), "the facade reports it detached")
@@ -793,6 +795,53 @@ def test_dflash_e2b_facade_streams(t : T?) {
         }
     } else {
         t |> skip("E2B facade streams: no das_metal in this build")
+    }
+}
+
+let private TILE_BAR = 5e-3   //! the tile form's logits against the fused form's, of a row's largest live logit: the two sum a row's keys in different orders
+
+//! The tile form of a full-context layer's attention, pinned on at every depth and pinned off (the control: no dispatch):
+//! the plain completion's ids fed a step at a time give the fused form's logits within `TILE_BAR`, each step's control the
+//! fused row a step off; the drafted completion's verify and the scheduler's two-stream step take the form too. The
+//! verify's and the batch's rows are held to the oracle by the kernel cells (`sq_tile_gate`): a drafted walk's ids can tie
+[cold_path]
+def private tile_attention_leg(t : T?; var m : Model; prompt, plain_ids : array<int64>) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var inscope fed : array<array<array<float>>>
+        var inscope walks : array<array<int64>>
+        var inscope prompts <- [for (turn in CHAT_TURNS); encode(m, turn, true)]
+        for (far in [0l, -1l]) {
+            let on = far == 0l
+            with_metal_attn_tile_far(far) {
+                metal_kernel_coverage_reset()
+                fed |> emplace <| feed_alone(m, KVDtype.f16, prompt, plain_ids)
+                let steps = metal_kernel_count("metal_sq_attn_tile")
+                metal_kernel_coverage_reset()
+                var s = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
+                var ids, no_stops : array<int64>
+                generate_drafted(m, s, prompt, SamplingParams(temp = 0.0), COMPLETE_STEPS, no_stops) $(id, _piece) {
+                    ids |> push(id)
+                    return true
+                }
+                delete s
+                delete no_stops
+                let verifies = metal_kernel_count("metal_sq_attn_tile")
+                walks |> emplace(ids)
+                metal_kernel_coverage_reset()
+                var none, joined = 0l
+                var inscope streams <- sched_streams(m, prompts, CHAT_MAX_NEW, false, none, joined)
+                let batched = metal_kernel_count("metal_sq_attn_tile")
+                if (on) {
+                    t |> success(steps > 0l, "the fed steps took the tile form on the full-context layers ({steps} dispatches)")
+                    t |> success(verifies > 0l, "the drafted completion's steps took it ({verifies} dispatches)")
+                    t |> success(batched > 0l, "the scheduler's two streams' steps took it ({batched} dispatches)")
+                } else {
+                    t |> equal(steps + verifies + batched, 0l, "control: the tile form pinned off dispatches none")
+                }
+            }
+        }
+        log_gen_texts(m, "E2B drafted completion, fused (as CPU) against tile (as GPU):", walks[1], walks[0])
+        feed_steps_within(t, m, "E2B fed steps, tile against fused", long_length(prompt), fed[0], fed[1], plain_ids, TILE_BAR, "the tile form", "the fused form")
     }
 }
 

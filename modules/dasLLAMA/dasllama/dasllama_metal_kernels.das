@@ -3598,6 +3598,305 @@ class MetalSqAttnDXF32 : MetalSqAttnDKvT {
     override PARTS = 4u
 }
 
+//! the tile attention's arguments (`MetalSqAttnTileF16`): a row's keys `[0, cnt)` of its route entry in `pieces`
+struct SqAttnTileArgs {
+    lay : uint      //! the layer's flat K/V-row element prefix, as `SqAttnDArgs.lay`
+    layr : uint     //! the rings' rows ahead of the layer
+    kstride : uint  //! a K/V row's elements
+    nheads : uint
+    kv_mul : uint   //! q heads a K/V head, a multiple of eight
+    hs : uint       //! 128, 256 or 512
+    scale : float
+    qstride : uint
+    keys : uint     //! the deepest row's count: `sq_tile_pieces` of it split its 64-key steps, a threadgroup a piece
+    rows : uint     //! the packed stamp's rows, one stream's: a K/V head's (row, q head) queries eight a threadgroup
+    qhs : uint      //! ... a q head's stride there, as `SqAttnDArgs.qhs`
+    gated : uint    //! ... and its gate, as `SqAttnDArgs.gated`
+}
+
+let SQ_TILE_PACK_QUERIES = 5l   //! the queries a K/V head from which the packed stamp leads: a chunk half idle levels the fused form
+
+//! the key pieces the tile attention splits `keys` keys into: a 64-key step a piece, 128 at most (the partials plane's
+//! depth); the kernels call it, so it reads no global
+def sq_tile_pieces(keys : uint) : uint => clamp((keys + 63u) / 64u, 1u, 128u)
+
+def attn_tile_pieces(keys : int64) : int64 => int64(sq_tile_pieces(uint(keys)))
+
+//! the partial entries a (row, head of 128) holds: the fused form's slice groups, or the tile form's pieces where it serves
+//! (`tile_keys` either stamp's keys, 0 = neither)
+def attn_d_entries(d_nsgs, tile_keys : int64) : int64 => tile_keys > 0l ? max(d_nsgs, attn_tile_pieces(tile_keys)) : d_nsgs
+
+//! whether the tile attention has a form for a layer: a full-context layer (no window, no ring) whose head is one to four
+//! heads of 128 and whose K/V head serves whole chunks of eight q heads; the packed stamp (`pack`) takes any count of q
+//! heads a K/V head, a head of 256 at most
+def attn_tile_layer_ok(head_size, kv_mul : int64; window, ring : uint; pack : bool = false) : bool
+    => (window == 0u && ring == 0u && kv_mul > 0l && (head_size == 128l || head_size == 256l || (head_size == 512l && !pack))
+        && (pack || kv_mul % 8l == 0l))
+
+//! the packed stamp's chunks of eight over `nrows` rows of `kv_mul` q heads a K/V head
+def attn_tile_pack_chunks(nrows, kv_mul : int64) : int64 => (nrows * kv_mul + 7l) / 8l
+
+//! whether a model's attention has a tile stamp: an f16 mirror, no sinks, no logit cap, and a gated q on the packed stamp
+//! alone, where the gate is read in place (`gate_direct`)
+def attn_tile_model_ok(f16, sinks, softcap, gated, gate_direct, pack : bool) : bool
+    => f16 && !sinks && !softcap && (!gated || (pack && gate_direct))
+
+//! whether a step of `nrows` rows of `streams` streams takes a tile stamp at `keys` keys, under the far count `far`
+//! (negative = never): from the far count on, the packed stamp the rows of one stream alone and from
+//! `SQ_TILE_PACK_QUERIES` queries a K/V head
+[arch(at="../ARCHITECTURE_GPU_BATCH.md#metal-attn-tile")]
+def attn_tile_step_ok(nrows, streams, kv_mul, keys, far : int64; pack : bool) : bool
+    => far >= 0l && keys >= far && (!pack || (streams == 1l && nrows * kv_mul >= SQ_TILE_PACK_QUERIES))
+
+//! The tile form of a full-context layer's fused attention over an f16 mirror: a threadgroup eight queries of one K/V head
+//! over a key piece, 64 keys a step, a piece's record the fused form's (`MetalSqAttnCombDT` joins them). The eight are a row's
+//! chunk of the head's q heads; under `PACK`, eight (row, q head) queries of ONE stream in `sq`, each masked at its row's count
+[ |> template_struct_instance]
+class template MetalSqAttnTileT {
+    @ssbo @binding = 0 @role = "read" kc : array<float16>
+    @ssbo @binding = 1 @role = "read" vc : array<float16>
+    @ssbo @binding = 2 @role = "read" q : array<float>
+    @ssbo @binding = 3 @role = "write" part : array<float>
+    @ssbo @binding = 4 @role = "read" @off = "rtoff" rt : array<uint4>
+    @uniform @binding = 5 ka : SqAttnTileArgs
+    @workgroup so : float[4096]    //! the chunk's eight weighted V rows, a head of 512 at most
+    @workgroup ss : float[512]     //! their scores, then their weights, over a step's 64 keys
+    @workgroup @template_gate = PACK sq : float[2048]   //! the packed stamp's eight queries, a head of 256 at most
+    @template_constant PACK : bool = false
+
+    def tile {   // nolint:STYLE037,STYLE038 - the one-pass flash body, barrier-coupled
+        let piece = gl_WorkGroupID.x
+        let hs = ka.hs
+        let sg = gl_SubgroupID
+        let lane = gl_SubgroupInvocationID
+        let kvd = ka.kstride
+        let packed = PACK
+        let chunks = packed ? (ka.rows * ka.kv_mul + 7u) / 8u : ka.kv_mul / 8u
+        let chunk = gl_WorkGroupID.y % chunks
+        let kvh = gl_WorkGroupID.y / chunks
+        //! the thread's two queries, slots `sg` and `4 + sg` of the chunk: each one's row, q head under the K/V head and count
+        let u0 = chunk * 8u + sg
+        let u1 = u0 + 4u
+        let live0 = !packed || u0 < ka.rows * ka.kv_mul
+        let live1 = !packed || u1 < ka.rows * ka.kv_mul
+        let rw0 = !packed ? gl_WorkGroupID.z : live0 ? u0 / ka.kv_mul : 0u
+        let rw1 = !packed ? gl_WorkGroupID.z : live1 ? u1 / ka.kv_mul : 0u
+        let hq0 = packed ? u0 % ka.kv_mul : u0
+        let hq1 = packed ? u1 % ka.kv_mul : u1
+        let rbase = packed ? (chunk * 8u) / ka.kv_mul : gl_WorkGroupID.z
+        let rrow = rt[rbase]
+        var cnt = rrow.w   //! the chunk's deepest count: its steps run to it
+        static_if (PACK) {
+            let rlast = min((chunk * 8u + 7u) / ka.kv_mul, ka.rows - 1u)
+            var rr = rbase + 1u
+            while (rr <= rlast) {
+                cnt = max(cnt, rt[rr].w)
+                rr++
+            }
+        }
+        let cnt0 = live0 ? rt[rw0].w : 0u
+        let cnt1 = live1 ? rt[rw1].w : 0u
+        let kb0 = rrow.x + ka.lay * rrow.z + ka.layr + kvh * hs
+        let vb0 = rrow.y + ka.lay * rrow.z + ka.layr + kvh * hs
+        let h0 = kvh * ka.kv_mul
+        let qb = rw0 * ka.qstride + (h0 + chunk * 8u) * hs   //! the plain stamp's chunk in `q`
+        for (jj in range(2)) {
+            let j = uint(jj) * 4u + sg
+            var i = lane
+            while (i < hs) {
+                so[j * hs + i] = 0.0
+                static_if (PACK) {
+                    let qj = (jj == 0 ? rw0 : rw1) * ka.qstride + (h0 + (jj == 0 ? hq0 : hq1)) * sq_qhs(ka.qhs, hs)
+                    sq[j * hs + i] = (jj == 0 ? live0 : live1) ? q[qj + i] : 0.0
+                }
+                i += 32u
+            }
+        }
+        barrier()
+        var s0acc = 0.0
+        var s1acc = 0.0
+        var m0acc = -3.0e38
+        var m1acc = -3.0e38
+        let np = sq_tile_pieces(ka.keys)
+        let nb = (ka.keys + 63u) / 64u
+        let bpp = max(1u, (nb + np - 1u) / np)
+        var st = piece * bpp
+        let stop = min((piece + 1u) * bpp, (cnt + 63u) / 64u)
+        while (st < stop) {
+            let p0 = st * 64u
+            let lanes = cnt < 64u   //! a row under one step: a lane a key
+            //! the last step slides back onto the row's last 64 keys; the keys it shares with the step before are masked
+            let pb = p0 + 64u > cnt && !lanes ? cnt - 64u : p0
+            if (lanes) {   //! four of the chunk's queries a lane
+                let kk = lane + 32u * (sg & 1u)
+                if (kk < cnt) {
+                    let kr = kb0 + kk * kvd
+                    for (jq in range(4)) {
+                        let j = (sg >> 1u) * 4u + uint(jq)
+                        var dot = 0.0
+                        var d = 0u
+                        while (d < hs) {
+                            var qv = 0.0
+                            static_if (PACK) {
+                                qv = sq[j * hs + d]
+                            } else {
+                                qv = q[qb + j * hs + d]
+                            }
+                            dot += qv * float(kc[kr + d])
+                            d++
+                        }
+                        ss[j * 64u + kk] = dot
+                    }
+                }
+            } else {
+                for (cc in range(2)) {
+                    let key0 = sg * 8u + uint(cc) * 32u
+                    let kr0 = kb0 + (pb + key0) * kvd
+                    var mqk : simdgroup_float8x8
+                    var d = 0u
+                    while (d < hs) {
+                        let pk = unsafe(addr(kc[kr0 + d]))
+                        static_if (PACK) {
+                            for [unroll_full] (i in range(4)) {
+                                var mk : simdgroup_half8x8
+                                var mq : simdgroup_float8x8
+                                simdgroup_load(mk, pk, uint(i) * 8u, kvd, true)
+                                simdgroup_load(mq, sq, d + uint(i) * 8u, hs)
+                                simdgroup_multiply_accumulate(mqk, mq, mk, mqk)
+                            }
+                        } else {
+                            let pq = unsafe(addr(q[qb + d]))
+                            for [unroll_full] (i in range(4)) {
+                                var mk : simdgroup_half8x8
+                                var mq : simdgroup_float8x8
+                                simdgroup_load(mk, pk, uint(i) * 8u, kvd, true)
+                                simdgroup_load(mq, pq, uint(i) * 8u, hs)
+                                simdgroup_multiply_accumulate(mqk, mq, mk, mqk)
+                            }
+                        }
+                        d += 32u
+                    }
+                    simdgroup_store(mqk, ss, key0, 64u)
+                }
+            }
+            barrier()
+            for (jj in range(2)) {
+                let j = uint(jj) * 4u + sg
+                let mold = jj == 0 ? m0acc : m1acc
+                let ia = 2u * lane
+                let ib = ia + 1u
+                let cj = jj == 0 ? cnt0 : cnt1
+                let visa = pb + ia >= p0 && pb + ia < cj
+                let visb = pb + ib >= p0 && pb + ib < cj
+                let sa = visa ? ss[j * 64u + ia] * ka.scale : -3.0e38
+                let sb = visb ? ss[j * 64u + ib] * ka.scale : -3.0e38
+                let mnew = simd_max(max(mold, max(sa, sb)))
+                let ms = exp(mold - mnew)
+                let wa = sa <= -1.0e38 ? 0.0 : exp(sa - mnew)
+                let wb = sb <= -1.0e38 ? 0.0 : exp(sb - mnew)
+                if (jj == 0) {
+                    m0acc = mnew
+                    s0acc = s0acc * ms + simd_sum(wa + wb)
+                } else {
+                    m1acc = mnew
+                    s1acc = s1acc * ms + simd_sum(wa + wb)
+                }
+                ss[j * 64u + ia] = wa
+                ss[j * 64u + ib] = wb
+                var i = lane
+                while (i < hs) {
+                    so[j * hs + i] *= ms
+                    i += 32u
+                }
+            }
+            barrier()
+            if (lanes) {
+                for (jj in range(2)) {
+                    let j = uint(jj) * 4u + sg
+                    var i = lane
+                    while (i < hs) {
+                        var acc = 0.0
+                        var k = 0u
+                        while (k < cnt) {
+                            acc += ss[j * 64u + k] * float(vc[vb0 + k * kvd + i])
+                            k++
+                        }
+                        so[j * hs + i] += acc
+                        i += 32u
+                    }
+                }
+            } else {
+                var g = 0u
+                while (g < hs) {
+                    var lo4 : simdgroup_float8x8[4]
+                    for [unroll_full] (ii in range(4)) {
+                        simdgroup_load(lo4[ii], so, g + sg * 8u + uint(ii) * 32u, hs)
+                    }
+                    for (cc in range(8)) {
+                        var vs : simdgroup_float8x8
+                        simdgroup_load(vs, ss, uint(cc) * 8u, 64u)
+                        let pv = unsafe(addr(vc[vb0 + (pb + uint(cc) * 8u) * kvd + g + sg * 8u]))
+                        for [unroll_full] (ii in range(4)) {
+                            var mv : simdgroup_half8x8
+                            simdgroup_load(mv, pv, uint(ii) * 32u, kvd)
+                            simdgroup_multiply_accumulate(lo4[ii], vs, mv, lo4[ii])
+                        }
+                    }
+                    for [unroll_full] (ii in range(4)) {
+                        simdgroup_store(lo4[ii], so, g + sg * 8u + uint(ii) * 32u, hs)
+                    }
+                    g += 128u
+                }
+            }
+            barrier()
+            st++
+        }
+        let parts = hs / 128u
+        for (jj in range(2)) {
+            let j = uint(jj) * 4u + sg
+            let rw = jj == 0 ? rw0 : rw1
+            let hh = h0 + (jj == 0 ? hq0 : hq1)
+            if (jj == 0 ? live0 : live1) {
+                let rec = ((rw * ka.nheads + hh) * parts) * np + piece
+                var i = lane
+                while (i < hs) {
+                    var o = so[j * hs + i]
+                    static_if (PACK) {
+                        o = sq_gated(o, q, rw * ka.qstride + hh * sq_qhs(ka.qhs, hs) + i, hs, ka.gated)
+                    }
+                    part[(rec + (i / 128u) * np) * 132u + i % 128u] = o
+                    i += 32u
+                }
+                if (lane < parts) {
+                    part[(rec + lane * np) * 132u + 128u] = jj == 0 ? m0acc : m1acc
+                    part[(rec + lane * np) * 132u + 129u] = jj == 0 ? s0acc : s1acc
+                }
+            }
+        }
+    }
+}
+
+[metal_dispatch(name = "enc_attn_tile16_c", pso = "g_pso_attn_tile16", tgmem = "metal_sq_attn_tile_msl_tgmem", tg = 128,
+    grid = "pieces, groups, nrows", params = "pieces : int64, groups : int64, nrows : int64", requires = "ka.hs % 128, ka.kv_mul % 8")]
+class MetalSqAttnTileF16 : MetalSqAttnTileT {
+    [metal_kernel(name = "metal_sq_attn_tile_msl")]
+    def metal_sq_attn_tile {
+        tile()
+    }
+}
+
+//! ... and the packed stamp: `groups` the K/V heads' chunks of eight (row, q head) queries
+[metal_dispatch(name = "enc_attn_tilepk16_c", pso = "g_pso_attn_tilepk16", tgmem = "metal_sq_attn_tile_pk_msl_tgmem", tg = 128,
+    grid = "pieces, groups", params = "pieces : int64, groups : int64", requires = "ka.hs % 128")]
+class MetalSqAttnTilePkF16 : MetalSqAttnTileT {
+    override PACK = true
+
+    [metal_kernel(name = "metal_sq_attn_tile_pk_msl")]
+    def metal_sq_attn_tile_pk {
+        tile()
+    }
+}
+
 // Cross-slice combine for the D entries: PARALLEL over entries (4 sgs online-merge their
 // subsets with float4 loads — m and l arrive in ONE float4), a single tgmem cross-sg merge.
 [ |> template_struct_instance]
@@ -4688,6 +4987,9 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_attndw32 = compile_stamp(MetalSqAttnDWF32_metal_sq_attn_d_msl, ok)
     g_pso_attndx16 = compile_stamp(MetalSqAttnDXF16_metal_sq_attn_d_msl, ok)
     g_pso_attndx32 = compile_stamp(MetalSqAttnDXF32_metal_sq_attn_d_msl, ok)
+    var tile_ok = true
+    g_pso_attn_tile16 = compile_stamp(metal_sq_attn_tile_msl, tile_ok)
+    g_pso_attn_tilepk16 = compile_stamp(metal_sq_attn_tile_pk_msl, tile_ok)
     g_pso_attnd_q8 = compile_stamp(MetalSqAttnDQ8_metal_sq_attn_d_msl, ok)
     g_pso_attnd_tq4 = compile_stamp(MetalSqAttnDTq4_metal_sq_attn_d_msl, ok)
     g_pso_attndw_q8 = compile_stamp(MetalSqAttnDWQ8_metal_sq_attn_d_msl, ok)
@@ -6737,7 +7039,7 @@ def metal_kernels_release {
     metal_base_split_release()
     release_handles(g_pso_attnb_tq4, g_pso_attnpb16, g_pso_attnpb32, g_pso_attnpb_q8, g_pso_attnpb_tq4, g_pso_attncombb)
     release_handles(g_pso_attnd16, g_pso_attnd32, g_pso_attnd_q8, g_pso_attnd_tq4, g_pso_attncombd, g_pso_rpstb16)
-    release_handles(g_pso_attndw16, g_pso_attndw32, g_pso_attndx16, g_pso_attndx32)
+    release_handles(g_pso_attndw16, g_pso_attndw32, g_pso_attndx16, g_pso_attndx32, g_pso_attn_tile16, g_pso_attn_tilepk16)
     release_handles(g_pso_attndw_q8, g_pso_attndw_tq4, g_pso_attndx_q8, g_pso_attndx_tq4, g_pso_rpstb32, g_pso_rpstb_q8, g_pso_rpstb_tq4)
     release_handles(g_pso_kv_rows_q8, g_pso_kv_rows_tq4)
 }

@@ -92,14 +92,27 @@ def routed_steps_form_cell(t : T?; f : KqFmt; cls : string; tag : string; steps 
     }
 }
 
+//! `body` under a knob moved to `to` through `set`, the knob put back to `prev` after
+def private under_knob(prev, to : auto(TT); set : function<(v : TT -const) : void>; body : block<void>) {
+    invoke(set, to)
+    invoke(body)
+    invoke(set, prev)
+}
+
 //! `body` under the fused single-pass attention's knob pinned to `on`, the knob put back after: a census that reads the
 //! fused form pins the knob, never inherits it. The body may move the knob itself (the knob-off control leg).
 def with_metal_attn_d(on : bool; body : block<void>) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        let prev = get_metal_attn_d()
-        set_metal_attn_d(on)
+        under_knob(get_metal_attn_d(), on, @@set_metal_attn_d, body)
+    } else {
         invoke(body)
-        set_metal_attn_d(prev)
+    }
+}
+
+//! `body` under the tile attention's far count pinned to `far` (0 = every depth, negative = never), the count put back after
+def with_metal_attn_tile_far(far : int64; body : block<void>) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        under_knob(get_metal_attn_tile_far(), far, @@set_metal_attn_tile_far, body)
     } else {
         invoke(body)
     }

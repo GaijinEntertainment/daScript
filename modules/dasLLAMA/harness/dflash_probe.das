@@ -12,6 +12,7 @@ require dasllama/dasllama_sampling   // generate_, generate_mtp_sampled, set_see
 require dasllama/dasllama_chat   // create_chat_renderer_, set_tools_, render_turn_, turn_stop_ids_: the tool-call arm's prompts
 require ?das_metal dasllama/dasllama_metal_kernels   // nolint:STYLE030,LINT019 - the Metal decode driver, inside the das_metal half
 require ?das_metal dasllama/dasllama_metal_dflash   // nolint:STYLE030,LINT019 - the drafter's device pass registers at init
+require ?das_metal dasllama/dasllama_metal_decode   // nolint:STYLE030,LINT019 - set_metal_attn_tile_far, inside the das_metal half
 require ?das_metal dasllama/dasllama_metal_common   // nolint:STYLE030,LINT019 - set_metal_decode_speculate, inside the das_metal half
 require ?cuda dasllama/dasllama_cuda_dflash   // nolint:STYLE030,LINT019 - the CUDA drafter's stats, inside the CUDA half
 require ?vulkan dasllama/dasllama_vulkan_dflash   // nolint:STYLE030,LINT019 - the drafter's Vulkan arm registers at init
@@ -39,6 +40,7 @@ require daslib/strings_boost
 //   bin/daslang -jit modules/dasLLAMA/harness/dflash_probe.das -- -m <trunk.gguf> [-r <drafter.gguf>] [--steps 48]
 //       [--mode greedy|sample|residual] [--temp 0.7] [--top-p 1] [--top-k 0] [--draft-temp <temp>] [--seed 4242]
 //       [--prompt-ids <file> | --prompts <file> [--tools <file>]] [--context-text <file> [--context-tokens 3000]]
+//       [--attn-tile-far <keys>]
 
 [CommandLineArgs]
 struct Args {
@@ -94,6 +96,9 @@ struct Args {
     context_text : string
     @clarg_doc = "the tokens --context-text contributes (default 3000)"
     context_tokens : int = 3000
+    @clarg_name = "attn-tile-far"
+    @clarg_doc = "Metal: the keys from which a full-context layer's attention takes the tile form (0 = at every depth, -1 = never; default: the driver's)"
+    attn_tile_far : int = -2
     @clarg_short = "?"
     @clarg_doc = "Show this help and exit"
     help : bool
@@ -434,6 +439,9 @@ def private run(a : Args) : int {
             }
             if (a.census) {
                 g_census_round = 2
+            }
+            if (a.attn_tile_far > -2) {
+                set_metal_attn_tile_far(int64(a.attn_tile_far))
             }
         } else {
             print("das_metal is not built into this binary\n")

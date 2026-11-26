@@ -275,7 +275,9 @@ and a greedy count. The whole test is gated on
 alone skips the whole test (`batchB8-kq` is not a substring of `batch`); `--arm batch` runs every batch
 arm, and is the way to reach a sub-arm.
 
-MTP parity (`test_metal_mtp_parity.das`, suite `mtp`): `mtp-ffh-<tag>` = the half-x crowns (k4, k5, k6) pinned
+MTP parity (`test_metal_mtp_parity.das`, suite `mtp`): `mtp-tile-<tag>` = the packed tile stamp pinned on at every
+depth under the depth-1 counting walk (the verify's rows take it, the tokens stay the plain walk's), then pinned off
+as the control; `mtp-ffh-<tag>` = the half-x crowns (k4, k5, k6) pinned
 over the counting walk at depth 1 - a two-row verify, the row count the half-x forms serve on every box (a rows8 box
 takes a k4 or k6 site from three rows up): the verify's K-quant sites, the MTP head's own q/k/v among
 them, read the f16 twin, and the rounds the rail drafts hold up to the uncrowned walk's within a fifth - a head fed
@@ -480,7 +482,10 @@ knobs - before its first walk and puts each back at the value its getter read be
   completion's ids through `generate_drafted` are the plain model's token for token, the chat's turns counted as draft
   passes and device steps and the completion accepting drafts; two streams through the scheduler at three drafts a round
   ride joint rounds (the scheduler's `mtp_joined_max` 2, a stream alone 1 - the control) with no pass held, each the plain scheduler's
-  token for token, the two together accepting what each accepts alone within a fifth; the detach reported; a stream given a stop id emits exactly the ids before that id's first
+  token for token, the two together accepting what each accepts alone within a fifth; the tile attention pinned on at
+  every depth, then off (`tile_attention_leg`): the plain completion's ids fed a step at a time give the fused form's
+  logits within 5e-3 of a row's largest (each step's control the fused row a step off), the drafted completion's steps
+  and the scheduler's two streams' steps dispatch the tile stamp, and pinned off none of the three does; the detach reported; a stream given a stop id emits exactly the ids before that id's first
   occurrence, the stopless stream running past it (the control); then, on the same load, `dflash-27b-sampled-metal`'s
   walks over the E2B's Q8_0 drafter (`sampled_modes_walk`, tag `E2B sampled metal`), the exact walk held by its draws and
   its first id, not token for token, and no sampled round holding its pass (its rounds are joint); skips without das_metal;
@@ -607,8 +612,10 @@ mirror past 4096 MiB and the continuation counting on;
 mirror = the mirror-fed window
 against the f32 panels on one blob twin under the pair's pinned crown - a 300-row window and a
 20-row continuation, the last row's logits within 0.4% of the largest and the census naming each
-form's kernels; the decode step after them uploads no row on the mirror-fed form and every row on
-the panels form; a paged taker adopts a released donor's mirror for the whole pages a prefix cache
+form's kernels; the same windows with the score slab's reach probed down to 256 rows land the whole
+windows' logits to the bit on both forms, the 300-row window's first piece on the 128-row stamp (the whole
+window takes none - the control) and the pieced window one token off outside the bar; the decode step after
+them uploads no row on the mirror-fed form and every row on the panels form; a paged taker adopts a released donor's mirror for the whole pages a prefix cache
 hands it and uploads the copied partial page's rows alone, to the bit of the same run with adoption off, and a reused group id under a
 new stamp adopts nothing; attn-dev = the device attention pair
 against the staged trio on one blob twin under the pair's pinned crown - a 300-row window on the
@@ -651,7 +658,10 @@ of them, nor the site's format stamps (the counters' control) - and the greedy c
 pinned off takes none, both walks the same tokens; both E2B rows assert parity through their forced-feed cells, not token
 equality, because freeform continuations from a 2B sit on near-ties; every fam-gemma4e row ends on the depth cell
 (`depth_cell`): three forced steps past a 120-number prompt within the row's bar of the CPU's, the census holding the
-full-context layers on the head-of-512 fused stamp, the sliding ones on the head-of-256 stamp, and none on the chunked pair;
+full-context layers on the head-of-512 fused stamp, the sliding ones on the head-of-256 stamp, and none on the chunked pair,
+the tile form pinned off; on a fam-gemma4e row three steps ahead of them are the reach leg - the mirror left standing, then
+the route tables' reach probed at the mirror slice's very end (the single row stays on the fused stamps) and a unit short
+of it (it goes to the chunked pair, no fused stamp);
 the same cell closes every ENGAGE row of a head-96 carrier (`fam-phi3`), its census the narrow fused stamp - the head off the
 64 lattice admitted past the ceiling;
 fam-gemma3 (gemma-3-1b) and fam-gemma4e (E2B) carry the Metal ring row (`metal_ring_row`): a counting prompt past the window
@@ -4660,8 +4670,10 @@ the run a wrong one stops, the ladder's and the widths' row
 names, `--only` and `--lengths`, the ultralong pass, the `--max-length` stop, an arm's rows and `--arm off`, the wide
 pass's stream cap, the runs that exit 1), `test_model_bench_behind` (the behind pass against the fake's slot routes: a
 base prefilled cold and saved, restored on the next run, a server whose routes refuse, a base that never comes off the
-cache, a cold base that is not served, the pass a run of its own), `test_model_bench_runner_passes` (against the fake
-as a child: the ultralong and behind passes each a start `--only` picks alone, `--report` with no start),
+cache, a cold base that is not served, a base that leaves the timed turn no room, an arm's decode row behind the
+deepest base and the long plain reply beside it), `test_model_bench_runner_passes` (against the fake
+as a child: the ultralong pass a start `--only` picks alone, the behind pass with its arm's row on a start of its own,
+`--report` with no start),
 `test_model_bench_cell_reads` (`cache_prompt` on the wire, a cell's draft sums, a stall, llama.cpp's timing names,
 an unfair wave, the shipped config), `test_model_bench_runner` (the command lines, the joined run files, a model's page over two sides' rows and over a
 folder's run files), `test_model_bench_runner_card` (a model run end to end against the fake as a child on port 18171:

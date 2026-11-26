@@ -34,6 +34,32 @@ def race_fill(count, salt : int; amp, bias : float; stir : uint = 0u) : array<fl
     return <- xa
 }
 
+//! the last `length(defaults)` command-line words as positive ints, the defaults where they are not that
+def race_int_args(args : array<string>; defaults : array<int>) : array<int> {
+    let n = length(defaults)
+    var out <- [for (d in defaults); d]
+    if (length(args) >= n && to_int(args[length(args) - n]) > 0) {
+        for (i in range(n)) {
+            out[i] = to_int(args[length(args) - n + i])
+        }
+    }
+    return <- out
+}
+
+//! an attention race's layer: `heads` q heads of `hs` over `kvh` K/V heads, and the widths that follow
+struct AttnRaceShape {
+    heads : int
+    hs : int
+    kvh : int
+    kv_dim : int    //! a K or V row's elements
+    kv_mul : int    //! q heads a K/V head
+    qd : int        //! a row's attention out
+    qstride : int   //! the decode's [q | k | v] row
+}
+
+def attn_race_shape(heads, hs, kvh : int) : AttnRaceShape
+    => AttnRaceShape(heads = heads, hs = hs, kvh = kvh, kv_dim = kvh * hs, kv_mul = heads / kvh, qd = heads * hs, qstride = heads * hs + 2 * kvh * hs)
+
 //! `s` stepped by the 1664525 / 1013904223 LCG; answers its top 24 bits
 def race_lcg(var s : uint&) : uint {
     s = s * 1664525u + 1013904223u
