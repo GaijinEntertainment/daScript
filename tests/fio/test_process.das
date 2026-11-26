@@ -13,6 +13,8 @@ def das_exe() : string {
     return empty(args) ? "" : args[0]
 }
 
+def private resolved_das_root() : string => path_join(getcwd(), get_das_root())
+
 def has_line(lines : array<string>; s : string) : bool {
     for (l in lines) {
         if (l == s) return true
@@ -20,8 +22,9 @@ def has_line(lines : array<string>; s : string) : bool {
     return false
 }
 
-def child_argv(fixture, ready, release : string) : array<string> =>
-    [das_exe(), "-dasroot", get_das_root(), fixture, "--", ready, release]
+def child_argv(fixture, ready, release : string) : array<string> => <- [
+    das_exe(), "-dasroot", resolved_das_root(), fixture, "--", ready, release
+]
 
 def make_temp_root(t : T?; prefix : string) : string {
     let tmp = create_temp_directory_result(prefix)
@@ -85,7 +88,7 @@ def test_process_lifecycle(t : T?) {
         let root_dir = tmp as value
         let ready = path_join(root_dir, "ready")
         let release = path_join(root_dir, "release")
-        let fixture = path_join(get_das_root(), "tests/fio/_fixture_process_child.das")
+        let fixture = path_join(resolved_das_root(), "tests/fio/_fixture_process_child.das")
         var p = unsafe(spawn_process(child_argv(fixture, ready, release), root_dir, ["DAS_PROC_TEST=marker42"]))
         t |> success(p != null, "spawn_process returned a handle")
         // Drain the child's stdout until it signals ready; the file event drives completion,
@@ -128,7 +131,7 @@ def test_close_kills_a_running_child(t : T?) {
     t |> run("closing the handle - explicitly, or leaving a with_process block - kills a child still running") @(t : T?) {
         let root_dir = make_temp_root(t, "das process close ")
         if (empty(root_dir)) return
-        let fixture = path_join(get_das_root(), "tests/fio/_fixture_process_child.das")
+        let fixture = path_join(resolved_das_root(), "tests/fio/_fixture_process_child.das")
         let noenv : array<string>
         var explicit_pid = 0
         var p = unsafe(spawn_process(child_argv(fixture, path_join(root_dir, "ready1"), path_join(root_dir, "never1")), "", noenv))
@@ -169,7 +172,7 @@ def test_process_terminate(t : T?) {
         let root_dir = tmp as value
         let ready = path_join(root_dir, "ready")
         let release = path_join(root_dir, "release")   // deliberately never written
-        let fixture = path_join(get_das_root(), "tests/fio/_fixture_process_child.das")
+        let fixture = path_join(resolved_das_root(), "tests/fio/_fixture_process_child.das")
         let noenv : array<string>
         var p = unsafe(spawn_process(child_argv(fixture, ready, release), "", noenv))
         t |> success(p != null, "spawn_process returned a handle")
@@ -290,13 +293,16 @@ let SPAWN_KINDS = fixed_array("popen_argv", "popen", "popen_timeout", "popen_arg
 //! and reads it to end of file; `<name>_done` appears after that.
 def spawn_window_child(root : string; kind : int; long_child : bool) {
     let name = long_child ? "long" : "short"
-    let fixture = path_join(get_das_root(), "tests/fio/_fixture_process_child.das")
+    let fixture = path_join(resolved_das_root(), "tests/fio/_fixture_process_child.das")
     let ready = path_join(root, "{name}_ready")
     let release = path_join(root, long_child ? "release" : "go")
     let noenv : array<string>
-    let argv <- [das_exe(), "-dasroot", get_das_root(), "-no-module-cache", fixture, "--",
+    let argv <- [das_exe(), "-dasroot", resolved_das_root(), "-no-module-cache", fixture, "--",
         ready, release]
-    let line = join(argv, " ")
+    var quoted := argv
+    let exe = path_join(getcwd(), quoted[0])
+    quoted[0] = "\"{get_platform_name() == "windows" ? replace(exe, "/", "\\") : exe}\""
+    let line = join(quoted, " ")
     if (kind == 0) {
         unsafe(popen_argv(argv, root, noenv, 120.0, $(f) {
             while (f != null && !feof(f)) {
