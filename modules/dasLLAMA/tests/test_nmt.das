@@ -533,6 +533,19 @@ def private device_declines(t : T?; var tr : Translator; s : Student) {
     nmt_seat_pin(was)
 }
 
+//! on a student's device form: the seat shut down, and the next sentence served on the device - the attach compiles the pipelines again
+[cold_path]
+def private device_reattach(t : T?; var tr : Translator; s : Student) {
+    let tag = device_tag(s)
+    nmt_seat_shutdown()
+    let was = nmt_seat_pin(true)
+    let served = nmt_seat_stats().sentences
+    var inscope ids <- nmt_translate_ids(tr.m, tr.st, s.srcs[0])
+    nmt_seat_pin(was)
+    t |> success(nmt_seat_stats().sentences > served, "{tag}: the sentence after the seat's shutdown is served on the device")
+    t |> success(ids_equal(ids, s.gpu[0]), "{tag}: and its ids are the device's before the shutdown")
+}
+
 //! on a student's f32 form: the exact lane through the seat, declined `quant_mode` and translated on the CPU
 [cold_path]
 def private device_exact_decline(t : T?; var ex : Translator; s : Student) {
@@ -608,7 +621,7 @@ def private en_ru_base_memory_block(t : T?; var s : Student) : bool {
 
 // The two ru/en base-memory students, a block each. The en-ru block sits inside ru-en's device form, so the seat swaps
 // from one live student to the other and back; every compare between two forms of a file follows the blocks.
-[test(description = "The ru-en and en-ru base-memory Bergamot students load once a form, the en-ru block inside the ru-en device form. On each f32 form, under marian's forced tokens the exact lane matches the f32 oracle's dump at every stage within 1e-4 of the stage's max magnitude, and its free run agrees on at least 28 lines, with displaced-token and displaced-source controls outside. On each q8 form the lane serves its GEMMs and classifier off the Q8_0 plane and translates at least 25 fixture lines as the f32 oracle does, while the form with the Q8_0 classifier zeroed falls under the floor and, against the q8 form, moves every line. On the device forms the translation seat serves every fixture line, at least 26 matching the CPU q8 chain, across a model swap with no shutdown and a swap back; a zeroed device classifier changes every line, and shape, length, buffer and quant_mode declines translate on the CPU. Through the facade the ru-en student keeps its one direction on its image form, and exact = true loads the f32 lane, which translates the pharmacy line")]
+[test(description = "The ru-en and en-ru base-memory Bergamot students load once a form, the en-ru block inside the ru-en device form. On each f32 form, under marian's forced tokens the exact lane matches the f32 oracle's dump at every stage within 1e-4 of the stage's max magnitude, and its free run agrees on at least 28 lines, with displaced-token and displaced-source controls outside. On each q8 form the lane serves its GEMMs and classifier off the Q8_0 plane and translates at least 25 fixture lines as the f32 oracle does, while the form with the Q8_0 classifier zeroed falls under the floor and, against the q8 form, moves every line. On the device forms the translation seat serves every fixture line, at least 26 matching the CPU q8 chain, across a model swap with no shutdown and a swap back; a zeroed device classifier changes every line, and shape, length, buffer and quant_mode declines translate on the CPU; after the seat's shutdown the next sentence is served on the device again, and its last shutdown leaves no Metal object. Through the facade the ru-en student keeps its one direction on its image form, and exact = true loads the f32 lane, which translates the pharmacy line")]
 def test_nmt_ru_en_pairs(t : T?) {
     return if (!jit_only(t))
     var inscope ru_en <- student_of(t, RU_EN_BASE_MEMORY)
@@ -636,6 +649,7 @@ def test_nmt_ru_en_pairs(t : T?) {
                 en_ru_ran = en_ru_base_memory_block(t, en_ru)
                 device_poisoned_lines(tr, ru_en)
                 tower_cell(t, "test_nmt_device, {ru_en.c.dir}: the seat's declines", tr, ru_en, @@device_declines)
+                tower_cell(t, "test_nmt_device, {ru_en.c.dir}: the seat serves again after its shutdown", tr, ru_en, @@device_reattach)
             } elif (form == "image") {
                 tower_cell(t, "test_nmt_llm_translator: a Bergamot pair kept", tr, @@student_keeps_direction)
             } elif (form == "image_f32") {
@@ -645,7 +659,7 @@ def test_nmt_ru_en_pairs(t : T?) {
         if (!nested) {
             en_ru_ran = en_ru_base_memory_block(t, en_ru)
         }
-        nmt_seat_shutdown()
+        t |> equal(nmt_seat_shutdown_leaks(), 0l, "the seat's shutdown releases its pipelines with its blob: no Metal object is left")
     }
     if (ran) {
         student_compares(t, ru_en)

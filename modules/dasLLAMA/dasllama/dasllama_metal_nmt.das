@@ -132,10 +132,12 @@ def private nm_release_all {
     g_nm_key = 0ul
 }
 
-//! Release the driver's device objects - the leak gate's rail and the model-switch seat; the next sentence re-attaches.
+//! Release the driver's device objects, its pipelines with them - the leak gate's rail and the model-switch seat; the next sentence re-attaches and recompiles.
 def metal_nmt_shutdown {
     nm_release_all()
     pool_drain(g_nm_pool)
+    release_handles(g_nm_pso_embed, g_nm_pso_ssru, g_nm_pso_pick)
+    g_nm_tried = false
     g_nm_said |> clear()
     g_nm_rate = 1.0lf
 }
