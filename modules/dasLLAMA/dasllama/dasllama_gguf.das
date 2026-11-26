@@ -620,6 +620,37 @@ def public clear_mtp_head_path() {
 //! the pinned head path and whether one is pinned at all (an empty pin turns the environment's `DASLLAMA_MTP_HEAD` off)
 def public mtp_head_path_pin() : tuple<set : bool; path : string> => (set = g_mtp_head_override_set, path = g_mtp_head_override)
 
+//! the head pin put back as `mtp_head_path_pin` read it
+def public restore_mtp_head_path(found : tuple<set : bool; path : string>) {
+    if (found.set) {
+        set_mtp_head_path(found.path)
+    } else {
+        clear_mtp_head_path()
+    }
+}
+
+//! `blk`, and what it returns, under the head pin `path` (an empty one: no pin, the environment's off), the pin it
+//! found put back however `blk` leaves, a panic included
+def public with_mtp_head_path(path : string; blk : block<() : auto(TT)>) : TT {
+    let found = mtp_head_path_pin()
+    set_mtp_head_path(path)
+    static_if (typeinfo is_void(type<TT>)) {
+        with_put_back($ {
+            restore_mtp_head_path(found)
+        }) {
+            invoke(blk)
+        }
+    } else {
+        var res <- default<TT>
+        with_put_back($ {
+            restore_mtp_head_path(found)
+        }) {
+            res <- invoke(blk)   // nolint:PERF030 - fresh default-constructed target, single move
+        }
+        return <- res
+    }
+}
+
 //! the stem before the trailing quant token, `-Q<digit>` or `-IQ<digit>` ("...-it-Q4_K_M" and "...-it-UD-IQ3_XXS" -> "...-it" and
 //! "...-it-UD"); no token = the whole stem - the sidecar rules' key, the split head's and the assistant drafter's alike
 def quant_stem(stem : string) : string {

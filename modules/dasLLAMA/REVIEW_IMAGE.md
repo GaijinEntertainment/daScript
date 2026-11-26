@@ -49,9 +49,10 @@ staged form holds source and image at once, and this rule caps that doubled peak
 
 **A path that reinterprets a mismatched image, or widens an identity so that an image matches a
 load whose plane bytes would differ from the image's, is a defect.** Anything that changes what
-an image contains - the box profile, the knobs, the flavor, a head that rides the load - goes into
-`image_identity`, the string the header bakes,
-not only into the image path; a mismatch declines loudly.
+an image contains - the box profile, the knobs, the flavor - goes into `image_identity`, the string
+the header bakes, not only into the image path, and a head that rides the load goes into the
+header's head record, which the load re-checks (`ARCHITECTURE_IMAGE.md#image-identity-head-fold`);
+a mismatch declines loudly.
 
 **An image save at the `image_path_for` path deletes its own lane's images whose identity no longer
 matches, and any image
@@ -63,9 +64,10 @@ this process registered.** A lane is the last dot-separated segment of the file 
 family, another lane's image whatever its identity, or one whose family this process cannot
 recompute - is a defect.** The explicit GC (`dlim_clean_`, the converter's `--clean`, the server's
 boot) deletes the same garbage, a hash-named legacy image of another identity, and every image whose
-source file was replaced beside it (verdict `STALE source`, whatever its lane or identity), and
-never a lane-named image of another identity whose source still matches; a save's GC keeps a `STALE
-source` image because the original file may be restored to that path.
+source file, or the split head its header records, was replaced (verdict `STALE source`, whatever
+its lane or identity), and never a lane-named image of another identity whose source still matches
+and whose recorded head, when it records one, still matches; a save's GC keeps a `STALE source`
+image because the original file may be restored to that path.
 
 **A diff that adds a segment to `image_lane_name` or a field to the identity records in
 `ARCHITECTURE_IMAGE.md#image-lane-name` whether the knob coexists (a lane segment AND an identity
@@ -104,10 +106,11 @@ nests, and whose every other image change is that field's own serializer line, l
 bump re-mints every family's.
 
 **A diff that adds or changes a function a closure member calls to set the order, offset or size
-of a piece's or a plane's bytes - not their values - adds it to `REVIEW.das`'s `LAYOUT_HELPERS` in
-the same change, unless the layout-stamp closure holds it.** The closure is every top-level
-definition under `dasllama/` that is a `serialize*` taking an `Archive`, `build_image`,
-`parse_image`, a `*_bake` or `*_bake_into`, a `*_prepare` of `dasllama/dasllama_tts_blocks.das`, a
+of a piece's or a plane's bytes, or whether a piece is written - not their values - adds it to
+`REVIEW.das`'s `LAYOUT_HELPERS` in the same change, unless the layout-stamp closure holds it.** The
+closure is every top-level definition under `dasllama/` that is a `serialize*` taking an `Archive`,
+`build_image`, `parse_image`, a `*_bake` or `*_bake_into`, a `*_prepare` of
+`dasllama/dasllama_tts_blocks.das`, a
 `LAYOUT_HELPERS` entry, or a `LAYOUT_CONSTANTS` declaration line.
 
 **A diff that takes a function out of the layout-stamp closure - deleting it, renaming it, or

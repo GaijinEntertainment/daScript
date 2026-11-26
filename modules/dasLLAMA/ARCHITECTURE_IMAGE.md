@@ -76,7 +76,7 @@ its name, and a named image that declines for it says so (`refuse_moved_source`)
 load unchecked: one with no source beside it (shipped alone, or copied away), one a host holds in memory, and one
 minted to a destination whose name spells no source there - its stamp is 0. The stamp samples the file and does not
 read it whole: a source rewritten at the same size with every sampled window unchanged keeps its image. A split
-head's file is outside the stamp; its fold is the lane's (`#image-identity-head-fold`).
+head's file is outside this stamp; the header records its own (`#image-identity-head-fold`).
 
 ### A planar image never stands in for the blob flavor {#image-flavor-rebake}
 
@@ -207,16 +207,17 @@ lane and reap each other's image on every switch.
 
 ### A split head is part of the image's identity {#image-identity-head-fold}
 
-**An image path folds in the split NextN head that rides the load.** `image_path_for` resolves
-`mtp_head_sidecar` for the gguf - the resolver excludes an assistant drafter (`gguf_is_assistant`),
-whose weights never enter the trunk's image - and, when a head exists, the lane carries
-`-mtp-<head>` (the head file's stem), so a trunk loaded alone, the same trunk with its head, and
-the same trunk with another head never share a `.dlim` path. The head's tensors are baked INSIDE
-the minted image - one file serves both - so two identities sharing a path would re-save over
-each other forever. Because the fold changes the path, a head's arrival or a swap needs no
-`IMAGE_VERSION` bump: no image at an unchanged path changes content. The fold lives in the path
-and not yet in the baked identity string (`followup_general.md` #99), so the direct-`.dlim` route
-still cannot tell a headed image from a head-less one by its header.
+**An image path folds in the split NextN head that rides the load.** `image_path_for` resolves `mtp_head_sidecar` for
+the gguf - never an assistant drafter (`gguf_is_assistant`), whose weights stay out of the trunk's image - and the
+lane carries `-mtp-<head>` (the head file's stem), so a trunk alone, with its head, and with another head never share
+a `.dlim` path: the head's tensors are baked INSIDE the image, and two identities on one path would re-save over each
+other forever. A head's arrival or swap changes the path, so it needs no `IMAGE_VERSION` bump. The baked identity
+string does not carry the fold (`followup_general.md` #99).
+
+**The header records the head an image was minted with** - its stamp and its path, a bare name where it stands beside
+the source - in page 0 after the fixed words. A load re-stamps the head its lane folds, as `mtp_head_sidecar` resolves
+it now; a lane's image that records another stamp, or none, mints again. A peek has no load's pin, and a load may ride
+no head: both re-read the recorded file (a mismatch declines, `STALE source` to a peek), unchecked where it is gone.
 
 ### The layout stamp is one hash over the code that places bytes {#image-layout-stamp}
 
@@ -229,7 +230,7 @@ The closure, per file in sorted name order: every `Archive` serializer body (a t
 `def serialize*` taking an `Archive`), `build_image`, `parse_image`, every `*_prepare` mint of
 `dasllama_tts_blocks.das` (the TTS blocks' plane packers; a driver's `*_prepare` places no image byte), the
 layout helpers `pad_to_page`, `w_page`, `plane_end`, `image_total_bytes`, `w_append`, `w_zeros`,
-`w_header`, `store_at`, `kq_plane_name`, the TTS blob's `blob_push`,
+`w_header`, `store_at`, the head record's `store_head_record` and `image_lane_head`, `kq_plane_name`, the TTS blob's `blob_push`,
 `weight_slot`, `table_slot` and `conv1d_weight_row`, a TTS quant matrix's shape and mint (`conv1d_quant_rows`,
 `conv1d_quant_k`, `conv1d_quant_row`, `q8_matrix_mint`), the streaming Vulkan mint's `vk_mint_plane`, `vk_mint_walk` and
 `vk_mint_sink_append`, GigaAM's streamed weight-plane writer `gg_stream_plane` and its plan's spans `gg_job_span` and
@@ -243,7 +244,7 @@ slab layout `rnnt_dev_layout`), the region and record lists they gather (`fc_q8_
 (`tower_aud_stem16` and its pitch `tower_aud_stem_kdp`, `tower_g4a_front16`, `tower_q3a_front16` and its stages
 `tower_q3a_stages` / `tower_conv_stage`, the conv panel `tower_stage_conv0_panel`, the padded row copy
 `tower_stage_f32_pad_row_stride`), and the declaration lines
-of the layout constants `IMAGE_PAGE`, `IMAGE_HEADER_BYTES`, `SECTION_TABLE_SLACK`, `DWRITE_STAGING_BAND`,
+of the layout constants `IMAGE_PAGE`, `IMAGE_HEADER_BYTES`, the header's `IMAGE_*_AT` offsets, `SECTION_TABLE_SLACK`, `DWRITE_STAGING_BAND`,
 `METAL_BAND_BLOCKS`, `BLOB_ALIGN_FLOATS` and `TOWER_DEV_ALIGN`. Comments are stripped first, so re-wording one moves nothing, and CRLF
 line ends fold to LF before anything is hashed, so a checkout under `autocrlf` stamps as the
 LF tree does. A body runs from its `def` line to the column-0 `}` that closes it, or, for a

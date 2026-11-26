@@ -1440,8 +1440,8 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // the TTS block file's *_prepare mints, the layout helpers and the layout constants' declaration
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
-let private IMAGE_LAYOUT_STAMP_VERSION = 65
-let private IMAGE_LAYOUT_STAMP_HASH = 0xca20e3d7efbcb74cul
+let private IMAGE_LAYOUT_STAMP_VERSION = 66
+let private IMAGE_LAYOUT_STAMP_HASH = 0x2b0bb37fa2eac985ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
@@ -1452,7 +1452,7 @@ let private IMAGE_LAYOUT_STAMP_HASH = 0xca20e3d7efbcb74cul
 // serializer body reads the same.
 var private LAYOUT_HELPERS <- {
     "pad_to_page", "w_page", "plane_end", "image_total_bytes",
-    "w_append", "w_zeros", "w_header", "store_at", "kq_plane_name",
+    "w_append", "w_zeros", "w_header", "store_at", "store_head_record", "image_lane_head", "kq_plane_name",
     "blob_push", "weight_slot", "table_slot", "conv1d_weight_row",
     "conv1d_quant_rows", "conv1d_quant_k", "conv1d_quant_row", "q8_matrix_mint", "q8_matrix_seat", "conv1d_size_kq", "kq_planes_seat", "kq_planes_size",
     "vk_mint_plane", "vk_mint_walk", "vk_mint_sink_append",
@@ -1473,7 +1473,7 @@ var private LAYOUT_HELPERS <- {
 // way an edited body does - the closure is deliberately wider than the byte-moving set, and a
 // change that provably moves nothing re-stamps the hash alone.
 var private LAYOUT_CONSTANTS <- {
-    "IMAGE_PAGE", "IMAGE_HEADER_BYTES", "IMAGE_STAMP_AT", "SECTION_TABLE_SLACK",
+    "IMAGE_PAGE", "IMAGE_HEADER_BYTES", "IMAGE_STAMP_AT", "IMAGE_HEAD_STAMP_AT", "IMAGE_HEAD_PATH_AT", "IMAGE_HEAD_PATH_MAX", "SECTION_TABLE_SLACK",
     "DWRITE_STAGING_BAND", "METAL_BAND_BLOCKS", "BLOB_ALIGN_FLOATS", "TOWER_DEV_ALIGN",
     "NV4_DEV_QSB", "NV4_DEV_SSB"
 }

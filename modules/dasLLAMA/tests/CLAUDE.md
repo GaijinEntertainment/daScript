@@ -745,7 +745,11 @@ loads unchecked beside no source or under a name that spells none, a byte betwee
 another lane's save leaves the image of a replaced source, the explicit GC removes it, and `refuse_moved_source`
 names the source for an image asked by its own path (the copy beside no source the control); a split GGUF's every
 shard, a lone shard whose sibling is missing and a directory's every file are the source, and only a lane-named
-`.dlim` answers for one; the lane naming -
+`.dlim` answers for one; the head record (`test_image_answers_for_its_head`) - a headed lane's image declines once
+its split head is replaced under its name and reads `STALE source`, maps with the head restored or gone, and declines
+to the load its head rides where it records none; a head pinned from another folder is recorded by its path, a
+same-named head beside the trunk is another head to the load, and the inventory re-reads the pinned file; a head
+beside its trunk is recorded by name, so an image copied with both answers for the head beside it; the lane naming -
 the file name's lane segment read back, a hash-named legacy image adopted into its lane, a save
 reaping only its own lane's legacy other while another lane's OTHER survives, a version-stale
 image going in any lane, and the rope-scaling override as a lane suffix and an identity element
