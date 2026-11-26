@@ -152,7 +152,7 @@ endif()
 das_lane_group(run_build "Running the build lane"
     run_tests_sweeps test-small run_tests_aot_subset ${DAS_BUILD_LANE_APPLE})
 das_lane_group(run_build_nightly "Running the build lane's nightly sweeps"
-    run_tests_slow run_backend_sweeps test_aot_subset run_tests_watchdog)
+    run_tests_slow run_backend_sweeps test_aot_subset run_tests_watchdog run_tests_dasllama_compile)
 das_lane_group(run_build_sanitizers "Running the sanitizer lane"
     run_tests_interpreter test-small)
 das_lane_group(run_build_clangcl "Running the clang-cl lane"

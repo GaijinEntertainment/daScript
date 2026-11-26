@@ -59,6 +59,7 @@ struct SuiteCtx {
     uriPaths : bool = false
     verbose : bool = false
     compile_only : bool = false
+    compile_threads : int = 1
     use_aot : bool = false
     aot_macros : bool = false
     cov_path : string = ""
@@ -125,6 +126,7 @@ def SuiteCtx(args : DastestArgs) : SuiteCtx {
     ctx.skipFullyCached = args.skip_fully_cached && !args.bench && empty(args.cov_path)
     ctx.passKey = cache_key_args(raw_args)
     ctx.compile_only = args.compile_only
+    ctx.compile_threads = args.compile_threads
     ctx.use_aot = args.use_aot || is_in_aot()
     ctx.aot_macros = args.aot_macros
     ctx.cov_path = args.cov_path
@@ -204,6 +206,7 @@ def private test_policies(ctx : SuiteCtx; var cop : CodeOfPolicies; var access :
         cop.stack = 1024u * 1024u
     }
     cop.threadlock_context = true
+    cop.compile_threads = ctx.compile_threads
     cop.jit_enabled = tests_jit_enabled()
     cop.debugger = ctx.debugger
     cop.keep_alive = ctx.keep_alive

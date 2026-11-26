@@ -504,31 +504,49 @@ def test_unmet_expect(t : T?) {
     remove(file)
 }
 
-[test(description = "--policy sets a compile policy for every test file under --test, --together and isolated workers, after the policies a --test-project file names, a project item that is no policy fails the run naming it, and a --policy name that is no policy stops dastest with exit code 2 naming it", timeout = 1200)]
-def test_policy(t : T?) {
-    let fixture = "{dastest_root()}/tests/_fixture_policy.das"
+//! runs `fixture` under --test without `flag`, which must fail and
+//! say `control_says`, then with it under --test, --together (spelled
+//! `together_flag`) and an isolated worker; returns the unflagged
+//! --test command line
+def flag_reaches_each_compile(t : T?; fixture : string; flag, together_flag : array<string>;
+                              control_says : string) : array<string> {
     let head <- [get_command_line_arguments()[0], "-dasroot", get_das_root(), "-no-module-cache",
         "{dastest_root()}/dastest.das", "--", "--failures-only"]
     var output : string
     var plain := head
     plain |> push_from(["--test", fixture])
     let plain_rc = run_and_capture(plain, output, 300.0)
-    t |> success(plain_rc != 0,
-        "control: without the flag the fixture compiles with the policy off: {output}")
+    t |> success(plain_rc != 0 && find(output, control_says) >= 0,
+        "control: without the flag the fixture fails its compile or its test: {output}")
     var flagged := plain
-    flagged |> push_from(["--policy", "force_inscope_pod"])
+    flagged |> push_from(flag)
     let flagged_rc = run_and_capture(flagged, output, 300.0)
     t |> equal(flagged_rc, 0, "the flag reaches a --test compile: {output}")
+    let scratch = test_temp_dir()
+    let scratch_env <- ["TMP={scratch}", "TEMP={scratch}", "TMPDIR={scratch}"]
     var together := head
-    together |> push_from(["--together", fixture, "--policy", "force_inscope_pod=true"])
-    let together_rc = run_and_capture(together, output, 300.0)
+    together |> push_from(["--together", fixture], together_flag)
+    let together_rc = run_and_capture(together, "", scratch_env, output, 300.0)
     t |> equal(together_rc, 0, "the flag reaches a --together compile: {output}")
     var isolated := flagged
     isolated |> push_from(["--isolated-mode", "--isolated-mode-threads", "1"])
-    let scratch = test_temp_dir()
-    let scratch_env <- ["TMP={scratch}", "TEMP={scratch}", "TMPDIR={scratch}"]
     let isolated_rc = run_and_capture(isolated, "", scratch_env, output, 300.0)
     t |> equal(isolated_rc, 0, "the flag reaches an isolated worker: {output}")
+    return <- plain
+}
+
+[test(description = "--compile-threads sets the compile_threads policy of every test file's compile under --test, --together and an isolated worker; without it a file compiles on one thread", timeout = 1200)]
+def test_compile_threads(t : T?) {
+    flag_reaches_each_compile(t, "{dastest_root()}/tests/_fixture_compile_threads.das",
+        ["--compile-threads", "3"], ["--compile-threads", "3"], "compile_threads is 1, not 3")
+}
+
+[test(description = "--policy sets a compile policy for every test file under --test, --together and isolated workers, after the policies a --test-project file names, a project item that is no policy fails the run naming it, and a --policy name that is no policy stops dastest with exit code 2 naming it", timeout = 1200)]
+def test_policy(t : T?) {
+    let plain <- flag_reaches_each_compile(t, "{dastest_root()}/tests/_fixture_policy.das",
+        ["--policy", "force_inscope_pod"], ["--policy", "force_inscope_pod=true"],
+        "force_inscope_pod is on for this compile")
+    var output : string
     var by_project := plain
     by_project |> push_from(["--test-project",
         "{dastest_root()}/tests/_fixtures/policy_project.das_project"])

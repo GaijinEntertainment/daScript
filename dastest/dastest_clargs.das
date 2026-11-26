@@ -18,6 +18,10 @@ struct DastestArgs {
     @clarg_doc = "Compile test files without executing them"
     compile_only : bool
 
+    @clarg_name = "compile-threads"
+    @clarg_doc = "Threads a test program's modules compile on, as jobs on their require graph. 0 is the job queue's thread count"
+    compile_threads : int = 1
+
     @clarg_doc = "The whole suite's timeout in seconds: past it the process ends at once with exit code 124, no summary, and one line naming the file that was running. 0 disables it. The default is 20 minutes"
     timeout : float = 1200.0
 
