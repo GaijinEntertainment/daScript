@@ -28,3 +28,51 @@ def test_solid_context_function_address(t : T?) {
         t |> equal(invoke(reinterpret<SolidFn>(declared), 20, 22), 42, "a handle casts back to a callable")
     }
 }
+
+var g_solid_scale = 3
+var g_solid_bias = 0.5
+
+[test(description = "under solid_context a global combined with a local in a binary operation reads the global's value, for int and float")]
+def test_solid_context_global_op_local(t : T?) {
+    var sum = 0
+    var total = 0.0
+    for (i in range(5)) {
+        sum += g_solid_scale * i
+        let step = float(i)
+        total += g_solid_bias + step
+    }
+    t |> equal(sum, 30)
+    t |> equal(total, 12.5)
+    g_solid_scale = 4
+    let seven = 7
+    t |> equal(g_solid_scale - seven, -3)
+    t |> success(g_solid_scale < seven)
+    g_solid_scale = 3
+}
+
+var g_solid_label = "four"
+
+[never_inline]
+def solid_scaled(scale, value : int) : int => scale * value + 1
+
+[never_inline]
+def solid_biased(bias, value : float) : float => bias + value
+
+[never_inline]
+def solid_labeled(text : string; count : int) : int => length(text) + count
+
+[test(description = "under solid_context a call that takes a global and then a local passes the global's value, for int, float and string")]
+def test_solid_context_call_global_local(t : T?) {
+    var sum = 0
+    var total = 0.0
+    var lengths = 0
+    for (i in range(4)) {
+        sum += solid_scaled(g_solid_scale, i)
+        let step = float(i)
+        total += solid_biased(g_solid_bias, step)
+        lengths += solid_labeled(g_solid_label, i)
+    }
+    t |> equal(sum, 22)
+    t |> equal(total, 8.0)
+    t |> equal(lengths, 22)
+}

@@ -131,6 +131,7 @@ Small-table regime micro-benchmarks (N from 1 to 64) - the load profile the larg
 
 | File | Description |
 |---|---|
+| `bench_global_local_op2.das` | A global combined with a local in a binary operation under `options solid_context` |
 | `bench_v_ldu.das` | Fusion-engine `Op2At` array-indexed read at sizeof(T)  in  {4,8,12,16} - int, int64, float3, float4. Used to compare DAS_FUSION=0 vs current `DAS_LDU_WORKHORSE` ladder vs `v_zero+memcpy(sizeof(CTYPE))` |
 
 ## sql/

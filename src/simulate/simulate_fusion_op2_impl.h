@@ -55,6 +55,7 @@
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode * node_r, Context * context, bool & anyLeft, bool & anyRight) const override { \
             auto & ccode = *(context->code); \
             /* match op2 */ if ( !node_l || !node_r ) { return nullptr; } \
+            MATCH_OP2(OPNAME,"GetGlobalR2V","GetLocalR2V",Global,Local) \
             MATCH_OP2(OPNAME,"GetThisBlockArgumentR2V","GetThisBlockArgument",ThisBlockArgumentRef,ThisBlockArgument) \
             MATCH_OP2(OPNAME,"GetThisBlockArgument","GetThisBlockArgument",ThisBlockArgument,ThisBlockArgument) \
             MATCH_OP2(OPNAME,"GetThisBlockArgument","GetArgument",ThisBlockArgument,Argument) \
