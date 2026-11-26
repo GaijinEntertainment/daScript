@@ -34,7 +34,10 @@ require _attn_oracle   // attn_row_oracle: the attention cells' softmax rows
 // exp() saturate DIFFERENTLY (probe-verified 60%+ output divergence) — a regime no real
 // model's activations enter. The gelu arm stays untested until a gelu-MoE q8 fixture exists.
 // A check skips without dasVulkan in the build, with no Vulkan device, or on an upload the
-// probe or budget refused.
+// probe or budget refused. The cells that need a seat only the Vulkan home installs - the
+// streamed stacks' pinned memory (streamed prefill, heat cache, the dense rail's stream mirror),
+// the deltanet state flush, the whole-model drop and the VRAM report (one-shot command, drop,
+// arena slabs) - skip where the run armed the CUDA home.
 
 // The CPU-reference arms' tolerances were derived against the sdot4 reference kernels: every
 // test pins that mode before its first device use. Never an [init]: a batch runs it in every
@@ -212,6 +215,7 @@ def test_vulkan_one_shot_command(t : T?) {
     pin_reference_gemm_mode()
     t |> run("vulkan shared one-shot command - serves before the prefill batch tier engages and after a whole-model drop") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
+            return if (vulkan_home_skipped(tt, "vulkan shared one-shot command"))
             install_vk_moe_hooks()
             if (!vk_device_ready()) {
                 tt |> skip("no Vulkan device")
@@ -332,6 +336,7 @@ def test_vulkan_moe_ffn_streamed(t : T?) {
     pin_reference_gemm_mode()
     t |> run("vulkan MoE streamed prefill (pinned mirrors, 2 slots) == CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
+            return if (vulkan_home_skipped(t, "vulkan MoE streamed prefill"))
             install_vk_moe_hooks()
             var wq1 : array<array<int8>>
             var ws1 : array<array<float>>
@@ -406,6 +411,7 @@ def test_vulkan_moe_heat_cache(t : T?) {
     pin_reference_gemm_mode()
     t |> run("vulkan heat-pinned expert cache == CPU reference (pins, eviction, split hits)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
+            return if (vulkan_home_skipped(t, "vulkan heat-pinned expert cache"))
             install_vk_moe_hooks()
             set_moe_gpu_heat_hooks(@@vk_moe_heat_query, @@vk_moe_heat_advise, @@vk_moe_ffn_begin, @@vk_moe_ffn_join)
             var want = GpuTierWant()
@@ -694,6 +700,7 @@ def test_vulkan_dense_gemm(t : T?) {
     pin_reference_gemm_mode()
     t |> run("vulkan dense GEMM rail == CPU reference (q8 + k4, one-region batch tiles)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
+            return if (vulkan_home_skipped(t, "vulkan dense GEMM rail"))
             install_vk_moe_hooks()
             // q8 arm: [DD x N] plane, Q8_0 acts
             var wq : array<int8>
@@ -1193,6 +1200,7 @@ def test_vulkan_deltanet_step(t : T?) {
     pin_reference_gemm_mode()
     t |> run("vulkan deltanet decode step == CPU reference (state carry + mid-sequence flush)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
+            return if (vulkan_home_skipped(t, "vulkan deltanet decode step"))
             install_vk_moe_hooks()
             var st : DnStacks
             return if (!dn_stacks_up(t, 61l, DNSQ_WOFF, DNSZ_WOFF, DNSO_WOFF, st))
@@ -1953,6 +1961,7 @@ def test_vulkan_drop_model(t : T?) {
     pin_reference_gemm_mode()
     t |> run("vulkan whole-model drop - stacks + arena rebuild and serve across two cycles") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
+            return if (vulkan_home_skipped(t, "vulkan whole-model drop"))
             install_vk_moe_hooks()
             for (cycle in range(2)) {
                 // per-op stack rail: upload -> dense GEMV -> parity vs THIS cycle's content
@@ -2012,6 +2021,7 @@ def test_vulkan_arena_slabs(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let SROWS = 64l
             let SBLK = SROWS * (N / 32l)   // blocks one [SROWS x N] q8 tensor occupies
+            return if (vulkan_home_skipped(tt, "vulkan arena slabs"))
             moe_gpu_drop_model_state()
             vk_arena_test_slab_cap(SBLK * 5l / 2l)   // 2.5 tensors per slab: the third place crosses
             {

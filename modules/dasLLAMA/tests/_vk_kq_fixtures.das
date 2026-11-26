@@ -13,10 +13,19 @@ require _compares
 require daslib/enum_trait
 require daslib/shader_lingua_franca
 require daslib/math_bits   // float_bits_to_uint: the nv4 device row's per-tensor scale word
+require dastest/testing_boost   // T?: the home guard registers its skip through the cell's handle
 
 // Synthetic K-quant expert stacks in the vulkan tier's DEVICE layout, shared by the tier suite
 // (test_vulkan_tier) and the cm2 expert-chain suite (test_vulkan_moe_cm2): the pow2 scale sets
 // keep |gate| in the sane silu regime, the dequant mirrors the kernels' extraction bit-exact.
+
+//! true, with `cell`'s skip registered on `t`, where the run armed the CUDA home: the Vulkan home stands down at its
+//! [init] and installs none of its seats, so a cell needing one the per-op hooks do not carry has no Vulkan tier to run on
+def vulkan_home_skipped(t : T?; cell : string) : bool {
+    return false if (!gpu_want_cuda())
+    t |> skip("{cell}: the run armed the CUDA home (DASLLAMA_CUDA=1); this cell is the Vulkan home's - run it under DASLLAMA_GPU=1 alone")
+    return true
+}
 
 //! a float rounded through f16 and back - the value the device reads where it stages a plane in halves
 def f16r(v : float) : float => f16_to_f32(f32_to_f16(v))

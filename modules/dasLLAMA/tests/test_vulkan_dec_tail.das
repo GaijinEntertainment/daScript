@@ -26,7 +26,9 @@ require _attn_oracle   // attn_row_oracle: the block reference's softmax rows
 //! two attention quads (layers A and B), one expert stack pair, two positions, in both acts
 //! forms (K-quant quads feed Q8_K, q8 quads feed Q8_0). Token flow per position: block(A) ->
 //! host residual -> tail(FFN A + combine + B's feed on the device) -> block(B) collects the
-//! residual row. Weights are synthetic stacks (the fixtures).
+//! residual row. Weights are synthetic stacks (the fixtures). A cell skips without dasVulkan in the
+//! build, with no Vulkan device, or on an upload the probe or budget refused; the heat cell, whose
+//! streamed stacks draw the Vulkan home's pinned memory, skips where the run armed the CUDA home.
 
 let private N = 256l        // dim (one Q8_K superblock)
 let private HS = 64l
@@ -1010,6 +1012,7 @@ let private HEAT_LAYER = 11l   //! the heat cell's pool layer
 [test(description = "The heat pool serves the two pinned experts of a top-k of three over streamed MXFP4 stacks on the async chain, under gpt-oss biased clamped swiglu, within 1e-3 of the row max; the plain reference misses")]
 def test_vulkan_heat_mx4_form(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
+        return if (vulkan_home_skipped(t, "heat mx4 form"))
         install_vk_moe_hooks()
         set_moe_gpu_heat_hooks(@@vk_moe_heat_query, @@vk_moe_heat_advise, @@vk_moe_ffn_begin, @@vk_moe_ffn_join)
         set_gpu_tier_want_(GpuTierWant(heat = 2l))

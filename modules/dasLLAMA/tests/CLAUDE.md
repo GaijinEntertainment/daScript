@@ -1240,12 +1240,19 @@ pair of two activation classes (`test_vulkan_routed_two_forms`: a q8 gate fed Q8
 image, a k6 down, on the decode GEMV arm and the batch arm, the up stacks fed the gate's image missing the rows as the control),
 and the heat pool under gpt-oss's form (`test_vulkan_heat_mx4_form`: mx4 stacks streamed, two experts pinned, a top-k of three
 whose two hits run on the async chain under the biased clamped swiglu with their experts named, against the engine's scalar
-dots, the plain reference missing the hit rows as the control).
+dots, the plain reference missing the hit rows as the control). `test_vulkan_heat_mx4_form` is the Vulkan home's: its streamed
+stacks draw that home's pinned memory, so it skips where the run armed the CUDA home (`vulkan_home_skipped`,
+`_vk_kq_fixtures.das`); every other cell runs under either home.
 `test_vulkan_tier.das` - model-free (a Vulkan device, else skips): first the tier's shared one-shot command, held before anything
 engages the prefill batch tier and after a whole-model drop; then the per-op tier's expert, dense, deltanet and attention
 chains against CPU references; among them `test_vulkan_deltanet_two_forms` - a q8 qkv plane fed Q8_0 beside a k4 z plane fed
 Q8_K off the call's second image, on the window chain (70 rows) and the decode step (one row), against the CPU chain over each
-plane's own image, the z plane fed the qkv's Q8_0 image missing the rows as the control.
+plane's own image, the z plane fed the qkv's Q8_0 image missing the rows as the control. Seven cells are the Vulkan home's
+and skip where the run armed the CUDA home (`vulkan_home_skipped`, `_vk_kq_fixtures.das`), each needing a seat only that
+home installs: `test_vulkan_moe_ffn_streamed`, `test_vulkan_moe_heat_cache` and `test_vulkan_dense_gemm` (its stream-mirror
+arm) the streamed stacks' pinned memory, `test_vulkan_deltanet_step` the deltanet state flush, and
+`test_vulkan_one_shot_command`, `test_vulkan_drop_model` and `test_vulkan_arena_slabs` the whole-model drop (the first two
+the VRAM report too); the other cells run under either home.
 `test_vulkan_shared_device.das` - model-free (a Vulkan device, else skips): one device a process
 (`../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-shared-device`) - a worker thread's context arms the tier on the device this
 context made, holds a reference while it lives (the holder's count one up) and gives it back at its shutdown, sees the
@@ -1652,7 +1659,8 @@ each refused by its own text, an alternate and a twin that repeat their primary'
 ladders' refusal cell `test_vkd_fa_stamp_refusals` need only the dasVulkan module): the
 per-class CPU-oracle units of the Vulkan kernel census (`_vkd_oracles.das` runs the class methods on the CPU as the
 oracle; `_vkd_toy.das` is the `[vk_dispatch]` bring-up fixture; `_vk_kq_fixtures.das` holds the
-synthetic K-quant expert stacks in the tier's device layout for `test_vulkan_tier` and `test_vulkan_moe_cm2`,
+synthetic K-quant expert stacks in the tier's device layout for `test_vulkan_tier` and `test_vulkan_moe_cm2`, and
+`vulkan_home_skipped`, the skip of the cells of `test_vulkan_tier` and `test_vulkan_dec_tail` that need the Vulkan home's seats,
 and `../harness/_vk_probe_fixture.das` re-exports it for the Vulkan probes with the word-hash quant
 bytes, the packed f16-pair scale word and the device-timestamp scaffold around a recorded command). The per-format tile cells
 (`test_vkd_<fmt>_cm2_batch`, one per `kq_sb` format; q8's cm2 tiles ride their own fmt-0 cells
