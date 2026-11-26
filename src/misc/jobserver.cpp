@@ -45,7 +45,7 @@ namespace das {
             return nullptr;
         }
 
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !DAS_TARGET_PS
         bool isInheritedPipe ( int fd ) {
             struct stat st;
             return fd >= 0 && fcntl(fd, F_GETFD) != -1 && fstat(fd, &st) == 0 && S_ISFIFO(st.st_mode);
@@ -71,6 +71,15 @@ namespace das {
     private:
         explicit JobserverPool ( HANDLE h ) : sem(h) {}
         HANDLE  sem;
+    };
+
+#elif DAS_TARGET_PS
+
+    class JobserverPool {
+    public:
+        static std::unique_ptr<JobserverPool> open ( const std::string & ) { return nullptr; }
+        bool take ( char & ) { return false; }
+        void giveBack ( char ) {}
     };
 
 #else
