@@ -699,14 +699,17 @@ def private joint_streams_leg(t : T?; m : Model) {
         }
         let j0 = metal_dflash_joint_rounds()
         let gv0 = metal_mtp_group_verifies()
+        let held0 = metal_dflash_selected().held
         var inscope drafted <- sched_streams(m, prompts, CHAT_MAX_NEW, true, together, joined)
         restore_mtp_depth(depth_pin)
+        let held = metal_dflash_selected().held - held0
         let j1 = metal_dflash_joint_rounds()
         if (metal_rows8_on()) {
             t |> success(alone > 0l, "each stream alone accepts drafts ({alone})")
             t |> success(together * 5l >= alone * 4l, "the two streams together accept what they accept alone within a fifth ({together} against {alone})")
             t |> equal(joined, 2l, "a tick's verify carried both streams' rows")
             t |> success(j1.rounds > j0.rounds, "the two streams ran joint rounds ({j1.rounds - j0.rounds})")
+            t |> equal(held, 0l, "a joint round lands its drafts ahead of its verify, so no pass is held for the verify seat")
             if (m.config.recr_mask != 0ul) {
                 t |> success(metal_mtp_group_verifies() > gv0, "a hybrid's joint verifies rode the seat's groups ({metal_mtp_group_verifies() - gv0})")
             }
@@ -720,7 +723,7 @@ def private joint_streams_leg(t : T?; m : Model) {
     }
 }
 
-[test(description = "On gemma-4-E2B's Metal home with its DFlash2 drafter attached through the facade, a two-turn greedy chat's replies and a greedy completion's ids are the plain model's token for token (a driver-against-itself compare, the drafted chat's steps counted on the device), the drafted walks accepting drafts; two streams through the scheduler ride joint rounds, each the plain scheduler's token for token; the stream with a stop id ends on that id's first occurrence; on the same load the exact sampled DFlash walk spends one draw a judged row with drafts accepted and opens on the plain sampled walk's first id, both rejection walks accept some drafts and reject some, drawn drafts end on the device selector, and verify-ahead off or the soft pick off reproduce the same stream; over a prompt past one of the drafter's windows the ring that grew its dense layer drafts id for id what a ring reserved that wide drafts, and with every layer held to the window the drafts differ")]
+[test(description = "On gemma-4-E2B's Metal home with its DFlash2 drafter attached through the facade, a two-turn greedy chat's replies and a greedy completion's ids are the plain model's token for token (a driver-against-itself compare, the drafted chat's steps counted on the device), the drafted walks accepting drafts; two streams through the scheduler ride joint rounds with no pass held, each the plain scheduler's token for token; the stream with a stop id ends on that id's first occurrence; on the same load the exact sampled DFlash walk spends one draw a judged row with drafts accepted and opens on the plain sampled walk's first id, both rejection walks accept some drafts and reject some, drawn drafts end on the device selector, and verify-ahead off or the soft pick off reproduce the same stream, no sampled round holding its pass; over a prompt past one of the drafter's windows the ring that grew its dense layer drafts id for id what a ring reserved that wide drafts, and with every layer held to the window the drafts differ")]
 def test_dflash_e2b_facade_streams(t : T?) {
     if (!arm_on(t, "dflash-e2b-facade") || !family_on(t, "gemma4e")) {
         return
@@ -796,7 +799,7 @@ def test_dflash_e2b_facade_streams(t : T?) {
 def private e2b_metal_twins(t : T?; var m : Model) {
     unsafe {   //! the cell captures the loaded trunk by reference
         t |> run("gemma-4-E2B, the sampled DFlash walks on the Metal device arm: the exact walk spends one draw a judged row and opens on the plain sampled walk's first id, a stop id, the rejection walks accept some and reject some, the device selector, verify-ahead and soft pick give the same stream") @capture(& m)(t : T ?) {
-            sampled_modes_walk(t, m, E2B_DRAFTER_FILE, true, "E2B sampled metal")
+            sampled_modes_walk(t, m, E2B_DRAFTER_FILE, device = true, tag = "E2B sampled metal", joint = true)
         }
         t |> run("gemma-4-E2B on the Metal device arm, over a prompt past one of the DFlash2 drafter's windows: the ring that grew its dense layer drafts id for id what a ring reserved that wide drafts, and with every layer held to the window the drafts differ") @capture(& m)(t : T ?) {
             dense_ring_leg(t, m, E2B_DRAFTER_FILE, "E2B Metal, the dense layer", METAL_DENSE_ITEMS, HOST_CTX, 1l, true)

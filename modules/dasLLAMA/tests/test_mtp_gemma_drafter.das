@@ -1481,7 +1481,7 @@ def private g26_trunk_rows(t : T?; var r : G26TrunkRows; var m : Model; form : M
     if (form.on_metal) {
         // under the form's required mode, ahead of the served cells' own pins
         if (empty(arm_why("dflash-26b-metal"))) {
-            metal_drafter_cell(t, m, "On the Metal device arm over the gemma-4-26B Q4_K_M trunk the greedy DFlash walk over a chat turn is lossless, its block rounds run as joint rounds on the batch rail, and the CPU arm accepts the same count",
+            metal_drafter_cell(t, m, "On the Metal device arm over the gemma-4-26B Q4_K_M trunk the greedy DFlash walk over a chat turn is lossless, its block rounds run as joint rounds on the batch rail with no pass held, and the CPU arm accepts the same count",
                 "dflash-26b-metal", G26_DRAFTER_FILE, "26B metal", true)
         }
         if (g26_capture_on(t)) {

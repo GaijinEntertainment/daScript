@@ -17,7 +17,9 @@ LCG state into its word buffer before the commit and lands its candidates, q and
 the round's land (`DflashDeviceSeams.land`), where the host records q - nothing between the pass and the walk reads the
 rng, the q record or the picks, so the stream is the waited round's draw for draw. The greedy round of a model whose verify
 takes device rows (`metal_verify_takes_device_rows`) always held; `DASLLAMA_METAL_VERIFY_AHEAD` = 1 adds the sampled round,
-0 holds the greedy round alone.
+0 holds the greedy round alone. A round that lands its drafts ahead of its verify holds nothing - the home's joint round,
+whose verify reads every stream's ids on the host (`mtp_block_draft_landed`): its pass is waited, since no verify seat
+follows to embed its rows off the device.
 
 **A model whose n-gram side input reads the host's ids - its rows' hash gather - encodes the verify ahead and commits it
 late** (`DASLLAMA_METAL_VERIFY_AHEAD` = 2, `metal_verify_takes_device_rows_late`, the hyper-connection trunk with it): the
