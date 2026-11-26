@@ -213,12 +213,13 @@ def test_popen_argv_paths_outside_ascii(t : T?) {
     t |> run("a cwd and an environment value outside ASCII reach the child") @(t : T?) {
         let dir = path_join(test_temp_dir(), "cwd_日本")
         t |> success(mkdir(dir), "mkdir {dir}")
-        let child = path_join(get_das_root(), "tests/fio/_fixture_process_child.das")
+        let root = path_join(getcwd(), get_das_root())
+        let child = path_join(root, "tests/fio/_fixture_process_child.das")
         let ready = path_join(dir, "ready")
         let release = path_join(dir, "release")
         fwrite(release, "go")
         var output : string
-        let args <- [das_exe(), child, "--", ready, release]
+        let args <- [das_exe(), "-dasroot", root, child, "--", ready, release]
         let rc = unsafe(popen_argv(args, dir, ["DAS_PROC_TEST=値"], 30.0) $(f) {
             if (f != null) {
                 output = fread(f)
