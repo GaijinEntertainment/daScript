@@ -33,8 +33,9 @@ elements the instrument's header comment names; the baseline arm is the one the 
 names as baseline. An instrument's header comment is the comment at the top of its file; in a
 file that holds more than one race or A/B, the header comment of each is the file's top comment
 together with the doc comment of every function between `main` and its rounds; a fact stated in
-either counts. A run of an arm refuses when it produces no figure or output, or runs on a backend
-other than the backend name the report row records.
+either counts. A run of an arm refuses when it produces no figure or output, runs on a backend
+other than the backend name the report row records, or runs a form other than the one the report
+row names (a generator stamp that declined to its reference body).
 
 A board cell is a run whose reading lands as a records row of `../performance/records/<box>.json`
 or a figure in `../PERF_LEDGER.md`.

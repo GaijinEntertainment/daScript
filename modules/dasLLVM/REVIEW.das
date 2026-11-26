@@ -15,6 +15,10 @@ let private DESCRIPTOR = "modules/dasLLVM/.das_module"
 let private EMITTER_PIN_TEST = "tests-cpp/small/test_jit_emitter_pin.cpp"
 let private EMITTER_HASH_FILE = "modules/dasLLVM/daslib/llvm_jit_run.das"
 let private EMITTER_DIR = "modules/dasLLVM/daslib"
+let private TUNE_SOURCE = "modules/dasLLVM/daslib/llvm_tune.das"
+// the annotation every [tune] clone carries of its own
+// (stamp_llvm_code), never copied from its source
+let private CLONE_OWN_ANNOTATION = "llvm_code"
 
 // Directories under TESTS_DIR whose contents git tracks. A suite run that creates,
 // overwrites or deletes inside one leaves the tree dirty or destroys a checked-in fixture.
@@ -188,16 +192,21 @@ def private check_tests_folder {
     }
 }
 
-def private emitter_file_names : array<string> {
-    let text = strip_line_comments(fread(EMITTER_PIN_TEST))
-    let from = find(text, "EMITTER_FILES[] = \{")
-    let to = from < 0 ? -1 : find(text, "\};", from)
+//! the quoted entries of `text` between `open` and the first `close`
+//! after it; none when either is missing
+def private quoted_list_between(text, open, close : string) : array<string> {
+    let from = find(text, open)
+    let to = from < 0 ? -1 : find(text, close, from)
     if (to < 0) {
         var none : array<string>
         return <- none
     }
     return <- quoted_segments(slice(text, from, to))
 }
+
+def private emitter_file_names : array<string> =>
+    <- quoted_list_between(strip_line_comments(fread(EMITTER_PIN_TEST)),
+                           "EMITTER_FILES[] = \{", "\};")
 
 def private emitter_source_path(name : string) : string =>
     name |> starts_with("/") ? slice(name, 1) : "{EMITTER_DIR}/{name}"
@@ -248,6 +257,62 @@ def private check_emitter_pin {
     }
 }
 
+// every name the emitter compares a function annotation against,
+// `has_hint_flag` reading `hint`
+def private emitter_annotation_reads : table<string; string> {
+    var names : table<string; string>
+    var inscope files : array<string>
+    collect_das_files(EMITTER_DIR, files)
+    for (path in files) {
+        continue if (!(base_name(path) |> starts_with("llvm_jit")))
+        let text = fread(path)
+        let needle = "annotation.name == \""
+        peek_data(text) $(d) {
+            var from = 0
+            while (true) {
+                let at = find(d, needle, from)
+                break if (at < 0)
+                let start = at + length(needle)
+                let close = find(d, "\"", start)
+                break if (close < 0)
+                names |> insert(slice(d, start, close), path)
+                from = close
+            }
+        }
+        if (calls(text, "has_hint_flag")) {
+            names |> insert("hint", path)
+        }
+    }
+    return <- names
+}
+
+//! the names a [tune] clone carries: CLONE_CARRIED_ANNOTATIONS's
+//! quoted entries in llvm_tune.das
+def private clone_carried_names : array<string> =>
+    <- quoted_list_between(fread(TUNE_SOURCE),
+                           "CLONE_CARRIED_ANNOTATIONS = fixed_array<string>(", ")")
+
+// a [tune] function's clones carry every annotation the emitter reads
+// off a function (the clone's own [llvm_code] stamp aside): one the
+// list lacks compiles the clone as if its source never said it
+[arch(at = "ARCHITECTURE_FAST_MATH.md#never-fast-math")]
+def private check_clone_carried_annotations {
+    var inscope carried <- clone_carried_names()
+    if (empty(carried)) {
+        gate_finding(TUNE_SOURCE, "CLONE_CARRIED_ANNOTATIONS is not where the gate reads it " +
+            "(`CLONE_CARRIED_ANNOTATIONS = fixed_array<string>(` up to `)`)")
+        return
+    }
+    var inscope reads <- emitter_annotation_reads()
+    for (name, path in keys(reads), values(reads)) {
+        continue if (name == CLONE_OWN_ANNOTATION || has_value(carried, name))
+        gate_finding(path, find_line(fread(path), "\"{name}\""),
+            "the emitter reads the function annotation `{name}`, and CLONE_CARRIED_ANNOTATIONS " +
+            "({TUNE_SOURCE}) lacks it: a [tune] function's grid and fat clones would " +
+            "compile without it")
+    }
+}
+
 [export]
 def main() : int {
     if (!fexist("modules/dasLLVM/REVIEW.das") || !fexist(DESCRIPTOR)) {
@@ -256,6 +321,7 @@ def main() : int {
     }
     check_tests_folder()
     check_emitter_pin()
+    check_clone_carried_annotations()
     gate_lane_census("modules/dasLLVM/CMakeLists.txt", TESTS_DIR)
     gate_descriptor_census(DESCRIPTOR, ["modules/dasLLVM/daslib", "modules/dasLLVM/bindings"],
         DESCRIPTOR_CATEGORY_TOKENS)

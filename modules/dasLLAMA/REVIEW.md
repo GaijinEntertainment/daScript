@@ -84,9 +84,9 @@ GGUF's `general.architecture`.
 every `dasllama/` change answer to this folder's `tests/REVIEW.md`; every PR touching this module
 applies `tests/REVIEW_RUNS.md` too.**
 
-**A diff that adds a CPU kernel, or changes the body, parameters or return type of one - a
-function in `dasllama/dasllama_math*.das` that runs on the CPU and writes an output buffer from
-operand buffers - applies `tests/REVIEW_KERNEL_CELLS.md`.**
+**A diff that adds a CPU kernel, or changes the body, parameters or return type of one or the code
+`dasllama/dasllama_gemm_gen*.das` emits for one - a function in `dasllama/dasllama_math*.das` that runs
+on the CPU and writes an output buffer from operand buffers - applies `tests/REVIEW_KERNEL_CELLS.md`.**
 
 **A diff that adds, moves or removes a `[test]` file outside this folder's `tests/` with a
 `require dasllama/...` line of its own adds, corrects or drops its row, with the reason it lives

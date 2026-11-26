@@ -7933,11 +7933,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     // Build `!{!"name"}` — a 1-operand MDNode wrapping a metadata string.
-    def make_loop_md_flag(name : string) : LLVMOpaqueMetadata? {
-        var arr : LLVMOpaqueMetadata? [1]
-        arr[0] = LLVMMDStringInContext2(g_ctx, name, uint64(long_length(name)))
-        return LLVMMDNodeInContext2(g_ctx, array_data_ptr(arr), 1ul)
-    }
+    def make_loop_md_flag(name : string) : LLVMOpaqueMetadata? => loop_md_flag(g_ctx, name)
 
     // Build `!{!"name", i32 N}` — a 2-operand MDNode used for LangRef pairs
     // like `llvm.loop.unroll.count, i32 N`.
@@ -7991,38 +7987,18 @@ class public LlvmJitVisitor : AstVisitor {
     // the recognized vocabulary.
     def attach_loop_metadata(branch_inst : LLVMValueRef; args : AnnotationArgumentList) {
         var operands : array<LLVMOpaqueMetadata?>
-        // nolint:STYLE014
-        // LLVMMetadataReplaceAllUsesWith calls MDNode::deleteTemporary on
-        // `temp` internally, so do NOT also call LLVMDisposeTemporaryMDNode
-        // — that would be a double-free (crashes on Linux/Windows, masked
-        // by Apple's allocator).
-        var temp = LLVMTemporaryMDNode(g_ctx, null, 0ul)
-        operands |> push(temp)
-        var mustprog = make_loop_md_flag("llvm.loop.mustprogress")
-        operands |> push(mustprog)
+        operands |> push(make_loop_md_flag("llvm.loop.mustprogress"))
         for (a in args) {
             append_loop_hint_operand(operands, a)
         }
-        let loop_md = LLVMMDNodeInContext2(g_ctx, array_data_ptr(operands), uint64(long_length(operands)))
-        LLVMMetadataReplaceAllUsesWith(temp, loop_md)
-        let loop_md_val = LLVMMetadataAsValue(g_ctx, loop_md)
-        let kind_id = LLVMGetMDKindIDInContext(g_ctx, "llvm.loop", 9u)
-        LLVMSetMetadata(branch_inst, kind_id, loop_md_val)
+        attach_loop_ops(g_ctx, branch_inst, operands)
     }
 
     // Thin wrapper for callsites without a source AST node (build_fixed_loop / ExprNew array init):
     // mustprogress only. Inlined rather than reusing attach_loop_metadata because handled types like
     // AnnotationArgumentList aren't safely default-constructible from das (no empty to pass).
     def attach_loop_mustprogress(branch_inst : LLVMValueRef) {
-        var temp = LLVMTemporaryMDNode(g_ctx, null, 0ul)
-        var loop_arr : LLVMOpaqueMetadata? [2]
-        loop_arr[0] = temp
-        loop_arr[1] = make_loop_md_flag("llvm.loop.mustprogress")
-        let loop_md = LLVMMDNodeInContext2(g_ctx, array_data_ptr(loop_arr), 2ul)
-        LLVMMetadataReplaceAllUsesWith(temp, loop_md)
-        LLVMSetMetadata(branch_inst,
-                        LLVMGetMDKindIDInContext(g_ctx, "llvm.loop", 9u),
-                        LLVMMetadataAsValue(g_ctx, loop_md))
+        attach_loop_flags(g_ctx, branch_inst, ["llvm.loop.mustprogress"])
     }
 
     def at_function_entry(blk : block) {

@@ -144,48 +144,11 @@ board row is `performance/records/rtx5060ti.json`'s, minted before the gate); `s
 Every generated CPU kernel
 walks the grp<mr> interleave the CPU repack lays rows out in, and the device planes are row-major -
 a row's blocks one after another - so the rare rail reads them through a second kernel shape
-(`dasllama_gemm_gen.das`, `rm_rows_walk` and its bodies): a vector holds 32 weights of one row, the
-lanes are k chunks, each block's lane dot folds under its scale, a row's lanes sum in order. A fold is one
-fused multiply-add a block on a loop-carried accumulator, so a row's chain is latency-bound alone; the
-block loop runs the body on several accumulator sets abreast (`rm_block_loop`: four in the GEMV; two in
-the four-token tile on x64, whose four tokens already run four chains; one in the NEON tile, where a
-second set spills its 32 vector registers; the sets summed once after the loop, the blocks past the last
-whole group one set at a time); nv4 folds a strip - sixteen a superblock against q40's eight - off its sixteen scales
-decoded once as vectors and picked by shuffle a block. One body
-a family: q8 (int8 rows, one f16 scale a block), the per-32 and MXFP4 planes (16 nibble bytes a block
-as 32 codes in k order, the codebook formats' weights off the LUT under the signed lattice, the 5-bit
-codes under the unsigned one with q51's m term on the activation sum), and the superblock formats
-(a superblock an iteration, its eight blocks' codes off the device's k / k+16 nibble pairing with the
-fifth and high bits deposited from the block's qh bytes and the 2-bit lanes off their byte fields,
-each vector's dot widened through the sub-scales a quarter, the min and offset terms as scalars off
-the Q8_K sums, one fold a superblock under d times the activation scale). On the 256-bit x64 arm k4 and k5 take
-the pair form (`rm_pair_codes`, `rm_sb_min_vec`): one 32-byte load holds two blocks, its low nibbles both blocks'
-low strips and its high nibbles their high strips (the k / k+16 pairing), the activation's two blocks re-split the
-same way, the two strips' pmaddubsw pair sums added in i16 and widened under the pair's sub-scales by one pmaddwd,
-k5's fifth bits off the two blocks' eight qh bytes in one spread, and the min term one vector a superblock - the
-eight mins times the eight 32-blocks' activation sums off the Q8_K strip sums - folded under -dmin x xs; the
-other widths and NEON keep the block-a-vector walk. The pair form halves a core's time over the 35B's K-quant
-planes (k4 80 -> 48 us, k5 100 -> 64 at n=2048 d=768, one thread); the token's host step at sixteen lanes streams a
-layer's picks at the box's DRAM ceiling either way, so what the rail still trails the planar path by on a token is its
-per-layer structure (the dasCUDA host-experts rows of `PERF_LEDGER.md`). Each format is its own
-`[tune]` family (`<fmt>q8_rm_gemv_gen`, `dasllama_math_gen.das`, the shared perms over the maddubs,
-vpdpbusd and sdot lattices, a scalar decode of the device layout the reference) with its four-token
-tile as the companion (`<fmt>q8_rm_tile4_gen`: every row against four activation rows at a row's
-stride, the weights decoded once a block) and a witness companion (`<fmt>q8_rm_witness_gen`), raced
-by the generator half on the streamed shape alone
-(`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#rm-family-race`), and the rail's device arm (`rare_plane`, `rm_dev_serves`,
+(`ARCHITECTURE_CPU_KERNELS.md#row-major-walk`). The rail's device arm (`rare_plane`, `rm_dev_serves`,
 `rm_dev_tile4`, `dasllama_blocks.das`) runs a run's rows four a tile and the rest a row, reading the
 device block strides off `kq_qsb` / `kq_dev_ssb` (a superblock) or the plane's own block bytes
 (per-32, mx4; q8 is 32 + 2) under the activation form the format reads (Q8_K a superblock plane, Q8_0
-the rest); a streamed layer's planar expert planes are never touched. At the rail's many-lane,
-DRAM-bound regime the row-major shape costs what the interleaved one does (llama.cpp's row-major
-kernels read even with ours there, `harness/kernel_ladder.sh` at sixteen lanes), and the tile reads
-an expert's planes once a tile where a GEMV a row read them once a row. The five codebook-grid
-formats (iq3s, iq3xxs, iq2s, iq2xs, iq2xxs) take the superblock body with the block's weights gathered
-off the module's grid table (`rm_grid_block`: the iq3 formats eight words of four magnitudes, the iq2
-formats four word pairs of eight) and its signs - the plane's own sign bytes, or the ksigns rows of
-its 7-bit codes - applied as one masked negate, the sub-scales 1 + 2 x the two-word row's fields or
-the per-16 strips after d.
+the rest); a streamed layer's planar expert planes are never touched.
 A decode token's host picks on a streamed layer read the same planes: the token window's host sum
 (`moe_routed_rows_sum`) takes the rail where every plane of the layer's triple is device-served
 (`rare_dev_layer`) - one region an expert, the hot pool's hits left out as before - and the

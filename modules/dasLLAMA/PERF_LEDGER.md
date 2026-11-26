@@ -10,6 +10,43 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-11-26) - the row-major GEMVs' row loop on x64: once the `[tune]` clones carry their family's
+  `noalias` hints, LLVM unroll-and-jams that loop, and a one-process race on zen4 (AMD Ryzen 7 PRO 8700GE, Zen 4,
+  Linux; class `x86-vnni512`) finds the jam slower on six rows it changes, faster on one and level on the rest, so the
+  generator keeps x64 row loops unjammed.** Instrument `harness/rm_row_jam_race.das` as this entry's commit carries it, `-jit`,
+  one lane, `DASLLAMA_ALLOW_UNTUNED=1` with `DAS_TUNE_POLICY` unset - the arms are explicit `[llvm_code]` stubs, so no
+  profile or sidecar picks a kernel - once with `DAS_JIT_BASELINE` unset (the box's class) and once with
+  `DAS_JIT_BASELINE=x86-avx2`. Every x64 perm row of the seven families the hints change (q8q8, mlx8, mlx4, q4032,
+  q5032, iq4nl32, mx4) is stamped twice, `row_jam = true` (the jammed form, what the clone and the `-jit` stamp
+  compiled to before this entry's commit) and `row_jam = false` (the baseline arm, the form x64 ships), each walking
+  every row of the tuner's own fixture at the tuner's streamed shape (`rm_streamed_shape`) and, for mlx8 and mlx4, a
+  4096-wide row as well, once a round in turn, 15 rounds after 2 dropped. Every baseline holds the fixture's scalar
+  oracle within the family's bar and every jammed arm is bit-exact to its baseline. A verdict needs the medians apart
+  by more than max(2%, twice the larger cv); each percentage is the jammed median against the unjammed one. Class
+  `x86-vnni512`: 81 pairs, 74 level, these 7 not; `x86-avx2`: 27 pairs, all level, the 54 vpdpbusd rows declined to
+  their reference body (their witness stubs read false) and printed no time:
+
+    | family | n x rows | perm row | jammed best / median ms / cv | unjammed best / median ms / cv | jam vs no jam | verdict for the jam |
+    |---|---|---|---|---|---|---|
+    | mlx8 | 640 x 32768 | vpdpbusd_width256_mr8_accs1 | 1.087 / 1.099 / 0.85% | 0.954 / 0.959 / 0.52% | +14.6% | LOSES |
+    | mlx8 | 640 x 32768 | vpdpbusd_width256_mr8_accs2 | 0.827 / 0.830 / 0.20% | 0.810 / 0.811 / 0.94% | +2.3% | LOSES |
+    | mlx8 | 4096 x 32768 | vpdpbusd_width256_mr8_accs1 | 7.285 / 7.295 / 1.08% | 6.564 / 6.578 / 0.12% | +10.9% | LOSES |
+    | mlx4 | 640 x 32768 | vpdpbusd_width256_mr8_accs1 | 0.672 / 0.674 / 0.43% | 0.938 / 0.940 / 0.40% | -28.3% | WINS |
+    | mlx4 | 4096 x 32768 | vpdpbusd_width256_mr8_accs1 | 6.692 / 6.712 / 0.20% | 6.467 / 6.471 / 0.08% | +3.7% | LOSES |
+    | q5032 | 1408 x 32768 | vpdpbusd_width512_mr16 | 3.526 / 3.561 / 0.99% | 3.176 / 3.202 / 3.63% | +11.2% | LOSES |
+    | q5032 | 1408 x 32768 | vpdpbusd_width512_mr16_accs2 | 3.055 / 3.089 / 1.29% | 2.914 / 2.947 / 1.40% | +4.8% | LOSES |
+
+  The q4032 rows an earlier run of the same race put on the losing side (`maddubs_width256_mr8`,
+  `vpdpbusd_width512_mr16_accs1`) are level here (1.495 against 1.398 ms, inside its 2 x 3.82% bar; 2.385 against
+  2.357 ms): the earlier gap was run-to-run spread, not a loss.
+
+  Why (`external`: llvm-mca 22.1.8, Debian, `-mcpu=znver4`, over each hot loop's instructions cut from `objdump -d`
+  of the JIT cache object a `DAS_TUNE_MODE=test` run of `harness/gen_tune_probe.das` wrote on zen4): the mlx8 jam
+  keeps each row's signed-level work (xor, vpabsb, vpsignb, two dots) and shares only the activation load, 4.63
+  cycles a dot against 4.02 unjammed with FP0/FP1 busy 92% of cycles against 39%; mlx4's unjammed accs1 loop is bound
+  by its one accumulator chain (66.8 cycles an iteration against a 48-cycle throughput bound), which three jammed rows
+  break - the rail shape's 640-wide rows make that chain the whole cost, a 4096-wide row does not. The mlx4 win
+  becomes a tuner axis at the release re-mint (`followup_general.md`, the `row_jam` row); no profile changes now.
 - **MEASURED (2026-11-25, `direction-grade`) - the CUDA speech stamps' exact math: compiling the tanh GELU, the
   harmonic source's noise draw and sines and the Pocket row GEMV family without NVRTC's fast math costs synthesis
   0.1-0.9% on the shipped arm (RunPod RTX PRO 4500 Blackwell, driver 595.112.07, Linux).** Two processes a model, one

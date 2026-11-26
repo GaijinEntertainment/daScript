@@ -2,7 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_CPU_CLASSES.md`,
-`ARCHITECTURE_DEBUG_INFO.md`, `ARCHITECTURE_EXE.md`, `ARCHITECTURE_JIT_ENTRY.md`, `ARCHITECTURE_LIB.md`,
+`ARCHITECTURE_DEBUG_INFO.md`, `ARCHITECTURE_EXE.md`, `ARCHITECTURE_FAST_MATH.md`,
+`ARCHITECTURE_JIT_ENTRY.md`, `ARCHITECTURE_LIB.md`, `ARCHITECTURE_SOLID_CONTEXT.md`,
 `ARCHITECTURE_TARGET_FEATURES.md`, `ARCHITECTURE_VECTOR_MATH.md`. Planned work: `LEDGER.md`.
 The `tests/` subfolder has its own checklist, `tests/REVIEW.md`: a `[test]` file, or a file that
 exists only for tests to build, run or require (a program root, a client, a fixture module),
@@ -33,12 +34,16 @@ answers to it wherever the diff puts it under this module.
 
 - **A diff that adds or changes a branch keyed on what `get_platform_name()`,
   `get_architecture_name()`, `cpu_supports()`, or `host_llvm_feature()` returns, directly or
-  through a value built from it, runs the module-owned suite on a machine that takes that
-  branch, when a build that targets the machine it runs on can take that branch, and names in
-  the PR body the cell of that run that executed the changed arm.** A child run
-  under a forced CPU feature (`DAS_JIT_ARM64_FORCE_FEATURES`, `DAS_JIT_X64_FORCE_FEATURES`)
-  that reaches the branch's code counts as such a machine. A test's own check that skips the
-  test on other platforms is not such a branch.
+  through a value built from it, in a file outside `tests/`, runs the module-owned suite on a
+  machine that takes that branch, when a build that targets the machine it runs on can take
+  that branch, and names in the PR body the cell of that run that executed the changed arm.
+  Such a branch in a file under `tests/` that does more than skip a test (a test's own
+  platform-dependent setup) runs that file on a machine that takes each arm.** A check that
+  only skips a test on other platforms is not such a branch.
+
+  A child run under a forced CPU feature (`DAS_JIT_ARM64_FORCE_FEATURES`,
+  `DAS_JIT_X64_FORCE_FEATURES`) that reaches the branch's code counts as a machine that takes
+  that branch.
 
 - **A diff that changes which arm a non-host triple selects in a branch keyed on the target
   triple (a key added, changed or removed), or changes code only a cross target's arm reaches,
@@ -138,8 +143,9 @@ answers to it wherever the diff puts it under this module.
   same change.** An override knob is an environment variable, a command-line flag, or an
   exported runtime setter that changes what a build compiles, tunes, or emits beyond the
   defaults of its output kind (`-jit`, `-exe`, `-lib`). Choosing the output kind is not a knob;
-  choosing the target machine, or making a build write nothing, is. A `[tune]`-family or
-  `[hint]` argument, written in source, is not a knob.
+  choosing the target machine, or making a build write nothing, is. An argument of `[tune]`,
+  `[tune_perm]`, `[tune_companion]`, `[tune_scope]`, `[tune_policy]`, `[llvm_code]` or `[hint]`,
+  written in source, is not a knob.
 
 - **A host path a diff writes into the tune sidecar (`<app>.tune.json`, written by
   `daslib/llvm_tune.das`) goes through `tilde_home` (`daslib/fio.das`, repo root); a host path
