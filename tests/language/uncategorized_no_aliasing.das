@@ -116,6 +116,29 @@ def test_store_initializer_and_select(t : T?) {
     t |> equal(s.b, 3.0)
 }
 
+let private MIN_SCALE = 0.5
+
+struct DefaultScaled {
+    a : float = 1.0
+    b : float = MIN_SCALE
+}
+
+var private g_scaled = DefaultScaled()
+
+def private store_let_global(var s : Scaled&) {
+    s = Scaled(a = MIN_SCALE, b = 2.0)
+    g_scaled = DefaultScaled()
+}
+
+[test(description = "a structure whose values or initializers read a let global compiles under no_aliasing, since no destination can be that global")]
+def test_store_let_global(t : T?) {
+    var s : Scaled
+    g_scaled.b = 9.0
+    store_let_global(s)
+    t |> equal(s.a, 0.5)
+    t |> equal(g_scaled.b, 0.5)
+}
+
 def private store_values(var p : IntPair?; var t : tuple<int; int>?; x : int) {
     *p = IntPair(a = x, b = 1)
     *t = (1, x)

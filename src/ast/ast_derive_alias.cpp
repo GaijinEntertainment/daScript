@@ -329,12 +329,13 @@ namespace das {
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
         virtual void preVisit ( ExprVar * expr ) override {
             Visitor::preVisit(expr);
+            if ( !expr->variable ) return;
             auto vt = expr->variable->type;
             bool arg = expr->argument || expr->block;
             if ( expr->variable==local ) found = true;
             else if ( vt->baseType==Type::tPointer ) read(vt->firstType, true);
             else if ( vt->ref ) read(vt, !arg);
-            else if ( expr->variable->global || (arg && vt->isRefType()) ) read(vt, false);
+            else if ( (expr->variable->global && !vt->constant) || (arg && vt->isRefType()) ) read(vt, false);
         }
         virtual void preVisit ( ExprPtr2Ref * expr ) override {
             Visitor::preVisit(expr);
