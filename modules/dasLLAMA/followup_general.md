@@ -2975,3 +2975,13 @@
     those files has no first-start kernel sanity check read. Done = the release re-mint builds the fat exe of
     each class it ships, runs `lcpp_bench` on it on a box of that class, and copies each run's `sanity:` lines and
     `tune gate:` line into its PR body, or says the run printed none.
+323. **`row_jam` is not yet a tuner axis.** The row-major GEMVs keep their row loop unjammed on x64
+    (`dasllama_gemm_gen.das`, `rm_rows_walk`), and `harness/rm_row_jam_race.das` races both forms in one process: on
+    zen4 (AMD Ryzen 7 PRO 8700GE, class `x86-vnni512`, `debug-jit`) the jam loses on six rows it changes, but wins mlx4
+    `vpdpbusd_width256_mr8_accs1` at the tuner's rail shape, 0.674 against 0.940 ms unjammed at 640 x 32768, while
+    losing at 4096 x 32768, 6.712 against 6.471 ms (the dated `PERF_LEDGER.md` entry on the row-major row jam). The
+    shipped `x86-vnni512` mlx4 and mlx4b pick, that same accs1 row, unjammed trails its sibling
+    `vpdpbusd_width256_mr8` (0.940 against 0.748 ms at 640, 6.471 against 4.375 at 4096, `debug-jit`). The tuner's
+    grid never sees the jammed form, so a family whose rows the jam would win cannot pick it. Done = the release
+    re-mint races `row_jam = true` beside each x64 row-major perm (a perm argument the generator already reads), at
+    the rail shape and a serving width, and the profiles carry the winner.

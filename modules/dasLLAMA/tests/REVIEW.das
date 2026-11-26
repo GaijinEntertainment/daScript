@@ -19,7 +19,7 @@ require ../../../utils/common/text_lines.das   // split_trimmed: a table cell's 
 //! the programs a child process of this folder runs as a program of its own, each for a claim a verb of the test
 //! child cannot carry
 let private OWN_ROOTS = fixed_array("_child_root.das", "_tuned_fallbacks_root.das", "_exe_smoke_root.das", "_box_runtime_root.das",
-    "_audio_lane_whisper_root.das", "_mx4_mint_root.das", "_fake_chat_root.das", "run.das",
+    "_audio_lane_whisper_root.das", "_mx4_mint_root.das", "_fake_chat_root.das", "_rm_row_jam_ir_root.das", "run.das",
     "dastest.das")
 
 //! the test files that build a child's command line on a root they name themselves (`child_cmd_root`): the

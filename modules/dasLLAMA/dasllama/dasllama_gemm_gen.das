@@ -314,6 +314,7 @@ struct private TileEmit {
     rm_sg : LLVMOpaqueValue? [4]        // ... and their scale plane bases
     rm_rpv : int                        // ... rows a vector (2 at width 256, 4 at 512; 0 = the form is off)
     rm_acc_sets : int                   // the perm's accumulator sets abreast in the row-major block loop (0 = the shipped pick)
+    rm_row_jam : bool                   // the row-major row loop may unroll-and-jam
     sign_code_pm1_g : LLVMOpaqueValue?   // the row-group grid decode: ksigns code -> eight +-1 bytes, [128 x i64], parity bit folded in
     gridRows : bool                      // set while the row-group grid decode emits: the column dword read (a panel-form win) reverts to byte loads
     vbmi : bool                          // grid = "vbmi": the grid gemv decodes through the VBMI symbol lattice (row form)
@@ -3456,10 +3457,11 @@ def private rm_block_loop(gc : LlvmCodeCtx; var te : TileEmit; var bi0, biEnd : 
     return r
 }
 
+
 //! the row loop of the walk: rows [r0, r1) `rstep` a group - the row-lane form (`paired`: a 128-bit lane a row's half
 //! block, the rows' plane bases in te.rm_wg / te.rm_sg) or a row alone (`bpv` blocks a vector) - the blocks under `body`,
 //! one ordered sum a row and token; leaves the builder at the loop's exit block
-[arch(at = "../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#row-major-walk")]
 def private rm_rows_loop(var gc : LlvmCodeCtx; var te : TileEmit; var r0, r1 : LLVMOpaqueValue?; rstep, bpv, nt : int; tile : bool; // nolint:STYLE037,STYLE038 - the row loop, the block loops and their folds are one walk
                          var rev, yp, wp, sp, qrow, srowb, nb : LLVMOpaqueValue?; paired : bool;
                          body : block<(var bi : LLVMOpaqueValue?; nblk : int; paired : bool; var f : LLVMOpaqueValue? [4]) : void>) {
@@ -3576,7 +3578,10 @@ def private rm_rows_loop(var gc : LlvmCodeCtx; var te : TileEmit; var r0, r1 : L
     var rNext = LLVMBuildAdd(b, rPhi, te.types->ConstI64(uint64(rstep)), "rnext")
     var rMore = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntSLT, rNext, r1, "rmore")
     var foldEnd = LLVMGetInsertBlock(b)
-    LLVMBuildCondBr(b, rMore, rhead, rdone)
+    var rBack = LLVMBuildCondBr(b, rMore, rhead, rdone)
+    if (!te.rm_row_jam) {
+        attach_loop_flags(te.gctx, rBack, ["llvm.loop.unroll_and_jam.disable"])
+    }
     var rLoopVals <- [rNext]
     var rLoopBlocks <- [foldEnd]
     LLVMAddIncoming(rPhi, rLoopVals, rLoopBlocks)
@@ -3593,6 +3598,11 @@ def private rm_rows_walk(var gc : LlvmCodeCtx; var te : TileEmit; qsb, ssb : int
     let neon = te.dotKind == DOT_SDOT
     let bpv = (belems != 32 || neon) ? 1 : te.width / 256   //! 32-blocks a weight vector: NEON two half loads a block, x64 one or two; a superblock walks alone
     let tile = nt > 1
+    te.rm_row_jam = !target_x64(gc.jit.target)   //! x64: the row loop stays unjammed, whatever the alias hints allow (PERF_LEDGER.md, rm_row_jam_race)
+    let jamArg = find_arg(gc.ann.arguments, "row_jam")   //! `[llvm_code(..., row_jam = true|false)]` overrides that pick
+    if (jamArg is tBool) {
+        te.rm_row_jam = jamArg as tBool
+    }
     var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
     LLVMPositionBuilderAtEnd(b, entry)
     var yp = LLVMGetParam(gc.impl, 0u)
@@ -3704,7 +3714,7 @@ def private rm_pair_dot(var te : TileEmit; var wlo, whi, xlo, xhi : LLVMOpaqueVa
     return kq_dot_mem(te, a, whi, xhi)
 }
 
-[arch(at = "../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#row-major-walk")]
 def private rm_q8_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE038 - one register-coupled block body a format family
     if (!ptrs_then_i64_signature(gc.fn, 5, nt > 1 ? 2 : 3)) return false
     let p = parse_perm(gc)
@@ -3990,7 +4000,7 @@ def private rm_grid_globals(var te : TileEmit; fmt : KqFmt; mod : LLVMOpaqueModu
 }
 
 //! a codebook-grid block's 32 signed weights off the module's grid table (the index bits above the byte off qh or the 9-bit word), its signs applied as one masked negate
-[arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#row-major-walk")]
 def private rm_grid_block(var te : TileEmit; fmt : KqFmt; var qoff : LLVMOpaqueValue?; jj : int; name : string) : LLVMOpaqueValue? {
     let b = te.builder
     var v32ty = LLVMVectorType(te.types.t_int8, 32u)
@@ -4164,7 +4174,7 @@ def private rm_sb_min_vec(var te : TileEmit; var soff, sb16 : LLVMOpaqueValue?; 
     return LLVMBuildMul(b, mn, LLVMBuildAdd(b, e, o, "bs32"), "minv{t}")
 }
 
-[arch(at = "../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#row-major-walk")]
 def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE038 - one register-coupled block body a format family
     if (!ptrs_then_i64_signature(gc.fn, 6, nt > 1 ? 2 : 3)) return false
     let p = parse_perm(gc)
@@ -4509,7 +4519,7 @@ def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE03
 def private rm_kq_gemv_gen(var gc : LlvmCodeCtx) : bool => rm_kq_gen(gc, 1)
 def private rm_kq_tile4_gen(var gc : LlvmCodeCtx) : bool => rm_kq_gen(gc, 4)
 
-[arch(at = "../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#row-major-walk")]
 def private rm_b32_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE038 - one register-coupled block body a format family
     if (!ptrs_then_i64_signature(gc.fn, 6, nt > 1 ? 2 : 3)) return false
     let p = parse_perm(gc)
@@ -4735,7 +4745,7 @@ def private rm_aff_half_at(var te : TileEmit; var off : LLVMOpaqueValue?; name :
 
 //! the affine members' row-major kernels over their disk-order planes: per 32-block (scale x isum + bias x asum) x xs,
 //! `dot_mlxq8_scalar`'s integer terms - the 8-bit codes ride as signed levels (code - 128), + 128 x asum restoring the dot
-[arch(at = "../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#row-major-walk")]
 def private rm_aff_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE038 - one register-coupled block body a format family
     if (!ptrs_then_i64_signature(gc.fn, 6, nt > 1 ? 2 : 3)) return false
     let p = parse_perm(gc)

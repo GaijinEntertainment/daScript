@@ -444,7 +444,8 @@ profile file to the defaults directory grows the exe. Each clone stamps its
 class profile's winner (else the `fallback=` chain resolved against the class's
 feature set, else the reference body), is lowered by the backend for its class
 alone, and never inlines into the baseline code around it. Companions clone
-per class alongside. The function's own body becomes the dispatch: a chain of
+per class alongside. A grid clone and a fat clone keep the function's own
+`[never_fast_math]` and `hint(...)` and no other of its annotations. The function's own body becomes the dispatch: a chain of
 direct calls over a runtime mask, most capable class first, the baseline last.
 The mask is one LLVM-side word of process memory, so a job context forked
 with its init script skipped dispatches like the main context.

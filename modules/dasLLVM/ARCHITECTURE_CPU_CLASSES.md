@@ -71,7 +71,9 @@ the baseline itself - most capable first, the baseline last; adding a profile fi
 exe. For each `[tune]` function and each class of the ship set the apply adds a generated clone
 `<name>__fat_<class>` (the class with `_` for `-`), stamped with the class profile's winner when
 the grid carries it and the class's set passes its `requires=`, else the first `fallback=` entry
-the class's set passes, else the reference body. Companions clone per class alongside, taking
+the class's set passes, else the reference body. The clone carries two of the function's own
+annotations, `[never_fast_math]` and `hint(...)` - the ones the emitter reads - and no other;
+the grid clones of the tune modes carry the same two. Companions clone per class alongside, taking
 their own profile entry when the class's set can run it and the main's pick otherwise. The
 stamp carries one extra `[llvm_code]` argument, `tune_class`, which folds into the cache keys
 with the rest. A reference clone carries no stamp, so its status row reads the class profile

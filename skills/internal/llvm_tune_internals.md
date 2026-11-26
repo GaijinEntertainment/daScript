@@ -8,9 +8,10 @@ file is only what maintaining the implementation needs on top of it.
 marker the default-policy pass stamps. The six user-facing names plus the default-policy
 infer pass are registered by `daslib/tune`, whose shells forward here - `tune_apply`,
 `tune_perm_apply`, `tune_companion_apply`, `tune_scope_apply`, `tune_policy_apply`,
-`tune_default_policy_apply`, and `llvm_code_apply` in `llvm_code.das` - under
+`tune_default_policy_apply`, and `llvm_code_apply` in `llvm_code.das`, plus `[tune]`'s
+`patch` forwarding to `tune_carry_annotations` - under
 `static_if (typeinfo module_exists(llvm_tune))`, and do nothing when the guard is
-false. Adding an annotation means adding both halves. A shell may not stay behind in this
+false. Adding an annotation, or a hook of one (`apply`, `patch`), means adding both halves. A shell may not stay behind in this
 module: **a module's macro state is per-module**, so `g_scopes`, `g_perm_rows` and
 `g_companion_rows` are only consistent while every writer and reader runs in one macro
 context - which is why the infer pass moved to `daslib/tune` with the annotations.

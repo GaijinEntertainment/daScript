@@ -7,6 +7,7 @@ require daslib/strings_boost
 require daslib/fio
 require strings
 require _spawn_common
+require _exe_test_common   // function_ir / signature_ir - a dumped function's IR
 require llvm/daslib/llvm_tune
 require llvm/daslib/llvm_cpu_class
 
@@ -301,7 +302,8 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
         t |> success(true)
         return
     }
-    let args <- get_command_line_arguments()  // aliases a process-global Array header - do not delete
+    // aliases a process-global Array header - do not delete
+    let args <- get_command_line_arguments()
     let bin = args[0]
     let dirRes = create_temp_directory_result("llvm_tune_fat_")
     if (dirRes is error) {
@@ -556,6 +558,105 @@ def test_llvm_tune_forced_file(t : T?) {
     delete lm
     delete lr
     rmdir_rec(work)
+}
+
+// _llvm_tune_fast_math_client.das prints `<ROW> <bits>` per call:
+// FAST (an unmarked body), PRECISE (a [never_fast_math] body nothing
+// clones), and the [never_fast_math, hint(noalias)] [tune] functions
+// directly and through their registries
+
+//! the fixture's rows, row name -> the bits it printed
+def private bit_rows(lines : array<string>) : table<string; string> {
+    var rows : table<string; string>
+    for (ln in lines) {
+        let s = strip(ln)
+        let sp = rfind(s, " ")
+        if (sp > 0 && find(s, " 0x") == sp) {
+            rows[slice(s, 0, sp)] = slice(s, sp + 1)
+        }
+    }
+    return <- rows
+}
+
+//! the fixture's rows `names` against its PRECISE row, after the FAST
+//! row shows fast math is on
+def private expect_precise(t : T?; rows : table<string; string>; names : array<string>;
+                           what : string) {
+    let precise = rows?["PRECISE"] ?? ""
+    t |> success(!empty(precise), "{what}: the fixture printed its precise row")
+    t |> success((rows?["FAST"] ?? precise) != precise,
+        "{what}: the unmarked body differs, so fast math is on")
+    for (name in names) {
+        t |> equal(precise, rows?[name] ?? "", "{what}: {name} keeps the k-ordered sum")
+    }
+    t |> equal(rows?["FAST"] ?? "", rows?["HAND"] ?? "",
+        "{what}: a hand-written function named like a clone carries nothing")
+}
+
+[test(description = "a [tune] function's grid clones and fat clones carry its [never_fast_math] and hint(...): under options fast_math each returns the k-ordered sum bit for bit, a stamped and a reference-body fat clone alike, and the fat clone's impl takes the hinted noalias parameter and the never-fast-math attribute", timeout = 1200)]
+def test_llvm_tune_clones_keep_codegen_annotations(t : T?) {
+    if (!jit_enabled()) {
+        t |> success(true)
+        return
+    }
+    // aliases a process-global Array header - do not delete
+    let args <- get_command_line_arguments()
+    let bin = args[0]
+    let dirRes = create_temp_directory_result("llvm_tune_nfm_")
+    if (dirRes is error) {
+        t |> failure("could not create a temp dir: {dirRes as error}")
+        return
+    }
+    let work = dirRes as value
+    let fixture = "_llvm_tune_fast_math_client.das"
+    copy_fixture(t, fixture, work)
+    let client = path_join(work, fixture)
+    var lg : array<string>
+    let grid_rc = spawn_child("{tune_env_prefix("test", "", "")}\"{bin}\" -no-module-cache -jit "
+        + "-jit-no-cache \"{client}\"", lg)
+    t |> equal(grid_rc, 0, "the grid child runs\n{join(lg, "\n")}")
+    let grid <- bit_rows(lg)
+    expect_precise(t, grid, ["DIRECT", "VARIANT reference", "VARIANT k0", "VARIANT k1",
+        "RVARIANT reference", "RVARIANT k0"], "the grid")
+    var ladder <- [for (c in jit_cpu_class_ladder(cpu_arch_of(get_architecture_name())));
+        cpu_class_name(c)]
+    let low = ladder[length(ladder) - 1] == "x86-base" ? "x86-avx2" : ladder[length(ladder) - 1]
+    let exe = path_join(work, "_llvm_tune_fast_math_client")
+    var lb : array<string>
+    let build_rc = spawn_child("{tune_env_prefix("fat", low, "")}\"{bin}\" -no-module-cache -exe "
+        + "-output \"{exe}.exe\" \"{client}\" -- --jit-dump", lb)
+    t |> equal(build_rc, 0, "the fat exe builds\n{join(lb, "\n")}")
+    let ref_clone = "precise_ref_sum (DAS_TUNE_MODE=fat): fat clones {low}=reference/reference"
+    t |> success(lb |> has(ref_clone),
+        "precise_ref_sum's fat clone is its reference body\n{join(lb, "\n")}")
+    let clone = "precise_sum__fat_{replace(low, "-", "_")}"
+    t |> success(find(attr_group_of(lb, "{clone} C1"), "das-never-fast-math") >= 0,
+        "the stamped fat clone's impl carries the never-fast-math attribute")
+    let sig = signature_ir(function_ir(join(lb, "\n"), "`{clone} C1`Lt`f`Gt`? Ci implementation"))
+    let params = slice(sig, find(sig, "("), find(sig, "%p") + 2)
+    t |> success(find(params, "noalias") >= 0, "the fat clone's p is noalias: {params}")
+    if (get_platform_name() != "windows" && das_is_dll_build() && fexist("{exe}.exe")) {
+        var lr : array<string>
+        let run_rc = spawn_child("\"{exe}.exe\"", lr)
+        t |> equal(run_rc, 0, "the fat exe runs\n{join(lr, "\n")}")
+        let fat <- bit_rows(lr)
+        expect_precise(t, fat, ["DIRECT", "REFERENCE", "VARIANT reference", "RVARIANT reference"],
+            "the fat exe")
+    }
+    delete ladder
+    rmdir_rec(work)
+}
+
+[test(description = "carrying a [tune] function's annotations onto a clone copies each one the clone lacks and only once: a clone that already holds the hint still takes never_fast_math and its never-inline flag, and a second pass adds nothing", timeout = 1200)]
+def test_llvm_tune_carry_into_per_annotation(t : T?) {
+    // aliases a process-global Array header - do not delete
+    let args <- get_command_line_arguments()
+    var lines : array<string>
+    let client = "{get_this_module_dir()}/_llvm_tune_carry_client.das"
+    let rc = spawn_child("\"{args[0]}\" -no-module-cache \"{client}\"", lines)
+    t |> equal(rc, 0, "the carry client compiles and runs\n{join(lines, "\n")}")
+    t |> success(lines |> has("CARRY never_fast_math 1 hint 1 never_inline true"),
+        "one never_fast_math, one hint, never-inline set, after two passes\n{join(lines, "\n")}")
 }
 
 [export]

@@ -29,6 +29,9 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require daslib/jobque_boost   // team_parallel_for - the lane-context arm of the iq4nl dequant
 require daslib/algorithm   // fill - the NaN sentinel over a reused output
 require math
+require daslib/fio   // the cell's temp directory, its dumps
+require _child_run   // child_cmd / run_child - the compile-only dump children
+require ../../dasLLVM/tests/_exe_test_common.das   // function_ir - a dumped function's IR
 
 // K-quant (Q4_K / Q6_K) superblock dequant gates. The synthetic arms hand-pack one superblock
 // with the on-disk bit layout written in the PACK direction (independent of the reader's unpack),
@@ -2350,4 +2353,66 @@ def test_q8_plane_row_f32(t : T?) {
         q8_plane_row_arm(t, 16l, 8l, 0l, 32l, 0l)
         q8_plane_row_arm(t, 16l, 8l, 0l, 37l, 5l)
     }
+}
+
+//! whether a loop of the dumped function `fname` (`_rm_row_jam_ir_root.das`'s stubs, every one on the q8 row
+//! signature) carries `llvm.loop.unroll_and_jam.disable`; false where `dump` defines no such function
+def private row_loop_unjammed(dump : string; fname : string) : bool {
+    let ir = function_ir(dump, "`{fname} 1`Lt`f`Gt`? C1`Lt`Ci8`Gt`? C1`Lt`Cu16`Gt`? C1`Lt`Ci8`Gt`? C1`Lt`Cf`Gt`? Ci64 Ci64 Ci64")
+    var unjammed = false
+    peek_data(dump) $(d) {
+        let flag_at = find(d, "!\{!\"llvm.loop.unroll_and_jam.disable\"\}")
+        return if (flag_at < 0)
+        let flag_from = rfind(d, "\n!", flag_at) + 1
+        let flag_node = slice(d, flag_from, find(d, " = ", flag_from))
+        peek_data(ir) $(body) {
+            var from = 0
+            while (!unjammed) {
+                let at = find(body, "!llvm.loop !", from)
+                break if (at < 0)
+                let id_from = at + length("!llvm.loop ")
+                var id_to = id_from + 1
+                while (id_to < length(body) && is_number(int(body[id_to]))) {
+                    id_to++
+                }
+                let node_at = find(d, "\n{slice(body, id_from, id_to)} = ")
+                if (node_at >= 0) {
+                    let node_end = find(d, "\n", node_at + 1)
+                    let ops_at = find(d, "{flag_node},", node_at)
+                    let end_at = find(d, "{flag_node}\}", node_at)
+                    unjammed = (ops_at >= 0 && ops_at < node_end) || (end_at >= 0 && end_at < node_end)
+                }
+                from = id_to
+            }
+        }
+    }
+    return unjammed
+}
+
+[test(description = "The row-major GEMV generator marks its row loop `llvm.loop.unroll_and_jam.disable` where the target is x64 or the stub says `row_jam = false`, and nowhere else: an aarch64 compile-only dump carries it on the `row_jam = false` NEON row alone, an x64 one on the default maddubs row and not on the `row_jam = true` one", timeout = 1200)]
+def test_rm_row_loop_unjam_metadata(t : T?) {
+    if (!jit_enabled()) {
+        t |> skip("an interpreted run: the generator stamps under the LLVM JIT alone")
+        return
+    }
+    let dirRes = create_temp_directory_result("rm_row_jam_ir_")
+    if (dirRes is error) {
+        t |> failure("could not create a temp dir: {dirRes as error}")
+        return
+    }
+    let work = dirRes as value
+    for (triple, stamped, bare in fixed_array("aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"),
+            fixed_array("neon_row_unjammed", "x64_row_default"), fixed_array("neon_row_default", "x64_row_jammed")) {
+        let dump = path_join(work, "{triple}.ll")
+        var out = ""
+        let cmd = child_cmd("_rm_row_jam_ir_root.das", [(name = "DAS_JIT_X64_FORCE_FEATURES", value = "avx2,f16c,fma")],
+            "--jit-compile-only --jit-target={triple} --jit-dump=\"{dump}\"", true)
+        let rc = run_child(replace(cmd, " -jit ", " -jit -jit-no-cache -no-module-cache "), out)
+        t |> equal(0, rc, "the {triple} compile-only child runs: {out}")
+        let text = fread(dump)
+        t |> success(find(text, "`{bare} 1`") >= 0, "{triple}: {bare} is in the dump")
+        t |> success(row_loop_unjammed(text, stamped), "{triple}: {stamped}'s row loop carries unroll_and_jam.disable")
+        t |> success(!row_loop_unjammed(text, bare), "{triple}: {bare}'s row loop does not")
+    }
+    rmdir_rec(work)
 }
