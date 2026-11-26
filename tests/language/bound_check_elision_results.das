@@ -94,3 +94,28 @@ def test_unproven_dim_and_vector_index_checked(t : T?) {
     }
     t |> success(caught4)
 }
+
+[export] def elided_small_int_sum : int {
+    var bytes : array<uint8>
+    bytes |> resize(16)
+    for (i in range(length(bytes))) {
+        bytes[i] = uint8(i * 3)
+    }
+    var chars : int8[8]
+    for (i in range(8)) {
+        chars[i] = int8(i - 4)
+    }
+    var s = 0
+    for (i in range(length(bytes))) {   // nolint:PERF018
+        s += int(bytes[i])
+    }
+    for (i in urange(8u)) {
+        s += int(chars[i])
+    }
+    return s
+}
+
+[test(description = "a small int element read through an index proven in range has the right value and sign")]
+def test_elided_small_int_reads(t : T?) {
+    t |> equal(elided_small_int_sum(), 356)
+}

@@ -171,3 +171,83 @@ def joinSeq_helper(l : array<int>; r : array<int>) {
     a |> push_from(l, r)
     return <- a
 }
+
+struct WidenedTexel {
+    pad : int
+    color : uint8
+    depth : int8
+    height : uint16
+    slope : int16
+}
+
+def widened_color_of(texel : WidenedTexel) : int => int(texel.color)
+
+def widened_depth_of(texel : WidenedTexel) : uint => uint(texel.depth)
+
+[test(description = "a small int read from a loop variable, a field of a loop variable, a reference local, a local and an argument field widens the same way under an int and a uint cast")]
+def test_widened_small_int_reads(t : T?) {
+    var bytes <- [250u8, 1u8, 2u8]
+    var chars <- [int8(-2), int8(1), int8(2)]
+    var int_sum = 0
+    var uint_sum = 0u
+    for (c in bytes) {
+        int_sum += int(c)
+        uint_sum += uint(c)
+    }
+    t |> equal(int_sum, 253)
+    t |> equal(uint_sum, 253u)
+    int_sum = 0
+    uint_sum = 0u
+    for (c in chars) {
+        int_sum += int(c)
+        uint_sum += uint(c)
+    }
+    t |> equal(int_sum, 1)
+    t |> equal(uint_sum, 1u)
+    var texels <- [WidenedTexel(color = 201u8, depth = int8(-3), height = uint16(65001),
+        slope = int16(-400))]
+    for (texel in texels) {
+        t |> equal(int(texel.color), 201)
+        t |> equal(uint(texel.depth), 0xfffffffd)
+        t |> equal(int(texel.height), 65001)
+        t |> equal(int(texel.slope), -400)
+        t |> equal(uint(texel.slope), 0xfffffe70)
+    }
+    unsafe {
+        let texel & = texels[0]
+        t |> equal(int(texel.depth), -3)
+        t |> equal(uint(texel.height), 65001u)
+    }
+    let local_texel = WidenedTexel(color = 202u8, depth = int8(-4))
+    t |> equal(int(local_texel.color), 202)
+    t |> equal(int(local_texel.depth), -4)
+    t |> equal(widened_color_of(local_texel), 202)
+    t |> equal(widened_depth_of(local_texel), 0xfffffffc)
+    var small = 255u8
+    small = uint8(int(small) - 1)
+    t |> equal(int(small), 254)
+}
+
+struct WidenedHolder {
+    bytes : array<uint8>
+}
+
+[test(description = "a small int read that stays on a plain node, an array reached through a pointer field, still widens under an int and a uint cast")]
+def test_widened_small_int_plain_read(t : T?) {
+    var holder = new WidenedHolder()
+    holder.bytes |> resize(4)
+    for (i in range(4)) {
+        holder.bytes[i] = uint8(250 + i)
+    }
+    var int_sum = 0
+    var uint_sum = 0u
+    for (i in range(4)) {
+        int_sum += int(holder.bytes[i])
+        uint_sum += uint(holder.bytes[3 - i])
+    }
+    t |> equal(int_sum, 1006)
+    t |> equal(uint_sum, 1006u)
+    unsafe {
+        delete holder
+    }
+}

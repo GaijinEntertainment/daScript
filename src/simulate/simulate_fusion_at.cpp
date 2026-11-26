@@ -11,6 +11,8 @@
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
+#define FUSION_OP2_SET_GLOBAL_MNH
+
 namespace das {
 
     struct SimNode_Op2At : SimNode_Op2Fusion {
@@ -51,7 +53,7 @@ namespace das {
             DAS_AT_CHECK(rr, range); \
             return *((CTYPE *)(pl + rr*stride + offset)); \
         } \
-        DAS_NODE(TYPE,CTYPE); \
+        DAS_AT_NODE_TAIL(TYPE,CTYPE); \
     };
 
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
@@ -63,7 +65,7 @@ namespace das {
             DAS_AT_CHECK(rr, range); \
             return *((CTYPE *)(pl + rr*stride + offset)); \
         } \
-        DAS_NODE(TYPE,CTYPE); \
+        DAS_AT_NODE_TAIL(TYPE,CTYPE); \
     };
 
 #define IMPLEMENT_OP2_SET_SETUP_NODE(result,node) \
@@ -80,12 +82,23 @@ namespace das {
 #include "simulate_fusion_op2_set_impl.h"
 #include "simulate_fusion_op2_set_perm.h"
 
+#define DAS_AT_NODE_TAIL(TYPE,CTYPE) DAS_NODE(TYPE,CTYPE)
 #define DAS_AT_CHECK DAS_AT_CHECK_ON
     IMPLEMENT_SETOP_SCALAR(AtR2V);
 #undef DAS_AT_CHECK
 #define DAS_AT_CHECK DAS_AT_CHECK_OFF
     IMPLEMENT_SETOP_SCALAR(AtR2VU);
 #undef DAS_AT_CHECK
+#undef DAS_AT_NODE_TAIL
+
+#define DAS_AT_NODE_TAIL(TYPE,CTYPE) DAS_FUSION_WIDE_NODE
+#define DAS_AT_CHECK DAS_AT_CHECK_ON
+    IMPLEMENT_SETOP_SMALL_INT(AtR2V);
+#undef DAS_AT_CHECK
+#define DAS_AT_CHECK DAS_AT_CHECK_OFF
+    IMPLEMENT_SETOP_SMALL_INT(AtR2VU);
+#undef DAS_AT_CHECK
+#undef DAS_AT_NODE_TAIL
 
 /* AtR2V VECTOR */
 
@@ -434,6 +447,7 @@ namespace das {
 
     static constexpr FusionEntry fusionEntries_at[] = {
         REGISTER_SETOP_SCALAR(AtR2V)
+        REGISTER_SETOP_SMALL_INT(AtR2V)
         REGISTER_SETOP_NUMERIC_VEC(AtR2V)
         FUSION_ENTRY("At","",FusionPoint_Set_At_StringPtr)
         FUSION_ENTRY("At","",FusionPoint_Set_At_VoidPtr)
@@ -446,6 +460,7 @@ namespace das {
         FUSION_ENTRY("At_U64","",FusionPoint_Set_At_U64_StringPtr)
         FUSION_ENTRY("At_U64","",FusionPoint_Set_At_U64_VoidPtr)
         REGISTER_SETOP_SCALAR(AtR2VU)
+        REGISTER_SETOP_SMALL_INT(AtR2VU)
         REGISTER_SETOP_NUMERIC_VEC(AtR2VU)
         FUSION_ENTRY("AtU","",FusionPoint_Set_AtU_StringPtr)
         FUSION_ENTRY("AtU","",FusionPoint_Set_AtU_VoidPtr)
@@ -453,6 +468,8 @@ namespace das {
 
     FUSION_TABLE(fusionTable_at, fusionEntries_at)
 }
+
+#undef FUSION_OP2_SET_GLOBAL_MNH
 
 #endif
 

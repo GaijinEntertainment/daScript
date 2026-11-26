@@ -1102,6 +1102,8 @@ src/simulate/simulate_fusion_op2_bin_vec.cpp
 src/simulate/simulate_fusion_op2_scalar_vec.cpp
 src/simulate/simulate_fusion_at.cpp
 src/simulate/simulate_fusion_at_array.cpp
+src/simulate/simulate_fusion_ptr_at.cpp
+src/simulate/simulate_fusion_widen.cpp
 src/simulate/simulate_fusion_tableindex.cpp
 src/simulate/simulate_fusion_tablewithhash.cpp
 src/simulate/simulate_fusion_misc_copy.cpp

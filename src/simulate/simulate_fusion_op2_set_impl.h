@@ -9,6 +9,28 @@
         return ccode.makeNode<SimNode_##OPNAME##_##COMPUTEL##_Any>(); \
     }
 
+#undef IMPLEMENT_OP2_SET_NODES_MNH
+#undef MATCH_OP2_SET_MNH
+// src/simulate/ARCHITECTURE.md#global-by-hash-source
+#ifdef FUSION_OP2_SET_GLOBAL_MNH
+#if DAS_FUSION>=2
+#define IMPLEMENT_OP2_SET_NODES_MNH(INLINE,OPNAME,TYPE,CTYPE) \
+    IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,GlobalMnh,Local); \
+    IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,GlobalMnh);
+#define MATCH_OP2_SET_MNH(OPNAME) \
+    MATCH_OP2_SET(OPNAME,"GetGlobalMnh","GetLocalR2V",GlobalMnh,Local) \
+    MATCH_OP2_SET_ANY(OPNAME,"GetGlobalMnh",GlobalMnh)
+#else
+#define IMPLEMENT_OP2_SET_NODES_MNH(INLINE,OPNAME,TYPE,CTYPE) \
+    IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,GlobalMnh);
+#define MATCH_OP2_SET_MNH(OPNAME) \
+    MATCH_OP2_SET_ANY(OPNAME,"GetGlobalMnh",GlobalMnh)
+#endif
+#else
+#define IMPLEMENT_OP2_SET_NODES_MNH(INLINE,OPNAME,TYPE,CTYPE)
+#define MATCH_OP2_SET_MNH(OPNAME)
+#endif
+
 #if DAS_FUSION>=2
 
 //  a SetOPNAME b
@@ -37,6 +59,7 @@
         IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,ArgumentRef); \
         IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,ArgumentRefOff); \
         IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,ThisBlockArgumentRef); \
+        IMPLEMENT_OP2_SET_NODES_MNH(INLINE,OPNAME,TYPE,CTYPE) \
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode * node_r, Context * context, bool & anyLeft, bool & anyRight) const override { \
             auto & ccode = *(context->code); \
             /* match op2 */ if ( !node_l || !node_r ) { return nullptr; } \
@@ -63,6 +86,7 @@
             MATCH_OP2_SET_ANY(OPNAME,"GetArgument",ArgumentRef) \
             MATCH_OP2_SET_ANY(OPNAME,"GetArgumentRefOff",ArgumentRefOff) \
             MATCH_OP2_SET_ANY(OPNAME,"GetThisBlockArgument",ThisBlockArgumentRef) \
+            MATCH_OP2_SET_MNH(OPNAME) \
             return nullptr; \
         } \
         virtual void set(SimNode_Op2Fusion * result, SimNode * node) const override { \
@@ -86,6 +110,7 @@
         IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,ArgumentRef); \
         IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,ArgumentRefOff); \
         IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,ThisBlockArgumentRef); \
+        IMPLEMENT_OP2_SET_NODES_MNH(INLINE,OPNAME,TYPE,CTYPE) \
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode * node_r, Context * context, bool & anyLeft, bool & anyRight) const override { \
             auto & ccode = *(context->code); \
             /* match op2 */ if ( !node_l || !node_r ) { return nullptr; } \
@@ -96,6 +121,7 @@
             MATCH_OP2_SET_ANY(OPNAME,"GetArgument",ArgumentRef) \
             MATCH_OP2_SET_ANY(OPNAME,"GetArgumentRefOff",ArgumentRefOff) \
             MATCH_OP2_SET_ANY(OPNAME,"GetThisBlockArgument",ThisBlockArgumentRef) \
+            MATCH_OP2_SET_MNH(OPNAME) \
             return nullptr; \
         } \
         virtual void set(SimNode_Op2Fusion * result, SimNode * node) const override { \
