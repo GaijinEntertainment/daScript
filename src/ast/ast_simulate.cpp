@@ -1788,13 +1788,13 @@ namespace das
             auto pidx = simulateExpression(expr->index);
             SimNode * result;
             if ( r2vType->baseType!=Type::none ) {
-                result = annotation->simulateGetAtR2V(context, at, r2vType, prv, pidx, extraOffset);
+                result = annotation->simulateGetAtR2V(context, at, r2vType, prv, pidx, extraOffset, expr->subexpr->type->isConst());
                 if ( !result ) {
                     context.thisProgram->error("integration error, simulateGetAtR2V returned null", "", "",
                                                at, CompilationError::internal_expression );
                 }
             } else {
-                result = annotation->simulateGetAt(context, at, r2vType, prv, pidx, extraOffset);
+                result = annotation->simulateGetAt(context, at, r2vType, prv, pidx, extraOffset, expr->subexpr->type->isConst());
                 if ( !result ) {
                     context.thisProgram->error("integration error, simulateGetAt returned null", "", "",
                                                at, CompilationError::internal_expression );
@@ -3143,7 +3143,8 @@ namespace das
                     result->source_iterators[t] = expr->sources[t]->type->annotation->simulateGetIterator(
                         context,
                         expr->sources[t]->at,
-                        getE(expr->sources[t])
+                        getE(expr->sources[t]),
+                        expr->sources[t]->type->isConst()
                     );
                 } else if ( expr->sources[t]->type->baseType==Type::tFixedArray ) {
                     result->source_iterators[t] = context.code->makeNode<SimNode_FixedArrayIterator>(
