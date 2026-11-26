@@ -38,7 +38,7 @@ require ?cuda dasllama/dasllama_cuda_dflash   // nolint:STYLE030,LINT019 - the C
 
 // The DFlash2 block drafter (`dasllama/dasllama_dflash`): the loader's refusal contract, and the lossless gate every arm of
 // the pass is held to - a greedy speculative walk's ids equal the plain walk's, with drafts accepted along the way - on the
-// CPU arm over the planar Qwen3.8-27B (large tier, PARITY_FULL-gated) and on the Metal home's device arm over the served
+// CPU arm over the planar Qwen3.8-27B (the `qwen35-27b` category) and on the Metal home's device arm over the served
 // trunk, where the CPU arm fed by the device's captures accepts the same count. The drafter sidecars are the 27B's own
 // DFlash2 Q8_0 file and its Q4_K_M file (Q4_K planes, Q6_K at some layers' v and down) under `drafters/`; the regular DFlash
 // drafter runs on the routed gemma-4-26B and, on the Metal home, on the dense Qwen3-4B (its Q8_0 file), whose device arm is a
@@ -49,12 +49,14 @@ require ?cuda dasllama/dasllama_cuda_dflash   // nolint:STYLE030,LINT019 - the C
 // CPU and Metal forms (`test_mtp_gemma_drafter.das`); the 27B GGUF trunk's Metal cells ride its block's Metal form, the blob
 // twin under the required mode; the snapshot trunk's and the E2B facade's Metal cells load their trunk off the image rail
 // through `with_metal_trunk`. A cell skips
-// without its files (the trunk, the drafters, the 27B snapshot), above the large tier without DASLLAMA_PARITY_FULL=1, and
+// without its files (the trunk, the drafters, the 27B snapshot), on a model file whose category the run does not name
+// (`../TEST_CATEGORIES.md`), on the 27B snapshot without DASLLAMA_PARITY_FULL=1, and
 // on the Metal device arms on a build without das_metal; the discrete-home cells skip on a build with no discrete GPU home,
 // with no armed GPU tier (`gpu_tier_armed`), where the residency plan does not fit the card, and when interpreted.
 // The NextN head's lossless gate on the large -MTP- carriers no block loads sits beside them: self-speculative greedy decode
 // token for token against plain decode on the 64-trunk-layer Qwen3.6-27B-MTP and on the non-recurrent GLM-4.5-Air (forced
-// rejects included), each large tier under DASLLAMA_PARITY_FULL=1, the invariance pair `_mtp_cpu_cells.das`'s.
+// rejects included), the first the `qwen35-27b` category's and the second the `glm45-air` category's, the invariance pair
+// `_mtp_cpu_cells.das`'s.
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -810,8 +812,8 @@ def private e2b_metal_twins(t : T?; var m : Model) {
 // Qwen3.6-27B-MTP Q4_K_M — the 64-trunk-layer carrier: its draft block sits at layer index 64, the
 // exact index where the pre-fix per-layer masks wrapped (mask >> 64 == mask >> 0 on x86) — this
 // arm regresses that whole bug class (layer_is_recurrent / layer_is_sliding / wv_offs guards)
-// besides being the model the feature is FOR (1.39x decode when frozen). Large tier (~16 GB):
-// DASLLAMA_PARITY_FULL=1.
+// besides being the model the feature is FOR (1.39x decode when frozen). The `qwen35-27b`
+// category's (~16 GB): run.das --category qwen35-27b.
 [test(description = "On Qwen3.6-27B-MTP Q4_K_M, whose draft block sits at layer index 64 where per-layer masks once wrapped, self-speculative greedy decode emits plain decode's counting tokens exactly")]
 def test_mtp_invariance_27b(t : T?) {
     t |> run("MTP self-spec output-invariance (Qwen3.6-27B-MTP Q4_K_M, draft block at layer 64)") @(t : T?) {
@@ -839,7 +841,7 @@ def test_mtp_invariance_27b(t : T?) {
 // TRUNK layer count, so blk.<n_layers>.attn_{q,k,v}.bias never loaded and the draft read past the
 // end of t.bq. And glm4moe ships nextn.embed_tokens/shared_head_head as copies of the trunk's own
 // tables, which the loader shape-checks rather than disabling the head over.
-// Large tier (~73 GB, 2 shards): DASLLAMA_PARITY_FULL=1.
+// The `glm45-air` category's (~73 GB, 2 shards): run.das --category glm45-air.
 [test(description = "On non-recurrent GLM-4.5-Air with qkv bias and a NextN head, self-speculative decode of a code prompt emits plain decode's tokens exactly, including with every third draft forced through the recr_mask-zero reject branch")]
 def test_mtp_invariance_glm(t : T?) {
     t |> run("MTP self-spec output-invariance (GLM-4.5-Air Q4_K_M, non-recurrent reject path)") @(t : T?) {
