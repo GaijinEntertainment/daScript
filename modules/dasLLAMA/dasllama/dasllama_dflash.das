@@ -1681,7 +1681,7 @@ def private cpu_block_pass(t : Model; var s : Session; dr : DflashDrafter; q : D
 //! top-k under the pairwise scores: greedy, or drawn at the drafter's temperature in a rejection-sampling round with its q
 //! recorded), their count back; 0 = the context ring does not reach `pos` (a plain step), or the device pass failed
 [no_env]
-def private dflash_block_draft(t : Model; var s : Session; tok, pos, k : int64) : int64 {
+def private dflash_block_draft(t : Model; var s : Session; tok, pos, k : int64; landed : bool) : int64 {
     let dr & = g_dflash
     let q = seq_of(s)
     g_dflash_land_nd = 0l
@@ -1699,7 +1699,7 @@ def private dflash_block_draft(t : Model; var s : Session; tok, pos, k : int64) 
     g_dflash_point_q = records_q && draft_temp <= 0.0
     let soft = draft_temp > 0.0
     if (g_dflash_dev_on && invoke(dev_seams().selects, soft)) {
-        return dflash_device_select(t, s, dr, *q, tok, pos, rows, nd, soft, draft_temp, t0)
+        return dflash_device_select(t, s, dr, *q, tok, pos, rows, nd, soft, draft_temp, t0, landed)
     }
     var logits, hsel : array<float>
     if (g_dflash_dev_on) {
@@ -1743,12 +1743,13 @@ def private dflash_block_draft(t : Model; var s : Session; tok, pos, k : int64) 
 }
 
 //! the device's own select - the pass and the pick one submission - its `nd` drafts (a held pass's land later) and their
-//! count; 0 = the pass failed (the round steps plain)
-def private dflash_device_select(t : Model; var s : Session; dr : DflashDrafter; q : DflashSeq; tok, pos, rows, nd : int64; soft : bool; draft_temp : float; t0 : int64) : int64 {
+//! count; 0 = the pass failed (the round steps plain). A `landed` draft holds no pass: its caller reads the ids before its verify
+def private dflash_device_select(t : Model; var s : Session; dr : DflashDrafter; q : DflashSeq; tok, pos, rows, nd : int64; soft : bool; draft_temp : float; t0 : int64;
+                                 landed : bool) : int64 {
     let span = ring_span(q, pos, rows, g_dflash.window)
     var cids : array<int64>
     var qs : array<float>
-    let got = invoke(dev_seams().select_pass, t, dr, s.uid, tok, pos, rows, nd, span.lo, span.nctx, q.valid_lo, !sel_wanted(s), !sel_ask_reads_drafts(s), draft_temp,
+    let got = invoke(dev_seams().select_pass, t, dr, s.uid, tok, pos, rows, nd, span.lo, span.nctx, q.valid_lo, !landed && !sel_wanted(s), !landed && !sel_ask_reads_drafts(s), draft_temp,
         s.rng, s.mtp_vbatch, cids, qs)
     if (got == DflashSelect.failed) {
         to_log(LOG_ERROR, "dasLLAMA: the block drafter's device pass at {pos} failed - the round steps plain\n")

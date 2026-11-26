@@ -617,13 +617,13 @@ def register_mtp_rollback_override(name : string; fn : MtpRollbackOverrideFn) {
 }
 
 //! The block drafter's seams (DFlash2), one a process: `captured` lands a `layers` trunk layer's rows (a step's `s.x`, a window's
-//! `s.x_b` from `pos0`); `draft` fills `s.mtp_vbatch[1 .. n]` from the anchor at `pos` (n = 0: the round steps plain) or leaves them
-//! on the device as the verify's rows, for `land` to put there before the host reads them; `commit` rows `pos0 ..` into its context
+//! `s.x_b` from `pos0`); `draft` fills `s.mtp_vbatch[1 .. n]` from the anchor at `pos` (n = 0: the round steps plain) or, unless
+//! `landed`, leaves them on the device as the verify's rows for `land` to put there; `commit` rows `pos0 ..` into its context
 struct MtpBlockSeams {
     attached : function<(t : Model) : bool>
     captured : function<(var s : Session; l, rows, pos0 : int64; window : bool) : void>
     captured_rows : function<(var s : Session; img : array<float>; rows, pos0 : int64) : void>   //! a device step's whole image, [rows][layer slot][dim]
-    draft : function<(t : Model; var s : Session; tok, pos, k : int64) : int64>
+    draft : function<(t : Model; var s : Session; tok, pos, k : int64; landed : bool) : int64>
     land : function<(var s : Session) : void>
     commit : function<(var s : Session; pos0, rows : int64) : void>
     layers : array<int64>
@@ -725,7 +725,7 @@ def mtp_block_commit(t : Model; var s : Session; pos0, rows : int64) {
 //! the block drafter's drafts from the anchor `tok` at `pos`, landed into `s.mtp_vbatch[1 ..]`: their count, 0 = the round
 //! steps plain (`MtpBlockSeams.draft`, then its `land`: a joint round's verify reads every stream's ids on the host)
 def mtp_block_draft_landed(t : Model; var s : Session; tok, pos, k : int64) : int64 {
-    let n = invoke(g_mtp_block.draft, t, s, tok, pos, k)
+    let n = invoke(g_mtp_block.draft, t, s, tok, pos, k, true)
     invoke(g_mtp_block.land, s)
     return n
 }
@@ -7345,7 +7345,7 @@ def mtp_spec_round_k(t : Model; var s : Session; tok : int64; k_req : int64) : i
     let chain_min_p = g_mtp_chain_min_p
     var drafted = 0l
     if (blockd) {
-        drafted = k <= 0l ? 0l : invoke(g_mtp_block.draft, t, s, tok, pos, k)
+        drafted = k <= 0l ? 0l : invoke(g_mtp_block.draft, t, s, tok, pos, k, false)
         if (drafted <= 0l) {   //! the drafter's context does not reach this position: the plain step, which commits its row
             prof_add("mtp.draft", ts_draft)
             forward(t, s, tok, pos)

@@ -470,7 +470,7 @@ knobs - before its first walk and puts each back at the value its getter read be
 - `dflash-26b-cpu` / `dflash-26b-metal` / `dflash-26b-discrete` (family `gemma4moe`, the `gemma4-moe` category) - the same
   trunk's drafted greedy walk is the plain walk's token for token, over one chat turn (a raw prompt leaves the routed trunk
   at near-tie logits): on the CPU arm; on the Metal device arm, whose block rounds run as joint rounds on the batch rail
-  (a gemma-4 trunk takes no single-stream verify seat), the CPU arm over the device's captures accepting the same count
+  (a gemma-4 trunk takes no single-stream verify seat) with no pass held for that seat, the CPU arm over the device's captures accepting the same count
   and no Metal object left alive; on the serving discrete home with the Q8_0 and the Q4_K_M drafter files - all three
   cells of the trunk's block in `test_mtp_gemma_drafter.das` (`test_gemma_drafter_26b_trunk`), the Metal one
   (`metal_drafter_cell`, `_dflash_cells.das`) on its Metal form's served image ahead of the served arms;
@@ -478,11 +478,11 @@ knobs - before its first walk and puts each back at the value its getter read be
   attached block drafter (`attach_block_drafter`): a two-turn greedy chat's replies through `respond` and a greedy
   completion's ids through `generate_drafted` are the plain model's token for token, the chat's turns counted as draft
   passes and device steps and the completion accepting drafts; two streams through the scheduler at three drafts a round
-  ride joint rounds (the scheduler's `mtp_joined_max` 2, a stream alone 1 - the control), each the plain scheduler's
+  ride joint rounds (the scheduler's `mtp_joined_max` 2, a stream alone 1 - the control) with no pass held, each the plain scheduler's
   token for token, the two together accepting what each accepts alone within a fifth; the detach reported; a stream given a stop id emits exactly the ids before that id's first
   occurrence, the stopless stream running past it (the control); then, on the same load, `dflash-27b-sampled-metal`'s
   walks over the E2B's Q8_0 drafter (`sampled_modes_walk`, tag `E2B sampled metal`), the exact walk held by its draws and
-  its first id, not token for token; skips without das_metal;
+  its first id, not token for token, and no sampled round holding its pass (its rounds are joint); skips without das_metal;
 - `dflash-27b-discrete` (large tier; the Q8_0, Q4_K_M and NVFP4 drafters over one trunk load) - the device arm on the serving discrete home (the CUDA home under its ask, else Vulkan) over the
   resident trunk (`resident_trunk`, an f16 mirror): a counting walk - one with no near tie, the home's rows and its one-row
   step rounding apart - the plain walk's token for token with drafts accepted (a driver-against-itself compare, the

@@ -24,8 +24,8 @@ def private forced_captured(var s : Session; l, rows, pos0 : int64; window : boo
 def private forced_captured_rows(var s : Session; img : array<float>; rows, pos0 : int64) {}
 
 //! the round's drafts are the forced sequence's next `k` ids after the anchor at `pos`
-[unused_argument(t, tok)]
-def private forced_draft(t : Model; var s : Session; tok, pos, k : int64) : int64 {
+[unused_argument(t, tok, landed)]
+def private forced_draft(t : Model; var s : Session; tok, pos, k : int64; landed : bool) : int64 {
     let at = pos - g_forced_base
     let n = clamp(long_length(g_forced_seq) - 1l - at, 0l, k)
     for (j in range64(1l, n + 1l)) {

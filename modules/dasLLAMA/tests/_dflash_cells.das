@@ -290,6 +290,15 @@ def private exact_holds_plain(t : T?; m : Model; tag : string; tokens_hold : boo
     t |> success(exact.accepted > 0l, "{tag}: exact accepted {exact.accepted} of {exact.drafted}")
 }
 
+//! the sampled rounds' held passes after the walks: some where the verify seat takes the trunk, none where its rounds are `joint`
+def private sampled_ahead_check(t : T?; tag : string; joint : bool) {
+    if (joint) {
+        t |> equal(sampled_ahead_rounds(), 0l, "{tag}: a joint round lands its drafts ahead of its verify, so no sampled round holds its pass")
+    } else {
+        t |> success(sampled_ahead_rounds() > 0l, "{tag}: the sampled rounds' passes held with their verifies committed behind them ({sampled_ahead_rounds()})")
+    }
+}
+
 //! the three acceptances over the drafter file `drafter` on `m`, the pass on the asked arm, against the plain sampled walk at the
 //! same seed: exact spends a draw a judged row with drafts accepted and opens on the plain walk's first id - where `tokens_hold`
 //! it equals the plain walk token for token, elsewhere the ids the two share are logged; each rejection walk (point-mass drafts,
@@ -298,7 +307,7 @@ def private exact_holds_plain(t : T?; m : Model; tag : string; tokens_hold : boo
 //! rates logged; on the device arm the drawn drafts drawn by the device selector, and with its soft pick off drawn on the host -
 //! the same stream
 def sampled_modes_walk(t : T?; m : Model; drafter : string; device : bool; tag : string;
-                       tokens_hold : bool = false) {
+                       tokens_hold : bool = false; joint : bool = false) {
     set_dflash_device(device)
     let why = attach_dflash_drafter(m, path_join(_model_tier::models_dir(), drafter))
     t |> equal(why, "", "{tag}: the drafter attaches")
@@ -345,7 +354,7 @@ def sampled_modes_walk(t : T?; m : Model; drafter : string; device : bool; tag :
     if (device && dflash_on_device()) {
         t |> success(sel_exact > 0l, "{tag}: the exact walk's greedy drafts end on the device selector ({sel_exact} passes)")
         t |> success(soft_drawn > 0l && soft_drawn == sel_soft, "{tag}: drawn drafts end on the device selector, which draws them ({soft_drawn} of {sel_soft} passes)")
-        t |> success(sampled_ahead_rounds() > 0l, "{tag}: the sampled rounds' passes held with their verifies committed behind them ({sampled_ahead_rounds()})")
+        sampled_ahead_check(t, tag, joint)
         let ahead0 = set_verify_ahead(0)
         let ahead_before = sampled_ahead_rounds()
         var inscope waited <- spec_sampled(m, prompt, MtpAccept.rejection, -1.0)
@@ -701,9 +710,11 @@ def private metal_drafter_arms(t : T?; m : Model; drafter, tag : string; joint :
         let rounds0 = metal_dflash_joint_rounds().rounds
         let dev = metal_lossless_walk(t, m, drafter, true, "{tag} device arm", true)
         let rounds = metal_dflash_joint_rounds().rounds - rounds0
+        let held = metal_dflash_selected().held
         detach_dflash_drafter()
         if (joint) {
             t |> success(rounds > 0l, "{tag}: the block rounds ran as the home's joint rounds on the batch rail ({rounds})")
+            t |> equal(held, 0l, "{tag}: a joint round lands its drafts ahead of its verify, so no pass is held for the verify seat")
         }
         let cpu = metal_lossless_walk(t, m, drafter, false, "{tag}, the CPU arm on the device's captures", true)
         detach_dflash_drafter()
