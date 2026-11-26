@@ -502,18 +502,18 @@ def log_mel_whisper(samples : array<float> | #; plan : WhisperMelPlan; filters :
 
 //! Borrowed-plane form — the filterbank lives in a prepared image.
 def log_mel_whisper(samples : array<float> | #; plan : WhisperMelPlan; filters : PlaneF; n_mel : int64;
-                    var padded : array<float>; var m : WhisperMel) {
+                    @scratch var padded : array<float>; var m : WhisperMel) {
     log_mel_whisper_(samples, plan, plane_at(filters, 0l), n_mel, padded, m)
 }
 
 def log_mel_whisper(samples : array<float> | #; plan : WhisperMelPlan; filters : array<float>; n_mel : int64;
-                    var padded : array<float>; var m : WhisperMel) {
+                    @scratch var padded : array<float>; var m : WhisperMel) {
     log_mel_whisper_(samples, plan, unsafe(addr<float const?>(filters[0])), n_mel, padded, m)
 }
 
 [hot_path]
 def private log_mel_whisper_(samples : array<float> | #; plan : WhisperMelPlan; filters : float const?; n_mel : int64;
-                             var padded : array<float>; var m : WhisperMel) {
+                             @scratch var padded : array<float>; var m : WhisperMel) {
     let n_in = long_length(samples)
     let head = AUDIO_N_FFT / 2l                            // 200
     let n_padded = n_in + AUDIO_SAMPLE_RATE * 30l + 2l * head
@@ -1388,7 +1388,7 @@ struct EncoderState {
     @exact_size qq : array<float>    // q token-major [T × d]
     @exact_size kk : array<float>    // k token-major [T × d]
     @exact_size vv : array<float>    // v token-major [T × d]
-    @exact_size hp : array<float>    // per-head packs q,kT,v,out: 4 × [T × d]
+    @scratch @exact_size hp : array<float>    // per-head packs q,kT,v,out: 4 × [T × d]
     @scratch @exact_size att : array<float>   // per-slot blocked scores [get_dispatch_slot_bound() × ATTN_ENC_QB × T]
     @exact_size h : array<float>     // ffn hidden [T × ff]
     @exact_size pooled : array<float>// [T/2 × d]

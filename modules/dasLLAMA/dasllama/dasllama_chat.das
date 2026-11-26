@@ -68,7 +68,7 @@ struct ChatSession {
     n_audio_rows : int64                  // row count in audio_rows (each tower.proj_dim wide)
     embedder : VisionEmbedder = VisionEmbedder()   // kind == none => no vision arm
     embedder_scratch : VisionState = VisionState()
-    image_rows : array<float>             // encoded image soft tokens awaiting the next respond()
+    @pool @exact_size image_rows : array<float>             // encoded image soft tokens awaiting the next respond()
     n_image_rows : int64                  // row count in image_rows (each vision.proj_dim wide)
     image_grid : int2                     // the merged nx×ny when the family ropes with grid positions (qwen mrope); (0,0) = sequential
     pending_spans : array<MediaMark>      // media the pending user turn carries INLINE: each span's positions render among the turn's tokens

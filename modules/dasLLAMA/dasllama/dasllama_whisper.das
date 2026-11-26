@@ -1055,7 +1055,7 @@ struct DecoderState {
     xsi : array<float>      // per-32-block scales for xqi
     // window-driver scratch, hoisted so a transcribe allocates nothing (README standing rule)
     mel : WhisperMel = WhisperMel()   // full-clip spectrogram (grows to the longest clip seen)
-    mel_padded : array<float>         // log_mel_whisper padding scratch
+    @scratch @exact_size mel_padded : array<float>         // log_mel_whisper padding scratch
     win : MelChunk = MelChunk()       // the 3000-frame encoder window
     prompt : array<int>
     toks : array<SampledTok>

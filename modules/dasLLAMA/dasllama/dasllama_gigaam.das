@@ -1465,7 +1465,7 @@ def private gg_rnnt_net(m : GigaamModel) : RnntNet {
 
 def private gg_decode_rnnt(m : GigaamModel; var st : GigaamState; n_frames : int64) {
     let jd = m.joint_dim
-    rnnt_decode(gg_rnnt_net(m), st.rnnt, RnntEnc(d = m.d_model, w = m.jenc_w, b = m.jenc_b, gen = st.enc_gen), st.x, st.encp, n_frames, st.toks) $(var encp) {
+    rnnt_decode(gg_rnnt_net(m), st.rnnt, RnntEnc(d = m.d_model, w = m.jenc_w, b = m.jenc_b, gen = st.enc_gen), st.x, st.encp, n_frames, st.toks) $(@scratch var encp) {
         ensure_length(encp, n_frames * jd)
         mm_blob_b(encp, m.blob, m.jenc_w, st.x, m.d_model, jd, n_frames)
         add_bias_rows(encp, m.blob, m.jenc_b, jd, n_frames)

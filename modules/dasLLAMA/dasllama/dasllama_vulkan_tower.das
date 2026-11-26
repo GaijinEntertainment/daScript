@@ -1207,6 +1207,12 @@ def vulkan_tower_fc_gen : uint64 => rows_handoff_gen(g_vt_fc_rows)
 def vulkan_tower_fc_rows(gen : uint64; bytes : int64) : uint64 => rows_handoff_dev(g_vt_fc_rows, gen, bytes)
 
 let private VT_HOME = "vk"   //! this home's device-block pieces' prefix (`tower_fc_piece`, `tower_family_piece`)
+let private VT_FC_KQ_FMTS_PIECE = tower_fc_kq_fmts_piece(VT_HOME)   //! the kq lane's format-word piece, named once
+let private VT_FC_WQ_PIECE = tower_fc_wq_piece(VT_HOME)   //! the q8 lane's quant-plane piece, named once
+let private VT_FC_FRONT16_PIECE = tower_front16_piece(VT_HOME, "fc")  //! the front convs' f16 slab piece, named once
+//! each K-quant member's quant and scale plane pieces, named once (`tower_fc_kq_piece` by format slot)
+let private VT_FC_KQ_Q <- [for (fmt in range(KQ_FMT_COUNT)); tower_fc_kq_piece(VT_HOME, fmt, false)]
+let private VT_FC_KQ_S <- [for (fmt in range(KQ_FMT_COUNT)); tower_fc_kq_piece(VT_HOME, fmt, true)]
 
 //! the block chain's seats beyond the shared rail's (`vt_rail_seats`, the rel quartet among them): the exact lane's halfwords, canary's rel plane, the f16 taps, the kq member pairs in slot order
 def private vt_fc_rail_seats(var rl : VtRail; r : VtResident; fc : TowerFc) {
@@ -1238,7 +1244,7 @@ def private vt_fc_kq_member_seats(var rl : VtRail; r : VtResident; fc : TowerFc)
 //! the block chain's planes and scratch inside the device's buffer range at `npos` rows
 def private vt_fc_range_ok(fc : TowerFc; npos : int64) : bool {
     let dp = fc.rotary ? fc.n_head * tower_fc_hsp(tower_fc_hs(fc.d, fc.n_head)) : 0l
-    let wq_bytes = fc.dev_backend == TowerDev.vulkan ? tower_dev_find(fc.devplan, tower_fc_piece(VT_HOME, "wq")).bytes : fc.qblob.n
+    let wq_bytes = fc.dev_backend == TowerDev.vulkan ? tower_dev_find(fc.devplan, VT_FC_WQ_PIECE).bytes : fc.qblob.n
     return (vk_range_ok(fc.f16w ? fc.w_n * 2l : wq_bytes) && vk_range_ok(fc.blob.n * 4l) && vt_fc_rows_ok(fc.rotary, npos, fc.d, fc.ff, dp)
         && (!fc.kq_lane || vt_fc_kq_range_ok(fc)))
 }
@@ -1247,8 +1253,8 @@ def private vt_fc_range_ok(fc : TowerFc; npos : int64) : bool {
 def private vt_fc_kq_range_ok(fc : TowerFc) : bool {
     return vk_range_ok(fc.kq.n) && vk_range_ok(fc.ks.n) if (fc.dev_backend != TowerDev.vulkan)
     for (fmt in range(KQ_FMT_COUNT)) {
-        return false if (!vk_range_ok(tower_dev_find(fc.devplan, tower_fc_kq_piece(VT_HOME, fmt, false)).bytes)
-            || !vk_range_ok(tower_dev_find(fc.devplan, tower_fc_kq_piece(VT_HOME, fmt, true)).bytes))
+        return false if (!vk_range_ok(tower_dev_find(fc.devplan, VT_FC_KQ_Q[fmt]).bytes)
+            || !vk_range_ok(tower_dev_find(fc.devplan, VT_FC_KQ_S[fmt]).bytes))
     }
     return true
 }
@@ -1407,7 +1413,7 @@ def private vulkan_parakeet_encode(m : ParakeetModel; var st : ParakeetState) : 
         vt_decline(r, TowerDecline.shape)
         return -1l
     }
-    let fc = tower_fc_of_pk(m, VT_HOME, g_vt_fc_offs, g_vt_fc_gseats)
+    let fc = tower_fc_of_pk(m, VT_FC_KQ_FMTS_PIECE, g_vt_fc_offs, g_vt_fc_gseats)
     let tt = vt_fc_front(r, fc, unsafe(addr<float const?>(st.mel.data[0])), long_length(st.mel.data), st.mel.n_len, st.mel.n_len, st.x, true)
     let first = !r.served_said   //! read past the front, whose attach re-keys the resident
     if (tt < 0l || !vt_fc_blocks(r, fc, st.x, tt, 2l * tt - 1l)) {
@@ -1527,14 +1533,14 @@ def private vulkan_gigaam_serves_model(e : GigaamModel) : bool {
 //! GigaAM's Vulkan device block (`#tower-dev-block`): the chain's planes, then the front's f16 conv slab with its mel tables
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
 def private vulkan_gigaam_bake(m : GigaamModel; var b : TowerDevBuild) : bool {
-    tower_fc_bake(tower_fc_of_ga(m, VT_HOME, g_vt_fc_offs, g_vt_fc_gseats), g_vt_fc_offs, g_vt_fc_gseats, b, VT_HOME)
+    tower_fc_bake(tower_fc_of_ga(m, VT_FC_KQ_FMTS_PIECE, g_vt_fc_offs, g_vt_fc_gseats), g_vt_fc_offs, g_vt_fc_gseats, b, VT_HOME)
     return tower_ga_front_bake(m, b, VT_HOME)
 }
 
 //! Parakeet's Vulkan device block (`#tower-dev-block`): the chain's planes, then the front's f16 conv panel
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
 def private vulkan_parakeet_bake(m : ParakeetModel; var b : TowerDevBuild) : bool {
-    let fc = tower_fc_of_pk(m, VT_HOME, g_vt_fc_offs, g_vt_fc_gseats)
+    let fc = tower_fc_of_pk(m, VT_FC_KQ_FMTS_PIECE, g_vt_fc_offs, g_vt_fc_gseats)
     tower_fc_bake(fc, g_vt_fc_offs, g_vt_fc_gseats, b, VT_HOME)
     tower_cn_front_bake(fc, b, VT_HOME)
     return true
@@ -3040,7 +3046,7 @@ let private VTF_H = 0x800u
 def private vt_cn_front_slab(var r : VtResident; fc : TowerFc) : bool {
     let btw = fc.device_mel ? fc.n_fft * 2l * fc.n_fb * 4l : 0l
     let bfil = fc.n_mel * fc.n_fb * 4l
-    let f16 = tower_dev_find(fc.devplan, tower_fc_piece(VT_HOME, "front16"))
+    let f16 = tower_dev_find(fc.devplan, VT_FC_FRONT16_PIECE)
     return f16.off >= 0l && vt_front_upload16(r, plane_at(fc.dev, f16.off), f16.bytes, fc.twiddles, btw, fc.filters, bfil)
 }
 
@@ -3112,7 +3118,7 @@ def private vt_cn_front_scratch(var r : VtResident; fc : TowerFc; cap : int64; g
 }
 
 [arch(at = "../ARCHITECTURE_GPU_TOWER_RAIL.md#fc-chains")]
-def private vt_fc_front(var r : VtResident; fc : TowerFc; src : float const?; src_elems, n_len, n_valid : int64; var x : array<float>;
+def private vt_fc_front(var r : VtResident; fc : TowerFc; src : float const?; src_elems, n_len, n_valid : int64; @scratch var x : array<float>;
                         blocks_behind : bool) : int64 {
     let n_mel = fc.n_mel
     let n_fb = fc.n_fb
@@ -3200,7 +3206,7 @@ def private vulkan_canary_front(t : CanaryEncoder; var s : CanaryState) : int64 
 //! the rotary family's front slab off the Vulkan image: both stride-2 conv panels as one f16 slab, the mel's DFT twiddles with the window behind
 [cold_path]
 def private vt_ga_front_slab(var r : VtResident; m : GigaamModel) : bool {
-    let f16 = tower_dev_find(m.devplan, tower_fc_piece(VT_HOME, "front16"))
+    let f16 = tower_dev_find(m.devplan, VT_FC_FRONT16_PIECE)
     let twin = tower_dev_find(m.devplan, tower_ga_twin_piece(VT_HOME))
     return false if (f16.off < 0l || twin.off < 0l)
     return vt_front_upload16(r, plane_at(m.dev, f16.off), f16.bytes, PlaneF(p = unsafe(reinterpret<float const?>(plane_at(m.dev, twin.off))),
@@ -3281,7 +3287,7 @@ def vulkan_gigaam_mel(m : GigaamModel; samples : array<float>; @exact_size var m
         vt_decline(r, TowerDecline.shape)
         return -1l
     }
-    let fc = tower_fc_of_ga(m, VT_HOME, g_vt_fc_offs, g_vt_fc_gseats)
+    let fc = tower_fc_of_ga(m, VT_FC_KQ_FMTS_PIECE, g_vt_fc_offs, g_vt_fc_gseats)
     let arm = vt_ga_front_arm(r, fc, m, n_len)
     return -1l if (!arm.ok)
     upload_region_at(r.fxin_dev, 0l, unsafe(addr<uint8 const?>(samples[0])), ((n_len - 1l) * m.hop + m.n_fft) * 4l)
@@ -3375,7 +3381,7 @@ def private vulkan_gigaam_encode(m : GigaamModel; var st : GigaamState; samples 
         vt_decline(r, TowerDecline.flavor)
         return -1l
     }
-    let fc = tower_fc_of_ga(m, VT_HOME, g_vt_fc_offs, g_vt_fc_gseats)
+    let fc = tower_fc_of_ga(m, VT_FC_KQ_FMTS_PIECE, g_vt_fc_offs, g_vt_fc_gseats)
     let tt = vt_ga_front(r, fc, m, st, samples, n_in)
     return -1l if (tt < 0l)
     gigaam_rope_tables(m, st, tt)

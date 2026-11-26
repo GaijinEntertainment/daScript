@@ -405,10 +405,10 @@ struct private StepRes {
 
 var private g_pre : StepRes                    // the pre-encoded next step, when valid
 // the driver-built rope row for the PREDICTED next position (bit-identical to forward()'s)
-var private g_rope_cos_next : array<float>
-var private g_rope_sin_next : array<float>
-var private g_rope_cos_next_swa : array<float>   // the sliding class's twin (dual-rope configs)
-var private g_rope_sin_next_swa : array<float>
+var private @pool g_rope_cos_next : array<float>
+var private @pool g_rope_sin_next : array<float>
+var private @pool g_rope_cos_next_swa : array<float>   // the sliding class's twin (dual-rope configs)
+var private @pool g_rope_sin_next_swa : array<float>
 
 // geometry + pooled buffers + uniforms for one step at `pos` — no input bytes yet (poke_step).
 // Hetero models (gemma4) carry TWO attention classes (global = config fields, sliding = _swa);

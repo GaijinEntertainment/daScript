@@ -877,7 +877,7 @@ def private shexp_image(f : int; x : array<float>; n, rows : int64) {
 
 //! A gated FFN triple on the tier's dense planes as three GEMMs - the form for a gate and up of two activation forms: gate and up
 //! each over its own image of `x` [rows x n], the activation on the host, the down over the down's form - `y` [rows x n]
-def public ffn_gpu_gemms(w1, w3, w2 : int64; f1, f3, f2 : int; act : FfnAct; n, nh, rows : int64; x : array<float>; var y : array<float>) {
+def public ffn_gpu_gemms(w1, w3, w2 : int64; f1, f3, f2 : int; act : FfnAct; n, nh, rows : int64; x : array<float>; @scratch var y : array<float>) {
     g_sh_g |> grow_resize(rows * nh)
     g_sh_u |> grow_resize(rows * nh)
     y |> grow_resize(rows * n)
@@ -891,7 +891,7 @@ def public ffn_gpu_gemms(w1, w3, w2 : int64; f1, f3, f2 : int; act : FfnAct; n, 
 }
 
 //! Layer `l`'s shared expert as `ffn_gpu_gemms` over the planes the tier holds for it
-def public shexp_gpu_gemms(t : Model; l, rows : int64; x : array<float>; var y : array<float>) {
+def public shexp_gpu_gemms(t : Model; l, rows : int64; x : array<float>; @scratch var y : array<float>) {
     let p = moe_gpu_shexp_planes(l)
     ffn_gpu_gemms(p.o1, p.o3, p.o2, p.f1, p.f3, p.f2, t.config.ffn_act, t.config.dim, t.config.n_ff_shexp, rows, x, y)
     g_shexp_gpu_gemm_rows += rows

@@ -372,45 +372,45 @@ struct ParakeetState {
     enc_gen : uint64   //!< the device rows' generation the last encode left (`tower_rows_gen`), 0 for none
     // mel
     mel : WhisperMel = WhisperMel()
-    pre : array<float>
-    padded : array<float>
+    @scratch @exact_size pre : array<float>
+    @scratch @exact_size padded : array<float>
     // conv subsampling
-    y0 : array<float>
-    y2 : array<float>
-    y3 : array<float>
-    y5 : array<float>
-    y6 : array<float>
-    xf : array<float>
+    @scratch @exact_size y0 : array<float>
+    @scratch @exact_size y2 : array<float>
+    @scratch @exact_size y3 : array<float>
+    @scratch @exact_size y5 : array<float>
+    @scratch @exact_size y6 : array<float>
+    @scratch @exact_size xf : array<float>
     // encoder residual (holds the final encoder rows after the last layer) + scratch
-    x : array<float>
-    xb : array<float>
-    h : array<float>
-    qq : array<float>
-    kk : array<float>
-    vv : array<float>
-    pos_emb : array<float>
+    @scratch @exact_size x : array<float>
+    @scratch @exact_size xb : array<float>
+    @scratch @exact_size h : array<float>
+    @scratch @exact_size qq : array<float>
+    @scratch @exact_size kk : array<float>
+    @scratch @exact_size vv : array<float>
+    @pool @exact_size pos_emb : array<float>
     pos_tt : int64              //!< the frame count `pos_emb` holds the table of (0 = none), at width `pos_d`, its quantized image `pos_image`
     pos_d : int64
     pos_image : PkPosImage
-    posq : array<int8>
-    poss : array<float>
-    posbs : array<int>          //!< the kq lane's Q8_K image of the table: its per-16 sums
-    posl : array<float>
-    qu : array<float>
-    qv : array<float>
-    vh : array<float>
-    kt : array<float>
-    sc : array<float>
-    rl : array<float>
-    posh : array<float>
-    oh : array<float>
-    ao : array<float>
+    @pool @exact_size posq : array<int8>
+    @pool @exact_size poss : array<float>
+    @pool @exact_size posbs : array<int>          //!< the kq lane's Q8_K image of the table: its per-16 sums
+    @scratch @exact_size posl : array<float>
+    @scratch @exact_size qu : array<float>
+    @scratch @exact_size qv : array<float>
+    @scratch @exact_size vh : array<float>
+    @scratch @exact_size kt : array<float>
+    @scratch @exact_size sc : array<float>
+    @scratch @exact_size rl : array<float>
+    @scratch @exact_size posh : array<float>
+    @scratch @exact_size oh : array<float>
+    @scratch @exact_size ao : array<float>
     // q8 activation image (q/k/v share one requant; decode reuses it)
-    xqi : array<int8>
-    xsi : array<float>
-    xbsi : array<int>   //!< the Q8_K image's per-16 sums (the kq lane's; empty on the others)
+    @scratch @exact_size xqi : array<int8>
+    @scratch @exact_size xsi : array<float>
+    @scratch @exact_size xbsi : array<int>   //!< the Q8_K image's per-16 sums (the kq lane's; empty on the others)
     // decode
-    encp : array<float>
+    @scratch @exact_size encp : array<float>
     @scratch toks : array<ParakeetToken>
     dec : RnntState = RnntState()
 }
@@ -1179,7 +1179,7 @@ def parakeet_log_mel(samples : array<float> | #; m : ParakeetModel; var st : Par
 // c0: conv2d k3 s2 p1, fused bias+relu. w tap-major [9][cout] (repacked at load, L1-resident);
 // bit-exact vs the old im2col+K9-GEMM+bias+relu chain and 6.5x faster even single-lane
 // (conv_sub_bench); threads over oy rows (bit-exact at any lane count).
-def private pk_conv2d_c1_s2_relu(var out : array<float>; x : array<float>; blob : PlaneF;
+def private pk_conv2d_c1_s2_relu(@scratch var out : array<float>; x : array<float>; blob : PlaneF;
                                  w_off, b_off : int64; iw, ih, cout : int64) {
     let ow = conv_s2_out(iw)
     let oh = conv_s2_out(ih)
@@ -1261,7 +1261,7 @@ def private pk_dw_pos(var op : float?; xp, wp, bp : float const?; oy, ox, iw, ih
 // depthwise conv2d k3 s2 p1, w tap-major [9][ch] (repacked at load): float4 over the
 // contiguous channel axis, 9 taps unrolled, guarded borders (isolated bench: 7.2x scalar);
 // interior threads over oy rows (independent — bit-exact at any lane count)
-def private pk_conv2d_dw_s2(var out : array<float>; x : array<float>; blob : PlaneF;
+def private pk_conv2d_dw_s2(@scratch var out : array<float>; x : array<float>; blob : PlaneF;
                             w_off, b_off : int64; iw, ih, ch : int64) {
     let ow = conv_s2_out(iw)
     let oh = conv_s2_out(ih)
@@ -1580,7 +1580,7 @@ def parakeet_tdt_decode(m : ParakeetModel; var st : ParakeetState; n_frames : in
     let d = m.n_state
     let pd = m.n_pred_dim
     let enc = RnntEnc(d = d, w = m.joint_enc_w, b = m.joint_enc_b, q8 = (m.q8 || m.kq_lane) && !m.jenc_exact, gen = st.enc_gen)
-    rnnt_decode(pk_rnnt_net(m), st.dec, enc, st.x, st.encp, n_frames, st.toks) $(var encp) {
+    rnnt_decode(pk_rnnt_net(m), st.dec, enc, st.x, st.encp, n_frames, st.toks) $(@scratch var encp) {
         pk_cpu_refuse(m, "joint's encoder projection")
         let ts_encp = ref_time_ticks()
         ensure_length(encp, n_frames * pd)

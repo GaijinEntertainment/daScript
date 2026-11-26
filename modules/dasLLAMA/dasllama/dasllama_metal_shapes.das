@@ -333,7 +333,7 @@ def dn_metal_ok(t : Model) : bool {
 //! layer `l`'s plane (`words`) in format `f` named by layer, site and `KqFmt` member where this home has no one-row GEMV for it at
 //! K `kdim`; "" where it has one
 def private one_row_unserved(l : int64; words : string; f : KqFmt; kdim : int64) : string =>
-    kq_fmt_one_row_gemv(f, kdim) ? "" : "layer {l}'s {words} plane is {f}"
+    kq_fmt_one_row_gemv(f, kdim) ? "" : "layer {l}'s {words} plane is {f}"   // nolint:PERF026,LINT019 - a decline reason (an error message); fires from the hot callers' compiles
 
 //! the first recurrent layer's deltanet plane this home has no one-row GEMV for, named by layer, site and `KqFmt` member; "" when
 //! every one has its GEMV - `dn_metal_ok` refuses the hybrid on it, and the gates decline `graph`

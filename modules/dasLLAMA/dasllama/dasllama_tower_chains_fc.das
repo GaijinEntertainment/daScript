@@ -125,6 +125,13 @@ struct TowerFcSeat {
 //! a device block piece of the FastConformer chain on home `home` (`vk`, `cu`)
 def tower_fc_piece(home, name : string) : string => "{home}.fc.{name}"
 
+//! the kq lane's format word piece; the bake writes it and the chains read it
+def tower_fc_kq_fmts_piece(home : string) : string => tower_fc_piece(home, "kq.fmts")
+
+//! the q8 lane's quant plane piece and its scales piece
+def tower_fc_wq_piece(home : string) : string => tower_fc_piece(home, "wq")
+def tower_fc_ws_piece(home : string) : string => tower_fc_piece(home, "ws")
+
 //! a K-quant member's device planes' piece names
 def tower_fc_kq_piece(home : string; fmt : int; scales : bool) : string => scales ? "{home}.fc.kq.{fmt}.s" : "{home}.fc.kq.{fmt}.q"
 
@@ -154,9 +161,9 @@ def tower_fc_of_cn(t : CanaryEncoder; @scratch @exact_size var offs : array<Cana
         proj_w = t.proj_w, proj_b = t.proj_b, proj_dim = t.proj_dim, dev_backend = t.dev_backend, dev = t.dev, devplan = t.devplan)
 }
 
-//! parakeet's chain descriptor on `home`'s image: block offsets on canary's record into `offs`, a CPU kq image's record seats into `gseats`
+//! parakeet's chain descriptor on a home's image, `kq_fmts_piece` its `tower_fc_kq_fmts_piece(home)`: block offsets on canary's record into `offs`, a CPU kq image's record seats into `gseats`
 [arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
-def tower_fc_of_pk(m : ParakeetModel; home : string; @scratch @exact_size var offs : array<CanaryLayerOffs>; @scratch @exact_size var gseats : array<TowerGemmSeat>) : TowerFc {
+def tower_fc_of_pk(m : ParakeetModel; kq_fmts_piece : string; @scratch @exact_size var offs : array<CanaryLayerOffs>; @scratch @exact_size var gseats : array<TowerGemmSeat>) : TowerFc {
     offs |> grow_resize(m.n_layer)
     for (l in range64(m.n_layer)) {
         offs[l] = pk_fc_layer(pk_layer_offsets(m, l))
@@ -167,7 +174,7 @@ def tower_fc_of_pk(m : ParakeetModel; home : string; @scratch @exact_size var of
     if (nseats > 0l) {
         kq_fmts = parakeet_fc_record_seats(m, gseats)
     } elif (m.kq_lane) {
-        kq_fmts = uint(tower_dev_word(m.dev, m.devplan, tower_fc_piece(home, "kq.fmts"), 0l))
+        kq_fmts = uint(tower_dev_word(m.dev, m.devplan, kq_fmts_piece, 0l))
     }
     return TowerFc(family = "parakeet", front_name = "parakeet-front", q8 = m.q8, qblob = m.qblob, qscales = m.qscales, blob = m.blob,
         kq_lane = m.kq_lane, kq = m.kq_lane ? m.kq : PlaneU8(), ks = m.kq_lane ? m.ks : PlaneU8(), kq_repacked = m.kq_repacked, kq_fmts = kq_fmts,
@@ -178,8 +185,8 @@ def tower_fc_of_pk(m : ParakeetModel; home : string; @scratch @exact_size var of
         dev_backend = m.dev_backend, dev = m.dev, devplan = m.devplan)
 }
 
-//! GigaAM's chain descriptor on home `home`'s image, offsets into `offs`; a CPU image's kq lane fills `gseats`, a GPU image carries its own
-def tower_fc_of_ga(m : GigaamModel; home : string; @scratch @exact_size var offs : array<CanaryLayerOffs>; @scratch @exact_size var gseats : array<TowerGemmSeat>) : TowerFc {
+//! GigaAM's chain descriptor on a home's image, `kq_fmts_piece` its `tower_fc_kq_fmts_piece(home)`, offsets into `offs`; a CPU image's kq lane fills `gseats`, a GPU image carries its own
+def tower_fc_of_ga(m : GigaamModel; kq_fmts_piece : string; @scratch @exact_size var offs : array<CanaryLayerOffs>; @scratch @exact_size var gseats : array<TowerGemmSeat>) : TowerFc {
     offs |> grow_resize(m.n_layer)
     for (l in range64(m.n_layer)) {
         offs[l] = gigaam_layer_offsets(m, l)
@@ -187,7 +194,7 @@ def tower_fc_of_ga(m : GigaamModel; home : string; @scratch @exact_size var offs
     let nseats = m.kq_lane && m.dev_backend == TowerDev.none ? m.n_layer * FC_GEMM_RECORDS : 0l
     gseats |> grow_resize(nseats)
     let kq_fmts = (nseats > 0l ? gigaam_fc_record_seats(m, gseats)
-        : uint(tower_dev_word(m.dev, m.devplan, tower_fc_piece(home, "kq.fmts"), 0l)))
+        : uint(tower_dev_word(m.dev, m.devplan, kq_fmts_piece, 0l)))
     let f16w = !m.q8 && m.gemm_f16
     return TowerFc(family = "gigaam", front_name = "gigaam-front", q8 = m.q8, qblob = m.qblob, qscales = m.qscales, blob = m.blob,
         f16w = f16w, wblob = f16w ? m.wblob : PlaneU16(), w_off = m.gemm_off, w_n = f16w ? m.n_layer * m.gemm_stride : 0l,
@@ -273,7 +280,7 @@ def tower_fc_bake(fc : TowerFc; offs : array<CanaryLayerOffs>; gseats : array<To
         tower_dev_put(b, tower_fc_piece(home, "kq.seats"), seats)
         delete seats
         let fmts = [int64(fc.kq_fmts)]
-        tower_dev_put(b, tower_fc_piece(home, "kq.fmts"), fmts)
+        tower_dev_put(b, tower_fc_kq_fmts_piece(home), fmts)
         for (fmt, qb in keys(p.qbytes), values(p.qbytes)) {
             var kq, ks : array<uint8>
             tower_fc_gather_kq_member(fc, recs, gseats, fmt, p.seats, qb, p.sbytes?[fmt] ?? 0l, kq, ks)
@@ -294,8 +301,8 @@ def tower_fc_bake(fc : TowerFc; offs : array<CanaryLayerOffs>; gseats : array<To
         tower_gather_q8_regions(fc.qblob, fc.qscales, regions, lay, wq, ws)
     }
     if (!empty(wq)) {
-        tower_dev_put(b, tower_fc_piece(home, "wq"), wq)
-        tower_dev_put(b, tower_fc_piece(home, "ws"), ws)
+        tower_dev_put(b, tower_fc_wq_piece(home), wq)
+        tower_dev_put(b, tower_fc_ws_piece(home), ws)
     }
     delete wq
     delete ws
@@ -325,7 +332,7 @@ def tower_cn_front_bake(fc : TowerFc; var b : TowerDevBuild; home : string) {
     tower_stage_conv0_panel(slab, fc.blob, fc.c0_w, fc.nch, 64l, fc.tap_major)
     var inscope slab16 <- cvt_f32_to_f16_sat_array(slab)
     delete slab
-    tower_dev_put(b, tower_fc_piece(home, "front16"), unsafe(addr<uint8 const?>(slab16[0])), long_length(slab16) * 2l)
+    tower_dev_put(b, tower_front16_piece(home, "fc"), unsafe(addr<uint8 const?>(slab16[0])), long_length(slab16) * 2l)
 }
 
 //! GigaAM's device-mel twin piece: the DFT twiddles [n_fft][2 n_bins], the window behind them (`tower_ga_mel_woff`)
@@ -348,7 +355,7 @@ def tower_ga_front_bake(m : GigaamModel; var b : TowerDevBuild; home : string) :
     tower_stage_f32_pad_row_stride(slab, m.blob, m.c2_w, nch * kd0, d, k * nch, kd2)
     var inscope slab16 <- cvt_f32_to_f16_sat_array(slab)
     delete slab
-    tower_dev_put(b, tower_fc_piece(home, "front16"), unsafe(addr<uint8 const?>(slab16[0])), long_length(slab16) * 2l)
+    tower_dev_put(b, tower_front16_piece(home, "fc"), unsafe(addr<uint8 const?>(slab16[0])), long_length(slab16) * 2l)
     var inscope twin : array<float>
     twin |> reserve(ntw + m.n_fft)
     for (i in range64(ntw)) {

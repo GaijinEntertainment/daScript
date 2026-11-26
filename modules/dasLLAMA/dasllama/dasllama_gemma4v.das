@@ -87,23 +87,23 @@ struct Gemma4vTower {
 
 //! Per-encode scratch, caller-owned like the audio EncoderState; sized to the largest canvas seen.
 struct Gemma4vState {
-    @exact_size x0 : array<float>    // [npos × patch_dim] im2col rows (scaled to [-1, 1])
-    @exact_size x : array<float>     // residual stream [npos × d]
-    @exact_size xb : array<float>    // norm / projection out [npos × d]
-    @exact_size xb2 : array<float>   // attention out [npos × d]
-    @exact_size xc : array<float>    // clamped GEMM input [npos × max(d, ff)]
-    @exact_size qq : array<float>
-    @exact_size kk : array<float>
-    @exact_size vv : array<float>
-    @exact_size hp : array<float>    // attention per-head packs
+    @scratch @exact_size x0 : array<float>    // [npos × patch_dim] im2col rows (scaled to [-1, 1])
+    @scratch @exact_size x : array<float>     // residual stream [npos × d]
+    @scratch @exact_size xb : array<float>    // norm / projection out [npos × d]
+    @scratch @exact_size xb2 : array<float>   // attention out [npos × d]
+    @scratch @exact_size xc : array<float>    // clamped GEMM input [npos × max(d, ff)]
+    @scratch @exact_size qq : array<float>
+    @scratch @exact_size kk : array<float>
+    @scratch @exact_size vv : array<float>
+    @scratch @exact_size hp : array<float>    // attention per-head packs
     @scratch @exact_size att : array<float>   // attention score blocks
-    @exact_size hg : array<float>    // ffn gate, then the GEGLU product [npos × ff]
-    @exact_size hu : array<float>    // ffn up [npos × ff]
-    @exact_size pooled : array<float>  // [nout × d]
+    @scratch @exact_size hg : array<float>    // ffn gate, then the GEGLU product [npos × ff]
+    @scratch @exact_size hu : array<float>    // ffn up [npos × ff]
+    @scratch @exact_size pooled : array<float>  // [nout × d]
     @scratch @exact_size xqi : array<int8>    // q8 lane: the requantized GEMM input [npos × max(d, ff)], grown per site
     @scratch @exact_size xsi : array<float>   // its per-32-block scales
-    @exact_size cos_x : array<float>; @exact_size sin_x : array<float>   // rope tables for the current grid
-    @exact_size cos_y : array<float>; @exact_size sin_y : array<float>
+    @pool @exact_size cos_x : array<float>; @pool @exact_size sin_x : array<float>   // rope tables for the current grid
+    @pool @exact_size cos_y : array<float>; @pool @exact_size sin_y : array<float>
     @scratch pos_x : array<int64>; @scratch pos_y : array<int64>   // the grid's patch columns / rows
     grid_w : int64       // the grid the tables were built for (0 = none yet)
     grid_h : int64
@@ -728,7 +728,7 @@ def private g4v_stem_finish(t : Gemma4vTower; var s : Gemma4vState; npos, n_cols
 
 // the tail: Gemma4VisionPooler (merge×merge mean, ×√d), the std guard, then the
 // Gemma4MultimodalEmbedder (weightless rms → clamped projection) into out; returns nout
-def private g4v_tail(t : Gemma4vTower; var s : Gemma4vState; n_cols, n_rows : int64; var out : array<float>) : int64 {
+def private g4v_tail(t : Gemma4vTower; var s : Gemma4vState; n_cols, n_rows : int64; @scratch var out : array<float>) : int64 {
     tower_cpu_refuse(t, "dasLLAMA gemma4v", "tail")
     let d = t.n_embd
     let nout = avg_pool2d_rows(s.pooled, s.x, n_cols, n_rows, d, t.merge)
@@ -759,7 +759,7 @@ def private g4v_tail(t : Gemma4vTower; var s : Gemma4vState; n_cols, n_rows : in
 //! [nout × proj_dim] soft tokens. Returns nout = (w/48)×(h/48) (patch 16 × merge 3).
 [hot_path]
 def gemma4v_encode(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h : int64;
-                   var out : array<float>) : int64 {
+                   @scratch var out : array<float>) : int64 {
     let span = t.patch * t.merge
     if (w % span != 0l || h % span != 0l) {
         panic("dasLLAMA gemma4v: canvas {w}x{h} is not a multiple of the {span}px pooled patch - letterbox first")
@@ -813,7 +813,7 @@ def gemma4v_encode(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>
 //! `out` = nout × proj_dim soft tokens (returns nout); `tag` names the `DASLLAMA_VISION_DUMP`
 //! artifact. `add_user_image` is this plus queueing onto a chat turn.
 def encode_image_(t : Gemma4vTower; var s : Gemma4vState; img : VisionImage; tag : string;
-                  var out : array<float>) : int64 {
+                  @scratch var out : array<float>) : int64 {
     if (img.width <= 0 || img.height <= 0) {
         panic("dasLLAMA gemma4v: encode_image_ got an empty image (decode failed?)")
     }

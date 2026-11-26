@@ -79,21 +79,21 @@ struct Qwen25vTower {
 
 //! Per-encode scratch, caller-owned; sized to the largest canvas seen.
 struct Qwen25vState {
-    @exact_size x0 : array<float>    // [npos × q25v_patch_pad] im2col rows (zero pad lanes)
-    @exact_size xn : array<float>    // conv out, natural patch order [npos × d]
-    @exact_size x : array<float>     // residual stream, WINDOW-sorted [npos × d]
-    @exact_size xb : array<float>    // norm / GEMM out [npos × d]
-    @exact_size xb2 : array<float>   // attention out [npos × d]
-    @exact_size qq : array<float>
-    @exact_size kk : array<float>
-    @exact_size vv : array<float>
-    @exact_size hp : array<float>
+    @scratch @exact_size x0 : array<float>    // [npos × q25v_patch_pad] im2col rows (zero pad lanes)
+    @scratch @exact_size xn : array<float>    // conv out, natural patch order [npos × d]
+    @scratch @exact_size x : array<float>     // residual stream, WINDOW-sorted [npos × d]
+    @scratch @exact_size xb : array<float>    // norm / GEMM out [npos × d]
+    @scratch @exact_size xb2 : array<float>   // attention out [npos × d]
+    @scratch @exact_size qq : array<float>
+    @scratch @exact_size kk : array<float>
+    @scratch @exact_size vv : array<float>
+    @scratch @exact_size hp : array<float>
     @scratch @exact_size att : array<float>
-    @exact_size hg : array<float>    // ffn gate [npos × ff]
-    @exact_size hu : array<float>    // ffn up [npos × ff]
-    @exact_size m0 : array<float>    // merger mid [nout × 4d]
-    @exact_size mout : array<float>  // merger out, window-sorted [nout × proj] — un-sorted into the caller's out
-    @exact_size cos_t : array<float>; @exact_size sin_t : array<float>
+    @scratch @exact_size hg : array<float>    // ffn gate [npos × ff]
+    @scratch @exact_size hu : array<float>    // ffn up [npos × ff]
+    @scratch @exact_size m0 : array<float>    // merger mid [nout × 4d]
+    @scratch @exact_size mout : array<float>  // merger out, window-sorted [nout × proj] — un-sorted into the caller's out
+    @pool @exact_size cos_t : array<float>; @pool @exact_size sin_t : array<float>
     @scratch pos2 : array<int2>      // per sorted row: (patch row, patch column)
     @scratch src_of : array<int64>   // per sorted row: source patch index in conv order
     @scratch win_lo : array<int64>   // per window: first sorted PATCH row (win_lo[i]..win_lo[i+1])
@@ -619,7 +619,7 @@ def register_qwen25v_gpu(fn : Qwen25vGpuChainFn) {
 //! [nout × proj_dim] soft tokens; returns nout = (w/28)×(h/28). Oracle fixtures skip the normalize.
 [hot_path]
 def qwen25v_encode(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>; w, h : int64;
-                   var out : array<float>) : int64 {
+                   @scratch var out : array<float>) : int64 {
     let span = t.patch * t.merge
     if (w % span != 0l || h % span != 0l) {
         panic("dasLLAMA qwen25v: canvas {w}x{h} is not a multiple of the {span}px merged patch - letterbox first")
@@ -668,7 +668,7 @@ def qwen25v_encode(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>
 //! The whole image path in one call: geometry → letterbox → per-channel CLIP normalize →
 //! ``qwen25v_encode`` into ``out`` (returns nout). Budget = the family's [8, 4096].
 def encode_image_(t : Qwen25vTower; var s : Qwen25vState; img : VisionImage; tag : string;
-                  var out : array<float>) : int64 {
+                  @scratch var out : array<float>) : int64 {
     if (img.width <= 0 || img.height <= 0) {
         panic("dasLLAMA qwen25v: encode_image_ got an empty image (decode failed?)")
     }

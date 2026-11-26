@@ -101,24 +101,24 @@ struct Qwen3vTower {
 
 //! Per-encode scratch, caller-owned; sized to the largest canvas seen.
 struct Qwen3vState {
-    @exact_size x0 : array<float>    // [npos × patch_dim] im2col rows
-    @exact_size xn : array<float>    // conv out, natural patch order [npos × d]
-    @exact_size x : array<float>     // residual stream, merge-reordered [npos × d]
-    @exact_size xb : array<float>    // norm / GEMM out [npos × d]
-    @exact_size xb2 : array<float>   // attention out [npos × d]
-    @exact_size qkv : array<float>   // fused qkv GEMM out [npos × 3d]
-    @exact_size qq : array<float>
-    @exact_size kk : array<float>
-    @exact_size vv : array<float>
-    @exact_size hp : array<float>
+    @scratch @exact_size x0 : array<float>    // [npos × patch_dim] im2col rows
+    @scratch @exact_size xn : array<float>    // conv out, natural patch order [npos × d]
+    @scratch @exact_size x : array<float>     // residual stream, merge-reordered [npos × d]
+    @scratch @exact_size xb : array<float>    // norm / GEMM out [npos × d]
+    @scratch @exact_size xb2 : array<float>   // attention out [npos × d]
+    @scratch @exact_size qkv : array<float>   // fused qkv GEMM out [npos × 3d]
+    @scratch @exact_size qq : array<float>
+    @scratch @exact_size kk : array<float>
+    @scratch @exact_size vv : array<float>
+    @scratch @exact_size hp : array<float>
     @scratch @exact_size att : array<float>
-    @exact_size hu : array<float>    // ffn up, GELU'd in place [npos × ff]
-    @exact_size m0 : array<float>    // merger mid [nout × 4d]
-    @exact_size ds_mid : array<float>    // deepstack tap: LayerNorm out [nout × 4d] (m0 takes the fc1 out)
-    @exact_size ds_slice : array<float>  // deepstack tap / main-merger staging [nout × proj]
+    @scratch @exact_size hu : array<float>    // ffn up, GELU'd in place [npos × ff]
+    @scratch @exact_size m0 : array<float>    // merger mid [nout × 4d]
+    @scratch @exact_size ds_mid : array<float>    // deepstack tap: LayerNorm out [nout × 4d] (m0 takes the fc1 out)
+    @scratch @exact_size ds_slice : array<float>  // deepstack tap / main-merger staging [nout × proj]
     @scratch @exact_size pos_rs : array<float>   // the pos table resized to the grid [npos × d]
-    @exact_size cos_t : array<float>; @exact_size sin_t : array<float>
-    @exact_size ds_stash : array<float>  // GPU arm: each tap merger's proj output [n_ds × nout × proj]
+    @pool @exact_size cos_t : array<float>; @pool @exact_size sin_t : array<float>
+    @scratch @exact_size ds_stash : array<float>  // GPU arm: each tap merger's proj output [n_ds × nout × proj]
     @scratch @exact_size xqi : array<int8>    // q8 lane: the requantized GEMM input, grown per site
     @scratch @exact_size xsi : array<float>   // its per-32-block scales
     @scratch pos2 : array<int2>      // per reordered row: (patch row, patch column)
@@ -864,7 +864,7 @@ def private q3v_scatter_slice(t : Qwen3vTower; src : array<float>; var out : arr
 
 // the tail: post-LN, then the 2×2 merger MLP (rows are already merge-adjacent, so the ×4
 // reshape is a flat reinterpretation) into out; returns nout
-def private q3v_tail(t : Qwen3vTower; var s : Qwen3vState; npos : int64; var out : array<float>) : int64 {
+def private q3v_tail(t : Qwen3vTower; var s : Qwen3vState; npos : int64; @scratch var out : array<float>) : int64 {
     tower_cpu_refuse(t, "dasLLAMA qwen3v", "tail")
     let d = t.n_embd
     let nout = npos / 4l
@@ -884,7 +884,7 @@ def private q3v_tail(t : Qwen3vTower; var s : Qwen3vState; npos : int64; var out
 //! slice k+1 = tap k); returns nout = (w/32)×(h/32). Oracle fixtures skip the normalize.
 [hot_path]
 def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w, h : int64;
-                  var out : array<float>) : int64 {
+                  @scratch var out : array<float>) : int64 {
     let span = t.patch * t.merge
     if (w % span != 0l || h % span != 0l) {
         panic("dasLLAMA qwen3v: canvas {w}x{h} is not a multiple of the {span}px merged patch - letterbox first")
@@ -964,7 +964,7 @@ def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w
 //! `qwen3v_encode` into `out` (returns nout). The token budget is the FAMILY's [8, 4096],
 //! not the gemma-scoped DASLLAMA_VISION_* knobs.
 def encode_image_(t : Qwen3vTower; var s : Qwen3vState; img : VisionImage; tag : string;
-                  var out : array<float>) : int64 {
+                  @scratch var out : array<float>) : int64 {
     if (img.width <= 0 || img.height <= 0) {
         panic("dasLLAMA qwen3v: encode_image_ got an empty image (decode failed?)")
     }

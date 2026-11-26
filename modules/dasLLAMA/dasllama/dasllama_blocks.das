@@ -2058,7 +2058,7 @@ def trim_planar_guard(t : Model; l : int64; what : string) {
 }
 
 //! the expert plane at `eoff` of the stack at `base` copied in the device layout off the tier's pinned mirror into `wq` / `ws`; false where the stack is not device-served, and the caller gathers off the planar planes
-def rare_expert_slot_copy(t : Model; f : KqFmt; n, rows, base, eoff : int64; var wq : array<uint8>; var ws : array<uint8>) : bool {
+def rare_expert_slot_copy(t : Model; f : KqFmt; n, rows, base, eoff : int64; @scratch var wq : array<uint8>; @scratch var ws : array<uint8>) : bool {
     return false if (!rare_arena_on() || !rm_dev_serves(f) || !moe_gpu_stream_fetch(base, int(f), (eoff - base) / (t.config.dim * t.config.n_ff_exp)))
     let p = rare_plane(t, f, n, base).p   //! after the fetch: the ring the view carries may be born by it
     return false if (!p.dev_layout)
@@ -2309,7 +2309,7 @@ def moe_prefill_rare_rows(t : Model; var s : Session; l, lo, hi : int64) {
 }
 
 //! the pairs of regions [lo, hi] of s.moe_ord: each row's expert, its bucket row and its position
-def private rare_pairs(s : Session; k, lo, hi : int64; var pe : array<int64>; var pb : array<int64>; var pp : array<int64>) : int64 {
+def private rare_pairs(s : Session; k, lo, hi : int64; @scratch var pe : array<int64>; @scratch var pb : array<int64>; @scratch var pp : array<int64>) : int64 {
     var np = 0l
     for (r in range64(lo, hi + 1l)) {
         np += int64(s.moe_ord[r].y)
@@ -2862,7 +2862,7 @@ var private @scratch g_up_bq : array<int8>   //! the up stacks' own bucket-row i
 var private @scratch g_up_bs : array<float>
 
 //! the bucket rows' image off one form's quantized rows (`unit` elements a scale): bucket row r reads position bkt[r] / k
-def private moe_gather_image(bkt : array<int64>; xq : array<int8>; xs : array<float>; nk, dim, k, unit : int64; var gq : array<int8>; var gs : array<float>) {
+def private moe_gather_image(bkt : array<int64>; xq : array<int8>; xs : array<float>; nk, dim, k, unit : int64; @scratch var gq : array<int8>; @scratch var gs : array<float>) {
     let nb = dim / unit
     gq |> grow_resize(nk * dim)
     gs |> grow_resize(nk * nb)

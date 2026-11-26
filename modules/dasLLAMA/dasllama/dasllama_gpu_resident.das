@@ -3732,7 +3732,7 @@ def gpu_resident_assist_commit(s : Session) {
 def gpu_resident_assist_rows() : int64 => g_rdec_active ? rdec_token_n_rows() : 0l
 
 //! position `pos`'s cos/sin plane on the armed driver (every rope class end to end, `resident_cos_elems` floats) into `dst` from `base`
-def gpu_resident_rope_row(t : Model; pos : int64; @exact_size var dst : array<float>; base : int64) {
+def gpu_resident_rope_row(t : Model; pos : int64; @scratch @exact_size var dst : array<float>; base : int64) {
     dst |> grow_resize(base + g_rdec_cos_elems)
     rdec_rope_rows(t, pos, dst, base)
 }
@@ -4596,7 +4596,7 @@ def private resident_hot_arm(t : Model; plan : ResidentPlan) {
 }
 
 //! expert `e`'s plane of `kind` on layer `l`, gathered in device layout into `wq` / `ws`
-def private rdec_hot_gather(t : Model; l : int64; kind, e : int; var wq : array<uint8>; var ws : array<uint8>) {
+def private rdec_hot_gather(t : Model; l : int64; kind, e : int; @scratch var wq : array<uint8>; @scratch var ws : array<uint8>) {
     let p = resident_expert_plane(t, l, kind)
     return if (rare_expert_slot_copy(t, p.f, p.n, p.rows, p.off, p.off + int64(e) * p.n * p.rows, wq, ws))
     trim_planar_guard(t, l, "the hot pool's slot fill") if (t.planes_trimmed)

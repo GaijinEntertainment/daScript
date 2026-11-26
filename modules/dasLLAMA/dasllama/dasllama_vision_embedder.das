@@ -184,7 +184,7 @@ def vision_mrope_grid(e : VisionEmbedder; s : VisionState) : int2 {
 //! The whole image path for the carried family: geometry → letterbox → normalize → the family's
 //! encode into ``out`` = nout × proj_dim soft tokens (returns nout). ``tag`` names the
 //! ``DASLLAMA_VISION_DUMP`` artifact. Panics on the text-only arm.
-def encode_image_(e : VisionEmbedder; var s : VisionState; img : VisionImage; tag : string; var out : array<float>) : int64 {
+def encode_image_(e : VisionEmbedder; var s : VisionState; img : VisionImage; tag : string; @scratch var out : array<float>) : int64 {
     if (e.kind == VisionKind.gemma4uv) return encode_image_(e.gemma4uv, s.gemma4uv, img, tag, out)
     if (e.kind == VisionKind.gemma4v) return encode_image_(e.gemma4v, s.gemma4v, img, tag, out)
     if (e.kind == VisionKind.gemma3v) return encode_image_(e.gemma3v, s.gemma3v, img, tag, out)

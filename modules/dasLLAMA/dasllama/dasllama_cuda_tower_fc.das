@@ -49,6 +49,8 @@ struct private CufResident {
     fsched : CutBuf
 }
 
+let private CUT_FC_KQ_FMTS_PIECE = tower_fc_kq_fmts_piece(CUT_HOME)   //! the kq lane's format-word piece, named once
+let private CUT_FC_FRONT16_PIECE = tower_front16_piece(CUT_HOME, "fc")  //! the front convs' f16 slab piece, named once
 var private g_cuf_cn = CufResident(t = CutResident(family = "canary"))
 var private g_cuf_pk = CufResident(t = CutResident(family = "parakeet"))
 var private g_cuf_ga = CufResident(t = CutResident(family = "gigaam"))
@@ -132,9 +134,9 @@ def private cuf_upload(var r : CufResident; fc : TowerFc; key : uint64) : bool {
     if (fc.f16w) {
         cut_up(r.t, r.t.wb, unsafe(reinterpret<void?>(plane_at(fc.wblob, fc.w_off))), fc.w_n * 2l)
     }
-    if (tower_dev_find(fc.devplan, tower_fc_piece(CUT_HOME, "wq")).off >= 0l) {
-        cut_put_piece(r.t, r.t.wq, fc, tower_fc_piece(CUT_HOME, "wq"))
-        cut_put_piece(r.t, r.t.ws, fc, tower_fc_piece(CUT_HOME, "ws"))
+    if (tower_dev_find(fc.devplan, tower_fc_wq_piece(CUT_HOME)).off >= 0l) {
+        cut_put_piece(r.t, r.t.wq, fc, tower_fc_wq_piece(CUT_HOME))
+        cut_put_piece(r.t, r.t.ws, fc, tower_fc_ws_piece(CUT_HOME))
     }
     tower_fc_dev_seats(fc, CUT_HOME, r.kq_seats)
     var m = 0
@@ -298,7 +300,7 @@ def private cuf_proj(var r : CufResident; fc : TowerFc; npos : int64; @scratch @
 //! the canary / parakeet front's slabs for the key, where its planes carry none yet (`r.t.front`): the f16 conv0 panel, canary's twiddles, the filters
 [cold_path]
 def private cuf_cn_slab(var r : CufResident; fc : TowerFc) : bool {
-    cut_put_piece(r.t, r.t.fw16, fc, tower_fc_piece(CUT_HOME, "front16"))
+    cut_put_piece(r.t, r.t.fw16, fc, CUT_FC_FRONT16_PIECE)
     if (fc.device_mel) {
         cp_up(r.t, r.p, TowerBuf.twiddle, unsafe(reinterpret<void?>(plane_at(fc.twiddles, 0l))), fc.n_fft * 2l * fc.n_fb * 4l)
     }
@@ -363,7 +365,7 @@ def private cuf_front_rows_stay(r : CufResident; var x : array<float>; bytes : i
 
 //! the canary / parakeet front's seat (`tower_fc_front`) off `src` into `x`: the frame count, or -1 counted - uncounted where the blocks would not admit
 [arch(at = "../ARCHITECTURE_GPU_TOWER_RAIL.md#fc-chains")]
-def private cuf_fc_front(var r : CufResident; fc : TowerFc; src : float const?; src_elems, n_len, n_valid : int64; var x : array<float>; blocks_behind : bool) : int64 {
+def private cuf_fc_front(var r : CufResident; fc : TowerFc; src : float const?; src_elems, n_len, n_valid : int64; @scratch var x : array<float>; blocks_behind : bool) : int64 {
     let nch = fc.nch
     let d = fc.d
     let g = tower_fc_geom(n_len, fc.n_mel)
@@ -438,7 +440,7 @@ def private cuda_parakeet_encode(m : ParakeetModel; var st : ParakeetState) : in
         cut_decline(r.t, TowerDecline.shape)
         return -1l
     }
-    let fc = tower_fc_of_pk(m, CUT_HOME, g_cuf_offs, g_cuf_gseats)
+    let fc = tower_fc_of_pk(m, CUT_FC_KQ_FMTS_PIECE, g_cuf_offs, g_cuf_gseats)
     let tt = cuf_fc_front(r, fc, unsafe(addr<float const?>(st.mel.data[0])), long_length(st.mel.data), st.mel.n_len, st.mel.n_len, st.x, true)
     let first = !r.t.served_said   //! read past the front, whose attach re-keys the resident
     if (tt < 0l || !cuf_blocks(r, fc, st.x, tt, 2l * tt - 1l)) {
@@ -452,7 +454,7 @@ def private cuda_parakeet_encode(m : ParakeetModel; var st : ParakeetState) : in
 //! GigaAM's front slabs for the key, where its planes carry none yet (`r.t.front`): the f16 conv slab, the device mel's twiddles and window (one plane), the filters
 [cold_path]
 def private cuf_ga_slab(var r : CufResident; m : GigaamModel; fc : TowerFc) : bool {
-    cut_put_piece(r.t, r.t.fw16, fc, tower_fc_piece(CUT_HOME, "front16"))
+    cut_put_piece(r.t, r.t.fw16, fc, CUT_FC_FRONT16_PIECE)
     cut_put_piece(r.t, r.p.b[int(TowerBuf.twiddle)], fc, tower_ga_twin_piece(CUT_HOME))
     cp_up(r.t, r.p, TowerBuf.filters, unsafe(reinterpret<void?>(plane_at(fc.filters, 0l))), m.n_mel * (m.n_fft / 2l + 1l) * 4l)
     r.t.front = !r.t.oom
@@ -497,7 +499,7 @@ def cuda_gigaam_mel(m : GigaamModel; samples : array<float>; @exact_size var mel
         cut_decline(r.t, TowerDecline.shape)
         return -1l
     }
-    let fc = tower_fc_of_ga(m, CUT_HOME, g_cuf_offs, g_cuf_gseats)
+    let fc = tower_fc_of_ga(m, CUT_FC_KQ_FMTS_PIECE, g_cuf_offs, g_cuf_gseats)
     return -1l if (!cuf_ga_arm(r, fc, m, n_len))
     cut_htod(r.t.planes.dev, unsafe(addr<void?>(samples[0])), ((n_len - 1l) * m.hop + m.n_fft) * 4l)
     tower_ga_mel(g_cut_rl, m, n_len)
@@ -542,7 +544,7 @@ def private cuda_gigaam_encode(m : GigaamModel; var st : GigaamState; samples : 
     var r & = g_cuf_ga
     g_cuf_rows.bytes = 0l
     return -1l if (!cut_gate(r.t, gigaam_gpu_lane_planes(m), m.dev_backend))
-    let fc = tower_fc_of_ga(m, CUT_HOME, g_cuf_offs, g_cuf_gseats)
+    let fc = tower_fc_of_ga(m, CUT_FC_KQ_FMTS_PIECE, g_cuf_offs, g_cuf_gseats)
     let tt = cuf_ga_front(r, fc, m, st, samples, n_in)
     return -1l if (tt < 0l)
     gigaam_rope_tables(m, st, tt)
@@ -586,7 +588,7 @@ def private cuda_canary_bake(m : CanaryEncoder; var b : TowerDevBuild) : bool {
 
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
 def private cuda_parakeet_bake(m : ParakeetModel; var b : TowerDevBuild) : bool {
-    let fc = tower_fc_of_pk(m, CUT_HOME, g_cuf_offs, g_cuf_gseats)
+    let fc = tower_fc_of_pk(m, CUT_FC_KQ_FMTS_PIECE, g_cuf_offs, g_cuf_gseats)
     tower_fc_bake(fc, g_cuf_offs, g_cuf_gseats, b, CUT_HOME)
     tower_cn_front_bake(fc, b, CUT_HOME)
     return true
@@ -594,7 +596,7 @@ def private cuda_parakeet_bake(m : ParakeetModel; var b : TowerDevBuild) : bool 
 
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
 def private cuda_gigaam_bake(m : GigaamModel; var b : TowerDevBuild) : bool {
-    tower_fc_bake(tower_fc_of_ga(m, CUT_HOME, g_cuf_offs, g_cuf_gseats), g_cuf_offs, g_cuf_gseats, b, CUT_HOME)
+    tower_fc_bake(tower_fc_of_ga(m, CUT_FC_KQ_FMTS_PIECE, g_cuf_offs, g_cuf_gseats), g_cuf_offs, g_cuf_gseats, b, CUT_HOME)
     return tower_ga_front_bake(m, b, CUT_HOME)
 }
 
