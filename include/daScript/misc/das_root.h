@@ -77,13 +77,31 @@ namespace das {
 #if defined(_WIN32)
     //! the UTF-8 `path` as a filesystem path; false when the bytes are not UTF-8 (a sidecar saved in
     //! the ANSI codepage), which the conversion would otherwise throw on
-    inline bool dasWidePath ( const char * path, std::filesystem::path & out ) {
-        try {
-            out = std::filesystem::u8path(path);
-            return true;
-        } catch ( ... ) {
-            return false;
+    inline bool dasIsUtf8 ( const char * path ) {
+        const unsigned char * p = (const unsigned char *) path;
+        while ( *p ) {
+            const unsigned c = *p++;
+            if ( c<0x80 ) continue;
+            int n;
+            unsigned cp;
+            if ( (c & 0xE0)==0xC0 ) { n = 1; cp = c & 0x1F; }
+            else if ( (c & 0xF0)==0xE0 ) { n = 2; cp = c & 0x0F; }
+            else if ( (c & 0xF8)==0xF0 ) { n = 3; cp = c & 0x07; }
+            else return false;
+            for ( int i=0; i!=n; ++i ) {
+                if ( (*p & 0xC0)!=0x80 ) return false;
+                cp = (cp << 6) | (*p++ & 0x3F);
+            }
+            if ( (n==1 && cp<0x80) || (n==2 && cp<0x800) || (n==3 && (cp<0x10000 || cp>0x10FFFF)) ) return false;
+            if ( cp>=0xD800 && cp<=0xDFFF ) return false;
         }
+        return true;
+    }
+
+    inline bool dasWidePath ( const char * path, std::filesystem::path & out ) {
+        if ( !dasIsUtf8(path) ) return false;
+        out = std::filesystem::u8path(path);
+        return true;
     }
 #endif
 
