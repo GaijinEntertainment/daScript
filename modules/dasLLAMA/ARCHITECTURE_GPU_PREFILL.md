@@ -19,6 +19,11 @@ serve it: the tiled QK/AV GEMM pair (the default, needing `head_size % 64` on BO
 classes) and the scalar 32x32 trio, which serves when that gate fails or `DASLLAMA_METAL_ATTN=0`
 pins it. A third form over the same slab is `ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-attn-device`.
 
+**A window's rows go a slab at a time.** The stamps index the slab in 32 bits, so a slab holds the
+query rows whose heads x padded keys fit 2^32 elements, a multiple of 256 that keeps every stamp's
+row tile whole (`attn_slab_rows`, `ATTN_SLAB_STEP`): a window past that runs the pipeline once a
+piece of its rows over the same K and V, and a context where not one piece fits declines the driver.
+
 - **A pad row of K or V stages as 0.** `pf_p_weight` zeroes P columns past each row's live
   length exactly, so the P side needs no guard; the K and V sides do.
 - **The PADFREE stamps drop that guard**; an encoder picks one only where the whole WALK stays

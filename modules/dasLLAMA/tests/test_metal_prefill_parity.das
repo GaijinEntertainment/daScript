@@ -458,7 +458,7 @@ def private continuation(trp, trd : Model; prompt : array<int64>; n_gen : int) :
 
 // the blob twin of a planar fixture (see test_metal_decode_parity's twin): an OWNED engine
 // load transformed to the GPU form — the drivers are blob-only
-[test(description = "Each Metal prefill arm (GEMV tails, scale planes, K-quants, chunked and span windows, device attention, decode-mirror feeding, quantized KV) matches the CPU control greedy tokens on Llama-3.2, or its logits within 0.004 of the max, engage counters as witnesses"), arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
+[test(description = "Each Metal prefill arm (GEMV tails, scale planes, K-quants, chunked and span windows, device attention, decode-mirror feeding, quantized KV) matches the CPU control greedy tokens on Llama-3.2, or its logits within 0.004 of the max, engage counters as witnesses; a window taken in score-slab pieces lands the whole window's logits to the bit, the driver against itself"), arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
 def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, one t |> run cell per arm
     t |> run("GPU-resident prefill == CPU control, 40-token greedy continuation (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
@@ -835,6 +835,8 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 select_prefill_override("metal")
                 set_metal_prefill_min_npos(1l)
                 let n_attn = trmg.config.n_layers
+                let slab_reach = get_metal_attn_slab_reach_probe_()
+                set_metal_attn_slab_reach_probe_(0ul)   //! the whole-window legs' stamp counts hold under the slab's own reach
                 set_metal_prefill_mirror(false)
                 metal_kernel_coverage_reset()
                 let served0 = metal_prefill_mirror_served()
@@ -848,6 +850,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 t |> equal(metal_prefill_mirror_served() - served0, 2l, "both windows ran the mirror-fed form")
                 t |> equal(metal_kernel_count("metal_half_rows") - half_panels, n_attn * 2l, "the continuation's K and V rows convert too: a layer's two passes more than the panels form's")
                 t |> equal(metal_kernel_count("MetalAttnQKDev_metal_attn_qk_dev"), n_attn * 2l, "the device pair serves the 20-row continuation too")
+                t |> equal(metal_kernel_count("MetalAttnQKDev128_metal_attn_qk_dev"), 0l, "the whole 300-row window takes no 128-row stamp (the pieced legs' control)")
                 var mirror_off <- two_window_logits(trmg, w1, w2_off)
                 let mag = logits_maxabs(panels)
                 let diff = logits_maxdiff(mirror, panels)
@@ -855,6 +858,31 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 to_log(LOG_INFO, "mirror: mirror-fed vs panels, last-row logits max difference {diff} of max {mag} (bar {ATTN_DEV_BAR * mag}); one token off {diff_off}\n")
                 t |> success(diff <= ATTN_DEV_BAR * mag, "the mirror-fed form's logits sit within the bar of the panels form's ({diff} of {mag})")
                 t |> success(diff_off > ATTN_DEV_BAR * mag, "the prompt one token off lands outside the bar ({diff_off})")
+                set_metal_attn_slab_reach_probe_(uint64(trmg.config.n_heads * 320l * 300l))   //! a score slab of 300 rows over the window's 320 keys: 256 a piece, the step's whole tiles
+                metal_kernel_coverage_reset()
+                var pieced <- two_window_logits(trmg, w1, w2)
+                t |> equal(metal_kernel_count("MetalAttnQKDev128_metal_attn_qk_dev"), n_attn, "the 300-row window's first piece is 256 rows, on the 128-row stamp")
+                t |> equal(metal_kernel_count("MetalAttnQKDev_metal_attn_qk_dev"), n_attn * 2l, "its 44 rows left and the 20-row window take the 32-row stamp")
+                let diff_pieced = logits_maxdiff(pieced, mirror)
+                var pieced_off <- two_window_logits(trmg, w1, w2_off)
+                let diff_pieced_off = logits_maxdiff(pieced_off, mirror)
+                delete pieced_off
+                set_metal_prefill_mirror(false)
+                metal_kernel_coverage_reset()
+                var pieced_panels <- two_window_logits(trmg, w1, w2)
+                t |> equal(metal_kernel_count("MetalAttnQKDev128_metal_attn_qk_dev"), n_attn, "the panels form's 300-row window goes in the same pieces")
+                let diff_pieced_panels = logits_maxdiff(pieced_panels, panels)
+                set_metal_attn_slab_reach_probe_(slab_reach)
+                set_metal_prefill_mirror(true)
+                var pick_pieced, pick_whole = 0l
+                with_dasllama_jobque() {
+                    pick_pieced = argmax_of(pieced)
+                    pick_whole = argmax_of(mirror)
+                }
+                to_log(LOG_INFO, "pieced window vs whole, last-row logits max difference: mirror-fed {diff_pieced}, panels {diff_pieced_panels}, one token off {diff_pieced_off}; next token '{eyeball_text(tr, [pick_pieced])}' vs '{eyeball_text(tr, [pick_whole])}'\n")
+                t |> equal(diff_pieced, 0.0, "the mirror-fed window in pieces lands the whole window's logits to the bit")
+                t |> equal(diff_pieced_panels, 0.0, "and the panels form's")
+                t |> success(diff_pieced_off > ATTN_DEV_BAR * mag, "the pieced window one token off lands outside the bar ({diff_pieced_off}): the pieces carry the window")
                 select_decode_override("metal")
                 set_metal_prefill_mirror(false)
                 let up0 = metal_mirror_uploaded_rows()
@@ -913,6 +941,8 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 delete panels
                 delete mirror
                 delete mirror_off
+                delete pieced
+                delete pieced_panels
                 delete step_panels
                 delete step_mirror
                 delete step_pm
