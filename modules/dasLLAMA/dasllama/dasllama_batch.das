@@ -338,6 +338,9 @@ def verify_batch_groups(t : Model; var ws : BatchWorkspace; var sessions : array
     set_batch_same_slab(false)
     g_verify_sessions |> clear()   // borrowed handles - the pointees are never this array's to free
     return done && batch_decode_logits_done()
+} finally {
+    ws.kbase |> clear()
+    ws.vbase |> clear()
 }
 
 //! One synchronous batched decode step: row i evals tokens[i] at sessions[i]'s position; each
@@ -500,4 +503,8 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
         sp.n_past++
     }
     prof_add("final", ts_final)
+} finally {
+    ws.kbase |> clear()
+    ws.vbase |> clear()
+    ws.lrow |> clear()
 }
