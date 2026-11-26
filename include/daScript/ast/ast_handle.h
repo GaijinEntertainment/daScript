@@ -504,14 +504,14 @@ namespace das
             return new TypeDecl(*vecType);
         }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
-                                         SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
+                                         SimNode * rv, SimNode * idx, uint32_t ofs, bool /*isConst*/ ) const override {
             return context.code->makeNode<SimNode_AtStdVector>(at,
                                                                rv,
                                                                idx,
                                                                ofs);
         }
         virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & type,
-                                            SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
+                                            SimNode * rv, SimNode * idx, uint32_t ofs, bool /*isConst*/ ) const override {
             if ( type->isHandle() ) {
                 auto expr = context.code->makeNode<SimNode_AtStdVector>(at,
                                                                 rv,
@@ -527,7 +527,7 @@ namespace das
             }
         }
 
-        virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, SimNode * rv ) const override {
+        virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, SimNode * rv, bool /*isConst*/ ) const override {
             return context.code->makeNode<SimNode_AnyIterator<VectorType,StdVectorIterator<VectorType>>>(at, rv);
         }
         static void jitEach ( Sequence * out, void * pVec, Context * context, LineInfoArg * at ) {

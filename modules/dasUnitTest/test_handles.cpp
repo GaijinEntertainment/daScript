@@ -431,7 +431,7 @@ struct PtrSlotsAnnotation final : ManagedStructureAnnotation<PtrSlots,false> {
         return new TypeDecl(*atType);
     }
     virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
-                                     SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
+                                     SimNode * rv, SimNode * idx, uint32_t ofs, bool /*isConst*/ ) const override {
         return context.code->makeNode<SimNode_PtrSlotsAt>(at, rv, idx, ofs);
     }
     virtual JitTarget jitGetAt ( Type indexType ) const override {

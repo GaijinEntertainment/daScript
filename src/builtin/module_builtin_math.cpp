@@ -275,12 +275,12 @@ namespace das {
             return true;
         }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
-                                         SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
+                                         SimNode * rv, SimNode * idx, uint32_t ofs, bool /*isConst*/ ) const override {
             return context.code->makeNode<SimNode_At>(at, rv, idx,
                                                       uint32_t(sizeof(float)*ColC), ofs, RowC, "matrix[index]");
         }
         virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & readType,
-                                            SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
+                                            SimNode * rv, SimNode * idx, uint32_t ofs, bool /*isConst*/ ) const override {
             return context.code->makeValueNode<SimNode_AtR2V>(readType->baseType, at, rv, idx,
                                                               uint32_t(sizeof(float)*ColC), ofs, RowC, "matrix[index]");
         }
