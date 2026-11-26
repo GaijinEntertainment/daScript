@@ -142,7 +142,7 @@ namespace das {
     template <typename IDXT,typename TT>
     SimNode * SimNode_PtrAtR2V<IDXT,TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(PtrAtR2V);
+        vis.op(PtrAtR2VName<IDXT>::name(), sizeof(TT), typeName<TT>::name());
         V_SUB_THIS(value);
         V_SUB_THIS(index);
         V_ARG_THIS(stride);

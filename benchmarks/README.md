@@ -131,8 +131,16 @@ Small-table regime micro-benchmarks (N from 1 to 64) - the load profile the larg
 
 | File | Description |
 |---|---|
+| `bench_arr_at_i64.das` | Array read and write with an `int`, `int64` and `uint64` index, same loop shape for all three |
+| `bench_double_index.das` | A table indexed by an element of another table: fixed arrays and arrays of `int` and `uint8`, local, global and argument; the Doom column loops through global `uint8` pointers; a class-then-transition automaton step |
+| `bench_global_at.das` | Global array and global fixed array read and write by index in a context that is not solid (the global is found by name hash) |
 | `bench_global_local_op2.das` | A global combined with a local in a binary operation under `options solid_context` |
+| `bench_ptr_at.das` | `p[i]` read through a pointer: local, argument, global and field pointer; local, expression, constant and `uint` index; `int`, `uint8` and `float3` elements |
+| `bench_ptr_set.das` | `p[i] = value` and `*p = value` through a pointer, `int` and `uint8` elements, with and without a narrowing cast on the value |
+| `bench_small_int_at.das` | Array and fixed-array read of `uint8`, `uint16` and `int16` elements cast to `int` or `uint` |
+| `bench_table_index_i64.das` | Table read with an `int`, `int64` and `uint64` key, same loop shape for all three |
 | `bench_v_ldu.das` | Fusion-engine `Op2At` array-indexed read at sizeof(T)  in  {4,8,12,16} - int, int64, float3, float4. Used to compare DAS_FUSION=0 vs current `DAS_LDU_WORKHORSE` ladder vs `v_zero+memcpy(sizeof(CTYPE))` |
+| `bench_widen_read.das` | A small int cast to `int` or `uint` when read from a loop variable, a field of a loop variable, a local struct field and an argument struct field |
 
 ## sql/
 

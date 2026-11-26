@@ -76,3 +76,36 @@ def test_solid_context_call_global_local(t : T?) {
     t |> equal(total, 8.0)
     t |> equal(lengths, 22)
 }
+
+var g_solid_table : int[8]
+var g_solid_bytes = fixed_array(3u8, 2u8, 1u8, 0u8)
+var g_solid_cursor : int?
+var g_solid_colormap : uint8?
+
+[test(description = "under solid_context a global fixed array and a global pointer read and written by index give the element, and small int elements widen")]
+def test_solid_context_global_indexing(t : T?) {
+    for (i in range(8)) {
+        g_solid_table[i] = i * 7
+    }
+    var through_bytes = 0
+    for (i in range(4)) {
+        through_bytes += g_solid_table[int(g_solid_bytes[i])] * (i + 1)
+    }
+    t |> equal(through_bytes, 70)
+    g_solid_cursor = unsafe(addr(g_solid_table[0]))
+    var through_pointer = 0
+    for (i in range(8)) {
+        through_pointer += unsafe(g_solid_cursor[i]) + unsafe(g_solid_cursor[7 - i])
+    }
+    t |> equal(through_pointer, 392)
+    unsafe(g_solid_cursor[2]) = through_pointer + 1
+    t |> equal(g_solid_table[2], 393)
+    g_solid_colormap = unsafe(addr(g_solid_bytes[0]))
+    var mapped = 0
+    for (i in range(4)) {
+        mapped += int(unsafe(g_solid_colormap[int(unsafe(g_solid_colormap[i]))])) * (i + 1)
+    }
+    t |> equal(mapped, 20)
+    g_solid_cursor = null
+    g_solid_colormap = null
+}

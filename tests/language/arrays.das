@@ -1249,3 +1249,74 @@ def test_scoped_array_of_arrays_unlocked_after_element_read(t : T?) {
     t |> equal(picked[0], "x")
     t |> equal(picked[1], "9")
 }
+
+var g_small_int_bytes : array<uint8>
+
+def small_int_sum_argument(bytes : array<uint8>; count : int) {
+    var sum = 0
+    for (i in range(count)) {
+        sum += int(bytes[i])
+    }
+    return sum
+}
+
+[test(description = "an array of small ints read by index widens uint8 and uint16 with zeros and int8 and int16 with the sign, for a local, an argument and a global array, and an index past the end raises")]
+def test_small_int_array_index_read(t : T?) {
+    var bytes <- [200u8, 7u8, 255u8]
+    let chars <- [int8(-5), int8(100), int8(-128)]
+    let words <- [uint16(60000), uint16(9), uint16(65535)]
+    let shorts <- [int16(-300), int16(300), int16(-32768)]
+    var int_sum = 0
+    var uint_sum = 0u
+    for (i in range(3)) {
+        int_sum += int(bytes[i]) + int(chars[i]) + int(words[i]) + int(shorts[i])
+        uint_sum += uint(bytes[2 - i]) + uint(words[2 - i])
+    }
+    t |> equal(int_sum, 93205)
+    t |> equal(uint_sum, 126006u)
+    var index = 0
+    t |> equal(uint(chars[index]), 0xfffffffb)
+    t |> equal(uint(shorts[index]), 0xfffffed4)
+    t |> equal(bytes[index], 200u8)
+    t |> equal(shorts[index], int16(-300))
+    t |> equal(int(bytes[1]), 7)
+    t |> equal(small_int_sum_argument(bytes, 3), 462)
+    g_small_int_bytes := bytes
+    int_sum = 0
+    for (i in range(3)) {
+        int_sum += int(g_small_int_bytes[i]) + int(g_small_int_bytes[2 - i])
+    }
+    t |> equal(int_sum, 924)
+    delete g_small_int_bytes
+    index = 3
+    var raised = false
+    try {
+        int_sum = int(bytes[index])
+    } recover {
+        raised = true
+    }
+    t |> success(raised, "an index past the end of a uint8 array raises")
+}
+
+[test(description = "an array of small ints read through an expression index keeps the sign and still raises past the end")]
+def test_small_int_array_expression_index(t : T?) {
+    let chars <- [int8(-5), int8(100), int8(-128)]
+    let shorts <- [int16(-300), int16(300), int16(-32768)]
+    var int_sum = 0
+    var uint_sum = 0u
+    for (i in range(3)) {
+        int_sum += int(chars[2 - i]) * (i + 1) + int(shorts[2 - i])
+        uint_sum += uint(chars[2 - i])
+    }
+    t |> equal(int_sum, -32711)
+    t |> equal(uint_sum, 0xffffffdf)
+    var raised = false
+    for (i in range(3, 4)) {
+        try {
+            int_sum = int(chars[i * 2 - 3])
+        } recover {
+            raised = true
+        }
+    }
+    t |> success(raised, "an expression index past the end of an int8 array raises")
+}

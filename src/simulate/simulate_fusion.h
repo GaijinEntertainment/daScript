@@ -21,6 +21,24 @@
         else { vec4f __r = v_zero(); memcpy(&__r, (src_ptr), sizeof(CTYPE)); (dst) = __r; } \
     } while (0)
 
+// src/simulate/ARCHITECTURE.md#fused-small-int-reads
+#define DAS_FUSION_WIDE_NODE \
+    DAS_EVAL_ABI virtual vec4f eval ( das::Context & context ) override { \
+        return das::cast<int32_t>::from(compute(context)); \
+    } \
+    virtual int32_t evalInt ( das::Context & context ) override { \
+        return compute(context); \
+    } \
+    virtual uint32_t evalUInt ( das::Context & context ) override { \
+        return uint32_t(compute(context)); \
+    }
+
+#define DAS_FUSION_SMALL_INTS(STAMP,ARG) \
+    STAMP(ARG,int8_t) \
+    STAMP(ARG,uint8_t) \
+    STAMP(ARG,int16_t) \
+    STAMP(ARG,uint16_t)
+
 namespace das {
 
     typedef char * StringPtr;
@@ -54,6 +72,7 @@ namespace das {
         static bool is ( const SimNodeInfoLookup & info, SimNode * node, const char * name );
         static bool is2 ( const SimNodeInfoLookup & info, SimNode * lnode, SimNode * rnode, const char * lname, const char * rname );
         static bool is ( const SimNodeInfoLookup & info, SimNode * node, const char * name, const char * typeName );
+        static bool isFusedOp2 ( const SimNodeInfoLookup & info, SimNode * node, const char * op, const char * typeName );
     protected:
         ~FusionPoint() = default;
     };
@@ -84,6 +103,12 @@ namespace das {
         const char *    op = nullptr;
         Type            baseType;
         SimSource       l, r;
+    };
+
+    struct SimNode_Op2Index : SimNode_Op2Fusion {
+        SimNode_Op2Index(const char * msg = nullptr) : SimNode_Op2Fusion(msg) {}
+        virtual SimNode * visit(SimVisitor & vis) override;
+        uint32_t  stride, offset;
     };
 
     struct FusionPointOp1 : FusionPoint {

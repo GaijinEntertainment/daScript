@@ -23,6 +23,7 @@ namespace das {
         ,   sThisBlockArgumentRef
         ,   sGlobal
         ,   sShared
+        ,   sGlobalMnh
     };
 
     struct DAS_API SimSource {
@@ -86,6 +87,11 @@ namespace das {
         }
         __forceinline void setShared(uint32_t ofs, uint64_t mnh) {
             type = SimSourceType::sShared;
+            mangledNameHash = mnh;
+            offset = ofs;
+        }
+        __forceinline void setGlobalMnh(uint32_t ofs, uint64_t mnh) {
+            type = SimSourceType::sGlobalMnh;
             mangledNameHash = mnh;
             offset = ofs;
         }
@@ -1122,6 +1128,12 @@ namespace das {
         SimNode * value, * index;
         uint32_t  stride, offset;
     };
+
+    template <typename IDXT> struct PtrAtR2VName;
+    template <> struct PtrAtR2VName<int32_t>  { constexpr static const char * name() { return "PtrAtR2V"; } };
+    template <> struct PtrAtR2VName<uint32_t> { constexpr static const char * name() { return "PtrAtR2V_U32"; } };
+    template <> struct PtrAtR2VName<int64_t>  { constexpr static const char * name() { return "PtrAtR2V_I64"; } };
+    template <> struct PtrAtR2VName<uint64_t> { constexpr static const char * name() { return "PtrAtR2V_U64"; } };
 
     template <typename IDXT, typename TT>
     struct SimNode_PtrAtR2V : SimNode_PtrAt<IDXT> {
@@ -2704,7 +2716,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         DAS_PTR_NODE;
         SimNode_GetGlobalMnh ( const LineInfo & at, uint32_t o, uint64_t mnh )
             : SimNode_SourceBase(at) {
-            subexpr.setGlobal(o,mnh);
+            subexpr.setGlobalMnh(o,mnh);
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute (Context & context) {

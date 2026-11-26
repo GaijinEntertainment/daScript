@@ -26,6 +26,7 @@ namespace das {
             V_ARG(offset);
             break;
         case SimSourceType::sGlobal:
+        case SimSourceType::sGlobalMnh:
             V_ARG(mangledNameHash);
             break;
         case SimSourceType::sShared:

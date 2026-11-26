@@ -139,3 +139,50 @@ def test_global_array_of_property_literals(t : T?) {
     t |> equal(g_prop_bits[1].low, 2u)
     t |> equal(g_prop_bits[2].low, 5u)
 }
+
+var g_indexed_values : array<int>
+var g_indexed_table : int[8]
+var g_indexed_points : float3[4]
+var g_indexed_cursor : int?
+
+[test(description = "a global array and a global fixed array read and written by index give the element for a local, an expression and a constant index, and a global pointer indexes the same elements")]
+def test_global_indexing(t : T?) {
+    delete g_indexed_values
+    g_indexed_values <- [for (i in range(8)); i * 5]
+    var forward = 0
+    var backward = 0
+    for (i in range(8)) {
+        g_indexed_table[i] = i * 7
+        g_indexed_table[7 - i]++
+    }
+    for (i in range(8)) {
+        forward += g_indexed_values[i] + g_indexed_table[i]
+        backward += (g_indexed_values[7 - i] + g_indexed_table[7 - i]) * (i + 1)
+    }
+    t |> equal(forward, 340)
+    t |> equal(backward, 1034)
+    t |> equal(g_indexed_values[3], 15)
+    t |> equal(g_indexed_table[3], 22)
+    for (i in range(4)) {
+        g_indexed_points[i] = float3(float(i), 1.0, 2.0)
+    }
+    var total = float3(0.0)
+    for (i in range(4)) {
+        total += g_indexed_points[i]
+    }
+    t |> equal(total, float3(6.0, 4.0, 8.0))
+    for (i in range(8)) {
+        g_indexed_values[i] = g_indexed_table[7 - i] + i
+    }
+    t |> equal(g_indexed_values[0], 49)
+    g_indexed_cursor = unsafe(addr(g_indexed_table[0]))
+    var through_pointer = 0
+    for (i in range(8)) {
+        through_pointer += unsafe(g_indexed_cursor[i])
+    }
+    t |> equal(through_pointer, 200)
+    unsafe(g_indexed_cursor[2]) = through_pointer + 1
+    t |> equal(g_indexed_table[2], 201)
+    g_indexed_cursor = null
+    delete g_indexed_values
+}

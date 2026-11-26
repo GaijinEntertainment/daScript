@@ -12,27 +12,11 @@
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
+#define FUSION_OP2_SET_GLOBAL_MNH
+
 namespace das {
 
-    struct SimNode_Op2ArrayAt : SimNode_Op2Fusion {
-        virtual SimNode * visit(SimVisitor & vis) override {
-            V_BEGIN();
-            string name = op;
-            name += getSimSourceName(l.type);
-            name += getSimSourceName(r.type);
-            if (baseType != Type::none) {
-                vis.op(name.c_str(), getTypeBaseSize(baseType), das_to_string(baseType));
-            } else {
-                vis.op(name.c_str());
-            }
-            l.visit(vis);
-            r.visit(vis);
-            V_ARG(stride);
-            V_ARG(offset);
-            V_END();
-        }
-        uint32_t  stride, offset;
-    };
+    using SimNode_Op2ArrayAt = SimNode_Op2Index;
 
     // the 32-bit array bounds check, toggled per node family: checked op-name (ArrayAt/ArrayAtR2V)
     // instantiates with it ON, the unchecked op-name (ArrayAtU/ArrayAtR2VU, emitted only where the
@@ -57,7 +41,7 @@ namespace das {
             DAS_ARRAYAT_CHECK(rr); \
             return *((CTYPE *)(pl->data + uint64_t(rr)*uint64_t(stride) + offset)); \
         } \
-        DAS_NODE(TYPE,CTYPE); \
+        DAS_ARRAYAT_NODE_TAIL(TYPE,CTYPE); \
     };
 
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
@@ -69,7 +53,7 @@ namespace das {
             DAS_ARRAYAT_CHECK(rr); \
             return *((CTYPE *)(pl->data + uint64_t(rr)*uint64_t(stride) + offset)); \
         } \
-        DAS_NODE(TYPE,CTYPE); \
+        DAS_ARRAYAT_NODE_TAIL(TYPE,CTYPE); \
     };
 
 #define IMPLEMENT_OP2_SET_SETUP_NODE(result,node) \
@@ -84,12 +68,23 @@ namespace das {
 #include "simulate_fusion_op2_set_impl.h"
 #include "simulate_fusion_op2_set_perm.h"
 
+#define DAS_ARRAYAT_NODE_TAIL(TYPE,CTYPE) DAS_NODE(TYPE,CTYPE)
 #define DAS_ARRAYAT_CHECK DAS_ARRAYAT_CHECK_ON
     IMPLEMENT_SETOP_SCALAR(ArrayAtR2V);
 #undef DAS_ARRAYAT_CHECK
 #define DAS_ARRAYAT_CHECK DAS_ARRAYAT_CHECK_OFF
     IMPLEMENT_SETOP_SCALAR(ArrayAtR2VU);
 #undef DAS_ARRAYAT_CHECK
+#undef DAS_ARRAYAT_NODE_TAIL
+
+#define DAS_ARRAYAT_NODE_TAIL(TYPE,CTYPE) DAS_FUSION_WIDE_NODE
+#define DAS_ARRAYAT_CHECK DAS_ARRAYAT_CHECK_ON
+    IMPLEMENT_SETOP_SMALL_INT(ArrayAtR2V);
+#undef DAS_ARRAYAT_CHECK
+#define DAS_ARRAYAT_CHECK DAS_ARRAYAT_CHECK_OFF
+    IMPLEMENT_SETOP_SMALL_INT(ArrayAtR2VU);
+#undef DAS_ARRAYAT_CHECK
+#undef DAS_ARRAYAT_NODE_TAIL
 
 /* ArrayAtR2V VECTOR */
 
@@ -421,9 +416,11 @@ namespace das {
 
     static constexpr FusionEntry fusionEntries_at_array[] = {
         REGISTER_SETOP_SCALAR(ArrayAtR2V)
+        REGISTER_SETOP_SMALL_INT(ArrayAtR2V)
         REGISTER_SETOP_NUMERIC_VEC(ArrayAtR2V)
         FUSION_ENTRY("ArrayAt","",FusionPoint_Set_ArrayAt_StringPtr)
         REGISTER_SETOP_SCALAR(ArrayAtR2VU)
+        REGISTER_SETOP_SMALL_INT(ArrayAtR2VU)
         REGISTER_SETOP_NUMERIC_VEC(ArrayAtR2VU)
         FUSION_ENTRY("ArrayAtU","",FusionPoint_Set_ArrayAtU_StringPtr)
         REGISTER_SETOP_SCALAR(ArrayAtR2V_I64)
@@ -436,6 +433,8 @@ namespace das {
 
     FUSION_TABLE(fusionTable_at_array, fusionEntries_at_array)
 }
+
+#undef FUSION_OP2_SET_GLOBAL_MNH
 
 #endif
 

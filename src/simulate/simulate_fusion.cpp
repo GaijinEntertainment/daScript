@@ -33,6 +33,34 @@ namespace das {
         return (it->second.name == name) && (it->second.typeName==typeName);
     }
 
+    static const char * const g_unknownSimSourceName = "???";
+
+    static const char * simSourceNameAt ( int index ) {
+        const char * name = getSimSourceName(SimSourceType(index));
+        return strcmp(name, g_unknownSimSourceName)==0 ? nullptr : name;
+    }
+
+    static bool isSimSourceName ( const char * text ) {
+        for ( int index=0; const char * name = simSourceNameAt(index); ++index ) {
+            if ( strcmp(text, name)==0 ) return true;
+        }
+        return false;
+    }
+
+    bool FusionPoint::isFusedOp2 ( const SimNodeInfoLookup & info, SimNode * node, const char * op, const char * typeName ) {
+        auto it = info.find(node);
+        if ( it==info.end() || it->second.typeName!=typeName ) return false;
+        size_t opLength = strlen(op);
+        const char * name = it->second.name.c_str();
+        if ( strncmp(name, op, opLength)!=0 ) return false;
+        const char * sources = name + opLength;
+        for ( int index=0; const char * left = simSourceNameAt(index); ++index ) {
+            size_t leftLength = strlen(left);
+            if ( strncmp(sources, left, leftLength)==0 && isSimSourceName(sources + leftLength) ) return true;
+        }
+        return false;
+    }
+
     SimNode * SimNode_Op1Fusion::visit(SimVisitor & vis) {
         V_BEGIN();
         string name = op;
@@ -58,6 +86,23 @@ namespace das {
         }
         l.visit(vis);
         r.visit(vis);
+        V_END();
+    }
+
+    SimNode * SimNode_Op2Index::visit(SimVisitor & vis) {
+        V_BEGIN();
+        string name = op;
+        name += getSimSourceName(l.type);
+        name += getSimSourceName(r.type);
+        if ( baseType!=Type::none ) {
+            vis.op(name.c_str(), getTypeBaseSize(baseType), das_to_string(baseType));
+        } else {
+            vis.op(name.c_str());
+        }
+        l.visit(vis);
+        r.visit(vis);
+        V_ARG(stride);
+        V_ARG(offset);
         V_END();
     }
 
@@ -120,8 +165,9 @@ namespace das {
         case SimSourceType::sThisBlockArgumentRef:             return "Tbargr";
         case SimSourceType::sGlobal:                           return "Glob";
         case SimSourceType::sShared:                           return "Shared";
+        case SimSourceType::sGlobalMnh:                        return "GlobMnh";
         };
-        return "???";
+        return g_unknownSimSourceName;
     }
 
 #if DAS_FUSION
@@ -147,6 +193,10 @@ namespace das {
     extern const FusionTable fusionTable_tablewithhash;
     extern const FusionTable fusionTable_call1;
     extern const FusionTable fusionTable_call2;
+    extern const FusionTable fusionTable_widen;
+#if DAS_FUSION>=2
+    extern const FusionTable fusionTable_ptr_at;
+#endif
 #endif
 
 #if DAS_FUSION
@@ -173,6 +223,10 @@ namespace das {
         &fusionTable_tablewithhash,
         &fusionTable_call1,
         &fusionTable_call2,
+        &fusionTable_widen,
+#if DAS_FUSION>=2
+        &fusionTable_ptr_at,
+#endif
     };
 #endif
 

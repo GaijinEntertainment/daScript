@@ -1044,3 +1044,444 @@ def test_typed_pointer_binds_to_void_ref(t : T?) {
     t |> equal(*q, 7)
     t |> success(is_set_through_const_void_ref(q))
 }
+
+struct IndexedHolder {
+    data : int?
+}
+
+var g_indexed_ints : int?
+
+
+def indexed_sum_argument(p : int?; count : int) {
+    var sum = 0
+    for (i in range(count)) {
+        sum += unsafe(p[i])
+    }
+    return sum
+}
+
+def indexed_pick_argument(p : int?; index : int) : int => unsafe(p[index])
+
+def indexed_third_argument(p : int?) : int => unsafe(p[2])
+
+def indexed_from_end_argument(p : int?; index : int) : int => unsafe(p[15 - index])
+
+def indexed_pick_local(source : int?; index : int) {
+    let p = source
+    return unsafe(p[index])
+}
+
+def indexed_pick_global(index : int) : int => unsafe(g_indexed_ints[index])
+
+def indexed_pick_field(holder : IndexedHolder?; index : int) : int => unsafe(holder.data[index])
+
+def indexed_bump(var value : int&) {
+    value += 1000
+}
+
+[test(description = "an indexed read through a local pointer gives the element for a local, an expression, a constant, an argument and a negative index")]
+def test_indexed_read_local_pointer(t : T?) {
+    var arr <- [for (i in range(16)); i * 3]
+    let p = unsafe(addr(arr[0]))
+    var forward = 0
+    var backward = 0
+    for (i in range(16)) {
+        forward += unsafe(p[i])
+        backward += unsafe(p[15 - i]) * (i + 1)
+    }
+    t |> equal(forward, 360)
+    t |> equal(backward, 2040)
+    t |> equal(unsafe(p[5]), 15)
+    t |> equal(indexed_pick_local(p, 7), 21)
+    let middle = unsafe(addr(arr[8]))
+    let back = -3
+    t |> equal(unsafe(middle[-3]), 15)
+    t |> equal(unsafe(middle[back]), 15)
+}
+
+[test(description = "an indexed read through a pointer argument gives the element for a local, an expression, a constant and an argument index")]
+def test_indexed_read_argument_pointer(t : T?) {
+    var arr <- [for (i in range(16)); i * 3]
+    let p = unsafe(addr(arr[0]))
+    t |> equal(indexed_sum_argument(p, 16), 360)
+    t |> equal(indexed_from_end_argument(p, 1), 42)
+    t |> equal(indexed_third_argument(p), 6)
+    t |> equal(indexed_pick_argument(p, 9), 27)
+}
+
+[test(description = "an indexed read through a global pointer gives the element for a local, an expression, a constant and an argument index")]
+def test_indexed_read_global_pointer(t : T?) {
+    var arr <- [for (i in range(16)); i * 3]
+    g_indexed_ints = unsafe(addr(arr[0]))
+    var forward = 0
+    var backward = 0
+    for (i in range(16)) {
+        forward += unsafe(g_indexed_ints[i])
+        backward += unsafe(g_indexed_ints[15 - i]) * (i + 1)
+    }
+    t |> equal(forward, 360)
+    t |> equal(backward, 2040)
+    t |> equal(unsafe(g_indexed_ints[4]), 12)
+    t |> equal(indexed_pick_global(11), 33)
+    g_indexed_ints = null
+}
+
+[test(description = "an indexed read through a pointer taken from a field gives the element for a local, a constant and an argument index")]
+def test_indexed_read_field_pointer(t : T?) {
+    var arr <- [for (i in range(16)); i * 3]
+    var holder = new IndexedHolder(data = unsafe(addr(arr[0])))
+    var forward = 0
+    for (i in range(16)) {
+        forward += unsafe(holder.data[i])
+    }
+    t |> equal(forward, 360)
+    t |> equal(unsafe(holder.data[6]), 18)
+    t |> equal(indexed_pick_field(holder, 10), 30)
+    unsafe {
+        delete holder
+    }
+}
+
+[test(description = "an indexed read through a pointer with a uint index gives the element for a local, a constant and an expression index")]
+def test_indexed_read_uint_index(t : T?) {
+    var arr <- [for (i in range(16)); i * 3]
+    let p = unsafe(addr(arr[0]))
+    var forward = 0
+    var backward = 0
+    for (i in urange(16u)) {
+        forward += unsafe(p[i])
+        backward += unsafe(p[15u - i])
+    }
+    t |> equal(forward, 360)
+    t |> equal(backward, 360)
+    t |> equal(unsafe(p[5u]), 15)
+}
+
+[test(description = "an indexed read through a pointer widens uint8 and uint16 elements with zeros and int8 and int16 elements with the sign, into both int and uint")]
+def test_indexed_read_small_int_elements(t : T?) {
+    var bytes <- [200u8, 7u8]
+    var chars <- [int8(-5), int8(100)]
+    var words <- [uint16(60000), uint16(9)]
+    var shorts <- [int16(-300), int16(300)]
+    let pb = unsafe(addr(bytes[0]))
+    let pc = unsafe(addr(chars[0]))
+    let pw = unsafe(addr(words[0]))
+    let ps = unsafe(addr(shorts[0]))
+    var index = 0
+    t |> equal(int(unsafe(pb[index])), 200)
+    t |> equal(uint(unsafe(pb[index])), 200u)
+    t |> equal(int(unsafe(pc[index])), -5)
+    t |> equal(uint(unsafe(pc[index])), 0xfffffffb)
+    t |> equal(int(unsafe(pw[index])), 60000)
+    t |> equal(uint(unsafe(pw[index])), 60000u)
+    t |> equal(int(unsafe(ps[index])), -300)
+    t |> equal(uint(unsafe(ps[index])), 0xfffffed4)
+    index = 1
+    t |> equal(unsafe(pb[index]), 7u8)
+    t |> equal(unsafe(pc[index]), int8(100))
+    t |> equal(unsafe(pw[index]), uint16(9))
+    t |> equal(unsafe(ps[index]), int16(300))
+}
+
+[test(description = "an indexed read through a pointer gives bool, int64, uint64, uint, float, double and vector elements unchanged")]
+def test_indexed_read_element_types(t : T?) {
+    var flags <- [false, true]
+    var longs <- [1l, -9000000000l]
+    var ulongs <- [1ul, 18000000000000000000ul]
+    var uints <- [1u, 4000000000u]
+    var floats <- [0.5, 1.5]
+    var doubles <- [0.25lf, 2.25lf]
+    var points <- [float3(1.0, 2.0, 3.0), float3(4.0, 5.0, 6.0)]
+    var pairs <- [int2(1, 2), int2(3, 4)]
+    var quads <- [uint4(1u, 2u, 3u, 4u), uint4(5u, 6u, 7u, 8u)]
+    let index = 1
+    let pflags = unsafe(addr(flags[0]))
+    let plongs = unsafe(addr(longs[0]))
+    let pulongs = unsafe(addr(ulongs[0]))
+    let puints = unsafe(addr(uints[0]))
+    let pfloats = unsafe(addr(floats[0]))
+    let pdoubles = unsafe(addr(doubles[0]))
+    t |> equal(unsafe(pflags[index]), true)
+    t |> equal(unsafe(plongs[index]), -9000000000l)
+    t |> equal(unsafe(pulongs[index]), 18000000000000000000ul)
+    t |> equal(unsafe(puints[index]), 4000000000u)
+    t |> equal(unsafe(pfloats[index]), 1.5)
+    t |> equal(unsafe(pdoubles[index]), 2.25lf)
+    let ppoints = unsafe(addr(points[0]))
+    let ppairs = unsafe(addr(pairs[0]))
+    let pquads = unsafe(addr(quads[0]))
+    t |> equal(unsafe(ppoints[index]), float3(4.0, 5.0, 6.0))
+    t |> equal(unsafe(ppairs[index]), int2(3, 4))
+    t |> equal(unsafe(pquads[index]), uint4(5u, 6u, 7u, 8u))
+}
+
+[test(description = "an indexed pointer element passed by reference is the element itself")]
+def test_indexed_reference(t : T?) {
+    var arr <- [for (i in range(4)); i]
+    var p = unsafe(addr(arr[0]))
+    let index = 2
+    unsafe {
+        indexed_bump(p[index])
+        indexed_bump(p[3])
+    }
+    t |> equal(arr[2], 1002)
+    t |> equal(arr[3], 1003)
+    t |> equal(arr[1], 1)
+}
+
+def indexed_fill_argument(var p : int?; count : int) {
+    for (i in range(count)) {
+        unsafe(p[i]) = i + 100
+    }
+}
+
+def indexed_store_argument(var p : int?; index, value : int) {
+    unsafe(p[index]) = value + 1
+}
+
+def deref_store_argument(var p : int?; value : int) {
+    *p = value + 1
+}
+
+[test(description = "an indexed store through a pointer writes the element for a local, an argument, a global and a field pointer, with a local, an expression, a constant and an argument index")]
+def test_indexed_store_sources(t : T?) {
+    var arr : array<int>
+    arr |> resize(8)
+    var p = unsafe(addr(arr[0]))
+    for (i in range(8)) {
+        unsafe(p[i]) = i + 1
+    }
+    t |> equal(arr[7], 8)
+    for (i in range(8)) {
+        unsafe(p[7 - i]) = i + 10
+    }
+    t |> equal(arr[0], 17)
+    let seed = 40
+    unsafe(p[3]) = seed + 2
+    t |> equal(arr[3], 42)
+    indexed_fill_argument(p, 8)
+    t |> equal(arr[5], 105)
+    indexed_store_argument(p, 6, 76)
+    t |> equal(arr[6], 77)
+    g_indexed_ints = p
+    for (i in range(8)) {
+        unsafe(g_indexed_ints[i]) = i + 200
+    }
+    g_indexed_ints = null
+    t |> equal(arr[4], 204)
+    var holder = new IndexedHolder(data = p)
+    for (i in range(8)) {
+        unsafe(holder.data[i]) = i + 300
+    }
+    t |> equal(arr[2], 302)
+    unsafe {
+        delete holder
+    }
+    for (i in urange(8u)) {
+        unsafe(p[i]) = int(i) + 400
+    }
+    t |> equal(arr[1], 401)
+}
+
+[test(description = "a store through a dereferenced local or argument pointer writes the pointee, and a null pointer raises instead of writing")]
+def test_deref_store(t : T?) {
+    var arr <- [1, 2]
+    var p = unsafe(addr(arr[0]))
+    let seed = 50
+    *p = seed + 5
+    t |> equal(arr[0], 55)
+    deref_store_argument(unsafe(addr(arr[1])), 60)
+    t |> equal(arr[1], 61)
+    var missing : int?
+    var raised = false
+    try {
+        *missing = seed + 1
+    } recover {
+        raised = true
+    }
+    t |> success(raised, "a store through a null local pointer raises")
+    raised = false
+    try {
+        deref_store_argument(missing, 1)
+    } recover {
+        raised = true
+    }
+    t |> success(raised, "a store through a null pointer argument raises")
+}
+
+[test(description = "a store of an int narrowed to a small int through a pointer keeps only the low bits, indexed and dereferenced")]
+def test_pointer_store_narrows(t : T?) {
+    var bytes : array<uint8>
+    var chars : array<int8>
+    var words : array<uint16>
+    var shorts : array<int16>
+    bytes |> resize(4)
+    chars |> resize(4)
+    words |> resize(4)
+    shorts |> resize(4)
+    var pb = unsafe(addr(bytes[0]))
+    var pc = unsafe(addr(chars[0]))
+    var pw = unsafe(addr(words[0]))
+    var ps = unsafe(addr(shorts[0]))
+    let big = 70000
+    let wide = 4000000000u
+    for (i in range(4)) {
+        unsafe {
+            pb[i] = uint8(big + i)
+            pc[i] = int8(200 + i)
+            pw[i] = uint16(big + i)
+            ps[i] = int16(wide)
+        }
+    }
+    t |> equal(bytes[1], 113u8)
+    t |> equal(chars[1], int8(-55))
+    t |> equal(words[1], uint16(4465))
+    t |> equal(shorts[1], int16(10240))
+    *pb = uint8(big)
+    *pw = uint16(wide)
+    t |> equal(bytes[0], 112u8)
+    t |> equal(words[0], uint16(10240))
+    t |> equal(bytes[2], 114u8)
+}
+
+[test(description = "an indexed store through a pointer writes bool, int64, uint64, uint, float and double values unchanged")]
+def test_indexed_store_element_types(t : T?) {
+    var flags <- [false, false]
+    var longs <- [0l, 0l]
+    var ulongs <- [0ul, 0ul]
+    var uints <- [0u, 0u]
+    var floats <- [0.0, 0.0]
+    var doubles <- [0.0lf, 0.0lf]
+    var pflags = unsafe(addr(flags[0]))
+    var plongs = unsafe(addr(longs[0]))
+    var pulongs = unsafe(addr(ulongs[0]))
+    var puints = unsafe(addr(uints[0]))
+    var pfloats = unsafe(addr(floats[0]))
+    var pdoubles = unsafe(addr(doubles[0]))
+    let index = 1
+    let seed = 3
+    unsafe {
+        pflags[index] = seed > 2
+        plongs[index] = int64(seed) - 9000000000l
+        pulongs[index] = uint64(seed) + 18000000000000000000ul
+        puints[index] = uint(seed) + 4000000000u
+        pfloats[index] = float(seed) * 0.5
+        pdoubles[index] = double(seed) * 0.25lf
+    }
+    t |> equal(flags[1], true)
+    t |> equal(longs[1], -8999999997l)
+    t |> equal(ulongs[1], 18000000000000000003ul)
+    t |> equal(uints[1], 4000000003u)
+    t |> equal(floats[1], 1.5)
+    t |> equal(doubles[1], 0.75lf)
+    t |> equal(flags[0], false)
+    t |> equal(longs[0], 0l)
+}
+
+[test(description = "an indexed read through a pointer gives uint2, int3, uint3, int4, float2 and float4 elements unchanged")]
+def test_indexed_read_vector_elements(t : T?) {
+    var upairs <- [uint2(1u, 2u), uint2(3u, 4u)]
+    var triples <- [int3(1, 2, 3), int3(-4, 5, -6)]
+    var utriples <- [uint3(1u, 2u, 3u), uint3(4u, 5u, 6u)]
+    var quads <- [int4(1, 2, 3, 4), int4(-5, 6, -7, 8)]
+    var fpairs <- [float2(1.0, 2.0), float2(3.5, 4.5)]
+    var fquads <- [float4(1.0, 2.0, 3.0, 4.0), float4(5.5, 6.5, 7.5, 8.5)]
+    let pupairs = unsafe(addr(upairs[0]))
+    let ptriples = unsafe(addr(triples[0]))
+    let putriples = unsafe(addr(utriples[0]))
+    let pquads = unsafe(addr(quads[0]))
+    let pfpairs = unsafe(addr(fpairs[0]))
+    let pfquads = unsafe(addr(fquads[0]))
+    for (index in range(1, 2)) {
+        t |> equal(unsafe(pupairs[index]), uint2(3u, 4u))
+        t |> equal(unsafe(ptriples[index]), int3(-4, 5, -6))
+        t |> equal(unsafe(putriples[index]), uint3(4u, 5u, 6u))
+        t |> equal(unsafe(pquads[index]), int4(-5, 6, -7, 8))
+        t |> equal(unsafe(pfpairs[index]), float2(3.5, 4.5))
+        t |> equal(unsafe(pfquads[index]), float4(5.5, 6.5, 7.5, 8.5))
+    }
+}
+
+[test(description = "an indexed read through a pointer with a uint index gives small int, int64, float, double, bool and vector elements, forward and backward")]
+def test_indexed_read_uint_index_element_types(t : T?) {
+    var bytes <- [200u8, 7u8, 255u8, 1u8]
+    var chars <- [int8(-5), int8(100), int8(-128), int8(1)]
+    var words <- [uint16(60000), uint16(9), uint16(65535), uint16(1)]
+    var shorts <- [int16(-300), int16(300), int16(-32768), int16(1)]
+    var longs <- [1l, -9000000000l, 3l, 4l]
+    var floats <- [0.5, 1.5, 2.5, 3.5]
+    var doubles <- [0.25lf, 2.25lf, 4.25lf, 6.25lf]
+    var flags <- [false, true, true, false]
+    var points <- [float3(1.0, 2.0, 3.0), float3(4.0, 5.0, 6.0), float3(7.0, 8.0, 9.0),
+        float3(10.0, 11.0, 12.0)]
+    let pbytes = unsafe(addr(bytes[0]))
+    let pchars = unsafe(addr(chars[0]))
+    let pwords = unsafe(addr(words[0]))
+    let pshorts = unsafe(addr(shorts[0]))
+    let plongs = unsafe(addr(longs[0]))
+    let pfloats = unsafe(addr(floats[0]))
+    let pdoubles = unsafe(addr(doubles[0]))
+    let pflags = unsafe(addr(flags[0]))
+    let ppoints = unsafe(addr(points[0]))
+    var small_sum = 0
+    var weighted = 0
+    var long_sum = 0l
+    var float_sum = 0.0
+    var double_sum = 0.0lf
+    var set_flags = 0
+    var point_sum = float3(0.0)
+    for (i in urange(4u)) {
+        small_sum += int(unsafe(pbytes[i])) + int(unsafe(pchars[i]))
+        small_sum += int(unsafe(pwords[i])) + int(unsafe(pshorts[i]))
+        weighted += (int(unsafe(pbytes[3u - i])) + int(unsafe(pchars[3u - i]))) * int(i + 1u)
+        long_sum += unsafe(plongs[i])
+        float_sum += unsafe(pfloats[3u - i])
+        double_sum += unsafe(pdoubles[i])
+        if (unsafe(pflags[i])) {
+            set_flags += int(i) + 1
+        }
+        point_sum += unsafe(ppoints[i])
+    }
+    t |> equal(small_sum, 93209)
+    t |> equal(weighted, 1357)
+    t |> equal(long_sum, -8999999992l)
+    t |> equal(float_sum, 8.0)
+    t |> equal(double_sum, 13.0lf)
+    t |> equal(set_flags, 5)
+    t |> equal(point_sum, float3(22.0, 26.0, 30.0))
+}
+
+[test(description = "a small int read through a pointer with a 64-bit index widens under an int and a uint cast")]
+def test_indexed_read_small_int_wide_index(t : T?) {
+    var chars <- [int8(-5), int8(100), int8(-128), int8(1), int8(-1), int8(-1), int8(-1), int8(-1)]
+    var words <- [uint16(60000), uint16(9), uint16(65535), uint16(1), uint16(65535), uint16(65535)]
+    let pchars = unsafe(addr(chars[0]))
+    let pwords = unsafe(addr(words[0]))
+    var int_sum = 0
+    var uint_sum = 0u
+    for (i in range64(4l)) {
+        int_sum += int(unsafe(pchars[i]))
+        uint_sum += uint(unsafe(pwords[i]))
+    }
+    t |> equal(int_sum, -32)
+    t |> equal(uint_sum, 125545u)
+}
+
+[test(description = "a pointer store keeps a widening cast and a cast from float on its value; only a narrowing cast from int or uint folds into a small-int store")]
+def test_pointer_store_keeps_other_casts(t : T?) {
+    var longs <- [0l, 0l, 0l]
+    var doubles <- [0.0lf, 0.0lf, 0.0lf]
+    var bytes : array<uint8>
+    bytes |> resize(3)
+    var plongs = unsafe(addr(longs[0]))
+    var pdoubles = unsafe(addr(doubles[0]))
+    var pbytes = unsafe(addr(bytes[0]))
+    for (i in range(3)) {
+        unsafe(plongs[i]) = int64(i - 5)
+        unsafe(pdoubles[i]) = double(i + 2)
+        unsafe(pbytes[i]) = uint8(float(i) + 200.5)
+    }
+    t |> equal(longs[1], -4l)
+    t |> equal(doubles[2], 4.0lf)
+    t |> equal(bytes[1], 201u8)
+}
