@@ -43,9 +43,9 @@ namespace das {
             DAS_PROFILE_NODE \
             auto res =  *(CTYPE *)(subexpr.compute##COMPUTE(context)); \
             if ( res == 0 ) { \
-                return if_true->eval(context); \
+                DAS_NO_MERGE return if_true->eval(context); \
             } else { \
-                return if_false->eval(context); \
+                DAS_NO_MERGE return if_false->eval(context); \
             } \
             return v_zero(); \
         } \
@@ -53,9 +53,9 @@ namespace das {
             DAS_PROFILE_NODE \
             auto res =  *(CTYPE *)(subexpr.compute##COMPUTE(context)); \
             if ( res == 0 ) { \
-                return if_true->eval##TYPE(context); \
+                DAS_NO_MERGE return if_true->eval##TYPE(context); \
             } else { \
-                return if_false->eval##TYPE(context); \
+                DAS_NO_MERGE return if_false->eval##TYPE(context); \
             } \
         } \
     };
@@ -84,9 +84,9 @@ namespace das {
             DAS_PROFILE_NODE \
             auto res =  *(CTYPE *)(subexpr.compute##COMPUTE(context)); \
             if ( res ) { \
-                return if_true->eval(context); \
+                DAS_NO_MERGE return if_true->eval(context); \
             } else { \
-                return if_false->eval(context); \
+                DAS_NO_MERGE return if_false->eval(context); \
             } \
             return v_zero(); \
         } \
@@ -94,9 +94,9 @@ namespace das {
             DAS_PROFILE_NODE \
             auto res =  *(CTYPE *)(subexpr.compute##COMPUTE(context)); \
             if ( res ) { \
-                return if_true->eval##TYPE(context); \
+                DAS_NO_MERGE return if_true->eval##TYPE(context); \
             } else { \
-                return if_false->eval##TYPE(context); \
+                DAS_NO_MERGE return if_false->eval##TYPE(context); \
             } \
         } \
     };

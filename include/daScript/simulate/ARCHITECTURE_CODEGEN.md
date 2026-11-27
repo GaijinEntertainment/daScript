@@ -20,3 +20,21 @@ cl takes a calling convention only between the return type and the name, so the 
 there: `virtual vec4f DAS_EVAL_ABI eval ( Context & )`. An `eval` override that leaves the
 macro out differs from its base only by calling convention. It compiles wherever the macro is
 empty, Linux and macOS included, and does not compile on x64 Windows.
+
+## A two-arm node keeps its branch {#two-arm-branch}
+
+A two-arm node evaluates a condition and then exactly one of two child nodes:
+`SimNode_IfThenElse`, the `IfZeroThenElse` and `IfNotZeroThenElse` nodes, their debugger
+twins, and the fused `IfZeroThenElse` and `IfNotZeroThenElse` nodes of
+`src/simulate/simulate_fusion_if.cpp`. Both arms end in the same call on a different child.
+
+Clang merges the two calls into one. It picks the child pointer with a data select and makes
+one indirect jump, so no conditional branch is left in the node. The target of that one jump
+then changes with the condition, and the processor predicts it badly: a recursive function
+whose body is an `if` runs more than twice as slow in the interpreter as it does with the
+branch kept.
+
+`DAS_NO_MERGE` (`misc/platform.h`) is `[[clang::nomerge]]`, and it sits on the `return` of
+each arm. It keeps the two calls apart, and the conditional branch stays with them. GCC and
+cl keep the branch without help, and the macro is empty for them. A node with one arm has
+nothing to merge and carries no macro.
