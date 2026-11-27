@@ -3077,6 +3077,24 @@ instantiations are excluded.
     // Good — comprehension
     var a <- [for (x in src); x * x]
 
+A comprehension moves an element that cannot be copied, so a ``push_clone``
+loop over such elements keeps its clone - the finding names
+``clone_to_move(EXPR)`` as the item, and the source stays whole:
+
+.. das-doc: alt
+.. code-block:: das
+
+    var grid : array<array<int>>
+
+    // Bad — empty var then a push_clone-only loop
+    var rows : array<array<int>>                // STYLE027
+    for (row in grid) {
+        rows |> push_clone(row)
+    }
+
+    // Good — the comprehension clones
+    var rows <- [for (row in grid); clone_to_move(row)]
+
 STYLE028 — redundant ``self->`` on a method call
 ==================================================
 

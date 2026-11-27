@@ -3886,52 +3886,60 @@ class StyleLintVisitor : AstVisitor {
                 || v._type == null) continue
             let isArray = v._type.baseType == Type.tArray
             let isTable = v._type.baseType == Type.tTable
-            if ((!isArray && !isTable)
-                || !for_loop_matches_comprehension(forE, v, isArray, 1)) continue
+            if (!isArray && !isTable) continue
+            let leaf = for_loop_comprehension_leaf(forE, v, isArray, 1)
+            if (leaf == null) continue
             let kindLabel = isArray ? "array<T>" : "table<K;V>"
+            let clonesUncopyable = (isArray && !v._type.firstType.canCopy
+                && is_named_target_call(leaf as ExprCall, v, 2, "push_clone"))
+            let item = clonesUncopyable ? "clone_to_move(EXPR)" : "EXPR"
             let rewriteForm = (isArray
-                ? "var {v.name} <- [for (x in SRC); EXPR; where COND]"
+                ? "var {v.name} <- [for (x in SRC); {item}; where COND]"
                 : "var {v.name} <- \{for (x in SRC); KEY => VAL; where COND\}")
+            let moveNote = (clonesUncopyable
+                ? "; the elements cannot be copied, so a bare EXPR moves them out of SRC" : "")
             style_warning("STYLE027: var {kindLabel} '{v.name}' followed by a for-loop that only " +
                 "push/insert into it; use a comprehension `{rewriteForm}` (drop `; where COND` " +
-                "when there is no filter)", v.at,
+                "when there is no filter){moveNote}", v.at,
                 st027_fix(blk, idx, v, isArray))
         }
     }
 
-    def for_loop_matches_comprehension(forE : ExprFor?; target : Variable?;
-                                       isArray : bool; for_budget : int) : bool {
-        //! Recursively verifies forE's body is built solely from pushes/inserts/at-assigns into `target`, optionally wrapped in if-filters and nested-for (up to `for_budget` additional nested ExprFor levels). Returns false on any side-effecting statement or unrelated shape, so the all-or-nothing structure guarantees the suggested comprehension rewrite is semantically equivalent.
+    def for_loop_comprehension_leaf(forE : ExprFor?; target : Variable?;
+                                    isArray : bool; for_budget : int) : Expression? const {
+        //! The one push/insert/at-assign into `target` a body of filters
+        //! and up to `for_budget` nested loops holds; null otherwise.
         if (forE == null || forE.genFlags.generated
-            || forE.body == null || !(forE.body is ExprBlock)) return false
+            || forE.body == null || !(forE.body is ExprBlock)) return null
         let blk = forE.body as ExprBlock
-        if (length(blk.list) != 1) return false
-        return stmt_matches_in_for(blk.list[0], target, isArray, for_budget)
+        if (length(blk.list) != 1) return null
+        return stmt_comprehension_leaf(blk.list[0], target, isArray, for_budget)
     }
 
-    def stmt_matches_in_for(stmt : Expression?; target : Variable?;
-                            isArray : bool; for_budget : int) : bool {
-        if (stmt == null || stmt.genFlags.generated) return false
+    def stmt_comprehension_leaf(stmt : Expression?; target : Variable?;
+                                isArray : bool; for_budget : int) : Expression? const {
+        if (stmt == null || stmt.genFlags.generated) return null
         if (stmt is ExprIfThenElse) {
             let ifte = stmt as ExprIfThenElse
             if (ifte.if_false != null || ifte.if_flags.isStatic
-                || ifte.if_true == null || !(ifte.if_true is ExprBlock)) return false
+                || ifte.if_true == null || !(ifte.if_true is ExprBlock)) return null
             let tb = ifte.if_true as ExprBlock
-            if (length(tb.list) != 1) return false
-            return stmt_matches_in_for(tb.list[0], target, isArray, for_budget)
+            if (length(tb.list) != 1) return null
+            return stmt_comprehension_leaf(tb.list[0], target, isArray, for_budget)
         }
         if (stmt is ExprFor) {
-            if (for_budget <= 0) return false
-            return for_loop_matches_comprehension(stmt as ExprFor, target, isArray, for_budget - 1)
+            if (for_budget <= 0) return null
+            return for_loop_comprehension_leaf(stmt as ExprFor, target, isArray, for_budget - 1)
         }
         if (isArray) {
-            if (!(stmt is ExprCall)) return false
+            if (!(stmt is ExprCall)) return null
             let call = stmt as ExprCall
             return (is_named_target_call(call, target, 2, "push")
-                || is_named_target_call(call, target, 2, "push_clone"))
+                || is_named_target_call(call, target, 2, "push_clone")) ? stmt : null
         }
-        if (stmt is ExprCall && is_named_target_call(stmt as ExprCall, target, 3, "insert")) return true
-        return is_at_assign_of(stmt, target)
+        let inserts = (stmt is ExprCall
+            && is_named_target_call(stmt as ExprCall, target, 3, "insert"))
+        return inserts || is_at_assign_of(stmt, target) ? stmt : null
     }
 
     def is_named_target_call(call : ExprCall?; target : Variable?;
