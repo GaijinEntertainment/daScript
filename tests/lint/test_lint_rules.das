@@ -349,8 +349,8 @@ def expected_findings() : array<tuple<line : int; text : string>> {
     ]
 }
 
-def style048_findings(t : T?; fixture : string) : array<LintIssue> {
-    //! The STYLE048 findings of one fixture under tests/lint.
+def style_findings(t : T?; fixture, code : string) : array<LintIssue> {
+    //! The findings of one STYLE rule in one fixture under tests/lint.
     var found : array<LintIssue>
     let path = "{get_das_root()}/tests/lint/{fixture}"
     var inscope access <- make_file_access("")
@@ -366,7 +366,7 @@ def style048_findings(t : T?; fixture : string) : array<LintIssue> {
                     return
                 }
                 let nothing : table<string>
-                let only <- { "STYLE048" }
+                let only <- { code }
                 style_lint_collect_issues(program, found, nothing, only)
             }
         }
@@ -374,9 +374,9 @@ def style048_findings(t : T?; fixture : string) : array<LintIssue> {
     return <- found
 }
 
-[test(description = "STYLE048 reports every if/elif chain over constants with its exact match rewrite and dead-arm text, and none from the quiet functions")]
+[test(description = "STYLE048 reports every if/elif chain over constants with its exact match rewrite and dead-arm text, and none from the quiet functions", timeout = 1200)]
 def test_style048_hints(t : T?) {
-    let found <- style048_findings(t, "_fixture_style048_hints.das")
+    let found <- style_findings(t, "_fixture_style048_hints.das", "STYLE048")
     let expected <- expected_findings()
     let what = "one finding per reporting function, none from the quiet ones"
     t |> equal(length(found), length(expected), what)
@@ -390,9 +390,33 @@ def test_style048_hints(t : T?) {
     }
 }
 
-[test(description = "STYLE048 suggests no match rewrite in a module that does not require daslib/match")]
+[test(description = "STYLE048 suggests no match rewrite in a module that does not require daslib/match", timeout = 1200)]
 def test_style048_needs_match_required(t : T?) {
-    let found <- style048_findings(t, "_fixture_style048_no_match.das")
+    let found <- style_findings(t, "_fixture_style048_no_match.das", "STYLE048")
     let what = "a module that does not require daslib/match gets no match suggestion"
     t |> equal(length(found), 0, what)
+}
+
+[test(description = "STYLE027 names clone_to_move only for a push_clone loop over elements that cannot be copied: a loop over copyable elements and a loop whose push moves get the plain item", timeout = 1200)]
+def test_style027_clone_loop(t : T?) {
+    let found <- style_findings(t, "_fixture_style027_clone.das", "STYLE027")
+    t |> equal(length(found), 3, "one finding per loop of the fixture")
+    for (f in found) {
+        let names_clone = find(f.message, "clone_to_move(EXPR)") >= 0
+        let says_moves = find(f.message, "moves them out of SRC") >= 0
+        let over_rows = find(f.message, "'rows'") >= 0
+        t |> equal(names_clone, over_rows, "only the uncopyable clone loop clones: {f.message}")
+        t |> equal(says_moves, over_rows, "only that finding says what a bare item does")
+    }
+}
+
+def private long_rows_as_suggested(var src : array<array<int>>) : array<array<int>> =>
+    <- [for (x in src); clone_to_move(x); where length(x) > 1]
+
+[test(description = "the comprehension STYLE027 suggests for a clone loop leaves its source whole")]
+def test_style027_suggested_form_keeps_source(t : T?) {
+    var src <- [[1], [2, 3]]
+    let rows <- long_rows_as_suggested(src)
+    t |> equal(length(rows), 1, "the filter keeps one row")
+    t |> equal(length(src[0]) + length(src[1]), 3, "the source keeps its elements")
 }

@@ -33,7 +33,7 @@ options _nolint = "STYLE042,STYLE043"
 //     single `where` clause.
 //   * `emplace` is intentionally excluded — different lifetime semantics.
 
-expect 31209:8
+expect 31209:9
 
 require daslib/style_lint
 
@@ -41,7 +41,7 @@ struct Foo {
     v : int = 0
 }
 
-// --- Bad patterns (must fire — 8 total) ---
+// --- Bad patterns (must fire — 9 total) ---
 
 def bad_single_source_no_filter(src : array<int>) : int {
     var a : array<int>                                // STYLE027 — comprehension
@@ -56,6 +56,16 @@ def bad_single_source_with_filter(src : array<int>) : int {
     for (x in src) {
         if (x < 19) {
             a |> push(x * x)
+        }
+    }
+    return length(a)
+}
+
+def bad_push_clone_rows(var src : array<array<int>>) : int {
+    var a : array<array<int>>                         // STYLE027 — names clone_to_move
+    for (s in src) {
+        if (length(s) > 1) {
+            a |> push_clone(s)
         }
     }
     return length(a)
@@ -116,6 +126,12 @@ def bad_table_at_assign(src : array<int>) : int {
 }
 
 // --- Good patterns (must NOT fire) ---
+
+def good_clone_comprehension(var src : array<array<int>>) : int {
+    // The rewrite of bad_push_clone_rows: rows cloned, src left whole.
+    var a <- [for (s in src); clone_to_move(s); where length(s) > 1]
+    return length(a)
+}
 
 def good_preinitialized(src : array<int>) : int {
     // Init is non-empty — comprehension rewrite would lose [1,2,3]; skip.
