@@ -97,6 +97,11 @@ def set_metal_wdec_step(on : bool) {
     g_wd_step_env = on
 }
 
+//! The decode-step half `set_metal_wdec_step` (or
+//! DASLLAMA_METAL_WDEC_STEP) last set - what a caller that sets it
+//! puts back
+def get_metal_wdec_step : bool => g_wd_step_env
+
 //! Pin the narrow decoder's CPU step on/off (DASLLAMA_METAL_WDEC_SMALL_CPU's twin): read by the load's lane, the staging and
 //! the bake, so it decides the next Metal image minted, never one already loaded (`#tower-dev-step-cpu`).
 def set_metal_wdec_small_cpu(on : bool) {

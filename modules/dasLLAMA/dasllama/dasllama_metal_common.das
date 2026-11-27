@@ -948,6 +948,11 @@ def public set_metal_decode_skip(v : string) {
     }
 }
 
+//! The knockout `set_metal_decode_skip` (or
+//! DASLLAMA_METAL_DECODE_SKIP) last armed, "" full math - what a
+//! caller that sets it puts back
+def public get_metal_decode_skip : string => g_skip
+
 //! Zero the cumulative per-stage timers + the served-step counter — windows a chase run's stage
 //! stats to one measurement loop (declines keep accumulating; they gate support, not speed).
 def public metal_decode_stage_reset {

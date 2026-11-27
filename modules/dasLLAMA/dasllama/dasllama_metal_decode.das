@@ -3876,6 +3876,10 @@ def public set_metal_decode_concurrent(v : int) {
     g_dconc = v < 0 ? -1 : (v != 0 ? 1 : 0)
 }
 
+//! The rail `set_metal_decode_concurrent` set: 1 on, 0 serial, -1
+//! the env default - what a caller that sets it puts back
+def public get_metal_decode_concurrent : int => g_dconc
+
 // DASLLAMA_METAL_FUSE (default ON): every sandwich seam as one residual step (`MetalPreAddRms` / `MetalPreAdd`) - off
 // restores the split chain (the branch's post norm, the add, the next norm) for A/B
 var private g_dfuse = -1
@@ -4586,6 +4590,10 @@ def public set_metal_batch_addrms_unfused(v : bool) {
     g_b_addrms_unfused = v
     discard_batch_pre()   // a step encoded under the other form would serve it one step late
 }
+
+//! The split-chain pin `set_metal_batch_addrms_unfused` set - what a
+//! caller that sets it puts back
+def public get_metal_batch_addrms_unfused : bool => g_b_addrms_unfused
 
 //! pin the gemma-4 MoE tail to its unfused chain (the routed combine, the three post norms, the add and the next add-norm), the
 //! tests' control for the one-step form (`MetalMoeCombG4`); returns the pin it replaced

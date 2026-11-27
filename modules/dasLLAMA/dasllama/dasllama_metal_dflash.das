@@ -600,6 +600,9 @@ def public set_metal_dflash_soft_pick(on : bool) {
     g_df_soft = on
 }
 
+//! the knob `set_metal_dflash_soft_pick` last wrote
+def public get_metal_dflash_soft_pick : bool => g_df_soft
+
 //! the device selector serves the attached drafter's round, a sampled one's drafts (`soft`) included: the knobs on, its pipelines
 //! built, its shapes the kernels'
 [no_env, arch(at="../ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-sampled-drafts")]

@@ -7063,6 +7063,11 @@ def public set_metal_prefill_span(on : bool) {
     g_pf_env_span = on
 }
 
+//! The span serving `set_metal_prefill_span` (or
+//! DASLLAMA_METAL_SPAN) last set - what a caller that sets it puts
+//! back
+def public get_metal_prefill_span : bool => g_pf_env_span
+
 //! Prefills below this npos decline to the CPU path (submit+readback overhead outweighs the win).
 //! Set 1 to force every prefill onto the GPU (tests).
 def public set_metal_prefill_min_npos(v : int64) {
@@ -7083,6 +7088,10 @@ def public set_metal_prefill_logits_cpu(v : bool) {
 def public set_metal_prefill_mulmm_legacy(v : bool) {
     g_mm_legacy = v
 }
+
+//! The legacy-GEMM pin `set_metal_prefill_mulmm_legacy` set (DASLLAMA_METAL_MULMM=0 pins apart
+//! from it) - what a caller that sets it puts back
+def public get_metal_prefill_mulmm_legacy : bool => g_mm_legacy
 
 //! A/B seat: the GEMV-tail prefill dispatch (small npos % 32 remainders peel onto the mv
 //! family) vs the padded-tile path — `DASLLAMA_METAL_MM_TAIL`'s setter twin. Default on.
@@ -7146,6 +7155,10 @@ def public set_metal_prefill_half_x(v : bool) {
     to_log(LOG_INFO, "dasLLAMA: set_metal_prefill_half_x({v}) - GEMM form override\n")
 }
 
+//! The half-X seat `set_metal_prefill_half_x` last set - what a
+//! caller that sets it puts back
+def public get_metal_prefill_half_x : bool => g_pf_env_half_x
+
 //! A/B seat: the dev-W all-device GEMM form (q8 W dequantized to a device f16 panel per
 //! site, >= 256 rows) vs the tg-staged twin. Default on; identity witnesses pin it off with
 //! half-X — the same row-gated form-swap class.
@@ -7162,6 +7175,10 @@ def public set_metal_prefill_tall(v : bool) {
     g_pf_env_tall = v
     to_log(LOG_INFO, "dasLLAMA: set_metal_prefill_tall({v}) - GEMM form override\n")
 }
+
+//! The tall-stamp seat `set_metal_prefill_tall` last set - what a
+//! caller that sets it puts back
+def public get_metal_prefill_tall : bool => g_pf_env_tall
 
 //! A/B seat: the fused qk_norm+rope pass (one panel rewrite + the q twin dual-store) vs the
 //! split norm/rope/cvt dispatches. Default on; `DASLLAMA_METAL_QK_ROPE=0` pins it off.
