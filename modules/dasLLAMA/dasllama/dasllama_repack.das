@@ -200,12 +200,81 @@ def repack_grp(var np : uint8?; var ep : uint8?; n, d, mr : int64; _f : KqTag_mx
     repack_unit_form(np, ep, n / KQ_B32_ELEMS, d, mr, MX4_QB, MX4_SB, verbatim_unit_field(MX4_SB, 1l))
 }
 
-//! mr-generalized per-32 plane repack, grp1 == disk order: a block's `b32_qb(f)` quant bytes as four-byte columns - q51 and
-//! q5032 five (the nibble dwords in mx4 order, the qh dword last), iq4nl32 and q4032 four, an affine member four, six or eight
-//! code columns - under its verbatim `b32_sb(f)`-byte scale unit (an affine row's units in order are its group pairs)
+//! mr-generalized per-32 plane repack (grp1 == disk order): quant bytes as four-byte columns in mx4 order; q20 and q10 panic past mr 1
 def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64;
-               f : KqTag_q51 | KqTag_iq4nl32 | KqTag_q4032 | KqTag_q5032 | KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) {
-    repack_unit_form(qp, sp, n / KQ_B32_ELEMS, d, mr, b32_qb(f), b32_sb(f), verbatim_unit_field(b32_sb(f), 1l))
+               f : KqTag_q51 | KqTag_iq4nl32 | KqTag_q4032 | KqTag_q5032 | KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b | KqTag_q20 | KqTag_q10) {
+    let sg = b32_sgroup(f)
+    if (sg > 1l && mr > 1l) {
+        panic("repack_grp: a {sg}-block scale group's planes sit in disk order - no grp<{mr}> interleave carries the group's shared unit")
+    }
+    repack_unit_form(qp, sp, n / (KQ_B32_ELEMS * sg), d, mr, b32_qb(f) * sg, b32_sb(f), verbatim_unit_field(b32_sb(f), 1l))
+}
+
+[unused_argument(kq, ks, n, d, mr, f)]
+def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; f : KqTag_iq1s | KqTag_iq1m) {}
+
+//! the bytes of the decoded scale rows a 1-bit group's panel carries past its weights: iq2xs's grp scale row a superblock and row
+def grid1_scale_panel_bytes(mr, nsb : int64) : int64 => mr * nsb * IQ2XS_SSB
+
+//! a 1-bit superblock's f16 d bits off its disk-order scale bytes: IQ1_S's d, IQ1_M's assembled off its four words
+def private grid1_d_bits(s : uint8 const?; _f : KqTag_iq1s) : uint => u16_le(s, 0l)
+def private grid1_d_bits(s : uint8 const?; _f : KqTag_iq1m) : uint {
+    let w = iq1m_scale_words(s, 0l)
+    return iq1m_d_bits(w[0], w[1], w[2], w[3])
+}
+
+//! a 1-bit superblock's octet (`ib`, `l`): its grid index, its delta sign and its 16-weight strip's scale field, off the
+//! disk-order quant bytes `q` and scale bytes `s`
+typedef Grid1OctetFields = tuple<idx : int; neg : bool; sc : int>   //! an octet's grid index, delta sign (-1/8) and strip scale 2s + 1
+
+[unused_argument(s)]
+def private grid1_octet_fields(q, s : uint8 const?; ib, l : int64; _f : KqTag_iq1s) : Grid1OctetFields {
+    let qh = u16_le(q, IQ1_QS_BYTES + 2l * ib)
+    unsafe {
+        return (idx = int(q[4l * ib + l]) | int(iq1s_hi(qh, uint(l)) << 8u), neg = iq1s_neg(qh) != 0u, sc = int(iq1s_sc(qh)))
+    }
+}
+def private grid1_octet_fields(q, s : uint8 const?; ib, l : int64; _f : KqTag_iq1m) : Grid1OctetFields {
+    unsafe {
+        let qhb = uint(q[IQ1_QS_BYTES + 2l * ib + l / 2l])
+        let o = uint(l % 2l)
+        let hb = int(2l * ib + l / 2l)
+        return (idx = int(q[4l * ib + l]) | int(iq1m_hi(qhb, o) << 8u), neg = iq1m_neg(qhb, o) != 0u, sc = 2 * iq1m_half_scale(u16_le(s, int64(2 * (hb / 4))), hb) + 1)
+    }
+}
+
+[arch(at = "../ARCHITECTURE_ENGINE_FORMATS_IQ1.md#iq1-grp-cpu")]
+def unpack_grid1_panel(kqg, ksg : uint8 const?; var dst : uint8?; mr, nsb, qsb, ssb : int64; f : auto(TT)) {
+    let grid = iq1s_grid()
+    unsafe {
+        var sdst = dst + mr * nsb * KQ_SB_ELEMS
+        var wd = reinterpret<uint?>(dst)
+        for (sbi in range64(nsb)) {
+            let ow = sbi * (KQ_SB_ELEMS / 4l) * mr
+            let so = sbi * IQ2XS_SSB * mr
+            for (r in range64(mr)) {
+                let q = kqg + (r * nsb + sbi) * qsb
+                let sc = ksg + (r * nsb + sbi) * ssb
+                let dbits = grid1_d_bits(sc, f)
+                sdst[so + 2l * r] = uint8(dbits & 0xFFu)
+                sdst[so + 2l * r + 1l] = uint8(dbits >> 8u)
+                sdst[so + 2l * mr + 2l * r] = 0u8
+                sdst[so + 2l * mr + 2l * r + 1l] = 0u8
+                for (ib in range64(8l)) {
+                    for (l in range64(4l)) {
+                        let fd = grid1_octet_fields(q, sc, ib, l, f)
+                        let w = grid1_octet_words(iq1_grid_entry(grid, fd.idx), fd.neg ? -1 : 1)
+                        let wo = ow + (l / 2l) * 32l * mr + (ib * 4l + 2l * (l % 2l)) * mr + r   // `store_grid_panel_pair`'s two dwords
+                        wd[wo] = w.x
+                        wd[wo + mr] = w.y
+                        if (l % 2l == 0l) {
+                            sdst[so + 4l * mr + (2l * ib + l / 2l) * mr + r] = uint8(fd.sc)
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 //! the k4/k5 scale row: d and dmin verbatim, then the 12 packed 6-bit sc/mn bytes DECODED into the two 8-strip fields
@@ -417,6 +486,14 @@ def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_iq
 //! [mr x f16 dmin] (contiguous d rows for the emitter's f16 vector loads).
 def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_k2) {
     repack_unit_form(kq, ks, n / KQ_SB_ELEMS, d, mr, K2_QSB, K2_SSB, [RepackField(src = 4l, width = 1l, count = 16l), RepackField(src = 0l, width = 2l, count = 1l), RepackField(src = 2l, width = 2l, count = 1l)])
+}
+
+def private tern_fmt(_f : KqTag_tq2) : KqFmt => KqFmt.tq2
+def private tern_fmt(_f : KqTag_tq1) : KqFmt => KqFmt.tq1
+
+//! the ternary members: the quant row as four-byte columns (tq2's 16 are k2's, tq1's 13), the scale row [mr x f16 d] alone.
+def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; f : KqTag_tq2 | KqTag_tq1) {
+    repack_unit_form(kq, ks, n / KQ_SB_ELEMS, d, mr, kq_qsb(tern_fmt(f)), kq_ssb(tern_fmt(f)), verbatim_unit_field(2l, 1l))
 }
 
 //! iq2s: 18 four-byte columns of [idx 32][signs 32][qh 8], the k4 row with 16 strips.

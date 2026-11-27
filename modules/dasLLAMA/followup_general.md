@@ -1272,7 +1272,7 @@
    or `lint.rst` section whose id no module still emits). (g) `utils/REVIEW.das`: a test file under
    `utils/` named in no workflow row, or only in a `--compile-only` row. (h) `site-dasllama`: a
    `_stories/*.md` entry with neither a figures comment nor a date and sha. (i) `dasLLVM`: every
-   `[EnvConfig]` field of `llvm_env.das` named in `ARCHITECTURE.md#inherited-invariants`; every `requires=` /
+   `[EnvConfig]` field of `llvm_env.das` named in `ARCHITECTURE_INVARIANTS.md#inherited-invariants`; every `requires=` /
    `g_target_x64_*` feature name present in `das_cpu_supports`. (j) `dasllama-server`: a fixture's
    top-level key absent from `README.md`. (k) `REVIEW_IMAGE`: an addition on the left of a
    `> msize` compare in `dasllama_image.das`; `REVIEW_TTS`: `styletts2_synthesize` carries
@@ -2992,3 +2992,27 @@
     `PERF_LEDGER.md` entry on the tile attention race and the served bench's behind pass
     (`ARCHITECTURE_MEASUREMENT_SERVED.md#model-bench`). Done = the release re-mint adds a spawned Metal cell behind a
     base of 32768 tokens or deeper to `performance/gen_bench_records.das` and mints its rows on every board box.
+325. **The six low-bit members' CPU families are untuned on most classes.** The `x86-vnni512` profile carries rizen's
+    mint of every family of the six members - `q20q8_rm_gemv_gen`, `q10q8_rm_gemv_gen`, and the `gemv`, `rm_gemv` and
+    `tile` families of `iq1sq8`, `iq1mq8`, `tq2q8` and `tq1q8` - and `x86-avx2` the reference box's mint of all six
+    members' families; every other entry of theirs names the reference body
+    (`performance/defaults/<class>.tune-defaults.json`), so those classes serve the members on the portable body. Owed:
+    `arm-neon`, `arm-sve` and `arm-i8mm` for all six members' families (the M5 Max holds `arm-i8mm` and races `arm-neon` as the class; no box
+    of the author's holds `arm-sve`); `x86-amx` for all six, a class no box of the author's holds. Done = each of those
+    entries names the winner the tuner timed on a box the `performance/REVIEW.md` profile rule admits, the tuner line
+    quoted in the PR body that lands it.
+326. **No board cell serves a low-bit member.** The CPU, Vulkan and CUDA tiers serve `q20`, `q10`, `iq1s`, `iq1m`, `tq2`
+    and `tq1`, and `performance/gen_bench_records.das` spawns no cell on a file any of them stores, so no board row times
+    their served turns; their readings are the arc's dated `PERF_LEDGER.md` entries. Done = a spawned cell on one of the
+    catalogued low-bit files (`performance/model_specs.das`: the Bonsai, Ternary-Bonsai and TriLM files among them) and
+    its rows minted on every board box.
+327. **Two races the low-bit GEMVs owe on the discrete homes.** (a) `gemv_grid_fmt` admits `iq1s` and `iq1m`, so the
+    lanes rule (`gemv_lanes_per_row`) gives them 8 lanes a row from 25 to 48 blocks, and no shape
+    `harness/gemv_cuda_vs_vulkan.das` races has n at or under 1536 (its smallest row is 1792): the rule's 8-lane branch
+    is timed for no member, though the Qwen1.5-MoE expert down (n 1408, 44 blocks) is served on it. (b) The iq1
+    grid-form race (`harness/vk_gemv_probe.das -- iq1`, the dated `PERF_LEDGER.md` entry on the iq1s and iq1m members'
+    decode GEMV) prints no noise on either backend while its leader differs by backend: on Vulkan the nibble-expanded
+    grid at 8 lanes reads 107.30 us summed on iq1m against the shipped 115.18, and on CUDA 8 lanes trail. Done = (a) the
+    lane race carrying shapes with n at or under 1536 - the MoE down's 1408 x 2048 and one at or under 768 - timed on
+    both homes, the 8-lane branch kept or changed by the result; (b) the grid-form race run on both homes with each
+    backend's noise beside its rows, and the shipped form read against it.

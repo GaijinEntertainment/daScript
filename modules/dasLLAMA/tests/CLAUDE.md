@@ -723,8 +723,8 @@ Qwen3-30B-A3B `--pure` mint's seven-block cut - family `qwen3moe`, its blocks as
 census-iq4nl32-table census-q4032 census-q5032 census-q51-table census-moe-q51 census-moe-q4032
 census-moe-q5032`, and the affine routed mint `census-moe-mlx4b` (the Qwen3.6-35B-A3B 4-bit snapshot's served image,
 large tier). Vulkan format census (`test_gpu_resident_format_census.das`, entry below):
-`vk-census vk-gather vk-perop-ffn vk-per32-iq4nl32 vk-per32-q4032 vk-per32-q5032 vk-per32-q51`;
-`vk-per32-moe` is `test_gpu_resident_qwen_moe.das`'s per-32 MoE carriers. A filter token matches by
+`vk-census vk-gather vk-perop-ffn vk-per32-iq4nl32 vk-per32-q4032 vk-per32-q5032 vk-per32-q51 vk-per32-q20 vk-per32-q10`;
+`vk-per32-moe` is `test_gpu_resident_qwen_moe.das`'s per-32 MoE carriers, `vk-per32-moe-q20` and `vk-per32-moe-q10` among them. A filter token matches by
 substring, so `--arm census-q51` also runs `census-q51-table`, and `--arm vk-per32` runs every
 per-32 arm of both Vulkan files.
 
@@ -1667,10 +1667,13 @@ twin on a Vulkan build, the CUDA home under `DASLLAMA_CUDA=1`): the one-copy rar
 kernels and their oracle on every expert format the tier streams, against the planar kernels over a planar disk-order
 stack on a Model shell gathered into the device layout by the engine's own gather (`layout_gather_dispatch` under `disk`),
 the poisoned expectation the control: the host twin (the discrete templates' own block decode run on the CPU, the shared
-`dasllama_gpu_host_twin`'s `moe_gpu_host_twin` / `moe_gpu_host_rows`) on the fifteen superblock formats, the four per-32 ones, mx4 and q8; the row-major GEMVs
-(`<fmt>q8_rm_gemv_gen`: q8, the per-32 and MXFP4 planes, the fifteen superblock formats) and their four-token
+`dasllama_gpu_host_twin`'s `moe_gpu_host_twin` / `moe_gpu_host_rows`) on the nineteen superblock formats, the six per-32 ones (q20 and q10 among them), mx4 and q8; the row-major GEMVs
+(`<fmt>q8_rm_gemv_gen`: q8, the per-32 and MXFP4 planes, the nineteen superblock formats) and their four-token
 tiles (`<fmt>q8_rm_tile4_gen`, four activation rows against the planar rows a token). A new expert format lands its cells
-here (`HOW_TO_ADD_A_FORMAT.md`, the Vulkan section's one-copy step).
+here (`HOW_TO_ADD_A_FORMAT.md`, the Vulkan section's one-copy step). On every build, the twin or none:
+`test_q20_float_witness` and `test_q10_float_witness` hold the per-32 low-bit GEMV cells' row oracle
+(`lowbit_gemv_row_oracle`, `_kernel_oracles.das`) to its plane-dequant float witness (`lowbit_gemv_float_oracle`) within 1e-4
+over 44 hashed blocks, the witness reading a d a block in place of a d a group past 1e-3 the control.
 `test_vulkan_moe_cm2.das` - `gpu-kernels` (no model; a cm2 device, else skips): the cm2 expert chain over a
 device-side f16 gather, the streamed-group slot hand-off, the streamed split's head on the
 per-expert chain (one expert, and two experts through the ring - each its own copy and submit;
@@ -1865,12 +1868,12 @@ last column standing),
 `test_vkd_q8_gemv_gu_n` (its N-column stamps - two, four and eight columns, and eleven as an eight-column tile and a
 four-column one - against the one-row
 kernel run a column at a time, bit for bit, each stamp full and short of its width, over silu and
-gelu), `test_vkd_gemv_ncol` (the N-column decode GEMV of every `KqFmt` member the discrete homes stamp, `kq_discrete_unstamped` naming the rest - q8 and its row-pair stamps, the fifteen kq
-leaves, and the per-32 q51 / iq4nl32 / q4032 / q5032 / mx4 leaves - against its one-column
+gelu), `test_vkd_gemv_ncol` (the N-column decode GEMV of every `KqFmt` member the discrete homes stamp, `kq_discrete_unstamped` naming the rest - q8 and its row-pair stamps, the nineteen kq
+leaves, and the per-32 q51 / iq4nl32 / q4032 / q5032 / q20 / q10 / mx4 leaves - against its one-column
 class a column at a time, bit for bit, at one to eight columns and through the tiled
 encoder at nine and twelve, the one-column rows against the CPU oracle - the
 engine's scalar dots on the per-32 formats - each bar with its poisoned element), `test_vkd_blk32_batch_family` (the
-per-32 batch tile `Blk32BatchT` - q51, iq4nl32, q4032, q5032, mx4 - over two regions with
+per-32 batch tile `Blk32BatchT` - q51, iq4nl32, q4032, q5032, q20, q10, mx4 - over two regions with
 edge tiles and a K tail against the engine's scalar dots, `blk32_gemm_oracle`),
 `test_vkd_cls_epi_rows` (the classifier epilogue over four logits rows in one dispatch
 against the one-row dispatch a row at a time, bit for bit, and the CPU softcap with every
@@ -2910,7 +2913,25 @@ feeds, and its q8 uncached CPU form, on every box, `chat_llama32_cells` (`_chat_
 adjacent pairs, carries the file's config otherwise (the file's context read off its header, the form's cap aside), serves
 mlx8 planes at every dense site with no q8 copy, and its teacher-forced logits sit within 8 percent of the file's range
 (top-1 equal at 17 of 20 positions) and within 0.4 of the snapshot runtime's top-1 logits; a skip where the snapshot is
-not stocked. `test_gpu_resident_smollm2`
+not stocked. The low-bit blocks (`test_llama_tq2`, `test_llama_tq1`, `test_llama_iq1s`, `test_llama_iq1m`), a file a
+block: the Llama-3.2-1B TQ2_0, TQ1_0, IQ1_S and IQ1_M mints and TriLM 1.1B's TQ2_0 and TQ1_0 files. On the K-quant-native
+CPU forms, on every box, every dense plane is tagged by its disk type (the IQ1 mints' mixed planes through
+`kq_mixed_tags_cell`), the last layer's first 64 attn_q rows through the served matmul dot the file dequant's rows on an
+exact Q8_K row within 1e-5 of the larger magnitude floored at 1 (`kq_last_q_served_cell`, its poisoned expectation the
+control), and on the portable pin the planes stay disk-order and dequant to the file's bit for bit; on the box's own backend
+the IQ1 mints' attention sites are native and layer 0's attention q and layer 2's FFN down rows through `mm_f` dot the file
+rows within f32 reassociation, a row's neighbour the control (`kq_dense_sites_cell`, `_kquant_cells.das`); on the box's own backend
+TriLM's forced feed of its story prompt and llama.cpp's opening ' lived in a house with a big tree.' reads each opening
+token as its argmax or within the dense tie bar (`LOGIT_BAR_REL` of the row's largest live logit), each row against
+llama.cpp's next token outside it the control (`trilm_opening_walk`). Each form's share runs under the member's census
+(`lowbit_census_ran`, `_resident_feed.das`): on the device form the member's stamps count on the home's census, on a CPU
+form - the control - they stay put. On the device form the tags hold and the 1B mint's window chain - 40 tokens and two
+windows on the Vulkan home, 40 tokens on the CUDA home, plus eight steps - sits no further from the file's f32 chain
+(`f32_form`) than the CPU q8 chain does (`lowbit_within`, `f32_chain_witness` at `LOWBIT_F32_DIST_REL` 1.0, the
+one-step-off rows the control), the CUDA driver serving every position; TriLM's story feed on the device, after the block,
+sits within the dense bar of the box backend's (`trilm_story_within`, the one-step-off rows the control), both forms'
+greedy continuations logged (`log_gen_texts`). On the Vulkan home each 1B mint's block also carries the coverage census's
+coopmat mode sweep (`sweep_forms`: the default form, KHR and sdot4). `test_gpu_resident_smollm2`
 and `test_gpu_resident_tinyllama` are CPU-only blocks, on every box, of cells the topic files' fixture modules hold (their
 entries name the cells): SmolLM2-135M at 512 positions - on its q8 form the scheduler's cells, `batch_decode_codec_cells`,
 `batch_decode_row_refuses_cell`, `kv_q8_prefill_vs_decode_cell`, `kv_paged_q8_cell`, `fused_attn_chain_cell` where the
@@ -3405,7 +3426,13 @@ counter's control), every fed step runs each layer's FFN row on the device, and
 the steps hold the CPU chain at the llama file's bar (the qwen2 mint at 8%, its reading in the carrier list's `//!`). Arms `vk-per32-iq4nl32`,
 `vk-per32-q4032`, `vk-per32-q5032` (family `qwen2`) and `vk-per32-q51` (family `qwen35`): the per-32 `--pure` mints, every site native
 (the census), the table gathered by the window and every step off its `<fmt>_emb_cls_spv` leaf, the forced feed at the
-qwen2 file's bar (the iq4nl32 mint at that file's iq4nl32 bar, 8%), and on the Q5_1 hybrid the NextN head armed (`rdec_verify_rows`); the Q5_1 hybrid and each per-32 qwen2 mint load once a form (`with_cpu_and_gpu_model`: one device form at one region, the census and the gather's device rows on it, the feed's CPU side on the CPU form; `per32_table_rows` the qwen2 mints'), every other gather cell (`emb_gather_cell`) loads its file with the planes on the host and runs the same device half (`emb_gather_rows`, `_cpu_gpu_model.das`, shared with the qwen3 file's 4B block) and compare (`emb_gather_within`) over the CPU chain on that model. Under
+qwen2 file's bar (the iq4nl32 mint at that file's iq4nl32 bar, 8%), and on the Q5_1 hybrid the NextN head armed (`rdec_verify_rows`); the Q5_1 hybrid and each per-32 qwen2 mint load once a form (`with_cpu_and_gpu_model`: one device form at one region, the census and the gather's device rows on it, the feed's CPU side on the CPU form; `per32_table_rows` the qwen2 mints'), every other gather cell (`emb_gather_cell`) loads its file with the planes on the host and runs the same device half (`emb_gather_rows`, `_cpu_gpu_model.das`, shared with the qwen3 file's 4B block) and compare (`emb_gather_within`) over the CPU chain on that model. Arm
+`vk-per32-q20` (families `qwen3` and `llama`): the Ternary-Bonsai-1.7B Q2_0 file and the Llama-3.2-1B Q2_0 mint, every site
+native, the tied table gathered (Bonsai's off `q20_emb_cls_spv`, the mint's Q6_K one), the forced feed at the per-32 tables'
+bar, each form loaded once; arm `vk-per32-q10` the same cells on the Bonsai-1.7B Q1_0 file (its tied table off `q10_emb_cls_spv`)
+and the Llama-3.2-1B Q1_0 mint. Each of the four blocks also loads its K-quant native CPU form on every box, whatever the arm
+filter says: Bonsai's table sites off their own bytes (`per32_tables_cpu_cell`), the mint's attention sites native and layer 0's
+attention q and FFN down rows against the file rows' dot (`kq_dense_sites_cell`, `_kquant_cells.das`). Under
 `DASLLAMA_CUDA=1` the per-op FFN rail's test, the per-32 tables' and the tied llama table's gather cells skip: the per-op tier and the
 gather witness (`vk_rdec_token_gathered`) are the Vulkan home's.
 `_metal_format_census_cells.das` - the Metal format census, cells on the blocks of its carriers' files
@@ -3949,7 +3976,11 @@ forms alone, on every box - under the portable pin the MoE hybrid's batched deco
 the K-quant planes requantized to q8 the cut's parity stream (`parity_qwen35moe_cut_cell`);
 `test_gpu_resident_moe_per32` (arm `vk-per32-moe`) the one-window cell on the Q5_1, Q4_0 and Q5_0 `--pure` mints' cuts - every
 site native, the q51 shared expert and routed stacks, the q4032 routed downs, the q5032 shared expert and routed stacks -
-a block a file. The whole-model resident driver on a MoE
+a block a file; `test_gpu_resident_moe_q20` (arm `vk-per32-moe-q20`, category `qwen15-moe`) the whole Qwen1.5-MoE whose gate, up and
+down stacks of layers 3, 11 and 19 are Q2_0 (no cut): every site native, the window and its fed steps on the resident chain with no CPU
+pass, within the routed bar; `test_gpu_resident_moe_q10` (arm `vk-per32-moe-q10`, category `qwen15-moe`) the same cell on the Q1_0 twin, and on
+that file's K-quant native CPU form, on every box, layer 3's routed gate, up and down rows against the file rows' dot
+(`kq_expert_sites_cell`, `_kquant_cells.das`). The whole-model resident driver on a MoE
 (`DASLLAMA_GPU=1`): the expert stacks in the arena, the window
 chain's routed block and the token command's routed block - the hybrid file's forced-feed
 logits-tolerance form at the routed chain's 20% bar (the arms part on the router's near-ties from
@@ -4021,7 +4052,12 @@ stored-rows cell - whether the cut window chain and the split token command writ
 `test_gpu_resident_moe_formats.das` - stocked suite, `-jit` only, `DASLLAMA_GPU=1`, its Qwen1.5-MoE files the `qwen15-moe` category's; the host twin's model-level matrix on
 the smallest MoE: Qwen1.5-MoE-A2.7B-Chat's routed experts requantized to one format a file (`moe-formats/<file>-exps-<TYPE>.gguf`
 under the models dir, a junction to another drive on the reference box; the rest Q8_0; the down stacks' 1408-wide rows take the
-type's per-32 fallback where a superblock type is asked - Q4_K's down is Q5_0), four routed layers' experts pinned to the host
+type's per-32 fallback where a superblock type is asked - Q4_K's down is Q5_0; a ternary or 1-bit grid type's file (TQ2_0,
+TQ1_0, IQ1_S, IQ1_M) is the three-layer form `moe-formats/<file>-exps3-<TYPE>.gguf`, the type on the gate and up stacks of
+layers 3, 11 and 19 alone and their down stacks the type's fallback - Q4_0 under a ternary type, IQ4_NL under IQ1_S and
+IQ1_M - since a ternary requant of every stack amplifies the chains' rounding past the routed bar; the IQ1_S and IQ1_M files' blocks
+also load a K-quant native CPU form whose cell holds layer 3's routed gate and up rows to the file rows' dot,
+`kq_expert_sites_cell`), four routed layers' experts pinned to the host
 under the streamed prompt (`set_gpu_want_pf_stream`), the rare rail reading them off the tier's pinned device-layout planes through
 the host twin (`set_rare_arena`): the host-pinned file's two cells a format - the split token command and the cut window chain
 against the CPU chain, one window and two, one `[test]` a format (dastest's `--test-names test_moe_formats_<TYPE>` runs one;
@@ -5051,6 +5087,9 @@ reaches it through the batch kernel.
 with the native K-quant and Q4_0 planes on (`KqNative.on_q40`) - on the portable-pinned form every Q4_0 plane-dequant
 prefix bit for bit the file dequant at its cursor offset, on the box's own backend the repacked expert gate and up regions,
 the tied k6 classifier and the region-list dispatch against the file's own dequant; and a third CPU form, the file's model_specs parity row's CPU form (`parity_spec_form`: the row's load mode and K-quant knob under `DASLLAMA_PIN_BACKEND`'s pin) runs the row's frozen greedy ids on every box (`parity_spec_cell`, `_parity_cells.das`), a skipped form where the box cannot take the pin.
+`test_q20_expert_sites_cpu` (the Qwen1.5-MoE mint with every routed stack Q2_0, family `qwen2moe`, the `qwen15-moe` category's run
+alone): one block, its K-quant native CPU form - the routed sites native and layer 0's expert gate, up and down rows through `mm_f`
+against the file rows' dot within f32 reassociation, a row's neighbour the control (`kq_expert_sites_cell`).
 `_kquant_cells.das` - the K-quant load's placement cells on a model loaded kq-native under the portable backend's pin
 (the planes stay disk-order, the placement oracle), each against the file's own dequant, with the plane and file dequants
 (`dequant_plane_prefix`, `read_prefix`) `test_kquant.das`'s own cells read: `kq_nv4_load_layout_cell` (Qwen3.5-0.8B-NVFP4-MTP:
@@ -6298,7 +6337,7 @@ carry no tag and always run. The model gate applies the filter too, by file name
 skips a file whose family row (`model_families()`, `_model_categories.das`, the longest stem
 that opens the name) is not among the tokens, so a cell on another family's model skips in a test
 that carries no tag, and a load-once block of a row's file needs no tag: its gate is `model_available`. The rows are the chat
-decoders', the voices' (`kitten`, `kokoro`, `pocket`), the Russian stress models' (`rustress`), the ASR carriers' (`whisper`,
+decoders' (the Bonsai 1.7B files under `qwen3`, TriLM 1.1B under `llama`), the voices' (`kitten`, `kokoro`, `pocket`), the Russian stress models' (`rustress`), the ASR carriers' (`whisper`,
 `parakeet`, `gigaam`, `canary` - its encoder), the VAD's (`vad`) and the Bergamot students' (`bergamot`). A file no row holds
 opens under any filter - a tower, a fixture, a front-end pack or context model a voice reads beside it (`tts_g2p*.bin`,
 `tts_postag.bin`, `tts_ctx_ru.gguf`), a decoder a cell of another family reads (the canary decoder) - and its own block carries

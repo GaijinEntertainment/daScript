@@ -98,6 +98,15 @@ def private allow_cpu_prefill_intent() {
 //   `_fused_decode_cells.das`, `_parity_cells.das`, `_chat_cells.das`, `_sampling_cells.das`, `_embedding_cells.das`);
 //   SmolLM2's portable-pinned CPU form carries the cells whose load lays the q8 rows out for the portable backend (the
 //   q8_0 K/V decode cell, the fused attention chain's portable pass and the deep-context witness cells).
+// - The Llama-3.2-1B TQ2_0, TQ1_0, IQ1_S and IQ1_M mints (`lowbit_1b_rows`): on their K-quant-native CPU forms, on every box,
+//   the plane tags and the served attn_q rows (`kq_last_q_served_cell`, `_kquant_cells.das`), the plane dequant bit for bit on
+//   the portable pin, and on the box's own backend the 1-bit grid mints' attention q and FFN down site rows
+//   (`kq_dense_sites_cell`); on the device form of either home the tags, the member's stamps on the home's census - a CPU
+//   form's census unmoved, the control - and the forced feed against the f32 chain by the distance form (`lowbit_within`);
+//   on the Vulkan home the coverage census's coopmat mode sweep on the mints' KHR and sdot4 forms and the default one.
+// - TriLM 1.1B TQ2_0 and TQ1_0 (`trilm_story_rows`): the same served cell on the CPU forms; on the box's own backend the
+//   story prompt's forced feed against llama.cpp's opening by the tie bar; on the device the tags and census, and the
+//   device's story feed held to the box backend's within the dense bar after the block.
 // - Llama-3.2-1B Q8_0's Metal form (`metal_form`, the blob twin) carries the Metal batched driver's cells
 //   (`_metal_batched_cells.das`): the batched row, the batched gather, the pre-encode rail, the landing across a move and a
 //   release, and the per-row tick. The form is one skipped cell on a build without das_metal.
@@ -126,6 +135,15 @@ let private FILE_1B_Q51 = "Llama-3.2-1B-Instruct-Q5_1-local.gguf"   //! every de
 let private FILE_1B_Q40 = "Llama-3.2-1B-Instruct-Q4_0-local.gguf"   //! the q40 planes: the window chain's kq batch arm off the f16 feed and the cm2 tiles on it
 let private FILE_1B_IQ4NL = "Llama-3.2-1B-Instruct-IQ4_NL-local.gguf"   //! iq4nl planes
 let private FILE_1B_NV4 = "Llama-3.2-1B-Instruct-NVFP4-local.gguf"   //! the nv4 planes: the window on the FP4 tensor rung (W4A4), the steps on the nv4 GEMV leaves
+let private FILE_1B_TQ2 = "Llama-3.2-1B-Instruct-TQ2_0-local.gguf"   //! every dense plane TQ2_0 (the mint's recipe row in `../performance/model_specs.das`), its text garbage on every engine
+let private FILE_TRILM_TQ2 = "TriLM_1.1B_Unpacked-tq2_0.gguf"   //! the trained-ternary carrier: TQ2_0 dense planes whose greedy text reads as a story
+let private TRILM_STORY_CTX = 512l   //! the tq2 cells read planes and a short continuation
+let private FILE_1B_TQ1 = "Llama-3.2-1B-Instruct-TQ1_0-local.gguf"   //! every dense plane TQ1_0 (the mint's recipe row in `../performance/model_specs.das`), its text garbage on every engine
+let private FILE_TRILM_TQ1 = "TriLM_1.1B_Unpacked-tq1_0.gguf"   //! TriLM's ternary weights again as TQ1_0 dense planes: llama.cpp writes the tq2_0 file's text
+let private FILE_1B_IQ1S = "Llama-3.2-1B-Instruct-IQ1_S-local.gguf"   //! the IQ1_S mint (`../performance/model_specs.das`): IQ1_S on attn_q, attn_k, ffn_gate and ffn_up, and on ffn_down past layer 1, beside Q4_K attn_v, IQ2_XXS attn_output and Q2_K ffn_down planes
+let private FILE_1B_IQ1M = "Llama-3.2-1B-Instruct-IQ1_M-local.gguf"   //! the IQ1_M mint, the same mix around IQ1_M
+let private IQ1_1B_PLANES = 78   //! the mints' 1-bit planes: four a layer over sixteen layers, and ffn_down over the last fourteen
+let private IQ1_1B_DOWN_LAYER = 2l   //! the mints' first 1-bit ffn_down: layers 0 and 1 keep Q2_K
 
 //! of the step's max |logit|: the codec carriers' q8_0 mirror bar - both chains quantize each query, each its own, so two
 //! roundings part; the Q4_K_M rows read 0.25-0.37 of an 8.4-9.3 max logit, the IQ4_XS rows 0.29-0.42 of 8.7-9.4
@@ -1540,6 +1558,290 @@ def test_gpu_resident_tinyllama(t : T?) {
         chat_tinyllama_cells(t, m)
         constrained_sampler_cell(t, m)
     }
+    delete forms
+}
+
+let private TRILM_STORY_IDS = 40   //! the greedy continuation each TriLM form logs, past the prompt
+let private TRILM_PROMPT = "Once upon a time, there was a little girl who"
+let private TRILM_OPENING = " lived in a house with a big tree."   //! llama.cpp's greedy opening of `TRILM_PROMPT` on both TriLM files
+
+//! the low-bit 1B mints' distance form: the CPU q8 chain itself sits past the dense 6 percent bar off the f32 chain, so the device is
+//! held to that chain's distance from it, the one-step-off rows the control; on Vulkan the device reads 0.34 of it at 40 tokens and
+//! 0.56 at 2136 on tq2 and tq1, 0.50 and 0.43 on iq1s, 0.48 and 0.37 on iq1m (iq1 on rizen's Radeon 8060S), the control 3.7-7.8 times it
+let private LOWBIT_F32_DIST_REL = 1.0
+
+//! a low-bit 1B mint's device feeds against the f32 chain by the distance form, each prompt one window chain (every position on CUDA)
+def private lowbit_within(t : T?; r : DenseFeeds; file : string) {
+    return if (!r.main.ran)
+    held_within(t, r.carrier, "{file}: ", false)
+    with_dasllama_jobque_() {
+        for (f, i in r.gpu, count()) {
+            let what = "{file}{r.cuda ? " cuda" : ""} prefill ({f.nprompt} tokens) and {DENSE_FED_STEPS} steps"
+            continue if (!twin_collected(t, i, length(r.cpu), "{what}: ") || !twin_collected(t, i, length(r.f32), "{what}, the f32 chain: "))
+            t |> equal(f.prefills, 1l, "{what}: the resident window chain served the {f.nprompt}-token prompt")
+            if (gpu_want_cuda()) {
+                t |> equal(f.cuda, f.nprompt + long_length(f.toks), "{what}: the CUDA driver served every position of the feed")
+            }
+            f32_chain_witness(t, what, f.rows, r.cpu[i].rows, r.f32[i].rows, LOWBIT_F32_DIST_REL) $(id) {
+                return feed_piece(f, r.cpu[i], id)
+            }
+        }
+    }
+}
+
+//! the low-bit 1B mints' forms: the portable-pinned and the box's own K-quant-native CPU loads, the device, the f32 chain
+def private lowbit_1b_forms() : array<ModelForm> =>
+    <- [cpu_cells_form(backend = "portable", kq_native = KqNative.on), cpu_cells_form(kq_native = KqNative.on), device_form(), f32_form()]
+
+//! a low-bit 1B mint's plane tags: every dense plane the ternary member's, `IQ1_1B_PLANES` the 1-bit grid member's
+def private lowbit_1b_tags(t : T?; m : Model; path : string; f : KqFmt) {
+    if (f == KqFmt.tq2 || f == KqFmt.tq1) {
+        kq_dense_tags_cell(t, m, path, f)
+    } else {
+        kq_mixed_tags_cell(t, m, path, f, IQ1_1B_PLANES)
+    }
+}
+
+//! one form's share of a low-bit 1B mint (`file`, member `f`) under the member's census: the device's tags and feeds, the
+//! K-quant-native CPU forms' tags and served attn_q rows - and on the box's own backend a 1-bit grid mint's attention q and
+//! FFN down site rows (`kq_dense_sites_cell`) - the other CPU forms' feeds
+def private lowbit_1b_rows(t : T?; var c : DenseFeeds; m : Model; form : ModelForm; f : KqFmt; file : string) {
+    let path = path_join(models_dir(), file)
+    lowbit_census_ran(t, f, form, file) {
+        if (form.on_gpu) {
+            lowbit_1b_tags(t, m, path, f)
+            llama_feed_rows(c, m, form)
+        } elif (form.kq_native == KqNative.on && form.quant == QuantMode.q8) {
+            lowbit_1b_tags(t, m, path, f)
+            kq_last_q_served_cell(t, m, path, f, form.backend == "portable")
+            if ((f == KqFmt.iq1s || f == KqFmt.iq1m) && empty(form.backend)) {
+                kq_dense_sites_cell(t, m, path, f, IQ1_1B_DOWN_LAYER)
+            }
+        } else {
+            llama_feed_rows(c, m, form)
+        }
+    }
+}
+
+//! the TriLM files' forms: the portable-pinned and the box's own K-quant-native CPU loads, the device
+def private trilm_forms() : array<ModelForm> =>
+    <- [cpu_cells_form(backend = "portable", kq_native = KqNative.on), cpu_cells_form(kq_native = KqNative.on), device_form()]
+
+//! what TriLM's forms collect for the compare after the block: the story feed - `TRILM_PROMPT` with llama.cpp's opening fed after
+//! it - on the device and on the box backend's CPU form, and the device's greedy continuation
+struct TrilmStory {
+    gpu : FeedRows
+    gpu_ran : bool
+    gpu_ids : array<int64>
+    cpu : FeedRows
+    cpu_ran : bool
+}
+
+//! `TRILM_PROMPT` and then llama.cpp's opening of it, fed on a fresh session of the form's codec
+def private trilm_story_feed(m : Model; form : ModelForm) : FeedRows {
+    var inscope prompt <- encode(m, TRILM_PROMPT, true, false)
+    var inscope opening <- encode(m, TRILM_OPENING, false, false)
+    var f : FeedRows
+    with_dasllama_jobque_() {
+        delete f
+        f <- feed_rows(m, form, prompt, opening)
+    }
+    return <- f
+}
+
+//! the greedy continuation of `TRILM_PROMPT` on a K/V codec `kv` session: `TRILM_STORY_IDS` ids past the prompt
+def private trilm_greedy(m : Model; kv : KVDtype) : array<int64> {
+    var inscope prompt <- encode(m, TRILM_PROMPT, true, false)
+    var inscope ids : array<int64>
+    with_dasllama_jobque_() {
+        var s = make_run_state(m.config, kv, kv)
+        delete ids
+        ids <- generate(m, s, prompt, length(prompt) + TRILM_STORY_IDS)
+        delete s
+    }
+    let echo = length(prompt) - 1
+    return <- [for (i in range(TRILM_STORY_IDS)); ids[echo + i]; where echo + i < length(ids)]
+}
+
+//! `row`'s largest logit less its logit at `id`: 0 where `id` is the argmax; infinite on a NaN, so a NaN row is outside every bar
+def private pick_gap(row : array<float>; id : int64) : float {
+    let gap = row[argmax_of(row)] - row[id]
+    return is_nan(gap) ? INFINITE_DIFF : gap
+}
+
+//! llama.cpp's opening of TriLM's story against the box backend's feed of it (`cpu`), an external-reference compare in the
+//! forced-feed form: at every step llama.cpp's token is our argmax or within the row's tie bar of it - the dense bar, which two
+//! engines' roundings of one row stay inside; the control holds each row against llama.cpp's NEXT token, a reference one row off,
+//! outside the bar at every step where that token is another id
+def private trilm_opening_walk(t : T?; m : Model; cpu : FeedRows; file : string) {
+    let n = length(cpu.toks)
+    t |> success(n > 1 && length(cpu.rows) == n + 1, "{file}: the story feed holds a row per opening token and one past ({length(cpu.rows)} rows, {n} tokens)")
+    return if (n < 2 || length(cpu.rows) != n + 1)
+    var outside = 0
+    var widest = 0.0
+    var widest_at = 0
+    var ctl_in = 0
+    var ctl_steps = 0
+    var ctl_least = INFINITE_DIFF
+    for (i in range(n)) {
+        let bar = row_bar(cpu.rows[i], LOGIT_BAR_REL)
+        let gap = pick_gap(cpu.rows[i], cpu.toks[i])
+        var inscope want <- [cpu.toks[i]]
+        to_log(LOG_INFO, "{file} story step {i}: our argmax {pick_text(m, cpu.rows[i])}, llama.cpp's '{eyeball_text(m, want)}' {gap} below it (bar {bar})\n")
+        outside += gap <= bar ? 0 : 1
+        if (!(gap / bar <= widest)) {
+            widest = gap / bar
+            widest_at = i
+        }
+        if (i + 1 < n && cpu.toks[i + 1] != cpu.toks[i]) {
+            let off = pick_gap(cpu.rows[i], cpu.toks[i + 1])
+            ctl_steps++
+            ctl_in += (off > bar && off < INFINITE_DIFF) ? 0 : 1
+            ctl_least = min(ctl_least, off / bar)
+        }
+    }
+    to_log(LOG_INFO, "{file} story walk: {outside} of {n} steps outside the tie bar, the widest {widest} bars at step {widest_at}; the control's nearest {ctl_least} bars over {ctl_steps} steps, {ctl_in} inside\n")
+    t |> success(outside == 0, "{file}: every token of llama.cpp's opening is our argmax or within the tie bar of it ({outside} of {n} outside, the widest {widest} bars at step {widest_at})")
+    t |> success(ctl_steps > 0 && ctl_in == 0, "{file} control: each row against llama.cpp's next token lands outside the tie bar at every one of {ctl_steps} steps ({ctl_in} inside, the nearest {ctl_least} bars)")
+}
+
+//! one form's share of a TriLM file (`file`, member `f`) under the member's census: the device's tags, story feed and greedy
+//! continuation; the CPU forms' served cell, and on the box backend's the story feed, the llama.cpp walk and both greedy texts
+def private trilm_story_rows(t : T?; var s : TrilmStory; m : Model; form : ModelForm; f : KqFmt; file : string) {
+    let path = path_join(models_dir(), file)
+    lowbit_census_ran(t, f, form, file) {
+        if (form.on_gpu) {
+            kq_dense_tags_cell(t, m, path, f)
+            s.gpu <- trilm_story_feed(m, form)
+            s.gpu_ids <- trilm_greedy(m, mirror_kv_dtype())
+            s.gpu_ran = true
+            return
+        }
+        kq_dense_served_cell(t, m, path, f, form.backend == "portable")
+        return if (!empty(form.backend))
+        s.cpu <- trilm_story_feed(m, form)
+        s.cpu_ran = true
+        trilm_opening_walk(t, m, s.cpu, file)
+        var inscope ids <- trilm_greedy(m, KVDtype.f32)
+        var inscope opening <- encode(m, TRILM_OPENING, false, false)
+        to_log(LOG_INFO, "{file} llama.cpp's opening: {eyeball_text(m, opening)}\n")
+        log_gen_texts(m, "{file} greedy continuation", ids, s.gpu_ids)
+    }
+}
+
+//! the story compare after TriLM's block: the device's feed within the dense bar of the box backend's (`feed_steps_within`), the
+//! one-step-off rows its control; a device feed with no CPU twin a failure
+def private trilm_story_within(t : T?; s : TrilmStory; f : KqFmt; file : string) {
+    return if (!s.gpu_ran)
+    if (!s.cpu_ran) {
+        t |> failure("{file}: the box backend's form collected no story feed to hold the device's against")
+        return
+    }
+    with_dasllama_jobque_() {
+        feed_steps_within(t, "{file} story, ", s.gpu.nprompt, s.gpu.rows, s.cpu.rows, s.gpu.toks, LOGIT_BAR_REL, "the device",
+                "the box backend's {f} chain") $(id) {
+            return feed_piece(s.gpu, s.cpu, id)
+        }
+    }
+}
+
+[test(description = "The Llama-3.2-1B TQ2_0 mint and TriLM 1.1B TQ2_0: on their K-quant-native CPU forms, on every box, every layer's seven dense planes are TQ2_0 on disk and tagged tq2, the last layer's attn_q rows through the served matmul dot the file dequant's rows on an exact Q8_K row within 1e-5, and on the portable pin the planes stay disk-order and dequant to the file's bit for bit; on the box's own backend TriLM's feed of its story prompt reads each token of llama.cpp's opening ' lived in a house with a big tree.' as its argmax or within the dense tie bar, llama.cpp's next token outside it; on the device form of either home the whole-model driver serves the tq2 planes - the tags, the tq2 stamps counted on the home's census and none on a CPU form, the 1B's resident chain no further from the f32 chain than the CPU q8 chain over one and two windows plus eight steps, every call served, and TriLM's story feed within 6 percent of the box backend's; on the Vulkan home the kernel coverage census's coopmat mode sweep runs the mint under the box's, KHR and sdot4 modes; each form loads once")]
+def test_llama_tq2(t : T?) {
+    return if (!family_on(t, "llama"))
+    var forms <- lowbit_1b_forms()
+    sweep_forms(t, forms, FILE_1B_TQ2)
+    var c : DenseFeeds
+    dense_feeds(c, gpu_want_cuda() ? [40l] : [40l, TWO_WINDOWS])
+    let ran = with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-TQ2_0-local.gguf", REGIONS_RIG_CTX, forms) $(var m, form) {
+        if (sweep_leg(form)) {
+            sweep_cell(t, m, form, FILE_1B_TQ2)
+        } else {
+            lowbit_1b_rows(t, c, m, form, KqFmt.tq2, FILE_1B_TQ2)
+        }
+    }
+    if (ran) {
+        lowbit_within(t, c, FILE_1B_TQ2)
+    }
+    delete c
+    delete forms
+    var story : TrilmStory
+    var trilm <- trilm_forms()
+    with_cpu_and_gpu_model(t, "llm", "TriLM_1.1B_Unpacked-tq2_0.gguf", TRILM_STORY_CTX, trilm, false) $(var m, form) {
+        trilm_story_rows(t, story, m, form, KqFmt.tq2, FILE_TRILM_TQ2)
+    }
+    trilm_story_within(t, story, KqFmt.tq2, FILE_TRILM_TQ2)
+    delete story
+    delete trilm
+}
+
+[test(description = "The Llama-3.2-1B TQ1_0 mint and TriLM 1.1B TQ1_0: on their K-quant-native CPU forms, on every box, every layer's seven dense planes are TQ1_0 on disk and tagged tq1, the last layer's attn_q rows through the served matmul dot the file dequant's rows on an exact Q8_K row within 1e-5, and on the portable pin the planes stay disk-order and dequant to the file's bit for bit; on the box's own backend TriLM's feed of its story prompt reads each token of llama.cpp's opening ' lived in a house with a big tree.' as its argmax or within the dense tie bar, llama.cpp's next token outside it; on the device form of either home the whole-model driver serves the tq1 planes - the tags, the tq1 stamps counted on the home's census and none on a CPU form, the 1B's resident chain no further from the f32 chain than the CPU q8 chain over one and two windows plus eight steps, every call served, and TriLM's story feed within 6 percent of the box backend's; on the Vulkan home the kernel coverage census's coopmat mode sweep runs the mint under the box's, KHR and sdot4 modes; each form loads once")]
+def test_llama_tq1(t : T?) {
+    return if (!family_on(t, "llama"))
+    var forms <- lowbit_1b_forms()
+    sweep_forms(t, forms, FILE_1B_TQ1)
+    var c : DenseFeeds
+    dense_feeds(c, gpu_want_cuda() ? [40l] : [40l, TWO_WINDOWS])
+    let ran = with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-TQ1_0-local.gguf", REGIONS_RIG_CTX, forms) $(var m, form) {
+        if (sweep_leg(form)) {
+            sweep_cell(t, m, form, FILE_1B_TQ1)
+        } else {
+            lowbit_1b_rows(t, c, m, form, KqFmt.tq1, FILE_1B_TQ1)
+        }
+    }
+    if (ran) {
+        lowbit_within(t, c, FILE_1B_TQ1)
+    }
+    delete c
+    delete forms
+    var story : TrilmStory
+    var trilm <- trilm_forms()
+    with_cpu_and_gpu_model(t, "llm", "TriLM_1.1B_Unpacked-tq1_0.gguf", TRILM_STORY_CTX, trilm, false) $(var m, form) {
+        trilm_story_rows(t, story, m, form, KqFmt.tq1, FILE_TRILM_TQ1)
+    }
+    trilm_story_within(t, story, KqFmt.tq1, FILE_TRILM_TQ1)
+    delete story
+    delete trilm
+}
+
+[test(description = "The Llama-3.2-1B IQ1_S mint: on its K-quant-native CPU forms, on every box, its 78 IQ1_S planes (attn_q, attn_k, ffn_gate and ffn_up, ffn_down past layer 1) and every other dense plane tagged by its disk type, the last layer's attn_q rows through the served matmul dotting the file dequant's rows on an exact Q8_K row within 1e-5 - on the box's own backend layer 0's attention q and layer 2's FFN down rows too, against the file rows' dot within f32 reassociation - and on the portable pin the planes disk-order and dequantizing to the file's bit for bit; on the device form of either home the whole-model driver serves the iq1s planes - the tags, the iq1s stamps counted on the home's census and none on a CPU form, the resident chain no further from the f32 chain than the CPU q8 chain over one and two windows plus eight steps, every call served; on the Vulkan home the kernel coverage census's coopmat mode sweep runs the mint under the box's, KHR and sdot4 modes; each form loads once")]
+def test_llama_iq1s(t : T?) {
+    return if (!family_on(t, "llama"))
+    var forms <- lowbit_1b_forms()
+    sweep_forms(t, forms, FILE_1B_IQ1S)
+    var c : DenseFeeds
+    dense_feeds(c, gpu_want_cuda() ? [40l] : [40l, TWO_WINDOWS])
+    let ran = with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-IQ1_S-local.gguf", REGIONS_RIG_CTX, forms) $(var m, form) {
+        if (sweep_leg(form)) {
+            sweep_cell(t, m, form, FILE_1B_IQ1S)
+        } else {
+            lowbit_1b_rows(t, c, m, form, KqFmt.iq1s, FILE_1B_IQ1S)
+        }
+    }
+    if (ran) {
+        lowbit_within(t, c, FILE_1B_IQ1S)
+    }
+    delete c
+    delete forms
+}
+
+[test(description = "The Llama-3.2-1B IQ1_M mint: on its K-quant-native CPU forms, on every box, its 78 IQ1_M planes (attn_q, attn_k, ffn_gate and ffn_up, ffn_down past layer 1) and every other dense plane tagged by its disk type, the last layer's attn_q rows through the served matmul dotting the file dequant's rows on an exact Q8_K row within 1e-5 - on the box's own backend layer 0's attention q and layer 2's FFN down rows too, against the file rows' dot within f32 reassociation - and on the portable pin the planes disk-order and dequantizing to the file's bit for bit; on the device form of either home the whole-model driver serves the iq1m planes - the tags, the iq1m stamps counted on the home's census and none on a CPU form, the resident chain no further from the f32 chain than the CPU q8 chain over one and two windows plus eight steps, every call served; on the Vulkan home the kernel coverage census's coopmat mode sweep runs the mint under the box's, KHR and sdot4 modes; each form loads once")]
+def test_llama_iq1m(t : T?) {
+    return if (!family_on(t, "llama"))
+    var forms <- lowbit_1b_forms()
+    sweep_forms(t, forms, FILE_1B_IQ1M)
+    var c : DenseFeeds
+    dense_feeds(c, gpu_want_cuda() ? [40l] : [40l, TWO_WINDOWS])
+    let ran = with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-IQ1_M-local.gguf", REGIONS_RIG_CTX, forms) $(var m, form) {
+        if (sweep_leg(form)) {
+            sweep_cell(t, m, form, FILE_1B_IQ1M)
+        } else {
+            lowbit_1b_rows(t, c, m, form, KqFmt.iq1m, FILE_1B_IQ1M)
+        }
+    }
+    if (ran) {
+        lowbit_within(t, c, FILE_1B_IQ1M)
+    }
+    delete c
     delete forms
 }
 

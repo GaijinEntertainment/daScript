@@ -430,6 +430,63 @@ def census_delta(c0, now : int64) : int64 => c0 == NO_CENSUS ? NO_CENSUS : now -
 //! `kernel`'s census count past `c0`, the count before the run (`census_delta`)
 def census_since(kernel : string; c0 : int64) : int64 => census_delta(c0, census(kernel))
 
+//! the summed census count so far of the stamps `keys` on the armed home, or NO_CENSUS (a stamp the home has no leaf of reads none)
+def stamps_census(keys : array<string>) : int64 {
+    var n = 0l
+    for (k in keys) {
+        let c = census(k)
+        return NO_CENSUS if (c == NO_CENSUS && !gpu_want_cuda())
+        n += max(c, 0l)
+    }
+    return n
+}
+
+//! the census names of the stamps of low-bit member `f` (tq2, tq1, iq1s, iq1m): the decode GEMV and its N-column leaves, the
+//! batch tiles; tq2's rotated N-column leaves beside them, and the 1-bit grid members' cm2e tile
+def private lowbit_stamps(f : KqFmt) : array<string> {
+    var keys <- ["kq_gemv_{f}_cls_spv", "kq_gemv_{f}_n_cls_spv", "kq_gemv_{f}_n4_cls_spv", "kq_batch_{f}_cls_spv",
+        "kq_batch_{f}_cm2l_cls_spv", "kq_batch_{f}_cm2m_cls_spv", "kq_batch_{f}_cm2s_cls_spv", "kq_batch_{f}_khr_cls_spv"]
+    if (f == KqFmt.tq2) {
+        keys |> push_from(["kq_gemv_tq2_nr_cls_spv", "kq_gemv_tq2_n4r_cls_spv"])
+    } elif (f == KqFmt.iq1s || f == KqFmt.iq1m) {
+        keys |> push("kq_batch_{f}_cm2e_cls_spv")
+    }
+    return <- keys
+}
+
+//! every stamp's census count so far of low-bit member `f` on the armed home, or NO_CENSUS: no other plane format moves it, so a
+//! rise is the member's planes' own
+def lowbit_census(f : KqFmt) : int64 {
+    var inscope keys <- lowbit_stamps(f)
+    return stamps_census(keys)
+}
+
+//! whether the armed home counts its stamps' dispatches: the CUDA home on a dasCUDA build, any other home on a dasVulkan build
+def home_has_census() : bool {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return true if (gpu_want_cuda())
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return true
+    }
+    return false
+}
+
+//! `run`, one form's share of a cell on a carrier of low-bit member `f` (`what` naming the carrier), under the member's census:
+//! on a device form the stamps rose; on a CPU form, the control, they stayed put; neither where the home counts no stamp
+def lowbit_census_ran(t : T?; f : KqFmt; form : ModelForm; what : string; run : block<void>) {
+    let c0 = lowbit_census(f)
+    invoke(run)
+    return if (!home_has_census())
+    let ran = lowbit_census(f) - c0
+    to_log(LOG_INFO, "{what}, {form_name(form)}: the {f} stamps ran {ran} dispatches\n")
+    if (form.on_gpu) {
+        t |> success(ran > 0l, "{what}: the device form ran the {f} stamps ({ran} dispatches)")
+    } else {
+        t |> equal(ran, 0l, "{what} control: the CPU form {form_name(form)} ran no {f} stamp")
+    }
+}
+
 //! how a resident cell's model loads: `served` is the product's load with no image (on a discrete home the gguf streams onto
 //! the card and no weight plane stays on the host), `host` keeps the planes beside the device's copy, `image` takes the rail
 enum ResidentLoad {

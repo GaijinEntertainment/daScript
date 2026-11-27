@@ -104,7 +104,7 @@ them; a whole run is as `../REVIEW_GPU_KERNEL_CLASSES.md` defines it. The pinned
 - `test_vulkan_kernels.das`'s `test_vkd_kq_gemv_k4_gu` cell must hold the fused gate + up + act + requant on Q4_K,
   IQ4_XS, iq3s4 and IQ2_S against the three-kernel path byte for byte and the CPU chain.
 - `test_vulkan_kernels.das`'s `test_vkd_q51_gemv`, `test_vkd_iq4nl32_gemv`, `test_vkd_q4032_gemv`,
-  `test_vkd_q5032_gemv` and `test_vkd_mx4_gemv` cells must hold the format's GEMV against its scalar dot, and its
+  `test_vkd_q5032_gemv`, `test_vkd_q20_gemv`, `test_vkd_q10_gemv` and `test_vkd_mx4_gemv` cells must hold the format's GEMV against its scalar dot, and its
   summed twin (`per32_sum_rows_cell`) over one, two and four token rows - every row its slots' dots under their
   weights, a poisoned last row the control, a wider dispatch's rows bit for bit the narrower one's.
 - `test_vulkan_kernels_gemm.das`'s `test_vkd_mmq_tiles`, `test_vkd_mmq_feed` and `test_vkd_mmq_inv` cells must hold the
@@ -112,9 +112,9 @@ them; a whole run is as `../REVIEW_GPU_KERNEL_CLASSES.md` defines it. The pinned
   poisoned-element control, and `test_vkd_mmq_device_check` the device check passing on an AMD KHR device.
 - `test_vulkan_kernels_gemm.das`'s `test_vkd_q51_cm2_batch`, `test_vkd_mx4_cm2_batch`, `test_vkd_iq4nl32_cm2_batch`,
   `test_vkd_iq3s4_cm2_batch`, `test_vkd_f16_gemm_khr`, `test_vkd_f16_gemm_s`, `test_vkd_kq_batch_family`,
-  `test_vkd_khr_rot_tiles` and `test_vkd_nv4_cm2_batch` cells - the census's evidence for the classes no cell of a
-  whole run dispatches - must hold each class against its CPU oracle at the bar the cell sets, with the cell's
-  poisoned-element control.
+  `test_vkd_khr_rot_tiles`, `test_vkd_nv4_cm2_batch`, `test_vkd_q20_cm2_batch`, `test_vkd_q10_cm2_batch`, `test_vkd_iq1s_cm2_batch`
+  and `test_vkd_iq1m_cm2_batch` cells - the census's evidence for the classes no cell of a whole run dispatches - must
+  hold each class against its CPU oracle at the bar the cell sets, with the cell's poisoned-element control.
 - `test_vulkan_kernels_attn.das`'s `test_vkd_fa_cm2`, `test_vkd_fa_khr`, `test_vkd_fa_khr_h256_softcap`,
   `test_vkd_fa_khr_h256_gated`, `test_vkd_fa_khr_tfirst`, `test_vkd_fa_khr_small_twins`, `test_vkd_da_attn`,
   `test_vkd_da_attn_rqk`, `test_vkd_da_attn_tile` and `test_vkd_da_attn_bw` cells - the census's evidence for the

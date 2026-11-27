@@ -173,7 +173,7 @@ def private dn_shell() : Model {
     return <- m
 }
 
-[test(description = "On a deltanet shell both the whole-model driver and the per-op chain accept q8, K-quant and per-32 recurrent planes by tag and name an mx4 plane, the per-op chain also naming a layer without the triple")]
+[test(description = "On a deltanet shell both the whole-model driver and the per-op chain accept q8, K-quant and per-32 recurrent planes (q20 and q10 among them) by tag and name an mx4 plane, the per-op chain also naming a layer without the triple")]
 def test_dn_plane_format_declines(t : T?) {
     t |> run("the whole-model driver reads q8, superblock and per-32 beta/alpha planes by tag and names an mx4 one") @(t : T?) {
         var m <- dn_shell()
@@ -182,7 +182,7 @@ def test_dn_plane_format_declines(t : T?) {
         m.dnalpha_fmt[1] = KqFmt.k4
         let sk = resident_layer_decline(m, 1l)
         t |> success(!contains(sk, "beta/alpha planes carry"), "K-quant beta/alpha planes draw no format decline - the resident GEMVs and tiles read them by tag: '{sk}'")
-        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
+        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.q20, KqFmt.q10]) {
             m.dnbeta_fmt[1] = f
             m.dnalpha_fmt[1] = f
             let sp = resident_layer_decline(m, 1l)
@@ -198,7 +198,7 @@ def test_dn_plane_format_declines(t : T?) {
         m.dngate_fmt[1] = KqFmt.q8
         t |> equal(perop_dn_decline(m, 1l), "", "a K-quant qkv beside a q8 z rides the chain: the z plane reads its own image")
         m.dngate_fmt[1] = KqFmt.k4
-        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
+        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.q20, KqFmt.q10]) {
             m.dnout_fmt[1] = f
             t |> success(!contains(perop_dn_decline(m, 1l), "outside the chain"), "a {f} out plane rides the chain's per-32 GEMVs")
         }

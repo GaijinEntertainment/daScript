@@ -1234,3 +1234,13 @@ amplifies the staging more than kokoro's), the exact twins the A/B. The served-l
 (`tests/_tts_parity.das`, `tts_gpu_synthesis_lane`) gates counters and sample counts and logs its sample-wise
 waveform figure without a bar; a phase-insensitive instrument - a per-window spectral compare tolerant of one
 frame of shift - would gate the served lane end to end.
+
+## 77. The six low-bit members are not served on Metal
+
+The Metal tier serves none of `q20`, `q10`, `iq1s`, `iq1m`, `tq2` and `tq1`: `kq_fmt_gpu_supported`
+(`dasllama/dasllama_metal_shapes.das`) names none of them, and the Metal `kq_tile_stamp` ladders skip them by word -
+`MTL_ST2_SKIP`, `MTL_PKOWN_SKIP` (`dasllama/dasllama_metal_sites.das`), the embed ladder's `!b32 metal q20 q10`
+(`dasllama/dasllama_metal_kernels.das`) - so the flavor pick declines a plane of such a member at load, by site and
+member, and the CPU serves it. Done = every Metal ladder stamps each of the six members or names its skip, the
+members' Metal served cells pass, and the arm classes' profile mints of their CPU families (`followup_general.md`
+row 325) land.

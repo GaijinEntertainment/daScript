@@ -631,7 +631,7 @@ def enc_q8_rows_mma(var s : void?; bufs : uint64 const[7]; var pc : GemvArgs; wg
 
 //! the formats with no rows tensor leaf: the superblock formats off the sixteen-nibble block (Q3_K, Q2_K), the grid formats
 //! (a codebook the leaf binds no plane for), the per-32 formats and MXFP4 (no dense plane)
-let private CUD_ROWS_MMA_SKIP = "k3 k2 iq3s iq3xxs iq2s iq2xs iq2xxs q51 q4032 q5032 iq4nl32 mx4"
+let private CUD_ROWS_MMA_SKIP = "k3 k2 tq2 tq1 iq3s iq3xxs iq2s iq2xs iq2xxs iq1s iq1m q51 q4032 q5032 iq4nl32 mx4 q20 q10"
 let private CUD_ROWS_MMA_TAILS = "mma"
 
 //! format `fmt` has a rows tensor leaf

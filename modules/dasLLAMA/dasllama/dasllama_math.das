@@ -1543,6 +1543,7 @@ struct B32Slots {
     batch_groupn : MatmulQ51Q8BatchGroupNFn
     repack : RepackQ51Fn
     layout : function<() : int>
+    live : function<() : bool>   //! the row's witness, read at activation: false seats the portable kernels instead (null: the row always serves)
 }
 
 //! One kernel backend: the three Q8·Q8 matmul kernels + the weight repack, plus selection metadata.
@@ -1598,6 +1599,10 @@ struct KernelBackend {
     kq_rows_iq2xxs : MatmulKqRowsFn = @@kq_unset_rows
     kq_rows_iq3s4 : MatmulKqRowsFn = @@kq_unset_rows
     kq_rows_nv4 : MatmulKqRowsFn = @@kq_unset_rows
+    kq_rows_iq1s : MatmulKqRowsFn = @@kq_unset_rows
+    kq_rows_iq1m : MatmulKqRowsFn = @@kq_unset_rows
+    kq_rows_tq2 : MatmulKqRowsFn = @@kq_unset_rows
+    kq_rows_tq1 : MatmulKqRowsFn = @@kq_unset_rows
     kq_batch : MatmulKqBatchFn = @@kq_unset_batch
     kq_groupn : MatmulKqGroupNFn = @@kq_unset_groupn
     kq_batch_groupn : MatmulKqBatchGroupNFn = @@kq_unset_batch_groupn
@@ -1671,6 +1676,10 @@ var g_kq_rows_iq2xs = @@kq_unset_rows
 var g_kq_rows_iq2xxs = @@kq_unset_rows
 var g_kq_rows_iq3s4 = @@kq_unset_rows
 var g_kq_rows_nv4 = @@kq_unset_rows
+var g_kq_rows_iq1s = @@kq_unset_rows
+var g_kq_rows_iq1m = @@kq_unset_rows
+var g_kq_rows_tq2 = @@kq_unset_rows
+var g_kq_rows_tq1 = @@kq_unset_rows
 var g_mm_kq_batch = @@kq_unset_batch
 var g_mm_kq_groupn = @@kq_unset_groupn
 var g_mm_kq_batch_groupn = @@kq_unset_batch_groupn
@@ -1735,6 +1744,12 @@ def private b32_slots_or(slots, fallback : B32Slots) : B32Slots {
         layout = slots.layout != null ? slots.layout : fallback.layout)
 }
 
+//! the slots a backend's row seats at activation: the row over `fallback`, or `fallback` alone where the row's witness says its stamp declined
+def private b32_slots_seat(slots, fallback : B32Slots) : B32Slots {
+    return fallback if (slots.live != null && !invoke(slots.live))
+    return b32_slots_or(slots, fallback)
+}
+
 //! seat `fmt`'s portable kernels (disk order: the identity repack at
 //! mr 1); an active slot still unset takes them
 def register_b32_portable(fmt : KqFmt; slots : B32Slots) {
@@ -1769,7 +1784,7 @@ def matmul_b32q8_batch(var y : array<float>; wq : array<uint8>; ws : array<uint8
     let blk = woff / KQ_B32_ELEMS
     unsafe {
         invoke(g_b32[int(fmt)].batch, addr(y[0]), addr<uint8 const?>(wq[blk * kq_qsb(fmt)]),
-            addr<uint8 const?>(ws[blk * kq_ssb(fmt)]), addr<int8 const?>(xq[0]),
+            addr<uint8 const?>(ws[kq_soff(fmt, blk)]), addr<int8 const?>(xq[0]),
             addr<float const?>(xs[0]), n, d, ntok)
     }
 }
@@ -2016,7 +2031,7 @@ def private activate(be : KernelBackend) {
     g_mm_q8q8_groupn = be.groupn
     g_mm_mx4q8_groupn = be.groupn_mx4
     for (i in range(KQ_FMT_COUNT)) {
-        g_b32[i] = b32_slots_or(be.b32[i], g_b32_portable[i])
+        g_b32[i] = b32_slots_seat(be.b32[i], g_b32_portable[i])
         g_active_b32_mr[i] = g_b32[i].layout != null ? int64(invoke(g_b32[i].layout)) : 1l
     }
     g_mm_q8q8_rows = be.mm_rows
@@ -2046,6 +2061,10 @@ def private activate(be : KernelBackend) {
     g_kq_rows_iq2xxs = be.kq_rows_iq2xxs
     g_kq_rows_iq3s4 = be.kq_rows_iq3s4
     g_kq_rows_nv4 = be.kq_rows_nv4
+    g_kq_rows_iq1s = be.kq_rows_iq1s
+    g_kq_rows_iq1m = be.kq_rows_iq1m
+    g_kq_rows_tq2 = be.kq_rows_tq2
+    g_kq_rows_tq1 = be.kq_rows_tq1
     g_mm_kq_batch = be.kq_batch
     g_mm_kq_groupn = be.kq_groupn
     g_mm_kq_batch_groupn = be.kq_batch_groupn
@@ -2088,7 +2107,7 @@ def private apply_batch_override(name : string) {
     g_mm_mx4q8_batch = be.mx4_batch
     g_mm_mx4q8_batch_groupn = be.mx4_batch_groupn
     for (i in range(KQ_FMT_COUNT)) {
-        let slots = b32_slots_or(be.b32[i], g_b32_portable[i])
+        let slots = b32_slots_seat(be.b32[i], g_b32_portable[i])
         g_b32[i].batch = slots.batch
         g_b32[i].batch_groupn = slots.batch_groupn
     }
@@ -2294,9 +2313,13 @@ def kq_rows_fn(fmt : int) : MatmulKqRowsFn {
     if (fmt == 34) return g_kq_rows_iq3xxs
     if (fmt == 45) return g_kq_rows_iq4nl
     if (fmt == 2) return g_kq_rows_k2
+    if (fmt == 22) return g_kq_rows_tq2
+    if (fmt == 21) return g_kq_rows_tq1
     if (fmt == 23) return g_kq_rows_iq2s
     if (fmt == 24) return g_kq_rows_iq2xs
     if (fmt == 25) return g_kq_rows_iq2xxs
+    if (fmt == 13) return g_kq_rows_iq1s
+    if (fmt == 16) return g_kq_rows_iq1m
     return @@kq_unset_rows
 }
 
@@ -3691,8 +3714,20 @@ def private restore_math_fn_defaults { // nolint:STYLE037,STYLE038 — flat seam
     if (g_kq_rows_nv4 == null) {
         g_kq_rows_nv4 = @@kq_unset_rows
     }
+    if (g_kq_rows_tq2 == null) {
+        g_kq_rows_tq2 = @@kq_unset_rows
+    }
+    if (g_kq_rows_tq1 == null) {
+        g_kq_rows_tq1 = @@kq_unset_rows
+    }
     if (g_kq_rows_iq2xxs == null) {
         g_kq_rows_iq2xxs = @@kq_unset_rows
+    }
+    if (g_kq_rows_iq1s == null) {
+        g_kq_rows_iq1s = @@kq_unset_rows
+    }
+    if (g_kq_rows_iq1m == null) {
+        g_kq_rows_iq1m = @@kq_unset_rows
     }
     if (g_mm_kq_batch == null) {
         g_mm_kq_batch = @@kq_unset_batch

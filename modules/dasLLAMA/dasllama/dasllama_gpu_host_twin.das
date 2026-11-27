@@ -32,9 +32,20 @@ class private HostKqGemvIq3s : Iq3sGemvT {}
 class private HostKqGemvIq3xxs : Iq3xxsGemvT {}
 class private HostKqGemvIq4nl : Iq4nlGemvT {}
 class private HostKqGemvK2 : K2GemvT {}
+class private HostKqGemvTq2 : K2GemvT {
+    override TQ2 = true
+}
+class private HostKqGemvTq1 : K2GemvT {
+    override TQ2 = true
+    override TQ1 = true
+}
 class private HostKqGemvIq2s : Iq2sGemvT {}
 class private HostKqGemvIq2xs : Iq2xsGemvT {}
 class private HostKqGemvIq2xxs : Iq2xxsGemvT {}
+class private HostKqGemvIq1s : Iq1GemvT {}
+class private HostKqGemvIq1m : Iq1GemvT {
+    override IQ1M = true
+}
 class private HostKqGemvK6 : K6GemvT {}
 class private HostKqGemvNv4 : Nv4GemvT {}
 
@@ -58,6 +69,14 @@ class private HostMx4Gemv : Blk32GemvRunT {
     typedef FMT = KqTag_mx4
 }
 
+class private HostQ20Gemv : Blk32GemvRunT {
+    typedef FMT = KqTag_q20
+}
+
+class private HostQ10Gemv : Blk32GemvRunT {
+    typedef FMT = KqTag_q10
+}
+
 //! a grid format's superblock class with its staged codebook filled from the main-context table, since no kernel head runs
 def private host_grid_cls(var k : auto(TK)?; grid : auto) : KqGemvBase? {
     for (i in range(length(grid))) {
@@ -78,9 +97,13 @@ def private host_kq_new(_t : KqTag_iq3s) : KqGemvBase? => host_grid_cls(new Host
 def private host_kq_new(_t : KqTag_iq3xxs) : KqGemvBase? => host_grid_cls(new HostKqGemvIq3xxs(), IQ3XXS_GRID)
 def private host_kq_new(_t : KqTag_iq4nl) : KqGemvBase? => new HostKqGemvIq4nl()
 def private host_kq_new(_t : KqTag_k2) : KqGemvBase? => new HostKqGemvK2()
+def private host_kq_new(_t : KqTag_tq2) : KqGemvBase? => new HostKqGemvTq2()
+def private host_kq_new(_t : KqTag_tq1) : KqGemvBase? => new HostKqGemvTq1()
 def private host_kq_new(_t : KqTag_iq2s) : KqGemvBase? => host_grid_cls(new HostKqGemvIq2s(), IQ2S_GRID)
 def private host_kq_new(_t : KqTag_iq2xs) : KqGemvBase? => host_grid_cls(new HostKqGemvIq2xs(), IQ2XS_GRID)
 def private host_kq_new(_t : KqTag_iq2xxs) : KqGemvBase? => host_grid_cls(new HostKqGemvIq2xxs(), IQ2XXS_GRID)
+def private host_kq_new(_t : KqTag_iq1s) : KqGemvBase? => host_grid_cls(new HostKqGemvIq1s(), IQ1S_GRID)
+def private host_kq_new(_t : KqTag_iq1m) : KqGemvBase? => host_grid_cls(new HostKqGemvIq1m(), IQ1S_GRID)
 def private host_kq_new(_t : KqTag_k6) : KqGemvBase? => new HostKqGemvK6()
 def private host_kq_new(_t : KqTag_q8) : KqGemvBase? => null
 def private host_kq_new(_t : KqTag_q51) : KqGemvBase? => null
@@ -88,6 +111,7 @@ def private host_kq_new(_t : KqTag_mx4) : KqGemvBase? => null
 def private host_kq_new(_t : KqTag_iq4nl32) : KqGemvBase? => null
 def private host_kq_new(_t : KqTag_q4032) : KqGemvBase? => null
 def private host_kq_new(_t : KqTag_q5032) : KqGemvBase? => null
+def private host_kq_new(_t : KqTag_q20 | KqTag_q10) : KqGemvBase? => null
 def private host_kq_new(_t : KqTag_nv4) : KqGemvBase? => new HostKqGemvNv4()
 def private host_kq_new(_t : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : KqGemvBase? => null
 
@@ -116,8 +140,9 @@ struct private HostTwin {
     q4032 : HostQ4032Gemv?
     q5032 : HostQ5032Gemv?
     mx4 : HostMx4Gemv?
-    qsb : int64   //! device bytes a block (a superblock, or a 32-block)
-    ssb : int64
+    q20 : HostQ20Gemv?
+    q10 : HostQ10Gemv?
+    bb : DevBlockBytes   //! the device block strides (`dev_block_bytes`): a superblock, or a 32-block
 }
 
 //! the per-32 and mx4 members' own classes on the twin (`kq_fmt_stamp` resolves the member's overload; a member outside the family
@@ -127,6 +152,8 @@ def private host_b32_new(var tw : HostTwin; _t : KqTag_iq4nl32) { tw.iq4nl32 = n
 def private host_b32_new(var tw : HostTwin; _t : KqTag_q4032) { tw.q4032 = new HostQ4032Gemv() }
 def private host_b32_new(var tw : HostTwin; _t : KqTag_q5032) { tw.q5032 = new HostQ5032Gemv() }
 def private host_b32_new(var tw : HostTwin; _t : KqTag_mx4) { tw.mx4 = new HostMx4Gemv() }
+def private host_b32_new(var tw : HostTwin; _t : KqTag_q20) { tw.q20 = new HostQ20Gemv() }
+def private host_b32_new(var tw : HostTwin; _t : KqTag_q10) { tw.q10 = new HostQ10Gemv() }
 [unused_argument(tw, _t)]
 def private host_b32_new(var tw : HostTwin; _t : auto) {}
 
@@ -136,11 +163,7 @@ def private host_b32_new(var tw : HostTwin; _t : auto) {}
 def host_twin(fmt : int) : void? {   // nolint:STYLE037 - kq_fmt_stamp's generated arms, one a format
     return null if (!expert_chain_slot_ok(fmt) || kq_discrete_unstamped(kq_fmt_of_slot(fmt)))
     let f = kq_fmt_of_slot(fmt)
-    var tw = new HostTwin()
-    tw.fmt = f
-    let b = dev_block_bytes(f)
-    tw.qsb = b.qsb
-    tw.ssb = b.ssb
+    var tw = new HostTwin(fmt = f, bb = dev_block_bytes(f))
     if (kq_sb(f)) {
         tw.fam = TwinFamily.superblock
         tw.k = host_kq_cls(f)
@@ -167,11 +190,11 @@ def private bind_view(var a : array<auto(TT)>; p : void?; count : int64) {
 
 //! the per-32 and mx4 twin: the class's own block decode and dot (`blk_words`, `blk_xdot`), its planes and the Q8_0
 //! activation bound as borrowed views, the row's blocks summed in order
-def private b32_rows(var k : auto(TK)?; var yp : float?; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; n, rb, re, qsb, ssb : int64) {
+def private b32_rows(var k : auto(TK)?; var yp : float?; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; n, rb, re : int64; bb : DevBlockBytes) {
     let nb = n / KQ_B32_ELEMS
     unsafe {
-        bind_view(k.wq, reinterpret<void?>(q), re * nb * qsb / 4l)
-        bind_view(k.wsu, reinterpret<void?>(s), (re * nb * ssb + 3l) / 4l)
+        bind_view(k.wq, reinterpret<void?>(q), re * nb * bb.qsb / 4l)
+        bind_view(k.wsu, reinterpret<void?>(s), (dev_scale_bytes(bb, re * nb) + 3l) / 4l)
         bind_view(k.xqw, reinterpret<void?>(xq), n / 4l)
         bind_view(k.axs, reinterpret<void?>(xs), nb)
         for (r in range64(rb, re)) {
@@ -204,19 +227,25 @@ def private q8_rows(var yp : float?; q : uint8 const?; s : uint8 const?; xq : in
 //! the per-32 and mx4 members' rows through the twin's own class (`kq_fmt_stamp` resolves the member's overload; a member outside
 //! the family folds nothing)
 def private host_b32_rows(var tw : HostTwin; _t : KqTag_q51; var yp : float?; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; n, rb, re : int64) {
-    b32_rows(tw.q51, yp, q, s, xq, xs, n, rb, re, tw.qsb, tw.ssb)
+    b32_rows(tw.q51, yp, q, s, xq, xs, n, rb, re, tw.bb)
 }
 def private host_b32_rows(var tw : HostTwin; _t : KqTag_iq4nl32; var yp : float?; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; n, rb, re : int64) {
-    b32_rows(tw.iq4nl32, yp, q, s, xq, xs, n, rb, re, tw.qsb, tw.ssb)
+    b32_rows(tw.iq4nl32, yp, q, s, xq, xs, n, rb, re, tw.bb)
 }
 def private host_b32_rows(var tw : HostTwin; _t : KqTag_q4032; var yp : float?; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; n, rb, re : int64) {
-    b32_rows(tw.q4032, yp, q, s, xq, xs, n, rb, re, tw.qsb, tw.ssb)
+    b32_rows(tw.q4032, yp, q, s, xq, xs, n, rb, re, tw.bb)
 }
 def private host_b32_rows(var tw : HostTwin; _t : KqTag_q5032; var yp : float?; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; n, rb, re : int64) {
-    b32_rows(tw.q5032, yp, q, s, xq, xs, n, rb, re, tw.qsb, tw.ssb)
+    b32_rows(tw.q5032, yp, q, s, xq, xs, n, rb, re, tw.bb)
 }
 def private host_b32_rows(var tw : HostTwin; _t : KqTag_mx4; var yp : float?; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; n, rb, re : int64) {
-    b32_rows(tw.mx4, yp, q, s, xq, xs, n, rb, re, tw.qsb, tw.ssb)
+    b32_rows(tw.mx4, yp, q, s, xq, xs, n, rb, re, tw.bb)
+}
+def private host_b32_rows(var tw : HostTwin; _t : KqTag_q20; var yp : float?; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; n, rb, re : int64) {
+    b32_rows(tw.q20, yp, q, s, xq, xs, n, rb, re, tw.bb)
+}
+def private host_b32_rows(var tw : HostTwin; _t : KqTag_q10; var yp : float?; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; n, rb, re : int64) {
+    b32_rows(tw.q10, yp, q, s, xq, xs, n, rb, re, tw.bb)
 }
 [unused_argument(tw, _t, yp, q, s, xq, xs, n, rb, re)]
 def private host_b32_rows(var tw : HostTwin; _t : auto; var yp : float?; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; n, rb, re : int64) {}
@@ -237,12 +266,12 @@ def host_rows(twin : void?; var yp : float?; q : uint8 const?; s : uint8 const?;
     }
     var k = tw.k
     let nsb = n / KQ_SB_ELEMS
-    let qsb = tw.qsb
-    let ssb = tw.ssb
+    let qsb = tw.bb.qsb
+    let ssb = tw.bb.ssb
     unsafe {
         bind_view(k.wq, reinterpret<void?>(q), re * nsb * qsb / 4l)
         bind_view(k.wq4, reinterpret<void?>(q), re * nsb * qsb / 16l)
-        bind_view(k.wsu, reinterpret<void?>(s), re * nsb * ssb / 4l)
+        bind_view(k.wsu, reinterpret<void?>(s), (re * nsb * ssb + 3l) / 4l)
         bind_view(k.xq4, reinterpret<void?>(xq), n / 16l)
         bind_view(k.axs, reinterpret<void?>(xs), nsb)
         for (r in range64(rb, re)) {

@@ -265,8 +265,9 @@ def private sdot4_tile_run(n, d, cnt0, cnt1, tile, wblk1 : int; p : Sdot4Planes;
 //! the kernel cells' approx bar with a poison past the expectation's largest magnitude, outside the bar at any scale
 let private BAR_APPROX_CTRL = Bar(rel = APPROX_REL, poison_of_max = true, poison_abs = 0.5)
 
-//! the fifteen kq formats with a decode GEMV leaf and a batch tile, the order the family cells walk
-let private KQ_LEAF_FMTS = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3), int(KqFmt.iq3s), int(KqFmt.iq3xxs), int(KqFmt.iq4nl), int(KqFmt.k2), int(KqFmt.iq2s), int(KqFmt.iq2xs), int(KqFmt.iq2xxs), int(KqFmt.iq3s4), int(KqFmt.nv4))
+//! the nineteen kq formats with a decode GEMV leaf and a batch tile, the order the family cells walk
+let private KQ_LEAF_FMTS = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3), int(KqFmt.iq3s), int(KqFmt.iq3xxs), int(KqFmt.iq4nl), int(KqFmt.k2), int(KqFmt.iq2s), int(KqFmt.iq2xs), int(KqFmt.iq2xxs), int(KqFmt.iq3s4), int(KqFmt.nv4), int(KqFmt.tq2), int(KqFmt.tq1),
+    int(KqFmt.iq1s), int(KqFmt.iq1m))
 
 //! the family's class rails engage on the device: every leaf's pipeline builds, else the cell skips
 def private kq_leaf_rails_engage(ensure : block<(fmt : int) : bool>) : bool {
@@ -446,9 +447,9 @@ def test_vkd_q8_batch_tile(t0 : T?) {
     }
 }
 
-[test(description = "The sdot4 kq batch tile of all fifteen kq leaf formats over two regions with edge tiles at two superblocks matches the kq GEMM oracle within 2e-3")]
+[test(description = "The sdot4 kq batch tile of all nineteen kq leaf formats over two regions with edge tiles at two superblocks matches the kq GEMM oracle within 2e-3")]
 def test_vkd_kq_batch_family(t0 : T?) {
-    t0 |> run("kq batch tile class family == the CPU oracle (all 15 formats)") <| @(t : T?) {
+    t0 |> run("kq batch tile class family == the CPU oracle (all 19 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!kq_leaf_rails_engage() <| $(fmt : int) => kq_batch_cls_ensure(fmt, false)) {
                 t |> skip("no Vulkan device, or a kq batch class pipeline failed to build")
@@ -462,7 +463,7 @@ def test_vkd_kq_batch_family(t0 : T?) {
             let rows = cnt0 + cnt1
             let totsb = 2 * d * nsb   // superblocks across both regions
             for (fmt in KQ_LEAF_FMTS) {
-                let wswords = totsb * int(kq_dev_ssb_i(fmt) / 4l)
+                let wswords = kq_ws_words(fmt, totsb)
                 var p = Sdot4Planes(ws_bytes = int64(wswords) * 4l)
                 p.wqh <- kq_dev_wq_plane(fmt, totsb, 1u, uint(fmt) * 131u)
                 p.wsh <- kq_ws_plane(fmt, wswords, 1u, uint(fmt) * 17u)
@@ -488,22 +489,22 @@ def test_vkd_kq_batch_family(t0 : T?) {
     }
 }
 
-[test(description = "The per-32 batch tile for q51, iq4nl32, q4032, q5032 and mx4 over two regions with edge tiles and a K tail matches the engine scalar dots (blk32_gemm_oracle) within 2e-3")]
+[test(description = "The per-32 batch tile for q51, iq4nl32, q4032, q5032, q20, q10 and mx4 over two regions with edge tiles and a K tail matches the engine scalar dots (blk32_gemm_oracle) within 2e-3")]
 def test_vkd_blk32_batch_family(t0 : T?) {
-    t0 |> run("per-32 batch tiles (q51 iq4nl32 q4032 q5032 mx4) == scalar dots") <| @(t : T?) {
+    t0 |> run("per-32 batch tiles (q51 iq4nl32 q4032 q5032 q20 q10 mx4) == scalar dots") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let n = 96                // nbb = 3: the zero-filled K tail of the 8-block pass
-            let nbb = n / 32
             let d = 40                // 2 w-tiles with an 8-col edge
             let cnt0 = 35
             let cnt1 = 20
             let rows = cnt0 + cnt1
-            let totblk = 2 * d * nbb
-            for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.mx4]) {
+            for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.q20, KqFmt.q10, KqFmt.mx4]) {
+                let n = kq_grouped_b32(f) ? 128 : 96   // nbb 3, or a grouped member's whole groups at 4: the zero-filled K tail of the 8-block pass
+                let nbb = n / 32
+                let totblk = 2 * d * nbb
                 let fmt = int(f)
                 verify(kq_batch_cls_ensure(fmt, false), "the per-32 batch class rail must engage")
                 var wsh <- blk32_scale_plane(f, totblk)
@@ -892,6 +893,20 @@ def test_vkd_q5032_cm2_batch(t0 : T?) {
     }
 }
 
+[test(description = "The Q2_0 per-32 cm2 l, m, s and e tiles and the KHR tile, d times code minus 1 off the two-block group's half-word d, match the format CPU oracle at the coopmat bar over two regions, and the neighbouring group's d reads apart")]
+def test_vkd_q20_cm2_batch(t0 : T?) {
+    t0 |> run("cm2 Q2_0 per-32 l/m/s/e tiles and the KHR tile == the CPU oracle (the per-32 plane verbatim: d * (code - 1), four codes a byte, a d a two-block group)") <| @(t : T?) {
+        fmt_tile_cell(t, KqFmt.q20)
+    }
+}
+
+[test(description = "The Q1_0 per-32 cm2 l, m, s and e tiles and the KHR tile, plus or minus the four-block group's half-word d by the sign bit, match the format CPU oracle at the coopmat bar over two regions, and the neighbouring group's d reads apart")]
+def test_vkd_q10_cm2_batch(t0 : T?) {
+    t0 |> run("cm2 Q1_0 per-32 l/m/s/e tiles and the KHR tile == the CPU oracle (the per-32 plane verbatim: +d where the bit is set, -d where it is clear, a d a four-block group)") <| @(t : T?) {
+        fmt_tile_cell(t, KqFmt.q10)
+    }
+}
+
 [test(description = "The MXFP4 cm2 s and e tiles and the KHR tile, e2m1 nibbles under the halved E8M0 scale with every code reached, match the format CPU oracle at the coopmat bar over two regions")]
 def test_vkd_mx4_cm2_batch(t0 : T?) {
     t0 |> run("cm2 MXFP4 s and e tiles == the CPU oracle (the per-32 plane verbatim: e2m1 nibble, the doubled magnitude times the halved E8M0 scale off one byte)") <| @(t : T?) {
@@ -910,6 +925,34 @@ def test_vkd_q40_cm2_batch(t0 : T?) {
 def test_vkd_k2_cm2_batch(t0 : T?) {
     t0 |> run("cm2 Q2_K l/m/s/e tiles and the KHR tile == the CPU oracle (pair-byte nibble scales decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
         fmt_tile_cell(t, KqFmt.k2)
+    }
+}
+
+[test(description = "The TQ2_0 cm2 l, m, s and e tiles and the KHR tile, k2's lanes under the two-byte d row decoded in the load, match the format CPU oracle at the coopmat bar over two regions")]
+def test_vkd_tq2_cm2_batch(t0 : T?) {
+    t0 |> run("cm2 TQ2_0 l/m/s/e tiles and the KHR tile == the CPU oracle (the f16 d a superblock, two a word, decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
+        fmt_tile_cell(t, KqFmt.tq2)
+    }
+}
+
+[test(description = "The TQ1_0 cm2 l, m, s and e tiles and the KHR tile, each element a trit of the 52-byte block under the two-byte d row decoded in the load, match the format CPU oracle at the coopmat bar over two regions")]
+def test_vkd_tq1_cm2_batch(t0 : T?) {
+    t0 |> run("cm2 TQ1_0 l/m/s/e tiles and the KHR tile == the CPU oracle (the trits off the plane bytes, the f16 d a superblock, two a word; the KHR arm stages the same decode)") <| @(t : T?) {
+        fmt_tile_cell(t, KqFmt.tq1)
+    }
+}
+
+[test(description = "The IQ1_S cm2 l, m, s and e tiles and the KHR tile, each element an octet's grid entry under its qh bits' index high bits, block scale and delta sign, the f16 d two superblocks a word, match the format CPU oracle at the coopmat bar over two regions")]
+def test_vkd_iq1s_cm2_batch(t0 : T?) {
+    t0 |> run("cm2 IQ1_S l/m/s/e tiles and the KHR tile == the CPU oracle (the 1-bit grid staged, the planes read in place; the KHR arm stages the same decode)") <| @(t : T?) {
+        fmt_tile_cell(t, KqFmt.iq1s)
+    }
+}
+
+[test(description = "The IQ1_M cm2 l, m, s and e tiles and the KHR tile, each element an octet's grid entry under its qh nibble's index high bits and delta sign, the half-block scale and the f16 d off the two scale words, match the format CPU oracle at the coopmat bar over two regions")]
+def test_vkd_iq1m_cm2_batch(t0 : T?) {
+    t0 |> run("cm2 IQ1_M l/m/s/e tiles and the KHR tile == the CPU oracle (the 1-bit grid staged, the planes read in place; the KHR arm stages the same decode)") <| @(t : T?) {
+        fmt_tile_cell(t, KqFmt.iq1m)
     }
 }
 
@@ -1361,9 +1404,9 @@ def private mmq_tile_arms(t : T?; tag : string; fmt : int; var f : TileFixture;
     }
 }
 
-[test(description = "The int8 m and s tiles over Q8_0, Q4_K, Q5_K, Q6_K, Q5_1 and per-32 Q5_0 planes - 160 weight rows, two regions of 300 and 260 rows, each format's K of the tile table, the rows int8-exact halves quantized by the f16 feed and read through a row map that is not the identity - match each format's f16 oracle at the coopmat bar")]
+[test(description = "The int8 m and s tiles over Q8_0, Q4_K, Q5_K, Q6_K, Q5_1, per-32 Q5_0, Q2_0 and Q1_0 planes - 160 weight rows, two regions of 300 and 260 rows, each format's K of the tile table, the rows int8-exact halves quantized by the f16 feed and read through a row map that is not the identity - match each format's f16 oracle at the coopmat bar")]
 def test_vkd_mmq_tiles(t0 : T?) {
-    t0 |> run("the int8 tiles == the f16 oracles (q8, k4, k5, k6, q51, q5032; the m and s stamps)") <| @(t : T?) {
+    t0 |> run("the int8 tiles == the f16 oracles (q8, k4, k5, k6, q51, q5032, q20, q10; the m and s stamps)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
                 t |> skip("no Vulkan device")
@@ -1382,7 +1425,7 @@ def test_vkd_mmq_tiles(t0 : T?) {
                 delete f
             }
             var rows <- fmt_tile_rows()
-            for (fmt in fixed_array(KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q51, KqFmt.q5032)) {
+            for (fmt in fixed_array(KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q51, KqFmt.q5032, KqFmt.q20, KqFmt.q10)) {
                 let at = find_index_if(rows) $(r : FmtTile) => r.fmt == fmt
                 if (at < 0) panic("format {fmt} has no row in the tile table")
                 var wqh, wsuh : array<uint>

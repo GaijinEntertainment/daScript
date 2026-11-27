@@ -821,9 +821,9 @@ def test_cud_kq_cm2_family(t0 : T?) {
 
 //! the K-quant decode GEMV family (the shared `KqGemvLeafT` leaves) against the Vulkan cell's CPU oracle, every superblock
 //! format at the three lane splits, 256, 512 and 5120 wide - the Vulkan cell's shapes
-[test(description = "Every kq GEMV leaf (all 15 superblock formats) compiles and matches the Vulkan cell's CPU oracle at 256, 512 and 5120 wide under the subgroup, 16- and 8-lane row splits, within 2e-3 under a poison control.")]
+[test(description = "Every kq GEMV leaf (all 19 superblock formats) compiles and matches the Vulkan cell's CPU oracle at 256, 512 and 5120 wide under the subgroup, 16- and 8-lane row splits, within 2e-3 under a poison control.")]
 def test_cud_kq_gemv_family(t0 : T?) {
-    t0 |> run("CUDA kq GEMV leaves == the CPU oracle (all 15 formats)") <| @(t : T?) {
+    t0 |> run("CUDA kq GEMV leaves == the CPU oracle (all 19 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_gemv_cls()) {
                 t |> skip("no CUDA device with NVRTC")
@@ -835,7 +835,7 @@ def test_cud_kq_gemv_family(t0 : T?) {
             for (fmt in kq_leaf_fmts()) {
                 t |> success(cud_gemv_ensure(fmt), "fmt {fmt}: the leaf compiles")
                 for (nsb in fixed_array(1, 2, 20)) {
-                    let ws_words_n = rows * nsb * int(kq_dev_ssb_i(fmt) / 4l)
+                    let ws_words_n = kq_ws_words(fmt, rows * nsb)
                     var inscope wsh <- kq_ws_plane(fmt, ws_words_n, 1u, uint(fmt) * 13u, rows_per_region * nsb)   //! a region a plane: its own site scale
                     var f <- kq_gemv_fix(fmt, nreg, rows_per_region, nsb, uint(fmt) * 77777u, wsh, nsb, 64, 31u, 5u, 0.5, 0.25, 7)
                     var inscope y_ref <- kq_gemv_oracle(fmt, f.wqh, f.wsh, f.xqh, f.xsh, f.regs, nsb * 256, rows_per_region, nreg)
@@ -981,7 +981,7 @@ def private leaf_weight_planes(fmt : KqFmt; n, rows : int; salt : uint) : tuple<
     let nsb = n / 256
     var wq <- (q8 ? hashed_words(rows * nb * 8, 1u, uint(fmt) * salt + 3u) : kq_dev_wq_plane(int(fmt), rows * nsb, 1u, uint(fmt) * salt + 3u))
     var ws <- (q8 ? [for (i in range((rows * nb + 1) / 2)); 0x10001u * (0x2C00u + (uint(i) * 37u) % 0x3FFu)]
-        : kq_ws_plane(int(fmt), rows * nsb * int(kq_dev_ssb_i(int(fmt)) / 4l), 1u, uint(fmt) * 13u))
+        : kq_ws_plane(int(fmt), kq_ws_words(int(fmt), rows * nsb), 1u, uint(fmt) * 13u))
     return (wq <- wq, ws <- ws)
 }
 
@@ -1321,6 +1321,7 @@ def private b32_row_oracle(f : KqFmt; wq, ws, xq : array<uint>; xs : array<float
         if (f == KqFmt.iq4nl32) return iq4nl32_gemv_row_oracle(wq, ws, xq, xs, wb0, nb)
         if (f == KqFmt.q4032) return q4032_gemv_row_oracle(wq, ws, xq, xs, wb0, nb)
         if (f == KqFmt.mx4) return mx4_gemv_row_oracle(wq, ws, xq, xs, wb0, nb)
+        if (f == KqFmt.q20 || f == KqFmt.q10) return lowbit_gemv_row_oracle(f, wq, ws, xq, xs, wb0, nb)
         return q5032_gemv_row_oracle(wq, ws, xq, xs, wb0, nb)
     } else {
         return 0.0
@@ -1329,9 +1330,9 @@ def private b32_row_oracle(f : KqFmt; wq, ws, xq : array<uint>; xs : array<float
 
 //! the per-32 decode GEMVs (the shared `Blk32GemvRunT` leaves) against the engine's scalar dots at the Vulkan cells' widths - a
 //! subgroup a row, a lane a block over Q8_0 activations, two regions of three rows
-[test(description = "The per-32 GEMV leaves (Q5_1, IQ4_NL, Q4_0, Q5_0, and mx4 up to gpt-oss's 2880) match the engine's scalar row dot at two widths each over two regions of three rows, within 2e-3 under a poison control.")]
+[test(description = "The per-32 GEMV leaves (Q5_1, IQ4_NL, Q4_0, Q5_0, Q2_0, Q1_0, and mx4 up to gpt-oss's 2880) match the engine's scalar row dot at two widths each over two regions of three rows, within 2e-3 under a poison control.")]
 def test_cud_b32_gemv_family(t0 : T?) {
-    t0 |> run("CUDA per-32 GEMV leaves == the scalar dot's float order (q51, iq4nl32, q4032, q5032, and mx4 at gpt-oss's 2880)") <| @(t : T?) {
+    t0 |> run("CUDA per-32 GEMV leaves == the scalar dot's float order (q51, iq4nl32, q4032, q5032, q20, q10, and mx4 at gpt-oss's 2880)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_gemv_cls()) {
                 t |> skip("no CUDA device with NVRTC")
@@ -1344,6 +1345,8 @@ def test_cud_b32_gemv_family(t0 : T?) {
                        B32Cell(f = KqFmt.iq4nl32, n0 = 640, n1 = 1280, qwords = 4, wq_seed = 67, xq_mul = 23, xq_add = 5),
                        B32Cell(f = KqFmt.q4032, n0 = 640, n1 = 896, qwords = 4, wq_seed = 71, xq_mul = 29, xq_add = 5),
                        B32Cell(f = KqFmt.q5032, n0 = 896, n1 = 1408, qwords = int(KQ_Q5032_QWORDS), wq_seed = 73, xq_mul = 31, xq_add = 5),
+                       B32Cell(f = KqFmt.q20, n0 = 1408, n1 = 2048, qwords = int(KQ_Q20_QWORDS), wq_seed = 79, xq_mul = 37, xq_add = 5),
+                       B32Cell(f = KqFmt.q10, n0 = 1408, n1 = 2048, qwords = int(KQ_Q10_QWORDS), wq_seed = 89, xq_mul = 37, xq_add = 5),
                        B32Cell(f = KqFmt.mx4, n0 = 704, n1 = 2880, qwords = 4, wq_seed = 53, xq_mul = 19, xq_add = 7)]) {   // mx4: 22 blocks a row, then gpt-oss's 90 - three lane passes, the last partial
                 let fmt = int(c.f)
                 t |> success(cud_gemv_ensure(fmt), "{c.f}: the leaf compiles")
@@ -1390,9 +1393,9 @@ def private cud_gather_rows(t : T?; fmt : int; wq, ws, ids : array<uint>; xh : a
 //! the token-table gathers: every superblock format's `KqEmb<Fmt>` leaf against the class lane decode (the Vulkan cell's oracle),
 //! the per-32 leaves against the engine's plane dequant, and the exact f32 table's leaf against the rows' own floats - four rows,
 //! three ids off a five-row table past a one-row lead, one `EMB_ID_HOST` row copying the host's staged row
-[test(description = "The token-table gathers of all 15 superblock formats, 4 per-32 formats and the f32 table match their oracles on three ids past a one-row lead plus a host-staged row within 2e-3, the f32 grid's footprint kept at the sentinel.")]
+[test(description = "The token-table gathers of all 19 superblock formats, 6 per-32 formats and the f32 table match their oracles on three ids past a one-row lead plus a host-staged row within 2e-3, the f32 grid's footprint kept at the sentinel.")]
 def test_cud_emb_family(t0 : T?) {   // nolint:STYLE038 - one flat arm per gather stamp (every kq leaf, the q8 and the f32 table), a split would hide the arm list
-    t0 |> run("CUDA token-table gather leaves == the oracles (15 superblock formats, 4 per-32 ones)") <| @(t : T?) {
+    t0 |> run("CUDA token-table gather leaves == the oracles (19 superblock formats, 6 per-32 ones)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_emb_gather_cls()) {
                 t |> skip("no CUDA device with NVRTC")
@@ -1409,15 +1412,15 @@ def test_cud_emb_family(t0 : T?) {   // nolint:STYLE038 - one flat arm per gathe
             for (fmt in kq_leaf_fmts()) {
                 t |> success(cud_emb_ensure(fmt), "{kq_fmt_of_slot(fmt)}: the gather leaf compiles")
                 var inscope wq <- kq_dev_wq_plane(fmt, (vocab + lead) * nsb, 1u, uint(fmt) * 9973u)
-                var inscope ws <- kq_ws_plane(fmt, (vocab + lead) * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 17u)
+                var inscope ws <- kq_ws_plane(fmt, kq_ws_words(fmt, (vocab + lead) * nsb), 1u, uint(fmt) * 17u)
                 var inscope y_ref <- emb_gather_oracle(fmt, wq, ws, ids, xh, n, uint(lead * nsb), escale)
                 var inscope y <- cud_gather_rows(t, fmt, wq, ws, ids, xh, n, lead * nsb, escale)
                 check_rows(t, "{kq_fmt_of_slot(fmt)} token-table gather against the class lane decode", y, y_ref, BAR_APPROX_CTRL, n)
             }
-            let n32 = 96
-            let nb = n32 / 32
-            var inscope xh32 <- row_fill(rows * n32, 7, 3, 0.01, -0.5)
-            for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
+            for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.q20, KqFmt.q10]) {
+                let n32 = kq_grouped_b32(f) ? 128 : 96   // three 32-blocks a row; a grouped member's rows are whole groups, four blocks
+                let nb = n32 / 32
+                var inscope xh32 <- row_fill(rows * n32, 7, 3, 0.01, -0.5)
                 let fmt = int(f)
                 t |> success(cud_emb_ensure(fmt), "{f}: the gather leaf compiles")
                 let totblk = (vocab + lead) * nb
@@ -1447,6 +1450,8 @@ def test_cud_emb_family(t0 : T?) {   // nolint:STYLE038 - one flat arm per gathe
                 var inscope y <- cud_gather_rows(t, fmt, wq, ws, ids, xh32, n32, lead * nb, escale)
                 check_rows(t, "{f} token-table gather against the engine's plane dequant", y, y_ref, BAR_APPROX_CTRL, n32)
             }
+            let n32 = 96
+            var inscope xh32 <- row_fill(rows * n32, 7, 3, 0.01, -0.5)
             // the exact table's gather (`CuEmbGatherF32`, the `WF` arm): the row's floats scaled, the `EMB_ID_HOST` row the host's
             t |> success(ensure_emb_gather_f32_cls(), "the f32 table gather compiles")
             var inscope wf <- row_fill(vocab * n32, 11, 5, 0.02, -0.7)

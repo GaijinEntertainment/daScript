@@ -46,7 +46,7 @@ let private GT_F64 = 12
 
 //! Bytes `n` elements of a ggml type take on disk (block bytes x blocks); 0 for a type the loader
 //! does not know, so a census sums what it can and names the rest.
-def ggml_type_bytes(gt : int; n : int64) : int64 {
+def ggml_type_bytes(gt : int; n : int64) : int64 {   // nolint:STYLE037 - one arm per ggml type, the honest shape
     if (gt == GGML_TYPE_F32) return n * 4l
     if (gt == GGML_TYPE_F16 || gt == GGML_TYPE_BF16) return n * 2l
     if (gt == GGML_TYPE_Q4_0 || gt == GGML_TYPE_IQ4_NL) return n / 32l * 18l
@@ -55,12 +55,18 @@ def ggml_type_bytes(gt : int; n : int64) : int64 {
     if (gt == GGML_TYPE_Q8_0) return n / 32l * 34l
     if (gt == GGML_TYPE_MXFP4) return n / 32l * 17l
     if (gt == GGML_TYPE_NVFP4) return n / 64l * 36l
+    if (gt == GGML_TYPE_Q2_0) return n / 64l * 18l
+    if (gt == GGML_TYPE_Q1_0) return n / 128l * 18l
     if (gt == GGML_TYPE_Q2_K) return n / 256l * 84l
+    if (gt == GGML_TYPE_TQ2_0) return n / 256l * 66l
+    if (gt == GGML_TYPE_TQ1_0) return n / 256l * 54l
     if (gt == GGML_TYPE_Q3_K || gt == GGML_TYPE_IQ3_S) return n / 256l * 110l
     if (gt == GGML_TYPE_Q4_K) return n / 256l * 144l
     if (gt == GGML_TYPE_Q5_K) return n / 256l * 176l
     if (gt == GGML_TYPE_Q6_K) return n / 256l * 210l
     if (gt == GGML_TYPE_IQ2_XXS) return n / 256l * 66l
+    if (gt == GGML_TYPE_IQ1_S) return n / 256l * 50l
+    if (gt == GGML_TYPE_IQ1_M) return n / 256l * 56l
     if (gt == GGML_TYPE_IQ2_XS) return n / 256l * 74l
     if (gt == GGML_TYPE_IQ2_S) return n / 256l * 82l
     if (gt == GGML_TYPE_IQ3_XXS) return n / 256l * 98l
@@ -84,6 +90,7 @@ def kq_disk_bytes(f : KqFmt; n : int64) : int64 => ggml_type_bytes(kq_ggml_type(
 let private GGML_TYPE_NAMES <- {
     GGML_TYPE_F32 => "F32", GGML_TYPE_F16 => "F16", GGML_TYPE_BF16 => "BF16",
     GGML_TYPE_Q4_0 => "Q4_0", GGML_TYPE_Q5_0 => "Q5_0", GGML_TYPE_Q5_1 => "Q5_1", GGML_TYPE_Q8_0 => "Q8_0", GGML_TYPE_MXFP4 => "MXFP4", GGML_TYPE_NVFP4 => "NVFP4",
+    GGML_TYPE_Q2_0 => "Q2_0", GGML_TYPE_Q1_0 => "Q1_0",
     GGML_TYPE_Q2_K => "Q2_K", GGML_TYPE_Q3_K => "Q3_K", GGML_TYPE_Q4_K => "Q4_K", GGML_TYPE_Q5_K => "Q5_K", GGML_TYPE_Q6_K => "Q6_K",
     GGML_TYPE_IQ2_XXS => "IQ2_XXS", GGML_TYPE_IQ2_XS => "IQ2_XS", GGML_TYPE_IQ2_S => "IQ2_S",
     GGML_TYPE_IQ3_XXS => "IQ3_XXS", GGML_TYPE_IQ3_S => "IQ3_S", GGML_TYPE_IQ4_NL => "IQ4_NL", GGML_TYPE_IQ4_XS => "IQ4_XS",
@@ -96,14 +103,12 @@ let private GGML_TYPE_NAMES <- {
 //! The ggml type's upstream spelling for logs ("Q4_K", "IQ3_S"); "type N" for one the loader does not know.
 def ggml_type_name(gt : int) : string => GGML_TYPE_NAMES?[gt] ?? "type {gt}"
 
-//! the served type nearest an unread one: Q4_1's (d, m) per-32 plane is Q5_1's shape at one bit less, the 1-bit iquants
-//! sit under IQ2_XXS, the ternaries under Q4_0
+//! the served type nearest an unread one: Q4_1's (d, m) per-32 plane is Q5_1's shape at one bit less
 let private NEAREST_SERVED_TYPE <- {
-    GGML_TYPE_Q4_1 => "Q5_1", GGML_TYPE_IQ1_S => "IQ2_XXS", GGML_TYPE_IQ1_M => "IQ2_XXS", GGML_TYPE_TQ1_0 => "Q4_0", GGML_TYPE_TQ2_0 => "Q4_0"
+    GGML_TYPE_Q4_1 => "Q5_1"
 }
 
-//! The load's decline of a file carrying a tensor type the reader has no arm for (Q4_1, IQ1_S, IQ1_M, TQ1_0, TQ2_0, ...):
-//! one panic before any plane is read, naming the tensor, its type and the served type to requantize it to
+//! One panic before any plane is read for a tensor type the reader has no arm for, naming the served type to requantize to
 def gguf_decline_unread_types(m : GGUFMeta) {
     let bad = find_index_if(m.tensors) $(ti) => ggml_type_bytes(ti.ggml_type, ti.n_elem) == 0l
     if (bad >= 0) {
@@ -1177,25 +1182,24 @@ def private kq_transcode_check(m : GGUFMeta; name : string; want_type : int; typ
 def gguf_scale_name(name : string) : string => "{trim_suffix(name, ".weight")}.scale"
 
 
-//! Transcode tensor `name`'s [src_off, +expect_n) slice - a whole number of `fmt`'s stride units
-//! (256-weight superblocks; q51's 32-blocks) - into the format's planes at plane-local element
-//! offset `eloff`: kq_transcode_p per unit, threaded over units (~1MB of disk bytes per job).
+//! Transcode tensor `name`'s [src_off, +expect_n) slice, whole disk blocks of `fmt`, into its planes at block-boundary offset `eloff`
 def gguf_transcode_kq(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; fmt : KqFmt; var kq : array<uint8>; var ks : array<uint8>; eloff, expect_n : int64; src_off : int64 = 0l) {
     if (kq_mlx_affine(fmt)) {
         gguf_transcode_mlx(m, srcbytes, name, fmt, kq, ks, eloff, expect_n, src_off)
         return
     }
     let d = kq_desc(fmt)
-    let ti = kq_transcode_check(m, name, d.ggml_type, ggml_type_name(d.ggml_type), src_off, expect_n, d.elems)
-    let nb = expect_n / d.elems
-    if (nb <= 0l) {
+    let ge = kq_group_elems(fmt)
+    let ti = kq_transcode_check(m, name, d.ggml_type, ggml_type_name(d.ggml_type), src_off, expect_n, ge)
+    let ng = expect_n / ge
+    if (ng <= 0l) {
         return
     }
-    if (eloff % d.elems != 0l) {
-        panic("gguf: tensor '{name}' {fmt} plane offset {eloff} is not block-aligned ({d.elems})")
+    if (eloff % ge != 0l) {
+        panic("gguf: tensor '{name}' {fmt} plane offset {eloff} is not group-aligned ({ge})")
     }
-    let unit0 = eloff / d.elems
-    transcode_kq_units(m, srcbytes, name, fmt, ti, kq, ks, unit0 * d.qsb, unit0 * d.ssb, nb, src_off)
+    let blk0 = eloff / d.elems
+    transcode_kq_units(m, srcbytes, name, fmt, ti, kq, ks, blk0 * d.qsb, kq_soff(fmt, blk0), ng, src_off)
 }
 
 //! the whole rows [src_off, +expect_n) of affine tensor `name` (its codes, `.scales` and `.biases`) into the format's planes
@@ -1279,39 +1283,40 @@ def gguf_transcode_mlx(m : GGUFMeta; srcbytes : array<uint8> | #; name : string;
 //! where one element offset cannot address both planes.
 def gguf_transcode_kq_at(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; fmt : KqFmt; var kq : array<uint8>; var ks : array<uint8>; qoff, soff, expect_n : int64) {
     let d = kq_desc(fmt)
-    let ti = kq_transcode_check(m, name, d.ggml_type, ggml_type_name(d.ggml_type), 0l, expect_n, d.elems)
-    let nb = expect_n / d.elems
-    if (nb <= 0l) {
+    let ti = kq_transcode_check(m, name, d.ggml_type, ggml_type_name(d.ggml_type), 0l, expect_n, kq_group_elems(fmt))
+    let ng = expect_n / kq_group_elems(fmt)
+    if (ng <= 0l) {
         return
     }
-    if (qoff % d.qsb != 0l || soff % d.ssb != 0l) {
-        panic("gguf: tensor '{name}' {fmt} plane offsets {qoff} / {soff} are not on the format's stride ({d.qsb} / {d.ssb})")
+    if (qoff % (d.qsb * d.sgroup) != 0l || soff % d.ssb != 0l) {
+        panic("gguf: tensor '{name}' {fmt} plane offsets {qoff} / {soff} are not on the format's group stride ({d.qsb * d.sgroup} / {d.ssb})")
     }
-    transcode_kq_units(m, srcbytes, name, fmt, ti, kq, ks, qoff, soff, nb, 0l)
+    transcode_kq_units(m, srcbytes, name, fmt, ti, kq, ks, qoff, soff, ng, 0l)
 }
 
-//! the `nb` units of tensor `ti` from element `src_off` into the planes at byte offsets `qoff` / `soff`, threaded over units
-def private transcode_kq_units(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; fmt : KqFmt; ti : int; var kq : array<uint8>; var ks : array<uint8>; qoff, soff, nb, src_off : int64) {
+//! the `ng` disk blocks of tensor `ti` from element `src_off` - each one scale group: `sgroup` stride units under one scale
+//! unit - into the planes at byte offsets `qoff` / `soff`, threaded over blocks
+def private transcode_kq_units(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; fmt : KqFmt; ti : int; var kq : array<uint8>; var ks : array<uint8>; qoff, soff, ng, src_off : int64) {
     let d = kq_desc(fmt)
     let disk = d.disk_bytes
-    let qsb = d.qsb
+    let qgb = d.qsb * d.sgroup
     let ssb = d.ssb
-    guard_dst(name, "quant plane", qoff, nb * qsb, long_length(kq))
-    guard_dst(name, "scale plane", soff, nb * ssb, long_length(ks))
+    guard_dst(name, "quant plane", qoff, ng * qgb, long_length(kq))
+    guard_dst(name, "scale plane", soff, ng * ssb, long_length(ks))
     with_tensor_view(m, srcbytes, ti) $(bytes, tbase) {
         unsafe {
-            let srcp = addr<uint8 const?>(bytes[tbase + (src_off / d.elems) * disk])
+            let srcp = addr<uint8 const?>(bytes[tbase + (src_off / kq_group_elems(fmt)) * disk])
             var kqp = addr(kq[qoff])
             var ksp = addr(ks[soff])
-            maybe_parallel_for(0, int(nb), transcode_jobs(nb, disk)) $(rb, re) {
-                kq_transcode_units(fmt, srcp, kqp, ksp, int64(rb), int64(re), disk, qsb, ssb)
+            maybe_parallel_for(0, int(ng), transcode_jobs(ng, disk)) $(rb, re) {
+                kq_transcode_units(fmt, srcp, kqp, ksp, int64(rb), int64(re), disk, qgb, ssb)
             }
         }
     }
 }
 
 //! The kq format tag of a superblock i-quant / Q2_K / Q3_K GGML type (q8 = not one of them).
-def gguf_kq_fmt_of_type(gtype : int) : KqFmt {
+def gguf_kq_fmt_of_type(gtype : int) : KqFmt {   // nolint:STYLE037 - one arm per ggml type, the honest shape
     if (gtype == GGML_TYPE_IQ4_XS) return KqFmt.iq4xs
     if (gtype == GGML_TYPE_Q3_K) return KqFmt.k3
     if (gtype == GGML_TYPE_IQ3_S) return KqFmt.iq3s
@@ -1322,11 +1327,17 @@ def gguf_kq_fmt_of_type(gtype : int) : KqFmt {
     if (gtype == GGML_TYPE_IQ2_XS) return KqFmt.iq2xs
     if (gtype == GGML_TYPE_IQ2_XXS) return KqFmt.iq2xxs
     if (gtype == GGML_TYPE_NVFP4) return KqFmt.nv4
+    if (gtype == GGML_TYPE_TQ2_0) return KqFmt.tq2
+    if (gtype == GGML_TYPE_TQ1_0) return KqFmt.tq1
     if (gtype == GGML_TYPE_MLX4) return KqFmt.mlx4
     if (gtype == GGML_TYPE_MLX8) return KqFmt.mlx8
     if (gtype == GGML_TYPE_MLX4B) return KqFmt.mlx4b
     if (gtype == GGML_TYPE_MLX8B) return KqFmt.mlx8b
     if (gtype == GGML_TYPE_MLX6B) return KqFmt.mlx6b
+    if (gtype == GGML_TYPE_Q2_0) return KqFmt.q20
+    if (gtype == GGML_TYPE_Q1_0) return KqFmt.q10
+    if (gtype == GGML_TYPE_IQ1_S) return KqFmt.iq1s
+    if (gtype == GGML_TYPE_IQ1_M) return KqFmt.iq1m
     return KqFmt.q8
 }
 
@@ -1527,12 +1538,34 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
         //! whole affine rows: the member's own transcode into scratch planes, then its block dequant
         let fmt = gguf_kq_fmt_of_type(gtype)
         let nb = expect_n / KQ_B32_ELEMS
-        var kq, ks : array<uint8>
-        kq |> resize(nb * kq_qsb(fmt))
-        ks |> resize(nb * kq_ssb(fmt))
+        var @exact_size kq : array<uint8>
+        var @exact_size ks : array<uint8>
+        kq |> reserve_resize(nb * kq_qsb(fmt))
+        ks |> reserve_resize(kq_sbytes(fmt, nb))
         gguf_transcode_mlx(m, srcbytes, name, fmt, kq, ks, 0l, expect_n, src_off)
         for (bi in range64(nb)) {
             dequant_b32_plane_block(fmt, kq, ks, bi, dst, dst_off + bi * KQ_B32_ELEMS)
+        }
+        delete kq
+        delete ks
+    } elif (kq_sgroup(gguf_kq_fmt_of_type(gtype)) > 1l) {
+        // a grouped per-32 member: each disk block through one-group scratch planes, the native load's two steps value for value
+        let fmt = gguf_kq_fmt_of_type(gtype)
+        let ge = kq_group_elems(fmt)
+        if (src_off % ge != 0l || expect_n % ge != 0l) {
+            panic("gguf: tensor '{name}' {ggml_type_name(gtype)} slice [{src_off}, +{expect_n}) is not {ge}-weight group-aligned")
+        }
+        let gb = kq_desc(fmt).disk_bytes
+        let sg = kq_sgroup(fmt)
+        var @exact_size kq : array<uint8>
+        var @exact_size ks : array<uint8>
+        kq |> reserve_resize(sg * kq_qsb(fmt))
+        ks |> reserve_resize(kq_sbytes(fmt, sg))
+        for (g in range64(expect_n / ge)) {
+            kq_transcode_superblock(fmt, bytes, base + (src_off / ge + g) * gb, kq, 0l, ks, 0l)
+            for (j in range64(sg)) {
+                dequant_b32_plane_block(fmt, kq, ks, j, dst, dst_off + g * ge + j * KQ_B32_ELEMS)
+            }
         }
         delete kq
         delete ks

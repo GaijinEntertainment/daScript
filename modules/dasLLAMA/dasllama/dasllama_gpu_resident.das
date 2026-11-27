@@ -518,13 +518,13 @@ def trim_pack_emb(src : Model; var t : Model; rebase : int64) : bool {
         let nsb = r.n / kq_elems(f)
         let sb0 = off0 / kq_elems(f)
         let qsb = kq_qsb(f)
-        let ssb = kq_ssb(f)
+        let sbytes = kq_sbytes(f, nsb)
         t.embq |> reserve_resize(nsb * qsb)
-        t.embs |> reserve_resize(nsb * ssb)
+        t.embs |> reserve_resize(sbytes)
         kq_plane_pair(src, f) $(q, s) {
             unsafe {
                 memcpy(addr<void?>(t.embq[0]), addr<void?>(q[sb0 * qsb]), nsb * qsb)
-                memcpy(addr<void?>(t.embs[0]), addr<void?>(s[sb0 * ssb]), nsb * ssb)
+                memcpy(addr<void?>(t.embs[0]), addr<void?>(s[kq_soff(f, sb0)]), sbytes)
             }
         }
     }
@@ -550,7 +550,7 @@ def trim_emb_plane_bytes(t : Model) : tuple<q : int64; s : int64> {
     }
     if (emb_kq(t) && (kq_sb(r.f) || kq_dense_b32(r.f))) {
         let nsb = r.n / kq_elems(r.f)
-        return (q = nsb * kq_qsb(r.f), s = nsb * kq_ssb(r.f))
+        return (q = nsb * kq_qsb(r.f), s = kq_sbytes(r.f, nsb))
     }
     return (q = 0l, s = 0l)
 }
@@ -601,7 +601,7 @@ def kq_plane_pair_names(f : KqFmt) : tuple<q : string; s : string> {
     if (f == KqFmt.q4032) return (q = "q4032q", s = "q4032s")
     if (f == KqFmt.q5032) return (q = "q5032q", s = "q5032s")
     if (f == KqFmt.mx4) return (q = "mxq", s = "mxs")
-    if (kq_mlx_affine(f)) return (q = "{f}q", s = "{f}s")
+    if (kq_mlx_affine(f) || kq_grouped_b32(f)) return (q = "{f}q", s = "{f}s")
     return (q = "", s = "")
 }
 
@@ -2407,13 +2407,13 @@ def private trim_emb_gather(t : Model; f : KqFmt; woff, n, rows, mr, kgroup, wbi
         let u0 = (woff - r.off) / kq_elems(f)
         let units = elems / kq_elems(f)
         let qsb = kq_qsb(f)
-        let ssb = kq_ssb(f)
+        let sbytes = kq_sbytes(f, units)
         kq_plane_pair(view, f) $(var q : array<uint8>; var sc : array<uint8>) {
             q |> reserve_resize(units * qsb)
-            sc |> reserve_resize(units * ssb)
+            sc |> reserve_resize(sbytes)
             unsafe {
                 memcpy(addr<void?>(q[0]), addr<void?>(t.embq[u0 * qsb]), units * qsb)
-                memcpy(addr<void?>(sc[0]), addr<void?>(t.embs[u0 * ssb]), units * ssb)
+                memcpy(addr<void?>(sc[0]), addr<void?>(t.embs[kq_soff(f, u0)]), sbytes)
             }
         }
     }

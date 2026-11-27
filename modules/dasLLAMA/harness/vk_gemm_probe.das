@@ -15,6 +15,14 @@ options _dasllama_internal = true
 // ATTRIBUTION SWEEP narrow:<fmt> - the tile pick's narrow-GEMM s rule: a format's l, m and s stamps at the widths the rule decides.
 // ATTRIBUTION SWEEP kqst:<fmt> - the K-quant window's two forms: the cm2 l/m/s stamps on the device's decode arm against the staged KHR tile.
 // ATTRIBUTION SWEEP q8i8 - the int8 KHR tile over a Q8_0 plane at 16 and 32 token rows (the 27B's gate and down): what an int8 rows leaf would cost.
+// RACE moeq20 | moeq10 - a low-bit routed block's two window tiles on the KHR arm (DASLLAMA_COOPMAT=mm): the f16 KHR tile against
+// the int8 tile over the expert schedule's m and s pieces, Qwen1.5-MoE's 60 experts (gate/up 2048 x 1408 a stack, down 1408 x
+// 2048) at 32, 77 and 128 window tokens top-4 and Flash-Next's 512 experts (2560 x 640, 640 x 2560) at 128 tokens top-10, two
+// rounds; moeq10 runs each shape under the shipped int8 tile (+-1 lanes) and its 0/1-lane alternate (`ProbeQ10Mmq01`), and
+// the dense 4096 x 14336 plane at 512 tokens for q10 and q20, one plane replayed and 13 planes a dispatch.
+// RACE moekhr - the 2-bit members with no int8 tile (k2, tq2, tq1) on the KHR arm (DASLLAMA_COOPMAT=mm): the KHR window tile
+// against its rotated K walk over moeq10's expert shapes and the dense 4096 x 14336 plane at 32, 77, 128 and 512 tokens, one
+// plane replayed and 13 planes a dispatch, two rounds.
 // ATTRIBUTION SWEEP khrsk - the KHR arm's q8 race (DASLLAMA_COOPMAT=mm): the q8 mul_mm tile against the KHR kq tile whole and split, one process.
 // ATTRIBUTION SWEEP small|barform - the token command's one-workgroup row kernels alone, chained, and by barrier form.
 // ATTRIBUTION SWEEP wh - the whisper large-v3-turbo encoder's role shapes at the chunk's 1500 rows and at 1536 (whole l columns):
@@ -34,7 +42,7 @@ options _dasllama_internal = true
 // format runs the whole-bucket form alone); ts:<fmt> a timestamp or a barrier between two of its m stamps; cold:<fmt> its l, m and s
 // stamps warm and cold, the host schedule, the deep slab, the wide plan and the flush; cm2x|k6x|ref
 // the bisect and reference arms; khrx the KHR kq tile's weight-stage and structural bisect; mmqx the
-// integer tile prototypes; kqst:<fmt> the cm2 stamps against the staged tile on the gemma-4 E2B and 4B shapes; plef32 the f32 rows' two tiles; wh the whisper encoder's shapes at 1500 and 1536 rows.
+// integer tile prototypes; kqst:<fmt> the cm2 stamps against the staged tile on the gemma-4 E2B and 4B shapes, the 1B's FFN and the reference's 4096 x 14336; plef32 the f32 rows' two tiles; wh the whisper encoder's shapes at 1500 and 1536 rows.
 // Shapes default to Llama-3.2-3B Q8 geometry (dim 3072, hidden 8192, kv_dim 1024).
 
 require math
@@ -47,6 +55,7 @@ require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_gpu_tier   // TILE_READ_SLACK: the rows the moe: arm's gathered plane carries past its last region
 require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_vulkan_classes
+require dasllama/dasllama_gpu_knee   // vk_alt_stamps: the moekhr arm prints the alternate stamps its served tiles build under
 require dasllama/dasllama_gpu_math   // ksign7: the iq probe classes inherit their decode bodies, compiled in this module
 require dasllama/dasllama_kqformat
 require daslib/typemacro_boost
@@ -477,7 +486,7 @@ def private cm2_fmt_names : string {
     return build_string() $(var w) {
         var first = true
         for (f in type<KqFmt>) {
-            if (kq_sb(f)) {
+            if (kq_sb(f) && !kq_discrete_unstamped(f)) {
                 w |> write("{first ? "" : " "}{f}")
                 first = false
             }
@@ -527,20 +536,28 @@ def private cm2_shape_host(fmt : int; d, n, cnt : int) : Cm2ShapeHost {
     let bb = arena_block_bytes(fmt)
     let wq_words = int(bb.wq / 4l)
     let ws_words = int(bb.ws / 4l)
+    let half_rows = bb.ws % 4l != 0l   // tq2's row is half a word: the plane's words are f16 d pairs, whole words at its end
+    let ws_total = half_rows ? int((int64(totsb) * bb.ws + 3l) / 4l) : totsb * ws_words
     var h : Cm2ShapeHost
     h.wq |> reserve(totsb * wq_words)   //! a wave sweep's fourth wave is 75 MB of q5_K blocks, past the unreserved growth cap
     h.wq |> resize(totsb * wq_words)
-    h.ws |> reserve(totsb * ws_words)
-    h.ws |> resize(totsb * ws_words)
+    h.ws |> reserve(ws_total)
+    h.ws |> resize(ws_total)
     h.xf |> resize(cnt * n / 2)
     h.xq |> resize(cnt * nsb * 64)
     h.axs |> resize(cnt * nsb)
     for (i in range(totsb * wq_words)) {
         h.wq[i] = hash_word(uint(i) + 29u)
     }
-    for (sb in range(totsb)) {
-        for (wi in range(ws_words)) {
-            h.ws[sb * ws_words + wi] = scale_row_word(fmt, sb, wi, ws_words)
+    if (half_rows) {
+        for (wi in range(ws_total)) {
+            h.ws[wi] = (hash_word(uint(wi) + 613u) & 0x03FF03FFu) | 0x2C002C00u
+        }
+    } else {
+        for (sb in range(totsb)) {
+            for (wi in range(ws_words)) {
+                h.ws[sb * ws_words + wi] = scale_row_word(fmt, sb, wi, ws_words)
+            }
         }
     }
     for (i in range(cnt * n / 2)) {
@@ -562,7 +579,7 @@ def private cm2_shape_dev(fmt : int; d, n, cnt : int; h : Cm2ShapeHost; slab_blo
     let bb = arena_block_bytes(fmt)
     let blk0 = max(slab_blocks - totsb, 0)
     let prow = max(plane_rows, cnt)
-    var dv = Cm2ShapeDev(wq_bytes = int64(blk0 + totsb) * bb.wq, ws_bytes = int64(blk0 + totsb) * bb.ws, xf_bytes = int64(prow * n) * 2l,
+    var dv = Cm2ShapeDev(wq_bytes = int64(blk0 + totsb) * bb.wq, ws_bytes = (int64(blk0 + totsb) * bb.ws + 3l) & ~3l, xf_bytes = int64(prow * n) * 2l,
         xq_bytes = long_length(h.xq) * 4l, axs_bytes = int64(cnt * nsb) * 4l, y_bytes = int64(prow * d) * 4l, wblk0 = blk0)
     dv.wqd = make_device_buf(dv.wq_bytes)
     dv.wsd = make_device_buf(dv.ws_bytes)
@@ -1077,15 +1094,6 @@ def private moe35_bucket_counts : array<int> {
     return <- cnt
 }
 
-def private moeq_readback(dev : uint64; bytes : int64) : array<float> {
-    var out : array<float>
-    out |> resize(bytes / 4l)
-    var host = make_host_buf(bytes, true, [cached = true])
-    readback_range(dev, 0u, host, unsafe(addr(out[0])), bytes)
-    destroy_host_buf(host)
-    return <- out
-}
-
 //! one subgroup's product of A[r] = (r + 1, 1, 0 ..) by B[c] = (17, c, 0 ..): element (r, c) reads 17 (r + 1) + c, and
 //! every lane writes its eight elements in its own order
 [vk_dispatch(name = "mmq_layout_probe", grid = "wgs", params = "wgs : int64")]
@@ -1156,7 +1164,7 @@ def private run_mmq_layout {
         enc_mmq_layout_probe(r, hz, set, pc, 1l)
     }
     submit_wait(raw)
-    var words <- moeq_readback(dev, bytes)   // the words read back as floats: their bits are the elements
+    var words <- readback_floats(dev, bytes)   // the words read back as floats: their bits are the elements
     for (lane in range(32)) {
         print("lane {lane}:")
         for (e in range(8)) {
@@ -1193,7 +1201,7 @@ def private run_mmq_sg {
         enc_mmq_sg_probe(r, hz, set, pc, 1l)
     }
     submit_wait(raw)
-    var words <- moeq_readback(dev, bytes)
+    var words <- readback_floats(dev, bytes)
     for (t in fixed_array(0, 1, 31, 32, 33, 63, 64, 127, 128, 255, 256, 511)) {
         let v = float_bits_to_uint(words[t])
         print("tid {t}: subgroup {int(v & 255u)} lane {int((v >> 8u) & 255u)} size {int(v >> 16u)}\n")
@@ -1204,8 +1212,9 @@ def private run_mmq_sg {
 //! the feed's block (row 1, block 1) against the host's quantization of the same 32 values: the quants off, the scale and
 //! the scale times the quants' sum beside the host's
 def private moeq_feed_check(name : string; xqd, xsd : uint64; xq_bytes, xs_bytes : int64; n : int) {
-    var fq <- moeq_readback(xqd, xq_bytes)
-    var fs <- moeq_readback(xsd, xs_bytes)
+    return if (g_moeq_rot)   // the rotated KHR arm runs no feed
+    var fq <- readback_floats(xqd, xq_bytes)
+    var fs <- readback_floats(xsd, xs_bytes)
     let nbq = n / 32
     var amax = 0.0lf
     for (k in range(32)) {
@@ -1244,6 +1253,99 @@ def private moeq_host_ref(name : string; wqh, wsuh, tokh : array<uint>; y_f, y_i
         }
         print("{name} host ref y[{smp.tc}][{smp.mr}] = {acc}   khr f16 {y_f[smp.tc * d + smp.mr]}   int8 {y_i[smp.tc * d + smp.mr]}\n")
     }
+}
+
+//! the q10 int8 tiles' race alternate (`moeq10`): `Q10MmqT` with the sign word staged as 0/1 lanes under 2d and -d over the
+//! activation sum (the min term), the 128-row tile and the 32-row one
+[vk_dispatch(name = "probe_q10_mmq01_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class ProbeQ10Mmq01 : Q10MmqT {
+    override MIN = true
+    override BITS01 = true
+
+    [spirv_kernel(local_size_x = 512, name = "probe_q10_mmq01_cls_spv")]
+    def run {
+        mmq_body()
+    }
+}
+
+[vk_dispatch(name = "probe_q10_mmqs01_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class ProbeQ10Mmqs01 : Q10MmqT {
+    override TOKS = 32u
+    override LANES = 128u
+    override MIN = true
+    override BITS01 = true
+
+    [spirv_kernel(local_size_x = 128, name = "probe_q10_mmqs01_cls_spv")]
+    def run {
+        mmq_body()
+    }
+}
+
+var private g_moeq_alt01 = false   //! `run_moeq_shape`'s int8 arms dispatch the q10 0/1-lane alternate in place of the shipped tile
+var private g_moeq_rot = false     //! `run_moeq_shape`'s second arms dispatch the format's KHR tile with its K walk rotated (`moeq_rot_enc`) in place of the int8 tile
+
+//! the rotated KHR window tile of `fmt`, a 2-bit member with no int8 tile (k2, tq2, tq1): `kq_batch_<fmt>_khr_rot_cls`
+def private moeq_rot_ensure(fmt : int) : bool {
+    return ensure_kq_batch_k2_khr_rot_cls() if (fmt == int(KqFmt.k2))
+    return ensure_kq_batch_tq2_khr_rot_cls() if (fmt == int(KqFmt.tq2))
+    return fmt == int(KqFmt.tq1) && ensure_kq_batch_tq1_khr_rot_cls()
+}
+
+def private moeq_rot_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; bits : uint const[5]) : VkDescriptorSet {
+    return set_kq_batch_k2_khr_rot_cls(bufs, sizes, bits) if (fmt == int(KqFmt.k2))
+    return set_kq_batch_tq2_khr_rot_cls(bufs, sizes, bits) if (fmt == int(KqFmt.tq2))
+    return set_kq_batch_tq1_khr_rot_cls(bufs, sizes, bits)
+}
+
+def private moeq_rot_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
+    if (fmt == int(KqFmt.k2)) {
+        enc_kq_batch_k2_khr_rot_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.tq2)) {
+        enc_kq_batch_tq2_khr_rot_cls(raw, h, s, pc, groups)
+    } else {
+        enc_kq_batch_tq1_khr_rot_cls(raw, h, s, pc, groups)
+    }
+}
+
+def private moeq_mmq_set(fmt : int; short : bool; bufs : uint64 const[7]; sizes : int64 const[7]; bits : uint const[7]) : VkDescriptorSet {
+    if (g_moeq_alt01) {
+        return short ? set_probe_q10_mmqs01_cls(bufs, sizes, bits) : set_probe_q10_mmq01_cls(bufs, sizes, bits)
+    }
+    return mmq_cls_set(fmt, short, bufs, sizes, bits)
+}
+
+def private moeq_mmq_enc(fmt : int; short : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
+    if (g_moeq_rot) {
+        moeq_rot_enc(fmt, raw, h, s, pc, groups)
+    } elif (!g_moeq_alt01) {
+        mmq_cls_enc(fmt, short, raw, h, s, pc, groups)
+    } elif (short) {
+        enc_probe_q10_mmqs01_cls(raw, h, s, pc, groups)
+    } else {
+        enc_probe_q10_mmq01_cls(raw, h, s, pc, groups)
+    }
+}
+
+def private moeq_arm2_name : string => g_moeq_rot ? "khr rot" : "int8 mmq"
+
+//! the int8 arms' feed timed on its own row: `frows` rows of `n` quantized off the window's f32 rows (`np` > 0, through the row map)
+//! or off the f16 rows; `bufs` and `sizes` the f32 rows, the f16 rows, the int8 rows and their scales
+def private moeq_feed_row(name : string; n, np, frows : int; bufs : uint64 const[4]; sizes : int64 const[4]) {
+    var pcf = MmqFeedArgs(n = uint(n), rows = uint(frows))
+    let feed_wgs = int64((frows * (n / 32) + 255) / 256)
+    var feed_us = 0.0lf
+    if (np > 0) {
+        var feed = set_mmq_feed_cls(fixed_array(bufs[0], bufs[2], bufs[3]), fixed_array(sizes[0], sizes[2], sizes[3]), fixed_array(1u, 2u, 4u))
+        feed_us = timed_chain(1) $(rawf; var hzf) {
+            enc_mmq_feed_cls(rawf, hzf, feed, pcf, feed_wgs)
+        }
+    } else {
+        var feed16 = set_mmq_feed16_cls(fixed_array(bufs[1], bufs[2], bufs[3]), fixed_array(sizes[1], sizes[2], sizes[3]), fixed_array(1u, 2u, 4u))
+        feed_us = timed_chain(1) $(rawf; var hzf) {
+            enc_mmq_feed16_cls(rawf, hzf, feed16, pcf, feed_wgs)
+        }
+    }
+    print("{name} feed: {frows} rows of {n} to int8  {feed_us / 1000.0lf} ms  timing-only\n")
 }
 
 //! A ladder schedule's pieces of format `fmt` - `cnt` the rows a region, each region its own `d` x `n` plane - on the
@@ -1359,25 +1461,20 @@ def private run_moeq_shape(fmt : int; name : string; d, n, np : int; cnt : array
     var fs_a = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, sd, xfd, yf_a), fixed_array(wq_bytes, ws_bytes, s_bytes, xf_bytes, y_bytes), gbits)
     var fs_b = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, sd, xfd, yf_b), fixed_array(wq_bytes, ws_bytes, s_bytes, xf_bytes, y_bytes), gbits)
     let ibits = fixed_array(1u, 2u, 0u, 4u, 8u, 16u, 32u)
-    var im_a = mmq_cls_set(fmt, false, fixed_array(wqd, wsd, md, xqd, xsd, yi_a, tokd), fixed_array(wq_bytes, ws_bytes, m_bytes, xq_bytes, xs_bytes, y_bytes, tok_bytes), ibits)
-    var im_b = mmq_cls_set(fmt, false, fixed_array(wqd, wsd, md, xqd, xsd, yi_b, tokd), fixed_array(wq_bytes, ws_bytes, m_bytes, xq_bytes, xs_bytes, y_bytes, tok_bytes), ibits)
-    var is_a = mmq_cls_set(fmt, true, fixed_array(wqd, wsd, sd, xqd, xsd, yi_a, tokd), fixed_array(wq_bytes, ws_bytes, s_bytes, xq_bytes, xs_bytes, y_bytes, tok_bytes), ibits)
-    var is_b = mmq_cls_set(fmt, true, fixed_array(wqd, wsd, sd, xqd, xsd, yi_b, tokd), fixed_array(wq_bytes, ws_bytes, s_bytes, xq_bytes, xs_bytes, y_bytes, tok_bytes), ibits)
-    var pcf = MmqFeedArgs(n = uint(n), rows = uint(frows))
-    let feed_wgs = int64((frows * (n / 32) + 255) / 256)
-    var feed_us = 0.0lf
-    if (np > 0) {
-        var feed = set_mmq_feed_cls(fixed_array(xwd, xqd, xsd), fixed_array(xw_bytes, xq_bytes, xs_bytes), fixed_array(1u, 2u, 4u))
-        feed_us = timed_chain(1) $(rawf; var hzf) {
-            enc_mmq_feed_cls(rawf, hzf, feed, pcf, feed_wgs)
-        }
+    var im_a, im_b, is_a, is_b : VkDescriptorSet
+    if (g_moeq_rot) {   // the rotated KHR tile reads the f16 rows the served tile reads
+        im_a = moeq_rot_set(fmt, fixed_array(wqd, wsd, md, xfd, yi_a), fixed_array(wq_bytes, ws_bytes, m_bytes, xf_bytes, y_bytes), gbits)
+        im_b = moeq_rot_set(fmt, fixed_array(wqd, wsd, md, xfd, yi_b), fixed_array(wq_bytes, ws_bytes, m_bytes, xf_bytes, y_bytes), gbits)
+        is_a = moeq_rot_set(fmt, fixed_array(wqd, wsd, sd, xfd, yi_a), fixed_array(wq_bytes, ws_bytes, s_bytes, xf_bytes, y_bytes), gbits)
+        is_b = moeq_rot_set(fmt, fixed_array(wqd, wsd, sd, xfd, yi_b), fixed_array(wq_bytes, ws_bytes, s_bytes, xf_bytes, y_bytes), gbits)
     } else {
-        var feed16 = set_mmq_feed16_cls(fixed_array(xfd, xqd, xsd), fixed_array(xf_bytes, xq_bytes, xs_bytes), fixed_array(1u, 2u, 4u))
-        feed_us = timed_chain(1) $(rawf; var hzf) {
-            enc_mmq_feed16_cls(rawf, hzf, feed16, pcf, feed_wgs)
-        }
+        im_a = moeq_mmq_set(fmt, false, fixed_array(wqd, wsd, md, xqd, xsd, yi_a, tokd), fixed_array(wq_bytes, ws_bytes, m_bytes, xq_bytes, xs_bytes, y_bytes, tok_bytes), ibits)
+        im_b = moeq_mmq_set(fmt, false, fixed_array(wqd, wsd, md, xqd, xsd, yi_b, tokd), fixed_array(wq_bytes, ws_bytes, m_bytes, xq_bytes, xs_bytes, y_bytes, tok_bytes), ibits)
+        is_a = moeq_mmq_set(fmt, true, fixed_array(wqd, wsd, sd, xqd, xsd, yi_a, tokd), fixed_array(wq_bytes, ws_bytes, s_bytes, xq_bytes, xs_bytes, y_bytes, tok_bytes), ibits)
+        is_b = moeq_mmq_set(fmt, true, fixed_array(wqd, wsd, sd, xqd, xsd, yi_b, tokd), fixed_array(wq_bytes, ws_bytes, s_bytes, xq_bytes, xs_bytes, y_bytes, tok_bytes), ibits)
+        moeq_feed_row(name, n, np, frows, fixed_array(xwd, xfd, xqd, xsd), fixed_array(xw_bytes, xf_bytes, xq_bytes, xs_bytes))
     }
-    print("{name} feed: {frows} rows of {n} to int8  {feed_us / 1000.0lf} ms  timing-only\n")
+    let arm2 = moeq_arm2_name()
     for (rep in range(2)) {
         let us_f = timed_chain() $(raw; var _h) {
             for (k in range(DISPATCHES)) {
@@ -1391,13 +1488,13 @@ def private run_moeq_shape(fmt : int; name : string; d, n, np : int; cnt : array
         let us_i = timed_chain() $(raw2; var _h) {
             for (k in range(DISPATCHES)) {
                 var hz_m, hz_s : VkHaz
-                mmq_cls_enc(fmt, false, raw2, hz_m, k % 2 == 0 ? im_a : im_b, pc, int64(bound_m))
+                moeq_mmq_enc(fmt, false, raw2, hz_m, k % 2 == 0 ? im_a : im_b, pc, int64(bound_m))
                 if (live_s > 0) {
-                    mmq_cls_enc(fmt, true, raw2, hz_s, k % 2 == 0 ? is_a : is_b, pc, int64(bound_s))
+                    moeq_mmq_enc(fmt, true, raw2, hz_s, k % 2 == 0 ? is_a : is_b, pc, int64(bound_s))
                 }
             }
         }
-        print("{name} rep {rep}: khr f16 {us_f / 1000.0lf} ms ({flop / (us_f * 1000000.0lf)} TFLOP/s)   int8 mmq {us_i / 1000.0lf} ms ({flop / (us_i * 1000000.0lf)} TFLOP/s)   wgs {bound_m}+{bound_s} ({live_m}+{live_s} live)\n")
+        print("{name} rep {rep}: khr f16 {us_f / 1000.0lf} ms ({flop / (us_f * 1000000.0lf)} TFLOP/s)   {arm2} {us_i / 1000.0lf} ms ({flop / (us_i * 1000000.0lf)} TFLOP/s)   wgs {bound_m}+{bound_s} ({live_m}+{live_s} live)\n")
     }
     if (live_s > 0) {   // the two columns apart, each arm's
         let fm = timed_chain() $(raw; var _h) {
@@ -1415,33 +1512,33 @@ def private run_moeq_shape(fmt : int; name : string; d, n, np : int; cnt : array
         let im = timed_chain() $(raw; var _h) {
             for (k in range(DISPATCHES)) {
                 var hz : VkHaz
-                mmq_cls_enc(fmt, false, raw, hz, k % 2 == 0 ? im_a : im_b, pc, int64(bound_m))
+                moeq_mmq_enc(fmt, false, raw, hz, k % 2 == 0 ? im_a : im_b, pc, int64(bound_m))
             }
         }
         let iss = timed_chain() $(raw; var _h) {
             for (k in range(DISPATCHES)) {
                 var hz : VkHaz
-                mmq_cls_enc(fmt, true, raw, hz, k % 2 == 0 ? is_a : is_b, pc, int64(bound_s))
+                moeq_mmq_enc(fmt, true, raw, hz, k % 2 == 0 ? is_a : is_b, pc, int64(bound_s))
             }
         }
-        print("{name} columns apart: m khr f16 {fm / 1000.0lf} ms, int8 {im / 1000.0lf} ms;  s khr f16 {fs / 1000.0lf} ms, int8 {iss / 1000.0lf} ms\n")
+        print("{name} columns apart: m khr f16 {fm / 1000.0lf} ms, {arm2} {im / 1000.0lf} ms;  s khr f16 {fs / 1000.0lf} ms, {arm2} {iss / 1000.0lf} ms\n")
     }
     {   // the compared outputs are one whole pass of each arm
         var raw_f = alloc_cmd()
         record_cmd(raw_f, false) $(raw; var _h) {
             var hz_m, hz_s : VkHaz
             cm2_cls_enc(fmt, CM2_TC_E, raw, hz_m, fm_b, pc, int64(bound_m))
-            mmq_cls_enc(fmt, false, raw, hz_m, im_b, pc, int64(bound_m))
+            moeq_mmq_enc(fmt, false, raw, hz_m, im_b, pc, int64(bound_m))
             if (live_s > 0) {
                 cm2_cls_enc(fmt, 32l, raw, hz_s, fs_b, pc, int64(bound_s))
-                mmq_cls_enc(fmt, true, raw, hz_s, is_b, pc, int64(bound_s))
+                moeq_mmq_enc(fmt, true, raw, hz_s, is_b, pc, int64(bound_s))
             }
         }
         submit_wait(raw_f)
     }
-    var y_f <- moeq_readback(yf_b, y_bytes)
-    var y_i <- moeq_readback(yi_b, y_bytes)
-    print("{name} int8 mmq vs khr f16: max rel diff {max_rel_diff(y_i, y_f):.5f} over {nk} x {d} outputs\n")
+    var y_f <- readback_floats(yf_b, y_bytes)
+    var y_i <- readback_floats(yi_b, y_bytes)
+    print("{name} {arm2} vs khr f16: max rel diff {max_rel_diff(y_i, y_f):.5f} over {nk} x {d} outputs\n")
     moeq_feed_check(name, xqd, xsd, xq_bytes, xs_bytes, n)
     if (fmt == int(KqFmt.q8)) {
         moeq_host_ref(name, wqh, wsuh, tokh, y_f, y_i, d, n, nk)
@@ -4016,7 +4113,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     var only = ""
     var cm2_fmt = -1
     for (a in get_command_line_arguments()) {
-        if (a == "plef32" || a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "gemma" || a == "wh" || a == "splitk" || a == "khrsk" || a == "moeq" || a == "mmqd" || a == "mmqlay" || a == "mmqsg" || a == "q8i8" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
+        if (a == "plef32" || a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "gemma" || a == "wh" || a == "splitk" || a == "khrsk" || a == "moeq" || a == "moeq20" || a == "moeq10" || a == "moekhr" || a == "mmqd" || a == "mmqlay" || a == "mmqsg" || a == "q8i8" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
             only = a
         } elif (fmt_arm_of(a) != "") {
             only = fmt_arm_of(a)
@@ -4198,6 +4295,9 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         run_kqst_shape(cm2_fmt, "ple_proj ", 1536, 256, 512)
         run_kqst_shape(cm2_fmt, "4B gate  ", 9728, 2560, 512)
         run_kqst_shape(cm2_fmt, "4B down  ", 2560, 9728, 512)
+        run_kqst_shape(cm2_fmt, "1B up    ", 8192, 2048, 512)
+        run_kqst_shape(cm2_fmt, "1B down  ", 2048, 8192, 512)
+        run_kqst_shape(cm2_fmt, "ref      ", 4096, 14336, 512)
         return
     }
     if (only == "ts:" || only == "cold:") {
@@ -4447,6 +4547,83 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
                 delete one
             }
         }
+        return
+    }
+    if (only == "moeq20" || only == "moeq10") {
+        if (g_gpu.coopmat_mode != COOPMAT_MM) {
+            print("{only} reads the KHR arm - run with DASLLAMA_COOPMAT=mm\n")
+            g_probe_exit = 1
+            return
+        }
+        let q10 = only == "moeq10"
+        let fmt = int(q10 ? KqFmt.q10 : KqFmt.q20)
+        let q20 = int(KqFmt.q20)
+        verify(cm2_cls_ensure(fmt, 32l) && cm2_cls_ensure(fmt, CM2_TC_E) && mmq_cls_ensure(fmt, false) && mmq_cls_ensure(fmt, true)
+            && ensure_mmq_feed_cls() && ensure_mmq_feed16_cls(), "the low-bit window race's pipelines must engage")
+        verify(!q10 || (ensure_probe_q10_mmq01_cls() && ensure_probe_q10_mmqs01_cls() && cm2_cls_ensure(q20, 32l) && cm2_cls_ensure(q20, CM2_TC_E)
+            && mmq_cls_ensure(q20, false) && mmq_cls_ensure(q20, true)), "the q10 race's alternate and q20 pipelines must engage")
+        let more = q10 ? "; the int8 tile's +-1 staging against its 0/1 staging; the dense 4096 x 14336 rows at 512 tokens, one plane (cache-resident) and 13 planes (past the cache), q20 beside" : ""
+        print("RACE {only}: the {kq_fmt_of_slot(fmt)} routed block's f16 KHR tile against its int8 tile, the window's expert schedule{more}\n")
+        for (round in range(2)) {
+            for (alt in range(q10 ? 2 : 1)) {
+                g_moeq_alt01 = alt == 1
+                let tag = q10 ? (alt == 1 ? " i8 0/1" : " i8 +-1") : ""
+                for (toks in [32, 77, 128]) {   // 77: a window off the token tile's multiples
+                    var cnt <- moefn_bucket_counts(60, toks * 4)
+                    run_moeq_shape(fmt, "r{round}{tag} qmoe t{toks} gate/up", 1408, 2048, toks, cnt)
+                    run_moeq_shape(fmt, "r{round}{tag} qmoe t{toks} down   ", 2048, 1408, 0, cnt)
+                    delete cnt
+                }
+                var cfn <- moefn_bucket_counts(512, 1280)
+                run_moeq_shape(fmt, "r{round}{tag} fnext t128 gate/up", 640, 2560, 128, cfn)
+                run_moeq_shape(fmt, "r{round}{tag} fnext t128 down   ", 2560, 640, 0, cfn)
+                delete cfn
+            }
+            g_moeq_alt01 = false
+            if (q10) {
+                var one <- [512]
+                var ring <- [for (_i in range(13)); 512]
+                for (f in fixed_array(fmt, q20)) {
+                    run_moeq_shape(f, "r{round} {kq_fmt_of_slot(f)} dense 4096x14336 t512 one plane  ", 4096, 14336, 0, one)
+                    run_moeq_shape(f, "r{round} {kq_fmt_of_slot(f)} dense 4096x14336 t512 13 planes", 4096, 14336, 0, ring)
+                }
+                delete one
+                delete ring
+            }
+        }
+        return
+    }
+    if (only == "moekhr") {
+        if (g_gpu.coopmat_mode != COOPMAT_MM) {
+            print("moekhr reads the KHR arm - run with DASLLAMA_COOPMAT=mm\n")
+            g_probe_exit = 1
+            return
+        }
+        let fmts = fixed_array(int(KqFmt.k2), int(KqFmt.tq2), int(KqFmt.tq1))
+        for (f in fmts) {
+            verify(cm2_cls_ensure(f, 32l) && cm2_cls_ensure(f, CM2_TC_E) && moeq_rot_ensure(f), "the KHR window race's pipelines must engage")
+        }
+        print("RACE moekhr: the k2, tq2 and tq1 KHR window tile against its rotated K walk (alternate stamps {vk_alt_stamps()}), the routed block's expert schedule and the dense 4096 x 14336 rows, one plane and 13 planes\n")
+        g_moeq_rot = true
+        for (round in range(2)) {
+            for (f in fmts) {
+                for (toks in [32, 77, 128]) {   // 77: a window off the token tile's multiples
+                    var cnt <- moefn_bucket_counts(60, toks * 4)
+                    run_moeq_shape(f, "r{round} {kq_fmt_of_slot(f)} qmoe t{toks} gate/up", 1408, 2048, toks, cnt)
+                    run_moeq_shape(f, "r{round} {kq_fmt_of_slot(f)} qmoe t{toks} down   ", 2048, 1408, 0, cnt)
+                    delete cnt
+                }
+                for (toks in [32, 77, 128, 512]) {
+                    var one <- [toks]
+                    var ring <- [for (_i in range(13)); toks]
+                    run_moeq_shape(f, "r{round} {kq_fmt_of_slot(f)} dense 4096x14336 t{toks} one plane  ", 4096, 14336, 0, one)
+                    run_moeq_shape(f, "r{round} {kq_fmt_of_slot(f)} dense 4096x14336 t{toks} 13 planes", 4096, 14336, 0, ring)
+                    delete one
+                    delete ring
+                }
+            }
+        }
+        g_moeq_rot = false
         return
     }
     if (only == "khrsk") {

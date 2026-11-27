@@ -32,7 +32,14 @@ require daslib/strings_boost
 //! planes (four 64-weight disk blocks a superblock: e2m1 nibbles re-paired into the k4 tiling, sixteen UE4M3 scales - one a
 //! 16-weight sub-block - verbatim); mlx4 / mlx8 / mlx4b / mlx8b / mlx6b = a safetensors affine triplet's per-32 planes (4-,
 //! 8- or 6-bit unsigned codes verbatim, the 64-group's F16 or BF16 (scale, bias) pair shared by its two blocks, w = scale x q +
-//! bias; mlx6b is the 6-bit codes under BF16).
+//! bias; mlx6b is the 6-bit codes under BF16); q20 = native Q2_0 per-32 planes (2-bit codes in the disk order, eight bytes a
+//! block, one f16 d a 64-weight group - a scale unit serving two blocks - weight d x (q - 1)); q10 = native Q1_0 per-32 planes
+//! (sign bits in the disk order, four bytes a block, one f16 d a 128-weight group - a scale unit serving four blocks - weight
+//! +d where the bit is set, -d where it is clear); iq1s / iq1m = native IQ1_S / IQ1_M superblock planes (the disk qs and qh
+//! bytes verbatim as the quant plane, IQ1_S's f16 d or IQ1_M's four scale words verbatim as the scale plane; weight
+//! scale x (grid value + delta) off the 2048-entry ternary grid `iq1s_grid`); tq2 = native TQ2_0 superblock planes (Q2_K's
+//! 2-bit lanes verbatim under one f16 d a superblock, weight d x (q - 1)); tq1 = native TQ1_0 superblock planes (the 48
+//! five-trit qs bytes and the 4 four-trit qh bytes verbatim under one f16 d a superblock, weight d x (q - 1)).
 //! New members append — the int value is the device stack tag and the image plane id.
 enum KqFmt : uint8 {
     q8
@@ -61,6 +68,12 @@ enum KqFmt : uint8 {
     mlx4b
     mlx8b
     mlx6b
+    q20
+    q10
+    iq1s
+    iq1m
+    tq2
+    tq1
 }
 
 //! One empty tag type per KqFmt member - the overload key of every per-format function family
@@ -92,6 +105,12 @@ struct KqTag_mlx8 {}
 struct KqTag_mlx4b {}
 struct KqTag_mlx8b {}
 struct KqTag_mlx6b {}
+struct KqTag_q20 {}
+struct KqTag_q10 {}
+struct KqTag_iq1s {}
+struct KqTag_iq1m {}
+struct KqTag_tq2 {}
+struct KqTag_tq1 {}
 
 [call_macro(name = "kq_fmt_stamp")]
 class KqFmtStamp : AstCallMacro {
@@ -216,8 +235,8 @@ class GridWordsMacro : AstFunctionAnnotation {
     }
 }
 
-//! the formats whose cm2 e stamp is the m stamp byte for byte (their k step is 64, the m tile's), so the e ladder takes the m class; the five grid-codebook formats and mx4 step 32 on the e column and keep a stamp of their own
-let KQ_CM2E_ALIASES_M = "q8 k4 k5 k6 q40 iq4xs iq3s4 iq4nl k3 k2 q51 q4032 q5032 iq4nl32 nv4"
+//! the formats whose cm2 e stamp is the m stamp byte for byte (their k step is 64, the m tile's), so the e ladder takes the m class; the seven grid-codebook formats and mx4 step 32 on the e column and keep a stamp of their own
+let KQ_CM2E_ALIASES_M = "q8 k4 k5 k6 q40 iq4xs iq3s4 iq4nl k3 k2 tq2 tq1 q51 q4032 q5032 iq4nl32 nv4 q20 q10"
 
 def kq_cm2e_aliases_m(fmt_name : string) : bool => word_in(KQ_CM2E_ALIASES_M, fmt_name)
 
@@ -225,7 +244,7 @@ def kq_cm2e_aliases_m(fmt_name : string) : bool => word_in(KQ_CM2E_ALIASES_M, fm
 //! `<verb>_<stem>_<tail>`, the stem `<fmt>_<family>` on q8 and the per-32 formats, `kq_<family>_<fmt>` on a kq format
 def kq_tile_stem(fmt_name : string; family : string = "batch") : string =>
     (fmt_name == "q8" || fmt_name == "q51" || fmt_name == "mx4" || fmt_name == "iq4nl32" || fmt_name == "q4032" || fmt_name == "q5032"
-        || word_in(KQ_DISCRETE_UNSTAMPED, fmt_name)) ? "{fmt_name}_{family}" : "kq_{family}_{fmt_name}"
+        || fmt_name == "q20" || fmt_name == "q10" || word_in(KQ_DISCRETE_UNSTAMPED, fmt_name)) ? "{fmt_name}_{family}" : "kq_{family}_{fmt_name}"
 
 let private STAMP_INST = "_::"   //! a placeholder written `_::<prefix>...` names a target resolved where its generic body is instantiated
 
@@ -300,8 +319,7 @@ def private word_in(list, word : string) : bool {
     return false
 }
 
-//! the members the discrete GPU homes (Vulkan, CUDA) stamp no kernel for - Metal stamps them: those homes' loads decline
-//! their planes by name (`kq_discrete_unstamped`)
+//! the members Vulkan and CUDA stamp no kernel for (Metal stamps them): those homes' loads decline their planes by name
 let KQ_DISCRETE_UNSTAMPED = "mlx4 mlx8 mlx4b mlx8b mlx6b"
 
 //! a member the discrete GPU homes stamp no kernel for
@@ -484,12 +502,14 @@ let GGML_TYPE_IQ4_XS = 23
 let GGML_TYPE_BF16 = 30
 let GGML_TYPE_MXFP4 = 39
 let GGML_TYPE_NVFP4 = 40
-// ... and the ids the load declines by name: no reader arm and no `KqFmt` member carries them
-let GGML_TYPE_Q4_1 = 3
+let GGML_TYPE_Q2_0 = 42
+let GGML_TYPE_Q1_0 = 41
 let GGML_TYPE_IQ1_S = 19
 let GGML_TYPE_IQ1_M = 29
-let GGML_TYPE_TQ1_0 = 34
 let GGML_TYPE_TQ2_0 = 35
+let GGML_TYPE_TQ1_0 = 34
+// ... and the ids the load declines by name: no reader arm and no `KqFmt` member carries them
+let GGML_TYPE_Q4_1 = 3
 //! the loader's own type ids for a safetensors affine triplet (u32 codes, the 64-group scale and bias planes beside them),
 //! outside ggml's id range: 4- and 8-bit codes under F16 or BF16 scales; a tensor of one counts its code bytes
 let GGML_TYPE_MLX4 = 1004
@@ -535,9 +555,10 @@ def mlx_affine_ggml_type(bits, group : int; bf16 : bool) : int {
 struct KqDesc {
     fmt : KqFmt
     qsb : int64          //!< quant-plane bytes per stride unit
-    ssb : int64          //!< scale-plane bytes per stride unit
+    ssb : int64          //!< scale-plane bytes per scale unit: `sgroup` stride units
+    sgroup : int64       //!< stride units one scale unit serves
     elems : int64        //!< weights per stride unit
-    disk_bytes : int64   //!< bytes one stride unit takes on disk (the ggml block bytes)
+    disk_bytes : int64   //!< bytes one scale unit's `sgroup` stride units take on disk (the ggml block bytes)
     ggml_type : int      //!< the ggml type the planes convert from
     schema_id : int      //!< the kernel/IR format id
     stream_code : int    //!< the loader's stream/repack region tag
@@ -559,83 +580,111 @@ let KQ_Q4032_SBYTES = 2u
 let KQ_Q5032_QWORDS = 5u
 let KQ_Q5032_SBYTES = 2u
 let KQ_MX4_SBYTES = 1u
+//! q20's device block: two code words a 32-block, and its f16 d one scale unit a `KQ_Q20_SGROUP`-block group
+let KQ_Q20_QWORDS = 2u
+let KQ_Q20_SBYTES = 2u
+let KQ_Q20_SGROUP = 2u
+//! q10's device block: one sign word a 32-block, and its f16 d one scale unit a `KQ_Q10_SGROUP`-block group
+let KQ_Q10_QWORDS = 1u
+let KQ_Q10_SBYTES = 2u
+let KQ_Q10_SGROUP = 4u
 
 //! The descriptor row of a format - a new format is one row here plus its planes; every
 //! per-format accessor below is a field of this row.
-def kq_desc(f : KqFmt) : KqDesc {   // nolint:STYLE037 - one arm per KqFmt member, the honest shape
+def kq_desc(f : KqFmt) : KqDesc {   // nolint:STYLE037,STYLE038 - one arm per KqFmt member, the honest shape
     if (f == KqFmt.k4) {
-        return KqDesc(fmt = f, qsb = K4_QSB, ssb = K4_SSB, elems = KQ_SB_ELEMS, disk_bytes = 144l, ggml_type = GGML_TYPE_Q4_K, schema_id = 4, stream_code = 4)
+        return KqDesc(fmt = f, qsb = K4_QSB, ssb = K4_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 144l, ggml_type = GGML_TYPE_Q4_K, schema_id = 4, stream_code = 4)
     }
     if (f == KqFmt.k5) {
-        return KqDesc(fmt = f, qsb = K5_QSB, ssb = K5_SSB, elems = KQ_SB_ELEMS, disk_bytes = 176l, ggml_type = GGML_TYPE_Q5_K, schema_id = 5, stream_code = 5)
+        return KqDesc(fmt = f, qsb = K5_QSB, ssb = K5_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 176l, ggml_type = GGML_TYPE_Q5_K, schema_id = 5, stream_code = 5)
     }
     if (f == KqFmt.k6) {
-        return KqDesc(fmt = f, qsb = K6_QSB, ssb = K6_SSB, elems = KQ_SB_ELEMS, disk_bytes = 210l, ggml_type = GGML_TYPE_Q6_K, schema_id = 6, stream_code = 6)
+        return KqDesc(fmt = f, qsb = K6_QSB, ssb = K6_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 210l, ggml_type = GGML_TYPE_Q6_K, schema_id = 6, stream_code = 6)
     }
     if (f == KqFmt.q40) {
-        return KqDesc(fmt = f, qsb = Q40_QSB, ssb = Q40_SSB, elems = KQ_SB_ELEMS, disk_bytes = 144l, ggml_type = GGML_TYPE_Q4_0, schema_id = 40, stream_code = 40)
+        return KqDesc(fmt = f, qsb = Q40_QSB, ssb = Q40_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 144l, ggml_type = GGML_TYPE_Q4_0, schema_id = 40, stream_code = 40)
     }
     if (f == KqFmt.iq4xs) {
-        return KqDesc(fmt = f, qsb = IQ4XS_QSB, ssb = IQ4XS_SSB, elems = KQ_SB_ELEMS, disk_bytes = 136l, ggml_type = GGML_TYPE_IQ4_XS, schema_id = 44, stream_code = 44)
+        return KqDesc(fmt = f, qsb = IQ4XS_QSB, ssb = IQ4XS_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 136l, ggml_type = GGML_TYPE_IQ4_XS, schema_id = 44, stream_code = 44)
     }
     if (f == KqFmt.k3) {
-        return KqDesc(fmt = f, qsb = K3_QSB, ssb = K3_SSB, elems = KQ_SB_ELEMS, disk_bytes = 110l, ggml_type = GGML_TYPE_Q3_K, schema_id = 3, stream_code = 3)
+        return KqDesc(fmt = f, qsb = K3_QSB, ssb = K3_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 110l, ggml_type = GGML_TYPE_Q3_K, schema_id = 3, stream_code = 3)
     }
     if (f == KqFmt.iq3s) {
-        return KqDesc(fmt = f, qsb = IQ3S_QSB, ssb = IQ3S_SSB, elems = KQ_SB_ELEMS, disk_bytes = 110l, ggml_type = GGML_TYPE_IQ3_S, schema_id = 33, stream_code = 33)
+        return KqDesc(fmt = f, qsb = IQ3S_QSB, ssb = IQ3S_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 110l, ggml_type = GGML_TYPE_IQ3_S, schema_id = 33, stream_code = 33)
     }
     if (f == KqFmt.iq3xxs) {
-        return KqDesc(fmt = f, qsb = IQ3XXS_QSB, ssb = IQ3XXS_SSB, elems = KQ_SB_ELEMS, disk_bytes = 98l, ggml_type = GGML_TYPE_IQ3_XXS, schema_id = 34, stream_code = 34)
+        return KqDesc(fmt = f, qsb = IQ3XXS_QSB, ssb = IQ3XXS_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 98l, ggml_type = GGML_TYPE_IQ3_XXS, schema_id = 34, stream_code = 34)
     }
     if (f == KqFmt.iq4nl) {
-        return KqDesc(fmt = f, qsb = Q40_QSB, ssb = Q40_SSB, elems = KQ_SB_ELEMS, disk_bytes = 144l, ggml_type = GGML_TYPE_IQ4_NL, schema_id = 45, stream_code = 45)
+        return KqDesc(fmt = f, qsb = Q40_QSB, ssb = Q40_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 144l, ggml_type = GGML_TYPE_IQ4_NL, schema_id = 45, stream_code = 45)
     }
     if (f == KqFmt.k2) {
-        return KqDesc(fmt = f, qsb = K2_QSB, ssb = K2_SSB, elems = KQ_SB_ELEMS, disk_bytes = 84l, ggml_type = GGML_TYPE_Q2_K, schema_id = 2, stream_code = K2_STREAM_TAG)
+        return KqDesc(fmt = f, qsb = K2_QSB, ssb = K2_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 84l, ggml_type = GGML_TYPE_Q2_K, schema_id = 2, stream_code = K2_STREAM_TAG)
     }
     if (f == KqFmt.iq2s) {
-        return KqDesc(fmt = f, qsb = IQ2S_QSB, ssb = IQ2S_SSB, elems = KQ_SB_ELEMS, disk_bytes = 82l, ggml_type = GGML_TYPE_IQ2_S, schema_id = 23, stream_code = 23)
+        return KqDesc(fmt = f, qsb = IQ2S_QSB, ssb = IQ2S_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 82l, ggml_type = GGML_TYPE_IQ2_S, schema_id = 23, stream_code = 23)
     }
     if (f == KqFmt.iq2xs) {
-        return KqDesc(fmt = f, qsb = IQ2XS_QSB, ssb = IQ2XS_SSB, elems = KQ_SB_ELEMS, disk_bytes = 74l, ggml_type = GGML_TYPE_IQ2_XS, schema_id = 24, stream_code = 24)
+        return KqDesc(fmt = f, qsb = IQ2XS_QSB, ssb = IQ2XS_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 74l, ggml_type = GGML_TYPE_IQ2_XS, schema_id = 24, stream_code = 24)
     }
     if (f == KqFmt.iq2xxs) {
-        return KqDesc(fmt = f, qsb = IQ2XXS_QSB, ssb = IQ2XXS_SSB, elems = KQ_SB_ELEMS, disk_bytes = 66l, ggml_type = GGML_TYPE_IQ2_XXS, schema_id = 25, stream_code = 25)
+        return KqDesc(fmt = f, qsb = IQ2XXS_QSB, ssb = IQ2XXS_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 66l, ggml_type = GGML_TYPE_IQ2_XXS, schema_id = 25, stream_code = 25)
     }
     if (f == KqFmt.q51) {
-        return KqDesc(fmt = f, qsb = Q51_QB, ssb = Q51_SB, elems = KQ_B32_ELEMS, disk_bytes = 24l, ggml_type = GGML_TYPE_Q5_1, schema_id = -1, stream_code = 2)
+        return KqDesc(fmt = f, qsb = Q51_QB, ssb = Q51_SB, sgroup = 1l, elems = KQ_B32_ELEMS, disk_bytes = 24l, ggml_type = GGML_TYPE_Q5_1, schema_id = -1, stream_code = 2)
     }
     if (f == KqFmt.mx4) {
-        return KqDesc(fmt = f, qsb = MX4_QB, ssb = MX4_SB, elems = KQ_B32_ELEMS, disk_bytes = 17l, ggml_type = GGML_TYPE_MXFP4, schema_id = -1, stream_code = MX4_STREAM_TAG)
+        return KqDesc(fmt = f, qsb = MX4_QB, ssb = MX4_SB, sgroup = 1l, elems = KQ_B32_ELEMS, disk_bytes = 17l, ggml_type = GGML_TYPE_MXFP4, schema_id = -1, stream_code = MX4_STREAM_TAG)
     }
     if (f == KqFmt.iq4nl32) {
-        return KqDesc(fmt = f, qsb = IQ4NL32_QB, ssb = IQ4NL32_SB, elems = KQ_B32_ELEMS, disk_bytes = 18l, ggml_type = GGML_TYPE_IQ4_NL, schema_id = -1, stream_code = IQ4NL32_STREAM_TAG)
+        return KqDesc(fmt = f, qsb = IQ4NL32_QB, ssb = IQ4NL32_SB, sgroup = 1l, elems = KQ_B32_ELEMS, disk_bytes = 18l, ggml_type = GGML_TYPE_IQ4_NL, schema_id = -1, stream_code = IQ4NL32_STREAM_TAG)
     }
     if (f == KqFmt.iq3s4) {
-        return KqDesc(fmt = f, qsb = IQ4XS_QSB, ssb = IQ3S_SSB, elems = KQ_SB_ELEMS, disk_bytes = 110l, ggml_type = GGML_TYPE_IQ3_S, schema_id = 35, stream_code = 35)
+        return KqDesc(fmt = f, qsb = IQ4XS_QSB, ssb = IQ3S_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 110l, ggml_type = GGML_TYPE_IQ3_S, schema_id = 35, stream_code = 35)
     }
     if (f == KqFmt.q4032) {
-        return KqDesc(fmt = f, qsb = Q4032_QB, ssb = Q4032_SB, elems = KQ_B32_ELEMS, disk_bytes = 18l, ggml_type = GGML_TYPE_Q4_0, schema_id = -1, stream_code = Q4032_STREAM_TAG)
+        return KqDesc(fmt = f, qsb = Q4032_QB, ssb = Q4032_SB, sgroup = 1l, elems = KQ_B32_ELEMS, disk_bytes = 18l, ggml_type = GGML_TYPE_Q4_0, schema_id = -1, stream_code = Q4032_STREAM_TAG)
     }
     if (f == KqFmt.q5032) {
-        return KqDesc(fmt = f, qsb = Q5032_QB, ssb = Q5032_SB, elems = KQ_B32_ELEMS, disk_bytes = 22l, ggml_type = GGML_TYPE_Q5_0, schema_id = -1, stream_code = Q5032_STREAM_TAG)
+        return KqDesc(fmt = f, qsb = Q5032_QB, ssb = Q5032_SB, sgroup = 1l, elems = KQ_B32_ELEMS, disk_bytes = 22l, ggml_type = GGML_TYPE_Q5_0, schema_id = -1, stream_code = Q5032_STREAM_TAG)
     }
     if (f == KqFmt.nv4) {
-        return KqDesc(fmt = f, qsb = NV4_QSB, ssb = NV4_SSB, elems = KQ_SB_ELEMS, disk_bytes = 144l, ggml_type = GGML_TYPE_NVFP4, schema_id = 49, stream_code = 49)
+        return KqDesc(fmt = f, qsb = NV4_QSB, ssb = NV4_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 144l, ggml_type = GGML_TYPE_NVFP4, schema_id = 49, stream_code = 49)
     }
     if (f == KqFmt.mlx4 || f == KqFmt.mlx4b) {
-        return KqDesc(fmt = f, qsb = MLX4_QB, ssb = MLX_SB, elems = KQ_B32_ELEMS, disk_bytes = 16l, ggml_type = f == KqFmt.mlx4 ? GGML_TYPE_MLX4 : GGML_TYPE_MLX4B,
+        return KqDesc(fmt = f, qsb = MLX4_QB, ssb = MLX_SB, sgroup = 1l, elems = KQ_B32_ELEMS, disk_bytes = 16l, ggml_type = f == KqFmt.mlx4 ? GGML_TYPE_MLX4 : GGML_TYPE_MLX4B,
             schema_id = -1, stream_code = f == KqFmt.mlx4 ? MLX4_STREAM_TAG : MLX4B_STREAM_TAG)
     }
     if (f == KqFmt.mlx8 || f == KqFmt.mlx8b) {
-        return KqDesc(fmt = f, qsb = MLX8_QB, ssb = MLX_SB, elems = KQ_B32_ELEMS, disk_bytes = 32l, ggml_type = f == KqFmt.mlx8 ? GGML_TYPE_MLX8 : GGML_TYPE_MLX8B,
+        return KqDesc(fmt = f, qsb = MLX8_QB, ssb = MLX_SB, sgroup = 1l, elems = KQ_B32_ELEMS, disk_bytes = 32l, ggml_type = f == KqFmt.mlx8 ? GGML_TYPE_MLX8 : GGML_TYPE_MLX8B,
             schema_id = -1, stream_code = f == KqFmt.mlx8 ? MLX8_STREAM_TAG : MLX8B_STREAM_TAG)
     }
     if (f == KqFmt.mlx6b) {
-        return KqDesc(fmt = f, qsb = MLX6_QB, ssb = MLX_SB, elems = KQ_B32_ELEMS, disk_bytes = 24l, ggml_type = GGML_TYPE_MLX6B,
+        return KqDesc(fmt = f, qsb = MLX6_QB, ssb = MLX_SB, sgroup = 1l, elems = KQ_B32_ELEMS, disk_bytes = 24l, ggml_type = GGML_TYPE_MLX6B,
             schema_id = -1, stream_code = MLX6B_STREAM_TAG)
     }
-    return KqDesc(fmt = KqFmt.q8, qsb = 0l, ssb = 0l, elems = KQ_B32_ELEMS, disk_bytes = 34l, ggml_type = GGML_TYPE_Q8_0, schema_id = -1, stream_code = 0)
+    if (f == KqFmt.q20) {
+        return KqDesc(fmt = f, qsb = Q20_QB, ssb = Q20_SB, sgroup = Q20_SGROUP, elems = KQ_B32_ELEMS, disk_bytes = 18l, ggml_type = GGML_TYPE_Q2_0,
+            schema_id = -1, stream_code = Q20_STREAM_TAG)
+    }
+    if (f == KqFmt.q10) {
+        return KqDesc(fmt = f, qsb = Q10_QB, ssb = Q10_SB, sgroup = Q10_SGROUP, elems = KQ_B32_ELEMS, disk_bytes = 18l, ggml_type = GGML_TYPE_Q1_0,
+            schema_id = -1, stream_code = Q10_STREAM_TAG)
+    }
+    if (f == KqFmt.iq1s) {
+        return KqDesc(fmt = f, qsb = IQ1S_QSB, ssb = IQ1S_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 50l, ggml_type = GGML_TYPE_IQ1_S, schema_id = 13, stream_code = 13)
+    }
+    if (f == KqFmt.iq1m) {
+        return KqDesc(fmt = f, qsb = IQ1M_QSB, ssb = IQ1M_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 56l, ggml_type = GGML_TYPE_IQ1_M, schema_id = 16, stream_code = 16)
+    }
+    if (f == KqFmt.tq2) {
+        return KqDesc(fmt = f, qsb = TQ2_QSB, ssb = TQ2_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 66l, ggml_type = GGML_TYPE_TQ2_0, schema_id = 22, stream_code = 22)
+    }
+    if (f == KqFmt.tq1) {
+        return KqDesc(fmt = f, qsb = TQ1_QSB, ssb = TQ1_SSB, sgroup = 1l, elems = KQ_SB_ELEMS, disk_bytes = 54l, ggml_type = GGML_TYPE_TQ1_0, schema_id = 21, stream_code = 21)
+    }
+    return KqDesc(fmt = KqFmt.q8, qsb = 0l, ssb = 0l, sgroup = 1l, elems = KQ_B32_ELEMS, disk_bytes = 34l, ggml_type = GGML_TYPE_Q8_0, schema_id = -1, stream_code = 0)
 }
 
 //! The superblock-lattice formats (Q8_K-form activations, % 256 rows, repack + stamped kq
@@ -681,7 +730,7 @@ def kq_blocks_for(n, rows : int64; fmt : int) : int64 {
 }
 
 //! the KqFmt slot count of a per-format table (int(KqFmt) indexes it; members append, so the last is the bound)
-let KQ_FMT_COUNT = int(KqFmt.mlx6b) + 1
+let KQ_FMT_COUNT = int(KqFmt.tq1) + 1
 
 //! the format an `int(KqFmt)` slot names - the per-format slot the GPU drivers and the image's plane tables index by; the caller holds the slot inside the enum's range
 def kq_fmt_of_slot(slot : int) : KqFmt => unsafe(reinterpret<KqFmt>(uint8(slot)))
@@ -708,11 +757,12 @@ def kq_mmq_raced(f : KqFmt) : bool => f == KqFmt.q51 || f == KqFmt.q5032
 //! the leaves with a min term: their reduction folds sixteen blocks at a time, so a row is a multiple of 512
 def kq_mmq_min(f : KqFmt) : bool => f == KqFmt.k4 || f == KqFmt.q51
 
-//! a per-32 plane format - Q5_1, Q5_0, the per-32 IQ4_NL and Q4_0 -
-//! served off its own plane pair at the 32-block reduction, never a
-//! superblock plane bind
+//! a per-32 plane format (Q5_1, Q5_0, per-32 IQ4_NL and Q4_0, Q2_0, Q1_0, the affine members): its own plane pair, never a superblock bind
 def kq_dense_b32(fmt : KqFmt) : bool => (fmt == KqFmt.q51 || fmt == KqFmt.iq4nl32
-    || fmt == KqFmt.q4032 || fmt == KqFmt.q5032 || kq_mlx_affine(fmt))
+    || fmt == KqFmt.q4032 || fmt == KqFmt.q5032 || fmt == KqFmt.q20 || fmt == KqFmt.q10 || kq_mlx_affine(fmt))
+
+//! a per-32 member whose scale unit serves a block group (q20's two blocks, q10's four): disk-order planes, rows whole in groups
+def kq_grouped_b32(fmt : KqFmt) : bool => kq_sgroup(fmt) > 1l
 
 //! an affine member: per-32 planes whose block pair shares one 64-group (scale, bias) pair
 def kq_mlx_affine(fmt : KqFmt) : bool => fmt == KqFmt.mlx4 || fmt == KqFmt.mlx8 || fmt == KqFmt.mlx4b || fmt == KqFmt.mlx8b || fmt == KqFmt.mlx6b
@@ -802,6 +852,31 @@ let MLX8_QB = 32l      //! affine 8-bit quant plane PER 32-BLOCK: one code byte 
 let MLX6_QB = 24l      //! affine 6-bit quant plane PER 32-BLOCK: the codes' six u32 words verbatim (element k at bits 6k..6k+5 of the little-endian stream)
 let MLX_SB = 2l        //! affine scale plane PER 32-BLOCK: half of the 64-group's (scale, bias) half pair, which its two blocks share
 let MLX_PAIR_BYTES = 4l   //! one 64-group's (scale, bias) pair: two halves, scale first
+let Q20_QB = 8l        //! Q2_0 quant plane PER 32-BLOCK: the 2-bit codes in the disk order (element j at byte j / 4, bits (j % 4) x 2)
+let Q20_SB = 2l        //! Q2_0 scale plane PER SCALE UNIT: the 64-weight group's f16 d
+let Q20_SGROUP = 2l    //! the 32-blocks one Q2_0 scale unit serves: the disk block's 64 weights
+let Q20_CODE_BITS = 2         //! a Q2_0 code's bits
+let Q20_CODE_MASK = 3         //! ... its mask
+let Q20_CODES_A_BYTE = 4l     //! ... the codes a byte holds: element j at bits (j % 4) x 2 of byte j / 4
+let Q20_ZERO_CODE = 1         //! the code of the zero level: weight (q - 1) x d
+
+//! code slot `k` of a Q2_0 code byte `b` as its signed level q - 1 (-1, 0, 1, 2); generic, to inline in the caller's partition
+def q20_level(b : auto(BT); k : auto(KT)) : int => ((int(b) >> (int(k) * Q20_CODE_BITS)) & Q20_CODE_MASK) - Q20_ZERO_CODE
+let Q10_QB = 4l        //! Q1_0 quant plane PER 32-BLOCK: the sign bits in the disk order (element j at bit j % 8 of byte j / 8)
+let Q10_SB = 2l        //! Q1_0 scale plane PER SCALE UNIT: the 128-weight group's f16 d
+let Q10_SGROUP = 4l    //! the 32-blocks one Q1_0 scale unit serves: the disk block's 128 weights
+let Q10_BITS_A_BYTE = 8l   //! the sign bits a Q1_0 byte holds: element j at bit j % 8 of byte j / 8
+
+//! bit `k` of a Q1_0 sign byte `b` as its level, +1 set and -1 clear; generic, to inline in the caller's partition
+def q10_level(b : auto(BT); k : auto(KT)) : int => ((int(b) >> int(k)) & 1) * 2 - 1
+
+//! the codes one quant byte of a low-bit member holds: element j at slot j % this of byte j / this
+def lowbit_codes_a_byte(_f : KqTag_q20) : int64 => Q20_CODES_A_BYTE
+def lowbit_codes_a_byte(_f : KqTag_q10) : int64 => Q10_BITS_A_BYTE
+
+//! code slot `k` of quant byte `b` as the member's signed level: q20's q - 1, q10's +-1; generic in `b` and `k`, as the levels are
+def lowbit_level(b : auto(BT); k : auto(KT); _f : KqTag_q20) : int => q20_level(b, k)
+def lowbit_level(b : auto(BT); k : auto(KT); _f : KqTag_q10) : int => q10_level(b, k)
 let NV4_QSB = 128l     //! NVFP4 quant plane: 128 nibble bytes a superblock, in the k4 tiling
 let NV4_SSB = 16l      //! NVFP4 scale plane: 16 UE4M3 bytes a superblock, one a 16-weight sub-block
 let NV4_UNIT_QUADS = 9u    //! NVFP4 device unit: a superblock's eight nibble quads in the file's pairing, then its scale quad
@@ -831,8 +906,42 @@ let IQ2XS_QSB = 64l   // IQ2_XS quant plane: 32 u16 words ([9-bit grid index][7-
 let IQ2XS_SSB = 20l   // IQ2_XS scale plane: the iq2s row exactly - f16 d EIGHTH-ed, 2 pad, 16 x uint8 (2ls+1) per-16 strips
 let IQ2XXS_QSB = 64l   // IQ2_XXS quant plane: 8 blocks x [4 iq2xxs_grid byte indices][aux32: 4 x 7-bit ksigns + 4-bit ls], verbatim disk order
 let IQ2XXS_SSB = 20l   // IQ2_XXS scale plane: the iq3xxs row shape - f16 d EIGHTH-ed, 2 pad, 8 x uint8 (2ls+1) per-32 strips, 8 pad
+let IQ1_QS_BYTES = 32l   //! an IQ1_S / IQ1_M superblock's grid-index low bytes, one an octet, ahead of its qh bytes in the quant plane
+let IQ1S_QSB = 48l   //! IQ1_S quant plane: [32 qs][8 LE u16 qh words, one a 32-block: index high bits, 3-bit scale, delta sign], verbatim disk order
+let IQ1S_SSB = 2l    //! IQ1_S scale plane: the f16 d, verbatim
+let IQ1M_QSB = 48l   //! IQ1_M quant plane: [32 qs][16 qh bytes, a nibble an octet: index high bits, delta sign], verbatim disk order
+let IQ1M_SSB = 8l    //! IQ1_M scale plane: the four LE u16 scale words verbatim (four 3-bit half-block scales each, the f16 d's nibbles on top)
+let IQ1_QWORDS = 12u   //! an IQ1_S / IQ1_M quant plane's words a superblock (`IQ1S_QSB` / 4): the device kernels' quant row stride
+let IQ1_QH_WORD = 8u   //! ... and the word its qh bytes start at (`IQ1_QS_BYTES` / 4): block b's 16 qh bits the half b % 2 of word 8 + b / 2
+let IQ1M_SWORDS = 2u   //! IQ1_M's scale plane words a superblock (`IQ1M_SSB` / 4)
+let TQ2_QSB = 64l      //! TQ2_0 quant plane: 64 qs bytes (four 2-bit lanes each, Q2_K's lane order), verbatim disk order
+let TQ2_SSB = 2l       //! TQ2_0 scale plane: the f16 d, nothing else - every sub-scale and min is 1 and dmin is d
+let TQ2_ZERO = 1       //! the TQ2_0 code of a zero weight: w = d x (q - TQ2_ZERO)
+let TQ2_K2_PAIR = 1 | (TQ2_ZERO << 4)   //! TQ2_0 as k2's block: every group's sub-scale 1 (low nibble) and min TQ2_ZERO (high nibble)
+let TQ1_QSB = 52l      //! TQ1_0 quant plane: the 48 qs bytes (five trits each) then the 4 qh bytes (four), verbatim disk order
+let TQ1_SSB = 2l       //! TQ1_0 scale plane: the f16 d, nothing else - tq2's row
+let TQ1_QWORDS = 13u   //! TQ1_0 quant plane words a superblock (`TQ1_QSB` / 4): the device kernels' quant row stride
+
 // IQ4_NL reuses Q40_QSB/Q40_SSB outright: the disk bytes are q40's (f16 d + 16 nibble bytes
 // per 32-block, the k/k+16 pairing) — only the nibble SEMANTICS differ (IQ4NL_LUT, no -8).
+
+let TQ1_DWORDS = 64     //! a TQ1_0 superblock's weight dwords, `tq1_dword_trit`'s domain
+let TQ1_HEAD_COLS = 8   //! TQ1_0's head: quant columns 0 .. 7 (qs bytes 0 .. 31), five trits a byte - dwords 0 .. 39
+let TQ1_MID_COLS = 4    //! ... columns 8 .. 11 (qs bytes 32 .. 47), five trits a byte - dwords 40 .. 59
+let TQ1_QH_COL = 12     //! ... column 12, the qh bytes, four trits a byte - dwords 60 .. 63
+let TQ1_HEAD_DWORDS = 40   //! `TQ1_HEAD_COLS` x 5
+let TQ1_QS_DWORDS = 60     //! ... then `TQ1_MID_COLS` x 5
+let TQ1_QH_BYTE = 48       //! the qh bytes' first byte in the quant row: `TQ1_QH_COL` x 4
+
+//! the column (`.x`, of the TQ1_0 quant row's 13 four-byte ones) and trit (`.y`) carrying superblock elements 4 w .. 4 w + 3
+def tq1_dword_trit(w : int) : int2 =>
+    w < TQ1_HEAD_DWORDS ? int2(w % TQ1_HEAD_COLS, w / TQ1_HEAD_COLS) : (w < TQ1_QS_DWORDS ? int2((w - TQ1_HEAD_DWORDS) % TQ1_MID_COLS + TQ1_HEAD_COLS, (w - TQ1_HEAD_DWORDS) / TQ1_MID_COLS) : int2(TQ1_QH_COL, w - TQ1_QS_DWORDS))
+
+//! 3^n, the multiplier of TQ1_0 digit n (0 to 4): byte n of 0x1B090301, then 81 - 32-bit words, so a shader body reads it too
+def tq1_pow3(n : auto(TN)) : int => int(n) < 4 ? int((0x1B090301u >> uint(8 * int(n))) & 0xFFu) : 81
+
+//! trit `n` (0 to 4) of TQ1_0 byte `b`, a code in {0, 1, 2}: (b x 3^n wrapped to 8 bits) x 3 >> 8
+def tq1_trit(b : auto(TB); n : int) : int => (((int(b) * tq1_pow3(n)) & 255) * 3) >> 8
 
 //! The IQ4_NL / IQ4_XS nibble codebook (upstream's kvalues_iq4nl): weight = scale x lut[nibble], as
 //! a per-call local (16 bytes on the caller's frame) - the form every worker-run kernel reads.
@@ -1559,6 +1668,214 @@ def iq2xxs_grid2() : uint[512] {
 //! a module global as zeros; kernels take `iq2xxs_grid2()` instead.
 let IQ2XXS_GRID = iq2xxs_grid2()
 
+//! The packed IQ1_S / IQ1_M grid, a per-call local kernels read on any lane: entry e at bits 16 x (e % 2) of word e / 2
+def iq1s_grid() : uint[1024] {   // nolint:STYLE038 - a 1024-word data table, not splittable
+    return fixed_array<uint>(
+        0x00020000u, 0x00080005u, 0x0011000au, 0x00200015u, 0x00280022u, 0x0045002au, 0x00540051u, 0x00650056u,
+        0x00820080u, 0x008a0088u, 0x00a00095u, 0x00a800a2u, 0x010400aau, 0x01110105u, 0x01160114u, 0x011a0119u,
+        0x01410125u, 0x01490146u, 0x01550152u, 0x0161015au, 0x01660164u, 0x01850168u, 0x01940191u, 0x01a50196u,
+        0x02020200u, 0x020a0208u, 0x02200215u, 0x02280222u, 0x0245022au, 0x02590251u, 0x02690264u, 0x02820280u,
+        0x028a0288u, 0x02950291u, 0x02a00299u, 0x02a802a2u, 0x041102aau, 0x04160414u, 0x04410425u, 0x04550449u,
+        0x0464045au, 0x04910465u, 0x04a50499u, 0x05040501u, 0x05060505u, 0x05180515u, 0x0529051au, 0x05450540u,
+        0x0550054au, 0x05540551u, 0x05560555u, 0x05600559u, 0x05650562u, 0x056a0568u, 0x05910581u, 0x05980595u,
+        0x05a1059au, 0x05a505a4u, 0x05a905a6u, 0x06190614u, 0x06440641u, 0x06520650u, 0x06580655u, 0x06610660u,
+        0x06690666u, 0x06910685u, 0x06990694u, 0x08020800u, 0x080a0808u, 0x08200815u, 0x08280822u, 0x0845082au,
+        0x08560851u, 0x08800865u, 0x08880882u, 0x0895088au, 0x08a208a0u, 0x08aa08a8u, 0x09110905u, 0x09190914u,
+        0x09250924u, 0x09500941u, 0x09550951u, 0x09640961u, 0x09910969u, 0x09960994u, 0x09a50999u, 0x0a020a00u,
+        0x0a0a0a08u, 0x0a200a15u, 0x0a280a22u, 0x0a450a2au, 0x0a590a51u, 0x0a650a61u, 0x0a820a80u, 0x0a880a85u,
+        0x0a950a8au, 0x0aa20aa0u, 0x0aaa0aa8u, 0x10111010u, 0x10191014u, 0x10251024u, 0x10441041u, 0x10551050u,
+        0x10611058u, 0x10651064u, 0x10911069u, 0x10961094u, 0x10a510a1u, 0x11041101u, 0x11091106u, 0x11121110u,
+        0x11181115u, 0x11241121u, 0x11451129u, 0x1150114au, 0x11521151u, 0x11551154u, 0x11591156u, 0x11651160u,
+        0x11921184u, 0x11a11195u, 0x121111a4u, 0x12161214u, 0x12401225u, 0x12491246u, 0x12551252u, 0x125a1258u,
+        0x12661264u, 0x12911285u, 0x12961294u, 0x140112a5u, 0x14091406u, 0x14151414u, 0x14191418u, 0x14261421u,
+        0x14451441u, 0x14481446u, 0x1451144au, 0x14551454u, 0x14591456u, 0x14651462u, 0x14841468u, 0x14901489u,
+        0x14951494u, 0x14991498u, 0x14a1149au, 0x14a514a4u, 0x150214a9u, 0x150a1505u, 0x15141511u, 0x15161515u,
+        0x15201519u, 0x15251522u, 0x152a1528u, 0x15441541u, 0x15461545u, 0x15521551u, 0x15551554u, 0x15591556u,
+        0x1561155au, 0x15651564u, 0x15691566u, 0x15821580u, 0x15851584u, 0x158a1588u, 0x15911590u, 0x15951594u,
+        0x15991596u, 0x15a0159au, 0x15a515a2u, 0x16041601u, 0x16061605u, 0x16161615u, 0x161a1618u, 0x16261621u,
+        0x16421640u, 0x16451644u, 0x164a1648u, 0x16551651u, 0x16581656u, 0x16611659u, 0x16651664u, 0x16691668u,
+        0x1686166au, 0x1692168au, 0x16a41695u, 0x181116a9u, 0x18251816u, 0x18441841u, 0x18491846u, 0x18551850u,
+        0x185a1858u, 0x18611860u, 0x18661864u, 0x18851869u, 0x18941891u, 0x191018a5u, 0x19151912u, 0x1921191au,
+        0x19421925u, 0x19451944u, 0x19511948u, 0x19551954u, 0x19591956u, 0x1960195au, 0x196a1965u, 0x19911989u,
+        0x19951992u, 0x19a11998u, 0x19a919a6u, 0x1a161a09u, 0x1a261a24u, 0x1a461a44u, 0x1a501a49u, 0x1a551a52u,
+        0x1a611a58u, 0x1a691a66u, 0x1a911a85u, 0x1a9a1a96u, 0x20022000u, 0x200a2008u, 0x20202015u, 0x20252022u,
+        0x202a2028u, 0x20512045u, 0x20612059u, 0x20802065u, 0x20882082u, 0x2095208au, 0x20a220a0u, 0x20a820a5u,
+        0x210520aau, 0x21142111u, 0x21252119u, 0x21442142u, 0x21552149u, 0x215a2158u, 0x21642161u, 0x21662165u,
+        0x21902185u, 0x21992196u, 0x220121a5u, 0x220a2208u, 0x22152211u, 0x22222220u, 0x222a2228u, 0x22512245u,
+        0x22592256u, 0x22812265u, 0x228a2288u, 0x22952291u, 0x22a222a0u, 0x22aa22a8u, 0x24142405u, 0x24192416u,
+        0x24442425u, 0x24462445u, 0x24522449u, 0x24582455u, 0x2466245au, 0x24912485u, 0x24992494u, 0x24a524a1u,
+        0x25152509u, 0x25292521u, 0x25452540u, 0x25512548u, 0x25552554u, 0x25622559u, 0x25682565u, 0x25902589u,
+        0x25952594u, 0x259a2598u, 0x25a425a1u, 0x25a925a6u, 0x26102605u, 0x26192612u, 0x26412625u, 0x26552649u,
+        0x26612660u, 0x26842669u, 0x26902686u, 0x2800269au, 0x28082802u, 0x2815280au, 0x28222820u, 0x282a2828u,
+        0x28512845u, 0x28652854u, 0x28822880u, 0x288a2888u, 0x28a228a0u, 0x28aa28a8u, 0x29112909u, 0x29192914u,
+        0x29462925u, 0x29522949u, 0x29612955u, 0x29662964u, 0x29852969u, 0x29962990u, 0x29a42999u, 0x2a0029a5u,
+        0x2a082a02u, 0x2a202a0au, 0x2a282a22u, 0x2a452a2au, 0x2a562a51u, 0x2a652a59u, 0x2a822a80u, 0x2a8a2a88u,
+        0x2aa02a95u, 0x2aa82aa2u, 0x40052aaau, 0x40164011u, 0x40494025u, 0x40554052u, 0x405a4058u, 0x40644061u,
+        0x40944066u, 0x40a14099u, 0x410040a6u, 0x41044101u, 0x41094106u, 0x41154112u, 0x41184116u, 0x4121411au,
+        0x41294126u, 0x41484145u, 0x4151414au, 0x41554154u, 0x41594156u, 0x4165415au, 0x416a4168u, 0x41844181u,
+        0x41904186u, 0x41954192u, 0x41a141a0u, 0x420541a2u, 0x42144211u, 0x42254216u, 0x42524241u, 0x425a4255u,
+        0x42694264u, 0x42944289u, 0x440142a5u, 0x44194415u, 0x44454429u, 0x444a4448u, 0x44544451u, 0x44564455u,
+        0x44624461u, 0x44684465u, 0x4481446au, 0x44894486u, 0x44924490u, 0x44a04495u, 0x44a944a1u, 0x45024501u,
+        0x450a4505u, 0x45144511u, 0x45164515u, 0x45204519u, 0x452a4525u, 0x45444541u, 0x45464545u, 0x45504549u,
+        0x45544551u, 0x45564555u, 0x45594558u, 0x45644561u, 0x45664565u, 0x45824569u, 0x45854584u, 0x45914588u,
+        0x45954594u, 0x45994596u, 0x45a5459au, 0x45aa45a8u, 0x46054601u, 0x46144609u, 0x46184615u, 0x4621461au,
+        0x46294624u, 0x46424640u, 0x46484645u, 0x46514650u, 0x46554652u, 0x46594656u, 0x46654662u, 0x46814668u,
+        0x468a4685u, 0x46954694u, 0x46a446a1u, 0x480546a6u, 0x48154811u, 0x4825481au, 0x48494842u, 0x48554850u,
+        0x48614858u, 0x48664864u, 0x48854869u, 0x48944891u, 0x48994896u, 0x490148a5u, 0x49064905u, 0x4910490au,
+        0x49154914u, 0x49214918u, 0x49264924u, 0x49454940u, 0x4951494au, 0x49544952u, 0x49564955u, 0x49604959u,
+        0x49654962u, 0x496a4966u, 0x49894986u, 0x49954992u, 0x49984996u, 0x49a449a1u, 0x49a949a6u, 0x4a444a16u,
+        0x4a494a46u, 0x4a584a55u, 0x4a644a5au, 0x4a944a69u, 0x50014aa5u, 0x50055004u, 0x50095006u, 0x50155012u,
+        0x5021501au, 0x50295024u, 0x50455040u, 0x50515048u, 0x50555054u, 0x50595056u, 0x50685065u, 0x50895086u,
+        0x50985095u, 0x50a150a0u, 0x50a950a6u, 0x51085105u, 0x510a5109u, 0x51145111u, 0x51165115u, 0x51195118u,
+        0x51255120u, 0x51285126u, 0x5141512au, 0x51455144u, 0x51495146u, 0x51515150u, 0x51545152u, 0x51565155u,
+        0x51595158u, 0x5161515au, 0x51655164u, 0x51695166u, 0x51855182u, 0x51945191u, 0x51965195u, 0x51a05199u,
+        0x51aa51a5u, 0x52065201u, 0x52155212u, 0x5221521au, 0x52425224u, 0x524a5245u, 0x52545251u, 0x52565255u,
+        0x52625259u, 0x52855265u, 0x52925290u, 0x52995295u, 0x52a4529au, 0x54055404u, 0x54145411u, 0x54165415u,
+        0x54195418u, 0x54255421u, 0x542a5428u, 0x54445441u, 0x54465445u, 0x544a5449u, 0x54515450u, 0x54555454u,
+        0x54585456u, 0x545a5459u, 0x54625461u, 0x54655464u, 0x54695466u, 0x54885480u, 0x5491548au, 0x54955494u,
+        0x54995496u, 0x54a454a1u, 0x54aa54a5u, 0x55025501u, 0x55055504u, 0x55095506u, 0x55115510u, 0x55145512u,
+        0x55165515u, 0x551a5519u, 0x55245521u, 0x55265525u, 0x55405529u, 0x55425541u, 0x55455544u, 0x55485546u,
+        0x55505549u, 0x55525551u, 0x55555554u, 0x55585556u, 0x555a5559u, 0x55615560u, 0x55655564u, 0x55685566u,
+        0x556a5569u, 0x55845581u, 0x55895585u, 0x5590558au, 0x55945591u, 0x55965595u, 0x55995598u, 0x55a455a1u,
+        0x55a655a5u, 0x560055a9u, 0x56025601u, 0x56065604u, 0x56095608u, 0x56145611u, 0x56185615u, 0x56205619u,
+        0x56225621u, 0x56255624u, 0x56285626u, 0x56415629u, 0x56465645u, 0x56495648u, 0x5650564au, 0x56525651u,
+        0x56555654u, 0x56585656u, 0x565a5659u, 0x56645661u, 0x56695665u, 0x56855682u, 0x56885686u, 0x568a5689u,
+        0x56955691u, 0x56a2569au, 0x56a656a5u, 0x56a956a8u, 0x58055804u, 0x58095806u, 0x58155810u, 0x58215818u,
+        0x5845582au, 0x584a5848u, 0x58545851u, 0x58565855u, 0x58595858u, 0x58625860u, 0x58655864u, 0x58895882u,
+        0x58925890u, 0x58985895u, 0x58a958a1u, 0x59025901u, 0x590a5905u, 0x59145911u, 0x59165915u, 0x59255919u,
+        0x59445941u, 0x59465945u, 0x59505949u, 0x59525951u, 0x59555954u, 0x59585956u, 0x595a5959u, 0x59645961u,
+        0x59665965u, 0x59815969u, 0x59895985u, 0x59945991u, 0x59965995u, 0x59995998u, 0x5a0459a5u, 0x5a155a08u,
+        0x5a205a1au, 0x5a265a25u, 0x5a455a29u, 0x5a495a48u, 0x5a555a51u, 0x5a585a56u, 0x5a625a59u, 0x5a685a65u,
+        0x5a815a6au, 0x5a925a8au, 0x5a965a95u, 0x5a9a5a98u, 0x60055aa1u, 0x60166014u, 0x60256019u, 0x60506044u,
+        0x60566055u, 0x605a6058u, 0x60646061u, 0x60696066u, 0x60966081u, 0x610160a5u, 0x61066104u, 0x61126109u,
+        0x61216115u, 0x61266122u, 0x61456129u, 0x61516149u, 0x61566155u, 0x61656159u, 0x616a6166u, 0x618a6184u,
+        0x61956192u, 0x61a661a1u, 0x621161a9u, 0x62196216u, 0x62416240u, 0x62556246u, 0x62586256u, 0x62856260u,
+        0x62966291u, 0x641162a5u, 0x64156412u, 0x641a6416u, 0x64266421u, 0x64406429u, 0x64456442u, 0x644a6448u,
+        0x64546451u, 0x64566455u, 0x645a6459u, 0x64626460u, 0x64846465u, 0x64896485u, 0x64926490u, 0x64956494u,
+        0x64986496u, 0x64a1649au, 0x64a964a4u, 0x65086505u, 0x6511650au, 0x65166515u, 0x65446519u, 0x65466545u,
+        0x65506549u, 0x65546551u, 0x65566555u, 0x65616559u, 0x65656564u, 0x65696566u, 0x65896586u, 0x6591658au,
+        0x65966595u, 0x659a6599u, 0x65a565a2u, 0x65a865a6u, 0x66096602u, 0x66206615u, 0x66286626u, 0x66406629u,
+        0x66486645u, 0x6651664au, 0x66556654u, 0x66586656u, 0x6660665au, 0x66686665u, 0x66826680u, 0x668a6685u,
+        0x66966694u, 0x66996698u, 0x66a466a0u, 0x66aa66a6u, 0x68196816u, 0x68416825u, 0x68556852u, 0x6861685au,
+        0x68856869u, 0x68986891u, 0x690168a6u, 0x69106904u, 0x69216915u, 0x69266924u, 0x69406929u, 0x69456941u,
+        0x69486946u, 0x69546951u, 0x69566955u, 0x69606959u, 0x696a6965u, 0x69846982u, 0x6995698au, 0x69a469a1u,
+        0x69a969a5u, 0x6a166a11u, 0x6a416a18u, 0x6a496a44u, 0x6a556a50u, 0x6a5a6a58u, 0x6a656a64u, 0x6a866a69u,
+        0x6a986a94u, 0x6aa66a9au, 0x80028000u, 0x800a8008u, 0x80228020u, 0x802a8028u, 0x80508045u, 0x80548051u,
+        0x80598056u, 0x80808065u, 0x80888082u, 0x8095808au, 0x80a280a0u, 0x80aa80a8u, 0x81118105u, 0x81168114u,
+        0x81258119u, 0x81448141u, 0x81508149u, 0x81558152u, 0x81588156u, 0x81648159u, 0x81698166u, 0x81898185u,
+        0x81968194u, 0x81a58199u, 0x82028200u, 0x820a8208u, 0x82208215u, 0x82288222u, 0x8251822au, 0x82598254u,
+        0x82808265u, 0x82888282u, 0x8295828au, 0x82a282a0u, 0x82aa82a8u, 0x84198414u, 0x84448441u, 0x84558451u,
+        0x8461845au, 0x84698464u, 0x84998494u, 0x85098501u, 0x85158512u, 0x8526851au, 0x85408529u, 0x85458541u,
+        0x85518548u, 0x85558554u, 0x85598556u, 0x8565855au, 0x85688566u, 0x8581856au, 0x85868584u, 0x85908589u,
+        0x85958592u, 0x85a68598u, 0x86168611u, 0x86258619u, 0x86448641u, 0x864a8649u, 0x86558650u, 0x865a8659u,
+        0x86668661u, 0x8685866au, 0x869a8691u, 0x880086a4u, 0x88088802u, 0x8815880au, 0x88228820u, 0x882a8828u,
+        0x88458841u, 0x88548851u, 0x88658859u, 0x88808869u, 0x88888882u, 0x8895888au, 0x88a288a0u, 0x88aa88a8u,
+        0x89068905u, 0x89148911u, 0x89258916u, 0x89448941u, 0x89498946u, 0x89528950u, 0x895a8955u, 0x89648961u,
+        0x89968985u, 0x89a58999u, 0x8a028a00u, 0x8a0a8a08u, 0x8a208a15u, 0x8a288a22u, 0x8a458a2au, 0x8a548a51u,
+        0x8a808a56u, 0x8a888a82u, 0x8a958a8au, 0x8aa28aa0u, 0x8aaa8aa8u, 0x90119005u, 0x90189016u, 0x90259019u,
+        0x90469041u, 0x90559049u, 0x905a9058u, 0x906a9069u, 0x90919085u, 0x90969094u, 0x90a59099u, 0x91049101u,
+        0x91099106u, 0x91159110u, 0x911a9118u, 0x91249121u, 0x91299126u, 0x91459140u, 0x91519150u, 0x91559154u,
+        0x91599156u, 0x91659162u, 0x91869184u, 0x91959192u, 0x91a19198u, 0x91a691a4u, 0x920591a9u, 0x92149211u,
+        0x92259219u, 0x92469244u, 0x92509249u, 0x92559252u, 0x92669258u, 0x92859269u, 0x92969294u, 0x940192a9u,
+        0x94069404u, 0x94159410u, 0x94269418u, 0x944a9440u, 0x94549451u, 0x94569455u, 0x94599458u, 0x94619460u,
+        0x94659462u, 0x94869484u, 0x94949492u, 0x94989495u, 0x94a994a1u, 0x95059500u, 0x950a9508u, 0x95119510u,
+        0x95159514u, 0x95199516u, 0x95259521u, 0x952a9529u, 0x95449541u, 0x95469545u, 0x95509549u, 0x95529551u,
+        0x95559554u, 0x95589556u, 0x955a9559u, 0x95649561u, 0x95669565u, 0x95819569u, 0x95889585u, 0x95929591u,
+        0x95959594u, 0x95999596u, 0x95a0959au, 0x95a595a2u, 0x95aa95a8u, 0x96049601u, 0x96159610u, 0x96209619u,
+        0x96299626u, 0x96489645u, 0x96519649u, 0x96559652u, 0x96599656u, 0x96689665u, 0x96849682u, 0x968a9689u,
+        0x96949692u, 0x96a49695u, 0x96a996a6u, 0x98169805u, 0x98259819u, 0x98469841u, 0x98529850u, 0x98569855u,
+        0x9864985au, 0x98859865u, 0x98969891u, 0x98a59899u, 0x99069904u, 0x99109909u, 0x99159912u, 0x991a9918u,
+        0x99219920u, 0x99269924u, 0x99429940u, 0x99489945u, 0x9951994au, 0x99559954u, 0x99599956u, 0x99659962u,
+        0x996a9966u, 0x99849981u, 0x99929990u, 0x999a9995u, 0x99a699a1u, 0x9a159a05u, 0x9a449a25u, 0x9a499a46u,
+        0x9a559a50u, 0x9a619a58u, 0x9a919a85u, 0x9a959a94u, 0xa0009a96u, 0xa008a002u, 0xa015a00au, 0xa022a020u,
+        0xa02aa028u, 0xa051a045u, 0xa056a054u, 0xa080a059u, 0xa088a082u, 0xa095a08au, 0xa0a2a0a0u, 0xa0aaa0a8u,
+        0xa109a105u, 0xa114a111u, 0xa119a116u, 0xa146a11au, 0xa151a149u, 0xa158a155u, 0xa161a15au, 0xa185a164u,
+        0xa192a190u, 0xa199a196u, 0xa208a202u, 0xa210a20au, 0xa222a219u, 0xa22aa228u, 0xa251a245u, 0xa259a256u,
+        0xa280a265u, 0xa288a282u, 0xa295a28au, 0xa2a2a2a0u, 0xa2aaa2a8u, 0xa425a419u, 0xa444a441u, 0xa454a450u,
+        0xa458a455u, 0xa461a45au, 0xa466a465u, 0xa469a468u, 0xa506a485u, 0xa510a509u, 0xa515a512u, 0xa526a518u,
+        0xa542a529u, 0xa551a545u, 0xa555a554u, 0xa559a556u, 0xa56aa565u, 0xa584a581u, 0xa586a585u, 0xa592a589u,
+        0xa598a595u, 0xa611a605u, 0xa61aa616u, 0xa625a621u, 0xa646a644u, 0xa652a64au, 0xa656a655u, 0xa660a658u,
+        0xa686a662u, 0xa695a690u, 0xa699a696u, 0xa6a4a6a1u, 0xa800a6a6u, 0xa808a802u, 0xa820a80au, 0xa828a822u,
+        0xa851a82au, 0xa856a854u, 0xa880a859u, 0xa888a882u, 0xa895a88au, 0xa8a2a8a0u, 0xa8aaa8a8u, 0xa914a905u,
+        0xa921a919u, 0xa941a925u, 0xa955a950u, 0xa961a95au, 0xa969a966u, 0xa996a990u, 0xaa02aa00u, 0xaa0aaa08u,
+        0xaa22aa20u, 0xaa2aaa28u, 0xaa54aa51u, 0xaa80aa56u, 0xaa88aa82u, 0xaa95aa8au, 0xaaa2aaa0u, 0xaaaaaaa8u)
+}
+
+//! Main-context use only - a forked worker reads a module global as zeros; kernels take `iq1s_grid()` instead.
+let IQ1S_GRID = iq1s_grid()
+
+//! the delta both 1-bit grid formats add to a grid value (upstream's IQ1S_DELTA = IQ1M_DELTA): an eighth
+let IQ1_DELTA = 0.125
+
+let IQ1_EIGHTHS_BIAS = 9   //! the unsigned 1-bit weight in eighths, 8 x code + 1 + delta (0 .. 18), less this is the signed one
+
+//! entry `idx` of the packed 1-bit grid: eight 2-bit codes, weight j's at bits 2j; generic in the table, so it inlines
+def iq1_grid_entry(grid : auto(TG); idx : int) : uint => (grid[idx >> 1] >> uint((idx & 1) * 16)) & 0xFFFFu
+
+//! The exact int dot of a 1-bit octet's weights in eighths, 8 x (code - 1) + `delta` (+-1), with a[ab .. ab + 8)
+def grid1_octet_dot(entry : uint; delta : int; a : auto(TA) const?; ab : int64) : int {
+    var acc = 0
+    unsafe {
+        for (j in range64(8l)) {
+            let c = int((entry >> uint(2l * j)) & 3u)
+            acc += (8 * c - 8 + delta) * int(a[ab + j])
+        }
+    }
+    return acc
+}
+
+//! A 1-bit octet's weights in eighths, 8 x (grid value) + `delta`, as signed bytes in two words (0-3, 4-7): the tile panel's form
+def grid1_octet_words(entry : uint; delta : int) : uint2 {
+    let add = delta < 0 ? 0xF7F7F7F7u : 0xF9F9F9F9u
+    return uint2(grid1_code_bytes(entry & 0xFFu, add), grid1_code_bytes(entry >> 8u, add))
+}
+
+//! four 2-bit codes (the low byte of `x`) spread a byte each as 8 x code, plus the bytes of `add` without a carry between bytes
+def grid1_code_bytes(x, add : uint) : uint {
+    let codes = (x | (x << 6u) | (x << 12u) | (x << 18u)) & 0x03030303u
+    return ((codes << 3u) + (add & 0x7F7F7F7Fu)) ^ (add & 0x80808080u)
+}
+
+//! IQ1_S: octet `l`'s three index high bits off its block's 16 qh bits
+def iq1s_hi(qh, l : uint) : uint => (qh >> (3u * l)) & 7u
+
+//! IQ1_S: the block's delta sign off its 16 qh bits, 1 for -1/8
+def iq1s_neg(qh : uint) : uint => qh >> 15u
+
+//! IQ1_S: the block's scale 2s + 1 off its 16 qh bits
+def iq1s_sc(qh : uint) : float => float(2u * ((qh >> 12u) & 7u) + 1u)
+
+//! IQ1_M: octet `l`'s three index high bits off its block's 16 qh bits, a nibble an octet
+def iq1m_hi(qh, l : uint) : uint => (qh >> (4u * l)) & 7u
+
+//! IQ1_M: octet `l`'s delta sign, its nibble's top bit, 1 for -1/8
+def iq1m_neg(qh, l : uint) : uint => (qh >> (4u * l + 3u)) & 1u
+
+//! the little-endian u16 at byte `o` of `p`, a byte pointer or array
+def u16_le(p : auto(TP); o : int64) : uint {
+    unsafe {
+        return uint(p[o]) | (uint(p[o + 1l]) << 8u)
+    }
+}
+
+//! IQ1_M's four scale words at byte `o` of `p` (a byte pointer or array): the half-block scales, the f16 d's nibbles on top
+def iq1m_scale_words(p : auto(TP); o : int64) : uint[4] => fixed_array<uint>(u16_le(p, o), u16_le(p, o + 2l), u16_le(p, o + 4l), u16_le(p, o + 6l))
+
+//! The 1-bit octet dequantized in ggml's own float order: dst[at + j] = dl x (grid value + delta)
+def store_grid1_octet(var dst : auto(TD); at : int64; dl : float; entry : uint; delta : float) {
+    unsafe {
+        for (j in range64(8l)) {
+            dst[at + j] = dl * (float(int((entry >> uint(2l * j)) & 3u) - 1) + delta)
+        }
+    }
+}
+
+//! IQ1_M's f16 d off its superblock's four scale words: word w's top nibble at bits 4w
+def iq1m_d_bits(w0, w1, w2, w3 : uint) : uint => (w0 >> 12u) | ((w1 >> 8u) & 0xF0u) | ((w2 >> 4u) & 0xF00u) | (w3 & 0xF000u)
+
+//! IQ1_M's 3-bit scale of 16-weight half-block `hb` (0..15) off scale word hb / 4: field hb % 4, three bits each
+def iq1m_half_scale(w : uint; hb : int) : int => int((w >> uint(3 * (hb % 4))) & 7u)
+
 //! Quant-plane bytes per stride unit — the typed stride surface. The stride unit is one
 //! 256-weight superblock for the kq lattice and one 32-weight block for q51 (see kq_elems).
 //! q8 panics (its planes are byte-per-elem, not stride-walked here).
@@ -1578,13 +1895,43 @@ def kq_split_tail_bytes(f : KqFmt) : int64 => f == KqFmt.k2 ? 4l : 2l
 //! the bytes the split scale form holds of `nsb` superblocks: a strip and a d tail a superblock
 def kq_split_scale_bytes(f : KqFmt; nsb : int64) : int64 => nsb * (KQ_STRIP_BYTES + kq_split_tail_bytes(f))
 
-//! Scale-plane bytes per stride unit (see kq_qsb for the unit).
-def kq_ssb(f : KqFmt) : int64 {
-    let ssb = kq_desc(f).ssb
-    if (ssb == 0l) {
-        panic("kq_ssb: no plane stride for this format")
+//! the descriptor row of a format with a scale plane - q8 panics, as kq_ssb does
+def private kq_scale_desc(f : KqFmt) : KqDesc {
+    let d = kq_desc(f)
+    if (d.ssb == 0l) {
+        panic("{f} has no scale plane")
     }
-    return ssb
+    return d
+}
+
+//! Scale-plane bytes per stride unit (see kq_qsb for the unit); panics, naming the member, when its scale unit serves a group
+def kq_ssb(f : KqFmt) : int64 {
+    let d = kq_scale_desc(f)
+    if (d.sgroup != 1l) {
+        panic("kq_ssb: {f} keeps one scale unit a {d.sgroup}-block group, so it has no per-block stride - read kq_soff / kq_sbytes")
+    }
+    return d.ssb
+}
+
+//! the stride units one scale unit of `f` serves
+def kq_sgroup(f : KqFmt) : int64 => kq_desc(f).sgroup
+
+//! the weights one scale unit of `f` serves - its disk block's weights, and the unit a row of the format is whole in
+def kq_group_elems(f : KqFmt) : int64 => kq_desc(f).elems * kq_desc(f).sgroup
+
+//! the scale-plane byte offset of stride unit `blk`: the scale unit of its group
+def kq_soff(f : KqFmt; blk : int64) : int64 {
+    let d = kq_scale_desc(f)
+    return (blk / d.sgroup) * d.ssb
+}
+
+//! the scale-plane bytes of `nblocks` whole stride units; panics, naming the member, when they end inside a group
+def kq_sbytes(f : KqFmt; nblocks : int64) : int64 {
+    let d = kq_scale_desc(f)
+    if (nblocks % d.sgroup != 0l) {
+        panic("kq_sbytes: {nblocks} {f} blocks end inside its {d.sgroup}-block scale group")
+    }
+    return (nblocks / d.sgroup) * d.ssb
 }
 
 //! Weights per stride unit: the kq lattice strides per 256-weight superblock; q8/q51 per
@@ -1615,6 +1962,12 @@ let MLX8_STREAM_TAG = 51
 let MLX4B_STREAM_TAG = 52
 let MLX8B_STREAM_TAG = 53
 let MLX6B_STREAM_TAG = 54
+
+//! q20's stream tag: the next code no kernel id claims
+let Q20_STREAM_TAG = 55
+
+//! q10's stream tag: the next code no kernel id claims
+let Q10_STREAM_TAG = 56
 
 def kq_stream_code(f : KqFmt) : int => kq_desc(f).stream_code
 

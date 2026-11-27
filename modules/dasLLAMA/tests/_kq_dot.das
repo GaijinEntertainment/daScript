@@ -45,6 +45,6 @@ def kq_grp_row_dot_rt(kf : KqFmt; kqg : uint8 const?; ksg : uint8 const?; r, mr 
 }
 
 //! The formats with no superblock grp planes: the stamp binds every `KqFmt` member, and a call on one of these panics.
-def private grp_row_dot(_kqg : uint8 const?; _ksg : uint8 const?; _r, _mr : int64; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_q8 | KqTag_q51 | KqTag_iq4nl32 | KqTag_q4032 | KqTag_q5032 | KqTag_mx4 | KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : float {
+def private grp_row_dot(_kqg : uint8 const?; _ksg : uint8 const?; _r, _mr : int64; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_q8 | KqTag_q51 | KqTag_iq4nl32 | KqTag_q4032 | KqTag_q5032 | KqTag_mx4 | KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b | KqTag_q20 | KqTag_q10) : float {
     panic("{typeinfo stripped_typename(_f)} has no superblock grp row dot")
 }

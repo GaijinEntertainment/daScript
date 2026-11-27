@@ -22,6 +22,7 @@ require _cpu_gpu_model   // with_cpu_and_gpu_model, the forms, FeedRows
 require _resident_regions   // the regions rig's batched-step collections, REGIONS_RIG_CTX
 require _kv_codec_cells   // codec_env_why: a codec form the environment keeps off
 require _format_census   // census_cell: the per-32 cuts' every site in its own format
+require _kquant_cells   // kq_expert_sites_cell: the Q1_0 expert carrier's K-quant native CPU form
 require dasllama/dasllama_env   // g_env_gpu.gpu_heat: the environment's slot ask, which shadows the pool's
 require dasllama/dasllama_core   // gpu_device_session_ctx: the context the pool's plan armed at
 require dasllama/dasllama_cuda_decode   // cud_rdec_hot_stats: the pool's hit chains; set_cuda_mmq_pin: the 35B cells' MMQ route
@@ -695,7 +696,7 @@ def test_gpu_resident_moe(t : T?) {
     var ran = false
     with_cuda_mmq_winners() {
         ran = with_cpu_and_gpu_model(t, "llm", "Qwen1.5-MoE-A2.7B-4L-Q4_K_M-local.gguf", MOE_CUT_CTX, forms) $(var m, form) {
-            return if (vk_census_cell(t, m, form, cov_vk_c60_qwen2moe_q4km()))
+            return if (vk_census_cell(t, m, form, cov_vk_c64_qwen2moe_q4km()))
             qwen_moe_rows(t, r, m, form, TWIN, true)
         }
     }
@@ -748,7 +749,7 @@ def test_gpu_resident_moe_q8(t : T?) {
                 return
             }
             metal_rows_controls(t, m, form, mr, mk)
-            return if (vk_census_cell(t, m, form, cov_vk_c58_qwen2moe_q8()))
+            return if (vk_census_cell(t, m, form, cov_vk_c62_qwen2moe_q8()))
             dev_ran ||= form.on_gpu
             if (dev_ran && (form.on_gpu || empty(form.backend))) {
                 qwen_moe_rows(t, r, m, form, Q8, false)
@@ -813,6 +814,78 @@ def private per32_rows_within(t : T?; fx : MoeFixture; r : Per32Rows) {
 let private PER32_Q51 = MoeFixture(file = "Qwen1.5-MoE-A2.7B-4L-Q5_1-local.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, census = true)
 let private PER32_Q4032 = MoeFixture(file = "Qwen1.5-MoE-A2.7B-4L-Q4_0-local.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, census = true)
 let private PER32_Q5032 = MoeFixture(file = "Qwen1.5-MoE-A2.7B-4L-Q5_0-pure-local.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, census = true)
+
+//! one form's share of a low-bit expert carrier's block: on the device the `fmt` stacks' tags, census, window and fed steps; on the CPU the chain's rows
+def private lowbit_moe_rows(t : T?; var r : Per32Rows; var m : Model; form : ModelForm; fmt : KqFmt; fx : MoeFixture) {
+    let side = main_side(r.main, form)
+    if (side == MainSide.device) {
+        for (l in [3l, 11l, 19l]) {
+            t |> equal(fmt_at(m.we1_fmt, l), fmt, "layer {l}'s gate stack loads as {fmt}")
+            t |> equal(fmt_at(m.we3_fmt, l), fmt, "layer {l}'s up stack loads as {fmt}")
+            t |> equal(fmt_at(m.we2_fmt, l), fmt, "layer {l}'s down stack loads as {fmt}")
+        }
+        t |> equal(fmt_at(m.we1_fmt, 0l), KqFmt.q8, "layer 0's gate stack stays q8")
+        let host_layers = moe_fixture_admitted(r.carrier, m, fx)
+        if (host_layers >= 0l) {
+            census_cell(t, m, path_join(models_dir(), fx.file), "vulkan load", ["routed experts", "shared expert"])
+            delete r.gpu
+            r.gpu <- moe_feed_rows(r.carrier, m, form, fx, 40l, FED_STEPS, host_layers, true)
+            r.gpu_ran = true
+        }
+    } elif (side == MainSide.cpu) {
+        delete r.cpu
+        r.cpu <- resident_feed_rows(m, form, 40l, FED_STEPS)
+    }
+}
+
+//! the q20 expert carrier (recipe in ../performance/model_specs.das): the whole Qwen1.5-MoE, not a cut, so the cut's block claim stays off it
+let private PER32_Q20 = MoeFixture(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-Q2_0.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, census = true, host_layers_ask = 4l)
+
+[test(description = "Qwen1.5-MoE with the routed gate, up and down stacks of three layers Q2_0 reads every site in its own format on the device, those stacks on the q20 GEMVs and tiles, and holds the CPU chain's logits within the routed bar over one window and its fed steps, no call taking a CPU pass; each form loads once")]
+def test_gpu_resident_moe_q20(t : T?) {
+    return if (!family_on(t, "qwen2moe") || !arm_on(t, "vk-per32-moe-q20"))
+    var r : Per32Rows
+    if (with_cpu_and_gpu_model(t, "llm", "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-Q2_0.gguf", MOE_CUT_CTX, [device_form(host_layers = PER32_Q20.host_layers_ask)]) $(m, form) {
+                lowbit_moe_rows(t, r, m, form, KqFmt.q20, PER32_Q20)
+            }) {
+        per32_rows_within(t, PER32_Q20, r)
+    }
+    delete r
+}
+
+//! the q10 expert carrier: the q20 carrier's recipe with the three layers' routed stacks Q1_0 (../performance/model_specs.das)
+let private PER32_Q10 = MoeFixture(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-Q1_0.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, census = true, host_layers_ask = 4l)
+
+//! the q10 expert carrier on its K-quant native CPU form: layer 3's routed gate, up and down stacks serve their own bytes
+//! (`kq_expert_sites_cell`)
+def private lowbit_moe_sites_cell(t : T?; var m : Model; fx : MoeFixture; fmt : KqFmt) {
+    let path = path_join(models_dir(), fx.file)
+    unsafe {   //! the cell reads the block's model by reference
+        t |> run("{fx.file}: layer 3's routed expert stacks serve their own {fmt} bytes on the CPU") @capture(& m)(t : T ?) {
+            kq_expert_sites_cell(t, m, path, fmt, 3l)
+        }
+    }
+}
+
+[test(description = "Qwen1.5-MoE with the routed gate, up and down stacks of three layers Q1_0 reads every site in its own format on the device, those stacks on the q10 GEMVs and tiles, and holds the CPU chain's logits within the routed bar over one window and its fed steps, no call taking a CPU pass; on the K-quant native CPU form, on every box, the routed sites load native - those stacks as q10 - and layer 3's expert gate, up and down rows match the file rows' dot within f32 reassociation; each form loads once")]
+def test_gpu_resident_moe_q10(t : T?) {
+    return if (!family_on(t, "qwen2moe"))
+    var r : Per32Rows
+    var forms : array<ModelForm>
+    forms_or_skips(t, forms, PER32_Q10.file, [device_form(host_layers = PER32_Q10.host_layers_ask)], arm_why("vk-per32-moe-q10"))
+    forms |> push(cpu_cells_form(kq_native = KqNative.on_q40))
+    if (with_cpu_and_gpu_model(t, "llm", "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-Q1_0.gguf", MOE_CUT_CTX, forms) $(var m, form) {
+                if (form.alone) {
+                    lowbit_moe_sites_cell(t, m, PER32_Q10, KqFmt.q10)
+                } else {
+                    lowbit_moe_rows(t, r, m, form, KqFmt.q10, PER32_Q10)
+                }
+            }) {
+        per32_rows_within(t, PER32_Q10, r)
+    }
+    delete r
+    delete forms
+}
 
 //! the heat pool's resident routed layers of a four-block cut: two
 //! placed, two streamed
@@ -1714,7 +1787,7 @@ def test_gpu_resident_moe_no_shexp(t : T?) {
     push_vk_census_form(t, "Qwen3-30B-A3B-7L-UD-IQ2_XXS-local.gguf", forms)
     let ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-30B-A3B-7L-UD-IQ2_XXS-local.gguf", MOE_CUT_CTX, forms) $(var m, form) {
         return if (metal_rows_pass(t, m, form, mr, mk)
-            || vk_census_cell(t, m, form, cov_vk_c61_qwen3moe_iq2xxs()))
+            || vk_census_cell(t, m, form, cov_vk_c65_qwen3moe_iq2xxs()))
         qwen_moe_rows(t, r, m, form, NO_SHEXP_CUT, true)
     }
     if (ran) {
@@ -1823,7 +1896,7 @@ def test_regions_batched_steps_q30(t : T?) {
     metal_rows_forms(forms, mr, KERNEL_COVERAGE_CTX, ["moe-gemv", "coverage"], ["moe-gemv"])
     let ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-30B-A3B-7L-Q4_K_M-local.gguf", REGIONS_RIG_CTX, forms, false) $(var m, form) {
         return if (metal_rows_pass(t, m, form, mr, mk)
-            || vk_census_cell(t, m, form, cov_vk_c59_qwen3moe_q4km()))
+            || vk_census_cell(t, m, form, cov_vk_c63_qwen3moe_q4km()))
         cut_held(h, m, QWEN3MOE_BLOCKS, "qwen3moe")
         let bar = home_ncol_rotates() ? LogitsBar.routed_bar : LogitsBar.wide_bar
         regions_batched_rows(h, m, bar)

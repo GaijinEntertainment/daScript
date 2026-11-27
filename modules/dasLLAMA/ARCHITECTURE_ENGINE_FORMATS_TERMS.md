@@ -2,8 +2,8 @@
 
 Companion to `ARCHITECTURE_ENGINE_FORMATS.md`; a section is cited by its anchor. This document
 defines the terms the weight-format rules use: a site, a lever and a converted copy
-(`#kq-format-terms`), and the served form, a second member over the same disk type, with its case
-`iq3s4` (`#served-form`).
+(`#kq-format-terms`), the served form, a second member over the same disk type, with its case
+`iq3s4` (`#served-form`), and the width of a set of members (`#kq-member-set`).
 
 ### The weight-format terms {#kq-format-terms}
 
@@ -54,4 +54,12 @@ tensor tiles, the routed GEMV and tiles, the token gather. So a host that sums r
 beside a Vulkan device reads the fast planes, and the device reads the same bytes; under Metal
 `auto` keeps the grid, which streams 17% fewer bytes a superblock.
 
-The nv4 member - its planes' bytes and the per-tensor scale beside them - is `ARCHITECTURE_ENGINE_FORMATS_NV4.md`; the snapshot source and its affine members are `ARCHITECTURE_ENGINE_FORMATS_MLX.md`.
+### A set of members is one 32-bit word {#kq-member-set}
+
+A set of `KqFmt` members is a `uint` with bit `int(member)` set for a member in it: a tower's `kq_fmts` word, in
+its image header and in the drivers that walk it. The Vulkan decode block keys a layer's mirror by
+`woq * DAT_KEY_FMTS + int(member)` with a radix of 32 (`dasllama_vulkan_common.das`). The enum holds 32
+members, so the word and the radix are full; a 33rd member widens both in the change that adds it.
+`check_kq_member_count` (`REVIEW.das`) counts the members of `enum KqFmt` against that width; it licenses none.
+
+The nv4 member - its planes' bytes and the per-tensor scale beside them - is `ARCHITECTURE_ENGINE_FORMATS_NV4.md`; the ternary members tq2 and tq1 are `ARCHITECTURE_ENGINE_FORMATS_TQ2.md`; the snapshot source and its affine members are `ARCHITECTURE_ENGINE_FORMATS_MLX.md`.

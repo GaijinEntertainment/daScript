@@ -118,6 +118,55 @@ def test_gguf_load_declines_unread_types(t : T?) {
     }
 }
 
+[test(description = "On a synthetic two-group Q2_0 tensor the plane transcode lands a group at a group-aligned element offset and refuses one inside a 64-weight group, the offset form refuses a quant or scale offset off the group stride, and the f32 reader refuses a slice that starts inside a group, each refusal naming the tensor")]
+def test_gguf_grouped_offsets_refuse(t : T?) {
+    let f = KqFmt.q20
+    let d = kq_desc(f)
+    let ge = kq_group_elems(f)
+    var data : array<uint8>
+    data |> resize(2l * d.disk_bytes)
+    let gg <- synth_gguf(d.ggml_type, 2l * ge, data)
+    var m <- parse_gguf_meta(gg)
+    var kq, ks : array<uint8>
+    kq |> resize(4l * d.sgroup * d.qsb)
+    ks |> resize(4l * d.ssb)
+    let aligned = panic_text() ${
+        gguf_transcode_kq(m, gg, "t", f, kq, ks, ge, ge)
+    }
+    t |> equal(aligned, "", "the control: one group lands at a group-aligned element offset")
+    let inside = panic_text() ${
+        gguf_transcode_kq(m, gg, "t", f, kq, ks, d.elems, ge)
+    }
+    t |> success(find(inside, "tensor 't'") >= 0 && find(inside, "not group-aligned") >= 0,
+        "an element offset inside a group is refused by name: {inside}")
+    let quant_off = panic_text() ${
+        gguf_transcode_kq_at(m, gg, "t", f, kq, ks, d.qsb, 0l, ge)
+    }
+    t |> success(find(quant_off, "tensor 't'") >= 0 && find(quant_off, "group stride") >= 0,
+        "a quant offset off the group stride is refused by name: {quant_off}")
+    let scale_off = panic_text() ${
+        gguf_transcode_kq_at(m, gg, "t", f, kq, ks, 0l, 1l, ge)
+    }
+    t |> success(find(scale_off, "tensor 't'") >= 0 && find(scale_off, "group stride") >= 0,
+        "a scale offset off the scale unit is refused by name: {scale_off}")
+    let on_stride = panic_text() ${
+        gguf_transcode_kq_at(m, gg, "t", f, kq, ks, d.qsb * d.sgroup, d.ssb, ge)
+    }
+    t |> equal(on_stride, "", "the control: the offset form lands a group on the stride")
+    var deq : array<float>
+    deq |> resize(2l * ge)
+    let slice = panic_text() ${
+        gguf_read_tensor_f32(m, gg, "t", deq, 0l, ge, d.elems)
+    }
+    t |> success(find(slice, "tensor 't'") >= 0 && find(slice, "group-aligned") >= 0,
+        "an f32 read that starts inside a group is refused by name: {slice}")
+    let whole = panic_text() ${
+        gguf_read_tensor_f32(m, gg, "t", deq, 0l, ge, ge)
+    }
+    t |> equal(whole, "", "the control: the f32 reader takes the second group")
+    delete m
+}
+
 [test(description = "On a synthetic 3-block Q5_0 tensor the f32 reader matches a hand-rolled ggml reference exactly, the Q8 transcode keeps d verbatim and reproduces every value bit for bit, and a src_off slice lands the full run's bytes")]
 def test_gguf_q5_0(t : T?) {
     // The dequant arm (gguf_read_tensor_f32) must match the hand-rolled reference exactly.

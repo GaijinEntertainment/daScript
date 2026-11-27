@@ -41,7 +41,7 @@ struct private LayoutSizes {
     wblob_n : int64   // element count of the big-weight region
     mx_n : int64      // element count of the native-MXFP4 expert planes (0 unless experts_mx4)
     bf16_n : int64    // halfword count of the native-BF16 region (0 unless ple_model_bf16)
-    @safe_when_uninitialized kq_n : int64[KQ_FMT_COUNT]   //! element count per lattice or affine plane pair, by int(KqFmt) (0 unless kquant_native)
+    @safe_when_uninitialized kq_n : int64[KQ_FMT_COUNT]   //! element count per lattice, affine, q20 or q10 plane pair, by int(KqFmt) (0 unless kquant_native)
     q51_n : int64
     iq4nl32_n : int64
     q4032_n : int64
@@ -61,7 +61,7 @@ struct private KqCursors {
 }
 
 def private kq_take(var cur : KqCursors; f : KqFmt; n : int64) : int64 {
-    if (kq_sb(f) || kq_mlx_affine(f)) {   //! the affine pairs' cursors share the slot table: their slots are no lattice plane's
+    if (kq_sb(f) || kq_mlx_affine(f) || kq_grouped_b32(f)) {   // the affine and grouped pairs' cursors share the slot table: their slots are no lattice plane's
         let o = cur.kq[int(f)]
         cur.kq[int(f)] += n
         return o
@@ -670,7 +670,8 @@ def private conv_account(m : GGUFMeta; name, kind : string; served : ConvServed;
 //! nibbles plus f32 scales, everything else as f32.
 def private served_bytes(t : Model; served : ConvServed; fmt : KqFmt; n : int64) : int64 {
     if (served == ConvServed.kq) {
-        return n / kq_elems(fmt) * (kq_qsb(fmt) + kq_ssb(fmt))
+        let nb = n / kq_elems(fmt)
+        return nb * kq_qsb(fmt) + kq_sbytes(fmt, nb)
     }
     if (served == ConvServed.q8) {
         return n + n / 32l * (t.wscale_f16 ? 2l : 4l)
@@ -857,7 +858,7 @@ def stream_field_of(t : Model; fmt : KqFmt) : string {
         return "q4032q"
     } elif (fmt == KqFmt.q5032) {
         return "q5032q"
-    } elif (kq_mlx_affine(fmt)) {
+    } elif (kq_mlx_affine(fmt) || kq_grouped_b32(fmt)) {
         return "{fmt}q"
     } elif (fmt == KqFmt.mx4) {
         return "mxq"
@@ -875,7 +876,7 @@ def private stream_strided(fmt : KqFmt) : bool => kq_sb(fmt) || kq_b32_planes(fm
 def private stream_job_shape(t : Model; j : FillJob) : tuple<qb : int64; sb : int64; rfmt : int> {
     if (stream_strided(j.fmt)) {
         let e = kq_elems(j.fmt)
-        return (qb = (j.n / e) * kq_qsb(j.fmt), sb = (j.n / e) * kq_ssb(j.fmt), rfmt = kq_stream_code(j.fmt))
+        return (qb = (j.n / e) * kq_qsb(j.fmt), sb = kq_sbytes(j.fmt, j.n / e), rfmt = kq_stream_code(j.fmt))
     }
     if (t.metal_blob) {   // scale and quants land interleaved, so there is no separate scale half
         return (qb = (j.n / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB), sb = 0l, rfmt = 0)
@@ -966,7 +967,7 @@ def private stream_job_transcode(m : GGUFMeta; bytes : array<uint8> | #; var dst
     let soff = j.woff - rebase
     let paired = kq_plane_pair(dst, j.fmt) $(var q : array<uint8>; var s : array<uint8>) {
         unsafe {
-            memcpy(addr<void?>(s[(soff / kq_elems(j.fmt)) * kq_ssb(j.fmt)]), addr<void?>(tmp.s[0]), sh.sb)
+            memcpy(addr<void?>(s[kq_soff(j.fmt, soff / kq_elems(j.fmt))]), addr<void?>(tmp.s[0]), sh.sb)
         }
     }
     if (!paired && sh.sb == 0l && j.n > 0l && !dst.metal_blob) {
@@ -991,7 +992,7 @@ def private stream_job_transcode(m : GGUFMeta; bytes : array<uint8> | #; var dst
                 let qrow = r.off - j.woff
                 let repacked = kq_fmt_of_stream_code(r.fmt, rf) && kq_plane_pair(dst, rf) $(var q : array<uint8>; var s : array<uint8>) {
                     invoke(g_stream_repack, r.fmt, addr<void?>(tmp.q[(qrow / kq_elems(rf)) * kq_qsb(rf)]),
-                        addr<void?>(s[(roff / kq_elems(rf)) * kq_ssb(rf)]), r.n, r.d)
+                        addr<void?>(s[kq_soff(rf, roff / kq_elems(rf))]), r.n, r.d)
                 }
                 if (!repacked) {
                     panic("dasLLAMA: a streamed repack region carries code {r.fmt}, which names no plane-pair format")
@@ -1100,7 +1101,7 @@ def stream_job_view(m : GGUFMeta; bytes : array<uint8> | #; t : Model; jobs : ar
     }
     let strided = stream_strided(f)
     let qb = strided ? (total / kq_elems(f)) * kq_qsb(f) : total
-    let sb = strided ? (total / kq_elems(f)) * kq_ssb(f) : total / Q8_BLOCK_ELEMS
+    let sb = strided ? kq_sbytes(f, total / kq_elems(f)) : total / Q8_BLOCK_ELEMS
     let paired = kq_plane_pair(sv, f) $(var q : array<uint8>; var s : array<uint8>) {
         q |> grow_resize(qb)
         s |> grow_resize(sb)
@@ -1425,7 +1426,7 @@ def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var 
         kind = transcode_kq_tensor(m, bytes, name, fmt, t.q4032q, t.q4032s, woff, n, src_off)
     } elif (fmt == KqFmt.q5032) {
         kind = transcode_kq_tensor(m, bytes, name, fmt, t.q5032q, t.q5032s, woff, n, src_off)
-    } elif (kq_mlx_affine(fmt)) {
+    } elif (kq_mlx_affine(fmt) || kq_grouped_b32(fmt)) {
         kq_plane_pair(t, fmt) $(var q : array<uint8>; var s : array<uint8>) {
             kind = transcode_kq_tensor(m, bytes, name, fmt, q, s, woff, n, src_off)
         }
@@ -1586,7 +1587,8 @@ def kq_fmt_of(gt : int) : KqFmt {
 [arch(at="../ARCHITECTURE_ENGINE_FORMATS.md#per-32-tables")]
 def kq_tag(m : GGUFMeta; name : string; rows : int64) : KqFmt {
     let disk_fmt = kq_fmt_of(gguf_tensor_type(m, name))
-    let why = kq_block32(disk_fmt) || disk_fmt == KqFmt.iq4nl ? "a {rows}-wide row is no multiple of 32" : "a {rows}-wide row is no multiple of 256"
+    let unit = kq_block32(disk_fmt) ? kq_group_elems(disk_fmt) : (disk_fmt == KqFmt.iq4nl ? KQ_B32_ELEMS : KQ_SB_ELEMS)
+    let why = "a {rows}-wide row is no multiple of {unit}"
     return note_demotion(name, disk_fmt, kq_fmt_row_ok(disk_fmt, rows), why)
 }
 
@@ -2821,6 +2823,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             g_stream_plane_total["iq4nl32q"] = (sz.iq4nl32_n / KQ_B32_ELEMS) * IQ4NL32_QB
             g_stream_plane_total["q4032q"] = (sz.q4032_n / KQ_B32_ELEMS) * Q4032_QB
             g_stream_plane_total["q5032q"] = (sz.q5032_n / KQ_B32_ELEMS) * Q5032_QB
+            g_stream_plane_total["q20q"] = (sz.kq_n[int(KqFmt.q20)] / KQ_B32_ELEMS) * Q20_QB
+            g_stream_plane_total["q10q"] = (sz.kq_n[int(KqFmt.q10)] / KQ_B32_ELEMS) * Q10_QB
             g_stream_plane_total["mxq"] = (sz.mx_n / KQ_B32_ELEMS) * MX4_QB
             let wb = mode == QuantMode.q8 ? sz.wblob_n : 0l
             g_stream_plane_total[t.metal_blob ? "mblob" : "qblob"] = (t.metal_blob
@@ -2835,16 +2839,16 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 reserve_resize(t.kq[int(f)].s, nsb * kq_ssb(f))
             }
         }
-        for (f, ne in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.mx4, KqFmt.mlx4, KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b, KqFmt.mlx6b],
+        for (f, ne in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.mx4, KqFmt.mlx4, KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b, KqFmt.mlx6b, KqFmt.q20, KqFmt.q10],
                 [sz.q51_n, sz.iq4nl32_n, sz.q4032_n, sz.q5032_n, sz.mx_n, sz.kq_n[int(KqFmt.mlx4)], sz.kq_n[int(KqFmt.mlx8)],
-                 sz.kq_n[int(KqFmt.mlx4b)], sz.kq_n[int(KqFmt.mlx8b)], sz.kq_n[int(KqFmt.mlx6b)]]) {
+                 sz.kq_n[int(KqFmt.mlx4b)], sz.kq_n[int(KqFmt.mlx8b)], sz.kq_n[int(KqFmt.mlx6b)], sz.kq_n[int(KqFmt.q20)], sz.kq_n[int(KqFmt.q10)]]) {
             continue if (ne <= 0l)
             let nb = ne / KQ_B32_ELEMS
             kq_plane_pair(t, f) $(var q : array<uint8>; var s : array<uint8>) {
                 if (!stream_q) {
                     q |> reserve_resize(nb * kq_qsb(f))
                 }
-                s |> reserve_resize(nb * kq_ssb(f))
+                s |> reserve_resize(kq_sbytes(f, nb))
             }
         }
         if (mode == QuantMode.q8) {

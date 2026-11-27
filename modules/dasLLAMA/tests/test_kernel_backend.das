@@ -278,6 +278,67 @@ def test_backend_availability_predicate(t : T?) {
     }
 }
 
+var private g_b32_probe_ran = false   //! the per-32 seat cell's probe slot ran
+
+[unused_argument(yp, wq, ws, xqp, xsp, n, d, ntok)]
+def private b32_probe_batch(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
+    g_b32_probe_ran = true
+}
+def private always_live() : bool => true
+
+//! a low-priority backend whose `fmt` per-32 row is the probe slot under witness `live`, its q8 slots the panicking dummies
+def private b32_probe_backend(name : string; fmt : KqFmt; live : function<() : bool>) : KernelBackend {
+    var be = KernelBackend(name = name, mm = @@unavailable_mm, batch = @@unavailable_batch, group3 = @@unavailable_group3,
+        repack = @@unavailable_repack, priority = -1)
+    be.b32[int(fmt)] = B32Slots(batch = @@b32_probe_batch, live = live)
+    return be
+}
+
+//! one `fmt` batch call (128 zero weights, one token) on backend `name`: whether the probe slot served it
+def private b32_probe_served(t : T?; name : string; fmt : KqFmt) : bool {
+    g_b32_probe_ran = false
+    let ran = with_kernel_backend(name) $ {
+        var inscope wq, ws : array<uint8>
+        wq |> resize(4l * kq_qsb(fmt))
+        ws |> resize(kq_sbytes(fmt, 4l))
+        var inscope xq : array<int8>
+        xq |> resize(128)
+        var inscope xs : array<float>
+        xs |> resize(4)
+        var inscope y : array<float>
+        y |> resize(1)
+        matmul_b32q8_batch(y, wq, ws, 0l, xq, xs, 128l, 1l, 1l, fmt)
+    }
+    t |> success(ran, "the pin on {name} takes")
+    return g_b32_probe_ran
+}
+
+//! `probe` with the backends `bes` registered, none of whose names stood registered before, each name's entry erased from the
+//! registry after it: the cell leaves the registry as it found it
+def private with_probe_backends(t : T?; bes : array<KernelBackend>; probe : block<void>) {
+    for (be in bes) {
+        t |> success(!key_exists(g_kernel_backends, be.name), "no backend {be.name} stands registered before the cell")
+        register_kernel_backend(be)
+    }
+    invoke(probe)
+    for (be in bes) {
+        g_kernel_backends |> erase(be.name)
+    }
+}
+
+[test(description = "A backend's per-32 row seats at activation only where its witness answers true, on the q20 and q10 rows: a row whose witness says its stamp declined yields to the portable kernels, a live one serves, and the registry keeps neither probe backend after the cell")]
+def test_b32_row_witness_seat(t : T?) {
+    for (f in [KqFmt.q20, KqFmt.q10]) {
+        let declined = "test-b32-declined-{f}"
+        let live = "test-b32-live-{f}"
+        with_probe_backends(t, [b32_probe_backend(declined, f, @@never_available), b32_probe_backend(live, f, @@always_live)]) {
+            t |> success(!b32_probe_served(t, declined, f), "{f}: a declined row's batch slot yields to the portable kernel")
+            t |> success(b32_probe_served(t, live, f), "{f}: a live row's batch slot serves")
+        }
+        t |> success(!key_exists(g_kernel_backends, declined) && !key_exists(g_kernel_backends, live), "{f}: the registry holds neither probe backend after the cell")
+    }
+}
+
 [test(description = "The batch backend follows the active one unpinned, an unknown or repack donor on a row-major active backend is rejected, a row-major donor's pin survives reselection, and clearing restores whole-backend slots")]
 def test_batch_backend_pin(t : T?) {
     t |> run("batch pin overrides the batch slots, survives re-select, guards layout") @(t : T?) {

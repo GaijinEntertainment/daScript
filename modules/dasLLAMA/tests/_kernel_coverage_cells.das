@@ -648,7 +648,7 @@ def private qwen3v_census(t : T?; var tw : Qwen3vTower; home : CovHome) {
     }
 }
 
-//! C31/C32 (Metal), C62/C63 (Vulkan): one synthesis of the StyleTTS2
+//! C31/C32 (Metal), C66/C67 (Vulkan): one synthesis of the StyleTTS2
 //! file `file` on `home` (`cov_home_of`) - kitten-nano.gguf the ONNX
 //! law's stamps, kokoro-82m.gguf the torch law's
 def coverage_tower_styletts2(t : T?; what : string; home : CovHome; var m : StyleTts2Model;
@@ -663,7 +663,7 @@ def private styletts2_census(t : T?; var m : StyleTts2Model;
     }
 }
 
-//! C33 (Metal), C64 (Vulkan): pocket-tts-en.gguf's codec over 24
+//! C33 (Metal), C68 (Vulkan): pocket-tts-en.gguf's codec over 24
 //! latent frames and one spoken line, on `home` (`cov_home_of`)
 def coverage_tower_pocket(t : T?; what : string; home : CovHome; var m : PocketModel) {
     coverage_cell(t, what, home, m, home, @@pocket_census)
@@ -686,7 +686,7 @@ def private pocket_census(t : T?; var m : PocketModel; home : CovHome) {
     }
 }
 
-//! C34 (Metal), C65 (Vulkan): pocket-tts-en-kq.gguf, the small form -
+//! C34 (Metal), C69 (Vulkan): pocket-tts-en-kq.gguf, the small form -
 //! its head's q8 linears take the q8 stamps - on `home`
 //! (`cov_home_of`)
 def coverage_tower_pocket_kq(t : T?; what : string; home : CovHome; var m : PocketModel) {
@@ -702,7 +702,7 @@ def private pocket_kq_census(t : T?; var m : PocketModel; home : CovHome) {
     }
 }
 
-//! C35 (Metal), C66 (Vulkan): the silero VAD's two kernels - the
+//! C35 (Metal), C70 (Vulkan): the silero VAD's two kernels - the
 //! batch probabilities over five seconds of a synthetic signal and
 //! one streaming feed on the device lever - on `home` (`cov_home_of`)
 def coverage_tower_vad(t : T?; what : string; home : CovHome; var v : VadModel) {
@@ -844,7 +844,7 @@ def private vk_cov_sweep(t : T?; var m : Model; row : CovVkRow) : bool {
     }
 }
 
-//! a Vulkan census row (C36-C38, C44-C57) on the device form's model,
+//! a Vulkan census row (C36-C38, C44-C61) on the device form's model,
 //! as a subtest of `t` its gates skip alone; no parity assert - the
 //! census wants dispatch diversity
 [unused_argument(form)]
@@ -857,7 +857,7 @@ def private vk_model_census(t : T?; var m : Model; row : CovVkRow) {
     vk_cov_sweep(t, m, row)
 }
 
-//! a routed row (C58-C61): `coverage_vk_model`, and where it ran the
+//! a routed row (C62-C65): `coverage_vk_model`, and where it ran the
 //! carrier note the conditional entries read - one routed row
 [unused_argument(form)]
 def coverage_vk_routed(t : T?; var m : Model; form : ModelForm; row : CovVkRow) {
@@ -930,41 +930,41 @@ def cov_vk_c38_phi3 : CovVkRow {
     return <- vk_row("Phi-3.5-mini-instruct-Q4_K_M.gguf", "phi3", none)
 }
 
-//! C56: qwen3.5 q8 - the DeltaNet chains and the decode step
-def cov_vk_c56_qwen35 : CovVkRow {
+//! C60: qwen3.5 q8 - the DeltaNet chains and the decode step
+def cov_vk_c60_qwen35 : CovVkRow {
     let none : array<int>
     return <- vk_row("Qwen3.5-0.8B-Q8_0.gguf", "qwen35", none)
 }
 
-//! C57: qwen3.5 9B (large tier) - head-256 gated attention on the cm2
+//! C61: qwen3.5 9B (large tier) - head-256 gated attention on the cm2
 //! flash stamps, the K-quant deltanet planes on the resident driver
-def cov_vk_c57_qwen35_9b : CovVkRow {
+def cov_vk_c61_qwen35_9b : CovVkRow {
     let none : array<int>
     return <- vk_row("Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf", "qwen35", none)
 }
 
-//! C58: the Qwen1.5-MoE Q8_0 cut's routed block
-def cov_vk_c58_qwen2moe_q8 : CovVkRow {
+//! C62: the Qwen1.5-MoE Q8_0 cut's routed block
+def cov_vk_c62_qwen2moe_q8 : CovVkRow {
     let none : array<int>
     return <- vk_row("Qwen1.5-MoE-A2.7B-4L-Q8_0-local.gguf", "qwen2moe", none, 4l)
 }
 
-//! C59: the Qwen3-30B Q4_K_M cut's routed block
-def cov_vk_c59_qwen3moe_q4km : CovVkRow {
+//! C63: the Qwen3-30B Q4_K_M cut's routed block
+def cov_vk_c63_qwen3moe_q4km : CovVkRow {
     let none : array<int>
     return <- vk_row("Qwen3-30B-A3B-7L-Q4_K_M-local.gguf", "qwen3moe", none, 7l)
 }
 
-//! C60: the Qwen1.5-MoE Q4_K_M twin, whole on a 16 GB card - the
+//! C64: the Qwen1.5-MoE Q4_K_M twin, whole on a 16 GB card - the
 //! whole-model driver's MoE block
-def cov_vk_c60_qwen2moe_q4km : CovVkRow {
+def cov_vk_c64_qwen2moe_q4km : CovVkRow {
     let none : array<int>
     return <- vk_row("Qwen1.5-MoE-A2.7B-4L-Q4_K_M-local.gguf", "qwen2moe", none, 4l)
 }
 
-//! C61: the UD-IQ2_XXS 30B - the resident MoE block's s and e stamps
+//! C65: the UD-IQ2_XXS 30B - the resident MoE block's s and e stamps
 //! over iq2xxs expert planes
-def cov_vk_c61_qwen3moe_iq2xxs : CovVkRow {
+def cov_vk_c65_qwen3moe_iq2xxs : CovVkRow {
     let none : array<int>
     return <- vk_row("Qwen3-30B-A3B-7L-UD-IQ2_XXS-local.gguf", "qwen3moe", none, 7l)
 }
@@ -989,7 +989,7 @@ struct private SweepVehicle {
     twin : int = NO_TWIN   //! the plane format the f16 and int8 twin legs reach
 }
 
-//! the mode sweep's vehicles, C44 to C55 in order: every prefill tile
+//! the mode sweep's vehicles, C44 to C59 in order: every prefill tile
 //! family under the coopmat modes its planes have twins in
 let private SWEEP_VEHICLES = fixed_array(
     SweepVehicle(file = "Qwen3-0.6B-Q8_0.gguf", family = "qwen3", twin = int(KqFmt.q8)),
@@ -1002,13 +1002,17 @@ let private SWEEP_VEHICLES = fixed_array(
     SweepVehicle(file = "Llama-3.2-1B-Instruct-IQ3_XXS-local.gguf", family = "llama"),
     SweepVehicle(file = "Llama-3.2-1B-Instruct-IQ4_NL-local.gguf", family = "llama"),
     SweepVehicle(file = "Llama-3.2-1B-Instruct-Q2_K-local.gguf", family = "llama"),
+    SweepVehicle(file = "Llama-3.2-1B-Instruct-TQ2_0-local.gguf", family = "llama"),
+    SweepVehicle(file = "Llama-3.2-1B-Instruct-TQ1_0-local.gguf", family = "llama"),
+    SweepVehicle(file = "Llama-3.2-1B-Instruct-IQ1_S-local.gguf", family = "llama"),
+    SweepVehicle(file = "Llama-3.2-1B-Instruct-IQ1_M-local.gguf", family = "llama"),
     SweepVehicle(file = "Llama-3.2-1B-Instruct-IQ2_XS-local.gguf", family = "llama"),
     SweepVehicle(file = "Llama-3.2-1B-Instruct-IQ2_XXS-local.gguf", family = "llama"),
     // iq2s on the attention planes
     SweepVehicle(file = "Llama-3.2-1B-Instruct.i1-IQ3_XXS.gguf", family = "llama"))
 
-//! the mode sweep's vehicle count: rows C44 to C55
-let COV_VK_SWEEP_ROWS = 12
+//! the mode sweep's vehicle count: rows C44 to C59
+let COV_VK_SWEEP_ROWS = 16
 
 //! whether sweep vehicle `i` (row C44 + i) takes the two twin legs -
 //! the f16 and int8 coopmat modes - past the box's mode, mm and sdot4

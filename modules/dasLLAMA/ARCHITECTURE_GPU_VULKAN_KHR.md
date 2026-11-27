@@ -72,7 +72,9 @@ against its f16 tiles, which holds every device reading of this section; the pro
   which is why the feed stores it. Q6_K carries a scale a 16-element half and no min term (`HALF2`): its block's two
   16-deep products keep an accumulator each, and a lane scales each by its half's scale. Q5_1 and the per-32 Q5_0 keep
   20-byte blocks, which no 16-byte word holds whole, so their stamps bind the plane as words (`W32`): Q5_1's weight is
-  `d * code + m`, the min arm with m added, and Q5_0's `d * (code - 16)`, the code less 16 as the int8.
+  `d * code + m`, the min arm with m added, and Q5_0's `d * (code - 16)`, the code less 16 as the int8. Q2_0's block is
+  two code words (`W32`), each byte's four codes spread to the int8 `code - 1`, its d its two-block group's: no min term.
+  Q1_0's block is one sign word (`W32`), each bit spread to the int8 +-1 under its four-block group's d: no min term.
 - **A step is two 32-blocks of K, loaded a step ahead.** A lane's stage job - a weight row's block, a row's block - is read
   into registers before the multiply of the step in flight and written to workgroup memory after that step's barrier, so
   the loads of the next step are in the air while the tiles multiply. The K walk starts two blocks a weight tile of the

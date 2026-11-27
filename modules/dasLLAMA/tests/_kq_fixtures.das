@@ -546,6 +546,50 @@ def build_q2k_block() : array<uint8> {
     return <- blkb
 }
 
+//! a ternary code a TQ2_0 or TQ1_0 element carries: 0, 1 or 2 (weight d x (q - 1))
+def ternary_pat(k : int) : int => (k * 5 + 2) % 3
+
+//! the tq2 synthetic superblock: a 66B TQ2_0 disk block of `ternary_pat` codes in the PACK direction, then f16 d (SYNTH_D)
+def build_tq2_block() : array<uint8> {
+    var blkb : array<uint8>
+    blkb |> resize(66)
+    for (j in range(2)) {
+        for (m in range(32)) {
+            var b = 0
+            for (l in range(4)) {
+                b = b | (ternary_pat(128 * j + 32 * l + m) << (2 * l))
+            }
+            blkb[32 * j + m] = uint8(b)
+        }
+    }
+    put_f16(blkb, 64, SYNTH_D)
+    return <- blkb
+}
+
+//! the tq1 synthetic superblock: a 54B TQ1_0 disk block in the PACK direction (`quantize_row_tq1_0_ref`), then f16 d (SYNTH_D)
+def build_tq1_block() : array<uint8> {
+    var blkb : array<uint8>
+    blkb |> resize(54)
+    for (m in range(48)) {
+        let stride = m < 32 ? 32 : 16
+        let e0 = m < 32 ? m : 160 + (m - 32)
+        var q = 0
+        for (n in range(5)) {
+            q = q * 3 + ternary_pat(e0 + n * stride)
+        }
+        blkb[m] = uint8((q * 256 + 242) / 243)
+    }
+    for (j in range(4)) {
+        var q = 0
+        for (n in range(4)) {
+            q = q * 3 + ternary_pat(240 + j + 4 * n)
+        }
+        blkb[48 + j] = uint8((q * 3 * 256 + 242) / 243)
+    }
+    put_f16(blkb, 52, SYNTH_D)
+    return <- blkb
+}
+
 // iq2s synthetic superblock: 82B IQ2_S disk block - per-16 scale nibbles SYNTH_SC & 15, f16 d,
 // idx/qh/sign byte patterns (written in the PACK direction); the gate recomposes each weight
 // through IQ2S_GRID
@@ -708,7 +752,119 @@ def build_iq4nl32_block(blk : int) : array<uint8> {
     return <- b
 }
 
-//! the synthetic superblock of format id `fmt` (35 = iq3s4 reads iq3s's; an id with no builder of its own reads k6's)
+//! the 2-bit code of element k of the Q2_0 synthetic group `blk`: every code in each 32-weight half, the halves' patterns apart
+def q20_pat(blk, k : int) : int => (k * 3 + blk + (k >> 5)) & 3
+
+//! the Q2_0 synthetic 64-weight group `blk`: Q2_0's own 18 B disk block in the pack direction, q51's d (f16-exact, varied per group)
+def build_q20_block(blk : int) : array<uint8> {
+    var b : array<uint8>
+    b |> resize(18)
+    put_f16(b, 0, q51_d(blk))
+    for (j in range(16)) {
+        var v = 0
+        for (s in range(4)) {
+            v += q20_pat(blk, j * 4 + s) << (s * 2)
+        }
+        b[2 + j] = uint8(v)
+    }
+    return <- b
+}
+
+//! the sign bit of element k of the Q1_0 synthetic group `blk`: both signs in each 32-weight block, the four blocks' patterns apart
+def q10_pat(blk, k : int) : int => ((k * 37 + blk * 11 + (k >> 5) * 7) >> 3) & 1
+
+//! the Q1_0 synthetic 128-weight group `blk`: Q1_0's own 18 B disk block in the pack direction, q51's d (f16-exact, varied per group)
+def build_q10_block(blk : int) : array<uint8> {
+    var b : array<uint8>
+    b |> resize(18)
+    put_f16(b, 0, q51_d(blk))
+    for (j in range(16)) {
+        var v = 0
+        for (s in range(8)) {
+            v += q10_pat(blk, j * 8 + s) << s
+        }
+        b[2 + j] = uint8(v)
+    }
+    return <- b
+}
+
+//! the 1-bit synthetic superblocks' f16 d: IQ1_S's plain, IQ1_M's spread over its four scale words' top nibbles, which all differ
+let IQ1S_SYNTH_D = 0.0625
+let IQ1M_SYNTH_D_BITS = 0x2E5Bu
+
+//! octet l of block ib's grid index in the 1-bit synthetic superblocks: every high-bit value, entry 601 (all three grid values) first
+def iq1_ix_pat(ib, l : int) : int => ib == 0 && l == 0 ? 601 : (((ib * 3 + l) % 8) << 8) | ((ib * 29 + l * 53 + 11) % 256)
+
+//! IQ1_S's scale field of block ib (every value 0..7) and its delta sign (both, alternating)
+def iq1s_sc_pat(ib : int) : int => ib
+def iq1s_neg_pat(ib : int) : bool => ib % 2 == 1
+
+//! the IQ1_S synthetic superblock of the `iq1_ix_pat` / `iq1s_*_pat` fields under `IQ1S_SYNTH_D`, written in the pack direction
+def build_iq1s_block() : array<uint8> {
+    var b : array<uint8>
+    b |> resize(50)
+    put_f16(b, 0, IQ1S_SYNTH_D)
+    for (ib in range(8)) {
+        var qh = (iq1s_sc_pat(ib) << 12) | (iq1s_neg_pat(ib) ? 1 << 15 : 0)
+        for (l in range(4)) {
+            let idx = iq1_ix_pat(ib, l)
+            b[2 + 4 * ib + l] = uint8(idx & 255)
+            qh = qh | ((idx >> 8) << (3 * l))
+        }
+        b[34 + 2 * ib] = uint8(qh & 255)
+        b[35 + 2 * ib] = uint8(qh >> 8)
+    }
+    return <- b
+}
+
+//! IQ1_M's scale field of half-block hb (each value 0..7 twice) and octet (ib, l)'s delta sign (both)
+def iq1m_sc_pat(hb : int) : int => (hb * 5 + 3) % 8
+def iq1m_neg_pat(ib, l : int) : bool => (ib + l) % 2 == 1
+
+//! the IQ1_M synthetic superblock of the `iq1_ix_pat` / `iq1m_*_pat` fields, `IQ1M_SYNTH_D_BITS` atop its scale words, in the pack direction
+def build_iq1m_block() : array<uint8> {
+    var b : array<uint8>
+    b |> resize(56)
+    for (ib in range(8)) {
+        for (l in range(4)) {
+            let idx = iq1_ix_pat(ib, l)
+            b[4 * ib + l] = uint8(idx & 255)
+            let nib = (idx >> 8) | (iq1m_neg_pat(ib, l) ? 8 : 0)
+            let q = 32 + 2 * ib + l / 2
+            b[q] = uint8(int(b[q]) | (nib << (4 * (l % 2))))
+        }
+    }
+    for (k in range(4)) {
+        var w = int((IQ1M_SYNTH_D_BITS >> uint(4 * k)) & 15u) << 12
+        for (f in range(4)) {
+            w = w | (iq1m_sc_pat(4 * k + f) << (3 * f))
+        }
+        b[48 + 2 * k] = uint8(w & 255)
+        b[49 + 2 * k] = uint8(w >> 8)
+    }
+    return <- b
+}
+
+//! the synthetic superblock of the format whose kernel id is `fmt` (iq3s4 reads iq3s's; a format with no builder of its own
+//! reads k6's)
 def synth_block(fmt : int) : array<uint8> {
-    return <- (fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : (fmt == 49 ? build_nv4_block() : (fmt == 44 ? build_iq4xs_block() : (fmt == 3 ? build_q3k_block() : (fmt == 33 || fmt == 35 ? build_iq3s_block() : (fmt == 34 ? build_iq3xxs_block() : (fmt == 45 ? build_iq4nl_block() : (fmt == 2 ? build_q2k_block() : (fmt == 23 ? build_iq2s_block() : (fmt == 24 ? build_iq2xs_block() : (fmt == 25 ? build_iq2xxs_block() : build_q6k_block())))))))))))))
+    let f = kq_fmt_of_id(fmt, "synth_block")
+    return <- build_q4k_block() if (f == KqFmt.k4)
+    return <- build_q5k_block() if (f == KqFmt.k5)
+    return <- build_q40_block() if (f == KqFmt.q40)
+    return <- build_nv4_block() if (f == KqFmt.nv4)
+    return <- build_iq4xs_block() if (f == KqFmt.iq4xs)
+    return <- build_q3k_block() if (f == KqFmt.k3)
+    return <- build_iq3s_block() if (f == KqFmt.iq3s || f == KqFmt.iq3s4)
+    return <- build_iq3xxs_block() if (f == KqFmt.iq3xxs)
+    return <- build_iq4nl_block() if (f == KqFmt.iq4nl)
+    return <- build_q2k_block() if (f == KqFmt.k2)
+    return <- build_iq2s_block() if (f == KqFmt.iq2s)
+    return <- build_iq2xs_block() if (f == KqFmt.iq2xs)
+    return <- build_iq2xxs_block() if (f == KqFmt.iq2xxs)
+    return <- build_iq1s_block() if (f == KqFmt.iq1s)
+    return <- build_iq1m_block() if (f == KqFmt.iq1m)
+    return <- build_tq2_block() if (f == KqFmt.tq2)
+    return <- build_tq1_block() if (f == KqFmt.tq1)
+    return <- build_q6k_block()
 }

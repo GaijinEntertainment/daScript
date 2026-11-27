@@ -212,6 +212,26 @@ def pack_kq_disk_block(fmt : int64; var blkb : array<uint8>; base : int) {   // 
         for (i in range(80)) {
             blkb[2 + i] = uint8((base * 37 + i * 101 + 29) % 256)
         }
+    } elif (fmt == 13l) {
+        // 50B IQ1_S disk block: f16 d, 32 qs, 8 u16 qh words (index high bits, scale, delta sign) - every qs and qh pattern is legal
+        let dbits = f32_to_f16(0.002 + 0.0001 * float(base % 13))
+        blkb[0] = uint8(dbits & 0xFF)
+        blkb[1] = uint8(dbits >> 8u)
+        for (i in range(48)) {
+            blkb[2 + i] = uint8((base * 41 + i * 97 + 17) % 256)
+        }
+    } elif (fmt == 16l) {
+        // 56B IQ1_M disk block: 32 qs, 16 qh, four scale words - the words' twelve low bits any pattern, their top nibbles the f16 d
+        for (i in range(48)) {
+            blkb[i] = uint8((base * 41 + i * 97 + 17) % 256)
+        }
+        let dbits = f32_to_f16(0.002 + 0.0001 * float(base % 13))
+        for (w in range(4)) {
+            let low = (base * 29 + w * 71 + 5) % 4096
+            let word = uint(low) | (((dbits >> uint(4 * w)) & 15u) << 12u)
+            blkb[48 + 2 * w] = uint8(word & 0xFFu)
+            blkb[48 + 2 * w + 1] = uint8(word >> 8u)
+        }
     } elif (fmt == 4l) {
         pack_kq_scale_header(blkb, base)
         for (i in range(128)) {
@@ -225,6 +245,22 @@ def pack_kq_disk_block(fmt : int64; var blkb : array<uint8>; base : int) {   // 
         for (i in range(128)) {
             blkb[48 + i] = uint8((base * 37 + i * 101 + 29) % 256)  // qs
         }
+    } elif (fmt == 22l) {
+        // 66B TQ2_0 disk block: 64 qs, f16 d - every byte pattern is legal (a 3 code reads as weight 2d)
+        for (i in range(64)) {
+            blkb[i] = uint8((base * 37 + i * 101 + 29) % 256)
+        }
+        let dbits = f32_to_f16(0.002 + 0.0001 * float(base % 13))
+        blkb[64] = uint8(dbits & 0xFF)
+        blkb[65] = uint8(dbits >> 8u)
+    } elif (fmt == 21l) {
+        // 54B TQ1_0 disk block: 48 qs, 4 qh, f16 d - every byte pattern is legal (each byte reads as trits of 0, 1 or 2)
+        for (i in range(52)) {
+            blkb[i] = uint8((base * 37 + i * 101 + 29) % 256)
+        }
+        let dbits = f32_to_f16(0.002 + 0.0001 * float(base % 13))
+        blkb[52] = uint8(dbits & 0xFF)
+        blkb[53] = uint8(dbits >> 8u)
     } else {
         for (i in range(128)) {
             blkb[i] = uint8((base * 37 + i * 101 + 29) % 256)       // ql
@@ -281,14 +317,15 @@ def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {
     fx.yref |> resize(ntok * d)
     var q4 := fx.kq
     var s4 := fx.ks
+    let omr = 4l
     unsafe {
-        repack_kq_grp_fmt(fmt, addr(q4[0]), addr(s4[0]), n, d, 4l)
-        for (g in range64(d / 4l)) {
-            let kqg = addr(q4[0]) + g * 4l * fx.nsb * qsb
-            let ksg = addr(s4[0]) + g * 4l * fx.nsb * ssb
+        repack_kq_grp_fmt(fmt, addr(q4[0]), addr(s4[0]), n, d, omr)
+        for (g in range64(d / omr)) {
+            let kqg = addr(q4[0]) + g * omr * fx.nsb * qsb
+            let ksg = addr(s4[0]) + g * omr * fx.nsb * ssb
             for (tk in range64(ntok)) {
-                for (r in range64(4l)) {
-                    fx.yref[tk * d + g * 4l + r] = kq_grp_row_dot_rt(kf, kqg, ksg, r, 4l,
+                for (r in range64(omr)) {
+                    fx.yref[tk * d + g * omr + r] = kq_grp_row_dot_rt(kf, kqg, ksg, r, omr,
                         addr(fx.xq[0]) + tk * n, addr(fx.xs[0]) + tk * (n / 256l), addr(fx.xbs[0]) + tk * (n / 16l), n)
                 }
             }
@@ -320,7 +357,7 @@ struct B32Fixture {
     fmt : KqFmt
     n, d : int64
     nb : int64
-    qb, sb : int64          // the format's quant / scale bytes a block (kq_desc's strides)
+    block_qbytes, unit_sbytes : int64
     qq : array<uint8>       // disk-order quant plane
     qs : array<uint8>       // disk-order f16 scale plane (q51: d, m; iq4nl32: d)
     xq : array<int8>
@@ -341,6 +378,8 @@ def private mlx_scalar_dot(fmt : KqFmt; wq : uint8 const?; ws : uint8 const?; xq
 //! the format's scalar disk-order dot - the oracle every per-32 variant is held to
 def b32_scalar_dot(fmt : KqFmt; wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float {
     return mlx_scalar_dot(fmt, wq, ws, xq, xs, n) if (kq_mlx_affine(fmt))
+    return dot_q20q8_scalar(wq, ws, xq, xs, n) if (fmt == KqFmt.q20)
+    return dot_q10q8_scalar(wq, ws, xq, xs, n) if (fmt == KqFmt.q10)
     return (fmt == KqFmt.q51 ? dot_q51q8_scalar(wq, ws, xq, xs, n) : (fmt == KqFmt.q4032 ? dot_q4032q8_scalar(wq, ws, xq, xs, n)
         : (fmt == KqFmt.q5032 ? dot_q5032q8_scalar(wq, ws, xq, xs, n) : dot_iq4nl32q8_scalar(wq, ws, xq, xs, n))))
 }
@@ -352,11 +391,13 @@ def private b32_half_bits(fmt : KqFmt; bits : int) : int {
 }
 
 def build_b32_fixture(fmt : KqFmt; n, d : int64) : B32Fixture {
-    var fx = B32Fixture(fmt = fmt, n = n, d = d, nb = n / 32l, qb = kq_qsb(fmt), sb = kq_ssb(fmt))
-    fx.qq |> reserve(d * fx.nb * fx.qb)
-    fx.qs |> reserve(d * fx.nb * fx.sb)
-    fx.qq |> resize(d * fx.nb * fx.qb)
-    fx.qs |> resize(d * fx.nb * fx.sb)
+    let sg = kq_sgroup(fmt)
+    var fx = B32Fixture(fmt = fmt, n = n, d = d, nb = n / 32l, block_qbytes = kq_qsb(fmt), unit_sbytes = kq_sbytes(fmt, sg))
+    let srow = kq_sbytes(fmt, fx.nb)
+    fx.qq |> reserve(d * fx.nb * fx.block_qbytes)
+    fx.qs |> reserve(d * srow)
+    fx.qq |> resize(d * fx.nb * fx.block_qbytes)
+    fx.qs |> resize(d * srow)
     // valid small f16 scale patterns cycled a block (d, then m where the row holds one; an affine group's two blocks its scale, then its bias); codes an LCG walk
     let f16s = fixed_array(0x2E66, 0x3266, 0xB18F, 0x2C00, 0x3000, 0xB266, 0x2A8F, 0x3400)
     var seed = 0x12345
@@ -365,12 +406,12 @@ def build_b32_fixture(fmt : KqFmt; n, d : int64) : B32Fixture {
         fx.qq[i] = uint8(seed >> 16)
     }
     for (r in range64(d)) {
-        for (bi in range64(fx.nb)) {
-            let sb = (r * fx.nb + bi) * fx.sb
+        for (bi in range64(fx.nb / sg)) {
+            let sb = r * srow + bi * fx.unit_sbytes
             let dv = b32_half_bits(fmt, int(f16s[int(r * 3l + bi) % 8]))
             fx.qs[sb] = uint8(dv & 255)
             fx.qs[sb + 1l] = uint8(dv >> 8)
-            if (fx.sb >= 4l) {
+            if (fx.unit_sbytes >= 4l) {
                 let mv = f16s[int(r * 5l + bi * 7l + 3l) % 8]
                 fx.qs[sb + 2l] = uint8(mv & 255)
                 fx.qs[sb + 3l] = uint8(mv >> 8)
@@ -397,7 +438,7 @@ def build_b32_fixture(fmt : KqFmt; n, d : int64) : B32Fixture {
     fx.yref |> resize(d)
     unsafe {
         for (r in range64(d)) {
-            fx.yref[r] = b32_scalar_dot(fmt, addr(fx.qq[0]) + r * fx.nb * fx.qb, addr(fx.qs[0]) + r * fx.nb * fx.sb,
+            fx.yref[r] = b32_scalar_dot(fmt, addr(fx.qq[0]) + r * fx.nb * fx.block_qbytes, addr(fx.qs[0]) + r * srow,
                                         addr(fx.xq[0]), addr(fx.xs[0]), n)
         }
     }

@@ -13,7 +13,8 @@ options stack = 524288
 // ATTRIBUTION SWEEP - `--only <fmt,...>`: the lane split's race - the named superblock formats at the llama-8B token step's
 // shapes, rows of 96 and 104 blocks (each side of the lane rule's last boundary) and the 27B's, an arm a lanes value (the rule's, 8, 16, the whole subgroup) over one pair of weight rings; a round is one Vulkan
 // submit and one CUDA launch chain of EVERY arm in turn, 2 warmup rounds dropped, an arm's number its best round after them.
-// No output is compared: the kernel cells hold every lanes value to the reference (`test_cud_kq_gemv_family`).
+// No output is compared: the kernel cells hold every lanes value to the reference (`test_cud_kq_gemv_family`). `--warm` keeps
+// two weight copies a ring, together inside the card's L2 - the reference perf rows' cache-resident condition.
 
 require vulkan
 require vulkan/vulkan_boost
@@ -46,8 +47,11 @@ def gemv_bytes(n, d : int) : double =>
 
 def gbs(bytes : double; us : double) : double => bytes / us / 1000.0lf
 
-//! the weight plane pairs a ring of `p`'s planes holds, together past `RING_BYTES`: two at least, an output each
+var g_warm = false   //! `--warm`: two copies a ring, cache-resident
+
+//! the weight plane pairs a ring of `p`'s planes holds, together past `RING_BYTES`: two at least, an output each; two under `--warm`
 def ring_copies(p : GemvFix) : int {
+    return 2 if (g_warm)
     let copies = max(2, int(RING_BYTES / ((long_length(p.wqh) + long_length(p.wsh)) * 4l)) + 1)
     return copies + (copies & 1)   //! an even ring: the two outputs alternate across the wrap too
 }
@@ -154,7 +158,7 @@ def race_q8(p : GemvFix; n, d : int) : RaceRow {
 //! a K-quant plane pair of `d` rows of `n` elements in the device layout, hashed, with its Q8_K activation row
 def kq_planes(fmt, d, n : int) : GemvFix {
     let nsb = n / 256
-    var wsh <- kq_ws_plane(fmt, d * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 13u)
+    var wsh <- kq_ws_plane(fmt, kq_ws_words(fmt, d * nsb), 1u, uint(fmt) * 13u)
     return <- kq_gemv_fix(fmt, 1, d, nsb, uint(fmt) * 77777u, wsh, nsb, 64, 31u, 5u, 0.5, 0.25, 7)
 }
 
@@ -249,15 +253,20 @@ def race_only_rows(only : table<string; void>) : int {
     var measured = 0
     let shapes <- [(n = 3072, d = 4096), (n = 3328, d = 4096), (n = 4096, d = 4096), (n = 4096, d = 14336), (n = 14336, d = 4096),
         (n = 5120, d = 5120), (n = 5120, d = 17408), (n = 17408, d = 5120)]
-    print("superblock decode GEMV at rows of 96 and 104 blocks, the llama-8B shapes and the 27B's, the rule's lanes a row then 8 / 16 / 32, both homes\n")
-    for (fmt in fixed_array(int(KqFmt.k4), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.q40), int(KqFmt.iq4nl), int(KqFmt.nv4))) {
+    let small_model_shapes <- [(n = 2048, d = 2048), (n = 2048, d = 8192), (n = 8192, d = 2048), (n = 1792, d = 1792), (n = 1792, d = 4864),
+        (n = 4864, d = 1792), (n = 2560, d = 2560), (n = 4096, d = 4096), (n = 2048, d = 1408), (n = 14336, d = 4096)]
+    print("superblock decode GEMV at rows of 96 and 104 blocks, the llama-8B shapes and the 27B's (the 2-bit lattice and the 1-bit grid: the 1B and TriLM shapes, rows of 2560 and 4096, the MoE expert's), the rule's lanes a row then 8 / 16 / 32, both homes\n")
+    for (fmt in fixed_array(int(KqFmt.k4), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.q40), int(KqFmt.iq4nl), int(KqFmt.nv4), int(KqFmt.k2), int(KqFmt.tq2), int(KqFmt.tq1),
+            int(KqFmt.iq2xxs), int(KqFmt.iq1s), int(KqFmt.iq1m))) {
         continue if (!key_exists(only, "{kq_fmt_of_slot(fmt)}"))
+        let on_small_models = (fmt == int(KqFmt.k2) || fmt == int(KqFmt.tq2) || fmt == int(KqFmt.tq1) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq1s)
+            || fmt == int(KqFmt.iq1m))
         var vk_best_sums, cu_wall_best_sums : double[LANE_ARMS]
         var vk_round_sums <- [for (_a in range(LANE_ARMS)); [for (_r in range(ROUNDS)); 0.0lf]]
         var cu_wall_round_sums <- [for (_a in range(LANE_ARMS)); [for (_r in range(ROUNDS)); 0.0lf]]
         var vk_ran = false
         var cu_ran = false
-        for (s in shapes) {
+        for (s in on_small_models ? small_model_shapes : shapes) {
             var p <- kq_planes(fmt, s.d, s.n)
             let bytes = kq_bytes(fmt, s.n, s.d)
             var lanes <- [gemv_lanes_per_row(fmt, int64(s.n)), LANE_VALUES[0], LANE_VALUES[1], LANE_VALUES[2]]
@@ -292,6 +301,7 @@ def race_only_rows(only : table<string; void>) : int {
 
 [export]
 def main {
+    g_warm = find_index(get_command_line_arguments(), "--warm") >= 0
     let only <- only_arms()
     if (!empty(only)) {
         let measured = race_only_rows(only)

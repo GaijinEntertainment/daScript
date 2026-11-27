@@ -35,7 +35,7 @@ def test_kqfmt_under_dat_key_radix(t : T?) {
     }
 }
 
-[test(description = "Every `KqFmt` member's int value is pinned to a literal 0 through 25, the ids device tags and stream codes key off")]
+[test(description = "Every `KqFmt` member's int value is pinned to a literal 0 through 31, the ids device tags and stream codes key off")]
 def test_kqfmt_enum_values(t : T?) {
     t |> run("int(KqFmt.*) values are pinned - device tags and stream codes key off them") @(t : T?) {
         t |> equal(int(KqFmt.q8), 0)
@@ -64,6 +64,37 @@ def test_kqfmt_enum_values(t : T?) {
         t |> equal(int(KqFmt.mlx4b), 23)
         t |> equal(int(KqFmt.mlx8b), 24)
         t |> equal(int(KqFmt.mlx6b), 25)
+        t |> equal(int(KqFmt.q20), 26)
+        t |> equal(int(KqFmt.q10), 27)
+        t |> equal(int(KqFmt.iq1s), 28)
+        t |> equal(int(KqFmt.iq1m), 29)
+        t |> equal(int(KqFmt.tq2), 30)
+        t |> equal(int(KqFmt.tq1), 31)
+    }
+}
+
+[test(description = "The iq1s and iq1m members are superblock planes both discrete homes stamp off the same bytes the CPU reads: IQ1_S 48 quant bytes and a 2-byte f16 d, IQ1_M 48 quant bytes and its 8 scale bytes, ggml types 19 and 29, kernel and stream ids 13 and 16, their device rows the planes themselves (12 quant words, IQ1_M's two scale words), read at interleave 1")]
+def test_kqfmt_iq1_rows(t : T?) {
+    t |> run("the 1-bit rows: strides, disk bytes, ids and the device form both discrete homes read") @(t : T?) {
+        for (f, qsb, ssb, disk, gt, id in [KqFmt.iq1s, KqFmt.iq1m], [48l, 48l], [2l, 8l], [50l, 56l], [19, 29], [13, 16]) {
+            let d = kq_desc(f)
+            t |> success(kq_sb(f) && !kq_dense_b32(f), "{f}: a superblock member")
+            t |> equal(d.qsb, qsb, "{f}: quant bytes a superblock")
+            t |> equal(d.ssb, ssb, "{f}: scale bytes a superblock")
+            t |> equal(d.disk_bytes, disk, "{f}: the disk block")
+            t |> equal(d.qsb + d.ssb, d.disk_bytes, "{f}: the planes store the disk bytes and nothing more")
+            t |> equal(d.ggml_type, gt, "{f}: ggml type")
+            t |> equal(d.schema_id, id, "{f}: kernel id")
+            t |> equal(d.stream_code, id, "{f}: stream code")
+            t |> equal(kq_dev_qsb(f), qsb, "{f}: the device quant row is the plane's")
+            t |> equal(kq_dev_ssb(f), ssb, "{f}: the device scale row is the plane's")
+            t |> success(kq_dev_is_plane(f) && !kq_discrete_unstamped(f), "{f}: read in place, stamped on the discrete homes")
+            t |> equal(int64(IQ1_QWORDS) * 4l, kq_dev_qsb(f), "{f}: IQ1_QWORDS is the device quant row in words")
+            t |> equal(int64(IQ1_QH_WORD) * 4l, IQ1_QS_BYTES, "{f}: IQ1_QH_WORD is the word its qh bytes start at")
+            t |> success(kq_is_grid1(id) && !kq_reads_packed_planes(int64(id)) && kq_has_emitter(id), "{f}: a 1-bit grid id whose tile reads a decoded panel, with an emitter arm")
+            t |> equal(gguf_kq_fmt_of_type(gt), f, "{f}: the ggml type maps to the member")
+        }
+        t |> equal(int64(IQ1M_SWORDS) * 4l, kq_dev_ssb(KqFmt.iq1m), "iq1m: IQ1M_SWORDS is its device scale row in words")
     }
 }
 
@@ -100,6 +131,129 @@ def test_kqfmt_affine_rows(t : T?) {
         t |> equal(mlx_affine_ggml_type(4, 32, false), -1, "a 32-group has no member")
         t |> equal(mlx_affine_ggml_type(3, 64, false), -1, "3-bit codes have no member")
         t |> success(!kq_discrete_unstamped(KqFmt.q5032), "a stamped per-32 member is not on the unstamped list (the control)")
+    }
+}
+
+//! a per-32 low-bit member's literal row: code bytes a 32-block, the scale group, ggml type and stream code, the named and device
+//! constants, the scale offsets of `blks`, block 7's device scale offset, `odd` blocks ending inside a group, and `ragged` rows on
+//! the 32 lattice whose last group is not whole
+struct private LowbitB32Row {
+    f : KqFmt
+    qsb : int64
+    sgroup : int64
+    gt : int
+    gtc : int
+    code : int
+    qb : int64
+    sb : int64
+    sg : int64
+    qwords : uint
+    sbytes : uint
+    dsg : uint
+    blks : int64[7]
+    soff : int64[7]
+    dev7 : int64
+    odd : int64
+    ragged : int64[2]
+}
+
+def private lowbit_b32_rows() : array<LowbitB32Row> {
+    return <- [LowbitB32Row(f = KqFmt.q20, qsb = 8l, sgroup = 2l, gt = 42, gtc = GGML_TYPE_Q2_0, code = 55, qb = Q20_QB, sb = Q20_SB, sg = Q20_SGROUP,
+            qwords = KQ_Q20_QWORDS, sbytes = KQ_Q20_SBYTES, dsg = KQ_Q20_SGROUP, blks = fixed_array(0l, 1l, 2l, 3l, 7l, 64l, 1001l),
+            soff = fixed_array(0l, 0l, 2l, 2l, 6l, 64l, 1000l), dev7 = 6l, odd = 3l, ragged = fixed_array(1376l, 2016l)),
+        LowbitB32Row(f = KqFmt.q10, qsb = 4l, sgroup = 4l, gt = 41, gtc = GGML_TYPE_Q1_0, code = 56, qb = Q10_QB, sb = Q10_SB, sg = Q10_SGROUP,
+            qwords = KQ_Q10_QWORDS, sbytes = KQ_Q10_SBYTES, dsg = KQ_Q10_SGROUP, blks = fixed_array(0l, 1l, 3l, 4l, 7l, 64l, 1001l),
+            soff = fixed_array(0l, 0l, 0l, 2l, 2l, 32l, 500l), dev7 = 2l, odd = 6l, ragged = fixed_array(1344l, 2016l))]
+}
+
+//! row `r`'s descriptor, device block constants and ids
+def private lowbit_b32_desc_cell(t : T?; r : LowbitB32Row) {
+    let f = r.f
+    t |> success(!kq_sb(f) && kq_block32(f) && kq_block32(int(f)) && kq_dense_b32(f) && kq_dense_b32(int(f)), "{f} is a per-32 member on both predicates")
+    t |> success(!kq_mlx_affine(f) && kq_grouped_b32(f), "{f} is a grouped member, no affine one")
+    t |> success(!kq_discrete_unstamped(f), "the Vulkan and CUDA homes stamp {f}")
+    t |> equal(kq_qsb(f), r.qsb, "{f}: its code bytes a 32-block")
+    t |> equal(kq_desc(f).ssb, 2l, "{f}: one f16 d a scale unit")
+    t |> equal(kq_desc(f).sgroup, r.sgroup, "{f}: a scale unit serves {r.sgroup} 32-blocks")
+    t |> equal(kq_sgroup(f), r.sgroup)
+    t |> equal(kq_group_elems(f), 32l * r.sgroup, "{f}: the disk block's weights")
+    t |> equal(kq_elems(f), 32l)
+    t |> equal(kq_desc(f).disk_bytes, 18l, "{f}: the disk block is the f16 d and 16 code bytes, one scale unit's 32-blocks")
+    t |> equal(kq_desc(f).schema_id, -1, "{f}: no kq kernel takes it by id")
+    t |> equal(kq_ggml_type(f), r.gt, "{f}: ggml type {r.gt}")
+    t |> equal(r.gtc, r.gt, "{f}: its ggml type constant")
+    t |> equal(kq_stream_code(f), r.code)
+    t |> equal(ggml_type_bytes(r.gt, 32l * r.sgroup), 18l)
+    t |> equal(ggml_type_bytes(r.gt, 2048l), 18l * 2048l / (32l * r.sgroup), "{f}: a 2048-wide row's blocks of 18 bytes")
+    t |> equal(gguf_kq_fmt_of_type(r.gt), f, "the type map names {f}")
+    t |> equal(kq_fmt_of(r.gt), f)
+    t |> equal(r.qb, r.qsb, "{f}: its quant-bytes constant")
+    t |> equal(r.sb, 2l, "{f}: its scale-bytes constant")
+    t |> equal(r.sg, r.sgroup, "{f}: its group constant")
+    t |> equal(int64(r.qwords) * 4l, kq_qsb(f), "{f}: the device block's code words a 32-block")
+    t |> equal(int64(r.sbytes), kq_desc(f).ssb, "{f}: the device block's f16 d")
+    t |> equal(int64(r.dsg), kq_sgroup(f), "{f}: the device block's group")
+}
+
+//! row `r`'s scale unit serving a group: `kq_soff` and `kq_sbytes` address the group, `kq_ssb` refuses
+def private lowbit_b32_group_cell(t : T?; r : LowbitB32Row) {
+    let f = r.f
+    for (blk, off in r.blks, r.soff) {
+        t |> equal(kq_soff(f, blk), off, "block {blk}'s scale unit sits at its group's")
+    }
+    t |> equal(kq_sbytes(f, r.sgroup), 2l)
+    t |> equal(kq_sbytes(f, 64l), 2l * 64l / r.sgroup, "{f}: {64l / r.sgroup} groups of one d")
+    let b = dev_block_bytes(f)
+    t |> equal(b.sgroup, r.sgroup, "the device row carries the group")
+    t |> equal(dev_scale_off(b, 7l), r.dev7)
+    t |> equal(dev_scale_bytes(b, 64l), 2l * 64l / r.sgroup)
+    let why = panic_text() ${
+        let s = kq_ssb(f)
+        t |> success(false, "unreachable: {s}")
+    }
+    t |> success(find(why, "{f}") >= 0, "kq_ssb refuses {f} by name: {why}")
+    let odd = panic_text() ${
+        let s = kq_sbytes(f, r.odd)
+        t |> success(false, "unreachable: {s}")
+    }
+    t |> success(find(odd, "{f}") >= 0, "{r.odd} blocks end inside a group: {odd}")
+}
+
+//! row `r`'s row rule: its tag kept on whole groups, off the superblock lattice too; any other row takes q8
+def private lowbit_b32_row_rule_cell(t : T?; r : LowbitB32Row) {
+    let f = r.f
+    t |> equal(kq_fmt_row_ok(f, 2048l), f)
+    t |> equal(kq_fmt_row_ok(f, 1408l), f, "Qwen1.5-MoE's expert down: {1408l / (32l * r.sgroup)} groups, off 256")
+    t |> equal(kq_fmt_expert_ok(f, 1408l), f)
+    for (n in r.ragged) {
+        t |> equal(kq_fmt_row_ok(f, n), KqFmt.q8, "{n / 32l} 32-blocks: the last group is not whole")
+    }
+    t |> equal(kq_fmt_row_ok(f, 650l), KqFmt.q8, "off the 32 lattice")
+}
+
+[test(description = "The q20 and q10 members are per-32 plane pairs stamped on the discrete homes and id-less: q20 8 code bytes a 32-block under one 2-byte f16 d a 2-block scale unit (Q2_0's 18-byte 64-weight disk block, ggml type 42, stream code 55), q10 4 sign bytes under one d a 4-block unit (Q1_0's 18-byte 128-weight block, ggml type 41, stream code 56); each scale unit addressed by its group, `kq_ssb` refusing either, and each tag kept only on rows of whole groups; q10's sign levels")]
+def test_kqfmt_lowbit_b32_rows(t : T?) {
+    var inscope rows <- lowbit_b32_rows()
+    for (r in rows) {
+        t |> run("{r.f}'s descriptor row, its device block constants and its ids") @(t : T?) {
+            lowbit_b32_desc_cell(t, r)
+        }
+        t |> run("{r.f}'s scale unit serves a {r.sgroup}-block group: kq_soff and kq_sbytes address the group, kq_ssb refuses") @(t : T?) {
+            lowbit_b32_group_cell(t, r)
+        }
+        t |> run("a {r.f} plane keeps its tag on whole {32l * r.sgroup}-weight groups, off the superblock lattice too; any other row takes q8") @(t : T?) {
+            lowbit_b32_row_rule_cell(t, r)
+        }
+    }
+    t |> run("q10's sign levels: +1 where the bit is set, -1 where it is clear, element j at bit j % 8 of byte j / 8") @(t : T?) {
+        for (k in range(8)) {
+            t |> equal(q10_level(uint8(1 << k), k), 1, "bit {k} set")
+            t |> equal(q10_level(uint8(255 - (1 << k)), k), -1, "bit {k} clear")
+            t |> equal(lowbit_level(uint8(1 << k), k, KqTag_q10()), 1)
+        }
+        t |> equal(lowbit_codes_a_byte(KqTag_q10()), 8l)
+        t |> equal(lowbit_codes_a_byte(KqTag_q20()), 4l)
+        t |> equal(Q10_BITS_A_BYTE, 8l)
     }
 }
 
@@ -168,6 +322,32 @@ def test_kqfmt_predicates(t : T?) {
         t |> equal(kq_ssb(KqFmt.iq3s4), IQ3S_SSB)    // iq3s's own scale row: f16 d + 8 x (1 + 2s)
         t |> equal(kq_elems(KqFmt.iq3s4), 256l)
         t |> equal(kq_ggml_type(KqFmt.iq3s4), GGML_TYPE_IQ3_S)   // IQ3_S disk blocks, the iq4xs plane shape
+    }
+}
+
+[test(description = "The tq2 and tq1 rows: superblock members whose planes take their disk blocks' bytes and no more - TQ2_0's 66 (64 quant bytes and the f16 d) under ggml type 35 and kernel id 22, TQ1_0's 54 (the 48 qs and 4 qh bytes and the f16 d) under type 34 and id 21 - both discrete homes stamping them off the same bytes (tq1's 13 quant words and the f16 d a superblock), each tile reading the packed planes")]
+def test_kqfmt_ternary_rows(t : T?) {
+    t |> run("the ternary rows: strides, disk bytes, ggml types, schema ids and the device form match literals") @(t : T?) {
+        for (f, qsb, named, disk, gt, id in [KqFmt.tq2, KqFmt.tq1], [64l, 52l], [TQ2_QSB, TQ1_QSB], [66l, 54l], [35, 34], [22, 21]) {
+            t |> success(kq_sb(f) && kq_sb(int(f)), "{f} is superblock on both predicates")
+            t |> equal(kq_qsb(f), qsb, "{f}: quant bytes a superblock")
+            t |> equal(named, qsb, "{f}: its quant-bytes constant")
+            t |> equal(kq_ssb(f), 2l, "{f}: the f16 d alone")
+            t |> equal(kq_elems(f), 256l)
+            t |> equal(kq_ggml_type(f), gt, "{f}: ggml type {gt}")
+            t |> equal(kq_desc(f).schema_id, id, "{f}: kernel id")
+            t |> equal(kq_desc(f).disk_bytes, disk, "{f}: the disk block")
+            t |> equal(kq_qsb(f) + kq_ssb(f), kq_desc(f).disk_bytes, "the {f} planes take the disk block's bytes, no more")
+            t |> success(!kq_discrete_unstamped(f), "{f}: the Vulkan and CUDA homes stamp it")
+            t |> equal(kq_dev_qsb(f) + kq_dev_ssb(f), kq_desc(f).disk_bytes, "{f}'s device planes take the disk block's bytes, no more")
+            t |> success(kq_reads_packed_planes(int64(kq_schema_id(f))), "{f}'s tile reads the packed planes, k2's way")
+        }
+        t |> equal(TQ2_SSB, 2l)
+        t |> equal(TQ1_SSB, 2l)
+        t |> equal(GGML_TYPE_TQ2_0, 35)
+        t |> equal(GGML_TYPE_TQ1_0, 34)
+        t |> equal(TQ1_DWORDS, 64)
+        t |> equal(int64(TQ1_QWORDS) * 4l, kq_dev_qsb(KqFmt.tq1), "TQ1_QWORDS is tq1's device quant row in words")
     }
 }
 
@@ -261,6 +441,31 @@ def test_kqfmt_grid(t : T?) {
         t |> equal(IQ3S_GRID[256], lut[256])
         t |> equal(IQ3S_GRID[303], lut[303])
     }
+    t |> run("the packed 1-bit grid is upstream's iq1s_grid two bits a weight, and the worker-safe local agrees") @(t : T?) {
+        let grid = iq1s_grid()
+        t |> equal(iq1_grid_entry(IQ1S_GRID, 0), 0x0000u, "entry 0: all -1")
+        t |> equal(iq1_grid_entry(IQ1S_GRID, 1), 0x0002u, "entry 1: +1 then seven -1")
+        t |> equal(iq1_grid_entry(IQ1S_GRID, 2), 0x0005u, "entry 2: 0, 0, then six -1")
+        t |> equal(iq1_grid_entry(IQ1S_GRID, 601), 0x2985u, "entry 601: upstream's 0xff01010001ff0000")
+        t |> equal(iq1_grid_entry(IQ1S_GRID, 2047), 0xAAAAu, "entry 2047: all +1")
+        for (e in [3, 600, 1024, 1500, 2046]) {
+            t |> equal(iq1_grid_entry(grid, e), iq1_grid_entry(IQ1S_GRID, e), "the local agrees at entry {e}")
+        }
+        var fnv = 0xcbf29ce484222325ul
+        var agree = 0
+        for (e in range(2048)) {
+            let v = iq1_grid_entry(grid, e)
+            for (j in range(8)) {
+                t |> success(((v >> uint(2 * j)) & 3u) != 3u, "entry {e}: weight {j} is a ternary code")
+            }
+            fnv = (fnv ^ uint64(v & 0xFFu)) * 0x100000001b3ul
+            fnv = (fnv ^ uint64(v >> 8u)) * 0x100000001b3ul
+            agree += v == iq1_grid_entry(IQ1S_GRID, e) ? 1 : 0
+        }
+        t |> equal(agree, 2048, "the local agrees at every entry")
+        t |> equal(fnv, 0x03f1880817eeffa4ul,
+            "all 2048 entries: FNV-1a 64 of upstream's table packed two bits a weight, low byte first")
+    }
 }
 
 [test(description = "`kq_schema_id` maps each lattice format to its pinned kernel id, and the int-id stride forms answer the same strides as the enum forms for every one")]
@@ -280,12 +485,48 @@ def test_kqfmt_id_bridge(t : T?) {
         t |> equal(kq_schema_id(KqFmt.iq2xs), 24)
         t |> equal(kq_schema_id(KqFmt.iq2xxs), 25)
         t |> equal(kq_schema_id(KqFmt.iq3s4), 35)
+        t |> equal(kq_schema_id(KqFmt.iq1s), 13)
+        t |> equal(kq_schema_id(KqFmt.iq1m), 16)
+        t |> equal(kq_schema_id(KqFmt.tq2), 22)
+        t |> equal(kq_schema_id(KqFmt.tq1), 21)
     }
     t |> run("gemm_schema's int-id forms delegate to the same truth") @(t : T?) {
-        for (f in [KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq4xs, KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq4nl, KqFmt.k2, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3s4]) {
+        for (f in [KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq4xs, KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq4nl, KqFmt.k2, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3s4, KqFmt.iq1s, KqFmt.iq1m, KqFmt.tq2, KqFmt.tq1]) {
             t |> equal(kq_qsb(kq_schema_id(f)), kq_qsb(f))
             t |> equal(kq_ssb(kq_schema_id(f)), kq_ssb(f))
         }
+    }
+}
+
+[test(description = "Every `KqFmt` member but q20 and q10 keeps a scale unit a stride unit (`sgroup` 1, on the device row too), q20 one a 2-block group, q10 a 4-block one, so on every other per-32 member `kq_soff` / `kq_sbytes` and `dev_scale_off` / `dev_scale_bytes` are the per-block stride's products, and q8's planeless scale refuses them")]
+def test_kqfmt_scale_group(t : T?) {
+    t |> run("every member but q20 and q10 keeps a scale unit a stride unit") @(t : T?) {
+        for (f in type<KqFmt>) {
+            let sg = f == KqFmt.q20 ? 2l : (f == KqFmt.q10 ? 4l : 1l)
+            t |> equal(kq_desc(f).sgroup, sg, "{f}: its scale unit's stride units")
+            t |> equal(kq_sgroup(f), sg, "{f}: kq_sgroup reads the row")
+            t |> equal(dev_block_bytes(f).sgroup, sg, "{f}: the device row carries the same group")
+        }
+    }
+    t |> run("a per-32 member's scale offset and byte count are blk x ssb where its unit serves one block") @(t : T?) {
+        for (f in type<KqFmt>) {
+            continue if (kq_sb(f) || f == KqFmt.q8 || kq_sgroup(f) != 1l)
+            let ssb = kq_ssb(f)
+            let b = dev_block_bytes(f)
+            for (blk in [0l, 1l, 2l, 7l, 64l, 1001l]) {
+                t |> equal(kq_soff(f, blk), blk * ssb, "{f}: block {blk}'s scale offset")
+                t |> equal(kq_sbytes(f, blk), blk * ssb, "{f}: {blk} blocks' scale bytes")
+                t |> equal(dev_scale_off(b, blk), blk * b.ssb, "{f}: block {blk}'s device scale offset")
+                t |> equal(dev_scale_bytes(b, blk), blk * b.ssb, "{f}: {blk} blocks' device scale bytes")
+            }
+        }
+    }
+    t |> run("q8 keeps no stride-walked scale plane: the group helpers refuse it as kq_ssb does") @(t : T?) {
+        let why = panic_text() ${
+            let o = kq_soff(KqFmt.q8, 1l)
+            t |> success(false, "unreachable: {o}")
+        }
+        t |> success(!empty(why), "kq_soff refuses q8: {why}")
     }
 }
 
@@ -306,6 +547,8 @@ def test_kqfmt_elems_and_stream(t : T?) {   // nolint:STYLE038 - one pin per KqF
         t |> equal(kq_elems(KqFmt.iq2xs), 256l)
         t |> equal(kq_elems(KqFmt.iq2xxs), 256l)
         t |> equal(kq_elems(KqFmt.iq3s4), 256l)
+        t |> equal(kq_elems(KqFmt.iq1s), 256l)
+        t |> equal(kq_elems(KqFmt.iq1m), 256l)
         t |> equal(kq_elems(KqFmt.q8), 32l)
         t |> equal(kq_elems(KqFmt.q51), 32l)
     }
@@ -313,7 +556,7 @@ def test_kqfmt_elems_and_stream(t : T?) {   // nolint:STYLE038 - one pin per KqF
         for (f in type<KqFmt>) {
             let d = kq_desc(f)
             t |> equal(d.fmt, f, "row {f} names itself")
-            t |> equal(d.disk_bytes, ggml_type_bytes(d.ggml_type, d.elems), "{f}: disk bytes per stride unit")
+            t |> equal(d.disk_bytes, ggml_type_bytes(d.ggml_type, d.elems * d.sgroup), "{f}: disk bytes per scale unit's stride units")
             t |> equal(d.elems, kq_sb(f) ? 256l : 32l, "{f}: stride unit")
             if (kq_sb(f)) {
                 var back = KqFmt.q8
@@ -374,6 +617,12 @@ def test_kqfmt_elems_and_stream(t : T?) {   // nolint:STYLE038 - one pin per KqF
         t |> equal(kq_stream_code(KqFmt.mlx4b), 52)
         t |> equal(kq_stream_code(KqFmt.mlx8b), 53)
         t |> equal(kq_stream_code(KqFmt.mlx6b), 54)
+        t |> equal(kq_stream_code(KqFmt.q20), 55)
+        t |> equal(kq_stream_code(KqFmt.q10), 56)
+        t |> equal(kq_stream_code(KqFmt.iq1s), 13)
+        t |> equal(kq_stream_code(KqFmt.iq1m), 16)
+        t |> equal(kq_stream_code(KqFmt.tq2), 22)
+        t |> equal(kq_stream_code(KqFmt.tq1), 21)
     }
 }
 
@@ -406,7 +655,7 @@ def test_iq3xxs_tables(t : T?) {
     }
 }
 
-[test(description = "Each per-32 format's quant words and scale bytes sum to its descriptor's disk bytes, and every per-32 and mlx block fits the one-block scratch")]
+[test(description = "Each per-32 format's quant words and scale bytes - a scale unit's blocks' - sum to its descriptor's disk bytes, and every per-32 and mlx block fits the one-block scratch")]
 def test_b32_plane_words(t : T?) {
     t |> run("a per-32 block's quant words and scale bytes are its disk bytes") @(t : T?) {
         t |> equal(int64(KQ_Q51_QWORDS * 4u + KQ_Q51_SBYTES), kq_desc(KqFmt.q51).disk_bytes, "q51: five quant words (the nibbles, the qh word) and the d | m halves")
@@ -414,6 +663,10 @@ def test_b32_plane_words(t : T?) {
         t |> equal(int64(KQ_B32_QWORDS * 4u + KQ_MX4_SBYTES), kq_desc(KqFmt.mx4).disk_bytes, "mx4: four nibble words and the E8M0 byte")
         t |> equal(int64(KQ_B32_QWORDS * 4u + KQ_Q4032_SBYTES), kq_desc(KqFmt.q4032).disk_bytes, "q4032: four nibble words and the d half")
         t |> equal(int64(KQ_Q5032_QWORDS * 4u + KQ_Q5032_SBYTES), kq_desc(KqFmt.q5032).disk_bytes, "q5032: five quant words (the nibbles, the qh word) and the d half")
+        t |> equal(int64(KQ_Q20_QWORDS * 4u * KQ_Q20_SGROUP + KQ_Q20_SBYTES), kq_desc(KqFmt.q20).disk_bytes, "q20: two code words a block, two blocks, and the group's d half")
+        t |> success(kq_qsb(KqFmt.q20) <= int64(B32_MAX_QB) && kq_desc(KqFmt.q20).ssb <= int64(B32_MAX_SB), "q20: one block fits the one-block scratch")
+        t |> equal(int64(KQ_Q10_QWORDS * 4u * KQ_Q10_SGROUP + KQ_Q10_SBYTES), kq_desc(KqFmt.q10).disk_bytes, "q10: one sign word a block, four blocks, and the group's d half")
+        t |> success(kq_qsb(KqFmt.q10) <= int64(B32_MAX_QB) && kq_desc(KqFmt.q10).ssb <= int64(B32_MAX_SB), "q10: one block fits the one-block scratch")
         t |> equal(B32_NIB_BYTES, 16l, "the 16 nibble bytes of a per-32 block")
         t |> equal(B5_QH_BYTES, 4l, "the qh word after them")
         t |> equal(B32_NIB_BYTES + B5_QH_BYTES, kq_qsb(KqFmt.q51), "q51's quant block")
@@ -506,8 +759,8 @@ def test_gguf_need_tensor_refuses(t : T?) {
 [test(description = "A tensor of an unread ggml type declines the load naming the tensor, its type and the served type to requantize to, Q8_0 for a type with no row, while a file of served types loads")]
 def test_gguf_decline_unread_types(t : T?) {
     t |> run("a tensor of a type the reader has no arm for declines the load, naming the tensor, the type and the served type to requantize to") @(t : T?) {
-        for (gt, name, target in [GGML_TYPE_Q4_1, GGML_TYPE_IQ1_S, GGML_TYPE_IQ1_M, GGML_TYPE_TQ1_0, GGML_TYPE_TQ2_0],
-                ["Q4_1", "IQ1_S", "IQ1_M", "TQ1_0", "TQ2_0"], ["Q5_1", "IQ2_XXS", "IQ2_XXS", "Q4_0", "Q4_0"]) {
+        for (gt, name, target in [GGML_TYPE_Q4_1],
+                ["Q4_1"], ["Q5_1"]) {
             var m <- GGUFMeta(tensors <- [GGUFTensorInfo(name = "blk.0.ffn_up.weight", ggml_type = GGML_TYPE_Q8_0, n_elem = 256l),
                 GGUFTensorInfo(name = "blk.0.ffn_down.weight", ggml_type = gt, n_elem = 256l)])
             let why = panic_text() ${
@@ -525,7 +778,7 @@ def test_gguf_decline_unread_types(t : T?) {
         t |> success(find(why, "blk.0.ffn_gate.weight") >= 0 && find(why, "type 9 on disk") >= 0 && find(why, "requantize it to a served type (Q8_0)") >= 0,
             "a type with no nearest-type row names the tensor, its type id and the Q8_0 fallback: {why}")
         delete unrowed
-        var served <- GGUFMeta(tensors <- [for (gt in [GGML_TYPE_F32, GGML_TYPE_BF16, GGML_TYPE_Q8_0, GGML_TYPE_Q4_K, GGML_TYPE_IQ2_XXS, GGML_TYPE_MXFP4]);
+        var served <- GGUFMeta(tensors <- [for (gt in [GGML_TYPE_F32, GGML_TYPE_BF16, GGML_TYPE_Q8_0, GGML_TYPE_Q4_K, GGML_TYPE_IQ2_XXS, GGML_TYPE_MXFP4, GGML_TYPE_Q2_0, GGML_TYPE_Q1_0, GGML_TYPE_IQ1_S, GGML_TYPE_IQ1_M, GGML_TYPE_TQ2_0, GGML_TYPE_TQ1_0]);
             GGUFTensorInfo(name = "t{gt}", ggml_type = gt, n_elem = 256l)])
         let none = panic_text() ${
             gguf_decline_unread_types(served)
@@ -623,7 +876,7 @@ def test_kq_tile_stamped(t : T?) {
 }
 
 //! the members a fixture stamp arms: Q8_0 and Q4_K, and with tails Q8_0's `a` alone
-let private FX_STAMP_SKIP = "k5 k6 q40 q51 iq4xs k3 iq3s iq3xxs iq4nl k2 iq2s iq2xs iq2xxs mx4 iq4nl32 iq3s4 q4032 q5032 nv4 q8/b"
+let private FX_STAMP_SKIP = "k5 k6 q40 q51 iq4xs k3 iq3s iq3xxs iq4nl k2 tq2 tq1 iq2s iq2xs iq2xxs iq1s iq1m mx4 iq4nl32 iq3s4 q4032 q5032 nv4 q20 q10 q8/b"
 
 def private note_q8_fx_cls(var hit : int&) {
     hit = int(KqFmt.q8)

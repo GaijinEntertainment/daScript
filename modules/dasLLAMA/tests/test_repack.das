@@ -22,6 +22,7 @@ require dasllama/dasllama_convert
 require dasllama/dasllama_par
 require daslib/jobque_boost
 require _kq_fixtures   // quantize_rows: the plane's Q8_0 rows
+require strings   // find: the low-bit interleave refusal read as text
 
 // deterministic byte source (LCG) — no Math.random in tests
 struct private Rng {
@@ -471,6 +472,49 @@ def test_repack_mlx_affine(t : T?) {
             delete q
             delete s
         }
+    }
+}
+
+//! a low-bit member's grp repack at mr=1 over planes sized to its groups, and its refusal at mr=2
+def private repack_lowbit_cell(t : T?; f : KqFmt; n : int64) {
+    let d = 6l
+    let nb = n / 32l
+    var rng = Rng(state = 0x71323073ul)
+    var q0, s0 : array<uint8>
+    q0 |> resize(d * nb * kq_qsb(f))
+    s0 |> resize(d * kq_sbytes(f, nb))
+    t |> equal(long_length(s0), d * (n / kq_group_elems(f)) * 2l, "the scale plane holds one 2-byte d a {kq_group_elems(f)}-weight group")
+    fill_bytes(q0, rng)
+    fill_bytes(s0, rng)
+    var q1 := q0
+    var s1 := s0
+    unsafe {
+        repack_kq_grp(f, addr(q1[0]), addr(s1[0]), n, d, 1l)
+    }
+    t |> equal(bytes_differ(q1, q0) + bytes_differ(s1, s0), 0l, "grp1 must be the disk order byte-for-byte")
+    let why = panic_text() ${
+        unsafe {
+            repack_kq_grp(f, addr(q1[0]), addr(s1[0]), n, d, 2l)
+        }
+    }
+    t |> success(find(why, "scale group") >= 0 && find(why, "grp<2>") >= 0, "grp2 refuses the grouped planes by name: {why}")
+    delete q0
+    delete s0
+    delete q1
+    delete s1
+}
+
+[test(description = "The q20 grp repack is the disk order at mr=1 over planes sized to its 64-weight groups (one 2-byte d a group), and an interleave past 1 panics naming the shared scale unit")]
+def test_repack_q20(t : T?) {
+    t |> run("mr=1 is the identity over the exact group-sized planes") @(t : T?) {
+        repack_lowbit_cell(t, KqFmt.q20, 192l)
+    }
+}
+
+[test(description = "The q10 grp repack is the disk order at mr=1 over planes sized to its 128-weight groups (one 2-byte d a group), and an interleave past 1 panics naming the shared scale unit")]
+def test_repack_q10(t : T?) {
+    t |> run("mr=1 is the identity over the exact group-sized planes") @(t : T?) {
+        repack_lowbit_cell(t, KqFmt.q10, 384l)
     }
 }
 

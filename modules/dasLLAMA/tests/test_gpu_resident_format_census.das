@@ -9,11 +9,10 @@ require daslib/fio   // path_join
 require daslib/jobque_boost   // parallel_for: the per-32 table's rows on job lanes
 require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: the gather's driver
-require dasllama/dasllama_convert   // quantize_q8_0_into: the per-32 sites' activation row
 require _format_census
 require _cpu_gpu_model   // with_cpu_and_gpu_model, the forms, FeedRows
 require _compares   // check, the bars: the per-32 tables' CPU cells
-require _kquant_cells   // read_prefix: the per-32 tables' file truth
+require _kquant_cells   // read_prefix: the per-32 tables' file truth; native_site_rows, kq_dense_sites_cell
 require _metal_format_census_cells   // the Metal arm of the census on the carriers' blob twins
 require _perop_ffn_cells   // the per-op FFN rail's cells on the iq4nl32 file's per-op forms
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_token_gathered: the token command's rows gathered off their ids, where the module exists
@@ -164,52 +163,6 @@ def private per32_lane_embed(t : T?; tr : Model) {
     delete flat
 }
 
-//! a per-32 site's rows through `mm_f` (one Q8_0 activation row)
-//! against the double dot of the file's dequantized rows with the
-//! activation's dequant, at sampled rows; the bar is f32
-//! reassociation, the control a row's neighbour
-def private per32_site_rows(t : T?; tr : Model; path, site, name : string; fmt : KqFmt;
-                            woff, n, d : int64) {
-    t |> success(kq_block32(fmt), "{site}: the plane serves its per-32 form ({fmt})")
-    var x, y, xs : array<float>
-    var xq : array<int8>
-    var xbs : array<int>
-    x |> resize(n)
-    for (i in range64(n)) {
-        x[i] = float((i * 37l) % 101l - 50l) * 0.013
-    }
-    xq |> resize(n)
-    xs |> resize(n / 32l)
-    xbs |> resize(n / 16l)
-    y |> resize(d)
-    mm_f(y, tr, fmt, woff, x, xq, xs, xbs, n, d)
-    quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
-    for (r in [0l, 7l, d / 2l + 3l, d - 1l]) {
-        var gt = 0
-        var fdq <- read_prefix(path, name, n, gt, r * n)
-        var ref = 0.0lf
-        var mag = 0.0lf
-        for (k in range64(n)) {
-            let p = double(fdq[k]) * double(float(xq[k]) * xs[k / 32l])
-            ref += p
-            mag += abs(p)
-        }
-        let bar = 1.0e-5lf * mag + 1.0e-6lf
-        t |> success(abs(double(y[r]) - ref) <= bar,
-            "{site} row {r}: {y[r]} within {bar} of the file rows' dot {ref}")
-        if (r + 1l < d) {
-            t |> success(abs(double(y[r + 1l]) - ref) > bar || abs(ref) < bar,
-                "{site} row {r}: the next row's output lands outside the bar (the control)")
-        }
-        delete fdq
-    }
-    delete x
-    delete y
-    delete xs
-    delete xq
-    delete xbs
-}
-
 //! the per-32 carrier on its K-quant native CPU form: every table site
 //! native (the census), the token table's rows through `embed_row` bit
 //! for bit the file's own dequant, the classifier rows - and the NextN
@@ -240,11 +193,11 @@ def private per32_tables_cpu_cell(t : T?; var m : Model; spec : Per32Spec) {
                 delete fdq
             }
             per32_lane_embed(t, m)
-            per32_site_rows(t, m, path, "classifier", "token_embd.weight", cls_fmt_of(m),
+            native_site_rows(t, m, path, "classifier", "token_embd.weight", cls_fmt_of(m),
                 m.wcls_off, dim, vocab)
             if (spec.hybrid) {
                 let eh = "blk.{m.config.n_layers}.nextn.eh_proj.weight"
-                per32_site_rows(t, m, path, "eh_proj", eh, m.mtp_ehproj_fmt, m.mtp_ehproj_off,
+                native_site_rows(t, m, path, "eh_proj", eh, m.mtp_ehproj_fmt, m.mtp_ehproj_off,
                     2l * dim, dim)
             }
             delete row
@@ -387,6 +340,122 @@ def private tied_forms(t : T?) : array<ModelForm> {
         }
     }
     return <- forms
+}
+
+//! a low-bit carrier's forms: on the Vulkan home, where `arm` reaches
+//! it, the gather's one-region form; the K-quant native CPU form on
+//! every box
+def private lowbit_forms(t : T?; file, arm : string) : array<ModelForm> {
+    var forms : array<ModelForm>
+    let why = vulkan_home_why("the table gather is the Vulkan home's")
+    if (!empty(why)) {
+        skip_cell(t, "{file}, the gather's form: {why}")
+    } elif (empty(arm_why(arm))) {
+        forms |> push(device_form(regions = 1l))
+    }
+    forms |> push(per32_cpu_form())
+    return <- forms
+}
+
+//! a low-bit carrier on its K-quant native CPU form: where `tied`, the
+//! table sites served off their own bytes (`per32_tables_cpu_cell`);
+//! else layer 0's attention q and FFN down rows against the file
+//! rows' dot (`kq_dense_sites_cell`)
+def private lowbit_cpu_cell(t : T?; var m : Model; file : string; fmt : KqFmt; tied : bool) {
+    if (tied) {
+        per32_tables_cpu_cell(t, m, Per32Spec(file = file, fmt = fmt))
+        return
+    }
+    let path = path_join(models_dir(), file)
+    unsafe {   //! the cell reads the block's model by reference
+        t |> run(("{file}: the attention and FFN planes serve their own {fmt} bytes on the " +
+                "CPU")) @capture(& m)(t : T ?) {
+            kq_dense_sites_cell(t, m, path, fmt)
+        }
+    }
+}
+
+//! one form's share of a low-bit carrier's block: on the device the `fmt` matrices (and table, where `tied`), census and gather; on
+//! the K-quant native CPU form the sites served off their own bytes (`lowbit_cpu_cell`); on the q8 CPU form the feed's other side
+def private lowbit_rows(t : T?; var g : EmbGather; var m : Model; form : ModelForm; file : string; fmt : KqFmt; tied : bool) {
+    if (form.on_gpu) {
+        t |> equal(fmt_at(m.wq_fmt, 0l), fmt, "{file}: attention q loads as {fmt}")
+        t |> equal(fmt_at(m.w2_fmt, 0l), fmt, "{file}: FFN down loads as {fmt}")
+        if (tied) {
+            t |> equal(m.emb_fmt, fmt, "{file}: the tied token table loads as {fmt}")
+        }
+        census_cell(t, m, path_join(models_dir(), file), "vulkan load", tied ? ["attention q/k/v/o", "token table", "classifier"] : ["attention q/k/v/o"])
+        emb_gather_rows(g, m, form, file)
+    } elif (alone_pass_of(form, per32_cpu_form())) {
+        lowbit_cpu_cell(t, m, file, fmt, tied)
+    } elif (g.ran && empty(g.cpu.rows) && same_cpu_load(form, cpu_quant_form(QuantMode.q8))) {
+        g.cpu <- resident_feed_rows(m, form, GATHER_PROMPT, GATHER_STEPS)
+    }
+}
+
+//! a low-bit carrier's compare after its block: the gather's rows
+//! against the CPU chain's at the per-32 tables' bar
+def private lowbit_within(t : T?; ran : bool; g : EmbGather; file : string) {
+    return if (!ran)
+    with_dasllama_jobque_() {
+        emb_gather_within(t, g, file, PER32_TABLE_BAR_REL)
+    }
+}
+
+[test(description = "Ternary-Bonsai-1.7B Q2_0 and the Llama-3.2-1B Q2_0 mint: on the Vulkan home every site read in its own format on the whole-model driver - Bonsai's tied q20 table gathered on the device each window and step - and forced-feed steps within 8 percent of the CPU chain, no call taking a CPU pass; on the K-quant native CPU form, on every box, Bonsai's table sites load native, `embed_row` rows match the file dequant bit for bit (job lanes too) and its classifier rows match the file rows' dot within f32 reassociation, and the mint's every attention site loads native, its attention q and FFN down rows matching the file rows' dot within f32 reassociation; each form loads once")]
+def test_gpu_resident_q20(t : T?) {
+    t |> run("Ternary-Bonsai-1.7B-Q2_0_g64.gguf: the q20 matrices and tied table on the device, census and forced feed; the table sites on the CPU") @(t : T?) {
+        return if (!family_on(t, "qwen3"))
+        let file = "Ternary-Bonsai-1.7B-Q2_0_g64.gguf"
+        var g : EmbGather
+        var forms <- lowbit_forms(t, file, "vk-per32-q20")
+        let ran = with_cpu_and_gpu_model(t, "llm", "Ternary-Bonsai-1.7B-Q2_0_g64.gguf", GATHER_CTX, forms) $(var m, form) {
+            lowbit_rows(t, g, m, form, file, KqFmt.q20, true)
+        }
+        lowbit_within(t, ran, g, file)
+        delete g
+        delete forms
+    }
+    t |> run("Llama-3.2-1B-Instruct-Q2_0-local.gguf: the q20 matrices on the device, census and forced feed; the attention and FFN sites on the CPU") @(t : T?) {
+        return if (!family_on(t, "llama"))
+        let file = "Llama-3.2-1B-Instruct-Q2_0-local.gguf"
+        var g : EmbGather
+        var forms <- lowbit_forms(t, file, "vk-per32-q20")
+        let ran = with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-Q2_0-local.gguf", GATHER_CTX, forms) $(var m, form) {
+            lowbit_rows(t, g, m, form, file, KqFmt.q20, false)
+        }
+        lowbit_within(t, ran, g, file)
+        delete g
+        delete forms
+    }
+}
+
+[test(description = "Bonsai-1.7B Q1_0 and the Llama-3.2-1B Q1_0 mint: on the Vulkan home every site read in its own format on the whole-model driver - Bonsai's tied q10 table gathered on the device each window and step - and forced-feed steps within 8 percent of the CPU chain, no call taking a CPU pass; on the K-quant native CPU form, on every box, Bonsai's table sites load native, `embed_row` rows match the file dequant bit for bit (job lanes too) and its classifier rows match the file rows' dot within f32 reassociation, and the mint's every attention site loads native, its attention q and FFN down rows matching the file rows' dot within f32 reassociation; each form loads once")]
+def test_gpu_resident_q10(t : T?) {
+    t |> run("Bonsai-1.7B-Q1_0.gguf: the q10 matrices and tied table on the device, census and forced feed; the table sites on the CPU") @(t : T?) {
+        return if (!family_on(t, "qwen3"))
+        let file = "Bonsai-1.7B-Q1_0.gguf"
+        var g : EmbGather
+        var forms <- lowbit_forms(t, file, "vk-per32-q10")
+        let ran = with_cpu_and_gpu_model(t, "llm", "Bonsai-1.7B-Q1_0.gguf", GATHER_CTX, forms) $(var m, form) {
+            lowbit_rows(t, g, m, form, file, KqFmt.q10, true)
+        }
+        lowbit_within(t, ran, g, file)
+        delete g
+        delete forms
+    }
+    t |> run("Llama-3.2-1B-Instruct-Q1_0-local.gguf: the q10 matrices on the device, census and forced feed; the attention and FFN sites on the CPU") @(t : T?) {
+        return if (!family_on(t, "llama"))
+        let file = "Llama-3.2-1B-Instruct-Q1_0-local.gguf"
+        var g : EmbGather
+        var forms <- lowbit_forms(t, file, "vk-per32-q10")
+        let ran = with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-Q1_0-local.gguf", GATHER_CTX, forms) $(var m, form) {
+            lowbit_rows(t, g, m, form, file, KqFmt.q10, false)
+        }
+        lowbit_within(t, ran, g, file)
+        delete g
+        delete forms
+    }
 }
 
 [test(description = "On Llama-3.2-3B Q4_K_M: on the whole-model driver its tied Q6_K table is gathered on the device by the window and every fed step off its token id, with forced-feed steps within the 6 percent split bar of the CPU chain; on the Metal home's blob twin, one load on a das_metal build, every site read in its own format with the gather on the tied Q6_K table, the Metal window and six steps within the census bar of the portable CPU chain's replay; each form loads once")]

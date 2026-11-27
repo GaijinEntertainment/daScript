@@ -32,6 +32,7 @@ require dasllama/dasllama_math   // with_dasllama_jobque_: the cut block's compa
 require dasllama/dasllama_common   // Model
 require _cpu_gpu_model   // with_cpu_and_gpu_model, the forms, FeedRows
 require _format_census   // census_cell: the cut's every site in its own format
+require _kquant_cells   // kq_expert_sites_cell: the 1-bit carriers' K-quant native CPU form
 require _kv_codec_cells   // codec_env_why: the block's f16 mirror ask
 require daslib/strings_boost   // split: a fixture's census sites
 require dasllama/dasllama   // create_session: the fault form's refused window
@@ -425,8 +426,8 @@ def private with_matrix(t : T?; tag : string; fx : MoeFixture; set : MatrixCells
     delete forms
 }
 
-//! a matrix carrier's fixture: the format `tag`'s file, four host layers asked
-def private carrier(tag : string) : MoeFixture => MoeFixture(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps-{tag}.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, host_layers_ask = 4l)
+//! a matrix carrier's fixture: the format `tag`'s file of form `stem` (`exps` every routed stack, `exps3` three layers'), four host layers asked
+def private carrier(tag : string; stem : string = "exps") : MoeFixture => MoeFixture(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-{stem}-{tag}.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, host_layers_ask = 4l)
 
 //! one [test] a format, so a run names one carrier a process (`--test-names test_moe_formats_<TYPE>`): under DASLLAMA_IMAGE=0 a loaded model's planes stay in the heap past its delete, and four carriers in one process exhaust the box
 [test(description = "Q2_K routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows; the form loads once")]
@@ -720,6 +721,72 @@ def test_moe_formats_Q5_1(t : T?) {
     with_matrix(t, "Q5_1", carrier("Q5_1"), MatrixCells.formats) $(var r, forms) {
         return with_cpu_and_gpu_model(t, "llm", "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps-Q5_1.gguf", MATRIX_CTX, forms) $(m, form) {
             matrix_form_rows(t, r, m, form)
+        }
+    }
+}
+
+//! a 1-bit carrier's K-quant native CPU form: its cell reads layer 3's routed gate and up stacks off their own bytes
+def private lowbit_sites_form() : ModelForm => cpu_cells_form(kq_native = KqNative.on_q40)
+
+//! the matrix's forms of a 1-bit carrier and its K-quant native CPU form (`lowbit_sites_form`)
+def private lowbit_sites_forms(forms : array<ModelForm>) : array<ModelForm> {
+    var all := forms
+    all |> push(lowbit_sites_form())
+    return <- all
+}
+
+//! one form's rows of a low-bit member's routed carrier (member `f` on the gate and up stacks of three layers), under the member's
+//! census: the device form ran its stamps, a CPU form none; on the K-quant native CPU form (`lowbit_sites_form`) layer 3's routed
+//! gate and up stacks serve their own bytes (`kq_expert_sites_cell`)
+def private lowbit_matrix_rows(t : T?; var r : MatrixRows; var m : Model; form : ModelForm; f : KqFmt) {
+    lowbit_census_ran(t, f, form, "the {f} gate and up stacks") {
+        if (!alone_pass_of(form, lowbit_sites_form())) {
+            matrix_form_rows(t, r, m, form)
+            return
+        }
+        let path = path_join(models_dir(), r.fx.file)
+        unsafe {   //! the cell reads the block's model by reference
+            t |> run("{r.fx.file}: layer 3's routed gate and up stacks serve their own {f} bytes on the CPU") @capture(& m)(t : T ?) {
+                kq_expert_sites_cell(t, m, path, f, 3l, false)
+            }
+        }
+    }
+}
+
+[test(description = "TQ2_0 routed gate and up experts on layers 3, 11 and 19 (their down stacks the file's Q4_0, the 1408-wide rows off the 256 lattice; every other routed stack Q8_0) under four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows, the device form counting the tq2 stamps and a CPU form none of them; the form loads once")]
+def test_moe_formats_TQ2_0(t : T?) {
+    with_matrix(t, "TQ2_0", carrier("TQ2_0", "exps3"), MatrixCells.formats) $(var r, forms) {
+        return with_cpu_and_gpu_model(t, "llm", "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-TQ2_0.gguf", MATRIX_CTX, forms) $(var m, form) {
+            lowbit_matrix_rows(t, r, m, form, KqFmt.tq2)
+        }
+    }
+}
+
+[test(description = "TQ1_0 routed gate and up experts on layers 3, 11 and 19 (their down stacks the file's Q4_0, the 1408-wide rows off the 256 lattice; every other routed stack Q8_0) under four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows, the device form counting the tq1 stamps and a CPU form none of them; the form loads once")]
+def test_moe_formats_TQ1_0(t : T?) {
+    with_matrix(t, "TQ1_0", carrier("TQ1_0", "exps3"), MatrixCells.formats) $(var r, forms) {
+        return with_cpu_and_gpu_model(t, "llm", "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-TQ1_0.gguf", MATRIX_CTX, forms) $(var m, form) {
+            lowbit_matrix_rows(t, r, m, form, KqFmt.tq1)
+        }
+    }
+}
+
+[test(description = "IQ1_S routed gate and up experts on layers 3, 11 and 19 (their down stacks the file's IQ4_NL, the 1408-wide rows off the 256 lattice; every other routed stack Q8_0) under four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows, the device form counting the iq1s stamps and a CPU form none of them; on the K-quant native CPU form, on every box, the routed sites load native - layer 3's gate and up stacks as iq1s - and their expert 0 rows match the file rows' dot within f32 reassociation; each form loads once")]
+def test_moe_formats_IQ1_S(t : T?) {
+    with_matrix(t, "IQ1_S", carrier("IQ1_S", "exps3"), MatrixCells.formats) $(var r, forms) {
+        var inscope all <- lowbit_sites_forms(forms)
+        return with_cpu_and_gpu_model(t, "llm", "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-IQ1_S.gguf", MATRIX_CTX, all) $(var m, form) {
+            lowbit_matrix_rows(t, r, m, form, KqFmt.iq1s)
+        }
+    }
+}
+
+[test(description = "IQ1_M routed gate and up experts on layers 3, 11 and 19 (their down stacks the file's IQ4_NL; every other routed stack Q8_0) under four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows, the device form counting the iq1m stamps and a CPU form none of them; on the K-quant native CPU form, on every box, the routed sites load native - layer 3's gate and up stacks as iq1m - and their expert 0 rows match the file rows' dot within f32 reassociation; each form loads once")]
+def test_moe_formats_IQ1_M(t : T?) {
+    with_matrix(t, "IQ1_M", carrier("IQ1_M", "exps3"), MatrixCells.formats) $(var r, forms) {
+        var inscope all <- lowbit_sites_forms(forms)
+        return with_cpu_and_gpu_model(t, "llm", "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-IQ1_M.gguf", MATRIX_CTX, all) $(var m, form) {
+            lowbit_matrix_rows(t, r, m, form, KqFmt.iq1m)
         }
     }
 }

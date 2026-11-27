@@ -333,6 +333,9 @@ def kq_dev_wq_plane(fmt : int; units : int; mul, add : uint) : array<uint> {
     return <- w
 }
 
+//! the words a device scale plane of `units` superblocks of format slot `fmt` takes: whole words at the plane's end (tq2's row is half a word)
+def kq_ws_words(fmt : int; units : int) : int => int((int64(units) * kq_dev_ssb_i(fmt) + 3l) / 4l)
+
 //! `ws_plane` under a format's device-row rule: an nv4 scale plane is one finite per-tensor scale a superblock, as f32 bits (`../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale`), where a hashed word would read as a wild f32;
 //! `plane_sbs` past 0 gives each plane of that many superblocks its own scale, so a read of another plane's word misses the reference
 def kq_ws_plane(fmt : int; n : int; mul, add : uint; plane_sbs : int = 0) : array<uint> {
@@ -439,8 +442,8 @@ def kq_gemv_fix(fmt : int; nreg, d, units : int; wq_seed : uint; var wsh : array
     return <- fx
 }
 
-//! the superblock decode GEMV family's kq members: the fourteen leaves past q8, in enum order
-def kq_leaf_fmts() : array<int> => <- [for (f in type<KqFmt>); int(f); where kq_sb(f)]
+//! the superblock decode GEMV family's kq members: the leaves past q8 the discrete homes stamp, in enum order
+def kq_leaf_fmts() : array<int> => <- [for (f in type<KqFmt>); int(f); where kq_sb(f) && !kq_discrete_unstamped(f)]
 
 let TILE_CELL_K = 768       //! every per-format tile cell's K: three unrolled superblock passes on both depths (a K-quant width is a multiple of 256, so no K-quant stamp ever takes the k loop's tail)
 let TILE_CELL_D = 160       //! every tile cell's weight rows a plane: one full 128-tile and a 32-row remainder - the KHR arm's edge tile, the cm2 arms' clamped second tile over rows 32..160

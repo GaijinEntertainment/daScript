@@ -437,7 +437,8 @@ def blk32_gemm_oracle(f : KqFmt; wq, ws, xq : array<uint>; xs : array<float>; re
         return (f == KqFmt.q51 ? q51_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb)
             : (f == KqFmt.iq4nl32 ? iq4nl32_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb)
             : (f == KqFmt.q4032 ? q4032_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb)
-            : (f == KqFmt.q5032 ? q5032_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb) : mx4_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb)))))
+            : (f == KqFmt.q5032 ? q5032_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb)
+            : ((f == KqFmt.q20 || f == KqFmt.q10) ? lowbit_gemv_row_oracle(f, wq, ws, xq_r, xs_r, wb0, nb) : mx4_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb))))))
     }
 }
 
@@ -501,7 +502,7 @@ def k6f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
 
 // a kq class instance with plane members bound — its blk_contrib IS the per-block dequant
 // bit-math under test, callable on the CPU (no subgroup machinery inside)
-def kq_cls_ref(fmt : int; wq, ws, xq : array<uint>; xs : array<float>) : KqGemvBase? {
+def kq_cls_ref(fmt : int; wq, ws, xq : array<uint>; xs : array<float>) : KqGemvBase? {   // nolint:STYLE037 - one arm a superblock format
     var k : KqGemvBase?
     if (fmt == int(KqFmt.k4)) {
         k = new KqGemvK4()
@@ -533,6 +534,10 @@ def kq_cls_ref(fmt : int; wq, ws, xq : array<uint>; xs : array<float>) : KqGemvB
         k = new KqGemvNv4()   // the doubled e2m1 lanes by arithmetic - no workgroup state to fill
     } elif (fmt == int(KqFmt.k2)) {
         k = new KqGemvK2()   // pure ALU - no workgroup state to fill
+    } elif (fmt == int(KqFmt.tq2)) {
+        k = new KqGemvTq2()
+    } elif (fmt == int(KqFmt.tq1)) {
+        k = new KqGemvTq1()
     } elif (fmt == int(KqFmt.iq2s)) {
         var k2s = new KqGemvIq2s()
         for (i in range(2048)) {   // same replay rule: the u64 grid's word pairs fill here
@@ -551,6 +556,18 @@ def kq_cls_ref(fmt : int; wq, ws, xq : array<uint>; xs : array<float>) : KqGemvB
             k2xx.gridw[i] = IQ2XXS_GRID[i]
         }
         k = k2xx
+    } elif (fmt == int(KqFmt.iq1s)) {
+        var k1s = new KqGemvIq1s()
+        for (i in range(1024)) {   // same replay rule, the 1-bit grid two entries a word
+            k1s.gridw[i] = IQ1S_GRID[i]
+        }
+        k = k1s
+    } elif (fmt == int(KqFmt.iq1m)) {
+        var k1m = new KqGemvIq1m()
+        for (i in range(1024)) {
+            k1m.gridw[i] = IQ1S_GRID[i]
+        }
+        k = k1m
     } else {
         k = new KqGemvK6()
     }
@@ -598,7 +615,8 @@ def gemv_float_walk(regions : array<uint>; n, d, nreg : int; sb_dot : block<(var
 
 //! whether `fmt` carries a float witness beside the class oracle (`kq_gemv_float_oracle`)
 def kq_has_float_oracle(fmt : int) : bool {
-    for (f in fixed_array(KqFmt.iq4xs, KqFmt.iq3s4, KqFmt.nv4, KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs)) {
+    for (f in fixed_array(KqFmt.iq4xs, KqFmt.iq3s4, KqFmt.nv4, KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.tq2, KqFmt.tq1,
+            KqFmt.iq1s, KqFmt.iq1m)) {
         if (int(f) == fmt) return true
     }
     return false
@@ -625,9 +643,142 @@ def kq_gemv_float_oracle(fmt : int; wq, ws, xq : array<uint>; xs : array<float>;
         return <- iq2xs_gemv_float_oracle(wq, ws, xq, xs, regions, n, d, nreg)
     } elif (fmt == int(KqFmt.iq2xxs)) {
         return <- iq2xxs_gemv_float_oracle(wq, ws, xq, xs, regions, n, d, nreg)
+    } elif (fmt == int(KqFmt.tq2)) {
+        return <- tq2_gemv_float_oracle(wq, ws, xq, xs, regions, n, d, nreg)
+    } elif (fmt == int(KqFmt.tq1)) {
+        return <- tq1_gemv_float_oracle(wq, ws, xq, xs, regions, n, d, nreg)
+    } elif (fmt == int(KqFmt.iq1s) || fmt == int(KqFmt.iq1m)) {
+        return <- iq1_gemv_float_oracle(kq_fmt_of_slot(fmt), wq, ws, xq, xs, regions, n, d, nreg)
     }
     panic("format {fmt} carries no float witness (kq_has_float_oracle)")
 }
+
+//! TQ2_0 GEMV float oracle: w = d * (q - 1) straight off the plane bytes - k2's qs lanes at shift 2*(blk%4), the f16 d two superblocks a word
+def tq2_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
+                          regions : array<uint>; n, d, nreg : int) : array<float> {
+    var y <- gemv_float_walk(regions, n, d, nreg) $(var acc : float&; sb, xsb : int) {
+        let dd = half_at(ws, sb)
+        for (blk in range(8)) {
+            let sh = 2 * (blk % 4)
+            var bacc = 0.0
+            for (l in range(32)) {
+                let q = ((byte_u8(wq, sb * 64 + (blk / 4) * 32 + l) >> sh) & 3) - TQ2_ZERO
+                bacc += float(q) * float(byte_s8(xq, xsb * 256 + blk * 32 + l))
+            }
+            acc += xs[xsb] * dd * bacc
+        }
+    }
+    return <- y
+}
+
+//! TQ1_0's code of element `e` of superblock `sb` off the plane bytes, by the format's own element order and base-3 digits
+def tq1_plane_code(wq : array<uint>; sb, e : int) : int {
+    var byte = 48 + (e - 240) % 4
+    var n = (e - 240) / 4
+    if (e < 160) {
+        byte = e % 32
+        n = e / 32
+    } elif (e < 240) {
+        byte = 32 + (e - 160) % 16
+        n = (e - 160) / 16
+    }
+    var p3 = 1
+    for (_k in range(n)) {
+        p3 *= 3
+    }
+    return (((byte_u8(wq, sb * int(TQ1_QSB) + byte) * p3) & 255) * 3) >> 8
+}
+
+//! TQ1_0 GEMV float oracle: w = d * (q - 1) straight off the plane bytes (`tq1_plane_code`), the f16 d two superblocks a word
+def tq1_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
+                          regions : array<uint>; n, d, nreg : int) : array<float> {
+    var y <- gemv_float_walk(regions, n, d, nreg) $(var acc : float&; sb, xsb : int) {
+        let dd = half_at(ws, sb)
+        for (blk in range(8)) {
+            var bacc = 0.0
+            for (l in range(32)) {
+                let q = tq1_plane_code(wq, sb, blk * 32 + l) - 1
+                bacc += float(q) * float(byte_s8(xq, xsb * 256 + blk * 32 + l))
+            }
+            acc += xs[xsb] * dd * bacc
+        }
+    }
+    return <- y
+}
+
+def plane_bytes(w : array<uint>; at, n : int) : array<uint8> => <- [for (i in range(n)); uint8(byte_u8(w, at + i))]
+
+//! an iq1 member's superblock `sb` straight off the plane bytes through the engine's CPU dequant (ggml's order)
+def iq1_plane_sb(f : KqFmt; wq, ws : array<uint>; sb : int) : array<float> {
+    let qsb = int(kq_qsb(f))
+    let ssb = int(kq_ssb(f))
+    var inscope kq <- plane_bytes(wq, sb * qsb, qsb)
+    var inscope ks <- plane_bytes(ws, sb * ssb, ssb)
+    var w : array<float>
+    w |> resize(256)
+    if (f == KqFmt.iq1m) {
+        dequant_iq1m_plane_superblock(kq, 0l, ks, 0l, w, 0l)
+    } else {
+        dequant_iq1s_plane_superblock(kq, 0l, ks, 0l, w, 0l)
+    }
+    return <- w
+}
+
+//! IQ1_S / IQ1_M GEMV float oracle: each superblock's weights off the plane bytes (`iq1_plane_sb`) against the Q8_K bytes
+def iq1_gemv_float_oracle(f : KqFmt; wq, ws, xq : array<uint>; xs : array<float>;
+                          regions : array<uint>; n, d, nreg : int) : array<float> {
+    var y <- gemv_float_walk(regions, n, d, nreg) $(var acc : float&; sb, xsb : int) {
+        var inscope w <- iq1_plane_sb(f, wq, ws, sb)
+        var sacc = 0.0
+        for (e in range(256)) {
+            sacc += w[e] * float(byte_s8(xq, xsb * 256 + e))
+        }
+        acc += xs[xsb] * sacc
+    }
+    return <- y
+}
+
+//! IQ1_M's scale word `k` (0 .. 3) of superblock `sb` off the scale plane's bytes
+def iq1m_scale_word(ws : array<uint>; sb, k : int) : uint => uint(byte_u8(ws, sb * int(IQ1M_SSB) + 2 * k) | (byte_u8(ws, sb * int(IQ1M_SSB) + 2 * k + 1) << 8))
+
+//! an iq1 member's element `e` of superblock `sb` read off the plane bytes in the format's own order, not through the engine's dequant
+def iq1_plane_w(f : KqFmt; wq, ws : array<uint>; sb, e : int) : float {
+    let q0 = sb * int(kq_qsb(f))
+    let ib = e / 32
+    let l = (e / 8) % 4
+    let qs = byte_u8(wq, q0 + 4 * ib + l)
+    var hi, neg : int
+    var dl : float
+    if (f == KqFmt.iq1m) {
+        let nib = (byte_u8(wq, q0 + int(IQ1_QS_BYTES) + 2 * ib + l / 2) >> (4 * (l % 2))) & 15
+        hi = nib & 7
+        neg = nib >> 3
+        let hb = e / 16
+        let dbits = iq1m_d_bits(iq1m_scale_word(ws, sb, 0), iq1m_scale_word(ws, sb, 1), iq1m_scale_word(ws, sb, 2), iq1m_scale_word(ws, sb, 3))
+        dl = unpackHalf2x16(dbits).x * float(2 * iq1m_half_scale(iq1m_scale_word(ws, sb, hb / 4), hb) + 1)
+    } else {
+        let qh = byte_u8(wq, q0 + int(IQ1_QS_BYTES) + 2 * ib) | (byte_u8(wq, q0 + int(IQ1_QS_BYTES) + 2 * ib + 1) << 8)
+        hi = (qh >> (3 * l)) & 7
+        neg = qh >> 15
+        dl = half_at(ws, sb) * float(2 * ((qh >> 12) & 7) + 1)
+    }
+    let code = int((iq1_grid_entry(IQ1S_GRID, qs | (hi << 8)) >> uint(2 * (e % 8))) & 3u)
+    return dl * (float(code - 1) + (neg != 0 ? -IQ1_DELTA : IQ1_DELTA))
+}
+
+//! an iq1 member's f16-feed GEMM reference over the device form: each plane weight read in place once (`iq1_plane_w`), rounded to f16
+def private iq1f16_gemm_oracle(f : KqFmt; wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                               recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = length(wq) * 4 / int(kq_qsb(f))
+    var inscope w16 <- [for (i in range(nsb * 256)); float(float16(iq1_plane_w(f, wq, wsu, i / 256, i % 256)))]
+    f16_gemm_walk(xf, recs, nrec, n, d, 256, y) $(sb, e : int) : float => w16[sb * 256 + e]
+}
+
+def iq1sf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                        recs : array<uint>; nrec, n, d : int; var y : array<float>) => iq1f16_gemm_oracle(KqFmt.iq1s, wq, wsu, xf, recs, nrec, n, d, y)
+
+def iq1mf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                        recs : array<uint>; nrec, n, d : int; var y : array<float>) => iq1f16_gemm_oracle(KqFmt.iq1m, wq, wsu, xf, recs, nrec, n, d, y)
 
 //! a two-word-row sub-block scale off the device row: iq4xs's signed ls - 32, or the iq3 row's 1 + 2s (`grid`: iq3s4's)
 def lut_row_sc(w0, w1 : uint; blk : int; grid : bool) : int => grid ? grid_sc(w1, uint(blk)) : iq4xs_sc(w0, w1, uint(blk))
@@ -909,6 +1060,28 @@ def iq4nlf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
     }
 }
 
+//! TQ2_0 f16-feed GEMM reference over the device form: k2's qs lanes under d * (q - 1), the f16 d two superblocks a word
+def tq2f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                       recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    f16_gemm_walk(xf, recs, nrec, n, d, 256, y) $(sb, e : int) : float {
+        let g = e / 16
+        let qi = (g / 8) * 32 + (g % 2) * 16 + e % 16
+        let q = (byte_u8(wq, sb * 64 + qi) >> (((g / 2) % 4) * 2)) & 3
+        let dd = half_at(wsu, sb)
+        return float(float16(dd * float(q) - dd))
+    }
+}
+
+//! TQ1_0 f16-feed GEMM reference over the device form: d * (q - 1) off the plane bytes (`tq1_plane_code`), the f16 d two superblocks a word
+def tq1f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                       recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    f16_gemm_walk(xf, recs, nrec, n, d, 256, y) $(sb, e : int) : float {
+        let q = tq1_plane_code(wq, sb, e)
+        let dd = half_at(wsu, sb)
+        return float(float16(dd * float(q) - dd))
+    }
+}
+
 //! Q2_K f16-feed GEMM reference over the device form: per-16 sc/min nibble pairs x d/dmin (16-word rows + [d|dmin][16 pair bytes] scales)
 def k2f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                       recs : array<uint>; nrec, n, d : int; var y : array<float>) {
@@ -1015,6 +1188,44 @@ def q5032f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
 def q5032_noqh_f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
                                recs : array<uint>; nrec, n, d : int; var y : array<float>) {
     q50f16_gemm_oracle(wq, wsw, xf, recs, nrec, n, d, y, false)
+}
+
+//! Q2_0 per-32 x f16 GEMM oracle (the q20 tiles' shape): d x (q - 1), rounded f16 as the decode rounds, f16 activations, block order - approx bars
+def q20f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
+                       recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    lowbit_f16_walk(KqFmt.q20, wq, wsw, xf, recs, nrec, n, d, y, false)
+}
+
+//! the q20 cell's control: each block under its neighbouring group's d, so a scale read by block or wrong half-word reads apart from the oracle
+def q20_nextd_f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
+                              recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    lowbit_f16_walk(KqFmt.q20, wq, wsw, xf, recs, nrec, n, d, y, true)
+}
+
+//! Q1_0 per-32 x f16 GEMM oracle (the q10 tiles' shape): +-d by the sign bit under the group's d, f16 activations, block order - approx bars
+def q10f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
+                       recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    lowbit_f16_walk(KqFmt.q10, wq, wsw, xf, recs, nrec, n, d, y, false)
+}
+
+//! the q10 cell's control: each block under its neighbouring group's d, so a scale read by block, pair or wrong half-word reads apart from the oracle
+def q10_nextd_f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
+                              recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    lowbit_f16_walk(KqFmt.q10, wq, wsw, xf, recs, nrec, n, d, y, true)
+}
+
+//! the per-32 low-bit members' f16 GEMM walk; `neighbour_d` reads each block under its neighbouring group's d - the control
+def private lowbit_f16_walk(f : KqFmt; wq : array<uint>; wsw : array<uint>; xf : array<uint>;
+                            recs : array<uint>; nrec, n, d : int; var y : array<float>; neighbour_d : bool) {
+    let grp = int(kq_sgroup(f))
+    let qb = int(kq_qsb(f))
+    f16_gemm_walk(xf, recs, nrec, n, d, 32, y) $(wb, e : int) : float {
+        let g = neighbour_d ? (wb / grp) ^ 1 : wb / grp
+        let dp = unpackHalf2x16(wsw[g / 2])
+        let dv = g % 2 == 0 ? dp.x : dp.y
+        let lv = f == KqFmt.q20 ? q20_level(byte_u8(wq, wb * qb + e / 4), e % 4) : q10_level(byte_u8(wq, wb * qb + e / 8), e % 8)
+        return float(float16(dv * float(lv)))
+    }
 }
 
 def private q50f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
@@ -1381,7 +1592,9 @@ enum ScaleForm {
     hash_d        //! four hashed signed sub-scale words, then [d | 0]
     d_hi_hash     //! [d | the row's hashed high bits], then one hashed word of 4-bit sub-scale fields
     q51_dm        //! one [d | m] word a block, m signed
-    iq4nl32_d     //! two f16 d a word
+    iq4nl32_d     //! two f16 d a word (the ternary members' and iq1s's superblock row too)
+    iq1m_words    //! IQ1_M's two scale words: the f16 d over their four halves' top nibbles, hashed 3-bit half-block scales below
+    group_d       //! two f16 d a word, one d a block group (the format's `kq_sgroup`: q20's two blocks, q10's four)
     mx4_e8m0      //! four E8M0 bytes a word
     nv4_site_word     //! the per-tensor scale word alone: the UE4M3 sub-block scale bytes are the quant unit's last four words
 }
@@ -1420,6 +1633,10 @@ def fmt_tile_rows() : array<FmtTile> {
         FmtTile(fmt = KqFmt.k4, n = TILE_CELL_K, blk_k = 256, wq_words = 32, wq_seed = 29u, form = ScaleForm.d_dmin_hash, dmul = 0.0002, mmul = 0.00005, sseed = 613u, xf_add = 5u, oracle = @@k4f16_gemm_oracle),
         FmtTile(fmt = KqFmt.k5, n = TILE_CELL_K, blk_k = 256, wq_words = 40, wq_seed = 29u, form = ScaleForm.d_dmin_hash, dmul = 0.0002, mmul = 0.00005, sseed = 613u, xf_add = 5u, oracle = @@k5f16_gemm_oracle),
         FmtTile(fmt = KqFmt.k2, n = TILE_CELL_K, blk_k = 256, wq_words = 16, wq_seed = 31u, form = ScaleForm.d_dmin_hash, dmul = 0.0004, mmul = 0.0003, sseed = 91u, xf_add = 7u, oracle = @@k2f16_gemm_oracle),
+        FmtTile(fmt = KqFmt.tq2, n = TILE_CELL_K, blk_k = 256, wq_words = 16, wq_seed = 31u, form = ScaleForm.iq4nl32_d, xf_add = 7u, oracle = @@tq2f16_gemm_oracle),
+        FmtTile(fmt = KqFmt.tq1, n = TILE_CELL_K, blk_k = 256, wq_words = int(TQ1_QWORDS), wq_seed = 31u, form = ScaleForm.iq4nl32_d, xf_add = 7u, oracle = @@tq1f16_gemm_oracle),
+        FmtTile(fmt = KqFmt.iq1s, n = TILE_CELL_K, blk_k = 256, wq_words = int(IQ1_QWORDS), wq_seed = 67u, form = ScaleForm.iq4nl32_d, xf_add = 5u, oracle = @@iq1sf16_gemm_oracle),
+        FmtTile(fmt = KqFmt.iq1m, n = TILE_CELL_K, blk_k = 256, wq_words = int(IQ1_QWORDS), wq_seed = 67u, form = ScaleForm.iq1m_words, dmul = 0.0002, sseed = 613u, xf_add = 5u, oracle = @@iq1mf16_gemm_oracle),
         FmtTile(fmt = KqFmt.iq2s, n = TILE_CELL_K, blk_k = 256, wq_words = 18, wq_seed = 29u, form = ScaleForm.d_dmin_hash, dmul = 0.0002, mmul = 0.0, sseed = 613u, xf_add = 5u, oracle = @@iq2sf16_gemm_oracle),
         FmtTile(fmt = KqFmt.iq2xs, n = TILE_CELL_K, blk_k = 256, wq_words = 16, wq_seed = 29u, form = ScaleForm.d_dmin_hash, dmul = 0.0002, mmul = 0.0, sseed = 613u, xf_add = 5u, oracle = @@iq2xsf16_gemm_oracle),
         FmtTile(fmt = KqFmt.q40, n = TILE_CELL_K, blk_k = 256, wq_words = 32, wq_seed = 29u, form = ScaleForm.d_pairs, dmul = 0.0002, mmul = 0.00013, xf_add = 5u, oracle = @@q40f16_gemm_oracle),
@@ -1436,6 +1653,8 @@ def fmt_tile_rows() : array<FmtTile> {
         FmtTile(fmt = KqFmt.iq4nl32, n = 640, blk_k = 32, wq_words = 4, wq_seed = 41u, form = ScaleForm.iq4nl32_d, xf_add = 5u, per32 = true, oracle = @@iq4nl32f16_gemm_oracle, control = @@q4032f16_gemm_oracle),   // Qwen3.8-Flash-Next's expert width: 20 blocks, two unrolled 256-passes and a 128 tail
         FmtTile(fmt = KqFmt.q4032, n = 896, blk_k = 32, wq_words = 4, wq_seed = 43u, form = ScaleForm.iq4nl32_d, xf_add = 5u, per32 = true, oracle = @@q4032f16_gemm_oracle, control = @@iq4nl32f16_gemm_oracle),   // Qwen2.5-0.5B's width: 28 blocks, three unrolled 256-passes and a 128 tail
         FmtTile(fmt = KqFmt.q5032, n = 1408, blk_k = 32, wq_words = 5, wq_seed = 47u, form = ScaleForm.iq4nl32_d, xf_add = 5u, per32 = true, oracle = @@q5032f16_gemm_oracle, control = @@q5032_noqh_f16_gemm_oracle),   // Qwen1.5-MoE's expert down width: 44 blocks, five unrolled 256-passes and a 128 tail
+        FmtTile(fmt = KqFmt.q20, n = 1408, blk_k = 32, wq_words = int(KQ_Q20_QWORDS), wq_seed = 59u, form = ScaleForm.group_d, xf_add = 5u, per32 = true, oracle = @@q20f16_gemm_oracle, control = @@q20_nextd_f16_gemm_oracle),   // Qwen1.5-MoE's expert down width: 44 blocks in 22 groups, five unrolled 256-passes and a 128 tail
+        FmtTile(fmt = KqFmt.q10, n = 1408, blk_k = 32, wq_words = int(KQ_Q10_QWORDS), wq_seed = 61u, form = ScaleForm.group_d, xf_add = 5u, per32 = true, oracle = @@q10f16_gemm_oracle, control = @@q10_nextd_f16_gemm_oracle),   // the same width: 44 blocks in 11 groups
         FmtTile(fmt = KqFmt.mx4, n = 704, blk_k = 32, wq_words = 4, wq_seed = 53u, form = ScaleForm.mx4_e8m0, xf_add = 5u, per32 = true, oracle = @@mx4f16_gemm_oracle)            // 22 blocks: eleven 64-deep k steps, two unrolled 256-passes and a 192 tail
     ]
 }
@@ -1443,16 +1662,6 @@ def fmt_tile_rows() : array<FmtTile> {
 //! the ways a per-format row's s column splits along K in the short-split cells: a chunk a 256-step, or two with the last short
 //! where K sits off the 256 grid
 def fmt_split_ways(n : int) : int => n % 256 == 0 ? n / 256 : 2
-
-//! the iq4nl32 cells' scale words: cool f16 d, two blocks a word, so the tile's f16 sums stay far from 65504
-def iq4nl32_scale_words(totblk : int; mul : float) : array<uint> {
-    var w : array<uint>
-    w |> resize((totblk + 1) / 2)
-    for (i in range(length(w))) {
-        w[i] = packHalf2x16(float2(mul * float(1 + (2 * i) % 7), mul * float(1 + (2 * i + 1) % 7)))
-    }
-    return <- w
-}
 
 //! the mx4 cells' E8M0 bytes: exponents 112..124 (2^-16 .. 2^-4 halved), four a word, so the tile's f16 sums stay far from 65504
 def mx4_scale_words(totblk : int) : array<uint> {
@@ -1464,13 +1673,29 @@ def mx4_scale_words(totblk : int) : array<uint> {
     return <- w
 }
 
-//! a per-32 plane's scale words for `totblk` blocks: q51's d | m halves, iq4nl32's two halves a word, mx4's four E8M0 bytes a word
+//! the iq1m cells' scale rows for `units` superblocks: sb's f16 d `dmul x (1 + sb % 7)` atop the words, the half-block scales hashed under `seed`
+def iq1m_scale_words(units : int; dmul : float; seed : uint) : array<uint> {
+    var w : array<uint>
+    w |> resize(units * int(IQ1M_SWORDS))
+    for (sb in range(units)) {
+        let db = packHalf2x16(float2(dmul * float(1 + sb % 7), 0.0)) & 0xFFFFu
+        for (wi in range(int(IQ1M_SWORDS))) {
+            let h = hash_word(uint(sb * 2 + wi) + seed) & 0x0FFF0FFFu
+            w[sb * int(IQ1M_SWORDS) + wi] = h | (((db >> uint(8 * wi)) & 0xFu) << 12u) | (((db >> uint(8 * wi + 4)) & 0xFu) << 28u)
+        }
+    }
+    return <- w
+}
+
+//! a per-32 plane's scale words for `totblk` blocks, in its format's scale form (a grouped member's one d a group)
 def blk32_scale_plane(f : KqFmt; totblk : int) : array<uint> {
     var words : array<uint>
     if (f == KqFmt.q51) {
         words <- [for (b in range(totblk)); packHalf2x16(float2(0.002 * float(1 + b % 7), 0.001 * float(b % 5) - 0.002))]
     } elif (f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q5032) {
         words <- iq4nl32_scale_words(totblk, 0.002)
+    } elif (kq_grouped_b32(f)) {
+        words <- iq4nl32_scale_words(totblk / int(kq_sgroup(f)), 0.002)
     } else {
         words <- mx4_scale_words(totblk)
     }
@@ -1560,9 +1785,15 @@ def fmt_tile_planes(row : FmtTile; var wqh, wsh : array<uint>) {
     if (row.form == ScaleForm.iq4nl32_d) {
         delete wsh
         wsh <- iq4nl32_scale_words(units, 0.0002)
+    } elif (row.form == ScaleForm.group_d) {
+        delete wsh
+        wsh <- iq4nl32_scale_words(units / int(kq_sgroup(row.fmt)), 0.0002)
     } elif (row.form == ScaleForm.mx4_e8m0) {
         delete wsh
         wsh <- mx4_scale_words(units)
+    } elif (row.form == ScaleForm.iq1m_words) {
+        delete wsh
+        wsh <- iq1m_scale_words(units, row.dmul, row.sseed)
     }
 }
 

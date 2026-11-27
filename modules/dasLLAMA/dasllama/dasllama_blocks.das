@@ -1656,10 +1656,10 @@ def rare_batched_pin : int => g_rare_batched_pin
 
 //! the formats whose device layout a row-major kernel reads (the one-copy rail): every expert format the tier streams
 def rm_dev_serves(f : KqFmt) : bool {
-    return (f == KqFmt.q8 || f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q51 || f == KqFmt.q5032 || f == KqFmt.mx4
-        || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3 || f == KqFmt.k2 || f == KqFmt.q40
+    return (f == KqFmt.q8 || f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q51 || f == KqFmt.q5032 || f == KqFmt.mx4 || f == KqFmt.q20 || f == KqFmt.q10
+        || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3 || f == KqFmt.k2 || f == KqFmt.tq2 || f == KqFmt.tq1 || f == KqFmt.q40
         || f == KqFmt.iq4nl || f == KqFmt.iq4xs || f == KqFmt.iq3s4 || f == KqFmt.nv4
-        || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs)
+        || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs || f == KqFmt.iq1s || f == KqFmt.iq1m)
 }
 
 def set_rare_arena(pin : int) {
@@ -1676,9 +1676,7 @@ struct private RarePlane {
     sid : int              //! the schema id (a superblock format)
     q : uint8 const?       //! the quant plane (a superblock or per-32 format)
     s : uint8 const?       //! ... and its scale plane
-    qsb : int64            //! bytes a block in each
-    ssb : int64
-    belems : int64         //! elements a block: 256 or 32
+    bb : DevBlockBytes     //! bytes a block in each plane (the scale plane's a unit of `sgroup` blocks), elements a block: 256 or 32
     tb : int64             //! the batched core's token block
     panel_bytes : int64    //! the batched core's panel scratch a lane (a superblock format whose tile reads an unpacked panel)
     kqfn : MatmulKqRowsFn  //! the backend's rows core (a superblock format)
@@ -1701,13 +1699,13 @@ def private rare_dev_ptrs(p : RarePlane; woff : int64) : tuple<q : uint8 const?;
         if (s < 0) {
             panic("dasLLAMA: the rare rail asked for expert {e} of the streamed stack at {p.base} (fmt {int(p.f)}), which the expert cache does not hold")
         }
-        let blk = (woff - p.base - e * p.ege) / p.belems
+        let blk = (woff - p.base - e * p.ege) / p.bb.belems
         if (s >= STREAM_RING_BASE) {   //! a ring slot holds the expert's page-widened lane span: its bytes start the lane skew in
             let r = int64(s - STREAM_RING_BASE)
-            return (q = p.view.ring_q + r * p.view.ring_qlen + stream_page_span(p.view.qoff, p.view.qlen, e).skew + blk * p.qsb,
-                    s = p.view.ring_s + r * p.view.ring_slen + stream_page_span(p.view.soff, p.view.slen, e).skew + blk * p.ssb)
+            return (q = p.view.ring_q + r * p.view.ring_qlen + stream_page_span(p.view.qoff, p.view.qlen, e).skew + blk * p.bb.qsb,
+                    s = p.view.ring_s + r * p.view.ring_slen + stream_page_span(p.view.soff, p.view.slen, e).skew + dev_scale_off(p.bb, blk))
         }
-        return (q = p.view.q + int64(s) * p.view.qlen + blk * p.qsb, s = p.view.s + int64(s) * p.view.slen + blk * p.ssb)
+        return (q = p.view.q + int64(s) * p.view.qlen + blk * p.bb.qsb, s = p.view.s + int64(s) * p.view.slen + dev_scale_off(p.bb, blk))
     }
 }
 
@@ -1885,7 +1883,7 @@ def private rare_batch_core(p : RarePlane; var yp : float?; woff : int64; xq : i
         if (p.dev_layout) {
             let t_dev = ref_time_ticks()
             var t = 0l
-            let xs_row = n / p.belems   //! a superblock plane's activation carries a scale a superblock, the rest a 32-block; the Q8_K sums sixteen a superblock
+            let xs_row = n / p.bb.belems   // a superblock plane's activation carries a scale a superblock, the rest a 32-block; the Q8_K sums sixteen a superblock
             let ptrs = rare_dev_ptrs(p, woff)
             while (t + 4l <= ntok) {
                 rm_dev_tile4(p, yp + t * d, ptrs.q, ptrs.s, xq + t * n, xs + t * xs_row, xbs != null ? xbs + t * (n / 16l) : null, n, d)
@@ -1904,10 +1902,10 @@ def private rare_batch_core(p : RarePlane; var yp : float?; woff : int64; xq : i
             }
             return
         }
-        let blk = woff / p.belems
-        let qp = p.q + blk * p.qsb
-        let sp = p.s + blk * p.ssb
-        if (p.belems == 256l) {
+        let blk = woff / p.bb.belems
+        let qp = p.q + blk * p.bb.qsb
+        let sp = p.s + dev_scale_off(p.bb, blk)
+        if (p.bb.belems == KQ_SB_ELEMS) {
             kq_expert_batch_core(p.sid, yp, qp, sp, xq, xs, xbs, n, d, ntok, p.tb, p.panel_bytes > 0l ? ln.panel : null)
         } else {
             b32_expert_batch_core(p.f, yp, qp, sp, xq, xs, n, d, ntok, p.tb, ln.bsums)
@@ -1928,10 +1926,7 @@ def private rare_plane(t : Model; f : KqFmt; n, woff : int64) : tuple<on : bool;
                 p.dev_layout = true
                 p.q = p.view.q
                 p.s = p.view.s
-                let b = dev_block_bytes(f)
-                p.qsb = b.qsb
-                p.ssb = b.ssb
-                p.belems = b.belems
+                p.bb = dev_block_bytes(f)
                 return (on = true, p = p)
             }
         }
@@ -1940,9 +1935,7 @@ def private rare_plane(t : Model; f : KqFmt; n, woff : int64) : tuple<on : bool;
             p.sid = kq_schema_id(f)
             p.q = addr<uint8 const?>(t.kq[i].q[0])
             p.s = addr<uint8 const?>(t.kq[i].s[0])
-            p.qsb = kq_qsb(f)
-            p.ssb = kq_ssb(f)
-            p.belems = 256l
+            p.bb = (qsb = kq_qsb(f), ssb = kq_ssb(f), belems = KQ_SB_ELEMS, sgroup = kq_sgroup(f))
             p.tb = kq_token_block(p.sid, n)
             p.panel_bytes = kq_walk_panel_bytes(p.sid, n, kq_layout_of(p.sid))
             p.kqfn = kq_rows_fn(p.sid)
@@ -1953,9 +1946,7 @@ def private rare_plane(t : Model; f : KqFmt; n, woff : int64) : tuple<on : bool;
                 p.q = addr<uint8 const?>(q[0])
                 p.s = addr<uint8 const?>(sp[0])
             }
-            p.qsb = kq_qsb(f)
-            p.ssb = kq_ssb(f)
-            p.belems = 32l
+            p.bb = dev_block_bytes(f)
             p.tb = effective_token_block(get_q8_token_block(), n)
             return (on = true, p = p)
         }
@@ -1993,10 +1984,10 @@ def private rare_rows_core(p : RarePlane; var yp : float?; woff : int64; xq : in
             invoke(p.q8fn, yp, p.q8q + woff, p.q8s + woff / 32l, xq, xs, n, rb, re)
             return
         }
-        let blk = woff / p.belems
-        let qp = p.q + blk * p.qsb
-        let sp = p.s + blk * p.ssb
-        if (p.belems == 256l) {
+        let blk = woff / p.bb.belems
+        let qp = p.q + blk * p.bb.qsb
+        let sp = p.s + dev_scale_off(p.bb, blk)
+        if (p.bb.belems == KQ_SB_ELEMS) {
             invoke(p.kqfn, yp, qp, sp, xq, xs, xbs, n, rb, re)
         } elif (p.f == KqFmt.iq4nl32) {
             iq4nl32q8_gemv_gen(yp, qp, sp, xq, xs, xbs, n, rb, re)
@@ -2063,12 +2054,13 @@ def rare_expert_slot_copy(t : Model; f : KqFmt; n, rows, base, eoff : int64; @sc
     let p = rare_plane(t, f, n, base).p   //! after the fetch: the ring the view carries may be born by it
     return false if (!p.dev_layout)
     let ptrs = rare_dev_ptrs(p, eoff)
-    let nblk = n * rows / p.belems
-    wq |> grow_resize(nblk * p.qsb)
-    ws |> grow_resize(nblk * p.ssb)
+    let nblk = n * rows / p.bb.belems
+    let sbytes = dev_scale_bytes(p.bb, nblk)
+    wq |> grow_resize(nblk * p.bb.qsb)
+    ws |> grow_resize(sbytes)
     unsafe {
-        memcpy(addr<void?>(wq[0]), reinterpret<void const?>(ptrs.q), nblk * p.qsb)
-        memcpy(addr<void?>(ws[0]), reinterpret<void const?>(ptrs.s), nblk * p.ssb)
+        memcpy(addr<void?>(wq[0]), reinterpret<void const?>(ptrs.q), nblk * p.bb.qsb)
+        memcpy(addr<void?>(ws[0]), reinterpret<void const?>(ptrs.s), sbytes)
     }
     g_rare_slot_copies++
     return true

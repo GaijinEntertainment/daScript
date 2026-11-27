@@ -63,8 +63,8 @@ Which gather a table takes is its disk type's:
 A `KqEmb<Fmt>` leaf is the format's own decode GEMV leaf stamped under `KqGemvLeafT`'s `EMB`: a
 thread a 32-block, element k the int8 lane `blk_decode` leaves and the term pair `blk_fold` reads (the
 per-format arithmetic is the GEMV's own, never re-spelled), the grid formats staging their codebook as
-the GEMV does. A per-32 table (q51, iq4nl32, q4032, q5032) is the `Blk32GemvRunT` family's `EMB` leaf
-(`Q51Emb`, `Iq4nl32Emb`, `Q4032Emb`, `Q5032Emb`), its block decode the GEMV's own; mx4 never tags a table.
+the GEMV does. A per-32 table (q51, iq4nl32, q4032, q5032, q20, q10) is the `Blk32GemvRunT` family's `EMB` leaf
+(`Q51Emb`, `Iq4nl32Emb`, `Q4032Emb`, `Q5032Emb`, `Q20Emb`, `Q10Emb`), its block decode the GEMV's own; mx4 never tags a table.
 
 **`EmbGather`'s row is the host embed's on a device that rounds as the CPU does, and an ulp off it on an AMD one.** The
 host dequantizes, then scales by the embed scale; the stamp spells the dequant as `mad(q, d, 0)` to keep that order, and an

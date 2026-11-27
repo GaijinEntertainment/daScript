@@ -1538,10 +1538,8 @@ def private rd_encode_hc_side(raw : VkCommandBuffer; var h : VkHaz; nrows : int6
 }
 
 //! one stack serves both the window's expert chain and the decode hit chain
-def private rd_hot_stack(base : int64; fmt : int; slots, blocks, elems : int64) : int {
-    let bb = arena_block_bytes(fmt)
-    return rd_hot_stack(base, fmt, slots, elems, (wq = blocks * bb.wq, ws = blocks * bb.ws))
-}
+def private rd_hot_stack(base : int64; fmt : int; slots, blocks, elems : int64) : int =>
+    rd_hot_stack(base, fmt, slots, elems, (wq = blocks * arena_block_bytes(fmt).wq, ws = arena_ws_bytes(fmt, blocks)))
 
 def private rd_hot_stack(base : int64; fmt : int; slots, elems : int64; pb : tuple<wq : int64; ws : int64>) : int {
     let si = make_stack_shell(base, slots * elems, fmt, slots * pb.wq, slots * pb.ws, [per_call = true])
@@ -1659,7 +1657,8 @@ def vk_rdec_hot_upload(l, slot : int64; wq1 : array<uint8>; ws1 : array<uint8>; 
     let b3 = arena_block_bytes(H.f3)
     let b2 = arena_block_bytes(H.f2)
     if (long_length(wq1) != H.blk1 * b1.wq || long_length(wq3) != H.blk3 * b3.wq || long_length(wq2) != H.blk2 * b2.wq
-            || long_length(ws1) < H.blk1 * b1.ws || long_length(ws3) < H.blk3 * b3.ws || long_length(ws2) < H.blk2 * b2.ws) {
+            || long_length(ws1) < arena_ws_bytes(H.f1, H.blk1) || long_length(ws3) < arena_ws_bytes(H.f3, H.blk3)
+            || long_length(ws2) < arena_ws_bytes(H.f2, H.blk2)) {
         panic("vk_rdec_hot_upload: layer {l}'s gathered planes ({long_length(wq1)}/{long_length(wq3)}/{long_length(wq2)} quant bytes) are not one expert's in formats {H.f1}/{H.f3}/{H.f2}")
     }
     let p1 = rd_hot_planes(H.st1)
@@ -1667,11 +1666,11 @@ def vk_rdec_hot_upload(l, slot : int64; wq1 : array<uint8>; ws1 : array<uint8>; 
     let p2 = rd_hot_planes(H.st2)
     unsafe {
         upload_region_at(p1.wq, slot * H.blk1 * b1.wq, addr<uint8 const?>(wq1[0]), H.blk1 * b1.wq)
-        upload_region_at(p1.ws, slot * H.blk1 * b1.ws, addr<uint8 const?>(ws1[0]), H.blk1 * b1.ws)
+        upload_region_at(p1.ws, arena_ws_off(H.f1, slot * H.blk1), addr<uint8 const?>(ws1[0]), arena_ws_bytes(H.f1, H.blk1))
         upload_region_at(p3.wq, slot * H.blk3 * b3.wq, addr<uint8 const?>(wq3[0]), H.blk3 * b3.wq)
-        upload_region_at(p3.ws, slot * H.blk3 * b3.ws, addr<uint8 const?>(ws3[0]), H.blk3 * b3.ws)
+        upload_region_at(p3.ws, arena_ws_off(H.f3, slot * H.blk3), addr<uint8 const?>(ws3[0]), arena_ws_bytes(H.f3, H.blk3))
         upload_region_at(p2.wq, slot * H.blk2 * b2.wq, addr<uint8 const?>(wq2[0]), H.blk2 * b2.wq)
-        upload_region_at(p2.ws, slot * H.blk2 * b2.ws, addr<uint8 const?>(ws2[0]), H.blk2 * b2.ws)
+        upload_region_at(p2.ws, arena_ws_off(H.f2, slot * H.blk2), addr<uint8 const?>(ws2[0]), arena_ws_bytes(H.f2, H.blk2))
     }
 }
 
@@ -1772,7 +1771,7 @@ def vk_rdec_hot_dma(l, slot, e, woff1 : int64; f1 : int) : bool {
         }
         cmd_copy_range(raw, src.qbuf, src.qoff, p.wq, slot * blks[k] * bb.wq, qlen)
         if (slen > 0l) {
-            cmd_copy_range(raw, src.sbuf, src.soff, p.ws, slot * blks[k] * bb.ws, min(slen, blks[k] * bb.ws))
+            cmd_copy_range(raw, src.sbuf, src.soff, p.ws, arena_ws_off(fmts[k], slot * blks[k]), min(slen, arena_ws_bytes(fmts[k], blks[k])))
         }
     }
     g_rd.hot_dma_fills++
