@@ -1795,6 +1795,21 @@ class public LlvmJitVisitor : AstVisitor {
         return load_inst
     }
 
+    //! context->globals and ->shared are allocated 16-aligned before
+    //! any jitted code runs and never move
+    def mark_context_block_load(load_inst : LLVMOpaqueValue?) {
+        let empty = LLVMMetadataAsValue(g_ctx, LLVMMDNodeInContext2(g_ctx, null, 0ul))
+        for (kind in fixed_array("invariant.load", "nonnull", "noundef")) {
+            let kind_id = LLVMGetMDKindIDInContext(g_ctx, kind, uint(length(kind)))
+            LLVMSetMetadata(load_inst, kind_id, empty)
+        }
+        var align : LLVMOpaqueMetadata? [1]
+        align[0] = LLVMValueAsMetadata(LLVMConstInt(types.t_int64, 16ul, 0))
+        let align_md = LLVMMDNodeInContext2(g_ctx, array_data_ptr(align), 1ul)
+        LLVMSetMetadata(load_inst, LLVMGetMDKindIDInContext(g_ctx, "align", 5u),
+            LLVMMetadataAsValue(g_ctx, align_md))
+    }
+
     def get_address_global(name : DllName; typ : LLVMOpaqueType? = null) : LLVMOpaqueValue? {
         let nonnull_type = typ != null ? typ : types.LLVMVoidPtrType()
         let mb_global = LLVMGetNamedGlobal(g_mod, name.glob())
@@ -6475,6 +6490,7 @@ class public LlvmJitVisitor : AstVisitor {
                     let coffset = expr.variable.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
                     var gp = LLVMBuildGEP2(g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
                     let global_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(types.t_int8, 0u), gp, "")
+                    mark_context_block_load(global_ptr)
                     let vptr = LLVMBuildGEP2(g_builder, types.t_int8, global_ptr, types.ConstI32(uint64(expr.variable.stackTop)), "")
                     tryV = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
                 }
@@ -8341,6 +8357,7 @@ def public generate_globals_initialization_fn(target : JitTarget; ctx : Context?
                             let coffset = glob.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
                             var gp = LLVMBuildGEP2(visitor.g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
                             let global_ptr = LLVMBuildLoad2(visitor.g_builder, LLVMPointerType(types.t_int8, 0u), gp, "")
+                            visitor.mark_context_block_load(global_ptr)
                             vptr = LLVMBuildGEP2(visitor.g_builder, types.t_int8, global_ptr, types.ConstI32(uint64(glob.stackTop)), "")
                         }
                         // register CMRES destination so init expressions that return by copy/move
