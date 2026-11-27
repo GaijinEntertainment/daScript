@@ -552,9 +552,7 @@ def target_literal() : int {
 def target_instance() : int => nvm_gen(6 + g_seed)
 
 [never_inline]
-def target_baseline() : int {
-    return nvm_step(3 + g_seed)
-}
+def target_baseline() : int => nvm_step(3 + g_seed)
 
 [never_inline]
 def target_canon() : int {
@@ -1257,4 +1255,66 @@ def test_inline_var_argument_for_a_const_parameter(t : T?) {
     g_bumped = 0
     t |> equal(target_const_parameter_from_var(1), 5)
     t |> equal(target_const_parameter_then_effect(1), 104)
+}
+
+var g_scale = 3
+
+var g_steps = fixed_array(10, 20, 30)
+
+[inline]
+def private product_of(a : int; b : int) : int => a * b
+
+[inline]
+def private product_after_rescale(a : int; b : int) : int {
+    g_scale = 100
+    return a * b
+}
+
+[export]
+def target_two_global_reads(index : int) : int => product_of(g_scale, g_steps[index])
+
+[export]
+def target_local_then_global_read(seed : int) : int {
+    var n = seed
+    n += 3
+    return product_of(n, g_scale)
+}
+
+[export]
+def target_global_read_then_writer() : int {
+    return product_of(g_scale, bump_by_reference(g_scale))
+}
+
+[export]
+def target_global_read_for_writing_callee() : int {
+    return product_after_rescale(g_scale, 2)
+}
+
+[test(description = "an argument that reads a global substitutes when the callee writes nothing and no later argument has an effect, and binds a local when either can write the global")]
+def test_inline_global_read_argument(t : T?) {
+    ast_gc_guard() {
+        t |> run("a global and a global element: both substitute") @(t : T?) {
+            let b = body_of(t, "target_two_global_reads")
+            t |> success(!has(b, "_inl"), "no temp: {b}")
+        }
+        t |> run("a written local before a global read: both substitute") @(t : T?) {
+            let b = body_of(t, "target_local_then_global_read")
+            t |> success(!has(b, "_inl"), "no temp: {b}")
+        }
+        t |> run("a later argument writes the global: the read binds a local") @(t : T?) {
+            let b = body_of(t, "target_global_read_then_writer")
+            t |> success(has(b, "_arg_a"), "read at its place in call order: {b}")
+        }
+        t |> run("the callee writes the global: the read binds a local") @(t : T?) {
+            let b = body_of(t, "target_global_read_for_writing_callee")
+            t |> success(has(b, "_arg_a"), "read before the body runs: {b}")
+        }
+    }
+    g_scale = 3
+    t |> equal(target_two_global_reads(1), 60)
+    t |> equal(target_local_then_global_read(1), 12)
+    t |> equal(target_global_read_then_writer(), 309, "the global was read before the write")
+    g_scale = 3
+    t |> equal(target_global_read_for_writing_callee(), 6, "read before the callee wrote it")
+    t |> equal(g_scale, 100)
 }
