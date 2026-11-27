@@ -2271,12 +2271,20 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_Cast : SimNode_CallBase {
         SimNode_Cast ( const LineInfo & at ) : SimNode_CallBase(at,"") { }
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
+        __forceinline vec4f compute ( Context & context ) {
             DAS_PROFILE_NODE
-            vec4f res = arguments[0]->eval(context);
-            CastTo value = (CastTo) cast<CastFrom>::to(res);
+            CastTo value = (CastTo) EvalTT<CastFrom>::eval(context, arguments[0]);
             return cast<CastTo>::from(value);
         }
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
+            return compute(context);
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return cast<CTYPE>::to(compute(context));               \
+        }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
     };
 
     // "DEBUG"
