@@ -683,6 +683,13 @@ class public LlvmJitVisitor : AstVisitor {
     [arch(at="../ARCHITECTURE.md#pointer-alias-model")]
     def apply_impl_param_attrs(fn : LLVMOpaqueValue?; arguments : dasvector`ptr`Variable; result : TypeDeclPtr; captureType : LLVMOpaqueType?; isCmres : bool; annotations : AnnotationList; use_option_flags : bool) {
         var inscope nat <- build_noalias_list(annotations)
+        if (!isCmres && result != null && result.isRef && result.sizeOf > 0) {
+            LLVMAddAttributeAtIndex(fn, 0u, attributes.nonnull)
+            LLVMAddAttributeAtIndex(fn, 0u, LLVMCreateEnumAttribute(g_ctx,
+                LLVMGetEnumAttributeKindForName("dereferenceable"), uint64(result.sizeOf)))
+            LLVMAddAttributeAtIndex(fn, 0u, LLVMCreateEnumAttribute(g_ctx,
+                LLVMGetEnumAttributeKindForName("align"), uint64(result.alignOf)))
+        }
         for (a, ai in arguments, ucount()) {
             var param = LLVMGetParam(fn, ai)
             if (a._type.isRef) {

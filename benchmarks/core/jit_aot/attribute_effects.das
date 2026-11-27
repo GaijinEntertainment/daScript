@@ -9,6 +9,7 @@ var g_sink : int64
 
 struct Acc {
     total : int
+    big : int
 }
 
 def private make_ints(n : int) {
@@ -44,6 +45,27 @@ def private gather_into_new(a : array<int>; idx : array<int>) : int {
     return r
 }
 
+[hint(noinline)]
+def private pick_big(var p : Acc&) : int& {
+    unsafe {
+        return p.big
+    }
+}
+
+//! a returned reference is dereferenceable: reading `r` is safe on
+//! every iteration, so it leaves the loop and the sum vectorizes
+[hint(noinline)]
+def private sum_if_big(a : array<int>; var p : Acc&) : int {
+    let r & = unsafe(pick_big(p))
+    var s = 0
+    for (x in a) {
+        if (x > 512) {
+            s += r
+        }
+    }
+    return s
+}
+
 [benchmark]
 def attribute_effects(b : B?) {
     let ia <- make_ints(M)
@@ -55,5 +77,9 @@ def attribute_effects(b : B?) {
     let idx <- [for (i in range(M)); (i * 7919) % M]
     b |> run("noalias_alloc_gather/{M}", 1) {
         g_sink += int64(gather_into_new(ia, idx))
+    }
+    b |> run("dereferenceable_ref_return/{M}", 1) {
+        var p = Acc(big = 3)
+        g_sink += int64(sum_if_big(ia, p))
     }
 }
