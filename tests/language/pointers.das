@@ -1485,3 +1485,166 @@ def test_pointer_store_keeps_other_casts(t : T?) {
     t |> equal(doubles[2], 4.0lf)
     t |> equal(bytes[1], 201u8)
 }
+
+struct FieldHolder {
+    i : int
+    u : uint
+    l : int64
+    ul : uint64
+    f : float
+    d : double
+    b : bool
+    s : string
+    v : float3
+    iv : int2
+    next : FieldHolder?
+}
+
+struct PointerInField {
+    pad : int
+    held : FieldHolder?
+}
+
+[unsafe_deref]
+def unchecked_int_argument(p : FieldHolder?) : int => p.i
+
+[unsafe_deref]
+def unchecked_int_reference(p : FieldHolder?&) : int => p.i
+
+[unsafe_deref]
+def unchecked_int_local(p : FieldHolder?) : int {
+    var q = p
+    q = q.next
+    return q.i
+}
+
+[unsafe_deref]
+def unchecked_int_struct_field(owner : PointerInField) : int => owner.held.i
+
+[unsafe_deref]
+def unchecked_uint(p : FieldHolder?) : uint => p.u
+
+[unsafe_deref]
+def unchecked_int64(p : FieldHolder?) : int64 => p.l
+
+[unsafe_deref]
+def unchecked_uint64(p : FieldHolder?) : uint64 => p.ul
+
+[unsafe_deref]
+def unchecked_float(p : FieldHolder?) : float => p.f
+
+[unsafe_deref]
+def unchecked_double(p : FieldHolder?) : double => p.d
+
+[unsafe_deref]
+def unchecked_bool(p : FieldHolder?) : bool => p.b
+
+[unsafe_deref]
+def unchecked_string(p : FieldHolder?) : string => p.s
+
+[unsafe_deref]
+def unchecked_float3(p : FieldHolder?) : float3 => p.v
+
+[unsafe_deref]
+def unchecked_int2(p : FieldHolder?) : int2 => p.iv
+
+[unsafe_deref]
+def unchecked_next(var p : FieldHolder?) : FieldHolder? => p.next
+
+[unsafe_deref]
+def unchecked_bump_argument(var p : FieldHolder?) {
+    indexed_bump(p.i)
+}
+
+[unsafe_deref]
+def unchecked_bump_reference(var p : FieldHolder?&) {
+    indexed_bump(p.i)
+}
+
+[unsafe_deref]
+def unchecked_bump_local(var p : FieldHolder?) {
+    var q = p.next
+    indexed_bump(q.i)
+}
+
+[unsafe_deref]
+def unchecked_store_argument(var p : FieldHolder?; value : int) {
+    p.i = value
+}
+
+[test(description = "an unchecked field read gives the field wherever the pointer is held")]
+def test_unchecked_field_read_sources(t : T?) {
+    var second = FieldHolder(i = 22)
+    var first = FieldHolder(i = 11)
+    first.next = unsafe(addr(second))
+    var p = unsafe(addr(first))
+    let owner = PointerInField(pad = 5, held = p)
+    t |> equal(unchecked_int_argument(p), 11)
+    t |> equal(unchecked_int_reference(p), 11)
+    t |> equal(unchecked_int_local(p), 22)
+    t |> equal(unchecked_int_struct_field(owner), 11)
+}
+
+[test(description = "an unchecked field read gives scalar, string, pointer and vector fields")]
+def test_unchecked_field_read_types(t : T?) {
+    var other = FieldHolder(i = 7)
+    var holder = FieldHolder(i = -3, u = 4000000000u, l = -5000000000l, ul = 0xfedcba9876543210ul,
+        f = 1.5, d = 2.25lf, b = true, s = "field", v = float3(1., 2., 3.), iv = int2(-4, 5))
+    holder.next = unsafe(addr(other))
+    var p = unsafe(addr(holder))
+    t |> equal(unchecked_int_argument(p), -3)
+    t |> equal(unchecked_uint(p), 4000000000u)
+    t |> equal(unchecked_int64(p), -5000000000l)
+    t |> equal(unchecked_uint64(p), 0xfedcba9876543210ul)
+    t |> equal(unchecked_float(p), 1.5)
+    t |> equal(unchecked_double(p), 2.25lf)
+    t |> equal(unchecked_bool(p), true)
+    t |> equal(unchecked_string(p), "field")
+    t |> equal(unchecked_float3(p), float3(1., 2., 3.))
+    t |> equal(unchecked_int2(p), int2(-4, 5))
+    t |> equal(unchecked_next(p) == unsafe(addr(other)), true)
+    t |> equal(unchecked_int_argument(unchecked_next(p)), 7)
+}
+
+[unsafe_deref]
+def unchecked_fields_reference(p : FieldHolder?&) =>
+    (u = p.u, l = p.l, ul = p.ul, f = p.f, d = p.d, b = p.b, s = p.s, v = p.v, iv = p.iv)
+
+[unsafe_deref]
+def unchecked_int2_struct_field(owner : PointerInField) : int2 => owner.held.iv
+
+[test(description = "an unchecked field read through a pointer behind a reference, or held in a struct field, gives scalar, string and vector fields")]
+def test_unchecked_field_read_reference_types(t : T?) {
+    var holder = FieldHolder(i = -3, u = 4000000000u, l = -5000000000l, ul = 0xfedcba9876543210ul,
+        f = 1.5, d = 2.25lf, b = true, s = "field", v = float3(1., 2., 3.), iv = int2(-4, 5))
+    var p = unsafe(addr(holder))
+    let got = unchecked_fields_reference(p)
+    t |> equal(got.u, 4000000000u)
+    t |> equal(got.l, -5000000000l)
+    t |> equal(got.ul, 0xfedcba9876543210ul)
+    t |> equal(got.f, 1.5)
+    t |> equal(got.d, 2.25lf)
+    t |> equal(got.b, true)
+    t |> equal(got.s, "field")
+    t |> equal(got.v, float3(1., 2., 3.))
+    t |> equal(got.iv, int2(-4, 5))
+    let owner = PointerInField(pad = 5, held = p)
+    t |> equal(unchecked_int2_struct_field(owner), int2(-4, 5))
+}
+
+[test(description = "an unchecked field passed by reference is the field, and a store writes it")]
+def test_unchecked_field_reference(t : T?) {
+    var second = FieldHolder(i = 20)
+    var first = FieldHolder(i = 10)
+    first.next = unsafe(addr(second))
+    var p = unsafe(addr(first))
+    unchecked_bump_argument(p)
+    t |> equal(first.i, 1010)
+    unchecked_bump_reference(p)
+    t |> equal(first.i, 2010)
+    unchecked_bump_local(p)
+    t |> equal(second.i, 1020)
+    unchecked_store_argument(p, 77)
+    t |> equal(first.i, 77)
+    t |> equal(second.i, 1020)
+}
