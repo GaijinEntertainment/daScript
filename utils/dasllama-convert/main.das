@@ -526,6 +526,7 @@ def main() : int {
         set_kquant_native(want.cpu.kquant_native)
         set_kq_q40_native(want.cpu.kq_q40_native)
         set_kq_q51_native(want.cpu.kq_q51_native)
+        set_rows_f32(want.cpu.rows_f32)
         if (!pin_backend_for_bake(want.cpu)) {
             to_log(LOG_ERROR, "dasllama-convert: --config targets '{want.cpu.backend}' and this host has no repack family to bake it with\n")
             return 2
