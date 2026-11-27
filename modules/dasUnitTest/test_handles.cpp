@@ -15,8 +15,8 @@ template<> struct das::cast <Point3>  : cast_fVec<Point3> {};
 namespace das {
     template <>
     struct typeFactory<Point3> {
-        static TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = new TypeDecl(Type::tFloat3, cppBindingLineInfo("Point3"));
+        static TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto t = new TypeDecl(Type::tFloat3, cppBindingLineInfo(lib.getThisModule(), "Point3"));
             t->alias = "Point3";
             t->aotAlias = true;
             return t;

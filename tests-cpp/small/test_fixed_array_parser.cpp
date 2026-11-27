@@ -63,7 +63,7 @@ TypeDecl * makeFAChain ( Type bt, std::initializer_list<int32_t> dims ) {
 
 TypeDeclPtr reparse ( const string & mangled ) {
     ModuleLibrary lib;
-    MangledNameParser parser(cppBindingLineInfo("test_fixed_array_parser"));
+    MangledNameParser parser(cppBindingLineInfo());
     const char * ch = mangled.c_str();
     auto t = parser.parseTypeFromMangledName(ch, lib, nullptr);
     CHECK_EQ(*ch, 0);    // consumed the whole name

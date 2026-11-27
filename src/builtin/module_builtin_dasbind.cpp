@@ -728,7 +728,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             auto wrp = computeWrapper(fun);
             uint64_t code = lateBind(ba.fn_name, ba.library, funptr);
             auto bif = new DasBindFunction(bindName, code, funptr, ba, wrp, computeArm64Layout(fun));
-            const LineInfo & bindAt = cppBindingLineInfo(bindName.c_str());
+            const LineInfo bindAt = cppBindingLineInfo(target, bindName.c_str());
             bif->at = bindAt;
             bif->result = proxyType(fun->result, bindAt);
             for ( auto & a : fun->arguments ) {
