@@ -188,3 +188,24 @@ def test_ref_and_bounds(t : T?) {
         t |> equal(3, unproven_index_jit(a, 2))
     }
 }
+
+[jit]
+def doubled_non_negative_jit(x : int) : int {
+    if (x < 0) {
+        panic("negative")
+    }
+    return x * 2
+}
+
+[test(description = "a JIT-compiled function whose branch calls panic returns on the other branch and still panics on its own")]
+def test_noreturn_call(t : T?) {
+    t |> success(!jit_enabled() || is_jit_function(@@doubled_non_negative_jit))
+    t |> equal(8, doubled_non_negative_jit(4))
+    var failed = false
+    try {
+        doubled_non_negative_jit(-1)
+    } recover {
+        failed = true
+    }
+    t |> success(failed)
+}
