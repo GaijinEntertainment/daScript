@@ -223,10 +223,11 @@ struct das_host_call<R (*)(Args...), fn>
 {
   static R invoke([[maybe_unused]] Args... args)
   {
-    if constexpr (DAS_SHOULD_USE_STUBS)
-      return jit_stubbed_call<R>();
-    else
-      return fn(static_cast<Args &&>(args)...);
+#if DAS_SHOULD_USE_STUBS
+    return jit_stubbed_call<R>();
+#else
+    return fn(static_cast<Args &&>(args)...);
+#endif
   }
 };
 
@@ -235,10 +236,11 @@ struct das_host_call<R (CC::*)(Args...), fn>
 {
   static R invoke([[maybe_unused]] CC &self, [[maybe_unused]] Args... args)
   {
-    if constexpr (DAS_SHOULD_USE_STUBS)
-      return jit_stubbed_call<R>();
-    else
-      return (self.*fn)(static_cast<Args &&>(args)...);
+#if DAS_SHOULD_USE_STUBS
+    return jit_stubbed_call<R>();
+#else
+    return (self.*fn)(static_cast<Args &&>(args)...);
+#endif
   }
 };
 
@@ -247,10 +249,11 @@ struct das_host_call<R (CC::*)(Args...) const, fn>
 {
   static R invoke([[maybe_unused]] const CC &self, [[maybe_unused]] Args... args)
   {
-    if constexpr (DAS_SHOULD_USE_STUBS)
-      return jit_stubbed_call<R>();
-    else
-      return (self.*fn)(static_cast<Args &&>(args)...);
+#if DAS_SHOULD_USE_STUBS
+    return jit_stubbed_call<R>();
+#else
+    return (self.*fn)(static_cast<Args &&>(args)...);
+#endif
   }
 };
 
