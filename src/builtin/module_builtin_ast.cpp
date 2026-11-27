@@ -1504,7 +1504,6 @@ namespace das {
     struct ModuleCacheState : ModuleGroupUserData {
         ModuleCacheState ()
             : ModuleGroupUserData("module_cache_state") {}
-        vector<FileInfoPtr> fileInfos;
         const char *        verdict = "none";
     };
 
@@ -1543,10 +1542,6 @@ namespace das {
             module_group->setUserData(state);
         }
         state->verdict = verdict;
-        for ( auto & fi : fileCache.cache.orphanedFileInfos ) {
-            state->fileInfos.emplace_back(das::move(fi));
-        }
-        fileCache.cache.orphanedFileInfos.clear();
         invokeProgramBlock("rtti_compile", program, issues,
             program && !program->failed(), block, context, at);
         return context->allocateString(verdict,

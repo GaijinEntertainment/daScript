@@ -1303,6 +1303,8 @@ namespace das
         // src/ast/ARCHITECTURE.md#module-cache-read; after the das-visible fields
         bool registersAtCompile = false;
         void noteRegistrationAtCompile () { if ( !macroContext ) registersAtCompile = true; }
+        // the FileInfos a module cache read created for this module; its LineInfos point at them
+        vector<FileInfoPtr> cachedFileInfos;
     private:
         Module * next = nullptr;
         unique_ptr<FileInfo>    ownFileInfo;

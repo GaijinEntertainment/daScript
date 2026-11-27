@@ -51,10 +51,10 @@ namespace das {
         bufferAsVector = storage->asVector();
     }
 
-    void AstSerializer::collectFileInfo ( vector<FileInfoPtr> & orphanedFileInfos ) {
+    void AstSerializer::collectFileInfo ( vector<FileInfoPtr> & fileInfos ) {
         for ( auto fileInfo : deleteUponFinish ) {
             if ( doNotDelete.count(fileInfo) == 0 ) {
-                orphanedFileInfos.emplace_back(fileInfo);
+                fileInfos.emplace_back(fileInfo);
             }
         }
         deleteUponFinish.clear();
@@ -3828,10 +3828,6 @@ namespace das {
             res.cutoffFile = reader->cutoffFile;
             res.cutoffReason = reader->cutoffReason;
             reader->moduleLibrary = nullptr;    // not ours to free
-            // claim the FileInfos the reader created that no module took ownership of -
-            // ~AstSerializer would DELETE them, and the deserialized AST's LineInfos still
-            // point at them (the crash is deferred to the first LineInfo::describe)
-            reader->collectFileInfo(orphanedFileInfos);
             reader.reset();
         }
         if ( writer ) {

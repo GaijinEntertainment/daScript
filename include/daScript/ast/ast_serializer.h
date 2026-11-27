@@ -299,7 +299,7 @@ namespace das {
         // reject a deserialized element count that exceeds the bytes left in the stream
         // BEFORE it gates an allocation (throws; reading only)
         void verifyLength ( uint64_t size );
-        void collectFileInfo ( vector<FileInfoPtr> & orphanedFileInfos );
+        void collectFileInfo ( vector<FileInfoPtr> & fileInfos );
         void getCompiledModules ( );
         void patch ();
         AstSerializer & operator << ( string & str ) { return serializeString(str, recordDepth == 0); }
@@ -545,10 +545,6 @@ namespace das {
         unique_ptr<AstSerializer>   reader, writer;
         string                      writePath;
         bool                        requested = false;  // install() was asked to read or write
-        // deserialized FileInfos not claimed by any module (collectFileInfo): LineInfos in
-        // the deserialized AST point at them, so this cache object MUST outlive the program
-        // it fed - declare it before the program/context in the embedding scope
-        vector<FileInfoPtr>         orphanedFileInfos;
     };
 
     // Opaque handle to expose serializer to daslang.
