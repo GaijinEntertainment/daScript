@@ -50,6 +50,13 @@ namespace das {
     bool FusionPoint::isFusedOp2 ( const SimNodeInfoLookup & info, SimNode * node, const char * op, const char * typeName ) {
         auto it = info.find(node);
         if ( it==info.end() || it->second.typeName!=typeName ) return false;
+        return isFusedOp2(info, node, op);
+    }
+
+    bool FusionPoint::isFusedOp2 ( const SimNodeInfoLookup & info, SimNode * node,
+                                   const char * op ) {
+        auto it = info.find(node);
+        if ( it==info.end() ) return false;
         size_t opLength = strlen(op);
         const char * name = it->second.name.c_str();
         if ( strncmp(name, op, opLength)!=0 ) return false;
@@ -86,6 +93,28 @@ namespace das {
         }
         l.visit(vis);
         r.visit(vis);
+        V_END();
+    }
+
+    SimNode * SimNode_Op2Fusion::visitIf ( SimVisitor & vis, SimNode * & if_true,
+                                           SimNode * & if_false ) {
+        V_BEGIN_CR();
+        string name = "If";
+        name += op;
+        name += if_false ? "ThenElse" : "Then";
+        name += getSimSourceName(l.type);
+        name += getSimSourceName(r.type);
+        if ( baseType!=Type::none && baseType!=Type::anyArgument ) {
+            vis.op(name.c_str(), getTypeBaseSize(baseType), das_to_string(baseType));
+        } else {
+            vis.op(name.c_str());
+        }
+        l.visit(vis);
+        r.visit(vis);
+        V_SUB(if_true);
+        if ( if_false ) {
+            V_SUB(if_false);
+        }
         V_END();
     }
 

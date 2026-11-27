@@ -81,3 +81,20 @@ argument, in a local that aliases the function's result, or in a local that sits
 literal under construction is not in a plain argument or stack slot either. All of these stay
 field nodes: the `FieldDeref` and `PtrFieldDeref` nodes, fused with their one child in
 `simulate_fusion_ptrfdr.cpp`.
+
+## An if over a fused compare is one node {#if-over-compare}
+
+An `if` whose condition is a fused compare - `==`, `!=`, `<`, `<=`, `>`, `>=` with the operand
+forms the compare family fuses - does not call a compare node and test the bool it returns. The
+`IfThenElse` and `IfThen` fusion asks the compare node for its twin (`fuseIf`), and the twin
+runs the same test inline and goes straight to an arm. It is named after the compare:
+`IfLessThenElseArgConst`, `IfEquThenLocAny`.
+
+The twin is a template over the compare node's own class (`simulate_fusion_if_cmp.h`): it
+derives from it, takes its two operands, and calls its `compute`. The compare family makes it
+from inside each compare node, so the twins exist for exactly the operand pairs, types and
+`DAS_FUSION` levels the compare family has, and there is no second list. The vector compares do
+not make one.
+
+Both arms of the `ThenElse` twin carry `DAS_NO_MERGE`: without it clang merges the two calls
+into one indirect jump, and the node loses the conditional branch it was made to keep.

@@ -1722,3 +1722,254 @@ def test_panic_ends_path(t : T?) {
         t |> equal(only_panic(1), 0)
     }
 }
+
+// --- helpers for an if over a compare ---
+
+let IF_COMPARE_LESS = 2 | 4 | 8 | 256 | 512
+let IF_COMPARE_EQUAL = 1 | 8 | 32 | 64 | 256
+let IF_COMPARE_GREATER = 2 | 16 | 32 | 64 | 128
+let IF_COMPARE_UNORDERED = 2 | 64 | 128 | 256 | 512
+
+[sideeffects]
+def if_compare_bits(a, b : auto(TT)) : int {
+    var bits = 0
+    if (a == b) {
+        bits |= 1
+    }
+    if (a != b) {
+        bits |= 2
+    }
+    if (a < b) {
+        bits |= 4
+    } else {
+        bits |= 64
+    }
+    if (a <= b) {
+        bits |= 8
+    } else {
+        bits |= 128
+    }
+    if (a > b) {
+        bits |= 16
+    } else {
+        bits |= 256
+    }
+    if (a >= b) {
+        bits |= 32
+    } else {
+        bits |= 512
+    }
+    return bits
+}
+
+[sideeffects]
+def if_equal_bits(a, b : auto(TT)) : int {
+    var bits = 0
+    if (a == b) {
+        bits |= 1
+    } else {
+        bits |= 4
+    }
+    if (a != b) {
+        bits |= 2
+    } else {
+        bits |= 8
+    }
+    return bits
+}
+
+[sideeffects]
+def if_compare_constant_bits(a : int) : int {
+    var bits = 0
+    if (a < 10) {
+        bits |= 1
+    } else {
+        bits |= 2
+    }
+    if (a >= 10) {
+        bits |= 4
+    }
+    if (a == 10) {
+        bits |= 8
+    }
+    if (10 > a) {
+        bits |= 16
+    } else {
+        bits |= 32
+    }
+    return bits
+}
+
+[sideeffects]
+def if_compare_local_bits(a, b : int) : int {
+    let x = a * 2
+    let y = b * 2
+    var bits = 0
+    if (x < y) {
+        bits |= 1
+    } else {
+        bits |= 2
+    }
+    if (x != y) {
+        bits |= 4
+    }
+    if (x + 1 > y) {
+        bits |= 8
+    } else {
+        bits |= 16
+    }
+    if (x <= y - 1) {
+        bits |= 32
+    }
+    return bits
+}
+
+[sideeffects]
+def opaque_divide(a, b : auto(TT)) : TT => a / b
+
+[sideeffects]
+def if_compare_pick_int(a, b, x, y : int) : int => a < b ? x : y
+
+[sideeffects]
+def if_compare_pick_uint(a, b : int; x, y : uint) : uint => a == b ? x : y
+
+[sideeffects]
+def if_compare_pick_int64(a, b : int; x, y : int64) : int64 => a > b ? x : y
+
+[sideeffects]
+def if_compare_pick_uint64(a, b : int; x, y : uint64) : uint64 => a >= b ? x : y
+
+[sideeffects]
+def if_compare_pick_float(a, b : int; x, y : float) : float => a < b ? x : y
+
+[sideeffects]
+def if_compare_pick_double(a, b : int; x, y : double) : double => a <= b ? x : y
+
+[sideeffects]
+def if_compare_pick_bool(a, b : int; x, y : bool) : bool => a != b ? x : y
+
+[sideeffects]
+def if_compare_pick_string(a, b : int; x, y : string) : string => a < b ? x : y
+
+[test(description = "an if over a compare takes the right arm for every compare and numeric type")]
+def test_if_over_compare_types(t : T?) {
+    t |> equal(if_compare_bits(1, 2), IF_COMPARE_LESS)
+    t |> equal(if_compare_bits(2, 2), IF_COMPARE_EQUAL)
+    t |> equal(if_compare_bits(3, 2), IF_COMPARE_GREATER)
+    t |> equal(if_compare_bits(-3, 2), IF_COMPARE_LESS)
+    t |> equal(if_compare_bits(1u, 4000000000u), IF_COMPARE_LESS)
+    t |> equal(if_compare_bits(4000000000u, 4000000000u), IF_COMPARE_EQUAL)
+    t |> equal(if_compare_bits(4000000000u, 1u), IF_COMPARE_GREATER)
+    t |> equal(if_compare_bits(-5000000000l, 5000000000l), IF_COMPARE_LESS)
+    t |> equal(if_compare_bits(5000000000l, 5000000000l), IF_COMPARE_EQUAL)
+    t |> equal(if_compare_bits(5000000000l, -5000000000l), IF_COMPARE_GREATER)
+    t |> equal(if_compare_bits(1ul, 0xfedcba9876543210ul), IF_COMPARE_LESS)
+    t |> equal(if_compare_bits(0xfedcba9876543210ul, 0xfedcba9876543210ul), IF_COMPARE_EQUAL)
+    t |> equal(if_compare_bits(0xfedcba9876543210ul, 1ul), IF_COMPARE_GREATER)
+    t |> equal(if_compare_bits(1.5, 2.5), IF_COMPARE_LESS)
+    t |> equal(if_compare_bits(2.5, 2.5), IF_COMPARE_EQUAL)
+    t |> equal(if_compare_bits(2.5, 1.5), IF_COMPARE_GREATER)
+    t |> equal(if_compare_bits(1.5lf, 2.5lf), IF_COMPARE_LESS)
+    t |> equal(if_compare_bits(2.5lf, 2.5lf), IF_COMPARE_EQUAL)
+    t |> equal(if_compare_bits(2.5lf, 1.5lf), IF_COMPARE_GREATER)
+}
+
+[test(description = "an if over a compare with a NaN takes the else arm, and only != is true")]
+def test_if_over_compare_nan(t : T?) {
+    if (HOST_FAST_MATH) {
+        t |> skip("host runtime is built -ffast-math: nan compares fold")
+        return
+    }
+    let nan = opaque_divide(0.0, 0.0)
+    let dnan = opaque_divide(0.0lf, 0.0lf)
+    t |> equal(if_compare_bits(nan, 1.0), IF_COMPARE_UNORDERED)
+    t |> equal(if_compare_bits(1.0, nan), IF_COMPARE_UNORDERED)
+    t |> equal(if_compare_bits(nan, nan), IF_COMPARE_UNORDERED)
+    t |> equal(if_compare_bits(dnan, 1.0lf), IF_COMPARE_UNORDERED)
+    t |> equal(if_compare_bits(dnan, dnan), IF_COMPARE_UNORDERED)
+}
+
+[test(description = "an if over == and != takes the right arm for bool, string and pointer")]
+def test_if_over_equal_types(t : T?) {
+    let part = "a"
+    let built = "{part}b"
+    var first = 1
+    var second = 1
+    let pfirst = unsafe(addr(first))
+    let psecond = unsafe(addr(second))
+    t |> equal(if_equal_bits(true, true), 9)
+    t |> equal(if_equal_bits(true, false), 6)
+    t |> equal(if_equal_bits("ab", built), 9)
+    t |> equal(if_equal_bits("ab", part), 6)
+    t |> equal(if_equal_bits(pfirst, pfirst), 9)
+    t |> equal(if_equal_bits(pfirst, psecond), 6)
+}
+
+[test(description = "an if over a compare takes the arm the compare selects for a constant, a local and an expression operand")]
+def test_if_over_compare_operands(t : T?) {
+    t |> equal(if_compare_constant_bits(5), 17)
+    t |> equal(if_compare_constant_bits(10), 46)
+    t |> equal(if_compare_constant_bits(15), 38)
+    t |> equal(if_compare_local_bits(1, 2), 53)
+    t |> equal(if_compare_local_bits(2, 2), 10)
+    t |> equal(if_compare_local_bits(3, 2), 14)
+}
+
+[test(description = "a conditional expression over a compare gives its arm for every result type")]
+def test_if_over_compare_result_types(t : T?) {
+    t |> equal(if_compare_pick_int(3, 7, 30, 70), 30)
+    t |> equal(if_compare_pick_int(7, 3, 30, 70), 70)
+    t |> equal(if_compare_pick_uint(1, 1, 4000000000u, 5u), 4000000000u)
+    t |> equal(if_compare_pick_uint(1, 2, 4000000000u, 5u), 5u)
+    t |> equal(if_compare_pick_int64(2, 1, -5000000000l, 7l), -5000000000l)
+    t |> equal(if_compare_pick_int64(1, 2, -5000000000l, 7l), 7l)
+    t |> equal(if_compare_pick_uint64(2, 2, 0xfedcba9876543210ul, 7ul), 0xfedcba9876543210ul)
+    t |> equal(if_compare_pick_uint64(1, 2, 0xfedcba9876543210ul, 7ul), 7ul)
+    t |> equal(if_compare_pick_float(1, 2, 1.5, 2.5), 1.5)
+    t |> equal(if_compare_pick_float(2, 1, 1.5, 2.5), 2.5)
+    t |> equal(if_compare_pick_double(2, 2, 1.25lf, 2.25lf), 1.25lf)
+    t |> equal(if_compare_pick_double(3, 2, 1.25lf, 2.25lf), 2.25lf)
+    t |> equal(if_compare_pick_bool(1, 2, true, false), true)
+    t |> equal(if_compare_pick_bool(2, 2, true, false), false)
+    t |> equal(if_compare_pick_string(1, 2, "less", "not less"), "less")
+    t |> equal(if_compare_pick_string(2, 1, "less", "not less"), "not less")
+}
+
+[sideeffects]
+def if_compare_pick_plus(a, b, x, y : int) : int => (a < b ? x : y) + 1
+
+[sideeffects]
+def if_compare_pick_scaled(a, b : int; x, y : float) : float => (a < b ? x : y) * 2.0
+
+[sideeffects]
+def if_compare_pick_flag(a, b : int; p, q : bool) : int {
+    if (a < b ? p : q) return 1
+    return 2
+}
+
+[sideeffects]
+def if_compare_pick_is_less(a, b : int; s, u : string) : bool => (a < b ? s : u) == "less"
+
+[test(description = "a ternary over a compare used as an operand of an add, a multiply, an if and a string compare gives the arm the compare selects")]
+def test_if_over_compare_as_operand(t : T?) {
+    t |> equal(if_compare_pick_plus(1, 2, 30, 70), 31)
+    t |> equal(if_compare_pick_plus(2, 1, 30, 70), 71)
+    t |> equal(if_compare_pick_scaled(1, 2, 1.5, 4.0), 3.0)
+    t |> equal(if_compare_pick_scaled(2, 1, 1.5, 4.0), 8.0)
+    t |> equal(if_compare_pick_flag(1, 2, true, false), 1)
+    t |> equal(if_compare_pick_flag(2, 1, true, false), 2)
+    t |> equal(if_compare_pick_is_less(1, 2, "less", "not less"), true)
+    t |> equal(if_compare_pick_is_less(2, 1, "less", "not less"), false)
+}
+
+[sideeffects]
+def if_compare_vectors(a, b : float3) : int {
+    if (a == b) return 1
+    return 2
+}
+
+[test(description = "an if over a vector compare, which has no fused form, takes the arm the compare selects")]
+def test_if_over_vector_compare(t : T?) {
+    t |> equal(if_compare_vectors(float3(1., 2., 3.), float3(1., 2., 3.)), 1)
+    t |> equal(if_compare_vectors(float3(1., 2., 3.), float3(1., 2., 4.)), 2)
+}

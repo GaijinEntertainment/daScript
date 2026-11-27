@@ -10,8 +10,10 @@
 
 #include "daScript/simulate/sim_policy.h"
 #include "simulate_fusion_op2.h"
+#include "simulate_fusion_if_cmp.h"
 
 // fake DAS_NODE to support boolean eval
+// src/simulate/ARCHITECTURE.md#if-over-compare
 #undef DAS_NODE
 #define DAS_NODE(TYPE,CTYPE)                                    \
     virtual bool evalBool ( das::Context & context ) override { \
@@ -19,6 +21,10 @@
     }                                                           \
     virtual vec4f DAS_EVAL_ABI eval ( das::Context & context ) override {    \
         return cast<bool>::from(compute(context));              \
+    }                                                           \
+    virtual SimNode * fuseIf ( das::Context * context,          \
+                               das::SimNode_IfTheElseAny * ifNode ) override { \
+        return das::makeIfCmp(context, this, ifNode);           \
     }
 
 namespace das {
