@@ -4486,7 +4486,15 @@ class public LlvmJitVisitor : AstVisitor {
             if (ssrc._type.isRange) {// range()->next()
                 let isRange64 = ssrc._type.baseType == Type.tRange64 || ssrc._type.baseType == Type.tURange64
                 var svar_v = LLVMBuildLoad2(g_builder, isRange64 ? types.t_int64 : types.t_int32, getV(svar), "")
-                svar_v = LLVMBuildAdd(g_builder, svar_v, LLVMConstInt(isRange64 ? types.t_int64 : types.t_int32, 1ul, 0), "")
+                //! the loop runs only while from < to, so the counter never wraps
+                let one = LLVMConstInt(isRange64 ? types.t_int64 : types.t_int32, 1ul, 0)
+                let unsignedRange = (ssrc._type.baseType == Type.tURange
+                    || ssrc._type.baseType == Type.tURange64)
+                if (unsignedRange) {
+                    svar_v = LLVMBuildNUWAdd(g_builder, svar_v, one, "")
+                } else {
+                    svar_v = LLVMBuildNSWAdd(g_builder, svar_v, one, "")
+                }
                 LLVMBuildStore(g_builder, svar_v, getV(svar))
                 var sto = range2[ssrc]
                 var rcond = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, svar_v, sto, "")
