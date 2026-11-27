@@ -248,3 +248,27 @@ def test_copy_destination_follows_the_right_side(t : T?) {
     t |> equal(second.v.j, 9)
     t |> equal(first.v.j, 0)
 }
+
+[test(description = "a build that fuses two-source nodes also fuses an unchecked field compare, an unchecked field read behind a reference, an if over a compare and a copy between two elements")]
+def test_fused_node_shapes(t : T?) {
+    if (get_running_platform_name() == "emscripten") {
+        t |> skip("no child process on the web")
+        return
+    }
+    let fixture = path_join(get_das_root(), "tests/language/_fixture_fused_nodes.das")
+    var output : string
+    let argv <- [get_das_exe(), "-dasroot", get_das_root(), "-no-module-cache", fixture]
+    let rc = run_and_capture(argv, output, child_deadline(20.0))
+    t |> equal(0, rc, "the child ran, got:\n{output}")
+    t |> success(output |> contains("fused 3 true 1 1 6"),
+                 "the child printed its values, got:\n{output}")
+    if (!(output |> contains("(AddArgArg_TT<int>"))) {
+        t |> skip("this build does not fuse two-source nodes")
+        return
+    }
+    let names = fixed_array("LessArgroArgro_TT<int>", "FieldDerefR2VArg_TT<int>",
+        "IfLessThenElseArgArg_TT<int>", "CopyRefValueAnyAny")
+    for (name in names) {
+        t |> success(output |> contains("({name}"), "{name} is in the node dump, got:\n{output}")
+    }
+}
