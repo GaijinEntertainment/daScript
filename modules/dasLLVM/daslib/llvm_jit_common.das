@@ -140,6 +140,7 @@ class public Attributes {
     norecurse : LLVMOpaqueAttributeRef?
     noalias : LLVMOpaqueAttributeRef?
     nonnull : LLVMOpaqueAttributeRef?
+    noundef : LLVMOpaqueAttributeRef?
     speculatable : LLVMOpaqueAttributeRef?
     sext : LLVMOpaqueAttributeRef?
     zext : LLVMOpaqueAttributeRef?
@@ -171,6 +172,7 @@ class public Attributes {
         norecurse = ctx |> LLVMGetEnumAttribute("norecurse")
         noalias = ctx |> LLVMGetEnumAttribute("noalias")
         nonnull = ctx |> LLVMGetEnumAttribute("nonnull")
+        noundef = ctx |> LLVMGetEnumAttribute("noundef")
         speculatable = ctx |> LLVMGetEnumAttribute("speculatable")
         sext = ctx |> LLVMGetEnumAttribute("signext")
         zext = ctx |> LLVMGetEnumAttribute("zeroext")
