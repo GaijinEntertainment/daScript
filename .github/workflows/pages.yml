@@ -32,6 +32,8 @@ jobs:
     # under the new name FIRST, or the same silent break.
     environment:
       name: github-pages
+    outputs:
+      placeholders: ${{ steps.placeholders.outputs.list }}
     steps:
     - name: "SCM Checkout"
       uses: actions/checkout@v4
@@ -392,6 +394,7 @@ jobs:
             # placeholder instead — the URL keeps resolving to something
             # useful while we re-roll the runtime.
             echo "WARNING: daslang_static.{js,wasm} missing under web/output — staging placeholder /playground/."
+            echo "daslang.io /playground/ (daslang_static.{js,wasm} missing)" >> "$RUNNER_TEMP/placeholders"
             mkdir -p _site/playground
             cp site/playground/placeholder.html _site/playground/index.html
         fi
@@ -436,6 +439,7 @@ jobs:
             cp web/output64/examples/furier/furier.wasm _site/examples/furier/
         else
             echo "WARNING: furier wasm build incomplete — staging a placeholder so the always-listed card doesn't 404."
+            echo "daslang.io furier (wasm build incomplete)" >> "$RUNNER_TEMP/placeholders"
             printf '%s' '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Fourier Series — building</title><style>html,body{margin:0;height:100%}body{background:#0d0c0a;color:#cfc8bb;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}p{max-width:30rem;line-height:1.6}</style></head><body><p>This example is being rebuilt and will be available shortly.</p></body></html>' > _site/examples/furier/furier.html
         fi
 
@@ -452,6 +456,7 @@ jobs:
             cp web/output64/examples/path_tracer_lab/path_tracer_lab.wasm _site/examples/path_tracer_lab/
         else
             echo "WARNING: path_tracer_lab wasm build incomplete — staging a placeholder so the always-listed card doesn't 404."
+            echo "daslang.io path_tracer_lab (wasm build incomplete)" >> "$RUNNER_TEMP/placeholders"
             printf '%s' '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Path Tracer Lab — building</title><style>html,body{margin:0;height:100%}body{background:#0d0c0a;color:#cfc8bb;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}p{max-width:30rem;line-height:1.6}</style></head><body><p>This example is being rebuilt and will be available shortly.</p></body></html>' > _site/examples/path_tracer_lab/path_tracer_lab.html
         fi
 
@@ -467,6 +472,7 @@ jobs:
             cp web/output64/examples/physarum_lab/physarum_lab.wasm _site/examples/physarum_lab/
         else
             echo "WARNING: physarum_lab wasm build incomplete — staging a placeholder so the always-listed card doesn't 404."
+            echo "daslang.io physarum_lab (wasm build incomplete)" >> "$RUNNER_TEMP/placeholders"
             printf '%s' '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Physarum Lab — building</title><style>html,body{margin:0;height:100%}body{background:#0d0c0a;color:#cfc8bb;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}p{max-width:30rem;line-height:1.6}</style></head><body><p>This example is being rebuilt and will be available shortly.</p></body></html>' > _site/examples/physarum_lab/physarum_lab.html
         fi
 
@@ -499,17 +505,18 @@ jobs:
         # bakes each GGUF into a .dlim against the wasm64 build's own DlimConfiguration (the
         # step-7 probe), copies the packs, writes models/manifest.json (the file list + the
         # IMAGE_VERSION the images carry) and stamps that version into the page, which refuses a
-        # set minted for another version before it fetches one. --expect-image-version is the
-        # gate: an image whose header disagrees with the tree's IMAGE_VERSION (mint_models.py
-        # exits 3) REDS THIS DEPLOY - that is this tree's converter minting a version this tree's
-        # loader does not read, never a transient. Served same-origin, so the page needs no CORS;
+        # set minted for another version before it fetches one. mint_models.py's exit 3 is the
+        # gate and REDS THIS DEPLOY: this tree's converter did not mint an image for the build, or
+        # minted one whose header disagrees with the tree's IMAGE_VERSION - the tree's own defect,
+        # never a transient. Served same-origin, so the page needs no CORS;
         # the Caddy vhost adds the isolation headers under /examples/ (caddy.snippet). A missing
-        # build or probe, or a set that would not fetch or mint, stages a placeholder page under a
+        # build or probe, or a set that did not stage, stages a placeholder page under a
         # warning annotation, so the card never 404s.
         IMAGE_VERSION=$(sed -n 's/^let IMAGE_VERSION = \([0-9][0-9]*\).*/\1/p' modules/dasLLAMA/dasllama/dasllama_image.das)
         test -n "$IMAGE_VERSION"
         placeholder_page() {
             echo "::warning title=dasllama.io $1::$2 - staging a placeholder so the card doesn't 404"
+            echo "dasllama.io $1 ($2)" >> "$RUNNER_TEMP/placeholders"
             rm -rf "_site_dasllama/examples/$1/models"
             printf '%s' "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>$1 - building</title><style>html,body{margin:0;height:100%}body{background:#12101a;color:#d6cfbf;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}p{max-width:30rem;line-height:1.6}</style></head><body><p>This example is being rebuilt and will be available shortly.</p></body></html>" > "_site_dasllama/examples/$1/$1.html"
         }
@@ -530,10 +537,10 @@ jobs:
                     --expect-image-version "$IMAGE_VERSION" \
                     --stamp-page "_site_dasllama/examples/$ex/$ex.html" || rc=$?
                 if [ "$rc" -eq 3 ]; then
-                    echo "::error title=dasllama.io $ex::the images minted for $ex do not carry the tree's IMAGE_VERSION $IMAGE_VERSION - this tree's converter and loader disagree"
+                    echo "::error title=dasllama.io $ex::this tree's converter did not mint $ex's images for the wasm64 build at IMAGE_VERSION $IMAGE_VERSION - the lines above say why"
                     exit 1
                 elif [ "$rc" -ne 0 ]; then
-                    placeholder_page "$ex" "the model set did not fetch or mint (exit $rc)"
+                    placeholder_page "$ex" "the model set did not stage (exit $rc) - the lines above say why"
                 else
                     cp "web/output64/examples/$ex/$ex.js"   "_site_dasllama/examples/$ex/"
                     cp "web/output64/examples/$ex/$ex.wasm" "_site_dasllama/examples/$ex/"
@@ -662,3 +669,26 @@ jobs:
         # the holds ride annotations.json: a held model leaves the live board with the commit that holds it
         ladder_import admin/import-annotations modules/dasLLAMA/performance/records/annotations.json annotations.json
         echo "deployed $REL"
+
+    - name: "List the placeholders this deploy shipped"
+      id: placeholders
+      run: |
+        if [ -s "$RUNNER_TEMP/placeholders" ]; then
+            echo "list=$(paste -sd ';' "$RUNNER_TEMP/placeholders")" >> "$GITHUB_OUTPUT"
+        fi
+
+  # A placeholder ships inside a green build-and-deploy, so the rest of the site deploys and the
+  # job's caches save. This job reds the run for it: GitHub mails a failed run to whoever pushed.
+  placeholders:
+    needs: build-and-deploy
+    if: github.repository == 'GaijinEntertainment/daScript' && github.ref == 'refs/heads/master' && needs.build-and-deploy.outputs.placeholders != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+    - name: "Fail the run: the deploy shipped a placeholder"
+      env:
+        PLACEHOLDERS: ${{ needs.build-and-deploy.outputs.placeholders }}
+      run: |
+        echo "::error title=the deploy shipped a placeholder::$PLACEHOLDERS"
+        exit 1
