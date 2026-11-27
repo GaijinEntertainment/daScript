@@ -737,12 +737,18 @@ class public LlvmJitVisitor : AstVisitor {
         }
         LLVMAddAttributeToFunctionArgument(fn, nai, attributes.nocapture)
         LLVMAddAttributeToFunctionArgument(fn, nai, attributes.noalias)        // context
+        LLVMAddAttributeToFunctionArgument(fn, nai, attributes.nonnull)
         LLVMAddAttributeToFunctionArgument(fn, nai, attributes.noundef)
         LLVMSetParamAlignment(LLVMGetParam(fn, nai++), 16u)
         if (isCmres) {
             LLVMAddAttributeToFunctionArgument(fn, nai, attributes.nocapture)
             LLVMAddAttributeToFunctionArgument(fn, nai, attributes.noalias)    // cmres
+            LLVMAddAttributeToFunctionArgument(fn, nai, attributes.nonnull)
             LLVMAddAttributeToFunctionArgument(fn, nai, attributes.noundef)
+            if (result.sizeOf > 0) {
+                LLVMAddAttributeToFunctionArgument(fn, nai, LLVMCreateEnumAttribute(g_ctx,
+                    LLVMGetEnumAttributeKindForName("dereferenceable"), uint64(result.sizeOf)))
+            }
             LLVMSetParamAlignment(LLVMGetParam(fn, nai), uint(result.alignOf))
         }
     }
