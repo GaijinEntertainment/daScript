@@ -746,7 +746,8 @@ def test_moe_formats_expert_cache(t : T?) {
         let pins = pin_stream(MOE_HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
         let cache_was = expert_cache_mb_pin()
         set_expert_cache_mb(3500l)
-        remove("{path_join(models_dir(), fx.file)}.vulkan.dlim.heat")   //! an earlier run's profile would seat the first feed's hottest experts already
+        let home = gpu_want_cuda() ? "cuda" : "vulkan"
+        remove("{path_join(models_dir(), fx.file)}.{home}.dlim.heat")   //! an earlier run's profile would seat the first feed's hottest experts already
         let trim_pin = vulkan_trim_pin()   //! the lane mints untrimmed: the cell's reference pass is the all-CPU chain, which reads the planar planes
         set_vulkan_trim(false)
         with_gpu_kv_dtype(ct, KVDtype.f16) {
