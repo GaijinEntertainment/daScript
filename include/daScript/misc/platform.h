@@ -107,6 +107,17 @@
     #define DAS_EVAL_ABI
 #endif
 
+// include/daScript/simulate/ARCHITECTURE_CODEGEN.md#two-arm-branch
+#if defined(__clang__) && defined(__has_cpp_attribute)
+    #if __has_cpp_attribute(clang::nomerge)
+        #define DAS_NO_MERGE [[clang::nomerge]]
+    #else
+        #define DAS_NO_MERGE
+    #endif
+#else
+    #define DAS_NO_MERGE
+#endif
+
 #ifndef _MSC_VER
     // Only define if not already defined by the compiler/system headers
     #ifndef __forceinline

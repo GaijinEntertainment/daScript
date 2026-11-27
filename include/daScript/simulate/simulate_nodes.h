@@ -3638,9 +3638,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             bool cmp = cond->evalBool(context);
             if ( cmp ) {
-                return if_true->eval(context);
+                DAS_NO_MERGE return if_true->eval(context);
             } else {
-                return if_false->eval(context);
+                DAS_NO_MERGE return if_false->eval(context);
             }
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
@@ -3648,9 +3648,9 @@ SIM_NODE_AT_VECTOR(Float, float)
                 DAS_PROFILE_NODE \
                 bool cmp = cond->evalBool(context);                 \
                 if ( cmp ) {                                        \
-                    return if_true->eval##TYPE(context);            \
+                    DAS_NO_MERGE return if_true->eval##TYPE(context); \
                 } else {                                            \
-                    return if_false->eval##TYPE(context);           \
+                    DAS_NO_MERGE return if_false->eval##TYPE(context); \
                 }                                                   \
             }
         DAS_EVAL_NODE
@@ -3740,10 +3740,10 @@ SIM_NODE_AT_VECTOR(Float, float)
             bool cmp = cond->evalBool(context);
             if ( cmp ) {
                 DAS_SINGLE_STEP(context,if_true->debugInfo,false);
-                return if_true->eval(context);
+                DAS_NO_MERGE return if_true->eval(context);
             } else {
                 DAS_SINGLE_STEP(context,if_false->debugInfo,false);
-                return if_false->eval(context);
+                DAS_NO_MERGE return if_false->eval(context);
             }
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
@@ -3753,10 +3753,10 @@ SIM_NODE_AT_VECTOR(Float, float)
                 bool cmp = cond->evalBool(context);                 \
                 if ( cmp ) {                                        \
                     DAS_SINGLE_STEP(context,if_true->debugInfo,false);  \
-                    return if_true->eval##TYPE(context);            \
+                    DAS_NO_MERGE return if_true->eval##TYPE(context); \
                 } else {                                            \
                     DAS_SINGLE_STEP(context,if_false->debugInfo,false); \
-                    return if_false->eval##TYPE(context);           \
+                    DAS_NO_MERGE return if_false->eval##TYPE(context); \
                 }                                                   \
             }
         DAS_EVAL_NODE
@@ -3774,9 +3774,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             auto res = EvalTT<TT>::eval(context,cond);
             if ( res == 0 ) {
-                return if_true->eval(context);
+                DAS_NO_MERGE return if_true->eval(context);
             } else {
-                return if_false->eval(context);
+                DAS_NO_MERGE return if_false->eval(context);
             }
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
@@ -3784,9 +3784,9 @@ SIM_NODE_AT_VECTOR(Float, float)
                 DAS_PROFILE_NODE \
                 auto res = EvalTT<TT>::eval(context,cond);          \
                 if ( res==0 ) {                                     \
-                    return if_true->eval##TYPE(context);            \
+                    DAS_NO_MERGE return if_true->eval##TYPE(context); \
                 } else {                                            \
-                    return if_false->eval##TYPE(context);           \
+                    DAS_NO_MERGE return if_false->eval##TYPE(context); \
                 }                                                   \
             }
         DAS_EVAL_NODE
@@ -3805,10 +3805,10 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto res = EvalTT<TT>::eval(context,this->cond);
             if ( res == 0 ) {
                 DAS_SINGLE_STEP(context,this->if_true->debugInfo,false);
-                return this->if_true->eval(context);
+                DAS_NO_MERGE return this->if_true->eval(context);
             } else {
                 DAS_SINGLE_STEP(context,this->if_false->debugInfo,false);
-                return this->if_false->eval(context);
+                DAS_NO_MERGE return this->if_false->eval(context);
             }
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
@@ -3818,10 +3818,10 @@ SIM_NODE_AT_VECTOR(Float, float)
                 auto res = EvalTT<TT>::eval(context,this->cond);    \
                 if ( res==0 ) {                                     \
                     DAS_SINGLE_STEP(context,this->if_true->debugInfo,false);  \
-                    return this->if_true->eval##TYPE(context);            \
+                    DAS_NO_MERGE return this->if_true->eval##TYPE(context); \
                 } else {                                            \
                     DAS_SINGLE_STEP(context,this->if_false->debugInfo,false); \
-                    return this->if_false->eval##TYPE(context);           \
+                    DAS_NO_MERGE return this->if_false->eval##TYPE(context); \
                 }                                                   \
             }
         DAS_EVAL_NODE
@@ -3839,9 +3839,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             auto res = EvalTT<TT>::eval(context,cond);
             if ( res != 0 ) {
-                return if_true->eval(context);
+                DAS_NO_MERGE return if_true->eval(context);
             } else {
-                return if_false->eval(context);
+                DAS_NO_MERGE return if_false->eval(context);
             }
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
@@ -3851,10 +3851,10 @@ SIM_NODE_AT_VECTOR(Float, float)
                 auto res = EvalTT<TT>::eval(context,cond);          \
                 if ( res!=0 ) {                                     \
                     DAS_SINGLE_STEP(context,if_true->debugInfo,false);  \
-                    return if_true->eval##TYPE(context);            \
+                    DAS_NO_MERGE return if_true->eval##TYPE(context); \
                 } else {                                            \
                     DAS_SINGLE_STEP(context,if_false->debugInfo,false); \
-                    return if_false->eval##TYPE(context);           \
+                    DAS_NO_MERGE return if_false->eval##TYPE(context); \
                 }                                                   \
             }
         DAS_EVAL_NODE
@@ -3873,10 +3873,10 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto res = EvalTT<TT>::eval(context,this->cond);
             if ( res != 0 ) {
                 DAS_SINGLE_STEP(context,this->if_true->debugInfo,false);
-                return this->if_true->eval(context);
+                DAS_NO_MERGE return this->if_true->eval(context);
             } else {
                 DAS_SINGLE_STEP(context,this->if_false->debugInfo,false);
-                return this->if_false->eval(context);
+                DAS_NO_MERGE return this->if_false->eval(context);
             }
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
@@ -3886,10 +3886,10 @@ SIM_NODE_AT_VECTOR(Float, float)
                 auto res = EvalTT<TT>::eval(context,this->cond);    \
                 if ( res!=0 ) {                                     \
                     DAS_SINGLE_STEP(context,this->if_true->debugInfo,false);  \
-                    return this->if_true->eval##TYPE(context);      \
+                    DAS_NO_MERGE return this->if_true->eval##TYPE(context); \
                 } else {                                            \
                     DAS_SINGLE_STEP(context,this->if_false->debugInfo,false); \
-                    return this->if_false->eval##TYPE(context);     \
+                    DAS_NO_MERGE return this->if_false->eval##TYPE(context); \
                 }                                                   \
             }
         DAS_EVAL_NODE
