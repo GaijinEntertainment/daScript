@@ -189,6 +189,11 @@ cost the prompt 3.5x (pp512 415 mapped against 117 staged, same plan; `debug-jit
 
 ### Under the decode meet a window claims over the pool {#pool-meet-window}
 
+**A decode step that goes through the meet sums every pick in the window chain and stages the pool's step
+weights zero (`rdec_host_experts_step`).** The token command's routed combine always adds the pool's weighted
+down rows (`hot_w`, one mapped block the step path restages a step), so a step that hands the device no hit
+stages none: a weight left from an earlier step would add that step's expert again.
+
 **Under `DASLLAMA_GPU_DEC_MEET`, a routed layer's window host step - where the layer's stack streams
 and its pool is on - runs the meet over the pool (`rdec_pool_meet_rows`).** The window's regions are
 its hits in their slots first, then its misses, each with a victim slot that the device's DMA fills

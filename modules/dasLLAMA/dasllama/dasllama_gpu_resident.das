@@ -4897,6 +4897,9 @@ def private rdec_host_experts_step(l : int64; xb : float const?; logits : float 
     if (gpu_dec_meet() && rdec_stream_on(l)) {
         g_rdec_dec_meet_steps++
         rdec_host_experts_rows(l, xb, logits, acc, 0l, 1l)
+        if (rdec_hot_on(l)) {
+            rdec_hot_submit(l, 0l, null, null)
+        }
         return
     }
     unsafe {
