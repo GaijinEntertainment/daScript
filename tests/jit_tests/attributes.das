@@ -209,3 +209,24 @@ def test_noreturn_call(t : T?) {
     }
     t |> success(failed)
 }
+
+struct RefPair {
+    a : int
+    b : float
+}
+
+[jit]
+def pick_a_jit(var p : RefPair&) : int& {
+    unsafe {
+        return p.a
+    }
+}
+
+[test(description = "a write through the reference a JIT-compiled function returns lands in the right field")]
+def test_ref_result(t : T?) {
+    t |> success(!jit_enabled() || is_jit_function(@@pick_a_jit))
+    var p = RefPair(a = 1, b = 2.0)
+    pick_a_jit(p) = 5
+    t |> equal(5, p.a)
+    t |> equal(2.0, p.b)
+}
