@@ -965,6 +965,7 @@ namespace das {
             serializer.fileAccess = access.get();
             serializer.serializeProgram(program, libGroup);
         });
+        if ( program->thisModule ) serializer_read->collectFileInfo(program->thisModule->cachedFileInfos);
 #if DAS_SERIALIZE_PROFILE
         serializer_read->profRecords.push_back({fileName, 0, payload_size, get_time_usec(profT0)});
 #endif
