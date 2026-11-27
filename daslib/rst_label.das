@@ -37,7 +37,12 @@ let private SAFE_NAME_REPLACEMENTS = [
     (text = ")", replacement = ""),
     (text = "[", replacement = "_lb_"),
     (text = "]", replacement = "_rb_"),
-    (text = "|", replacement = "")
+    (text = "|", replacement = ""),
+    (text = "+", replacement = "_pl_"),
+    (text = "/", replacement = "_sl_"),
+    (text = "%", replacement = "_pc_"),
+    (text = "^", replacement = "_ct_"),
+    (text = "~", replacement = "_tl_")
 ]
 
 def public safe_function_name(name : string) : string {
