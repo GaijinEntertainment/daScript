@@ -145,8 +145,9 @@ aarch64, x86-64 with F16C) and half the bytes. Where the convert is software (wa
 class) every read pays it, so those targets serve the same rows as floats.
 
 `DlimCpuConfig.rows_f32` is that outcome, and `active_rows_f32` reads it: a cross-box bake's target,
-else the process pin (`set_rows_f32`, which a test uses to reach the float form on a box that
-converts), else the JIT target's own answer (`target_half_converts`, a companion of the f32 tile
+else the process pin (`set_rows_f32`: `dasllama-convert` sets it from `--config`, so a target whose
+backend this host registers bakes in the target's form, and a test reaches the float form on a box
+that converts), else the JIT target's own answer (`target_half_converts`, a companion of the f32 tile
 family; interpreted, the answer is no). The identity spells it ` f32rows` inside its last field only
 when set, so an image of a converting target keeps its identity, and the two forms never share one:
 a lane is its CPU class, and no class holds both kinds of box.

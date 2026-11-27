@@ -19,6 +19,8 @@ require daslib/clargs                    // get_host_binary: the child bake runs
 require dasllama/dasllama_image         // image_family_tag: the baked image's lane, read off its header
 require dasllama/dasllama_styletts2     // styletts2_stored_lane: the lane a written GGUF names
 require daslib/env_registry             // env_value_of: the child bake's knobs, read the sanctioned way
+require dasllama/dasllama_config
+require strings
 
 def private sniff_cell(t : T?; name : string; want : AsrCarrierKind) {
     let path = path_join(models_dir(), name)
@@ -190,6 +192,32 @@ def test_bake_gigaam_lanes(t : T?) {
         remove(stale)
         remove(copy)
     }
+}
+
+
+[test(description = "a --config naming the row form this host does not serve bakes an image whose identity carries that form", timeout = 1200)]
+def test_bake_config_row_form(t : T?) {
+    let src = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
+    return if (!model_available(t, src))
+    let config = path_join(test_temp_dir(), "row-form.json")
+    let out = path_join(test_temp_dir(), "row-form.dlim")
+    remove(config)
+    remove(out)
+    var log = ""
+    let dump <- ["--dump-config", "-o", config]
+    let dumped = convert_run(dump, log)
+    t |> equal(dumped, 0, "the host's configuration dumps: {log}")
+    var want = DlimConfiguration()
+    t |> success(dlim_config_from_json(fread(config), want), "the dump is a DlimConfiguration")
+    want.cpu.rows_f32 = !want.cpu.rows_f32
+    t |> success(fwrite(config, dlim_config_json(want)), "the flipped configuration is written")
+    let bake <- ["--model", src, "--config", config, "-o", out, "--keep-stale-tmp"]
+    let rc = convert_run(bake, log)
+    t |> equal(rc, 0, "the bake exits 0: {log}")
+    let identity_has_f32rows = find(image_peek(out).identity, " f32rows") >= 0
+    t |> equal(identity_has_f32rows, want.cpu.rows_f32, "the image's identity names the configuration's row form")
+    remove(out)
+    remove(config)
 }
 
 
