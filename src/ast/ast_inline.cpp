@@ -1064,61 +1064,70 @@ namespace das {
         // may this expression's evaluation move (earlier, later, or become conditional)?
         // node-level noSideEffects flags are stale at patch time; function sideEffectFlags
         // are fresh (buildAccessFlags runs right before the patch slot) - derive from the tree
-        bool isReorderSafe ( Expression * e ) {
+        // src/ast/ARCHITECTURE_INLINE.md#inline-argument-after-sibling
+        bool isReorderSafe ( Expression * e, bool stableGlobals = false ) {
+            auto safe = [&]( Expression * x ) { return isReorderSafe(x, stableGlobals); };
             if ( !e ) return true;
             if ( e->rtti_isConstant() ) return true;
             if ( e->rtti_isMakeBlock() ) return true;   // making a block writes nothing (and
                                                         // hoisting one would copy a non-copyable)
             if ( e->rtti_isTypeDecl() ) return true;    // type<...> witness: a compile-time tag
-            if ( e->rtti_isUnsafe() ) return isReorderSafe(static_cast<ExprUnsafe *>(e)->body);
+            if ( e->rtti_isUnsafe() ) return safe(static_cast<ExprUnsafe *>(e)->body);
             if ( e->rtti_isVar() ) return true;     // lvalue: storage identity is stable - only the R2V load below is time-sensitive
             if ( e->rtti_isR2V() ) {
                 auto sub = static_cast<ExprRef2Value *>(e)->subexpr;
-                if ( isGlobalRooted(sub) ) return false;    // the value can change mid-inline - snapshot it
-                return isReorderSafe(sub);
+                // the value can change mid-inline - snapshot it
+                if ( !stableGlobals && isGlobalRooted(sub) ) return false;
+                return safe(sub);
             }
-            if ( e->rtti_isField() ) return isReorderSafe(static_cast<ExprField *>(e)->value);
-            if ( e->rtti_isSafeField() ) return isReorderSafe(static_cast<ExprSafeField *>(e)->value);
-            if ( e->rtti_isAsVariant() ) return isReorderSafe(static_cast<ExprAsVariant *>(e)->value);
-            if ( e->rtti_isSafeAsVariant() ) return isReorderSafe(static_cast<ExprSafeAsVariant *>(e)->value);
-            if ( e->rtti_isSwizzle() ) return isReorderSafe(static_cast<ExprSwizzle *>(e)->value);
-            if ( e->rtti_isCast() ) return isReorderSafe(static_cast<ExprCast *>(e)->subexpr);
+            if ( e->rtti_isField() ) return safe(static_cast<ExprField *>(e)->value);
+            if ( e->rtti_isSafeField() ) return safe(static_cast<ExprSafeField *>(e)->value);
+            if ( e->rtti_isAsVariant() ) return safe(static_cast<ExprAsVariant *>(e)->value);
+            if ( e->rtti_isSafeAsVariant() ) {
+                return safe(static_cast<ExprSafeAsVariant *>(e)->value);
+            }
+            if ( e->rtti_isSwizzle() ) return safe(static_cast<ExprSwizzle *>(e)->value);
+            if ( e->rtti_isCast() ) return safe(static_cast<ExprCast *>(e)->subexpr);
             if ( e->rtti_isAt() ) {
                 auto at = static_cast<ExprAt *>(e);
-                return isReorderSafe(at->subexpr) && isReorderSafe(at->index);
+                return safe(at->subexpr) && safe(at->index);
             }
             if ( e->rtti_isSafeAt() ) {
                 auto at = static_cast<ExprSafeAt *>(e);
-                return isReorderSafe(at->subexpr) && isReorderSafe(at->index);
+                return safe(at->subexpr) && safe(at->index);
             }
             if ( e->rtti_isNullCoalescing() ) {
                 auto nc = static_cast<ExprNullCoalescing *>(e);
-                return isReorderSafe(nc->subexpr) && isReorderSafe(nc->defaultValue);
+                return safe(nc->subexpr) && safe(nc->defaultValue);
             }
             if ( e->rtti_isOp1() ) {
                 auto op = static_cast<ExprOp1 *>(e);
                 if ( op->func && op->func->hasObservableEffects() ) return false;
-                return isReorderSafe(op->subexpr);
+                return safe(op->subexpr);
             }
             if ( e->rtti_isOp2() ) {
                 auto op = static_cast<ExprOp2 *>(e);
                 if ( op->func && op->func->hasObservableEffects() ) return false;
-                return isReorderSafe(op->left) && isReorderSafe(op->right);
+                return safe(op->left) && safe(op->right);
             }
             if ( e->rtti_isOp3() ) {
                 auto op = static_cast<ExprOp3 *>(e);
                 if ( op->func && op->func->hasObservableEffects() ) return false;
-                return isReorderSafe(op->subexpr) && isReorderSafe(op->left) && isReorderSafe(op->right);
+                return safe(op->subexpr) && safe(op->left) && safe(op->right);
             }
             if ( e->rtti_isCall() ) {
                 auto c = static_cast<ExprCall *>(e);
                 if ( !c->func || c->func->hasObservableEffects() ) return false;
                 for ( auto & a : c->arguments ) {
-                    if ( !isReorderSafe(a) ) return false;
+                    if ( !safe(a) ) return false;
                 }
                 return true;
             }
             return false;   // unrecognized - conservatively unsafe to reorder
+        }
+
+        bool argumentHasEffect ( Expression * e ) {
+            return !isReorderSafe(e, true);
         }
 
         // a callee that writes nothing (no var by-ref params, no external state, no
@@ -2353,7 +2362,7 @@ namespace das {
             bool effectSeen = false;
             for ( size_t ai=sa.count(); ai-- > 0; ) {
                 effectsAfter[ai] = effectSeen;
-                effectSeen = effectSeen || !isReorderSafe(sa.arg(ai));
+                effectSeen = effectSeen || argumentHasEffect(sa.arg(ai));
             }
             for ( size_t ai=0, ais=sa.count(); ai!=ais; ++ai ) {
                 Expression * arg = sa.arg(ai);
@@ -2490,7 +2499,9 @@ namespace das {
                     bool canCalleeInvalidate = (!writeFree || effectsAfter[ai]) && !argReadsOnlyPrivateLocals(arg, sa);
                     bool needsStorage = (stats.readAsRefArg.find(param)!=stats.readAsRefArg.end() && !(arg->type && arg->type->ref))
                         || (stats.readAsPlace.find(param)!=stats.readAsPlace.end() && !(arg->type && arg->type->isRef()));
-                    if ( reads<=1 && !underLoop && isReorderSafe(arg) && !canCalleeInvalidate && !needScope && !needsStorage ) {
+                    bool movable = isReorderSafe(arg, writeFree && !effectsAfter[ai]);
+                    if ( reads<=1 && !underLoop && movable && !canCalleeInvalidate
+                            && !needScope && !needsStorage ) {
                         sub.substitute = arg;
                     } else {
                         if ( !makeArgTemp(cloneTyped(arg), !varParam, false, argNonCopyable) ) return false;

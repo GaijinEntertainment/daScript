@@ -82,7 +82,17 @@ substituted argument that reads a variable sees a write made by an argument that
 the call, where the call itself read the variable first: `f(n, bump(n))` with `bump` writing `n`
 by reference.
 
-`classifyArguments` therefore records, for each argument, whether a later one is unsafe to
-reorder (`effectsAfter`). With such an argument behind it, a variable that is written anywhere
-in the caller, and an expression that reads one, bind a local of their own, set at the
-argument's place in call order.
+`classifyArguments` therefore records, for each argument, whether a later one has an effect
+(`effectsAfter`): it calls something with observable effects, or is a shape the walk does not
+know. With such an argument behind it, a variable that is written anywhere in the caller, and
+an expression that reads one, bind a local of their own, set at the argument's place in call
+order.
+
+A read of a global is not an effect. It writes nothing, so it does not change what an argument
+before it reads. It is time-sensitive instead: its value changes when something writes the
+global between the argument's place in the call and the read in the body. Only the callee and
+a later argument can do that, so an argument that reads a global substitutes when the callee
+has no observable effects and no later argument has an effect, and binds a local otherwise.
+`isReorderSafe` is the one walk behind both tests - may this expression move, does this
+argument have an effect - and its `stableGlobals` argument says whether a global read counts
+as stable.

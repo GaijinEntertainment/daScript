@@ -361,7 +361,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 289;   // 289: the policies record disable_sink
+            return 290;   // 290: an inlined argument that reads a global substitutes
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
