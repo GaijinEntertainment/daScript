@@ -1538,6 +1538,10 @@ class public LlvmJitVisitor : AstVisitor {
                            is_cmres : bool; name : string) {
         let start = is_cmres ? 1u : 0u
         var ccall = LLVMBuildCall2(g_builder, fn_type, loaded_func, params, name)
+        if (func.moreFlags2.noReturn) {
+            LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.noreturn)
+            LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.cold)
+        }
         if (func.sideEffectFlags == bitfield(0)) {
             LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.nounwind)     // TODO: better no-unwind?
             LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.willreturn)
