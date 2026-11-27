@@ -1519,6 +1519,12 @@ def unchecked_int_local(p : FieldHolder?) : int {
 }
 
 [unsafe_deref]
+def unchecked_int_local_reference(var p : FieldHolder?) : int {
+    let q & = unsafe(p)
+    return q.i
+}
+
+[unsafe_deref]
 def unchecked_int_struct_field(owner : PointerInField) : int => owner.held.i
 
 [unsafe_deref]
@@ -1582,6 +1588,7 @@ def test_unchecked_field_read_sources(t : T?) {
     t |> equal(unchecked_int_argument(p), 11)
     t |> equal(unchecked_int_reference(p), 11)
     t |> equal(unchecked_int_local(p), 22)
+    t |> equal(unchecked_int_local_reference(p), 11)
     t |> equal(unchecked_int_struct_field(owner), 11)
 }
 
@@ -1647,4 +1654,53 @@ def test_unchecked_field_reference(t : T?) {
     unchecked_store_argument(p, 77)
     t |> equal(first.i, 77)
     t |> equal(second.i, 1020)
+}
+
+[unsafe_deref]
+def unchecked_less_fields(a, b : FieldHolder?) : bool => a.i < b.i
+
+[unsafe_deref]
+def unchecked_less_argument(a : FieldHolder?; value : int) : bool => a.i < value
+
+[unsafe_deref]
+def unchecked_less_local(a : FieldHolder?; value : int) : bool {
+    let q = a.next
+    return q.i < value
+}
+
+[unsafe_deref]
+def unchecked_add_assign(var p : FieldHolder?; value : int) {
+    p.i += value
+}
+
+[unsafe_deref]
+def unchecked_sum_local(p : FieldHolder?) : int {
+    var q = p
+    var total = 0
+    while (q != null) {
+        total += q.i
+        q = q.next
+    }
+    return total
+}
+
+[test(description = "a compare, an add-assign and a loop sum over an unchecked field read and update the field's current value")]
+def test_unchecked_field_operand(t : T?) {
+    var third = FieldHolder(i = 30)
+    var second = FieldHolder(i = 20)
+    var first = FieldHolder(i = 10)
+    second.next = unsafe(addr(third))
+    first.next = unsafe(addr(second))
+    var p = unsafe(addr(first))
+    var q = unsafe(addr(second))
+    t |> equal(unchecked_less_fields(p, q), true)
+    t |> equal(unchecked_less_fields(q, p), false)
+    t |> equal(unchecked_less_argument(p, 11), true)
+    t |> equal(unchecked_less_argument(p, 10), false)
+    t |> equal(unchecked_less_local(p, 21), true)
+    t |> equal(unchecked_less_local(p, 20), false)
+    t |> equal(unchecked_sum_local(p), 60)
+    unchecked_add_assign(p, 5)
+    t |> equal(first.i, 15)
+    t |> equal(unchecked_sum_local(p), 65)
 }

@@ -64,3 +64,20 @@ their two files define `FUSION_OP2_SET_GLOBAL_MNH` before they include the set p
 list, which adds the lines for it. The pointer index family takes it as a base too. The `Set`
 family and the table index family include the same list without the define, and the binary
 operation and call families have a list of their own; none of them takes a global by hash.
+
+## A field read without a null check is an offset source {#unchecked-field-source}
+
+A field read through a pointer that needs no null check - the function carries `unsafe_deref` -
+and whose pointer sits in an argument or in a local is not a field node over a variable node.
+`ast_simulate.cpp` makes it the node of the offset source: `GetArgumentRefOff` and
+`GetLocalRefOff`, or their `R2V` forms when the value is read. That source is "the slot holds a
+pointer, add an offset", the one a struct passed by reference already uses, so every fused
+family that takes it takes the field read as an operand: `a.y < b.y` on two pointer arguments
+is one `Less` node.
+
+A pointer behind a reference argument is two loads, which no source describes, and a
+null-checked read has an error to report, which a source cannot do. A pointer in a block
+argument, in a local that aliases the function's result, or in a local that sits inside a
+literal under construction is not in a plain argument or stack slot either. All of these stay
+field nodes: the `FieldDeref` and `PtrFieldDeref` nodes, fused with their one child in
+`simulate_fusion_ptrfdr.cpp`.
