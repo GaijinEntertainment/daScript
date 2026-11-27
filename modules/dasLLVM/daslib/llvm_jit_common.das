@@ -849,6 +849,10 @@ def public init_jit_state(target : JitTarget;  // nolint:STYLE038 - order-couple
         get_jit_alloc_heap(), fixed_array(nounwind, willreturn, nofree, memory_inaccessible_rw), (nocapture, [1]))
     var alloc_persistent = jit_add_extern(FN_JIT_ALLOC_PERSISTENT, jit_fn_type($(size : int; ctx : void?) : void? {}),
         get_jit_alloc_persistent(), fixed_array(nounwind, willreturn, nofree, memory_inaccessible_rw), (nocapture, [1]))
+    //! a fresh chunk aliases nothing the program already holds
+    for (alloc in fixed_array(alloc_heap, alloc_persistent)) {
+        LLVMAddAttributeAtIndex(alloc, 0u, attrs.noalias)
+    }
     //! the object size LLVM's bounds checks read off the call; a vec3 load past a 12-byte object would be UB against it
     if (!LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS) {
         for (alloc in fixed_array(alloc_heap, alloc_persistent)) {

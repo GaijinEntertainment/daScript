@@ -7,6 +7,10 @@ let M = 50000
 
 var g_sink : int64
 
+struct Acc {
+    total : int
+}
+
 def private make_ints(n : int) {
     var res <- [for (i in range(n)); i & 1023]
     return <- res
@@ -24,6 +28,22 @@ def private checked_sum(a : array<int>; var total : int&) {
     }
 }
 
+//! the heap allocator returns noalias: `p.total` is none of `a`'s
+//! elements, so it stays in a register, though no runtime check
+//! can cover the indirect read `a[i]`
+[hint(noinline)]
+def private gather_into_new(a : array<int>; idx : array<int>) : int {
+    var p = new Acc()
+    for (i in idx) {
+        p.total += a[i]
+    }
+    let r = p.total
+    unsafe {
+        delete p
+    }
+    return r
+}
+
 [benchmark]
 def attribute_effects(b : B?) {
     let ia <- make_ints(M)
@@ -31,5 +51,9 @@ def attribute_effects(b : B?) {
         var t = 0
         checked_sum(ia, t)
         g_sink += int64(t)
+    }
+    let idx <- [for (i in range(M)); (i * 7919) % M]
+    b |> run("noalias_alloc_gather/{M}", 1) {
+        g_sink += int64(gather_into_new(ia, idx))
     }
 }
