@@ -3,6 +3,7 @@ options indenting = 4
 options multiple_contexts
 options strict_smart_pointers = true
 options no_aliasing = false
+options no_global_variables = false
 
 module decs shared public
 

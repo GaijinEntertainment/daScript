@@ -6,6 +6,7 @@ options strict_smart_pointers
 
 // Intentionally opt in for user-facing docs: keep comments concise and actionable.
 options _comment_hygiene = true
+options no_global_variables = false
 
 module sql_boost shared public
 

@@ -54,7 +54,7 @@ foreach(_n ${_lint_chunks})
 endforeach()
 foreach(_n ${_lint_daslib_chunks})
     add_das_target(lint_daslib_chunk_${_n}
-        COMMAND $<TARGET_FILE:daslang> ./utils/lint/main.das -- ${_lint_daslib_chunks_${_n}} -q --silent --cop no_aliasing=true
+        COMMAND $<TARGET_FILE:daslang> ./utils/lint/main.das -- ${_lint_daslib_chunks_${_n}} -q --silent --cop no_aliasing=true --cop no_global_variables=true
         DEPENDS daslang ${_lint_run_inputs} WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     list(APPEND _lint_targets lint_daslib_chunk_${_n})
 endforeach()

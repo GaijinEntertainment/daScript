@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options no_global_variables = false
 
 module jobque_profile shared public
 

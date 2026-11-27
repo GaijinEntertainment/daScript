@@ -3,6 +3,7 @@ options indenting = 4
 options strict_smart_pointers = true
 options unsafe_table_lookup = false
 options no_aliasing = false
+options no_global_variables = false
 
 module cpp_gen public
 

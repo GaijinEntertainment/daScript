@@ -1,6 +1,7 @@
 options gen2
 
 options indenting = 4
+options no_global_variables = false
 options strict_smart_pointers = true
 
 module quote shared private

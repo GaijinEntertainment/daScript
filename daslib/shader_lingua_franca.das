@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options no_global_variables = false
 
 // Shader lingua franca: the backend-invariant builtin surface shared by daslang's two shader
 // emitter cores -- dasGlsl (-> GLSL text) and dasSpirv (-> SPIR-V binary). Both
