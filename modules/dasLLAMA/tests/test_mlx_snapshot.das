@@ -5,55 +5,52 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require _model_tier
-require dasllama/dasllama_env   // parity_full_mode: the full suite's flag
 require dasllama/dasllama_core
 require dasllama/dasllama_common
 require dasllama/dasllama_load
 require dasllama/dasllama_math
 require dasllama/dasllama_tokenizer
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration for the load
-require dasllama/dasllama   // nolint:STYLE030,LINT019 - the overrides and the Metal mode, inside the das_metal halves
-require _metal_blob_twin   // nolint:STYLE030,LINT019 - blob_twin and the kernel census, inside the das_metal halves
-require _compares   // nolint:STYLE030,LINT019 - argmax_of, inside the das_metal halves
-require _mlx_cells   // the prompt, the oracles' gate and the teacher-forced rail
-require daslib/strings_boost
-require ?das_metal dasllama/dasllama_metal_common   // nolint:STYLE030,LINT019 - the kernel census, inside the das_metal halves
-require ?das_metal dasllama/dasllama_metal_decode   // nolint:STYLE030,LINT019 - metal_decode_stats and shutdown, inside the das_metal halves
-require ?das_metal dasllama/dasllama_metal_prefill   // nolint:STYLE030,LINT019 - metal_prefill_stats and shutdown, inside the das_metal halves
-require ?das_metal dasllama/dasllama_metal_kernels   // nolint:STYLE030,LINT019 - get_metal_b32_wide, inside the das_metal halves
-require ?das_metal metal/das_metal_boost   // nolint:STYLE030,LINT019 - metal_live_object_count, inside the das_metal halves
+require dasllama/dasllama   // nolint:STYLE030,LINT019 - the overrides, inside the das_metal halves
+require _metal_blob_twin   // nolint:STYLE030,LINT019 - the census counts and the overrides' seat, inside the das_metal halves
+require _compares   // argmax_of
+require _cpu_gpu_model   // with_cpu_and_gpu_snapshot, the forms
+require _metal_decode_cells   // decode_per32_mlx_3b_4bit: the 3B snapshot's per-32 row
+require _mlx_cells   // the prompt, the oracles' gate, the teacher-forced rail, the snapshots' Metal cells
+require _metal_format_census_cells   // the 35B snapshot's weight-format census row
+require ?das_metal dasllama/dasllama_metal_decode   // nolint:STYLE030,LINT019 - metal_decode_stats, inside the das_metal halves
+require ?das_metal dasllama/dasllama_metal_prefill   // nolint:STYLE030,LINT019 - metal_prefill_stats, inside the das_metal halves
 require math
+require _kernel_census   // nolint:STYLE030,LINT019 - kernel_census_reset_metal, inside the das_metal halves
 
-// The stocked safetensors snapshots served on the CPU from their own affine planes: the config against the GGUF twin's, the
-// per-plane format tags, and teacher-forced logits against two oracles - the GGUF twin (other quantized weights of the same
-// checkpoint, a loose bar) and the snapshot's own runtime on the CPU (the same weights; the gap is the activation forms).
-// A cell skips where its snapshot or its GGUF twin is not stocked, where the snapshot sits above the large tier without
-// DASLLAMA_PARITY_FULL=1, and on the Metal arms where the build carries no dasMetal or the run is interpreted (`jit_only`).
-// The Llama-3.2-1B 8-bit snapshot's cell against its GGUF twin runs on the twin's block (`test_gpu_resident_llama.das`, the
-// cell `_mlx_cells.das`'s), which loads the twin once.
+// The stocked safetensors snapshots, one block each
+// (`with_cpu_and_gpu_snapshot`): on the snapshot's CPU form the
+// per-plane format tags and teacher-forced logits against the
+// snapshot's own runtime (the same weights; the gap is the activation
+// forms), on its Metal form - the blob twin - the window and greedy
+// steps against the CPU rails' (the portable-pinned CPU form), the
+// Metal compares after the block. A cell skips where its snapshot is
+// not stocked, where the snapshot sits above the large tier without
+// DASLLAMA_PARITY_FULL=1, and the Metal forms where the build carries
+// no dasMetal, the run is interpreted (`jit_only`) or the arm filter
+// reaches none of their cells. The Llama-3.2-1B 8-bit snapshot's
+// block runs beside its GGUF twin's, in that twin's test
+// (`test_gpu_resident_llama.das`); the Qwen3.8-27B 4-bit snapshot's
+// cells ride its trunk's block (`mlx_qwen38_27b_forms`,
+// `_mlx_cells.das`).
 
 let private ORACLE_3B <- [(2l, 5.8398, 14924l, 5.7305), (220l, 7.9961, 2768l, 6.9570), (315l, 18.3438, 3363l, 16.9062), (9822l, 13.7266, 8494l, 13.5312), (374l, 18.9844, 11l, 18.2031), (12366l, 17.5625, 7559l, 14.8203), (13l, 19.5469, 11l, 18.9531), (578l, 16.7812, 1102l, 16.3750), (6864l, 16.7969, 3363l, 15.6719), (315l, 19.5156, 374l, 18.7656), (12366l, 17.7969, 22463l, 13.6641), (374l, 18.6406, 11l, 16.4219), (7295l, 16.6719, 1101l, 14.1953), (13l, 20.0625, 627l, 17.6250), (578l, 17.8438, 1628l, 14.9141), (6864l, 17.7500, 7928l, 15.5703), (4409l, 14.6016, 40214l, 13.3125), (22463l, 11.7344, 279l, 11.5000), (13l, 16.5312, 11l, 15.3906), (578l, 16.5781, 358l, 14.1953)]
 
-//! the 27B oracle's text, which its own tokenizer encodes to `PROMPT_27B` (no BOS)
-let private TEXT_27B = "The capital of France is Paris. The capital of Italy is Rome. The ocean is blue."
-let private PROMPT_27B = fixed_array(760l, 6511l, 314l, 9338l, 369l, 11751l, 13l, 561l, 6511l, 314l, 14898l, 369l, 21047l, 13l, 561l, 17415l, 369l, 6105l, 13l)
 
-//! mlx-lm's forward of Qwen3.8-27B-4bit on the GPU over `PROMPT_27B`: the top-2 per position (id, logit, runner-up id, logit)
-let private ORACLE_27B <- [(2614l, 9.5000, 220l, 9.2500), (314l, 16.2500, 3177l, 14.1875), (279l, 13.1875, 264l, 10.5000), (369l, 18.2500, 11l, 17.5000), (11751l, 17.3750, 264l, 14.6250), (13l, 19.3750, 11l, 17.6250), (198l, 14.1250, 11751l, 13.6875), (6511l, 14.3125, 6823l, 11.8125), (314l, 21.0000, 3177l, 15.1250), (9564l, 16.1250, 14898l, 15.5625), (369l, 22.0000, 11l, 15.7500), (21047l, 18.7500, 31586l, 13.1875), (13l, 18.7500, 11l, 14.5000), (561l, 17.3750, 198l, 14.8125), (6511l, 17.8750, 89798l, 13.1875), (421l, 16.8750, 369l, 16.3750), (6105l, 17.2500, 264l, 16.3750), (13l, 20.7500, 11l, 17.1250), (561l, 15.5625, 198l, 13.8125)]
-
-//! mlx-lm's forward of Qwen3.6-35B-A3B-4bit on the GPU over `PROMPT_27B` (the same tokenizer): the top-2 per position
+//! mlx-lm's forward of Qwen3.6-35B-A3B-4bit on the GPU over
+//! `PROMPT_27B` (the same tokenizer): the top-2 per position
 let private ORACLE_35B <- [(2614l, 13.4375, 1156l, 11.9375), (314l, 17.5000, 3177l, 15.9375), (279l, 14.0000, 9338l, 11.7500), (11l, 19.0000, 369l, 18.6250), (11751l, 17.7500, 264l, 15.7500), (11l, 19.5000, 13l, 19.2500), (198l, 15.4375, 11751l, 15.2500), (6511l, 15.8750, 242476l, 13.7500), (314l, 21.7500, 3177l, 17.3750), (9564l, 16.7500, 17163l, 16.3750), (369l, 22.1250, 11l, 16.5000), (21047l, 19.7500, 43984l, 14.6250), (13l, 21.8750, 11l, 18.6250), (561l, 18.3750, 3437l, 16.1250), (6511l, 20.2500, 89798l, 13.5625), (1881l, 17.7500, 369l, 17.3750), (6105l, 17.5000, 279l, 16.6250), (13l, 20.8750, 11l, 17.5000), (561l, 15.9375, 271l, 15.5625)]
 
-[test(description = "The Llama-3.2-3B MLX 4-bit snapshot serves mlx4 planes on the CPU, its teacher-forced logits within 0.4 of the snapshot runtime's top-1 at every position with no lead miss, and a greedy continuation decodes to text")]
-def test_mlx_llama_3b_4bit(t : T?) {
-    t |> run("Llama-3.2-3B 4-bit snapshot: mlx4 planes, logits against the runtime oracle, a greedy continuation") @(t : T?) {
-        let snap = hf_snapshot_dir("mlx-community/Llama-3.2-3B-Instruct-4bit")
-        if (empty(snap)) {
-            t |> skip("the 3B snapshot not present")
-            return
-        }
-        with_dasllama_jobque_() {
-            var m <- load_model_(snap, QuantMode.q8)
+//! the 3B snapshot on its CPU form: mlx4 planes, the teacher-forced
+//! logits against the snapshot runtime's, a greedy continuation
+def private mlx_3b_cpu_cell(t : T?; var m : Model) {
+    unsafe {
+        t |> run("Llama-3.2-3B 4-bit snapshot: mlx4 planes, logits against the runtime oracle, a greedy continuation") @capture(& m)(t : T ?) {
             t |> equal(m.emb_fmt, KqFmt.mlx4, "the token table serves its own mlx4 planes")
             t |> equal(fmt_at(m.w2_fmt, 0l), KqFmt.mlx4, "the FFN down plane too")
             var inscope lg <- teacher_forced(m)
@@ -61,6 +58,7 @@ def test_mlx_llama_3b_4bit(t : T?) {
             var s <- make_run_state(m.config)
             var tok = 0l
             var ids : array<int64>
+            ids |> reserve(6)
             for (id, i in PROMPT_IDS, count()) {
                 forward(m, s, id, int64(i))
                 tok = argmax_of(s.logits)
@@ -74,311 +72,33 @@ def test_mlx_llama_3b_4bit(t : T?) {
             to_log(LOG_INFO, "3B greedy continuation: '{text}'\n")
             t |> success(!empty(text), "the greedy continuation decodes to text ('{text}')")
             delete s
-            delete m
+            delete ids
         }
     }
 }
 
-//! the class stem an affine member's Metal stamps carry
-def private mlx_stem(f : KqFmt) : string => capitalize("{f}")
-
-//! member `f`'s one-row GEMV planes read since the census reset: the two-row stamps, the K-split ones, the wide ones, and twice
-//! each fused gate|up dispatch - it reads two planes
-def private mlx_gemv_dispatches(f : KqFmt) : int64 {
-    return (metal_kernel_count("metal_kq_gemv_{f}") + metal_kernel_count("metal_kq_gemv_{f}_ks")
-        + metal_kernel_count("MetalKqGemv{mlx_stem(f)}W_metal_b32_gemv_w") + 2l * metal_kernel_count("MetalKqGemv{mlx_stem(f)}Glu_metal_b32_gemv_w"))
-}
-
-//! member `f`'s dispatches since the census reset on the forms a window takes: the base tile, its split stamp and its tensor
-//! arms (every `MetalKqMulMm<stem>*` stamp), the small-batch forms, the GEMV
-def private mlx_window_dispatches(f : KqFmt) : int64 {
-    let s = mlx_stem(f)
-    var n = metal_kernel_count_prefix("MetalKqMulMm{s}")
-    for (ks in ["", "Ks"]) {
-        for (w in [2, 4, 8]) {
-            n += metal_kernel_count("MetalB32MvB{w}{s}{ks}_metal_b32_mvb")
+[test(description = "The Llama-3.2-3B MLX 4-bit snapshot serves mlx4 planes on the CPU, its teacher-forced logits within 0.4 of the snapshot runtime's top-1 at every position with no lead miss, and a greedy continuation decodes to text; on the Metal home's blob twin, on a das_metal build, it prefills in one device window and decodes 16 greedy steps on the affine GEMV and embed stamps, emitting the CPU rails' ids exactly, batches two to twelve per-32 streams token for token the single-row step's, and its prefill window, uncrowned and with the `kq_mulmm` tensor twins crowned, lands its last logits row within 4.0 max-abs of the CPU rails' while the one-token-short control lands outside; each form loads once")]
+def test_mlx_llama_3b_4bit(t : T?) {
+    return if (!family_on(t, "llama"))
+    var forms <- [cpu_cells_form()]
+    var inscope metal <- mlx_metal_forms(t, "mlx-community/Llama-3.2-3B-Instruct-4bit", ["metal-mlx4", "metal-prefill-mlx4", "batch-per32"])
+    forms |> push_from(metal)
+    var k : MlxLlamaMetalKept
+    with_cpu_and_gpu_snapshot(t, "llm", "mlx-community/Llama-3.2-3B-Instruct-4bit", MLX_SNAPSHOT_CTX, forms) $(var m, form) {
+        if (form.on_metal) {
+            mlx_llama_metal_cells(t, m, form, KqFmt.mlx4, "metal-mlx4", "metal-prefill-mlx4", decode_per32_mlx_3b_4bit(), k)
+        } elif (alone_pass_of(form, cpu_cells_form())) {
+            mlx_3b_cpu_cell(t, m)
+        } else {
+            mlx_llama_metal_cpu(m, form, k)
         }
     }
-    return n + mlx_gemv_dispatches(f)
+    mlx_llama_metal_verdict(t, k)
+    delete forms
 }
 
-//! a dense model's planes tagged `f`
-def private planes_of(m : Model; f : KqFmt) : int64 {
-    var n = 0l
-    for (l in range64(m.config.n_layers)) {
-        for (g in [fmt_at(m.wq_fmt, l), fmt_at(m.wk_fmt, l), fmt_at(m.wv_fmt, l), fmt_at(m.wo_fmt, l), fmt_at(m.w1_fmt, l), fmt_at(m.w2_fmt, l), fmt_at(m.w3_fmt, l)]) {
-            n += g == f ? 1l : 0l
-        }
-    }
-    return n
-}
-
-//! `nsteps` greedy ids after `prompt`'s window through `s`: each step fed the argmax of the row the step before left
-def private greedy_after(m : Model; var s : Session; prompt : array<int64>; nsteps : int) : array<int64> {
-    eval_(m, s, prompt)
-    var ids : array<int64>
-    ids |> reserve(nsteps)
-    var one <- [0l]
-    for (_i in range(nsteps)) {
-        one[0] = argmax_of(s.logits, m.config.vocab_size)
-        ids |> push(one[0])
-        eval_(m, s, one)
-    }
-    delete one
-    return <- ids
-}
-
-//! The snapshot served on the Metal home: the blob twin's prefill window and `nsteps` greedy steps against the CPU rails' over
-//! the same prompt - the ids token for token, the window one device prefill and every step a device decode, the window's affine
-//! sites on their stamps (the GEMV, the small-batch form or the base tile), every step's on the GEMV, and the token table
-//! gathered on the device by the member's stamp
-[unused_argument(t, snap, f, tag, prompt, nsteps)]
-def private metal_served_cell(t : T?; snap : string; f : KqFmt; tag : string; prompt : array<int64>; nsteps : int) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let prior_wscale = get_wscale_f16()
-        let prior_backend = active_kernel_backend()
-        let prior_mode = get_metal_mode()
-        set_wscale_f16(false)
-        pin_kernel_backend("portable")
-        set_metal_mode(MetalMode.when_available)
-        var tr <- load_model_(snap, QuantMode.q8)
-        tr.config.seq_len = min(tr.config.seq_len, 512l)
-        var trg <- blob_twin(t, snap, 512l)
-        let np = planes_of(trg, f)
-        t |> success(np > 0l, "{tag}: the dense planes load as {f} ({np} planes)")
-        let emb = "MetalEmbedB32{mlx_stem(f)}_metal_embed_b32"
-        with_dasllama_jobque_() {
-            var sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
-            var inscope want <- greedy_after(tr, sc, prompt, nsteps)
-            delete sc
-            var sg = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
-            let seat = metal_overrides_seat()
-            let pf0 = metal_prefill_stats().prefills
-            metal_kernel_coverage_reset()
-            select_prefill_override("metal")
-            set_metal_prefill_min_npos(1l)
-            eval_(trg, sg, prompt)
-            t |> equal(metal_prefill_stats().prefills - pf0, 1l, "{tag}: the window was one prefill the device served")
-            let w = mlx_window_dispatches(f)
-            t |> success(w >= np, "{tag}: the window's {f} sites rode the affine stamps ({w} dispatches, {np} planes)")
-            t |> success(metal_kernel_count(emb) >= 1l, "{tag}: the window gathered its token rows on the device ({emb})")
-            select_decode_override("metal")
-            let de0 = metal_decode_stats().decodes
-            metal_kernel_coverage_reset()
-            var inscope got : array<int64>
-            var one <- [0l]
-            for (_i in range(nsteps)) {
-                one[0] = argmax_of(sg.logits, trg.config.vocab_size)
-                got |> push(one[0])
-                eval_(trg, sg, one)
-            }
-            delete one
-            restore_metal_overrides(seat)
-            let served = metal_decode_stats().decodes - de0
-            t |> equal(served, int64(nsteps), "{tag}: every step was a device decode")
-            let gv = mlx_gemv_dispatches(f)
-            t |> success(gv >= int64(nsteps) * np, "{tag}: the steps read every {f} plane through its GEMV ({gv} dispatches, {int64(nsteps) * np} planes x steps)")
-            let gw = metal_kernel_count("MetalKqGemv{mlx_stem(f)}W_metal_b32_gemv_w")
-            t |> success(gw > 0l || !get_metal_b32_wide(),
-                "{tag}: the planes of 512 rows or more rode the wide one-row form ({gw} dispatches; DASLLAMA_METAL_B32_WIDE={get_metal_b32_wide()})")
-            let gl = metal_kernel_count("MetalKqGemv{mlx_stem(f)}Glu_metal_b32_gemv_w")
-            t |> success(gl >= int64(nsteps) * trg.config.n_layers || !get_metal_b32_glu() || !get_metal_b32_wide(),
-                "{tag}: every step's FFN read its gate and up planes in the fused dispatch ({gl} dispatches; DASLLAMA_METAL_B32_GLU={get_metal_b32_glu()}, DASLLAMA_METAL_B32_WIDE={get_metal_b32_wide()})")
-            t |> success(metal_kernel_count(emb) >= int64(nsteps), "{tag}: every step gathered its token row on the device ({emb})")
-            log_gen_texts(tr, "{tag} Metal", want, got)
-            t |> equal(got, want, "{tag}: the Metal greedy ids are the CPU rails' token for token")
-            delete sg
-        }
-        metal_decode_shutdown()
-        metal_prefill_shutdown()
-        delete trg
-        delete tr
-        t |> equal(metal_live_object_count(), 0l, "{tag}: no leaked Metal objects after shutdown")
-        set_metal_mode(prior_mode)
-        clear_kernel_backend_pin()
-        select_kernel_backend(prior_backend)
-        set_wscale_f16(prior_wscale)
-    }
-}
-
-[test(description = "On the Metal home the mlx8 and mlx4 Llama snapshots prefill in one device window and decode 16 greedy steps on the affine GEMV and embed stamps, emitting the CPU rails' ids exactly, with no leaked Metal objects")]
-def test_mlx_metal_served(t : T?) {
-    for (spec in [(repo = "mlx-community/Llama-3.2-1B-Instruct-8bit", f = KqFmt.mlx8, arm = "metal-mlx8"),
-                  (repo = "mlx-community/Llama-3.2-3B-Instruct-4bit", f = KqFmt.mlx4, arm = "metal-mlx4")]) {
-        t |> run("{spec.repo} served on Metal: window and greedy steps == the CPU rails, on the {spec.f} stamps") @(t : T?) {
-            if (!family_on(t, "llama") || !arm_on(t, spec.arm)) return
-            static_if (typeinfo builtin_module_exists(das_metal)) {
-                return if (!jit_only(t))
-                let snap = hf_snapshot_dir(spec.repo)
-                if (empty(snap)) {
-                    t |> skip("{spec.repo} not stocked")
-                    return
-                }
-                var inscope prompt <- [for (id in PROMPT_IDS); id]
-                metal_served_cell(t, snap, spec.f, spec.arm, prompt, 16)
-            } else {
-                t |> skip("dasMetal not built")
-            }
-        }
-    }
-}
-
-//! the prefill arm's bar against the CPU rails: the device window reads half tiles where the CPU reads Q8_0 rows (the dense
-//! K-quant bar of the format census)
-let private PREFILL_BAR = 4.0
-
-//! one Metal prefill window over `prompt` on a fresh f16 session: the last row's logits
-def private metal_window_logits(trg : Model; prompt : array<int64>) : array<float> {
-    var out : array<float>
-    with_dasllama_jobque_() {
-        var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
-        eval_(trg, s, prompt)
-        out := s.logits
-        delete s
-    }
-    return <- out
-}
-
-//! member `f`'s dense twin and dev-W dispatches since the census reset (`kq_mulmm_<f>`'s forms, the dequant pass)
-def private mlx_twin_dispatches(f : KqFmt) : int64 {
-    let s = mlx_stem(f)
-    var n = metal_kernel_count("MetalKqDequant{s}_metal_kq_dequant")
-    for (v in ["T", "TH", "TH128"]) {
-        n += metal_kernel_count_compiled("MetalKqMulMm{s}{v}_metal_kq_mulmm_b32_t")
-    }
-    for (v in ["THDb", "THDb128", "THSk", "TSk", "THSk16", "TSk16"]) {
-        n += metal_kernel_count_compiled("MetalKqMulMm{s}{v}_metal_kq_mulmm_db")
-    }
-    return n
-}
-
-//! The snapshot's prefill window on the Metal home against the CPU rails': the base leg (no crown: the base tile, the dev-W
-//! chain and the small-batch remainder), then the member's `kq_mulmm_<f>` crown pinned (the tensor twins) - each leg one device
-//! prefill whose last row sits within `PREFILL_BAR` of the CPU's, its sites on the member's stamps by the census; the CPU
-//! row of the prompt one token short lands outside the bar (the control)
-[unused_argument(t, snap, f, tag)]
-def private metal_prefill_cell(t : T?; snap : string; f : KqFmt; tag : string) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let prior_wscale = get_wscale_f16()
-        let prior_backend = active_kernel_backend()
-        let prev_crowns = get_metal_tensor_crowns()
-        set_wscale_f16(false)
-        pin_kernel_backend("portable")
-        var tr <- load_model_(snap, QuantMode.q8)
-        tr.config.seq_len = min(tr.config.seq_len, 512l)
-        var trg <- blob_twin(t, snap, 512l)
-        var inscope prompt <- encode(tr, counting_text(40), true, false)
-        var inscope short <- [for (i in range(length(prompt) - 1)); prompt[i]]
-        var cpu, cpu_short : array<float>
-        with_dasllama_jobque_() {
-            var sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
-            eval_(tr, sc, prompt)
-            cpu := sc.logits
-            delete sc
-            var ss = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
-            eval_(tr, ss, short)
-            cpu_short := ss.logits
-            delete ss
-        }
-        let seat = metal_overrides_seat()
-        select_prefill_override("metal")
-        set_metal_prefill_min_npos(1l)
-        for (crowned in [false, true]) {
-            let leg = crowned ? "kq_mulmm_{f} crowned" : "no crown"
-            if (crowned) {
-                pin_metal_tensor_crowns("kq_mulmm_{f}")
-                metal_prefill_shutdown()
-            }
-            let pf0 = metal_prefill_stats().prefills
-            metal_kernel_coverage_reset()
-            var inscope got <- metal_window_logits(trg, prompt)
-            t |> equal(metal_prefill_stats().prefills - pf0, 1l, "{tag} {leg}: the window was one prefill the device served")
-            let base = metal_kernel_count("MetalKqMulMm{mlx_stem(f)}_metal_kq_mulmm") + metal_kernel_count_compiled("MetalKqMulMm{mlx_stem(f)}Sk_metal_kq_mulmm")
-            let twins = mlx_twin_dispatches(f)
-            if (crowned) {
-                t |> success(twins > 0l, "{tag} {leg}: the window's {f} sites rode the member's tensor twins or dev-W chain ({twins} dispatches)")
-            } else {
-                t |> success(base + twins > 0l, "{tag} {leg}: the window's {f} sites rode the base tile or the dev-W chain ({base} + {twins} dispatches)")
-            }
-            let d = logits_maxdiff(got, cpu)
-            var pick_gpu = 0l
-            var pick_cpu = 0l
-            with_dasllama_jobque_() {
-                pick_gpu = argmax_of(got, tr.config.vocab_size)
-                pick_cpu = argmax_of(cpu, tr.config.vocab_size)
-            }
-            to_log(LOG_INFO, "{tag} {leg}: window last row vs the CPU rails maxd {d} (bar {PREFILL_BAR}); next '{eyeball_str(piece_(tr, pick_gpu))}' vs '{eyeball_str(piece_(tr, pick_cpu))}'\n")
-            t |> success(d <= PREFILL_BAR, "{tag} {leg}: the window's last row within {PREFILL_BAR} of the CPU rails' (maxd {d})")
-        }
-        let ctl = logits_maxdiff(cpu_short, cpu)
-        t |> success(all_finite(cpu_short) && all_finite(cpu), "{tag}: every logit the control reads is finite")
-        t |> success(ctl > PREFILL_BAR, "{tag}: the control - the prompt one token short lands outside the bar ({ctl})")
-        restore_metal_overrides(seat)
-        unpin_metal_tensor_crowns()
-        set_metal_tensor_crowns(prev_crowns)
-        metal_decode_shutdown()
-        metal_prefill_shutdown()
-        delete cpu
-        delete cpu_short
-        delete trg
-        delete tr
-        t |> equal(metal_live_object_count(), 0l, "{tag}: no leaked Metal objects after shutdown")
-        clear_kernel_backend_pin()
-        select_kernel_backend(prior_backend)
-        set_wscale_f16(prior_wscale)
-    }
-}
-
-[test(description = "The mlx8 and mlx4 snapshots' Metal prefill window, uncrowned and with the `kq_mulmm` tensor twins crowned, lands its last logits row within 4.0 max-abs of the CPU rails', while the one-token-short control lands outside")]
-def test_mlx_metal_prefill(t : T?) {
-    for (spec in [(repo = "mlx-community/Llama-3.2-1B-Instruct-8bit", f = KqFmt.mlx8, arm = "metal-prefill-mlx8"),
-                  (repo = "mlx-community/Llama-3.2-3B-Instruct-4bit", f = KqFmt.mlx4, arm = "metal-prefill-mlx4")]) {
-        t |> run("{spec.repo} prefill window on Metal == the CPU rails, base tile and crowned twins") @(t : T?) {
-            if (!family_on(t, "llama") || !arm_on(t, spec.arm)) return
-            static_if (typeinfo builtin_module_exists(das_metal)) {
-                return if (!jit_only(t))
-                let snap = hf_snapshot_dir(spec.repo)
-                if (empty(snap)) {
-                    t |> skip("{spec.repo} not stocked")
-                    return
-                }
-                metal_prefill_cell(t, snap, spec.f, spec.arm)
-            } else {
-                t |> skip("dasMetal not built")
-            }
-        }
-    }
-}
-
-//! the 27B snapshot (BF16 pairs, the deltanet planes), large tier: its tokenizer.json gives the oracle's ids, and its
-//! teacher-forced logits on the CPU rails sit on mlx-lm's forward of the same weights
-[test(description = "The Qwen3.8-27B MLX 4-bit snapshot serves mlx4b planes, its tokenizer.json encodes the oracle text to the oracle ids exactly, and its CPU teacher-forced logits sit within 0.4 of mlx-lm's top-1 with no lead miss")]
-def test_mlx_qwen38_27b_4bit(t : T?) {
-    t |> run("Qwen3.8-27B 4-bit snapshot: mlx4b planes, the tokenizer's ids and the teacher-forced logits against mlx-lm's") @(t : T?) {
-        if (!family_on(t, "qwen35")) return
-        let snap = hf_snapshot_dir("mlx-community/Qwen3.8-27B-4bit")
-        if (empty(snap)) {
-            t |> skip("the 27B snapshot not present")
-            return
-        }
-        if (!parity_full_mode()) {
-            t |> skip("the 27B snapshot is large-tier - set DASLLAMA_PARITY_FULL=1 to run")
-            return
-        }
-        with_dasllama_jobque_() {
-            var m <- load_model_(snap, QuantMode.q8)
-            t |> equal(fmt_at(m.w2_fmt, 0l), KqFmt.mlx4b, "the FFN down plane serves its own mlx4b planes")
-            var inscope want <- [for (id in PROMPT_27B); id]
-            var inscope ids <- encode(m, TEXT_27B, false, false)
-            t |> equal(ids, want, "the snapshot's tokenizer.json encodes the oracle's text to the oracle's ids")
-            var inscope lg <- teacher_forced(m, want)
-            oracle_gate(t, "27B", lg, ORACLE_27B)
-            delete m
-        }
-    }
-}
-
-//! the worst gap of our row at position i + `shift` to the oracle's top-1 logit at position i
+//! the worst gap of our row at position i + `shift` to the oracle's
+//! top-1 logit at position i
 def private oracle_worst(lg : array<array<float>>; oracle : array<tuple<int64; float; int64; float>>; shift : int) : float {
     var worst = 0.0
     for (i in range(length(oracle) - shift)) {
@@ -387,7 +107,8 @@ def private oracle_worst(lg : array<array<float>>; oracle : array<tuple<int64; f
     return worst
 }
 
-//! the routed FFN's planes of every layer tagged `f`: the three expert stacks and the shared expert's triple
+//! the routed FFN's planes of every layer tagged `f`: the three
+//! expert stacks and the shared expert's triple
 def private moe_planes_all(m : Model; f : KqFmt) : bool {
     for (l in range64(m.config.n_layers)) {
         for (g in [fmt_at(m.we1_fmt, l), fmt_at(m.we2_fmt, l), fmt_at(m.we3_fmt, l), fmt_at(m.wsh1_fmt, l), fmt_at(m.wsh2_fmt, l), fmt_at(m.wsh3_fmt, l)]) {
@@ -397,24 +118,13 @@ def private moe_planes_all(m : Model; f : KqFmt) : bool {
     return true
 }
 
-//! the 35B-A3B snapshot (routed experts, the shared expert, the 8-bit router), large tier: the expert geometry off config.json,
-//! every routed and shared plane in its own mlx4b member, the teacher-forced logits against mlx-lm's forward, and a greedy
-//! counting walk
-[test(description = "The Qwen3.6-35B-A3B MLX snapshot reads its expert geometry off config.json, serves every routed and shared plane as mlx4b, holds 0.4 of mlx-lm's top-1 logits (the one-position-shifted control outside), and greedily continues a count")]
-def test_mlx_qwen36_35b_a3b_4bit(t : T?) {
-    t |> run("Qwen3.6-35B-A3B 4-bit snapshot: the expert geometry, mlx4b routed and shared planes, the logits against mlx-lm's") @(t : T?) {
-        if (!family_on(t, "qwen35moe")) return
-        let snap = hf_snapshot_dir("mlx-community/Qwen3.6-35B-A3B-4bit")
-        if (empty(snap)) {
-            t |> skip("the 35B-A3B snapshot not present")
-            return
-        }
-        if (!parity_full_mode()) {
-            t |> skip("the 35B-A3B snapshot is large-tier - set DASLLAMA_PARITY_FULL=1 to run")
-            return
-        }
-        with_dasllama_jobque_() {
-            var m <- load_model_(snap, QuantMode.q8)
+//! the 35B-A3B snapshot on its CPU form: the expert geometry off
+//! config.json, every routed and shared plane in its own mlx4b
+//! member, the teacher-forced logits against mlx-lm's forward, and a
+//! greedy counting walk
+def private q36_35b_cpu_cell(t : T?; var m : Model) {
+    unsafe {
+        t |> run("Qwen3.6-35B-A3B 4-bit snapshot: the expert geometry, mlx4b routed and shared planes, the logits against mlx-lm's") @capture(& m)(t : T ?) {
             let c = m.config
             t |> success(c.n_expert == 256l && c.n_expert_used == 8l && c.n_ff_exp == 512l && c.n_ff_shexp == 512l,
                 "the expert geometry off config.json: 256 experts, top-8, 512-wide experts and shared expert")
@@ -430,80 +140,49 @@ def test_mlx_qwen36_35b_a3b_4bit(t : T?) {
             t |> success(ctl > ORACLE_LOGIT_BAR, "the control - each row against the next position's oracle - lands outside the bar ({ctl})")
             var inscope count_ids <- encode(m, "1, 2, 3, 4, 5, 6, 7,", false, false)
             var s <- make_run_state(m.config)
-            var inscope walk <- greedy_after(m, s, count_ids, 6)
+            eval_(m, s, count_ids)
+            var inscope walk <- greedy_eval_steps(m, s, 6)
             let text = decode(m.tok, walk)
             to_log(LOG_INFO, "35B-A3B greedy after the count: '{text}'\n")
             t |> equal(text, " 8, 9,", "the greedy walk continues the count")
             delete s
-            delete m
         }
     }
 }
 
-//! the 27B snapshot on the Metal rails, large tier: the teacher-forced logits, every position a device decode, against
-//! mlx-lm's forward; then the window and a short greedy walk against the CPU rails' (`metal_served_cell`)
-[test(description = "On Metal the Qwen3.8-27B MLX snapshot decodes every teacher-forced position on the device within 0.4 of mlx-lm's top-1 logits, and its prefill window plus 8 greedy steps emit the CPU rails' ids exactly")]
-def test_mlx_qwen38_27b_metal(t : T?) {
-    t |> run("Qwen3.8-27B 4-bit snapshot on Metal: the teacher-forced logits against mlx-lm's, the greedy walk == the CPU rails") @(t : T?) {
-        if (!family_on(t, "qwen35") || !arm_on(t, "metal-27b")) return
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            return if (!jit_only(t))
-            let snap = hf_snapshot_dir("mlx-community/Qwen3.8-27B-4bit")
-            if (empty(snap)) {
-                t |> skip("the 27B snapshot not present")
-                return
-            }
-            if (!parity_full_mode()) {
-                t |> skip("the 27B snapshot is large-tier - set DASLLAMA_PARITY_FULL=1 to run")
-                return
-            }
-            let prior_wscale = get_wscale_f16()
-            let prior_backend = active_kernel_backend()
-            set_wscale_f16(false)
-            pin_kernel_backend("portable")
-            var inscope want <- [for (id in PROMPT_27B); id]
-            with_dasllama_jobque_() {
-                var trg <- blob_twin(t, snap, 512l)
-                let seat = metal_overrides_seat()
-                select_decode_override("metal")
-                let de0 = metal_decode_stats().decodes
-                var inscope lg <- teacher_forced(trg, want)
-                let served = metal_decode_stats().decodes - de0
-                restore_metal_overrides(seat)
-                t |> equal(served, long_length(want), "27B Metal: every teacher-forced position was a device decode")
-                oracle_gate(t, "27B Metal", lg, ORACLE_27B)
-                metal_decode_shutdown()
-                delete trg
-            }
-            clear_kernel_backend_pin()
-            select_kernel_backend(prior_backend)
-            set_wscale_f16(prior_wscale)
-            metal_served_cell(t, snap, KqFmt.mlx4b, "metal-27b", want, 8)
-        } else {
-            t |> skip("dasMetal not built")
-        }
-    }
-}
-
-//! member `f`'s routed tensor twins dispatched since the census reset
-def private mlx_routed_twins(f : KqFmt) : int64 {
-    var n = 0l
-    for (v in ["T", "TH", "TH128", "THR"]) {
-        n += metal_kernel_count("MetalMoeMulMm{mlx_stem(f)}{v}_metal_moe_mulmm_b32_t")
-    }
-    return n
-}
-
-//! the routed snapshot's window against the CPU rails: the Metal window's last row within the census bar of the CPU's (the
-//! qwen35moe hybrid's deltanet drift under a 4-bit routed stack reads 1.5-2.0 there, the one-step-off rows 10.9 and up)
+//! the routed snapshot's window against the CPU rails: the Metal
+//! window's last row within the census bar of the CPU's (the
+//! qwen35moe hybrid's deltanet drift under a 4-bit routed stack reads
+//! 1.5-2.0 there, the one-step-off rows 10.9 and up)
 let private MLX_MOE_BAR = 3.0
 
-//! one window leg of `metal_routed_cell` over a fresh session: the routed sites on the member's tensor twins (`base` false, the
-//! knee's pick) or on its simdgroup base (the knee at 0 and the member's `moe_mulmm_<f>` and `kq_mulmm_<f>` crowns pinned off -
-//! a crowned family takes its twins at every shape), one device prefill whose last row holds `MLX_MOE_BAR` of the CPU rails'
-def private routed_window_leg(t : T?; trg : Model; f : KqFmt; tag : string; prompt : array<int64>; cpu : array<float>;
-                              nstacks : int64; prev_crowns : string; base : bool) : Session {
+//! what the routed cell's Metal side keeps: the prompt, each window
+//! leg's name and last row, the device's greedy ids; the CPU rails'
+//! window rows and ids beside them
+struct private RoutedKept {
+    tag : string
+    prompt : array<int64>
+    nsteps : int
+    legs : array<string>
+    rows : array<array<float>>
+    got : array<int64>
+    cpu : array<float>
+    cpu_short : array<float>
+    want : array<int64>
+    metal : bool
+    cpu_ran : bool
+}
+
+//! one window leg of `routed_metal` over a fresh session: the routed
+//! sites on the member's tensor twins (`base` false, the knee's pick)
+//! or on its simdgroup base (the knee at 0 and the member's
+//! `moe_mulmm_<f>` and `kq_mulmm_<f>` crowns pinned off - a crowned
+//! family takes its twins at every shape), one device prefill whose
+//! last row the leg keeps
+def private routed_window_leg(t : T?; trg : Model; f : KqFmt; var k : RoutedKept; nstacks : int64; prev_crowns : string;
+                              base : bool) : Session {
     static_if (typeinfo builtin_module_exists(das_metal)) {
+        let tag = k.tag
         let leg = base ? "base" : "twins"
         set_metal_moe_kq_twin_avg(base ? 0l : 16l)
         if (base) {
@@ -512,139 +191,144 @@ def private routed_window_leg(t : T?; trg : Model; f : KqFmt; tag : string; prom
         }
         var sg = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
         let pf0 = metal_prefill_stats().prefills
-        metal_kernel_coverage_reset()
-        eval_(trg, sg, prompt)
+        kernel_census_reset_metal()
+        eval_(trg, sg, k.prompt)
         t |> equal(metal_prefill_stats().prefills - pf0, 1l, "{tag} {leg}: the window was one prefill the device served")
         let nb = metal_kernel_count("metal_moe_mulmm_{f}")
-        let nt = mlx_routed_twins(f)
+        let nt = routed_twin_dispatches(f, "metal_moe_mulmm_b32_t", false)
         if (base) {
             t |> success(nb >= nstacks && nt == 0l, "{tag} {leg}: every routed site rode the {f} base tile ({nb} base, {nt} twin dispatches, {nstacks} stacks)")
         } else {
             t |> success(nt >= nstacks, "{tag} {leg}: every routed site rode the {f} tensor twins ({nt} twin, {nb} base dispatches, {nstacks} stacks)")
         }
-        let d = logits_maxdiff(sg.logits, cpu)
-        to_log(LOG_INFO, "{tag} {leg}: window last row vs the CPU rails maxd {d} (bar {MLX_MOE_BAR})\n")
-        t |> success(d <= MLX_MOE_BAR, "{tag} {leg}: the window's last row within {MLX_MOE_BAR} of the CPU rails' (maxd {d})")
+        k.legs |> push(leg)
+        k.rows |> push_clone(sg.logits)
         return <- sg
     } else {
         return <- make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
     }
 }
 
-//! The routed snapshot on the Metal home over `text`'s ids: the prefill window twice - the routed sites on the member's tensor
-//! twins (the knee's pick), then on its simdgroup base (the knee pinned to 0 and the member's routed and dense crowns pinned off:
-//! a crowned family takes its twins at every shape) - each one device prefill whose last row holds
-//! `MLX_MOE_BAR` of the CPU rails' (the CPU row of the prompt one token short outside it), then `nsteps` greedy device decodes
-//! from the base leg's window, the ids the CPU rails' token for token and every step's routed sites on the member's
-//! expert-indexed GEMV
-[unused_argument(t, snap, f, tag, text, nsteps)]
-def private metal_routed_cell(t : T?; snap : string; f : KqFmt; tag, text : string; nsteps : int) {
+//! The routed snapshot on the Metal form's twin `trg` over `text`'s
+//! ids: the prefill window twice - the routed sites on the member's
+//! tensor twins (the knee's pick), then on its simdgroup base (the
+//! knee pinned to 0 and the member's routed and dense crowns pinned
+//! off: a crowned family takes its twins at every shape) - each one
+//! device prefill, then `nsteps` greedy device decodes from the base
+//! leg's window, every step's routed sites on the member's
+//! expert-indexed GEMV; the rows and ids kept for the CPU rails'
+//! (`routed_cpu`). The base leg shuts the prefill driver down so its
+//! pipelines compile under its crowns
+[unused_argument(t, trg, f, text, nsteps, k)]
+def private routed_metal(t : T?; var trg : Model; f : KqFmt; text : string; nsteps : int; var k : RoutedKept) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        let prior_wscale = get_wscale_f16()
-        let prior_backend = active_kernel_backend()
-        let prior_mode = get_metal_mode()
-        set_wscale_f16(false)
-        pin_kernel_backend("portable")
-        set_metal_mode(MetalMode.when_available)
-        var tr <- load_model_(snap, QuantMode.q8)
-        tr.config.seq_len = min(tr.config.seq_len, 512l)
-        var inscope prompt <- encode(tr, text, true, false)
-        var trg <- blob_twin(t, snap, 512l)
+        k.metal = true
+        k.nsteps = nsteps
+        k.prompt <- encode(trg, text, true, false)
+        let tag = k.tag
         let nstacks = 3l * trg.config.n_layers
-        var inscope short <- [for (i in range(length(prompt) - 1)); prompt[i]]
-        var inscope cpu <- metal_window_logits(tr, prompt)
-        var inscope cpu_short <- metal_window_logits(tr, short)
-        let ctl = logits_maxdiff(cpu_short, cpu)
-        t |> success(all_finite(cpu_short) && all_finite(cpu), "{tag}: every logit the control reads is finite")
-        t |> success(ctl > MLX_MOE_BAR, "{tag}: the control - the prompt one token short lands outside the bar ({ctl})")
         with_dasllama_jobque_() {
-            var sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
-            var inscope want <- greedy_after(tr, sc, prompt, nsteps)
-            delete sc
-            let seat = metal_overrides_seat()
-            select_prefill_override("metal")
-            set_metal_prefill_min_npos(1l)
-            let knee = set_metal_moe_kq_twin_avg(16l)
-            let prev_crowns = get_metal_tensor_crowns()
-            var sg <- routed_window_leg(t, trg, f, tag, prompt, cpu, nstacks, prev_crowns, false)
-            delete sg
-            sg <- routed_window_leg(t, trg, f, tag, prompt, cpu, nstacks, prev_crowns, true)
-            unpin_metal_tensor_crowns()
-            set_metal_tensor_crowns(prev_crowns)
-            set_metal_moe_kq_twin_avg(knee)
-            select_decode_override("metal")
-            let de0 = metal_decode_stats().decodes
-            metal_kernel_coverage_reset()
-            var inscope got : array<int64>
-            var one <- [0l]
-            for (_i in range(nsteps)) {
-                one[0] = argmax_of(sg.logits, trg.config.vocab_size)
-                got |> push(one[0])
-                eval_(trg, sg, one)
+            with_metal_rails(MetalRails(decode = false)) {
+                let knee = set_metal_moe_kq_twin_avg(16l)
+                let prev_crowns = get_metal_tensor_crowns()
+                let prev_pinned = metal_tensor_crowns_pinned()
+                var sg <- routed_window_leg(t, trg, f, k, nstacks, prev_crowns, false)
+                delete sg
+                sg <- routed_window_leg(t, trg, f, k, nstacks, prev_crowns, true)
+                if (prev_pinned) {
+                    pin_metal_tensor_crowns(prev_crowns)
+                } else {
+                    unpin_metal_tensor_crowns()
+                    set_metal_tensor_crowns(prev_crowns)
+                }
+                set_metal_moe_kq_twin_avg(knee)
+                select_decode_override("metal")
+                let de0 = metal_decode_stats().decodes
+                kernel_census_reset_metal()
+                k.got <- greedy_eval_steps(trg, sg, nsteps)
+                t |> equal(metal_decode_stats().decodes - de0, int64(nsteps), "{tag}: every step was a device decode")
+                let gv = routed_gemv_dispatches(f, kq_stem(f))
+                t |> success(gv >= int64(nsteps) * nstacks, "{tag}: every step read every routed stack through the {f} routed stamps ({gv} stacks served, {int64(nsteps) * nstacks} stacks x steps)")
+                routed_steps_form_cell(t, f, kq_stem(f), tag, int64(nsteps), trg.config.n_layers)
+                delete sg
             }
-            delete one
-            restore_metal_overrides(seat)
-            t |> equal(metal_decode_stats().decodes - de0, int64(nsteps), "{tag}: every step was a device decode")
-            let gv = routed_gemv_dispatches(f, mlx_stem(f))
-            t |> success(gv >= int64(nsteps) * nstacks, "{tag}: every step read every routed stack through the {f} routed stamps ({gv} stacks served, {int64(nsteps) * nstacks} stacks x steps)")
-            routed_steps_form_cell(t, f, mlx_stem(f), tag, int64(nsteps), trg.config.n_layers)
-            log_gen_texts(tr, "{tag} Metal", want, got)
-            t |> equal(got, want, "{tag}: the Metal greedy ids are the CPU rails' token for token")
-            delete sg
         }
-        metal_decode_shutdown()
-        metal_prefill_shutdown()
-        delete trg
-        delete tr
-        t |> equal(metal_live_object_count(), 0l, "{tag}: no leaked Metal objects after shutdown")
-        set_metal_mode(prior_mode)
-        clear_kernel_backend_pin()
-        select_kernel_backend(prior_backend)
-        set_wscale_f16(prior_wscale)
     }
 }
 
-//! the 35B-A3B snapshot on the Metal rails, large tier: the teacher-forced logits, every position a device decode, against
-//! mlx-lm's forward; then the routed window on the twins and on the base tile and a greedy walk against the CPU rails'
-[test(description = "On Metal the Qwen3.6-35B-A3B MLX snapshot holds 0.4 of mlx-lm's top-1 logits per device decode, its routed window on tensor twins and on the base tile lands within 3.0 of the CPU row, and 8 greedy steps match the CPU ids")]
-def test_mlx_qwen36_35b_metal(t : T?) {
-    t |> run("Qwen3.6-35B-A3B 4-bit snapshot on Metal: the logits against mlx-lm's, the routed window and walk == the CPU rails") @(t : T?) {
-        if (!family_on(t, "qwen35moe") || !arm_on(t, "metal-35b")) return
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            return if (!jit_only(t))
-            let snap = hf_snapshot_dir("mlx-community/Qwen3.6-35B-A3B-4bit")
-            if (empty(snap)) {
-                t |> skip("the 35B-A3B snapshot not present")
-                return
-            }
-            if (!parity_full_mode()) {
-                t |> skip("the 35B-A3B snapshot is large-tier - set DASLLAMA_PARITY_FULL=1 to run")
-                return
-            }
-            let prior_wscale = get_wscale_f16()
-            let prior_backend = active_kernel_backend()
-            set_wscale_f16(false)
-            pin_kernel_backend("portable")
-            var inscope want <- [for (id in PROMPT_27B); id]
-            with_dasllama_jobque_() {
-                var trg <- blob_twin(t, snap, 512l)
-                let seat = metal_overrides_seat()
-                select_decode_override("metal")
-                let de0 = metal_decode_stats().decodes
-                var inscope lg <- teacher_forced(trg, want)
-                let served = metal_decode_stats().decodes - de0
-                restore_metal_overrides(seat)
-                t |> equal(served, long_length(want), "35B-A3B Metal: every teacher-forced position was a device decode")
-                oracle_gate(t, "35B-A3B Metal", lg, ORACLE_35B)
-                metal_decode_shutdown()
-                delete trg
-            }
-            clear_kernel_backend_pin()
-            select_kernel_backend(prior_backend)
-            set_wscale_f16(prior_wscale)
-            metal_routed_cell(t, snap, KqFmt.mlx4b, "metal-35b", counting_text(24), 8)
-        } else {
-            t |> skip("dasMetal not built")
+//! the routed cell's CPU side on the CPU rails' model `tr`
+//! (`mlx_cpu_form`), once: the window's last row over the kept prompt
+//! and the prompt one token short, the greedy ids after it
+def private routed_cpu(var tr : Model; var k : RoutedKept) {
+    return if (!k.metal || k.cpu_ran)
+    k.cpu_ran = true
+    var inscope short <- [for (i in range(length(k.prompt) - 1)); k.prompt[i]]
+    k.cpu <- window_last_logits(tr, k.prompt)
+    k.cpu_short <- window_last_logits(tr, short)
+    with_dasllama_jobque_() {
+        var sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+        eval_(tr, sc, k.prompt)
+        k.want <- greedy_eval_steps(tr, sc, k.nsteps)
+        delete sc
+    }
+    log_gen_texts(tr, "{k.tag} Metal", k.want, k.got)
+}
+
+//! the routed cell's compares after the block: the CPU row of the
+//! prompt one token short outside `MLX_MOE_BAR` (the control), each
+//! window leg's last row within it of the CPU rails', the Metal
+//! greedy ids the CPU rails' token for token; a Metal side whose CPU
+//! side never ran a failure
+def private routed_verdict(t : T?; var k : RoutedKept) {
+    let tag = k.tag
+    if (k.metal && !k.cpu_ran) {
+        t |> failure("{tag}: the Metal legs ran and the CPU rails' side did not - the block gives no `mlx_cpu_form()`")
+    } elif (k.cpu_ran) {
+        let ctl = logits_maxdiff(k.cpu_short, k.cpu)
+        t |> success(all_finite(k.cpu_short) && all_finite(k.cpu), "{tag}: every logit the control reads is finite")
+        t |> success(ctl > MLX_MOE_BAR, "{tag}: the control - the prompt one token short lands outside the bar ({ctl})")
+        for (leg, row in k.legs, k.rows) {
+            let d = logits_maxdiff(row, k.cpu)
+            to_log(LOG_INFO, "{tag} {leg}: window last row vs the CPU rails maxd {d} (bar {MLX_MOE_BAR})\n")
+            t |> success(d <= MLX_MOE_BAR, "{tag} {leg}: the window's last row within {MLX_MOE_BAR} of the CPU rails' (maxd {d})")
+        }
+        t |> equal(k.got, k.want, "{tag}: the Metal greedy ids are the CPU rails' token for token")
+    }
+    delete k
+}
+
+//! the 35B-A3B snapshot on its Metal form, under the arm `metal-35b`:
+//! the teacher-forced logits against mlx-lm's, then the routed window
+//! and walk kept for the CPU rails'
+def private q36_35b_metal_cells(t : T?; var m : Model; var k : RoutedKept) {
+    return if (!arm_on(t, "metal-35b"))
+    metal_teacher_forced(t, m, "35B-A3B", ORACLE_35B)
+    k.tag = "metal-35b"
+    routed_metal(t, m, KqFmt.mlx4b, counting_text(24), 8, k)
+}
+
+[test(description = "The Qwen3.6-35B-A3B MLX snapshot, large tier, reads its expert geometry off config.json, serves every routed and shared plane as mlx4b, holds 0.4 of mlx-lm's top-1 logits (the one-position-shifted control outside), and greedily continues a count; on the Metal home's blob twin, on a das_metal build, it holds 0.4 of mlx-lm's top-1 logits per device decode, its routed window on tensor twins and on the base tile lands within 3.0 of the CPU row, and 8 greedy steps match the CPU ids; on the blob twin every routed stack loads as mlx4b with every site native, and the Metal window and six steps ride the mlx4b routed stamps within 3.0 of the portable CPU chain's replay; each form loads once")]
+def test_mlx_qwen36_35b_a3b_4bit(t : T?) {
+    return if (!family_on(t, "qwen35moe") || full_suite_only(t, "the 35B-A3B snapshot"))
+    let row = format_census_mlx4b_moe()
+    var forms <- [cpu_cells_form()]
+    var inscope arms <- ["metal-35b", row.arm]
+    var inscope metal <- mlx_metal_forms(t, "mlx-community/Qwen3.6-35B-A3B-4bit", arms)
+    forms |> push_from(metal)
+    var k : RoutedKept
+    var census : CensusKept
+    with_cpu_and_gpu_snapshot(t, "llm", "mlx-community/Qwen3.6-35B-A3B-4bit", MLX_SNAPSHOT_CTX, forms) $(var m, form) {
+        if (form.on_metal) {
+            format_census_metal(t, m, form, row, census)
+            q36_35b_metal_cells(t, m, k)
+        } elif (alone_pass_of(form, cpu_cells_form())) {
+            q36_35b_cpu_cell(t, m)
+        } elif (alone_pass_of(form, mlx_cpu_form())) {
+            routed_cpu(m, k)
+            format_census_cpu(t, m, form, row, census)
         }
     }
+    routed_verdict(t, k)
+    format_census_verdict(t, row, census)
+    delete forms
 }

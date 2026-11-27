@@ -30,7 +30,7 @@ require math
 //                  after each forward so s.logits is landed, and compare per position.
 // This probe measures free-running TRAJECTORY divergence: each session advances on its own path,
 // so its per-position delta compounds the verify's per-step kernel difference with the KV/state
-// the verify writes. The isolated per-step gate lives in tests/test_metal_mtp_parity.das
+// the verify writes. The isolated per-step gate lives in tests/_metal_mtp_cells.das
 // (forced-feed, identical tokens, logits tolerance) - that is the one to trust for correctness;
 // this probe is the acceptance/quality lens. A drift that flips an argmax changes emitted
 // tokens; drift below the flip line still eats acceptance silently, so both the flip count and

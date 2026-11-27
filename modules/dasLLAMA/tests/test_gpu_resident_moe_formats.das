@@ -38,6 +38,7 @@ require dasllama/dasllama   // create_session: the fault form's refused window
 require dasllama/dasllama_cuda_decode   // cuda_window_planes_held: the FP4-chain fault form's planes
 require daslib/rtti   // this_context().last_exception: the refused window's text
 require strings   // find: the refusal's words
+require _metal_format_census_cells   // format_census_*: the NVFP4 cut's Metal census row
 
 let private QWEN15_MOE_EXPERTS = 60l   //! the carrier's routed experts a layer (Qwen1.5-MoE-A2.7B): a pool at or past it never fills
 let private SHARE_CELL_SLOTS = 16l     //! the share cell's pool: a quarter of the experts, so a step's misses outrun the free slots
@@ -579,7 +580,7 @@ def private nv4_cut_rows(t : T?; var r : Nv4CutRows; var m : Model; form : Model
     }
 }
 
-[test(description = "Qwen3-30B-A3B-7L NVFP4-pure, every weight site nv4 on the seven-block cut, with four of its seven routed layers on the host reads every site in its own format, and the one-copy host rail plus the nv4 kernels hold the CPU chain within the routed bar over one and two windows; the form loads once")]
+[test(description = "Qwen3-30B-A3B-7L NVFP4-pure, every weight site nv4 on the seven-block cut, with four of its seven routed layers on the host reads every site in its own format, and the one-copy host rail plus the nv4 kernels hold the CPU chain within the routed bar over one and two windows; on the Metal home's blob twin every routed stack loads as nv4 with every site native and the window and six steps ride the nv4 routed stamps and GEMV within 3.0 of the portable CPU chain; each form loads once")]
 def test_moe_formats_NVFP4_30B_cut(t : T?) {
     return if (!family_on(t, "qwen3moe"))
     var r : Nv4CutRows
@@ -589,19 +590,37 @@ def test_moe_formats_NVFP4_30B_cut(t : T?) {
     if (!empty(why)) {
         r.h |> held_skip("the cut's f16 mirror: {why}")
     } else {
-        if (gpu_want_cuda()) {   //! the fault form first: the form after it is the load that finds the seat lifted
-            forms |> push(device_form(regions = 1l, host_layers = NV4_CUT.host_layers_ask, cuda_mmq_fault = true) |> asking(KVDtype.f16))
-        }
+        // the fault form first: the form after it is the load that
+        // finds the seat lifted
+        forms_or_skips(t, forms, NV4_CUT.file,
+            [device_form(regions = 1l, host_layers = NV4_CUT.host_layers_ask, cuda_mmq_fault = true) |> asking(KVDtype.f16)],
+            cuda_home_why())
         forms |> push(device_form(regions = 1l, host_layers = NV4_CUT.host_layers_ask) |> asking(KVDtype.f16))
+    }
+    let census = format_census_nv4_moe()
+    let census_cpu = cpu_cells_form(backend = "portable")
+    var census_kept : CensusKept
+    if (any_arm_on([census.arm])) {
+        forms |> push(metal_form(ctx = CENSUS_CELLS_CTX))
+        if (empty(metal_build_why())) {
+            forms |> push(census_cpu)
+        }
     }
     let pins = pin_stream(MOE_HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
     var ran = false
     with_cuda_mmq_winners() {
         ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-30B-A3B-7L-NVFP4-pure-local.gguf", MOE_CUT_CTX, forms) $(var m, form) {
-            nv4_cut_rows(t, r, m, form)
+            if (form.on_metal) {
+                format_census_metal(t, m, form, census, census_kept)
+            } elif (!form.on_gpu && same_cpu_load(form, census_cpu)) {
+                format_census_cpu(t, m, form, census, census_kept)
+            } else {
+                nv4_cut_rows(t, r, m, form)
+            }
         }
     }
     restore_stream_pins(pins)
+    format_census_verdict(t, census, census_kept)
     held_within(t, r.h, "{NV4_CUT.file}: ", false)
     if (ran) {
         with_dasllama_jobque_() {
@@ -713,7 +732,7 @@ def test_moe_formats_MXFP4(t : T?) {
 //! the expert cache at half: twenty of the Q4_K file's routed layers streamed under a budget keeping about half of each layer's experts resident, the misses read off the lane into the ring - the fed steps' picks against the CPU chain, the on-demand reads the witness
 [test(description = "Under a 3500 MB expert cache over twenty Q4_K host layers the misses read off the lane on demand within the CPU chain's routed bar, and a second feed with the saved heat profile reads fewer planes")]
 def test_moe_formats_expert_cache(t : T?) {
-    own_load("the cell loads the Q4_K file twice through the image rail, minting its device lane beside the file, and the first load's drop writes the heat profile beside that lane which the second load reads: the reload is the claim")
+    own_load("reloads the model: the Q4_K file loaded twice through the image rail, the first load's drop writing beside its device lane the heat profile the second load reads")
     let fx = MoeFixture(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps-Q4_K.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, host_layers_ask = 20l, image = true)
     t |> run("Q4_K experts on twenty host layers under a 3500 MB expert cache: the misses read off the lane, the token command vs the CPU chain") @(ct : T?) {
         if (!g_env_engine.image) {

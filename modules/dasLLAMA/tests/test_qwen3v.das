@@ -25,6 +25,7 @@ require _tower_twin   // set_every_gpu_tower, the Vulkan twin's seat and instrum
 require _vision_forms   // the towers' forms, the twin's kept canvases, a block's cell
 require _cpu_gpu_model   // with_cpu_and_gpu_model: a chat decoder's one block in the area
 require _vision_chat_cells   // the image chat turn's cells, run under the tower's image form
+require _kernel_coverage_cells   // coverage_tower_qwen3v_metal: the kernel census's canvas
 
 // Tier-1 qwen3v tower parity vs llama-mtmd-debug -p encode (the Omni-30B SigLIP-geometry ViT).
 // Reference arm: the f32-widened mmprojs, CPU, -fa off (qwen3vl-vision-oracle/mint.sh mints the
@@ -597,6 +598,11 @@ def test_qwen3v_4b(t : T?) {
             qwen3vl_4b_decoder(t, e)
         } elif (form == "image_f32") {
             tower_cell(t, "tier-1 deepstack tower parity vs the mtmd encode dumps (Qwen3-VL 4B)", e.qwen3v, @@test_qwen3v_tier1_deepstack)
+            if (empty(metal_build_why())) {
+                coverage_tower_qwen3v_metal(t,
+                    "qwen3v 4B: the kernel census's canvas on the Metal tower",
+                    e.qwen3v)
+            }
         } elif (form == "image_q8") {
             tower_cell(t, "tier-1 deepstack on the q8 block-GEMM lane (Qwen3-VL 4B)", e.qwen3v, @@test_qwen3v_tier1_q8_deepstack)
         } elif (form == "q8_z11") {

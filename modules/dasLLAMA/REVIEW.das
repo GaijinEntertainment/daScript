@@ -3329,7 +3329,7 @@ def private check_running_max_nan {
     }
 }
 
-let private COVERAGE_FILE = "modules/dasLLAMA/tests/test_kernel_coverage.das"
+let private CENSUS_FILE = "modules/dasLLAMA/tests/_kernel_census.das"
 let private PINNED_DOCS = ["modules/dasLLAMA/tests/REVIEW_PINNED_GATES.md",
                            "modules/dasLLAMA/tests/REVIEW_PINNED_KERNEL_GATES.md"]
 let private CENSUS_TABLES = ["let private CENSUS_NEVER_DISPATCHED <- [", "let private VK_CENSUS_NEVER_DISPATCHED <- ["]
@@ -3351,13 +3351,20 @@ def private pinned_set(var names : table<string>; var whole_files : table<string
     }
 }
 
-//! the evidence names a census table's comment lines cite: the kernel-unit cells (`test_vk*`, `test_metal_*`) and the gates (`*_gate`)
+//! the evidence names a census table's comment lines cite: the
+//! kernel-unit cells (`test_vk*`, `test_metal_*`) and the gates
+//! (`*_gate`); a table whose opening line is missing is a finding
 def private census_evidence(var out : table<string; int>) {
-    let text = read_lf(COVERAGE_FILE)
+    let text = read_lf(CENSUS_FILE)
     var inscope lines <- split(text, "\n")
     for (marker in CENSUS_TABLES) {
         let from = find_line(text, marker)
-        continue if (from <= 0)
+        if (from <= 0) {
+            gate_finding(CENSUS_FILE, ("the census evidence check finds no table opening " +
+                "`{marker}` - its blind spots' evidence goes unchecked; keep the spelling or " +
+                "move this check with it (ARCHITECTURE_ENGINE.md#test-folder-gates)"))
+            continue
+        }
         var i = from
         while (i < length(lines) && find(lines[i - 1], "\"]") < 0) {
             let s = strip(lines[i - 1])
@@ -3428,19 +3435,25 @@ def private called_by_pinned_cell(name, home : string; pinned : table<string>) :
 //! every kernel-unit cell a census table names as a blind spot's evidence is in the pinned set
 [arch(at = "ARCHITECTURE_ENGINE.md#test-folder-gates")]
 def private check_census_evidence_pinned {
-    return if (!fexist(COVERAGE_FILE) || !fexist(PINNED_DOCS[0]))
-    var inscope pinned, whole_files : table<string>
-    pinned_set(pinned, whole_files)
+    if (!fexist(CENSUS_FILE)) {
+        gate_finding(CENSUS_FILE, ("no such file - the census tables' evidence check has no " +
+            "file to read; keep the path or move this check with it " +
+            "(ARCHITECTURE_ENGINE.md#test-folder-gates)"))
+        return
+    }
     var inscope evidence : table<string; int>
     census_evidence(evidence)
+    return if (!fexist(PINNED_DOCS[0]))
+    var inscope pinned, whole_files : table<string>
+    pinned_set(pinned, whole_files)
     var inscope homes <- tests_homes()
     for (name, line in keys(evidence), values(evidence)) {
         continue if (key_exists(pinned, name))
         let home = homes?[name] ?? ""
         if (empty(home)) {
-            gate_finding(COVERAGE_FILE, line, "a census table cites `{name}` as evidence and no file under tests/ defines it - name the cell that dispatches the kernel (ARCHITECTURE_ENGINE.md#test-folder-gates)")
+            gate_finding(CENSUS_FILE, line, "a census table cites `{name}` as evidence and no file under tests/ defines it - name the cell that dispatches the kernel (ARCHITECTURE_ENGINE.md#test-folder-gates)")
         } elif (!key_exists(whole_files, base_name(home)) && !called_by_pinned_cell(name, home, pinned)) {
-            gate_finding(COVERAGE_FILE, line, "a census table cites `{name}` ({base_name(home)}) as a blind spot's evidence, and the pinned set does not hold it - a cell a checked-in table names as its evidence is pinned, by a named-cell entry or its file's entry, in tests/REVIEW_PINNED_GATES.md or its kernel-gate companion tests/REVIEW_PINNED_KERNEL_GATES.md (ARCHITECTURE_ENGINE.md#test-folder-gates)")
+            gate_finding(CENSUS_FILE, line, "a census table cites `{name}` ({base_name(home)}) as a blind spot's evidence, and the pinned set does not hold it - a cell a checked-in table names as its evidence is pinned, by a named-cell entry or its file's entry, in tests/REVIEW_PINNED_GATES.md or its kernel-gate companion tests/REVIEW_PINNED_KERNEL_GATES.md (ARCHITECTURE_ENGINE.md#test-folder-gates)")
         }
     }
 }
@@ -3448,7 +3461,7 @@ def private check_census_evidence_pinned {
 let private VK_BLIND_TABLE = "let private VK_CENSUS_NEVER_DISPATCHED <- ["
 let private VK_CONDITIONAL_TABLE = "let private VK_CENSUS_PICK_CONDITIONAL : table<string; string> <- \{"
 
-//! the quoted entries of the Vulkan blind list that opens at line `from` of the coverage file's comment-stripped `lines`
+//! the quoted entries of the Vulkan blind list that opens at line `from` of the census file's comment-stripped `lines`
 def private vk_blind_entries(lines : array<string>; from : int) : table<string> {
     var out : table<string>
     for (i in range(from - 1, length(lines))) {
@@ -3462,12 +3475,12 @@ def private vk_blind_entries(lines : array<string>; from : int) : table<string> 
 
 //! every key of the Vulkan census's conditional table is an entry of its blind list, by its exact text: the census asserts it only where a device runs it
 def private check_vk_census_conditional_blind {
-    return if (!fexist(COVERAGE_FILE))
-    let text = strip_line_comments(read_lf(COVERAGE_FILE))
+    return if (!fexist(CENSUS_FILE))
+    let text = strip_line_comments(read_lf(CENSUS_FILE))
     let blind_at = find_line(text, VK_BLIND_TABLE)
     let cond_at = find_line(text, VK_CONDITIONAL_TABLE)
     if (blind_at <= 0 || cond_at <= 0) {
-        gate_finding(COVERAGE_FILE, "no `{blind_at <= 0 ? VK_BLIND_TABLE : VK_CONDITIONAL_TABLE}` line - the check that every conditional key of the Vulkan census is a blind entry has no table to read; keep the spelling or move this check with it")
+        gate_finding(CENSUS_FILE, "no `{blind_at <= 0 ? VK_BLIND_TABLE : VK_CONDITIONAL_TABLE}` line - the check that every conditional key of the Vulkan census is a blind entry has no table to read; keep the spelling or move this check with it")
         return
     }
     var inscope lines <- split(text, "\n")
@@ -3480,7 +3493,7 @@ def private check_vk_census_conditional_blind {
             continue if (empty(names))
             let key = names[length(names) - 1]
             if (!key_exists(blind, key)) {
-                gate_finding(COVERAGE_FILE, i + 1, "`{key}` is a key of VK_CENSUS_PICK_CONDITIONAL and no entry of VK_CENSUS_NEVER_DISPATCHED spells it - a conditional line marks a blind entry that census rows dispatch where its driver pick holds, so it names an entry of the blind list by that entry's exact text, and the census itself asserts this only on a box with a Vulkan device; add `{key}` to VK_CENSUS_NEVER_DISPATCHED with its reason and its cell, or drop the conditional line")
+                gate_finding(CENSUS_FILE, i + 1, "`{key}` is a key of VK_CENSUS_PICK_CONDITIONAL and no entry of VK_CENSUS_NEVER_DISPATCHED spells it - a conditional line marks a blind entry that census rows dispatch where its driver pick holds, so it names an entry of the blind list by that entry's exact text, and the census itself asserts this only on a box with a Vulkan device; add `{key}` to VK_CENSUS_NEVER_DISPATCHED with its reason and its cell, or drop the conditional line")
             }
         }
     }

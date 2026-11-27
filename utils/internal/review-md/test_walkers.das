@@ -279,6 +279,7 @@ def make_dasllama_fixture(t : T?; tree, root : string) {
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_meta.das", DASLLAMA_META_GREEN)
     write_at(t, root, "modules/dasLLAMA/.das_module", DASLLAMA_MODULE_LIST)
     write_at(t, root, "modules/dasLLAMA/REVIEW.md", "rules\n")
+    write_at(t, root, DASLLAMA_CENSUS, vk_census_text("", ""))
     write_at(t, root, "tutorials/dasLLAMA/01_demo.das", "covered_fn()\n// prose beside the call stays harmless\n")
     write_at(t, root, "doc/source/reference/tutorials/dasLLAMA_01_demo.rst", "``covered_fn`` narrated\n")
     var err : string
@@ -532,16 +533,17 @@ let LEG_TESTS_DOC = ("# tests\n\nArms: `alpha beta-<tag>`.\n\n"
 
 def private leg_resident(extra : string) : string => replace(LEG_RESIDENT, "\{EXTRA\}", extra)
 
-//! the coverage file's two Vulkan census tables: the blind list - one
+//! the census file's tables: the Vulkan blind list - one
 //! entry under its evidence comment, `cite` one more comment line -
-//! and the conditional table, whose first key is that entry (`cond`
-//! the rest of its line)
-def private vk_coverage_text(cite, cond : string) : string =>
+//! the conditional table, whose first key is that entry (`cond` the
+//! rest of its line), and the Metal blind list
+def private vk_census_text(cite, cond : string) : string =>
     ("options gen2\n\nlet private VK_CENSUS_NEVER_DISPATCHED <- [\n" +
         "    // its coverage is test_vkd_pinned_cell in test_vulkan_kernels.das\n{cite}" +
         "    \"a_cls_spv\"]\n\n" +
         "let private VK_CENSUS_PICK_CONDITIONAL : table<string; string> <- \{\n" +
-        "    \"a_cls_spv\" => VK_PICK_TOY{cond}\n\}\n")
+        "    \"a_cls_spv\" => VK_PICK_TOY{cond}\n\}\n\n" +
+        "let private CENSUS_NEVER_DISPATCHED <- [\n    \"MetalToy\"]\n")
 
 //! the leg's dasllama gates on one planted tree: the green run
 //! carries a clean control per gate (a race stamp one constant off
@@ -572,8 +574,8 @@ def test_dasllama_leg_gates(t : T?) {   // nolint:STYLE038 - one planted tree, r
                                                             + "nan_wide_diff(a[i], b[i]))\n"
                                                             + "        p = max(p, abs(a[i]))\n"
                                                             + "    \}\n\}\n")
-    write_at(t, fixture, "modules/dasLLAMA/tests/test_kernel_coverage.das",
-        vk_coverage_text("", ""))
+    write_at(t, fixture, "modules/dasLLAMA/tests/_kernel_census.das",
+        vk_census_text("", ""))
     write_at(t, fixture, "modules/dasLLAMA/tests/_vk_cells.das", "options gen2\n\n"
                                                                + "def test_vkd_pinned_cell(t : T?) "
                                                                + "\{\n\}\n\n"
@@ -618,8 +620,8 @@ def test_dasllama_leg_gates(t : T?) {   // nolint:STYLE038 - one planted tree, r
                                                             + "    for (i in range(length(a))) \{\n"
                                                             + "        m = max(m, abs(a[i] - "
                                                             + "b[i]))\n    \}\n\}\n")
-    write_at(t, fixture, "modules/dasLLAMA/tests/test_kernel_coverage.das",
-        vk_coverage_text("    // their coverage is test_vkd_loose_cell and test_vkd_ghost_cell\n",
+    write_at(t, fixture, "modules/dasLLAMA/tests/_kernel_census.das",
+        vk_census_text("    // their coverage is test_vkd_loose_cell and test_vkd_ghost_cell\n",
             ", \"b_cls_spv\" => VK_PICK_TOY"))
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_load.das", "options gen2\n\n"
                                                                       + "def private load_big(m : "
@@ -659,12 +661,12 @@ def test_dasllama_leg_gates(t : T?) {   // nolint:STYLE038 - one planted tree, r
                     "bench_toy.das:27: race stamp `BenchToyOther` names `MetalToy` but does not "
                   + "stamp its template `ToyT`",
                     "_maxes.das:6: a running largest difference `max(m, abs(a - b))`",
-                    "test_kernel_coverage.das:5: a census table cites `test_vkd_loose_cell` "
+                    "_kernel_census.das:5: a census table cites `test_vkd_loose_cell` "
                   + "(_vk_cells.das) as a blind spot's evidence, and the pinned set does not hold "
                   + "it",
-                    "test_kernel_coverage.das:5: a census table cites `test_vkd_ghost_cell` as "
+                    "_kernel_census.das:5: a census table cites `test_vkd_ghost_cell` as "
                   + "evidence and no file under tests/ defines it",
-                    "test_kernel_coverage.das:9: `b_cls_spv` is a key of " +
+                    "_kernel_census.das:9: `b_cls_spv` is a key of " +
                     "VK_CENSUS_PICK_CONDITIONAL and no entry of VK_CENSUS_NEVER_DISPATCHED " +
                     "spells it",
                     "dasllama_load.das:8: a `load_big` call with no format",
@@ -701,7 +703,7 @@ struct GatePlant {
 }
 
 let DASLLAMA_ENGINE = "modules/dasLLAMA/dasllama"
-let DASLLAMA_COVERAGE = "modules/dasLLAMA/tests/test_kernel_coverage.das"
+let DASLLAMA_CENSUS = "modules/dasLLAMA/tests/_kernel_census.das"
 
 //! the row-stash plants: a small-slab stamp off the tier's small dim,
 //! none at all, no small dim to compare, a stash default off the slab
@@ -738,12 +740,12 @@ def private dasllama_slab_plants() : array<GatePlant> {
 
 //! the rotated-walk alternate plants - no family bit to read, an
 //! alternate missing, tied to another stamp, on another bit, no KHR
-//! stamp at all - and the census check's two unreadable tables
+//! stamp at all - and the census checks' three unreadable tables
 def private dasllama_alt_plants() : array<GatePlant> {
     let classes = (rel = "{DASLLAMA_ENGINE}/dasllama_vulkan_classes.das",
         text = vk_classes_text(false))
     let knee = (rel = "{DASLLAMA_ENGINE}/dasllama_gpu_knee.das", text = GPU_KNEE_TEXT)
-    let coverage = (rel = DASLLAMA_COVERAGE, text = vk_coverage_text("", ""))
+    let coverage = (rel = DASLLAMA_CENSUS, text = vk_census_text("", ""))
     let untied = "has no rotated-walk alternate tied to it"
     let q8_tie = "alt_of = \"q8_batch_khr_cls\", alt_bit = "
     return <- [
@@ -760,11 +762,18 @@ def private dasllama_alt_plants() : array<GatePlant> {
         GatePlant(at = classes, from = "_khr_cls\"", to = "_khw_cls\"",
             needle = "no `<format>_batch_khr_cls` [vk_dispatch] line"),
         GatePlant(at = coverage, from = "VK_CENSUS_PICK_CONDITIONAL", to = "VK_CENSUS_PICK_COND",
-            needle = "test_kernel_coverage.das: no `let private VK_CENSUS_PICK_CONDITIONAL : " +
+            needle = "_kernel_census.das: no `let private VK_CENSUS_PICK_CONDITIONAL : " +
             "table<string; string> <- \{` line"),
         GatePlant(at = coverage, from = "VK_CENSUS_NEVER_DISPATCHED", to = "VK_CENSUS_BLIND",
-            needle = "test_kernel_coverage.das: no `let private VK_CENSUS_NEVER_DISPATCHED <- [` " +
-            "line")]
+            needle = "_kernel_census.das: no `let private VK_CENSUS_NEVER_DISPATCHED " +
+            "<- [` line"),
+        GatePlant(at = coverage, from = "VK_CENSUS_NEVER_DISPATCHED", to = "VK_CENSUS_BLIND",
+            needle = "_kernel_census.das: the census evidence check finds no table " +
+            "opening `let private VK_CENSUS_NEVER_DISPATCHED <- [`"),
+        GatePlant(at = coverage, from = "let private CENSUS_NEVER_DISPATCHED",
+            to = "let private CENSUS_BLIND",
+            needle = "_kernel_census.das: the census evidence check finds no table " +
+            "opening `let private CENSUS_NEVER_DISPATCHED <- [`")]
 }
 
 //! each plant alone on the green tree at `root`: the gate is red, the
@@ -781,7 +790,7 @@ def private fire_plants(t : T?; root, gate : string; plants : array<GatePlant>) 
     }
 }
 
-[test(description = "the dasLLAMA row-stash, rotated-alternate and census-table gates each fire once on their own plant alone, and the covered tree is green before the plants and after them", timeout = 1200)]
+[test(description = "the dasLLAMA row-stash, rotated-alternate and census-table gates each fire once on their own plant alone, a missing census file fires its finding once, and the covered tree is green before the plants and after them", timeout = 1200)]
 def test_dasllama_slab_alt_gates(t : T?) {
     let tree = getcwd()
     let fixture = repo_fixture(t, "modules/dasLLAMA/REVIEW.das", "review_dasllama_slab")
@@ -789,12 +798,19 @@ def test_dasllama_slab_alt_gates(t : T?) {
     make_dasllama_fixture(t, tree, fixture)
     restamp_dasllama_gate(t, fixture)
     let gate = path_join(fixture, "modules/dasLLAMA/REVIEW.das")
-    write_at(t, fixture, DASLLAMA_COVERAGE, vk_coverage_text("", ""))
+    write_at(t, fixture, DASLLAMA_CENSUS, vk_census_text("", ""))
     let green = spawn_at(fixture, [gate])
     t |> equal(0, green.rc, "the covered fixture is green: {green.out}")
 
     fire_plants(t, fixture, gate, dasllama_slab_plants())
     fire_plants(t, fixture, gate, dasllama_alt_plants())
+
+    t |> success(remove(path_join(fixture, DASLLAMA_CENSUS)), "the census file removed")
+    let gone = spawn_at(fixture, [gate])
+    let gone_needle = "_kernel_census.das: no such file - the census tables' evidence check"
+    t |> equal(1, gone.rc, "a missing census file is red")
+    t |> equal(1, count(gone.out, gone_needle), "finding fired once: {gone_needle}\n{gone.out}")
+    write_at(t, fixture, DASLLAMA_CENSUS, vk_census_text("", ""))
 
     let restored = spawn_at(fixture, [gate])
     t |> equal(0, restored.rc, "the covered fixture is green after the plants: {restored.out}")

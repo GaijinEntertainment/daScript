@@ -16,6 +16,7 @@ require daslib/fio
 require math
 require _scratch_dir
 require _compares
+require _model_form
 
 // The Russian stress pack and the tiers that need no stocked file, on packs a test-side writer builds:
 // the load refusals, the front-coded tables, the lookups that allocate nothing, and the model-less tiers -
@@ -379,6 +380,7 @@ def private variants_are(t : T?; p : RuStressPack; word : string; want : array<i
 
 [test(description = "the stress pack's front-coded tables answer every key of synthetic version 2 packs - first, last and block-edge keys, a form with two ordinals in its order, a ё mask of two bytes - and no key beside them, at 16, 3 and 1 keys a block")]
 def test_pack_front_table(t : T?) {
+    own_load("loads a copy of the file the cell itself writes: synthetic packs in scratch")
     t |> run("named keys of a seven-key pack at four keys a block") @(t : T?) {
         var inscope s : SynthPack
         s.stress <- { "аб" => [1], "абажур" => [3], "абажура" => [3, 1], "абажуры" => [2], "вода" => [2, 1], "что-нибудь" => [1], "я" => [1] }
@@ -766,6 +768,7 @@ def private speak_and_drop(var m : TtsModel; text : string) {
 
 [test(description = "a directory loads as a front end with no voice: the Russian pack it holds is its one language, marks stress and phonemizes, another language marks nothing, the roster is empty and a synthesis panics naming the missing voice; a directory with no pack refuses to load naming the packs")]
 def test_front_end_from_a_directory(t : T?) {
+    own_load("loads a copy of the file the cell itself writes: scratch directories, one empty")
     t |> run("a directory holding the Russian pack alone, and an empty one") @(t : T?) {
         var inscope s : SynthPack
         s.stress <- { "вода" => [2], "замок" => [1, 2] }

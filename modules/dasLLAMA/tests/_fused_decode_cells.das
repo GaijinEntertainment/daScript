@@ -158,3 +158,81 @@ def fused_decode_moe_chain_cell(t : T?; var tr : Model) {
         }
     }
 }
+
+//! one model file's fused-decode row: the file its messages name,
+//! and whether its layers are native K-quant - the auto backend's
+//! kq rows cores the cell asks, where a pre/post-norm row asks the
+//! portable pin
+struct FusedRow {
+    file : string
+    kquant : bool
+}
+
+//! gemma-3-1b: qk-norm, dual-rope sliding (5:1), the attention
+//! chain's deferred residual add
+def fused_row_gemma3_1b() : FusedRow => FusedRow(file = "gemma-3-1b-it-Q8_0.gguf")
+
+//! gemma-2-2b: softcap, GeGLU, qd != dim, alternating sliding
+def fused_row_gemma2_2b() : FusedRow => FusedRow(file = "gemma-2-2b-it-Q8_0.gguf")
+
+//! gemma-4 E2B: the pre/post-norm chain of the gemma-4 generation
+def fused_row_gemma4_e2b() : FusedRow => FusedRow(file = "gemma-4-E2B-it-Q8_0.gguf")
+
+//! Qwen3-4B Q5_K_M: k5 planes, k6 ffn_down
+def fused_row_qwen3_4b_q5km() : FusedRow => FusedRow(
+    file = "Qwen3-4B-Instruct-2507-Q5_K_M.gguf", kquant = true)
+
+//! Qwen3-4B Q4_K_M: k4 planes, k6 ffn_down
+def fused_row_qwen3_4b_q4km() : FusedRow => FusedRow(
+    file = "Qwen3-4B-Instruct-2507-Q4_K_M.gguf", kquant = true)
+
+//! the row's bit-exact compare on `tr`: the portable pin held on a
+//! pre/post-norm row; on a K-quant row a load the backend did not
+//! repack skips (the fused gate would compare std against std)
+def private fused_row_within(t : T?; tr : Model; row : FusedRow) {
+    if (!row.kquant) {
+        t |> equal(kernel_backend_pin(), "portable", "the cell runs on its form's portable pin")
+        fused_vs_std_bit_exact(t, tr)
+    } elif (!tr.kq_repacked) {
+        t |> success(true, "skipped: active backend has no kq rows cores")
+    } else {
+        fused_vs_std_bit_exact(t, tr)
+    }
+}
+
+//! the CPU form a row's cell runs on: a pre/post-norm row on
+//! `cpu_cells_form(backend = "portable")` (the chains defer the
+//! residual add, the post-norm a serial tail after the rendezvous); a
+//! K-quant row on the auto backend's q8 form with the native K-quant
+//! planes on (Q8_K activations: the layer-input quantize, the
+//! w2-input requant at 256-row stage-0 grain, the wo-input requant
+//! per head group)
+def fused_row_form(row : FusedRow) : ModelForm {
+    return cpu_cells_form(kq_native = KqNative.on) if (row.kquant)
+    return cpu_cells_form(backend = "portable")
+}
+
+//! On `tr`, on the pass of the row's CPU form alone
+//! (`fused_row_form`), its context cut to FUSED_CTX, dispatch forced
+//! threaded: the fused decode chains match the per-op path's greedy
+//! ids and final logits bit for bit; the fused knob put back as
+//! found. Other passes pass by
+def fused_decode_row_cell(t : T?; var tr : Model; form : ModelForm; row : FusedRow) {
+    return if (!alone_pass_of(form, fused_row_form(row)))
+    let title = (row.kquant ? "fused chains bit-exact on native K-quant layers (needs the kq ggufs)"
+        : "fused chains bit-exact on pre/post-norm arches (needs the gemma ggufs)")
+    with_ctx_cut(tr, FUSED_CTX) {
+        unsafe {
+            t |> run("{row.file}: {title}") @capture(& tr)(t : T ?) {
+                return if (!jit_only(t))
+                t |> equal(form.backend, row.kquant ? "" : "portable",
+                    "{row.file}: the cell runs on the form its row asks")
+                let fused0 = get_fused_decode()
+                with_threaded_jobque() {
+                    fused_row_within(t, tr, row)
+                }
+                set_fused_decode(fused0)
+            }
+        }
+    }
+}

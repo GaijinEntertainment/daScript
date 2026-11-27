@@ -14,6 +14,7 @@ require daslib/fio   // base_name
 require strings
 require _resident_feed   // cuda_home_asked, with_gpu_kv_dtype
 require _vulkan_lane   // the lane cells both homes run, the mint's frame
+require _model_form
 
 // The CUDA home's lane (`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`), the Vulkan mint file's cells on this home: a cold load mints the `cuda`
 // lane and no other - the walk the Vulkan home mints by, under this home's dry flag - the trimmed lane serves the same greedy
@@ -35,6 +36,7 @@ def private cuda_lane_named(t : T?; img : string) {
 
 [test(description = "A cold CUDA-armed load of Qwen3.5-0.8B-MTP mints the cuda lane alone, and the trimmed lane serves the device twin greedy tokens and CPU embed rows cold and maps back warm to the same tokens")]
 def test_cuda_mint_lanes(tst : T?) {
+    own_load("writes a `.dlim` image beside the file: the cold mint, loaded back warm")
     tst |> run("Qwen3.5-0.8B-MTP: a cold CUDA-armed load mints the cuda lane alone; the trimmed lane serves the same tokens and embed rows, cold and warm") @(t : T?) {
         return if (!cuda_home_asked(t))
         with_mint_file(t, "qwen35", MINT_FILE) $(path) {
@@ -49,6 +51,7 @@ def test_cuda_mint_lanes(tst : T?) {
 
 [test(description = "With no lane to write, a CUDA-armed load of Qwen3.5-0.8B-MTP streams the gguf onto the device and keeps no planar plane on the host; it serves the lane tokens, re-arms off the gguf, refuses a CPU call by name, and keeps its planes under the host-planes ask")]
 def test_cuda_live_load(tst : T?) {
+    own_load("reloads the model: the gguf streamed onto the device, re-armed, loaded again")
     tst |> run("Qwen3.5-0.8B-MTP: the gguf streamed onto the CUDA home with no host planes serves the lane's tokens, re-arms, and refuses the CPU by name; the host-planes ask keeps the planes") @(t : T?) {
         return if (!cuda_home_asked(t))
         with_mint_file(t, "qwen35", MINT_FILE) $(path) {
@@ -64,6 +67,7 @@ def test_cuda_live_load(tst : T?) {
 //! under an untied K-quant token table - a test a family:
 //! its trimmed cuda lane minted with no planar family on the host, then served cold, warm and re-armed
 def private family_lane_test(tst : T?; family, file : string) {
+    own_load("writes a `.dlim` image beside the file: the trimmed lane, cold, warm and re-armed")
     tst |> run("{file}: the trimmed cuda lane serves the live load's tokens cold, warm and re-armed, the token rows gathered where the staged load's are") @(t : T?) {
         return if (!cuda_home_asked(t))
         with_mint_file(t, family, file) $(path) {
@@ -96,6 +100,7 @@ def test_cuda_mint_family_lane_qwen3moe(tst : T?) {
 
 [test(description = "The Qwen3.5-0.8B Q4_K_M twin mints its cuda lane off its native K-quant planes, named for the armed backend, and maps back warm to the same greedy tokens")]
 def test_cuda_mint_kquant(tst : T?) {
+    own_load("writes a `.dlim` image beside the file: the K-quant lane, mapped back warm")
     tst |> run("Qwen3.5-0.8B-Q4_K_M: the K-quant twin's cuda lane mints off its native planes and maps back warm to the same tokens") @(t : T?) {
         return if (!cuda_home_asked(t))
         with_mint_file(t, "qwen35", KQ_FILE) $(path) {
@@ -110,6 +115,7 @@ def test_cuda_mint_kquant(tst : T?) {
 
 [test(description = "A trimmed cuda lane minted under a q8_0 K/V mirror maps under tq4 and f16 with no re-mint and serves at each codec the tokens the staged load serves there")]
 def test_cuda_mint_kv_codecs(tst : T?) {
+    own_load("writes a `.dlim` image beside the file: the q8_0 mint, mapped under each codec")
     tst |> run("Qwen3.5-0.8B-MTP: the trimmed cuda lane minted under a q8_0 mirror maps under tq4 and f16 with no re-mint, and serves at each codec the tokens the staged load serves there") @(t : T?) {
         return if (!cuda_home_asked(t))
         with_mint_file(t, "qwen35", MINT_FILE) $(path) {

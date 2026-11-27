@@ -11,15 +11,17 @@ require daslib/jobque_boost
 require daslib/fio
 require dasllama/dasllama_math   // with_dasllama_jobque_
 
-// The CPU-prefill tripwire — this file deliberately never calls allow_cpu_prefill()
-// (test_attn_span arms it in [init], which is why this cell cannot live there): on a
-// Metal-capable build a >32-row undeclared batched prefill panics, media span included —
-// the metal rail serves spans, so a CPU-served one is a silent fallback like any other.
+// The CPU-prefill tripwire: on a Metal-capable build a >32-row
+// undeclared batched prefill panics, media span included - the metal
+// rail serves spans, so a CPU-served one is a silent fallback like
+// any other. The cell pins the declaration off around its prefills:
+// every runner child declares CPU intent (DASLLAMA_CPU_PREFILL=1), as
+// test_attn_span's [init] does.
 
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 let NROWS = 40l
 
-[test(description = "On a Metal-capable build an undeclared 40-row CPU prefill panics the tripwire for a non-causal span, a causal prefill, an mrope quantum and a deepstack quantum alike", standalone = "a program that arms allow_cpu_prefill() - test_attn_span's [init], every runner child - disarms the guard this test trips, so the runner exempts the file by name")]
+[test(description = "On a Metal-capable build an undeclared 40-row CPU prefill panics the tripwire for a non-causal span, a causal prefill, an mrope quantum and a deepstack quantum alike", standalone = "the guard's one tripwire: its cell pins off the CPU-prefill declaration that every runner child and the prefill files' [init] turn on")]
 def test_cpu_prefill_tripwire(t : T?) {
     t |> run("an undeclared prefill trips - span and causal alike (needs stories15M)") @(t : T?) {
         if (!stat(MODEL_PATH).is_valid) {
@@ -30,59 +32,67 @@ def test_cpu_prefill_tripwire(t : T?) {
             t |> skip("not a Metal-capable build - the tripwire never arms")
             return
         }
-        var tr <- load_checkpoint(MODEL_PATH)
-        var rows : array<float>
-        rows |> reserve(NROWS * tr.config.dim)
-        rows |> resize(NROWS * tr.config.dim)
-        with_dasllama_jobque_() {
-            var s <- make_run_state(tr.config)
-            var span_tripped = false
-            try {
-                forward_prefill_embd(tr, s, rows, NROWS, 0l, true)
-            } recover {
-                span_tripped = true
-            }
-            t |> success(span_tripped, "an undeclared {NROWS}-row SPAN prefill panics like any other")
-            var tripped = false
-            try {
-                var s2 <- make_run_state(tr.config)
-                forward_prefill_embd(tr, s2, rows, NROWS, 0l, false)
-                delete s2
-            } recover {
-                tripped = true
-            }
-            t |> success(tripped, "an undeclared {NROWS}-row causal prefill still panics")
-            // an mrope quantum is no longer exempt: metal serves it (the per-row-table
-            // capability), so a CPU-served one is the same silent fallback as any other
-            tr.config.rope_sections = int4(8, 8, 8, 0)   // stamp: the toy is not an mrope arch (rotary 48 -> half 24)
-            tr.config.mrope_interleaved = true
-            var mrope_tripped = false
-            try {
-                var s3 <- make_run_state(tr.config)
-                eval_embd_span_mrope(tr, s3, rows, NROWS, 8l, 32l, int2(6, 4))
-                delete s3
-            } recover {
-                mrope_tripped = true
-            }
-            t |> success(mrope_tripped, "an undeclared {NROWS}-row MROPE quantum panics like any other")
-            // a deepstack quantum is no longer exempt either: metal performs the slice adds
-            tr.config.n_deepstack = 3l
-            var wide : array<float>
-            wide |> reserve(NROWS * 4l * tr.config.dim)
-            wide |> resize(NROWS * 4l * tr.config.dim)
-            var ds_tripped = false
-            try {
-                var s4 <- make_run_state(tr.config)
-                eval_embd(tr, s4, wide, NROWS)
-                delete s4
-            } recover {
-                ds_tripped = true
-            }
-            t |> success(ds_tripped, "an undeclared {NROWS}-row DEEPSTACK quantum panics like any other")
-            delete wide
-            delete s
+        with_cpu_prefill(false) {
+            trip_every_prefill(t)
         }
-        delete rows
-        delete tr
     }
+}
+
+//! each undeclared 40-row prefill panics: a span, a causal
+//! prefill, an mrope and a deepstack quantum
+def private trip_every_prefill(t : T?) {
+    var tr <- load_checkpoint(MODEL_PATH)
+    var rows : array<float>
+    rows |> reserve(NROWS * tr.config.dim)
+    rows |> resize(NROWS * tr.config.dim)
+    with_dasllama_jobque_() {
+        var s <- make_run_state(tr.config)
+        var span_tripped = false
+        try {
+            forward_prefill_embd(tr, s, rows, NROWS, 0l, true)
+        } recover {
+            span_tripped = true
+        }
+        t |> success(span_tripped, "an undeclared {NROWS}-row SPAN prefill panics like any other")
+        var tripped = false
+        try {
+            var s2 <- make_run_state(tr.config)
+            forward_prefill_embd(tr, s2, rows, NROWS, 0l, false)
+            delete s2
+        } recover {
+            tripped = true
+        }
+        t |> success(tripped, "an undeclared {NROWS}-row causal prefill still panics")
+        // an mrope quantum is no longer exempt: metal serves it (the per-row-table
+        // capability), so a CPU-served one is the same silent fallback as any other
+        tr.config.rope_sections = int4(8, 8, 8, 0)   // stamp: the toy is not an mrope arch (rotary 48 -> half 24)
+        tr.config.mrope_interleaved = true
+        var mrope_tripped = false
+        try {
+            var s3 <- make_run_state(tr.config)
+            eval_embd_span_mrope(tr, s3, rows, NROWS, 8l, 32l, int2(6, 4))
+            delete s3
+        } recover {
+            mrope_tripped = true
+        }
+        t |> success(mrope_tripped, "an undeclared {NROWS}-row MROPE quantum panics like any other")
+        // a deepstack quantum is no longer exempt either: metal performs the slice adds
+        tr.config.n_deepstack = 3l
+        var wide : array<float>
+        wide |> reserve(NROWS * 4l * tr.config.dim)
+        wide |> resize(NROWS * 4l * tr.config.dim)
+        var ds_tripped = false
+        try {
+            var s4 <- make_run_state(tr.config)
+            eval_embd(tr, s4, wide, NROWS)
+            delete s4
+        } recover {
+            ds_tripped = true
+        }
+        t |> success(ds_tripped, "an undeclared {NROWS}-row DEEPSTACK quantum panics like any other")
+        delete wide
+        delete s
+    }
+    delete rows
+    delete tr
 }

@@ -12,6 +12,7 @@ require dasllama/dasllama_gpu_resident   // vulkan_bake_* — the offline flavor
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the vulkan static_if half
 require _model_tier
+require _model_form   // own_load: a load no block can hold
 require _vulkan_lane   // nolint:STYLE030,LINT019 - load_cached_q8, used only inside the vulkan static_if arms (a build without the module drops them)
 
 // The OFFLINE vulkan bake (plan-as-data): the dry tier runs the load walk's accept/refuse
@@ -22,6 +23,7 @@ require _vulkan_lane   // nolint:STYLE030,LINT019 - load_cached_q8, used only in
 //! the minted twin against the eager dry bake's - the walk over the prepared RAM planes, the mint's reference: the same
 //! entries in the same order, every entry's device bytes equal, a poisoned byte in the reference missing the compare
 def private mint_matches_eager_bake(t : T?; minted : Model; path : string) {
+    own_load("asserts on the load itself - the staged planes it lands on: the plan its dry bake collects")
     vulkan_bake_begin()
     var eager <- load_model_(path, QuantMode.q8)
     t |> success(vulkan_bake_take(eager), "the eager dry bake collected its plan")
@@ -64,6 +66,7 @@ def private mint_matches_eager_bake(t : T?; minted : Model; path : string) {
 
 [test(description = "With the Vulkan tier armed, the device-free dry bake of SmolLM2 q8 collects a plan whose every entry is role-stamped and inside the blob, and the flavor image round-trips the plan and blob lengths", standalone = "the runner's image-vulkan suite is this one file")]
 def test_vulkan_dry_bake(tst : T?) {
+    own_load("asserts on the load itself - the staged planes it lands on: the plan its dry bake collects")
     tst |> run("SmolLM2 q8: dry bake collects a role-stamped plan and the image round-trips") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!family_on(t, "llama") || !arm_on(t, "vulkan")) return
@@ -114,9 +117,10 @@ def test_vulkan_dry_bake(tst : T?) {
 
 [test(description = "A cold cached SmolLM2 load under the armed Vulkan tier mints only the vulkan lane, its plan and twin byte-equal to the eager dry bake (a poisoned byte misses), and the trimmed lane drops the q8 planes for a smaller file", standalone = "the runner's image-vulkan suite is this one file")]
 def test_vulkan_inline_bake(tst : T?) {
+    own_load("writes a `.dlim` image beside the file: the vulkan lane, cold and trimmed")
     tst |> run("SmolLM2 q8: a cold cached load under the armed tier mints the vulkan lane ALONE - the twin streamed off the gguf inside the save, no planar file - and the trimmed lane drops the planar families") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!family_on(t, "llama") || !arm_on(t, "vulkan")) return
+            if (!family_on(t, "llama") || !arm_on(t, "vulkan") || !image_rail_on(t)) return
             let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
             return if (!jit_model_available(t, path))
             apply_box_profile_runtime()

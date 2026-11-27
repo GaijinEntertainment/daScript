@@ -35,6 +35,7 @@ require ?das_metal dasllama/dasllama_metal_common   // metal_kernel_coverage: th
 require dasllama/dasllama_tower   // TowerDev: the flavor a model was staged for
 require _tts_corpus   // the corpus sentences the oracle prepared: the prepare-parity cell's inputs
 require _model_tier
+require _kernel_coverage_cells   // coverage_tower_pocket*: the kernel census's codec and frames
 
 // The Pocket TTS family. Model-gated (`pocket-tts-en.gguf` under models_dir(), minted by
 // harness/convert_pocket.py; the oracle dumps under `tts_oracle/pocket_english_2026-04/` by
@@ -2667,6 +2668,7 @@ def test_pocket_from_memory(t : T?) {
 
 [test(description = "A Pocket file's staging refuses by name a text table stored in a format the native lane has no form for - a copy of the 18m K-quant file with the table retyped Q8_0, the same copy staging under the q8 pin as the control - and a roster naming a voice twice, a copy with one name's bytes written over another's")]
 def test_pocket_stage_refusals(t : T?) {
+    own_load("asserts on the load itself - its refusal: retyped copies of the carrier in scratch")
     let path = path_join(models_dir(), "pocket-tts-en-18m-kq.gguf")
     return if (!model_available(t, path))
     with_dasllama_jobque_() {
@@ -2942,6 +2944,11 @@ def test_pocket_en(t : T?) {
                             "The home gives its rows back when idle.", "alba", false, dev_held)
                     }
                 }
+                if (form == "native@dev") {
+                    coverage_tower_pocket(t,
+                        "pocket-tts-en.gguf: the census's codec and line, home image",
+                        cov_home_of(TowerFamily.tts), m.pocket)
+                }
             } elif (form == "f32@cpu") {
                 pocket_cell(t, "test_pocket_parity", m.pocket, @@test_pocket_parity)
                 pocket_cell(t, "test_pocket_codec_stream", m.pocket, @@test_pocket_codec_stream)
@@ -3040,6 +3047,9 @@ def test_pocket_en_kq(t : T?) {
                 return
             }
             if (form == "native@dev") {
+                coverage_tower_pocket_kq(t,
+                    "pocket-tts-en-kq.gguf: the census's line on the home image",
+                    cov_home_of(TowerFamily.tts), m.pocket)
                 pocket_cell(t, "test_pocket_knob_flip_refuses", m, @@test_pocket_knob_flip_refuses)
                 return
             }

@@ -32,6 +32,10 @@ require _model_tier   // _model_tier::models_dir() + model_available() presence/
 require _compares   // first_mismatch
 require _resident_feed   // served_every_call, cuda_served_since: the discrete walks' served witnesses
 require _model_form   // device_form, asking, with_ctx_cut: the drafter form and the CPU drafter scope
+require dasllama/dasllama_scheduler   // the joint round's two streams
+require _scheduler_rig   // make_req, drain, toks_of: the scheduler's streams
+require _metal_blob_twin   // nolint:STYLE029,STYLE030,LINT019 - the tile's counts, das_metal halves
+require _kernel_census   // nolint:STYLE029,STYLE030,LINT019 - the census reset, das_metal halves
 require ?vulkan dasllama/dasllama_vulkan_dflash   // nolint:STYLE030,LINT019 - the discrete cell's static_if reads the Vulkan arm
 require ?cuda dasllama/dasllama_cuda_dflash   // nolint:STYLE030,LINT019 - ... and the CUDA arm
 
@@ -257,10 +261,14 @@ def set_verify_ahead(level : int) : int {
     }
 }
 
-//! the device selector's draw of a sampled round's drafts on or off (nothing off the Metal build)
-def set_device_soft_pick(on : bool) {
+//! the device selector's draw of a sampled round's drafts on or off, the prior one back (true off the Metal build)
+def set_device_soft_pick(on : bool) : bool {
     static_if (typeinfo builtin_module_exists(das_metal)) {
+        let prior = get_metal_dflash_soft_pick()
         set_metal_dflash_soft_pick(on)
+        return prior
+    } else {
+        return true
     }
 }
 
@@ -308,8 +316,10 @@ def private sampled_ahead_check(t : T?; tag : string; joint : bool) {
 //! the same stream
 def sampled_modes_walk(t : T?; m : Model; drafter : string; device : bool; tag : string;
                        tokens_hold : bool = false; joint : bool = false) {
+    let device0 = dflash_device_knob()
     set_dflash_device(device)
     let why = attach_dflash_drafter(m, path_join(_model_tier::models_dir(), drafter))
+    set_dflash_device(device0)
     t |> equal(why, "", "{tag}: the drafter attaches")
     return if (!empty(why))
     let prompt <- encode(m, PROMPT, true)
@@ -366,11 +376,11 @@ def sampled_modes_walk(t : T?; m : Model; drafter : string; device : bool; tag :
         }
         t |> success(same_waited == long_length(soft.ids) && length(soft.ids) == length(waited.ids) && soft.accepted == waited.accepted && soft.drafted == waited.drafted,
             "{tag}: the held sampled rounds draw the waited rounds' stream - equal for {same_waited} of {length(soft.ids)} ids, accepted {soft.accepted} / {waited.accepted} of {soft.drafted} / {waited.drafted}")
-        set_device_soft_pick(false)
+        let soft0 = set_device_soft_pick(false)
         let sel_before_host = device_selections()
         var inscope host_drawn <- spec_sampled(m, prompt, MtpAccept.rejection, -1.0)
         t |> equal(device_selections() - sel_before_host, 0l, "{tag}: the soft pick knob off, drawn drafts stand the device selector down")
-        set_device_soft_pick(true)
+        set_device_soft_pick(soft0)
         var same_soft = 0l
         while (same_soft < long_length(soft.ids) && same_soft < long_length(host_drawn.ids) && soft.ids[same_soft] == host_drawn.ids[same_soft]) {
             same_soft++
@@ -775,6 +785,237 @@ def metal_drafter_cell(t : T?; var m : Model; title, arm, drafter, tag : string;
                 t |> equal(metal_log_leaks_if_any(), 0l,
                     "{tag}: no leaked Metal objects after shutdown")
             }
+        }
+    }
+}
+
+let private CHAT_TURNS = fixed_array("Describe the TCP three-way handshake in three sentences.", "Now name the side that picks the first sequence number, in one sentence.")
+let private CHAT_MAX_NEW = 96l
+
+//! a two-turn greedy chat on `m`, thinking off: each turn's reply
+def private chat_replies(m : Model) : array<string> {
+    var replies : array<string>
+    var chat <- create_chat(m, "", CHAT_MAX_NEW)
+    set_thinking(chat, false)
+    replies |> reserve(length(CHAT_TURNS))
+    for (turn in CHAT_TURNS) {
+        add_user(chat, turn)
+        replies |> push(respond(m, chat, SamplingParams(temp = 0.0)) $(_piece) => true)
+    }
+    delete chat
+    return <- replies
+}
+
+//! a scheduler's streams over `prompts`, `budget` ids each, speculating or plain: every stream's ids, the drafts the
+//! scheduler accepted into `accepted`, the most streams one of its verifies carried into `joined`
+def private sched_streams(m : Model; prompts : array<array<int64>>; budget : int64; spec : bool; var accepted, joined : int64&) : array<array<int64>> {
+    var ev : array<SchedEvent>
+    let n = long_length(prompts)
+    var sch <- create_scheduler(m, n, n, 0l, 64l, 0l, KVDtype.f16, spec)
+    for (i in range64(n)) {
+        submit(m, sch, make_req(i + 1l, prompts[i], budget))
+    }
+    drain(m, sch, ev)
+    var out <- [for (i in range64(n)); toks_of(ev, i + 1l)]
+    accepted = sch.mtp_accepted
+    joined = sch.mtp_joined_max
+    delete sch
+    delete ev
+    return <- out
+}
+
+//! two streams through the scheduler with the drafter attached, at three drafts a round: a tick's rounds draft in one joint
+//! pass and verify in one joint step, each stream the plain scheduler's token for token (the driver against itself) and the
+//! two together accepting what each accepts alone within a fifth (the joint pass's drafts are each stream's own: a pass
+//! reading another stream's rows drafts noise and accepts next to nothing); the rounds before it carried one stream each (the
+//! joint count's control), and on a hybrid the joint verifies ride the seat's groups
+def joint_streams_leg(t : T?; m : Model) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var inscope prompts <- [for (turn in CHAT_TURNS); encode(m, turn, true)]
+        var none, alone, together, joined, lone = 0l
+        var inscope plain <- sched_streams(m, prompts, CHAT_MAX_NEW, false, none, joined)
+        let depth_pin = mtp_depth_pin()
+        set_mtp_depth(3l)
+        for (p in prompts) {
+            var inscope one : array<array<int64>>
+            one |> push_clone(p)
+            var acc = 0l
+            var inscope solo <- sched_streams(m, one, CHAT_MAX_NEW, true, acc, lone)
+            alone += acc
+            t |> success(lone <= 1l, "a stream alone rides no joint verify ({lone}) - the joint count's control")
+        }
+        let j0 = metal_dflash_joint_rounds()
+        let gv0 = metal_mtp_group_verifies()
+        let held0 = metal_dflash_selected().held
+        var inscope drafted <- sched_streams(m, prompts, CHAT_MAX_NEW, true, together, joined)
+        restore_mtp_depth(depth_pin)
+        let held = metal_dflash_selected().held - held0
+        let j1 = metal_dflash_joint_rounds()
+        if (metal_rows8_on()) {
+            t |> success(alone > 0l, "each stream alone accepts drafts ({alone})")
+            t |> success(together * 5l >= alone * 4l, "the two streams together accept what they accept alone within a fifth ({together} against {alone})")
+            t |> equal(joined, 2l, "a tick's verify carried both streams' rows")
+            t |> success(j1.rounds > j0.rounds, "the two streams ran joint rounds ({j1.rounds - j0.rounds})")
+            t |> equal(held, 0l, "a joint round lands its drafts ahead of its verify, so no pass is held for the verify seat")
+            if (m.config.recr_mask != 0ul) {
+                t |> success(metal_mtp_group_verifies() > gv0, "a hybrid's joint verifies rode the seat's groups ({metal_mtp_group_verifies() - gv0})")
+            }
+        } else {
+            t |> success(joined <= 1l, "off the matrix-unit form two streams stand down to the plain batched step")
+        }
+        for (i in range(length(prompts))) {
+            t |> equal(length(drafted[i]), length(plain[i]), "stream {i}: the drafted stream runs the plain stream's length")
+            t |> equal(first_mismatch(drafted[i], plain[i]), -1, "stream {i}: the drafted scheduler's ids are the plain scheduler's")
+        }
+    }
+}
+
+//! the E2B facade's legs on its Metal-served trunk `m` with the
+//! drafter file `drafter`, under the Metal decode override
+[cold_path]
+def private e2b_facade_legs(t : T?; var m : Model; drafter : string) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let prompt <- encode(m, PROMPT, true)
+        var inscope plain_replies <- chat_replies(m)
+        var s1 = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
+        var inscope plain_ids : array<int64>
+        generate(m, s1, prompt, SamplingParams(temp = 0.0), COMPLETE_STEPS) $(id, _piece) {
+            plain_ids |> push(id)
+            return true
+        }
+        delete s1
+        let device0 = dflash_device_knob()
+        set_dflash_device(true)
+        t |> equal(attach_block_drafter(m, drafter), "", "the drafter attaches through the facade")
+        set_dflash_device(device0)
+        t |> success(block_drafter_attached(m), "the facade reports it attached")
+        let st0 = metal_dflash_stats()
+        let dev0 = metal_decode_stats().decodes + metal_batch_decode_stats().steps
+        var inscope drafted_replies <- chat_replies(m)
+        let st1 = metal_dflash_stats()
+        t |> success(st1.passes > st0.passes, "the chat's turns ran draft passes ({st1.passes - st0.passes})")
+        let dev1 = metal_decode_stats().decodes + metal_batch_decode_stats().steps
+        t |> success(dev1 > dev0, "the drafted chat's steps ran on the device ({dev1 - dev0})")
+        t |> equal(length(drafted_replies), length(plain_replies))
+        for (a, b, i in drafted_replies, plain_replies, count()) {
+            t |> equal(a, b, "turn {i}: the drafted chat's reply is the plain chat's")
+        }
+        var s2 = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
+        var inscope drafted_ids, no_stops : array<int64>
+        let n = generate_drafted(m, s2, prompt, SamplingParams(temp = 0.0), COMPLETE_STEPS, no_stops) $(id, _piece) {
+            drafted_ids |> push(id)
+            return true
+        }
+        t |> equal(n, COMPLETE_STEPS, "the drafted completion runs its budget")
+        t |> success(s2.mtp_accepted > 0l, "the completion accepted drafts ({s2.mtp_accepted} of {s2.mtp_drafted})")
+        t |> equal(length(drafted_ids), length(plain_ids))
+        t |> equal(first_mismatch(drafted_ids, plain_ids), -1, "the drafted completion's ids are the plain completion's")
+        delete s2
+        //! a stop id: the stream ends on its first occurrence, nothing past it emitted
+        let stop_id = plain_ids[length(plain_ids) / 2]
+        var first = 0
+        while (plain_ids[first] != stop_id) {
+            first++
+        }
+        var s3 = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
+        var inscope stops <- [stop_id]
+        var inscope stopped_ids : array<int64>
+        generate_drafted(m, s3, prompt, SamplingParams(temp = 0.0), COMPLETE_STEPS, stops) $(id, _piece) {
+            return false if (id == stop_id)
+            stopped_ids |> push(id)
+            return true
+        }
+        t |> equal(length(stopped_ids), first, "the stopped stream emits the ids before the stop's first occurrence ({first})")
+        t |> success(first < length(plain_ids) - 1, "the stop sits inside the budget (the control: the stopless stream ran past it)")
+        delete s3
+        tile_attention_leg(t, m, prompt, plain_ids)
+        joint_streams_leg(t, m)
+        detach_block_drafter()
+        t |> success(!block_drafter_attached(m), "the facade reports it detached")
+        e2b_metal_twins(t, m)
+    }
+}
+
+//! The E2B facade's Metal cells on the E2B block's required blob twin
+//! `m` (`metal_form(required = true, ctx = HOST_CTX)`), as a subtest
+//! of `t` under the arm `dflash-e2b-facade`, the drafter file
+//! present; the decode and prefill drivers down after
+def dflash_e2b_facade_cell(t : T?; var m : Model) {
+    let title = ("gemma-4-E2B's Metal home with its DFlash2 drafter attached through the " +
+        "facade: the drafted chat and completion, a stop id, the tile attention, the joint " +
+        "streams, the sampled walks and the dense ring")
+    unsafe {   //! the cell captures the loaded trunk by reference
+        t |> run(title) @capture(& m)(t : T ?) {
+            return if (!arm_on(t, "dflash-e2b-facade"))
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                let drafter = path_join(_model_tier::models_dir(), E2B_DRAFTER_FILE)
+                return if (!model_available(t, drafter))
+                on_metal_trunk() {
+                    e2b_facade_legs(t, m, drafter)
+                }
+            } else {
+                t |> skip("E2B facade streams: no das_metal in this build")
+            }
+        }
+    }
+}
+
+let private TILE_BAR = 5e-3   //! the tile form's logits against the fused form's, of a row's largest live logit: the two sum a row's keys in different orders
+
+//! The tile form of a full-context layer's attention, pinned on at every depth and pinned off (the control: no dispatch):
+//! the plain completion's ids fed a step at a time give the fused form's logits within `TILE_BAR`, each step's control the
+//! fused row a step off; the drafted completion's verify and the scheduler's two-stream step take the form too. The
+//! verify's and the batch's rows are held to the oracle by the kernel cells (`sq_tile_gate`): a drafted walk's ids can tie
+[cold_path]
+def private tile_attention_leg(t : T?; var m : Model; prompt, plain_ids : array<int64>) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var inscope fed : array<array<array<float>>>
+        var inscope walks : array<array<int64>>
+        var inscope prompts <- [for (turn in CHAT_TURNS); encode(m, turn, true)]
+        for (far in [0l, -1l]) {
+            let on = far == 0l
+            with_metal_attn_tile_far(far) {
+                kernel_census_reset_metal()
+                fed |> emplace <| feed_alone(m, KVDtype.f16, prompt, plain_ids)
+                let steps = metal_kernel_count("metal_sq_attn_tile")
+                kernel_census_reset_metal()
+                var s = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
+                var ids, no_stops : array<int64>
+                generate_drafted(m, s, prompt, SamplingParams(temp = 0.0), COMPLETE_STEPS, no_stops) $(id, _piece) {
+                    ids |> push(id)
+                    return true
+                }
+                delete s
+                delete no_stops
+                let verifies = metal_kernel_count("metal_sq_attn_tile")
+                walks |> emplace(ids)
+                kernel_census_reset_metal()
+                var none, joined = 0l
+                var inscope streams <- sched_streams(m, prompts, CHAT_MAX_NEW, false, none, joined)
+                let batched = metal_kernel_count("metal_sq_attn_tile")
+                if (on) {
+                    t |> success(steps > 0l, "the fed steps took the tile form on the full-context layers ({steps} dispatches)")
+                    t |> success(verifies > 0l, "the drafted completion's steps took it ({verifies} dispatches)")
+                    t |> success(batched > 0l, "the scheduler's two streams' steps took it ({batched} dispatches)")
+                } else {
+                    t |> equal(steps + verifies + batched, 0l, "control: the tile form pinned off dispatches none")
+                }
+            }
+        }
+        log_gen_texts(m, "E2B drafted completion, fused (as CPU) against tile (as GPU):", walks[1], walks[0])
+        feed_steps_within(t, m, "E2B fed steps, tile against fused", long_length(prompt), fed[0], fed[1], plain_ids, TILE_BAR, "the tile form", "the fused form")
+    }
+}
+
+//! the 27B's sampled Metal cell on the E2B pair, on the facade cell's load: the three sampled acceptances on the Q8_0 file
+[cold_path]
+def private e2b_metal_twins(t : T?; var m : Model) {
+    unsafe {   //! the cell captures the loaded trunk by reference
+        t |> run("gemma-4-E2B, the sampled DFlash walks on the Metal device arm: the exact walk spends one draw a judged row and opens on the plain sampled walk's first id, a stop id, the rejection walks accept some and reject some, the device selector, verify-ahead and soft pick give the same stream") @capture(& m)(t : T ?) {
+            sampled_modes_walk(t, m, E2B_DRAFTER_FILE, device = true, tag = "E2B sampled metal", joint = true)
+        }
+        t |> run("gemma-4-E2B on the Metal device arm, over a prompt past one of the DFlash2 drafter's windows: the ring that grew its dense layer drafts id for id what a ring reserved that wide drafts, and with every layer held to the window the drafts differ") @capture(& m)(t : T ?) {
+            dense_ring_leg(t, m, E2B_DRAFTER_FILE, "E2B Metal, the dense layer", METAL_DENSE_ITEMS, HOST_CTX, 1l, true)
         }
     }
 }

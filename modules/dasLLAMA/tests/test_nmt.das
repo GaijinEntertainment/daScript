@@ -26,6 +26,7 @@ require _npy   // read_npy: the oracle's per-stage dumps
 require _compares   // check_rows / check_exact / check_exceeds / ids_equal
 require _nmt_oracle   // the build's device translation seat, nmt_log_side
 require _image_memory   // read_page_aligned: a host's own copy of an image
+require _kernel_coverage_cells   // coverage_tower_bergamot_metal: the census's lines
 
 // The Bergamot students against marian's own f32 graph (`../benchmarks/nmt/bergamot_oracle.py`, this repository's oracle rig,
 // writes the model root's `nmt_oracle/<pair>-<tier>/<src>_<variant>/`): the tokenizer id for id against Python sentencepiece
@@ -492,6 +493,7 @@ def private device_against_cpu(t : T?; s : Student) {
 //! a synthetic d 32 student through the seat: off the 64-wide GEMM tiles, so declined `shape` and translated on the CPU
 [cold_path]
 def private device_shape_decline(t : T?) {
+    own_load("loads a copy of the file the cell itself writes: a synthetic d 32 student")
     let pinned = nmt_seat_pin(true)
     var inscope v <- unigram_vocab()
     let syn = syn_student("device_shape", "zz", SynSpec(), "vocab.zz.spm", v)
@@ -682,9 +684,18 @@ def test_nmt_exact_students(t : T?) {
         }
         var inscope ru_en <- student_of(t, RU_EN_TINY)
         var inscope ru_en_forms <- student_forms(t, ru_en, ["f32"])
+        if (empty(metal_build_why())) {   //! the kernel census's device lines, the dumps or not
+            let cov_why = arm_why("coverage")
+            let why = empty(cov_why) ? nmt_seat_why() : cov_why
+            add_served_forms(t, ru_en_forms, ru_en.c.dir, ["device"], why)
+        }
         with_model_once(t, "translate", "bergamot/ru-en-tiny/model.ruen.intgemm.alphas.bin", ru_en_forms, @@translator_stage_key, @@translator_stage, @@translator_form) $(var tr; form) {
             translator_form_is(t, tr, ru_en.c.dir, form)
             student_lane_cells(t, tr, ru_en, form)
+            if (form == "device") {
+                coverage_tower_bergamot_metal(t,
+                    "{ru_en.c.dir}: the kernel census's lines on the device seat", tr.m)
+            }
         }
         var inscope en_de <- student_of(t, EN_DE_BASE_MEMORY)
         var inscope en_de_forms <- student_forms(t, en_de, ["f32"])
@@ -965,6 +976,7 @@ def private unigram_vocab : array<uint8> {
 
 [test(description = "A synthetic float32 Marian student stages to f32 planes bit-identical to its intgemm8 twin's with every [in][out] GEMM transposed, an untransposed twin differing (the control), and the q8 lane lays the classifier's Q8_0 copy after the GEMMs")]
 def test_nmt_float32_student(t : T?) {
+    own_load("loads a copy of the file the cell itself writes: three synthetic student twins")
     t |> run("a float32 Marian student widens to the planes its intgemm8 twin does, every [in][out] GEMM transposed") @(t : T?) {
         var inscope v <- unigram_vocab()
         let a = syn_student("twin_int8", "zz", SynSpec(), "vocab.zz.spm", v)
@@ -992,6 +1004,7 @@ def private stage_panic(path : string) : string {
 
 [test(description = "`stage_nmt_model` stages a well-formed synthetic student and refuses by name each malformed one - wrong yml values, missing or misshaped items, bad framing, a split or BPE or absent vocabulary, a missing model")]
 def test_nmt_loader_refusals(t : T?) {
+    own_load("asserts on the load itself - its refusal: malformed synthetic students")
     t |> run("the student loader refuses each malformed file by name") @(t : T?) {
         var inscope v <- unigram_vocab()
         let ok = syn_student("good", "zz", SynSpec(), "vocab.zz.spm", v)
@@ -1100,6 +1113,7 @@ def test_nmt_spm_file_refusals(t : T?) {
 
 [test(description = "The translator facade refuses an LLM with no direction or a self-direction, serves any two of its 46 languages, holds a Marian student to its own pair, and loads a synthetic student on the q8 lane by default and f32 under exact")]
 def test_translate_facade_contracts(t : T?) {
+    own_load("loads a copy of the file the cell itself writes: a synthetic student, loaded twice")
     t |> run("the facade's direction, coverage and language calls on a shell of each kind and a synthetic student") @(t : T?) {
         var inscope llm = Translator(kind = TranslatorKind.llm)
         let why = panic_text() $ {
@@ -1161,7 +1175,7 @@ def private raw_completion(var tr : Translator; prompt_text : string; cap : int6
 
 [test(description = "MiLMMT-46 through the facade translates ru to en (pharmacy) and back, stopping at the end of the first line where an unstopped completion runs on, and its baked .dlim translates too")]
 def test_nmt_llm_translator(tst : T?) {
-    own_load("writes a .dlim image beside the file: the facade's GGUF load bakes it, and the second cell asserts it current and loads it back as an LLM")
+    own_load("writes a `.dlim` image beside the file: the facade's GGUF load bakes it, and the second cell asserts it current and loads it back as an LLM")
     let path = path_join(models_dir(), "milmmt/MiLMMT-46-1B-v0.1.Q4_K_M.gguf")
     let text = "Где ближайшая аптека?"   // nolint:STYLE039 - the source language's own text
     tst |> run("a translation LLM through the facade: the direction picked, one sentence translated to the end of its line") @(t : T?) {

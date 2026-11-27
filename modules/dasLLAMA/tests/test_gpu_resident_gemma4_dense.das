@@ -13,6 +13,10 @@ require dasllama/dasllama_common   // Model
 require dasllama/dasllama_gpu_tier   // gpu_want_cuda: the CUDA home's arms
 require dasllama/dasllama_env   // g_env_engine.pin_backend: the parity form's environment pin
 require _parity_cells   // parity_gemma4_12b_cut_cell: the Q4_K_M cut's pinned CPU form's parity stream; the Q8_0 file's parity row
+require _metal_matrix_cells   // the Metal family matrix's hetero rows on the files' Metal forms
+require _metal_prefill_cells   // prefill_gemma4_12b_12l: the Q8_0 cut's Metal prefill cells
+require _metal_mtp_cells   // mtp_verify_metal: the Q4_K_M cut's served image's same-slab verify
+require _kernel_coverage_cells   // cov_zoo_c11_gemma4_12b: the kernel census's zoo row
 
 // gemma-4-12B Q8_0 (the dense carrier on the Q8_0 planes: the weightless v-norm, the V-from-K global layers beside
 // the sliding ones, the per-layer output scale, the final softcap and the suppressed ids). Its device cells run on
@@ -39,6 +43,21 @@ let private GEMMA4_Q8_TWO_WINDOW_PPL_RATIO = 1.3
 //! literal, the file `REVIEW.das` holds to one call an area
 let private GEMMA4_12B_Q8_CUT = "gemma-4-12B-12L-Q8_0-local.gguf"
 let private GEMMA4_12B_K_CUT = "gemma-4-12B-12L-Q4_K_M-local.gguf"
+let private HETERO_ARM = "fam-gemma4"   //! the Metal family matrix's hetero rows
+
+//! the Metal hetero row `p` on the Metal form, its CPU side on the
+//! portable CPU form; false on any other form
+def private hetero_cells(t : T?; var m : Model; form : ModelForm; p : MatrixHeteroRow;
+                         var kept : MatrixHeteroKept) : bool {
+    if (form.on_metal) {
+        matrix_hetero_metal(t, m, form, p, kept)
+    } elif (alone_pass_of(form, matrix_cpu_form())) {
+        matrix_hetero_cpu(t, m, form, p, kept)
+    } else {
+        return false
+    }
+    return true
+}
 
 //! what a dense cut's forms collect: the default form beside its CPU
 //! form (`main`), the two forms' feeds and path gaps, the arms the
@@ -79,7 +98,7 @@ def private g4dense_rows_within(t : T?; tag : string; r : G4DenseRows; gaps : ar
     }
 }
 
-[test(description = "On the whole-model driver gemma-4-12B-12L Q8_0 keeps one-window forced-feed logits within 16 percent of the CPU chain (on the CUDA driver too, every position served); over two mirror regions a batched step over two sessions reads bit for bit what each session reads alone, with both prompts past the unsplit position the N-row command's split attention form does too, and a batched step before any one-row step, one-row steps, then a batched step again all read what each session reads alone; each form loads once")]
+[test(description = "On the whole-model driver gemma-4-12B-12L Q8_0 keeps one-window forced-feed logits within 16 percent of the CPU chain (on the CUDA driver too, every position served); over two mirror regions a batched step over two sessions reads bit for bit what each session reads alone, with both prompts past the unsplit position the N-row command's split attention form does too, and a batched step before any one-row step, one-row steps, then a batched step again all read what each session reads alone; on the Metal home's blob twin, one load on a das_metal build, the narrowed last-row prefill tail reads within 1.0 of every row's; each form loads once")]
 def test_gpu_resident_gemma4_dense(t : T?) {
     return if (!family_on(t, "gemma4"))
     var feeds : array<int64>
@@ -91,15 +110,25 @@ def test_gpu_resident_gemma4_dense(t : T?) {
     if (!empty(feeds)) {
         forms |> push(device_form())
     }
+    if (any_arm_on(fixed_array("lastrow-g"))) {   //! the prefill row's cells: no CPU side
+        forms |> push(metal_form(ctx = PREFILL_GEMMA4_12B_12L_CTX))
+    }
+    var pf : PrefillKept
     var ran = false
     with_cuda_mmq_winners() {
-        ran = with_cpu_and_gpu_model(t, "llm", "gemma-4-12B-12L-Q8_0-local.gguf", GEMMA_RIG_CTX, forms) $(m, form) {
-            g4dense_rows(r, m, form, feeds, array<int64>())
+        ran = with_cpu_and_gpu_model(t, "llm", "gemma-4-12B-12L-Q8_0-local.gguf", GEMMA_RIG_CTX,
+                forms) $(var m, form) {
+            if (form.on_metal) {
+                prefill_parity_metal(t, m, form, prefill_gemma4_12b_12l(), pf)
+            } else {
+                g4dense_rows(r, m, form, feeds, array<int64>())
+            }
         }
     }
     if (ran) {
         g4dense_rows_within(t, GEMMA4_12B_Q8_CUT, r, array<int64>())
     }
+    prefill_parity_verdict(t, pf)
     delete r
     delete forms
     delete feeds
@@ -114,7 +143,7 @@ def private g4q8_walk_within(t : T?; tag : string; r : GemmaWalkRows; i : int; r
     gemma_walk_twin_within(t, tag, r, GEMMA4_Q8_WALKS, i, ratio)
 }
 
-[test(description = "On the whole-model driver gemma-4-12B Q8_0 keeps its 150-position perplexity within 1.05x of the CPU chain's and its two-window perplexity within 1.3x; on the CUDA driver the same file's teacher-forced perplexity stays within 1.05x of the CPU chain's over 150 positions and 1.3x past two windows; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+[test(description = "On the whole-model driver gemma-4-12B Q8_0 keeps its 150-position perplexity within 1.05x of the CPU chain's and its two-window perplexity within 1.3x; on the CUDA driver the same file's teacher-forced perplexity stays within 1.05x of the CPU chain's over 150 positions and 1.3x past two windows; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; on the Metal home's blob twin, one load on a das_metal build, the hetero q8 row's generate emits the portable CPU truth's ids exactly, a B=2 batched decode emits them too, B=4 teacher-forced rows hold within 8 of the CPU's and a continuation prefill holds its logits; each form loads once")]
 def test_gpu_resident_gemma4_dense_ppl(t : T?) {
     return if (!family_on(t, "gemma4"))
     let dense = empty(arm_why(GEMMA4_Q8_FILE.arm))
@@ -125,11 +154,20 @@ def test_gpu_resident_gemma4_dense_ppl(t : T?) {
     if (dense || cuda) {
         forms |> push(device_form())
     }
+    metal_row_forms(forms, empty(arm_why(HETERO_ARM)), MATRIX_CTX, matrix_cpu_form())
+    var q8 : MatrixHeteroQ8Kept
     with_cuda_mmq_winners() {
         ran = with_cpu_and_gpu_model(t, "llm", "gemma-4-12B-it-Q8_0.gguf", GEMMA_RIG_CTX, forms, parity = true) $(var m, form) {
-            gemma_walk_rows(r, m, form, GEMMA4_Q8_WALKS)
+            if (form.on_metal) {
+                matrix_hetero_q8_metal(t, m, form, q8)
+            } elif (alone_pass_of(form, matrix_cpu_form())) {
+                matrix_hetero_q8_cpu(t, m, form, q8)
+            } else {
+                gemma_walk_rows(r, m, form, GEMMA4_Q8_WALKS)
+            }
         }
     }
+    matrix_hetero_q8_verdict(t, q8)
     if (ran) {
         held_within(t, r.carrier, "gemma-4-12B Q8_0: ", false)
     }
@@ -179,7 +217,7 @@ def test_gpu_resident_gemma4_dense_ppl(t : T?) {
 //! the parity row's context: a cut's parity stream runs at the context its full file's parity row loads at
 let private PARITY_CUT_CTX = 2048l
 
-[test(description = "On the whole-model driver gemma-4-12B-12L Q4_K_M's wide-head window chain and token command agree over 8 and 300 tokens within 6x the CPU chain's own prefill-versus-decode gap, the agreement form standing in for a CPU-referenced bar - on the CUDA driver too, with every position of both paths served; on the parity-pinned CPU form, on every box, fed the 12B's reference greedy stream after the 1492-id count every reference id keeps within 3% of its row's top logit, the stream one step late outside; each form loads once")]
+[test(description = "On the whole-model driver gemma-4-12B-12L Q4_K_M's wide-head window chain and token command agree over 8 and 300 tokens within 6x the CPU chain's own prefill-versus-decode gap, the agreement form standing in for a CPU-referenced bar - on the CUDA driver too, with every position of both paths served; on the parity-pinned CPU form, on every box, fed the 12B's reference greedy stream after the 1492-id count every reference id keeps within 3% of its row's top logit, the stream one step late outside; on the Metal home's blob twin, one load on a das_metal build, a prompt, a continuation and a batched step feed the kernel census; on its served image, one load on a das_metal build, the batch rail's same-slab verify rows read within 6.0 of the single steps' with no decline; each form loads once")]
 def test_gpu_resident_gemma4_prefill_vs_decode(t : T?) {
     return if (!family_on(t, "gemma4"))
     let cuda = gpu_want_cuda()
@@ -194,11 +232,23 @@ def test_gpu_resident_gemma4_prefill_vs_decode(t : T?) {
     if (!empty(gaps)) {
         forms |> push(device_form())
     }
+    if (any_arm_on(fixed_array("coverage"))) {
+        forms |> push(metal_form(ctx = KERNEL_COVERAGE_CTX))
+    }
+    let verify = mtp_verify_gemma4_12b_cut()
+    var verify_arms <- mtp_verify_arms(verify.tag)
+    if (any_arm_on(verify_arms)) {
+        forms |> push(metal_form(image = true, ctx = METAL_MTP_CELLS_CTX))
+    }
     var r : G4DenseRows
     var ran = false
     with_cuda_mmq_winners() {
         ran = with_cpu_and_gpu_model(t, "llm", "gemma-4-12B-12L-Q4_K_M-local.gguf", GEMMA_RIG_CTX, forms) $(var m, form) {
-            if (form.kq_native == KqNative.off) {
+            if (form.metal_image) {
+                mtp_verify_metal(t, m, form, verify)
+            } elif (form.on_metal) {
+                coverage_zoo_metal(t, m, form, cov_zoo_c11_gemma4_12b())
+            } elif (form.kq_native == KqNative.off) {
                 with_ctx_cut(m, PARITY_CUT_CTX) {
                     parity_gemma4_12b_cut_cell(t, m)
                 }
@@ -212,5 +262,45 @@ def test_gpu_resident_gemma4_prefill_vs_decode(t : T?) {
     }
     delete r
     delete gaps
+    delete forms
+    delete verify_arms
+}
+
+// gemma-4-12B Q4_K_M (the dense carrier on the K-quant planes, the
+// gemma4-dense category's) and gemma-4-31B Q4_K_M (the largest dense
+// gemma-4, the gemma4-31b category's): each file's Metal form (the
+// blob twin; arm `fam-gemma4`) carries the family matrix's hetero
+// row, its portable-pinned CPU form the row's CPU truths; the 12B's
+// parity row's CPU form, on every box, the row's frozen greedy ids.
+// Skips off the JIT, without the file under models_dir(), or where
+// the run names no category of the file's.
+
+[test(description = "On the Metal home's blob twin of gemma-4-12B Q4_K_M, one load on a das_metal build, the hetero row derives its needs, engages all three Metal paths, holds a 128-row forced-feed stream within 8 of the portable CPU truth's with its one-step-back control outside, and its counting generate, a B=2 batched decode and a continuation prefill hold the CPU truth; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+def test_gpu_resident_gemma4_12b_k4(t : T?) {
+    return if (!family_on(t, "gemma4"))
+    var inscope row <- matrix_hetero_gemma4_12b()
+    var kept = MatrixHeteroKept()
+    var forms : array<ModelForm>
+    metal_row_forms(forms, empty(arm_why(HETERO_ARM)), MATRIX_CTX, matrix_cpu_form())
+    with_cpu_and_gpu_model(t, "llm", "gemma-4-12B-it-Q4_K_M.gguf", GEMMA_RIG_CTX,
+            forms, parity = true) $(var m, form) {
+        hetero_cells(t, m, form, row, kept)
+    }
+    matrix_hetero_verdict(t, row, kept)
+    delete forms
+}
+
+[test(description = "On the Metal home's blob twin of gemma-4-31B Q4_K_M, one load on a das_metal build, the hetero row derives its needs, engages all three Metal paths, holds the forced-feed stream's 29 rows ahead of its one-token loop within 8 of the portable CPU truth's with its control outside, serves past the slab seam at a dim over 4096, and its counting generate, a B=2 batched decode and a continuation prefill hold the CPU truth; each form loads once")]
+def test_gpu_resident_gemma4_31b(t : T?) {
+    return if (!family_on(t, "gemma4"))
+    var inscope row <- matrix_hetero_gemma4_31b()
+    var kept = MatrixHeteroKept()
+    var forms : array<ModelForm>
+    metal_row_forms(forms, empty(arm_why(HETERO_ARM)), MATRIX_CTX, matrix_cpu_form())
+    with_cpu_and_gpu_model(t, "llm", "gemma-4-31B-it-Q4_K_M.gguf", GEMMA_RIG_CTX,
+            forms) $(var m, form) {
+        hetero_cells(t, m, form, row, kept)
+    }
+    matrix_hetero_verdict(t, row, kept)
     delete forms
 }

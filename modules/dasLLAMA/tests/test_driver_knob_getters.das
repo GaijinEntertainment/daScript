@@ -14,12 +14,16 @@ require dasllama/dasllama_gpu_resident   // the lane_read and gpu_kv_want levers
 require _override_probes   // decode_declines: the fake override's step
 require dasllama/dasllama_kv_codec   // cvt_q8kv_to_f32: a poisoned q8_0 row read back
 require dasllama/dasllama_env   // g_env_engine: the cpu_prefill lever's unpinned knob
+require dasllama/dasllama_blocks   // set_span_fuse / get_span_fuse
 require daslib/linq   // all
 require daslib/rtti   // this_context: the panic a lever's with re-raised
 require strings
-require ?das_metal dasllama/dasllama_metal_decode   // get_metal_decode_fuse, metal_mtp_carry_pre
-require ?das_metal dasllama/dasllama_metal_prefill   // get_metal_prefill_lastrow
+require ?das_metal dasllama/dasllama_metal_decode   // the decode rails' getters, metal_mtp_carry_pre
+require ?das_metal dasllama/dasllama_metal_prefill   // the prefill knobs' getters
+require ?das_metal dasllama/dasllama_metal_common   // get_metal_decode_skip
 require ?das_metal dasllama/dasllama_metal_mtp_gemma   // gemma_trace, gemma_carry_pre_norm
+require ?das_metal dasllama/dasllama_metal_dflash   // get_metal_dflash_soft_pick
+require ?das_metal dasllama/dasllama_metal_asr_dec   // get_metal_wdec_step
 
 // The driver knobs' getters and the registries' removal verbs, model-free and device-free: each setter's value read back through
 // its getter, then the value found put back and read back as found - the form every cell that pins a knob restores through.
@@ -134,7 +138,7 @@ def test_unregister_prefill_override(t : T?) {
     }
 }
 
-[test(description = "Each Metal driver knob getter (decode fuse, prefill last row, gemma trace, gemma carry pre-norm) reads back what its setter set and the value found restores, and the carry choice leaves the decode carry alone with no drafter attached")]
+[test(description = "Each Metal driver knob getter (decode fuse, prefill last row, prefill span, decode concurrent rail, which reads any negative as the env default, batch split-chain pin, decode knockout, gemma trace, gemma carry pre-norm) reads back what its setter set and the value found restores, and the carry choice leaves the decode carry alone with no drafter attached")]
 def test_metal_knob_getters(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         t |> run("get_metal_decode_fuse reads the rail set_metal_decode_fuse set") @(t : T?) {
@@ -155,6 +159,44 @@ def test_metal_knob_getters(t : T?) {
             set_metal_prefill_lastrow(found)
             t |> equal(get_metal_prefill_lastrow(), found, "the tail found is put back")
         }
+        t |> run("get_metal_prefill_span reads the span serving set_metal_prefill_span set") @(t : T?) {
+            let found = get_metal_prefill_span()
+            for (v in fixed_array(!found, found)) {
+                set_metal_prefill_span(v)
+                t |> equal(get_metal_prefill_span(), v, "the span serving reads {v}")
+            }
+            set_metal_prefill_span(found)
+            t |> equal(get_metal_prefill_span(), found, "the span serving found is put back")
+        }
+        t |> run("get_metal_decode_concurrent reads the rail set_metal_decode_concurrent set, any negative as the env default") @(t : T?) {
+            let found = get_metal_decode_concurrent()
+            for (v in fixed_array(1, 0, -1)) {
+                set_metal_decode_concurrent(v)
+                t |> equal(get_metal_decode_concurrent(), v, "the concurrent rail reads {v}")
+            }
+            set_metal_decode_concurrent(-7)
+            t |> equal(get_metal_decode_concurrent(), -1, "any negative reads the env default, -1")
+            set_metal_decode_concurrent(found)
+            t |> equal(get_metal_decode_concurrent(), found, "the rail found is put back")
+        }
+        t |> run("get_metal_batch_addrms_unfused reads the split-chain pin set_metal_batch_addrms_unfused set") @(t : T?) {
+            let found = get_metal_batch_addrms_unfused()
+            for (v in fixed_array(!found, found)) {
+                set_metal_batch_addrms_unfused(v)
+                t |> equal(get_metal_batch_addrms_unfused(), v, "the split-chain pin reads {v}")
+            }
+            set_metal_batch_addrms_unfused(found)
+            t |> equal(get_metal_batch_addrms_unfused(), found, "the pin found is put back")
+        }
+        t |> run("get_metal_decode_skip reads the knockout set_metal_decode_skip armed") @(t : T?) {
+            let found = get_metal_decode_skip()
+            for (v in fixed_array("attn", "")) {
+                set_metal_decode_skip(v)
+                t |> equal(get_metal_decode_skip(), v, "the knockout reads '{v}'")
+            }
+            set_metal_decode_skip(found)
+            t |> equal(get_metal_decode_skip(), found, "the knockout found is put back")
+        }
         t |> run("gemma_trace and gemma_carry_pre_norm read the drafter levers their setters set") @(t : T?) {
             let trace = gemma_trace()
             let pre = gemma_carry_pre_norm()
@@ -171,6 +213,85 @@ def test_metal_knob_getters(t : T?) {
         }
     } else {
         t |> skip("das_metal is not built on this platform; the Metal drivers' knobs are not compiled")
+    }
+}
+
+[test(description = "Each Metal form seat getter (prefill half-X, prefill tall stamps, legacy-GEMM pin, dflash soft pick, ASR-decoder step half) reads back what its setter set and the value found restores")]
+def test_metal_form_seat_getters(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        t |> run("get_metal_prefill_half_x reads the half-X seat set_metal_prefill_half_x set") @(t : T?) {
+            let found = get_metal_prefill_half_x()
+            for (v in fixed_array(!found, found)) {
+                set_metal_prefill_half_x(v)
+                t |> equal(get_metal_prefill_half_x(), v, "the half-X seat reads {v}")
+            }
+            set_metal_prefill_half_x(found)
+            t |> equal(get_metal_prefill_half_x(), found, "the half-X seat found is put back")
+        }
+        t |> run("get_metal_prefill_tall reads the tall-stamp seat set_metal_prefill_tall set") @(t : T?) {
+            let found = get_metal_prefill_tall()
+            for (v in fixed_array(!found, found)) {
+                set_metal_prefill_tall(v)
+                t |> equal(get_metal_prefill_tall(), v, "the tall-stamp seat reads {v}")
+            }
+            set_metal_prefill_tall(found)
+            t |> equal(get_metal_prefill_tall(), found, "the tall-stamp seat found is put back")
+        }
+        t |> run("get_metal_prefill_mulmm_legacy reads the legacy-GEMM pin set_metal_prefill_mulmm_legacy set") @(t : T?) {
+            let found = get_metal_prefill_mulmm_legacy()
+            for (v in fixed_array(!found, found)) {
+                set_metal_prefill_mulmm_legacy(v)
+                t |> equal(get_metal_prefill_mulmm_legacy(), v, "the legacy-GEMM pin reads {v}")
+            }
+            set_metal_prefill_mulmm_legacy(found)
+            t |> equal(get_metal_prefill_mulmm_legacy(), found, "the legacy-GEMM pin found is put back")
+        }
+        t |> run("get_metal_dflash_soft_pick reads the soft pick knob set_metal_dflash_soft_pick set") @(t : T?) {
+            let found = get_metal_dflash_soft_pick()
+            for (v in fixed_array(!found, found)) {
+                set_metal_dflash_soft_pick(v)
+                t |> equal(get_metal_dflash_soft_pick(), v, "the soft pick knob reads {v}")
+            }
+            set_metal_dflash_soft_pick(found)
+            t |> equal(get_metal_dflash_soft_pick(), found, "the soft pick knob found is put back")
+        }
+        t |> run("get_metal_wdec_step reads the decode-step half set_metal_wdec_step set") @(t : T?) {
+            let found = get_metal_wdec_step()
+            for (v in fixed_array(!found, found)) {
+                set_metal_wdec_step(v)
+                t |> equal(get_metal_wdec_step(), v, "the decode-step half reads {v}")
+            }
+            set_metal_wdec_step(found)
+            t |> equal(get_metal_wdec_step(), found, "the decode-step half found is put back")
+        }
+    } else {
+        t |> skip("das_metal is not built on this platform; the Metal drivers' knobs are not compiled")
+    }
+}
+
+[test(description = "`get_span_fuse` reads back the span fuse `set_span_fuse` set, and the value found restores")]
+def test_span_fuse_getter(t : T?) {
+    t |> run("get_span_fuse reads the span fuse set_span_fuse set") @(t : T?) {
+        let found = get_span_fuse()
+        for (v in fixed_array(!found, found)) {
+            set_span_fuse(v)
+            t |> equal(get_span_fuse(), v, "the span fuse reads {v}")
+        }
+        set_span_fuse(found)
+        t |> equal(get_span_fuse(), found, "the span fuse found is put back")
+    }
+}
+
+[test(description = "`get_moe_gpu_shexp_route` reads back the shared-expert routing gate `set_moe_gpu_shexp_route` set, and the value found restores")]
+def test_shexp_route_getter(t : T?) {
+    t |> run("get_moe_gpu_shexp_route reads the gate set_moe_gpu_shexp_route set") @(t : T?) {
+        let found = get_moe_gpu_shexp_route()
+        for (v in fixed_array(!found, found)) {
+            set_moe_gpu_shexp_route(v)
+            t |> equal(get_moe_gpu_shexp_route(), v, "the shared-expert gate reads {v}")
+        }
+        set_moe_gpu_shexp_route(found)
+        t |> equal(get_moe_gpu_shexp_route(), found, "the shared-expert gate found is put back")
     }
 }
 

@@ -893,6 +893,7 @@ def private head_width_cell(t : T?) {
 
 [test(description = "`load_ru_stress` refuses, naming the cause, a missing file, a GGUF of another architecture, a file without a tensor it needs, a head that is neither 8 nor 16 classes wide and a layer stored in a quantized type the layer GEMMs do not serve (the tensor, the site and the format member in the text); `load_wordpiece_gguf` refuses a tokenizer that is not bert, one without the sorted piece ids (the key and the converter in the text) and one whose sorted ids are not the pieces' byte order")]
 def test_stress_model_refusals(t : T?) {
+    own_load("asserts on the load itself - its refusal: synthetic stress models in scratch")
     t |> run("a missing file panics naming it") @(t : T?) {
         let missing = scratch_path("no-such-ru-stress.gguf")
         let why = panic_text() {

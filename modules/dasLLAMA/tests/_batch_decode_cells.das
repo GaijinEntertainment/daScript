@@ -9,10 +9,9 @@ require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require dasllama/dasllama_math   // with_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
 require dasllama/dasllama_bench   // bench_tg_batched_rep: the batched row's refusal on a per-row step
-require daslib/f16_cvt
 require daslib/jobque_boost
 require math
-require _model_tier   // cut_within, logits_maxdiff, nan_wide_diff
+require _model_tier   // cut_within, logits_maxdiff, kv_row_max_diff
 require _cpu_gpu_model   // with_ctx_cut: the cells' 64-position context
 
 // Batched decode vs sequential: eval_batch_ must reproduce the per-session forward() stream —
@@ -66,56 +65,15 @@ def run_ref(tr : Model; kdt : KVDtype; prompt : array<int64>; nsteps, vocab : in
 def private kv_blob_max_diff(blob : array<uint8>; refb : array<uint8>; pref : array<int64>;
                              dt : KVDtype; c : Config; npast : int64) : float {
     var maxd = 0.0
-    unsafe {
-        let bp = addr<uint8 const?>(blob[0])
-        let rp = addr<uint8 const?>(refb[0])
-        for (l in range64(c.n_layers)) {
-            if (layer_kv_source(c, l) != l) {
-                continue
-            }
-            let kvd = layer_kv_dim(c, l)
-            let rowb = kv_row_bytes(dt, kvd)
-            let base = pref[l] * c.seq_len
-            for (row in range64(npast)) {
-                if (dt == KVDtype.f16) {
-                    let hb = reinterpret<uint16 const?>(bp + base + row * rowb)
-                    let hr = reinterpret<uint16 const?>(rp + base + row * rowb)
-                    for (e in range64(kvd)) {
-                        maxd = max(maxd, nan_wide_diff(f16_to_f32(uint(hb[e])), f16_to_f32(uint(hr[e]))))
-                    }
-                } elif (dt == KVDtype.q8_0) {
-                    let qb = bp + base + row * rowb
-                    let qr = rp + base + row * rowb
-                    for (bi in range64(kvd / 32l)) {
-                        let bb = bi * 34l
-                        let db = f16_to_f32(uint(qb[bb]) | (uint(qb[bb + 1l]) << 8u))
-                        let dr = f16_to_f32(uint(qr[bb]) | (uint(qr[bb + 1l]) << 8u))
-                        for (k in range64(32l)) {
-                            maxd = max(maxd, nan_wide_diff(float(int8(qb[bb + 2l + k])) * db, float(int8(qr[bb + 2l + k])) * dr))
-                        }
-                    }
-                } elif (dt == KVDtype.tq4) {
-                    let qb = bp + base + row * rowb
-                    let qr = rp + base + row * rowb
-                    for (bi in range64(kvd / 32l)) {
-                        let bb = bi * 18l
-                        let db = f16_to_f32(uint(qb[bb]) | (uint(qb[bb + 1l]) << 8u))
-                        let dr = f16_to_f32(uint(qr[bb]) | (uint(qr[bb + 1l]) << 8u))
-                        for (k in range64(16l)) {
-                            let byb = int(qb[bb + 2l + k])
-                            let byr = int(qr[bb + 2l + k])
-                            maxd = max(maxd, nan_wide_diff(float((byb & 15) - 8) * db, float((byr & 15) - 8) * dr))
-                            maxd = max(maxd, nan_wide_diff(float((byb >> 4) - 8) * db, float((byr >> 4) - 8) * dr))
-                        }
-                    }
-                } else {
-                    let fb = reinterpret<float const?>(bp + base + row * rowb)
-                    let fr = reinterpret<float const?>(rp + base + row * rowb)
-                    for (e in range64(kvd)) {
-                        maxd = max(maxd, nan_wide_diff(fb[e], fr[e]))
-                    }
-                }
-            }
+    for (l in range64(c.n_layers)) {
+        if (layer_kv_source(c, l) != l) {
+            continue
+        }
+        let kvd = layer_kv_dim(c, l)
+        let rowb = kv_row_bytes(dt, kvd)
+        let base = pref[l] * c.seq_len
+        for (row in range64(npast)) {
+            maxd = max(maxd, kv_row_max_diff(blob, refb, base + row * rowb, dt, kvd))
         }
     }
     return maxd

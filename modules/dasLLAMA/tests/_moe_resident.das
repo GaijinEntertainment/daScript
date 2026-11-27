@@ -432,28 +432,25 @@ struct HeatPlacement {
 
 let HEAT_CELL_STEPS = 80l   //! fed steps past the heat pool's re-pin interval (64 tokens a layer), so every pooled layer is pinned and then hit
 
-//! the per-op tier's heat pool on a MoE fixture: the whole-model route off, the last `resident` routed layers' stacks placed and
-//! the rest streamed under `slots` hot experts a layer; a 40-token prompt and `HEAT_CELL_STEPS` fed steps against the CPU chain at
-//! the fixture's bar, the pool serving some of the streamed layers' picks, and on a shared-expert fixture every routed layer's
-//! shared expert on the device after the routed chain or the pool's hits - none overlapped, none on the CPU, none on the GEMMs
-//! - where the walk put the routed layers returned
-def moe_perop_heat_cell(t : T?; fx : MoeFixture; resident, slots : int64) : HeatPlacement {
-    var placement : HeatPlacement
-    return placement if (!vulkan_home_asked(t, "the per-op tier and its heat pool are the Vulkan home's"))
-    let path = path_join(models_dir(), fx.file)
-    return placement if (!resident_ready(t, path))
-    let route = gpu_resident_route_lever()
-    let want0 = g_gpu_want
-    set_gpu_resident_route(false)
-    var want = want0
-    want.moe_layers = resident
-    want.moe_stream = -1l
-    want.heat = slots
-    set_gpu_tier_want_(want)
-    t |> success(moe_gpu_tier_arm_(), "the tier re-armed at {resident} resident routed layers")
-    heat_reset()
-    var tr <- load_model_(path, QuantMode.q8)
-    set_gpu_resident_route(route)
+//! what the heat cell's device side hands its CPU side: where the
+//! walk put the routed layers, the window's and the fed steps'
+//! rows, the codec they ran on
+struct HeatKept {
+    placement : HeatPlacement
+    gpu : array<array<float>>
+    kv : KVDtype
+    ran : bool       //! the device side fed its steps
+    cpu_ran : bool   //! the CPU side fed and compared them
+}
+
+let private HEAT_PROMPT = 40l
+
+//! the heat cell's device side on `tr`, loaded on the per-op tier
+//! under the heat pool's want: the walk's placement, a
+//! `HEAT_PROMPT`-token prompt and `HEAT_CELL_STEPS` fed steps, the
+//! pool's hits and the shared expert's rows
+def private heat_device_side(t : T?; tr : Model; kv : KVDtype; fx : MoeFixture) : HeatKept {
+    var kept : HeatKept
     t |> success(!moe_gpu_resident_active(), "the whole-model route is off: the per-op rails serve")
     var routed = 0l
     var placed = 0l
@@ -463,16 +460,17 @@ def moe_perop_heat_cell(t : T?; fx : MoeFixture; resident, slots : int64) : Heat
         placed += moe_gpu_layer_on_gpu(l) ? 1l : 0l
     }
     t |> success(placed > 0l && placed < routed, "the expert walk placed {placed} of {routed} routed layers, the rest streamed under the heat pool")
-    placement = HeatPlacement(routed = routed, placed = placed)
+    kept.placement = HeatPlacement(routed = routed, placed = placed)
+    kept.kv = kv
     with_dasllama_jobque_() {
-        var prompt <- resident_prompt(40l)
+        var prompt <- resident_prompt(HEAT_PROMPT)
         var toks <- resident_feed(HEAT_CELL_STEPS)
         let heat0 = heat_totals()
         let over0 = shexp_gpu_decode_rows()
         let after0 = shexp_gpu_after_rows()
         let gemm0 = shexp_gpu_gemm_rows()
-        var sg <- create_session(tr, mirror_kv_dtype())
-        var gpu <- feed_logits(tr, sg, prompt, toks)
+        var sg <- create_session(tr, kept.kv)
+        kept.gpu <- feed_logits(tr, sg, prompt, toks)
         delete sg
         let heat = heat_totals()
         to_log(LOG_INFO, "heat pool: {heat.hits - heat0.hits} of {heat.picks - heat0.picks} streamed picks served by the slots; shared expert rows overlapped {shexp_gpu_decode_rows() - over0}, after {shexp_gpu_after_rows() - after0}, GEMMs {shexp_gpu_gemm_rows() - gemm0}\n")
@@ -482,20 +480,70 @@ def moe_perop_heat_cell(t : T?; fx : MoeFixture; resident, slots : int64) : Heat
             t |> equal(shexp_gpu_decode_rows() - over0, 0l, "no shared expert overlapped CPU experts under the heat pool")
             t |> equal(shexp_gpu_gemm_rows() - gemm0, 0l, "no shared expert on the three dense GEMMs: one activation form a layer")
         }
-        set_gpu_tier_want_(want0)
-        moe_gpu_tier_arm_()
-        heat_reset()
-        moe_gpu_drop_model()
-        var cpu <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
-        feed_steps_within(t, tr, "heat pool ", 40l, gpu, cpu, toks, fx.bar_rel, "per-op heat")
-        delete gpu
+        delete prompt
+        delete toks
+    }
+    kept.ran = true
+    return <- kept
+}
+
+//! the heat cell's CPU side on `tr`, its device state gone: the same
+//! prompt and fed steps on the CPU chain against the device side's
+//! rows at the fixture's bar, the rows freed after
+def private heat_cpu_side(t : T?; tr : Model; fx : MoeFixture; var kept : HeatKept) {
+    with_dasllama_jobque_() {
+        var prompt <- resident_prompt(HEAT_PROMPT)
+        var toks <- resident_feed(HEAT_CELL_STEPS)
+        var cpu <- feed_alone(tr, kept.kv, prompt, toks)
+        feed_steps_within(t, tr, "heat pool ", HEAT_PROMPT, kept.gpu, cpu, toks, fx.bar_rel,
+            "per-op heat")
         delete cpu
         delete prompt
         delete toks
     }
-    set_gpu_tier_want_(want0)
-    moe_gpu_tier_arm_()
-    delete tr
+    delete kept.gpu
+    kept.cpu_ran = true
+}
+
+//! the heat cell's device side on a block's per-op form (`m`, loaded
+//! on the per-op tier under the heat pool's want: `fx`'s resident
+//! routed layers placed, the rest streamed under the pool's slots),
+//! its rows kept for `moe_perop_heat_cpu`; no load
+def moe_perop_heat_rows(t : T?; var m : Model; form : ModelForm; fx : MoeFixture;
+                        var kept : HeatKept) {
+    return if (!vulkan_home_asked(t, "the per-op tier and its heat pool are the Vulkan home's"))
+    if (!form.perop) {
+        t |> failure(("{fx.file}: the heat cell's device side runs on a per-op form, not " +
+            "{form_name(form)}"))
+        return
+    }
+    delete kept
+    kept <- heat_device_side(t, m, form.kv, fx)   //! no mirror arms on a per-op load: the form names the codec
+}
+
+//! the CPU load the heat cell's CPU side runs on: the q8 CPU chain
+//! the block's device forms answer to
+def heat_cpu_form() : ModelForm => cpu_quant_form(QuantMode.q8)
+
+//! the heat cell's CPU side on the first pass of `heat_cpu_form()`'s
+//! load (`m`, no device state), where the device side ran; other
+//! passes pass by; no load
+def moe_perop_heat_cpu(t : T?; var m : Model; form : ModelForm; fx : MoeFixture;
+                       var kept : HeatKept) {
+    return if (!kept.ran || kept.cpu_ran || form.on_gpu || !same_cpu_load(form, heat_cpu_form()))
+    heat_cpu_side(t, m, fx, kept)
+}
+
+//! after the block: a device side whose CPU side never ran fails
+//! naming the file; where the walk put the routed layers returned,
+//! the rows freed
+def moe_perop_heat_verdict(t : T?; fx : MoeFixture; var kept : HeatKept) : HeatPlacement {
+    if (kept.ran && !kept.cpu_ran) {
+        t |> failure(("{fx.file}: the heat pool's steps lost their CPU side (no " +
+            "`heat_cpu_form` pass)"))
+    }
+    let placement = kept.placement
+    delete kept
     return placement
 }
 

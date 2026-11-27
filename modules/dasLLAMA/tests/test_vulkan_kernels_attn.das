@@ -13,6 +13,7 @@ require _compares
 require _attn_oracle   // the batched decode attention cells' oracle
 require _moe_routing_oracles
 require _vk_kq_fixtures
+require _kernel_census   // nolint:STYLE030,LINT019 - kernel_census_reset_vulkan, in the vulkan arms
 require ?vulkan _vkd_toy
 require ?vulkan _vkd_oracles
 require ?vulkan _vk_codec_attn
@@ -528,7 +529,7 @@ def private fa_khr_stand_in_cells(t : T?; suffix, what : string) {
         for (stem in FA_KHR_STEMS) {
             t |> equal(vkd_slot_kernel("fa_khr_{stem}_cls_spv"), "fa_khr_{stem}_{suffix}_spv", "the {stem} slot serves its {what}")
         }
-        vk_kernel_coverage_reset()
+        kernel_census_reset_vulkan()
         fa_tile_run(t, true, ", the {what}s")
         fa_h256_gated_cell(t, "fa_khr h256 gated, the {what}s", 4, 2, 77, 64, true)
         fa_h256_softcap_cell(t, true, ", the {what}s")

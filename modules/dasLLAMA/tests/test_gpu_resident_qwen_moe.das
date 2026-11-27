@@ -32,6 +32,11 @@ require _segment_cells   // recurrent_segments_cell, SEG_WINDOW: the 35B cut's s
 require _parity_cells   // parity_qwen2moe_cut_cell, parity_qwen35moe_cut_cell: the cuts' parity streams on their pinned CPU forms; the 30B's parity row
 require _batch_decode_cells   // batch_decode_hybrid_moe_cell: the 35B UD-Q4_K_M cut's portable-pinned CPU form
 require _metal_batched_cells   // metal_qwen_moe_cells: the Qwen1.5 Q8_0 cut's Metal form's cells
+require _metal_prefill_cells   // prefill_parity_*: the Metal prefill rows
+require _metal_matrix_cells   // matrix_*: the support-matrix rows
+require _metal_mtp_cells   // mtp_parity_metal, mtp_verify_metal: the served image's rows
+require _metal_format_census_cells   // format_census_*: the Metal census rows
+require _kernel_coverage_cells   // coverage_zoo_metal, coverage_vk_routed: the census rows
 
 // The whole-model resident driver on a MoE under DASLLAMA_GPU=1, on the Vulkan home or under DASLLAMA_CUDA=1 on the CUDA home:
 // the expert stacks in the arena beside the attention quads and the shared experts, the window chain's routed block (the
@@ -54,10 +59,10 @@ require _metal_batched_cells   // metal_qwen_moe_cells: the Qwen1.5 Q8_0 cut's M
 //   one-window feed; on its CPU form under the environment's backend pin (DASLLAMA_PIN_BACKEND, none where unset), on every
 //   box, the parity reference's greedy stream (`_parity_cells.das`); a pin the box cannot take skips that form loudly.
 // - The per-32 cuts (`test_gpu_resident_moe_per32`, arm `vk-per32-moe`): Q5_1, Q4_0 and Q5_0, each read site by site in its
-//   own format, a 40-token window against the CPU chain.
+//   own format, a 40-token window against the CPU chain; on the Q5_1 cut's per-op form the heat pool cell.
 // The Qwen3-30B UD-IQ2_XXS, the MoE with no shared expert (the residual step's add partner off), holds the format census
 // first - every site the file carries read in its own format - as does the Q4_K_M host-layer fixture; the Qwen3.6-35B
-// cuts' blocks follow the per-op heat cell. Qwen3-Coder-Next
+// cuts' blocks follow. Qwen3-Coder-Next
 // (512 experts) holds the device select past 256 experts beside the host-layer split. Those whole-file fixtures are their categories'
 // (qwen3moe-30b, qwen35moe-35b, qwen3coder-next), run under `--category`. The Qwen1.5 Q8_0 cut's Metal form (`metal_form`, the blob twin) carries the
 // Metal batched driver's shared-expert cells (`_metal_batched_cells.das`: the batched row and the one-row same-slab verify), one
@@ -68,6 +73,189 @@ require _metal_batched_cells   // metal_qwen_moe_cells: the Qwen1.5 Q8_0 cut's M
 // home's); the driver's admission of every fixture is asserted, never skipped - on a device with neither the cm2 tile
 // family nor KHR cooperative matrices at subgroup 32 (or under DASLLAMA_COOPMAT=sdot4) the expert pieces ride the Q8-fed
 // chain's batch tiles.
+
+// The Metal home's rows ride each file's block: the blob twin's
+// census, coverage zoo, support-matrix and prefill cells, their
+// controls on the portable CPU form after it, the served image's
+// NextN and verify cells, the compares after the block (`MetalRows`).
+
+//! the Metal coverage zoo row a file's blob twin runs
+enum private MetalZoo {
+    none
+    qwen2moe   //! C14, the Qwen1.5-MoE Q8_0 cut
+    qwen3moe   //! C12, the Qwen3-30B Q4_K_M cut
+}
+
+//! the Metal home's rows of one model file and the CPU form their
+//! controls run on (`cpu`)
+struct private MetalRows {
+    cpu : ModelForm = ModelForm()
+    zoo : MetalZoo
+    prefill : bool
+    pf : PrefillRow
+    census : bool
+    cs : CensusRow
+    family : bool
+    fam : MatrixFamilyRow = MatrixFamilyRow()
+    hybrid : bool
+    hy : MatrixHybridRow
+    qwen2moe : bool
+    verify : bool
+    vr : MtpVerifyRow = MtpVerifyRow()
+    mtp : bool
+    mp : MtpParityRow = MtpParityRow()
+}
+
+//! what a file's Metal cells keep for their controls and compares
+struct private MetalKept {
+    prefill : PrefillKept
+    census : CensusKept
+    family : MatrixFamilyKept
+    hybrid : MatrixHybridKept
+    qwen2moe : MatrixQwen2moeKept
+}
+
+//! the rows' controls on a CPU form, else none
+def private metal_rows_cpu(r : MetalRows) : bool => (r.prefill || r.census || r.family
+    || r.hybrid || r.qwen2moe)
+
+//! the rows' blob twin cells, else none
+def private metal_rows_twin(r : MetalRows) : bool => metal_rows_cpu(r) || r.zoo != MetalZoo.none
+
+//! the forms `r` asks onto `forms`: the blob twin at `ctx` where the
+//! arm filter reaches one of `arms`, and on a das_metal build the CPU
+//! form of its controls where it reaches one of `cpu_arms`; the
+//! served image where a NextN or verify row runs, the verify's only
+//! where the filter reaches its arms
+def private metal_rows_forms(var forms : array<ModelForm>; r : MetalRows; ctx : int64;
+                             arms, cpu_arms : array<string>) {
+    if (metal_rows_twin(r) && any_arm_on(arms)) {
+        forms |> push(metal_form(ctx = ctx, iq3s_serve = r.cpu.iq3s_serve))
+    }
+    if (metal_rows_cpu(r) && any_arm_on(cpu_arms) && empty(metal_build_why())) {
+        forms |> push(r.cpu)
+    }
+    var inscope verify_arms <- mtp_verify_arms(r.vr.tag)
+    if (r.mtp || (r.verify && any_arm_on(verify_arms))) {
+        forms |> push(metal_form(image = true, ctx = METAL_MTP_CELLS_CTX))
+    }
+}
+
+//! the rows' Metal cells on a Metal form `form`: the served image's,
+//! or the twin's - the prefill row last, as it shuts the drivers down
+def private metal_rows_cells(t : T?; var m : Model; form : ModelForm; r : MetalRows;
+                             var kept : MetalKept) {
+    if (form.metal_image) {
+        if (r.verify) {
+            mtp_verify_metal(t, m, form, r.vr)
+        }
+        if (r.mtp) {
+            mtp_parity_metal(t, m, form, r.mp)
+        }
+        return
+    }
+    if (r.zoo == MetalZoo.qwen2moe) {
+        coverage_zoo_metal(t, m, form, cov_zoo_c14_qwen2moe())
+    } elif (r.zoo == MetalZoo.qwen3moe) {
+        coverage_zoo_metal(t, m, form, cov_zoo_c12_qwen3moe())
+    }
+    if (r.census) {
+        format_census_metal(t, m, form, r.cs, kept.census)
+    }
+    metal_rows_matrix(t, m, form, r, kept)
+    if (r.prefill) {
+        prefill_parity_metal(t, m, form, r.pf, kept.prefill)
+    }
+}
+
+//! the rows' support-matrix cells on the blob twin
+def private metal_rows_matrix(t : T?; var m : Model; form : ModelForm; r : MetalRows;
+                              var kept : MetalKept) {
+    if (r.family) {
+        matrix_family_metal(t, m, form, r.fam, kept.family)
+    }
+    if (r.hybrid) {
+        matrix_hybrid_metal(t, m, form, r.hy, kept.hybrid)
+    }
+    if (r.qwen2moe) {
+        matrix_qwen2moe_metal(t, m, form, kept.qwen2moe)
+    }
+}
+
+//! the rows' controls on the pass of their CPU form that stands alone
+def private metal_rows_controls(t : T?; var m : Model; form : ModelForm; r : MetalRows;
+                                var kept : MetalKept) {
+    return if (!metal_rows_cpu(r) || !alone_pass_of(form, r.cpu))
+    if (r.census) {
+        format_census_cpu(t, m, form, r.cs, kept.census)
+    }
+    if (r.family) {
+        matrix_family_cpu(t, m, form, r.fam, kept.family)
+    }
+    if (r.hybrid) {
+        matrix_hybrid_cpu(t, m, form, r.hy, kept.hybrid)
+    }
+    if (r.qwen2moe) {
+        matrix_qwen2moe_cpu(t, m, form, kept.qwen2moe)
+    }
+    if (r.prefill) {
+        prefill_parity_cpu(t, m, form, kept.prefill)
+    }
+}
+
+//! the rows' compares after the block, `kept` freed
+def private metal_rows_verdict(t : T?; r : MetalRows; var kept : MetalKept) {
+    if (r.census) {
+        format_census_verdict(t, r.cs, kept.census)
+    }
+    if (r.family) {
+        matrix_family_verdict(t, r.fam, kept.family)
+    }
+    if (r.hybrid) {
+        matrix_hybrid_verdict(t, r.hy, kept.hybrid)
+    }
+    if (r.qwen2moe) {
+        matrix_qwen2moe_verdict(t, kept.qwen2moe)
+    }
+    if (r.prefill) {
+        prefill_parity_verdict(t, kept.prefill)
+    }
+    delete kept
+}
+
+//! a block's pass on the rows `r`: a Metal form's cells, the controls
+//! on their CPU form; true where the pass was the rows' alone
+def private metal_rows_pass(t : T?; var m : Model; form : ModelForm; r : MetalRows;
+                            var kept : MetalKept) : bool {
+    if (form.on_metal) {
+        metal_rows_cells(t, m, form, r, kept)
+        return true
+    }
+    metal_rows_controls(t, m, form, r, kept)
+    return !form.on_gpu && metal_rows_cpu(r) && same_cpu_load(form, r.cpu)
+}
+
+//! the census form (`vk_census_form`) for `file`'s Vulkan row where
+//! the `coverage-vk` arm runs: off the CUDA home where the tier arms,
+//! else a skipped cell naming the form and the reason
+def private push_vk_census_form(t : T?; file : string; var forms : array<ModelForm>) {
+    return if (!any_arm_on(["coverage-vk"]))
+    let why = (gpu_want_cuda() ? vulkan_home_why("the census row is the Vulkan driver's")
+        : gpu_tier_why())
+    if (empty(why)) {
+        forms |> push(vk_census_form())
+    } else {
+        skip_cell(t, "{file}, {form_name(vk_census_form())}: {why}")
+    }
+}
+
+//! a file's Vulkan census row on its census form; false where `form`
+//! is another
+def private vk_census_cell(t : T?; var m : Model; form : ModelForm; row : CovVkRow) : bool {
+    return false if (!vk_census_form_is(form))
+    coverage_vk_routed(t, m, form, row)
+    return true
+}
 
 //! the Qwen1.5-MoE cuts' blocks: their four trunk blocks, the routed
 //! layers asked onto the host (of four)
@@ -496,16 +684,18 @@ def private twin_forms(var r : QwenMoeRows) : array<ModelForm> {
     return <- forms
 }
 
-[test(description = "On Qwen1.5-MoE-A2.7B-4L Q4_K_M, the four-block cut, the resident routed window and token command hold the CPU chain's logits within the routed bar over one and two windows, the routed census growing by the routed layer count; a q8_0 mirror holds the CPU chain on q8_0 sessions, and a tq4 ask serves at q8_0 by the serving rule; with two of the four routed layers' experts asked onto the host the split token command and the cut window chain hold the routed bar over one and two windows and the streamed windows the stream twin's bar of the host's sums; on the CUDA driver the feeds over one and two windows, the host cells with the meet splitting the experts and the prompt stream off as control, and the hot pool's DMA fill and decode meet, both off, an all-device load and an unstreamed pool as controls, every feed within 20 percent of max logit of the CPU chain; each form loads once")]
+[test(description = "On Qwen1.5-MoE-A2.7B-4L Q4_K_M, the four-block cut, the resident routed window and token command hold the CPU chain's logits within the routed bar over one and two windows, the routed census growing by the routed layer count; a q8_0 mirror holds the CPU chain on q8_0 sessions, and a tq4 ask serves at q8_0 by the serving rule; with two of the four routed layers' experts asked onto the host the split token command and the cut window chain hold the routed bar over one and two windows and the streamed windows the stream twin's bar of the host's sums; on the CUDA driver the feeds over one and two windows, the host cells with the meet splitting the experts and the prompt stream off as control, and the hot pool's DMA fill and decode meet, both off, an all-device load and an unstreamed pool as controls, every feed within 20 percent of max logit of the CPU chain; off the CUDA home the default form feeds the Vulkan kernel census's routed row; each form loads once")]
 def test_gpu_resident_moe(t : T?) {
     return if (!family_on(t, "qwen2moe"))
     var r = QwenMoeRows()
     qwen_moe_rows_init(r, TWIN_HOST, QWEN2MOE_BLOCKS, "qwen2moe", MOE_HOST_FIRST)
     var forms <- twin_forms(r)
+    push_vk_census_form(t, "Qwen1.5-MoE-A2.7B-4L-Q4_K_M-local.gguf", forms)
     let pins = pin_stream(0l)   //! the device claims first: the meet's share the host cells pin live
     var ran = false
     with_cuda_mmq_winners() {
-        ran = with_cpu_and_gpu_model(t, "llm", "Qwen1.5-MoE-A2.7B-4L-Q4_K_M-local.gguf", MOE_CUT_CTX, forms) $(m, form) {
+        ran = with_cpu_and_gpu_model(t, "llm", "Qwen1.5-MoE-A2.7B-4L-Q4_K_M-local.gguf", MOE_CUT_CTX, forms) $(var m, form) {
+            return if (vk_census_cell(t, m, form, cov_vk_c60_qwen2moe_q4km()))
             qwen_moe_rows(t, r, m, form, TWIN, true)
         }
     }
@@ -520,7 +710,7 @@ def test_gpu_resident_moe(t : T?) {
 let private PARITY_CUT_CTX = 2048l   //! the parity row's load context (`parity_row_load`)
 
 
-[test(description = "On Qwen1.5-MoE-A2.7B-4L Q8_0, the four-block cut over Q8_0 expert stacks, two of the four routed layers' experts asked onto the host hold the CPU chain within the routed bar over one and two windows and the streamed windows the stream twin's bar of the host's sums; the N-row command's plain act and shared-expert requant batch two sessions bit for bit what each reads alone, at one window and past the unsplit position; on the CUDA driver under the pinned MMQ winners the one-window feed and the host cells hold 20 percent of max logit of the CPU chain, the meet splitting the experts and the prompt stream off as control; on the q8 CPU form, on every box, the cut fed the parity reference's greedy stream after the counting fixture keeps every reference id within 2% of its row's top logit, the stream one step late outside; on the Metal home's blob twin, one load on a das_metal build: on the shared-expert Qwen1.5-MoE-A2.7B-4L Q8_0, the batched bench row serves four streams at a rate through the Metal batched driver's rows site, every timed step a device step, none on the CPU stack; on Qwen1.5-MoE-A2.7B-4L Q8_0, one row through the batched driver's same-slab verify lands logits within 2.0 of the single-row step's over 12 rounds, while the one-step-off control lands outside that bar; each form loads once")]
+[test(description = "On Qwen1.5-MoE-A2.7B-4L Q8_0, the four-block cut over Q8_0 expert stacks, two of the four routed layers' experts asked onto the host hold the CPU chain within the routed bar over one and two windows and the streamed windows the stream twin's bar of the host's sums; the N-row command's plain act and shared-expert requant batch two sessions bit for bit what each reads alone, at one window and past the unsplit position; on the CUDA driver under the pinned MMQ winners the one-window feed and the host cells hold 20 percent of max logit of the CPU chain, the meet splitting the experts and the prompt stream off as control; on the q8 CPU form, on every box, the cut fed the parity reference's greedy stream after the counting fixture keeps every reference id within 2% of its row's top logit, the stream one step late outside; on the Metal home's blob twin, one load on a das_metal build: on the shared-expert Qwen1.5-MoE-A2.7B-4L Q8_0, the batched bench row serves four streams at a rate through the Metal batched driver's rows site, every timed step a device step, none on the CPU stack; on Qwen1.5-MoE-A2.7B-4L Q8_0, one row through the batched driver's same-slab verify lands logits within 2.0 of the single-row step's over 12 rounds, while the one-step-off control lands outside that bar; on the same twin the Metal kernel census's zoo row and the short prefill window on the gathered expert route within 0.08 of the CPU peak on the portable CPU form, a changed last token outside; off the CUDA home the default form feeds the Vulkan census's routed row; each form loads once")]
 def test_gpu_resident_moe_q8(t : T?) {
     return if (!family_on(t, "qwen2moe"))
     var r = QwenMoeRows()
@@ -539,7 +729,14 @@ def test_gpu_resident_moe_q8(t : T?) {
     forms |> push(device_form(regions = 2l, ctx = REGIONS_RIG_CTX))
     //! the parity row's environment pin; the row's K-quant native knob reads nothing on a file whose tagged sites are all Q8_0
     forms |> push(cpu_cells_form(backend = g_env_engine.pin_backend))
-    forms |> push(metal_form(ctx = METAL_ROW_CTX))
+    var mr = MetalRows(cpu = prefill_cpu_form(), zoo = MetalZoo.qwen2moe, prefill = true,
+        pf = prefill_qwen15_moe_4l())
+    var mk = MetalKept()
+    forms |> push(metal_form(ctx = KERNEL_COVERAGE_CTX))
+    if (empty(metal_build_why()) && any_arm_on(["moe-gemv"])) {
+        forms |> push(mr.cpu)
+    }
+    push_vk_census_form(t, "Qwen1.5-MoE-A2.7B-4L-Q8_0-local.gguf", forms)
     let pins = pin_stream(0l)   //! the device claims first: the meet's share the host cells pin live
     var ran = false
     var dev_ran = false
@@ -547,8 +744,11 @@ def test_gpu_resident_moe_q8(t : T?) {
         ran = with_cpu_and_gpu_model(t, "llm", "Qwen1.5-MoE-A2.7B-4L-Q8_0-local.gguf", MOE_CUT_CTX, forms) $(var m, form) {
             if (form.on_metal) {
                 metal_qwen_moe_cells(t, m)
+                metal_rows_cells(t, m, form, mr, mk)
                 return
             }
+            metal_rows_controls(t, m, form, mr, mk)
+            return if (vk_census_cell(t, m, form, cov_vk_c58_qwen2moe_q8()))
             dev_ran ||= form.on_gpu
             if (dev_ran && (form.on_gpu || empty(form.backend))) {
                 qwen_moe_rows(t, r, m, form, Q8, false)
@@ -564,6 +764,7 @@ def test_gpu_resident_moe_q8(t : T?) {
     if (ran) {
         qwen_moe_rows_within(t, "Qwen1.5-MoE-A2.7B-4L Q8_0: ", r)
     }
+    metal_rows_verdict(t, mr, mk)
     delete r
     delete forms
 }
@@ -613,54 +814,144 @@ let private PER32_Q51 = MoeFixture(file = "Qwen1.5-MoE-A2.7B-4L-Q5_1-local.gguf"
 let private PER32_Q4032 = MoeFixture(file = "Qwen1.5-MoE-A2.7B-4L-Q4_0-local.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, census = true)
 let private PER32_Q5032 = MoeFixture(file = "Qwen1.5-MoE-A2.7B-4L-Q5_0-pure-local.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, census = true)
 
-[test(description = "The per-32 four-block cuts of Qwen1.5-MoE - Q5_1, Q4_0 and Q5_0 routed and shared expert stacks - read every site in its own format on the device and hold the CPU chain's logits within the routed bar over one window; each form loads once")]
-def test_gpu_resident_moe_per32(t : T?) {
-    return if (!family_on(t, "qwen2moe") || !arm_on(t, "vk-per32-moe"))
-    var q51 : Per32Rows
-    if (with_cpu_and_gpu_model(t, "llm", "Qwen1.5-MoE-A2.7B-4L-Q5_1-local.gguf", MOE_CUT_CTX, [device_form()]) $(m, form) {
-                per32_rows(t, q51, m, form, PER32_Q51)
-            }) {
-        per32_rows_within(t, PER32_Q51, q51)
+//! the heat pool's resident routed layers of a four-block cut: two
+//! placed, two streamed
+let private HEAT_RESIDENT = 2l
+let private HEAT_SLOTS_QWEN2MOE = 8l   //! the Q5_1 cut's hot experts a layer
+let private HEAT_SLOTS_QWEN35MOE = 16l   //! the 35B cut's
+
+//! the heat pool cell's per-op form on a cut, off the CUDA home (the
+//! per-op tier and its pool are the Vulkan home's), `slots` hot
+//! experts a layer; else a skipped cell naming `file`
+def private push_heat_form(t : T?; var forms : array<ModelForm>; file : string; slots : int64) {
+    let why = vulkan_home_why("the per-op tier and its heat pool are the Vulkan home's")
+    if (empty(why)) {
+        forms |> push(device_form(perop = true, pool_slots = slots, moe_layers = HEAT_RESIDENT))
+    } else {
+        skip_cell(t, "{file}, the heat pool cell: {why}")
     }
-    delete q51
-    var q4032 : Per32Rows
-    if (with_cpu_and_gpu_model(t, "llm", "Qwen1.5-MoE-A2.7B-4L-Q4_0-local.gguf", MOE_CUT_CTX, [device_form()]) $(m, form) {
-                per32_rows(t, q4032, m, form, PER32_Q4032)
-            }) {
-        per32_rows_within(t, PER32_Q4032, q4032)
-    }
-    delete q4032
-    var q5032 : Per32Rows
-    if (with_cpu_and_gpu_model(t, "llm", "Qwen1.5-MoE-A2.7B-4L-Q5_0-pure-local.gguf", MOE_CUT_CTX, [device_form()]) $(m, form) {
-                per32_rows(t, q5032, m, form, PER32_Q5032)
-            }) {
-        per32_rows_within(t, PER32_Q5032, q5032)
-    }
-    delete q5032
 }
 
-[test(description = "On the per-op tier with half the routed layers placed and half streamed under the heat pool, Qwen3.6-35B-A3B-4L IQ4_XS and Qwen1.5-MoE-A2.7B-4L Q5_1 (each two routed layers placed, two streamed) hold the CPU chain's routed bar, every shared expert on the device")]
-def test_gpu_perop_moe_heat(t : T?) {
-    t |> run("Qwen3.6-35B-A3B-4L IQ4_XS on the per-op tier: two routed layers placed, two streamed under the heat pool, every layer's shared expert on the device after the routed chain or the pool's hits, against the CPU chain") @(t : T?) {
-        if (!family_on(t, "qwen35moe")) return
-        let placement = moe_perop_heat_cell(t, CENSUS35, 2l, 16l)
-        if (placement.routed > 0l) {
-            t |> equal(placement.routed, QWEN35MOE_BLOCKS,
-                "every block of the {QWEN35MOE_BLOCKS}-block cut routes")
-            t |> equal(placement.placed, 2l, "the walk placed two of the {placement.routed} routed layers")
-            t |> equal(placement.routed - placement.placed, 2l, "... and streamed the other two")
-        }
+//! the heat pool cell's sides on a block's pass: the device side on
+//! its per-op form, the CPU side on the CPU form; true on the per-op
+//! form's pass
+def private heat_pass(t : T?; var m : Model; form : ModelForm; fx : MoeFixture;
+                      var kept : HeatKept) : bool {
+    if (form.perop && form.pool_slots > 0l) {
+        moe_perop_heat_rows(t, m, form, fx, kept)
+        return true
     }
-    t |> run("Qwen1.5-MoE-A2.7B-4L Q5_1 on the per-op tier: two routed layers placed, two streamed under the heat pool's q51 slots, the q51 shared expert on the device after them, against the CPU chain") @(t : T?) {
-        if (!family_on(t, "qwen2moe")) return
-        let placement = moe_perop_heat_cell(t, PER32_Q51, 2l, 8l)
-        if (placement.routed > 0l) {
-            t |> equal(placement.routed, QWEN2MOE_BLOCKS,
-                "every block of the {QWEN2MOE_BLOCKS}-block cut routes")
-            t |> equal(placement.placed, 2l, "the walk placed two of the {placement.routed} routed layers")
-            t |> equal(placement.routed - placement.placed, 2l, "... and streamed the other two")
-        }
+    moe_perop_heat_cpu(t, m, form, fx, kept)
+    return false
+}
+
+//! the heat pool cell's compare after its block: where the walk put
+//! the cut's `blocks` routed layers
+def private heat_within(t : T?; fx : MoeFixture; var kept : HeatKept; blocks : int64) {
+    let placement = moe_perop_heat_verdict(t, fx, kept)
+    if (placement.routed > 0l) {
+        t |> equal(placement.routed, blocks, "every block of the {blocks}-block cut routes")
+        t |> equal(placement.placed, HEAT_RESIDENT,
+            "the walk placed two of the {placement.routed} routed layers")
+        t |> equal(placement.routed - placement.placed, HEAT_RESIDENT,
+            "... and streamed the other two")
     }
+}
+
+//! a per-32 cut's block: the device rows, its Metal census row, and
+//! on the Q5_1 cut the heat pool cell's
+struct private Per32Block {
+    rows : Per32Rows
+    metal : MetalRows = MetalRows()
+    kept : MetalKept
+    heat : HeatKept
+}
+
+//! a per-32 cut's block on the Metal census row `cs`
+def private per32_block(cs : CensusRow) : Per32Block {
+    return <- Per32Block(metal = MetalRows(cpu = cpu_cells_form(backend = "portable"),
+        census = true, cs = cs))
+}
+
+//! a per-32 cut's forms: the default where the `vk-per32-moe` arm
+//! runs (`device`), on the Q5_1 cut the heat pool's (`heat`), the
+//! Metal census row's
+def private per32_forms(t : T?; b : Per32Block; file : string;
+                        device, heat : bool) : array<ModelForm> {
+    var forms : array<ModelForm>
+    if (device) {
+        forms |> push(device_form())
+    }
+    if (heat) {
+        push_heat_form(t, forms, file, HEAT_SLOTS_QWEN2MOE)
+    }
+    metal_rows_forms(forms, b.metal, CENSUS_CELLS_CTX, [b.metal.cs.arm], [b.metal.cs.arm])
+    return <- forms
+}
+
+//! a per-32 cut's pass: the Metal census row, the heat pool cell, the
+//! device rows
+def private per32_pass(t : T?; var b : Per32Block; var m : Model; form : ModelForm;
+                       fx : MoeFixture) {
+    return if (metal_rows_pass(t, m, form, b.metal, b.kept) || heat_pass(t, m, form, fx, b.heat))
+    per32_rows(t, b.rows, m, form, fx)
+}
+
+//! a per-32 cut's compares after its block
+def private per32_within(t : T?; fx : MoeFixture; var b : Per32Block; ran : bool) {
+    if (ran) {
+        per32_rows_within(t, fx, b.rows)
+    }
+    metal_rows_verdict(t, b.metal, b.kept)
+    heat_within(t, fx, b.heat, QWEN2MOE_BLOCKS)
+    delete b
+}
+
+[test(description = "The per-32 four-block cuts of Qwen1.5-MoE - Q5_1, Q4_0 and Q5_0 routed and shared expert stacks - read every site in its own format on the device and hold the CPU chain's logits within the routed bar over one window (arm vk-per32-moe); on the Q5_1 cut's per-op tier, two routed layers placed and two streamed under the heat pool's q51 slots, the fed steps hold the CPU chain's routed bar with the q51 shared expert on the device after the routed chain or the pool's hits; on the Metal home's blob twin each cut's routed and shared expert stacks load in their per-32 form with every site native and the window and steps ride their routed stamps within 2.0 of the portable CPU chain; each form loads once")]
+def test_gpu_resident_moe_per32(t : T?) {
+    return if (!family_on(t, "qwen2moe"))
+    let why = arm_why("vk-per32-moe")
+    if (!empty(why)) {
+        skip_cell(t, "the per-32 cuts' device rows: {why}")
+    }
+    let device = empty(why)
+    var q51 <- per32_block(format_census_moe_q51())
+    var q51_forms <- per32_forms(t, q51, PER32_Q51.file, device, true)
+    let q51_ran = with_cpu_and_gpu_model(t, "llm", "Qwen1.5-MoE-A2.7B-4L-Q5_1-local.gguf", MOE_CUT_CTX, q51_forms) $(var m, form) {
+        per32_pass(t, q51, m, form, PER32_Q51)
+    }
+    per32_within(t, PER32_Q51, q51, q51_ran)
+    var q4032 <- per32_block(format_census_moe_q4032())
+    var q4032_forms <- per32_forms(t, q4032, PER32_Q4032.file, device, false)
+    let q4032_ran = with_cpu_and_gpu_model(t, "llm", "Qwen1.5-MoE-A2.7B-4L-Q4_0-local.gguf", MOE_CUT_CTX, q4032_forms) $(var m, form) {
+        per32_pass(t, q4032, m, form, PER32_Q4032)
+    }
+    per32_within(t, PER32_Q4032, q4032, q4032_ran)
+    var q5032 <- per32_block(format_census_moe_q5032())
+    var q5032_forms <- per32_forms(t, q5032, PER32_Q5032.file, device, false)
+    let q5032_ran = with_cpu_and_gpu_model(t, "llm", "Qwen1.5-MoE-A2.7B-4L-Q5_0-pure-local.gguf", MOE_CUT_CTX, q5032_forms) $(var m, form) {
+        per32_pass(t, q5032, m, form, PER32_Q5032)
+    }
+    per32_within(t, PER32_Q5032, q5032, q5032_ran)
+    delete q51_forms
+    delete q4032_forms
+    delete q5032_forms
+}
+
+[test(description = "On the whole Qwen1.5-MoE-A2.7B-Chat Q8_0 file, the qwen15-moe category's, on the Metal home's blob twin: softmax-no-renorm select and the sigmoid-gated shared expert, prefill, decode and the batched step engaging, the batched step within 8.0 of the portable CPU chain's batched stack, the metal-overrides generate token for token the CPU chain's and the continuation within 4.0; the short prefill window on the gathered expert route holding the CPU chain's argmax; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its reference-prefill arm; each form loads once")]
+def test_metal_moe_qwen15_whole(t : T?) {
+    return if (!family_on(t, "qwen2moe"))
+    let mr = MetalRows(cpu = prefill_cpu_form(), qwen2moe = true, prefill = true,
+        pf = prefill_qwen15_moe())
+    var mk = MetalKept()
+    var forms : array<ModelForm>
+    var inscope arms <- ["fam-qwen2moe", "moe-gemv"]
+    metal_rows_forms(forms, mr, MATRIX_CTX, arms, arms)
+    with_cpu_and_gpu_model(t, "llm", "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf", PARITY_ROW_CTX, forms, parity = true) $(var m, form) {
+        metal_rows_pass(t, m, form, mr, mk)
+    }
+    metal_rows_verdict(t, mr, mk)
+    delete forms
 }
 
 // Qwen3.6-35B-A3B's four-block cuts (`Qwen3.6-35B-A3B-4L-*-local.gguf`, family `qwen35moe`): three recurrent deltanet
@@ -1247,7 +1538,7 @@ def private iq4xs_rows(t : T?; var r : Iq4xsRows; var m : Model; form : ModelFor
     }
 }
 
-[test(description = "On Qwen3.6-35B-A3B-4L-MTP IQ4_XS-pure, the four-block cut with its NextN block: every site tagged with the file's own format and the whole-model driver armed with no layer decline, its forced-feed steps within 20 percent of the CPU chain on the IQ4_XS tile, GEMV and table gather; the greedy chain forced on and adaptive bit for bit the plain walk's and a short tail peeled within the routed bar of one-row steps, speculation off; a device verify accepting exactly where row 0's argmax is the draft, its rows within 20 percent of one-row steps and four rounds landing the stream stepped; a prefill continued past zero within the routed bar of the one-call prefill; the pool's openings taken up as the host prefix cache does; the routed NextN head's draft within 20 percent of the CPU head's, every round drafted and verified on the device and a device-home session's rounds matching the host-cached session's while drafts agree; segmented windows within the routed bar of solo windows and captured stops adopting at their rows; ten sessions in command groups within the wide bar of each alone and on the CUDA home's rows leaf nearer each alone than its previous step; with the whole-model route off the per-op rails holding every deltanet layer and shared expert in the file's format within 20 percent of the CPU chain; each form loads once")]
+[test(description = "On Qwen3.6-35B-A3B-4L-MTP IQ4_XS-pure, the four-block cut with its NextN block: every site tagged with the file's own format and the whole-model driver armed with no layer decline, its forced-feed steps within 20 percent of the CPU chain on the IQ4_XS tile, GEMV and table gather; the greedy chain forced on and adaptive bit for bit the plain walk's and a short tail peeled within the routed bar of one-row steps, speculation off; a device verify accepting exactly where row 0's argmax is the draft, its rows within 20 percent of one-row steps and four rounds landing the stream stepped; a prefill continued past zero within the routed bar of the one-call prefill; the pool's openings taken up as the host prefix cache does; the routed NextN head's draft within 20 percent of the CPU head's, every round drafted and verified on the device and a device-home session's rounds matching the host-cached session's while drafts agree; segmented windows within the routed bar of solo windows and captured stops adopting at their rows; ten sessions in command groups within the wide bar of each alone and on the CUDA home's rows leaf nearer each alone than its previous step; with the whole-model route off the per-op rails holding every deltanet layer and shared expert in the file's format within 20 percent of the CPU chain; on the per-op tier with two routed layers placed and two streamed under the heat pool the fed steps within the routed bar of the CPU chain, every shared expert on the device; on the Metal home's blob twin every site in its own format by census and the window and steps on the IQ4_XS kernels within 6.0 of the portable CPU chain, and on its served image the MTP rail's verify rows within the MoE bar of the plain GPU step and speculative free-run emitting the plain run's tokens; each form loads once")]
 def test_gpu_resident_moe_iq4xs(t : T?) {
     return if (!family_on(t, "qwen35moe"))
     var r : Iq4xsRows
@@ -1267,12 +1558,21 @@ def test_gpu_resident_moe_iq4xs(t : T?) {
             forms |> push(device_form(perop = true))
         }
     }
+    push_heat_form(t, forms, CENSUS35.file, HEAT_SLOTS_QWEN35MOE)
+    var heat : HeatKept
+    let mr = MetalRows(cpu = cpu_cells_form(backend = "portable"), census = true,
+        cs = format_census_iq4xs_pure(), mtp = true, mp = mtp_parity_qwen36_35b_iq4xs_cut())
+    var mk = MetalKept()
+    metal_rows_forms(forms, mr, CENSUS_CELLS_CTX, [mr.cs.arm], [mr.cs.arm])
     var ran = false
     with_cuda_mmq_winners() {
-        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3.6-35B-A3B-4L-MTP-IQ4_XS-pure-local.gguf", REGIONS_RIG_CTX, forms) $(m, form) {
+        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3.6-35B-A3B-4L-MTP-IQ4_XS-pure-local.gguf", REGIONS_RIG_CTX, forms) $(var m, form) {
+            return if (metal_rows_pass(t, m, form, mr, mk) || heat_pass(t, m, form, CENSUS35, heat))
             iq4xs_rows(t, r, m, form, census_armed)
         }
     }
+    metal_rows_verdict(t, mr, mk)
+    heat_within(t, CENSUS35, heat, QWEN35MOE_BLOCKS)
     if (ran) {
         with_dasllama_jobque_() {
             if (census_armed) {
@@ -1295,6 +1595,67 @@ def test_gpu_resident_moe_iq4xs(t : T?) {
         }
     }
     delete r
+    delete forms
+}
+
+[test(description = "On the whole Qwen3.6-35B-A3B UD-Q4_K_M file, the qwen35moe-35b category's, on the Metal home's blob twin: deltanet, grouped MoE, the sigmoid-gated shared expert and f32-on-disk beta and alpha rows engaging on every path, the batched step within the bar of single-row steps on each KV codec, the metal-overrides generate token for token the portable CPU chain's on every codec and the continuation within 6.0; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked and reference prefill arms; each form loads once")]
+def test_metal_moe_35b_whole(t : T?) {
+    return if (!family_on(t, "qwen35moe"))
+    let mr = MetalRows(cpu = prefill_cpu_form(), hybrid = true, hy = matrix_hybrid_qwen36_35b())
+    var mk = MetalKept()
+    var forms : array<ModelForm>
+    var inscope arms <- ["fam-qwen35moe"]
+    metal_rows_forms(forms, mr, MATRIX_CTX, arms, arms)
+    with_cpu_and_gpu_model(t, "llm", "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf", PARITY_ROW_CTX, forms, parity = true) $(var m, form) {
+        metal_rows_pass(t, m, form, mr, mk)
+    }
+    metal_rows_verdict(t, mr, mk)
+    delete forms
+}
+
+[test(description = "On the whole Qwen3.6-35B-A3B-MTP UD-Q4_K_M file, the qwen35moe-35b category's, on the Metal home's served image the arms its four-block cut cannot hold: a seeded sampled speculative stream with the selection landed matching the rows-landed stream, and the verify accepting drafts on every other mirror codec with speculative counting equal to plain; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+def test_metal_mtp_35b_whole(t : T?) {
+    return if (!family_on(t, "qwen35moe"))
+    let mr = MetalRows(mtp = true, mp = mtp_parity_qwen36_35b_whole())
+    var mk = MetalKept()
+    var forms : array<ModelForm>
+    var inscope no_arms : array<string>
+    metal_rows_forms(forms, mr, METAL_MTP_CELLS_CTX, no_arms, no_arms)
+    with_cpu_and_gpu_model(t, "llm", "Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf", PARITY_ROW_CTX, forms, parity = true) $(var m, form) {
+        metal_rows_pass(t, m, form, mr, mk)
+    }
+    metal_rows_verdict(t, mr, mk)
+    delete forms
+}
+
+[test(description = "On the whole Qwen3.6-35B-A3B-MTP IQ4_XS-pure file, the qwen35moe-35b category's, on the Metal home's served image the arms its four-block cut cannot hold: a seeded sampled speculative stream with the selection landed matching the rows-landed stream, the verify accepting drafts on every other mirror codec with speculative counting equal to plain, and the forced-feed verify rows within the 2.0 MoE bar of the plain GPU step at depths 1, 2 and 4; each form loads once")]
+def test_metal_mtp_35b_iq4xs_whole(t : T?) {
+    return if (!family_on(t, "qwen35moe"))
+    let mr = MetalRows(mtp = true, mp = mtp_parity_qwen36_35b_iq4xs_whole())
+    var mk = MetalKept()
+    var forms : array<ModelForm>
+    var inscope no_arms : array<string>
+    metal_rows_forms(forms, mr, METAL_MTP_CELLS_CTX, no_arms, no_arms)
+    with_cpu_and_gpu_model(t, "llm", "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf", METAL_MTP_CELLS_CTX,
+            forms) $(var m, form) {
+        metal_rows_pass(t, m, form, mr, mk)
+    }
+    metal_rows_verdict(t, mr, mk)
+    delete forms
+}
+
+[test(description = "On Qwen3.6-35B-A3B-4L UD-IQ3_S, the four-block cut, under the lut pin on both loads, on the Metal home's blob twin the routed IQ3_S downs load as iq3s4 beside the IQ2_S gate and up with every site in its own format, and the window and six steps ride the iq3s4 routed stamps within 6.0 of the portable CPU chain; each form loads once")]
+def test_metal_census_iq3s4_moe(t : T?) {
+    return if (!family_on(t, "qwen35moe"))
+    let cs = format_census_iq3s4_moe()
+    let mr = MetalRows(cpu = census_cpu_form(cs), census = true, cs = cs)
+    var mk = MetalKept()
+    var forms : array<ModelForm>
+    metal_rows_forms(forms, mr, CENSUS_CELLS_CTX, [mr.cs.arm], [mr.cs.arm])
+    with_cpu_and_gpu_model(t, "llm", "Qwen3.6-35B-A3B-4L-UD-IQ3_S-local.gguf", MOE_CUT_CTX, forms) $(var m, form) {
+        metal_rows_pass(t, m, form, mr, mk)
+    }
+    metal_rows_verdict(t, mr, mk)
     delete forms
 }
 
@@ -1330,7 +1691,7 @@ let private NO_SHEXP_HOST = MoeFixture(file = "Qwen3-30B-A3B-7L-UD-IQ2_XXS-local
 let private MOE_CODEC_DIST_REL = 1.15
 let private MOE_CODEC_PAIR_REL = 1.4
 
-[test(description = "On Qwen3-30B-A3B-7L UD-IQ2_XXS, the seven-block cut of a MoE with no shared expert, every site reads in its file format and the routed block alone at the FFN site holds the CPU chain within the routed bar over one and two windows; a tq4 mirror's distance from f16 stays within 1.15 of the CPU tq4 chain's; with two of the seven routed layers' experts on the host the split token command and the cut window chain hold the routed bar over one and two windows ; on the CUDA driver the feeds over one and two windows hold 20 percent of max logit; each form loads once")]
+[test(description = "On Qwen3-30B-A3B-7L UD-IQ2_XXS, the seven-block cut of a MoE with no shared expert, every site reads in its file format and the routed block alone at the FFN site holds the CPU chain within the routed bar over one and two windows; a tq4 mirror's distance from f16 stays within 1.15 of the CPU tq4 chain's; with two of the seven routed layers' experts on the host the split token command and the cut window chain hold the routed bar over one and two windows ; on the CUDA driver the feeds over one and two windows hold 20 percent of max logit; off the CUDA home the default form feeds the Vulkan census's routed row; on the Metal home's blob twin the routed GEMM's crowned twins and simdgroup base form keep last-row logits within 0.15 of the CPU peak on the grid-served CPU form, the base census zero under the crown and rising without it; each form loads once")]
 def test_gpu_resident_moe_no_shexp(t : T?) {
     return if (!family_on(t, "qwen3moe"))
     var r = QwenMoeRows()
@@ -1346,47 +1707,134 @@ def test_gpu_resident_moe_no_shexp(t : T?) {
         forms |> push(device_form() |> asking(KVDtype.tq4))
     }
     forms |> push(device_form(regions = 1l, host_layers = QWEN3MOE_HOST_LAYERS))
-    let ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-30B-A3B-7L-UD-IQ2_XXS-local.gguf", MOE_CUT_CTX, forms) $(m, form) {
+    let mr = MetalRows(cpu = prefill_cpu_form("grid"), prefill = true,
+        pf = prefill_qwen3_30b_7l_iq2xxs())
+    var mk = MetalKept()
+    metal_rows_forms(forms, mr, PREFILL_QWEN3_30B_7L_IQ2XXS_CTX, ["moe-base"], ["moe-base"])
+    push_vk_census_form(t, "Qwen3-30B-A3B-7L-UD-IQ2_XXS-local.gguf", forms)
+    let ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-30B-A3B-7L-UD-IQ2_XXS-local.gguf", MOE_CUT_CTX, forms) $(var m, form) {
+        return if (metal_rows_pass(t, m, form, mr, mk)
+            || vk_census_cell(t, m, form, cov_vk_c61_qwen3moe_iq2xxs()))
         qwen_moe_rows(t, r, m, form, NO_SHEXP_CUT, true)
     }
     if (ran) {
         qwen_moe_rows_within(t, "Qwen3-30B-A3B-7L UD-IQ2_XXS: ", r)
     }
+    metal_rows_verdict(t, mr, mk)
     delete r
+    delete forms
+}
+
+[test(description = "On Qwen3-30B-A3B-7L UD-Q3_K_XL, the seven-block cut over Q3_K expert stacks, on the Metal home's blob twin the routed GEMM's crowned twins and simdgroup base form keep last-row logits within 0.10 of the CPU peak on the grid-served CPU form, the base census zero under the crown and rising without it; each form loads once")]
+def test_metal_moe_base_q3kxl(t : T?) {
+    return if (!family_on(t, "qwen3moe"))
+    let mr = MetalRows(cpu = prefill_cpu_form("grid"), prefill = true,
+        pf = prefill_qwen3_30b_7l_q3kxl())
+    var mk = MetalKept()
+    var forms : array<ModelForm>
+    metal_rows_forms(forms, mr, PREFILL_QWEN3_30B_7L_Q3KXL_CTX, ["moe-base"], ["moe-base"])
+    with_cpu_and_gpu_model(t, "llm", "Qwen3-30B-A3B-7L-UD-Q3_K_XL-local.gguf", MOE_CUT_CTX, forms) $(var m, form) {
+        metal_rows_pass(t, m, form, mr, mk)
+    }
+    metal_rows_verdict(t, mr, mk)
     delete forms
 }
 
 //! the stream twin on the whole UD-IQ2_XXS file (the qwen3moe-30b category's): on the seven-block cut its 40-token prefill
 //! row reads 2.77 against the twin's 2.66 bar with two routed layers on the host (3.21 against 2.61 with four), the steps and
 //! the one-step-off controls (17) as on the whole file
-let private TWIN_IQ_WHOLE = "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf"
+let private TWIN_IQ_HOST_LAYERS = 4l
+let private TWIN_IQ_IDS = 40l
+let private TWIN_IQ_STEPS = 8l
 
-[test(description = "Qwen3-30B UD-IQ2_XXS with four routed layers pinned to the host: the streamed windows' rows sit within the stream twin's bar of the host sums, the device claiming first")]
-def test_gpu_resident_moe_stream_twin_iq(t : T?) {
-    t |> run("Qwen3-30B-A3B UD-IQ2_XXS with four routed layers' experts pinned to the host: the streamed windows' rows against the host's sums' at the stream twin's bar, the device claiming first") @(ct : T?) {
-        return if (!family_on(ct, "qwen3moe"))
-        let path = path_join(models_dir(), TWIN_IQ_WHOLE)
-        return if (!resident_ready(ct, path))
-        with_gpu_kv_dtype(ct, KVDtype.f16) {
-            stream_twin_within(ct, path, 4l, 40l, 8l, STREAM_TWIN_BAR_REL, "Qwen3-30B-A3B UD-IQ2_XXS ")
+//! the stream twin's halves: the prompt stream on, then off
+struct private StreamTwinRows {
+    h : Held
+    on : FeedRows
+    off : FeedRows
+    on_ran : bool
+    off_ran : bool
+}
+
+//! one host-layers form's half of the stream twin, the driver armed
+def private stream_twin_rows(var r : StreamTwinRows; m : Model; form : ModelForm) {
+    let stream = form.pf_stream ? "on" : "off"
+    r.h |> held_fact(moe_gpu_resident_active(),
+        "the whole-model driver armed on the model with the prompt stream {stream} " +
+        "(the load log names any decline)")
+    return if (!moe_gpu_resident_active())
+    var rows <- resident_feed_rows(m, form, TWIN_IQ_IDS, TWIN_IQ_STEPS)
+    if (form.pf_stream) {
+        delete r.on
+        r.on <- rows
+        r.on_ran = true
+    } else {
+        delete r.off
+        r.off <- rows
+        r.off_ran = true
+    }
+}
+
+//! the stream twin's compare after its block: the streamed windows'
+//! rows within the twin's bar of the host's sums
+def private stream_twin_rows_within(t : T?; tag : string; r : StreamTwinRows) {
+    held_within(t, r.h, tag, false)
+    return if (!r.on_ran || !r.off_ran)
+    if (r.on.cuda >= 0l) {
+        t |> equal(r.on.cuda, TWIN_IQ_IDS + TWIN_IQ_STEPS,
+            "{tag}the CUDA driver served every position of the streamed prompt's load")
+    }
+    with_dasllama_jobque_() {
+        feed_steps_within(t, tag, TWIN_IQ_IDS, r.on.rows, r.off.rows, r.on.toks,
+                STREAM_TWIN_BAR_REL, "the streamed windows", "the host's sums") $(id) {
+            return feed_piece(r.on, r.off, id)
         }
     }
 }
 
-[test(description = "On Qwen3-30B-A3B-7L Q4_K_M, the seven-block cut of a MoE with no shared expert, the N-row routed block over K-quant stacks fed Q8_K batches two sessions within the wide bar of each alone - the routed bar where the N-column leaves walk rotated - at one window and past the unsplit position, the one-token-off control past it; the form loads once")]
+[test(description = "Qwen3-30B UD-IQ2_XXS with four routed layers pinned to the host: the streamed windows' rows sit within the stream twin's bar of the host sums, the device claiming first; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+def test_gpu_resident_moe_stream_twin_iq(t : T?) {
+    return if (!family_on(t, "qwen3moe"))
+    var r : StreamTwinRows
+    var forms <- [for (stream in fixed_array(true, false));
+        device_form(regions = 1l, ctx = MOE_CUT_CTX, host_layers = TWIN_IQ_HOST_LAYERS,
+            pf_stream = stream) |> asking(KVDtype.f16)]
+    let pins = pin_stream(0l, plain_steps = false)   //! the device claims first
+    with_cpu_and_gpu_model(t, "llm", "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf", PARITY_ROW_CTX, forms, false, true) $(var m, form) {
+        if (form.on_gpu) {
+            stream_twin_rows(r, m, form)
+        }
+    }
+    restore_stream_pins(pins)
+    stream_twin_rows_within(t, "Qwen3-30B-A3B UD-IQ2_XXS ", r)
+    delete r
+    delete forms
+}
+
+[test(description = "On Qwen3-30B-A3B-7L Q4_K_M, the seven-block cut of a MoE with no shared expert, the N-row routed block over K-quant stacks fed Q8_K batches two sessions within the wide bar of each alone - the routed bar where the N-column leaves walk rotated - at one window and past the unsplit position, the one-token-off control past it; off the CUDA home the default form feeds the Vulkan census's routed row; on the Metal home's blob twin the census's zoo row and the short prefill window on the gathered expert route within 0.10 of the portable CPU chain's peak, a changed last token outside, and on its served image the batch rail's same-slab verify rows and distinct-session steps within the 2.0 MoE bar of the plain GPU step; each form loads once")]
 def test_regions_batched_steps_q30(t : T?) {
     return if (!family_on(t, "qwen3moe"))
     var h : Held
-    let forms <- [device_form(regions = 2l, ctx = REGIONS_RIG_CTX)]
-    let ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-30B-A3B-7L-Q4_K_M-local.gguf", REGIONS_RIG_CTX, forms, false) $(m, _form) {
+    var forms <- [device_form(regions = 2l, ctx = REGIONS_RIG_CTX)]
+    push_vk_census_form(t, "Qwen3-30B-A3B-7L-Q4_K_M-local.gguf", forms)
+    let mr = MetalRows(cpu = prefill_cpu_form(), zoo = MetalZoo.qwen3moe, prefill = true,
+        pf = prefill_qwen3_30b_7l(), verify = true, vr = mtp_verify_qwen3_30b_a3b_cut())
+    var mk = MetalKept()
+    metal_rows_forms(forms, mr, KERNEL_COVERAGE_CTX, ["moe-gemv", "coverage"], ["moe-gemv"])
+    let ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-30B-A3B-7L-Q4_K_M-local.gguf", REGIONS_RIG_CTX, forms, false) $(var m, form) {
+        return if (metal_rows_pass(t, m, form, mr, mk)
+            || vk_census_cell(t, m, form, cov_vk_c59_qwen3moe_q4km()))
         cut_held(h, m, QWEN3MOE_BLOCKS, "qwen3moe")
-        regions_batched_rows(h, m, home_ncol_rotates() ? LogitsBar.routed_bar : LogitsBar.wide_bar)
+        let bar = home_ncol_rotates() ? LogitsBar.routed_bar : LogitsBar.wide_bar
+        regions_batched_rows(h, m, bar)
         regions_split_rows(h, m, LogitsBar.wide_bar)
     }
     if (ran) {
         held_within(t, h, "Qwen3-30B-A3B-7L Q4_K_M, the regions rig: ", false)
     }
+    metal_rows_verdict(t, mr, mk)
     delete h
+    delete forms
 }
 
 //! 32768 positions asked whole: a 16 GB card cannot hold every expert stack of this 17 GB file beside the mirror, so the first routed layers' go to the host
@@ -1403,11 +1851,68 @@ let private Q35_CTX_STRICT = MoeFixture(file = "Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf"
 //! first routed layers' experts on the host at a context asked whole
 let private CODER_NEXT = MoeFixture(file = "Qwen3-Coder-Next-Q4_K_M.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, expect_host_layers = true, strict_ctx = 8192l)
 
-[test(description = "The 512-expert Qwen3-Coder-Next arms the whole-model driver with host-layer experts and its device select past 256 experts holds the CPU chain within the routed bar over one window")]
-def test_gpu_resident_moe_512_experts(t : T?) {
-    t |> run("Qwen3-Coder-Next-Q4_K_M: the 512-expert hybrid on the whole-model driver - the device select past 256 experts, the host-layer split, one window against the CPU chain") @(t : T?) {
-        moe_forced_feed(t, 40l, CODER_NEXT)
+//! a whole file's forced feed at the context its fixture asks whole:
+//! the host-planes form's admission, census and feed, the CPU form's
+//! feed of the same prompt on the codec it armed
+struct private ForcedRows {
+    h : Held
+    kv : KVDtype
+    gpu : FeedRows
+    gpu_ran : bool
+    cpu : FeedRows
+    cpu_ran : bool
+}
+
+//! the forced feed's form: one region, the planes on the host, the
+//! fixture's context asked whole
+def private forced_form(fx : MoeFixture) : ModelForm => device_form(regions = 1l, host = true,
+    ctx = fx.strict_ctx, strict_ctx = true)
+
+//! one pass's share of the forced feed of `n` tokens on `fx`
+def private forced_rows(t : T?; var r : ForcedRows; m : Model; form : ModelForm; fx : MoeFixture;
+                        n : int64) {
+    if (!form.on_gpu) {
+        return if (!r.gpu_ran || r.cpu_ran || form.kv != r.kv
+            || !same_cpu_load(form, cpu_quant_form(QuantMode.q8)))
+        r.cpu <- resident_feed_rows(m, form, n, FED_STEPS)
+        r.cpu_ran = true
+        return
     }
+    let host_layers = moe_fixture_admitted(r.h, m, fx)
+    return if (host_layers < 0l)
+    if (fx.census) {
+        var inscope any_sites, bound : array<string>
+        census_cell(t, m, path_join(models_dir(), fx.file), "vulkan load", any_sites, bound)
+    }
+    r.kv = form.kv
+    r.gpu <- moe_feed_rows(r.h, m, form, fx, n, FED_STEPS, host_layers, true)
+    r.gpu_ran = true
+}
+
+//! the forced feed's compare after its block
+def private forced_rows_within(t : T?; r : ForcedRows; fx : MoeFixture) {
+    held_within(t, r.h, "{fx.file}: ", false)
+    return if (!r.gpu_ran)
+    if (!r.cpu_ran) {
+        t |> failure("{fx.file}: the CPU form collected no twin of the device feed")
+        return
+    }
+    with_dasllama_jobque_() {
+        feed_rows_within(t, "{fx.file}: ", r.gpu, r.cpu, fx.bar_rel)
+    }
+}
+
+[test(description = "The 512-expert Qwen3-Coder-Next arms the whole-model driver with host-layer experts and its device select past 256 experts holds the CPU chain within the routed bar over one window; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked-prefill arm; each form loads once")]
+def test_gpu_resident_moe_512_experts(t : T?) {
+    return if (!family_on(t, "qwen3"))
+    var r : ForcedRows
+    var forms <- [forced_form(CODER_NEXT)]
+    with_cpu_and_gpu_model(t, "llm", "Qwen3-Coder-Next-Q4_K_M.gguf", CODER_NEXT.strict_ctx, forms, parity = true) $(var m, form) {
+        forced_rows(t, r, m, form, CODER_NEXT, 40l)
+    }
+    forced_rows_within(t, r, CODER_NEXT)
+    delete r
+    delete forms
 }
 
 // The whole Q4_K_M file's forms, loaded once each (`with_cpu_and_gpu_model`): one region at 32768 positions asked whole,
@@ -1509,29 +2014,42 @@ def private q30_host_rows_within(t : T?; r : Q30HostRows) {
 //! the device prefill's f16 K/V rows read 0.006 (K) and 0.013 (V) of the CPU rows' magnitude from them, a row held to the next 0.68
 let private ROWS_BARS = StoredRowsBars(k = 0.02, v_step = 0.05, v_prefill_of_ctrl = 0.6, f16_dist = 0.05)
 
-[test(description = "Qwen3-30B Q4_K_M at 32768 context serves the experts the card cannot hold on the host, the split token command and cut window holding the CPU chain over one and two windows; a 30-layer ask raises the host count; on a MoE whose experts serve on the host a two-token prompt runs through the window chain, because the token command's short-tail peel declines host experts; with host-layer experts at a strict 32768 context layer 0's f16 mirror rows written by the cut window chain and split token command sit within 2% (K) and 5% (V) of the CPU cache's; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its reference-prefill arm; each form loads once")]
+[test(description = "Qwen3-30B Q4_K_M at 32768 context serves the experts the card cannot hold on the host, the split token command and cut window holding the CPU chain over one and two windows; a 30-layer ask raises the host count; on a MoE whose experts serve on the host a two-token prompt runs through the window chain, because the token command's short-tail peel declines host experts; with host-layer experts at a strict 32768 context layer 0's f16 mirror rows written by the cut window chain and split token command sit within 2% (K) and 5% (V) of the CPU cache's; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its reference-prefill arm; on the Metal home's blob twin qwen3 attention and the GPU MoE route engage on every path, the metal-overrides generate token for token the portable CPU chain's and the continuation within 6.0, and the short prefill window on the gathered expert route holds the CPU chain's argmax; each form loads once")]
 def test_gpu_resident_moe_host_layers(t : T?) {
     return if (!family_on(t, "qwen3moe"))
     var r : Q30HostRows
     r.prompts <- window_prompts(r.carrier)
     var forms <- [device_form(regions = 1l, strict_ctx = true), device_form(regions = 1l, host_layers = Q30_HOST_SPLIT_ASKED.host_layers_ask, strict_ctx = true),
         device_form(strict_ctx = true) |> asking(KVDtype.f16)]
+    let mr = MetalRows(cpu = prefill_cpu_form(), prefill = true, pf = prefill_qwen3_30b(),
+        family = true, fam = matrix_row_qwen3moe_30b())
+    var mk = MetalKept()
+    var inscope arms <- ["fam-qwen3moe", "moe-gemv"]
+    metal_rows_forms(forms, mr, MATRIX_CTX, arms, arms)
     let ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf", Q30_HOST_SPLIT.strict_ctx, forms, parity = true) $(var m, form) {
+        return if (metal_rows_pass(t, m, form, mr, mk))
         q30_host_rows(t, r, m, form)
     }
     if (ran) {
         q30_host_rows_within(t, r)
     }
+    metal_rows_verdict(t, mr, mk)
     delete r
     delete forms
 }
 
-[test(description = "At a 131072 context asked whole the Qwen3.6-35B hybrid's experts yield to the mirror and serve on the host, and the chain holds the CPU chain within the routed bar over two windows")]
+[test(description = "At a 131072 context asked whole the Qwen3.6-35B hybrid's experts yield to the mirror and serve on the host, and the chain holds the CPU chain within the routed bar over two windows; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked and reference prefill arms; each form loads once")]
 def test_gpu_resident_moe_ctx_strict(t : T?) {
-    t |> run("Qwen3.6-35B-A3B-UD-IQ2_XXS at a context asked whole (131072): the experts yield to the mirror and serve on the host, the hybrid chain against the CPU over two windows") @(t : T?) {
-        assert_pf_window(t)
-        moe_forced_feed(t, PF_WINDOW_ROWS + 88l, Q35_CTX_STRICT)
+    return if (!family_on(t, "qwen35moe"))
+    var r : ForcedRows
+    held_pf_window(r.h)
+    var forms <- [forced_form(Q35_CTX_STRICT)]
+    with_cpu_and_gpu_model(t, "llm", "Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf", Q35_CTX_STRICT.strict_ctx, forms, parity = true) $(var m, form) {
+        forced_rows(t, r, m, form, Q35_CTX_STRICT, PF_WINDOW_ROWS + 88l)
     }
+    forced_rows_within(t, r, Q35_CTX_STRICT)
+    delete r
+    delete forms
 }
 
 [init]
@@ -1551,8 +2069,6 @@ def private allow_cpu_prefill_intent() {
 // file, the `qwen15-moe` category's: on the four-block cut the decode span serves no fed step and the prefill row sits past
 // the bar.
 
-let private SHEXP_TWIN = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"   //! the Q4_K_M mint of the Q8_0 carrier (its recipe row in ../performance/model_specs.das)
-
 //! of the step's max |logit|. The arms agree to 1e-8 at layer 0 and part from layer 1 on: the device chain's
 //! summation order moves the residual by ulps, the next layer's Q8 requant rounds a few elements the
 //! other way and the router flips a near-tie, and 24 layers of that read 0.05-0.10 on the twin under both
@@ -1561,15 +2077,9 @@ let private SHEXP_TWIN = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"   //! the Q4
 let private SHEXP_LOGIT_BAR_REL = 0.12
 let private SHEXP_FED_STEPS = 4l
 
-//! one prompt of `n` tokens plus the fed steps through both arms of the route lever
-def private shexp_forced_feed(t : T?; n : int64) {
-    return if (!family_on(t, "qwen2moe"))
-    let path = path_join(models_dir(), SHEXP_TWIN)
-    return if (!jit_model_available(t, path) || !gpu_tier_armed(t))
-    let route0 = gpu_resident_route_lever()
-    set_gpu_resident_route(false)   //! the per-op rails' claims: the whole-model driver would take the twin (the blocks above hold that arm)
-    var tr <- load_model_(path, QuantMode.q8)
-    set_gpu_resident_route(route0)   //! the lever reads at the load alone
+//! one prompt of `n` tokens plus the fed steps through both arms of
+//! the route lever on the per-op form's model `tr`
+def private shexp_forced_feed(t : T?; tr : Model; n : int64) {
     t |> success(!moe_gpu_resident_active(), "the route lever kept the whole-model driver off the twin")
     t |> success(tr.config.n_ff_shexp > 0l && !tr.config.moe_dense_shexp, "the twin carries a gated shared expert")
     let layers = tr.config.n_layers
@@ -1581,12 +2091,12 @@ def private shexp_forced_feed(t : T?; n : int64) {
     }
     if (marked != layers) {
         t |> skip("the shared experts are resident on {marked} of {layers} layers - the tier's budget or the shexp mark declined (the load log says which)")
-        delete tr
         return
     }
     with_dasllama_jobque_() {
         var prompt <- resident_prompt(n)
         var toks <- resident_feed(SHEXP_FED_STEPS)
+        let route_was = get_moe_gpu_shexp_route()
         set_moe_gpu_shexp_route(true)
         let served0 = shexp_gpu_prefill_layers()
         let span0 = span_tokens()
@@ -1595,7 +2105,7 @@ def private shexp_forced_feed(t : T?; n : int64) {
         t |> equal(span_tokens(), span0 + SHEXP_FED_STEPS, "the decode span served every fed step on the device arm (the shared expert inside it)")
         set_moe_gpu_shexp_route(false)
         var cpu <- feed_alone(tr, KVDtype.f16, prompt, toks)
-        set_moe_gpu_shexp_route(true)   //! the tier as found
+        set_moe_gpu_shexp_route(route_was)
         t |> equal(shexp_gpu_prefill_layers(), served0 + layers, "the CPU arm served no shared expert on the device")
         t |> equal(span_tokens(), span0 + SHEXP_FED_STEPS, "the CPU arm's steps took the per-layer path - the span declines a shared expert off the device")
         feed_steps_within(t, tr, "", n, dev, cpu, toks, SHEXP_LOGIT_BAR_REL, "the device shared expert", "the CPU form")
@@ -1604,17 +2114,24 @@ def private shexp_forced_feed(t : T?; n : int64) {
         delete prompt
         delete toks
     }
-    delete tr
 }
 
-[test(description = "On Qwen1.5-MoE Q4_K_M with the per-op tier, the shared expert prefilled on the device serves every layer and keeps forced-feed logits within 12 percent of max logit of the CPU form over 64- and 600-token prompts, with a one-step-off control red")]
+[test(description = "On Qwen1.5-MoE Q4_K_M with the per-op tier, the shared expert prefilled on the device serves every layer and keeps forced-feed logits within 12 percent of max logit of the CPU form over 64- and 600-token prompts, with a one-step-off control red; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its reference-prefill arm; each form loads once")]
 def test_gpu_moe_shexp_prefill(t : T?) {
-    t |> run("Qwen1.5-MoE-A2.7B-Q4_K_M: the shared expert's prefill on the device vs the CPU form, one 64-token prompt") @(t : T?) {
-        shexp_forced_feed(t, 64l)
+    return if (!family_on(t, "qwen2moe"))
+    var forms <- [device_form(perop = true)]
+    with_cpu_and_gpu_model(t, "llm", "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf", PARITY_ROW_CTX, forms, false, true) $(var m, form) {
+        return if (!form.perop)
+        unsafe {   //! the cells read the block's model by reference
+            t |> run("Qwen1.5-MoE-A2.7B-Q4_K_M: the shared expert's prefill on the device vs the CPU form, one 64-token prompt") @capture(& m)(t : T ?) {
+                shexp_forced_feed(t, m, 64l)
+            }
+            t |> run("Qwen1.5-MoE-A2.7B-Q4_K_M: the same over a 600-token prompt (the chain's chunking)") @capture(& m)(t : T ?) {
+                shexp_forced_feed(t, m, 600l)
+            }
+        }
     }
-    t |> run("Qwen1.5-MoE-A2.7B-Q4_K_M: the same over a 600-token prompt (the chain's chunking)") @(t : T?) {
-        shexp_forced_feed(t, 600l)
-    }
+    delete forms
 }
 
 // The host-experts form on the CUDA home's whole-model driver (`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`): the split token command - a
@@ -1724,19 +2241,33 @@ def private host35_rows(t : T?; var r : Host35Rows; var m : Model; form : ModelF
     }
 }
 
-[test(description = "On the CUDA driver Qwen3.6-35B-A3B-4L-MTP UD-Q4_K_M, the four-block cut with its NextN block, with its first routed layer's experts on the host stays within 20 percent of the CPU chain with the hot pool's hit chains serving picks and the stream's meet splitting the experts, and every speculative round drafts and verifies on the device while plain steps draft and verify nothing; each form loads once")]
+[test(description = "On the CUDA driver Qwen3.6-35B-A3B-4L-MTP UD-Q4_K_M, the four-block cut with its NextN block, with its first routed layer's experts on the host stays within 20 percent of the CPU chain with the hot pool's hit chains serving picks and the stream's meet splitting the experts, and every speculative round drafts and verifies on the device while plain steps draft and verify nothing; on the Metal home's served image the MTP rail's verify rows within 0.5 of the plain GPU step on forced feed and speculative free-run emitting the plain run's tokens exactly; each form loads once")]
 def test_gpu_resident_moe_host_35b(t : T?) {
-    return if (!family_on(t, "qwen35moe") || !cuda_home_asked(t))
+    return if (!family_on(t, "qwen35moe"))
     let file = "Qwen3.6-35B-A3B-4L-MTP-UD-Q4_K_M-local.gguf"
     var r : Host35Rows
+    var forms : array<ModelForm>
+    let cuda_why = cuda_home_why()
+    if (empty(cuda_why)) {
+        forms |> push(device_form(regions = 1l, host_layers = Q35_HOST_LAYERS))
+    } else {
+        skip_cell(t, "{file}, the host-experts form: {cuda_why}")
+    }
+    let mr = MetalRows(mtp = true, mp = mtp_parity_qwen36_35b_cut())
+    var mk = MetalKept()
+    var inscope no_arms : array<string>
+    metal_rows_forms(forms, mr, METAL_MTP_CELLS_CTX, no_arms, no_arms)
     let pins = pin_stream(MOE_HOST_FIRST, pf_stream = 1)   //! the meet's host share and the plain steps, read at the load and live
     var ran = false
     with_cuda_mmq_winners() {
-        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3.6-35B-A3B-4L-MTP-UD-Q4_K_M-local.gguf", MOE_CUT_CTX, [device_form(regions = 1l, host_layers = Q35_HOST_LAYERS)]) $(m, form) {
+        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3.6-35B-A3B-4L-MTP-UD-Q4_K_M-local.gguf", MOE_CUT_CTX, forms) $(var m, form) {
+            return if (metal_rows_pass(t, m, form, mr, mk))
             host35_rows(t, r, m, form, file)
         }
     }
     restore_stream_pins(pins)
+    metal_rows_verdict(t, mr, mk)
+    delete forms
     if (ran) {
         held_within(t, r.h, "{file}: ", false)
         with_dasllama_jobque_() {

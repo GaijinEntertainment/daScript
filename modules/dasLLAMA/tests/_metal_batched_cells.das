@@ -166,7 +166,7 @@ def private batched_row_shexp(t : T?; tr : Model) {   // nolint:LINT012,LINT019 
 }
 
 //! the rows and the single GEMV forms round the router's logits apart and a near-tie flips an expert: the plain-MoE bar of
-//! test_metal_mtp_parity's q30 arms (reads 1.6e-3 at most on the M1 Max, the one-step-off control 9.7 at least)
+//! the q30 MTP verify row (`mtp_verify_qwen3_30b_a3b_cut`: 1.6e-3 at most on the M1 Max, the one-step-off control 9.7 at least)
 let private SHEXP_SAMESLAB_BAR = 2.0
 let private SHEXP_SAMESLAB_ROUNDS = 12l
 

@@ -20,6 +20,7 @@ require _tower_twin   // set_every_gpu_tower, the Vulkan twin's seat and instrum
 require _vision_forms   // the towers' forms, the twin's kept canvases, a block's cell
 require _cpu_gpu_model   // with_cpu_and_gpu_model: a chat decoder's one block in the area
 require _vision_chat_cells   // the image chat turn's cells, run under the tower's image form
+require _kernel_coverage_cells   // coverage_tower_gemma4v_metal: the kernel census's canvas
 
 // Tier-1 gemma4v tower parity vs llama-mtmd-debug -p encode.
 // Reference arm: the f32-widened mmproj, CPU, --no-mmproj-offload, -fa off (the only true-f32 arm).
@@ -479,6 +480,11 @@ def test_gemma4v_e2b(t : T?) {
         } else {
             if (form == "f32") {
                 tower_cell(t, "synthesized std_bias/std_scale: the file's own encode", e.gemma4v, stdk, @@std_guard_encode)
+                if (empty(metal_build_why())) {
+                    coverage_tower_gemma4v_metal(t,
+                        "gemma4v E2B: the kernel census's canvas on the Metal tower",
+                        e.gemma4v)
+                }
             } elif (form == "q8@dev") {
                 tower_cell(t, "tier-1 attempt on the serving discrete home's tower ({serving_tower_dev(TowerFamily.vision)}) vs the mtmd encode dumps (the q8 lane's bar)", e.gemma4v, @@test_gemma4v_tier1_vulkan)
             }

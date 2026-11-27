@@ -13,6 +13,7 @@ require math
 require _model_tier   // model_available: the stocked-carrier gate (shards, the large tier)
 require _override_probes   // decode_declines: the fake override's step
 require _batch_decode_cells   // batch_vs_ref, run_ref, cache_feq, the prompts: the harness
+require _fused_decode_cells   // fused_attn_chain_cell
 
 // Batched decode vs sequential: eval_batch_ must reproduce the per-session forward() stream —
 // token-for-token greedy, per-step logits, and the final KV caches. Needs llama2.c's
@@ -372,7 +373,7 @@ def test_batch_decode_portable_cells(t : T?) {
     }
 }
 
-[test(description = "stories15M on one load quantized to Q8_0 on the box's own backend runs the step census, B=1 delegation, tuned-kernel, late-embed and verify-decline cells in turn, each on its own sessions")]
+[test(description = "stories15M on one load quantized to Q8_0 on the box's own backend runs the step census, B=1 delegation, tuned-kernel, late-embed, verify-decline and fused-chain cells in turn, each on its own sessions")]
 def test_batch_decode_q8_cells(t : T?) {
     with_stories15m(t) $(var tr) {
         test_batch_decode_step_census(t, tr)
@@ -382,6 +383,7 @@ def test_batch_decode_q8_cells(t : T?) {
         batch_vs_ref_cell(t, tr, "active-backend batch kernels: tokens match sequential within the FP budget (needs stories15M.bin)", KVDtype.f32, 1.0e-3, "tuned")
         test_batch_decode_late_embed(t, tr)
         test_batch_decode_verify_declines(t, tr)
+        fused_attn_chain_cell(t, tr, "fused chains == per-op dispatches, bit for bit")
     }
 }
 

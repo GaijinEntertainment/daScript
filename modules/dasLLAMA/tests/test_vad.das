@@ -19,6 +19,7 @@ require _model_once   // with_model_once_at: the bin's one block in the area
 require _compares   // check / check_exceeds: the twin's bar and its control
 require _gpu_knobs   // with_gpu_knobs / set_serving_gpu_tower: the seat cells' tower pin
 require ?das_metal dasllama/dasllama_metal_common   // metal_common_init: whether the box has a Metal device
+require _kernel_coverage_cells   // coverage_tower_vad: the kernel census's VAD row
 
 // Silero-VAD tests. The forward gate is self-contained (the ~1.2 MB weights are checked in at
 // modules/dasLLAMA/models/silero_vad.bin) and drives a deterministic integer-LCG signal — the
@@ -451,6 +452,9 @@ def test_vad_silero(t : T?) {
             tower_cell(t, "the GPU seat's probabilities against the CPU chunk step on the LCG signal, whole and ragged", m, @@test_vad_gpu_twin)
             tower_cell(t, "the streaming seat: the device feed's events are the CPU feed's, every whole chunk served", m, @@vad_twin_stream)
             tower_cell(t, "the batch segmenter on the device: jfk's and ru_long's speech regions are the CPU's, the probabilities within the bar", m, @@vad_twin_segmenter)
+            coverage_tower_vad(t,
+                "the kernel census's batch and stream probabilities on the VAD seat",
+                cov_home_of(TowerFamily.vad), m)
             tower_cell(t, "the Metal VAD seat declines on its knob, a model with no slab, a recurrence pipeline under 1024 lanes and a scratch it cannot take", m, @@test_vad_metal_declines)
             tower_cell(t, "the Vulkan VAD seat declines on its knob, a model with no slab, a device with neither tile family, a slab past the storage range on a released resident and a scratch past it, then serves on a rebuilt scratch", m, @@test_vad_vulkan_declines)
             tower_cell(t, "the CUDA VAD seat declines on its knob, a model with no slab, a class that failed to build and an allocation it cannot take, then serves on a rebuilt resident", m, @@test_vad_cuda_declines)

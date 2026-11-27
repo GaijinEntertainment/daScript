@@ -10,6 +10,7 @@ require _model_categories
 require dasllama/dasllama_gguf   // model_tier_skip_reason: a file past the tier is a category's
 require dasllama/dasllama_env   // models_dir_resolved: the models directory the runner reads
 require _child_run   // disable_module_flags, child_cmd_root_leaving: what a spawned child leaves out
+require _kernel_census   // census_read_of, with_kernel_census
 require daslib/fio
 require daslib/strings_boost
 require strings
@@ -89,22 +90,22 @@ def test_suite_split_matches_the_files(t : T?) {
     }
 }
 
-//! every test file in the folder sits in some run.das suite; the one exemption is the CPU-prefill
-//! tripwire, whose header says why (it asserts the guard the runner disarms for every child)
-[test(description = "Every test_, failed_ and uncategorized file in the folder sits in some run.das suite except the declared CPU-prefill tripwire, over more than 50 files walked, and run.das carries no [init]")]
+//! every test file in the folder sits in some run.das suite, the
+//! census verdict the runner appends to a run aside
+[test(description = "Every test_, failed_ and uncategorized file in the folder but the census verdict sits in some run.das suite, over more than 50 files walked, and run.das carries no [init]")]
 def test_every_file_sits_in_a_suite(t : T?) {
     var listed : table<string; void?>   // nolint:STYLE027 - a nested walk over the suite tables, not one comprehension
-    for (suite in ["decode", "mtp", "prefill", "matrix", "kernels", "gpu-kernels", "image", "image-vulkan", "coverage", "model-free", "stocked", "examples"]) {
+    for (suite in ["mtp", "kernels", "gpu-kernels", "image", "image-vulkan", "model-free", "stocked", "examples"]) {
         for (file in suite_files(suite)) {
             listed |> insert(base_name(file), null)
         }
     }
-    let exempt <- ["test_cpu_prefill_tripwire.das"]
     var count = 0
     fio::dir("modules/dasLLAMA/tests") $(name) {
         if ((name |> starts_with("test_") || name |> starts_with("failed_") || name |> starts_with("uncategorized")) && name |> ends_with(".das")) {
             count++
-            t |> success(key_exists(listed, name) || find_index(exempt, name) >= 0, "a test file sits in a run.das suite, or is the declared tripwire exemption: {name}")
+            let verdict = "{TESTS_DIR}/{name}" == CENSUS_VERDICT
+            t |> success(key_exists(listed, name) || verdict, "a test file sits in a run.das suite: {name}")
         }
     }
     t |> success(count > 50, "the folder listing walked the test files ({count})")
@@ -112,13 +113,16 @@ def test_every_file_sits_in_a_suite(t : T?) {
     t |> success(find(fread("{TESTS_DIR}/run.das"), "[init]") < 0, "run.das carries no [init] - it runs nothing on require")
 }
 
-//! the area tables cover the per-PR census exactly: every standing area's file is a model-free or stocked file,
+//! the area tables cover the per-PR census exactly: every standing
+//! area's file is a model-free, stocked or image file,
 //! every such file has at least one area, an on-demand area's files are the examples suite's and no per-PR file,
-//! and every image-suite arm an area names exists
-[test(description = "The runner's standing area tables cover the model-free plus stocked census exactly, an on-demand area holds the examples suite's files and none of the census, every image arm an area names exists in test_model_image, and every image arm is reachable from an area or listed unclaimed")]
+//! every image-suite arm an area names exists, and every image-suite
+//! arm is one area's
+[test(description = "The runner's standing area tables cover the model-free, stocked and image census exactly, an on-demand area holds the examples suite's files and none of the census, every image arm an area names exists in test_model_image, and every image arm literal is reached by the arms of exactly one area")]
 def test_area_tables_match_the_census(t : T?) {
     var census <- [for (f in free_files()); base_name(f)]
-    census |> push_from([for (f in suite_files("stocked")); base_name(f)])
+    census |> push_from([for (f in suite_files("stocked")); base_name(f)], [for (f in suite_files("image")); base_name(f)],
+        [for (f in suite_files("image-vulkan")); base_name(f)])
     let on_demand <- [for (f in suite_files("examples")); base_name(f)]
     var covered : table<string; void?>
     for (a in standing_areas()) {
@@ -139,17 +143,12 @@ def test_area_tables_match_the_census(t : T?) {
         t |> success(key_exists(covered, name), "a per-PR file has an area - add it to `area_tests`: {name}")
     }
     let image = fread("{TESTS_DIR}/test_model_image.das")
-    var claimed : array<string>
     for (a in AREAS) {
         for (tok in split(area_image_arms(a), ",")) {
             continue if (empty(tok))
             t |> success(find(image, "arm_on(t, \"{tok}") >= 0, "the image suite has an arm the area names: {a}/{tok}")
-            claimed |> push(tok)
         }
     }
-    // the reverse: every arm the image suite declares is reachable from some area, or is named here as
-    // deliberately unclaimed - `gemma` is an --arm substring of every other gemma* arm (CLAUDE.md says how to reach it)
-    let unclaimed <- ["gemma"]
     let marker = "arm_on(t, \""
     var at = find(image, marker)
     var n_arms = 0
@@ -159,11 +158,15 @@ def test_area_tables_match_the_census(t : T?) {
         break if (stop < 0)
         let arm = slice(image, start, stop)   // nolint:PERF031 - a few dozen short arm names, read once
         n_arms++
-        var hit = find_index(unclaimed, arm) >= 0
-        for (tok in claimed) {
-            hit ||= find(arm, tok) >= 0
+        var inscope owners : array<string>
+        for (a in AREAS) {
+            for (tok in split(area_image_arms(a), ",")) {
+                if (!empty(tok) && find(arm, tok) >= 0 && !has_value(owners, a)) {
+                    owners |> push(a)
+                }
+            }
         }
-        t |> success(hit, "an image-suite arm is reachable from an area, or listed as unclaimed: {arm}")
+        t |> equal(length(owners), 1, "an image-suite arm is one area's, so a whole run runs it once: {arm} ({join(owners, ",")})")
         at = find(image, marker, stop)
     }
     t |> success(n_arms > 10, "the image suite's arm literals were walked ({n_arms})")
@@ -209,7 +212,7 @@ def test_areas_for_path(t : T?) {
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_vulkan_tts_pocket_kernels.das"), ","), "tts", "the Vulkan Pocket TTS cells reach the tts area")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_vulkan_tts_source_kernels.das"), ","), "tts", "the Vulkan TTS source and STFT cells reach the tts area")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_tower_twin.das"), ","), "audio,vision", "the tower twin fixture reaches both towers")
-    t |> equal(length(areas_for_path("modules/dasLLAMA/tests/test_metal_decode_parity.das")), 0, "a model-suite file reaches no area - it takes --arm")
+    t |> equal(length(areas_for_path("modules/dasLLAMA/tests/test_metal_decode_kernels.das")), 0, "a kernels-suite file reaches no area - it takes --arm")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_tts_oracle.das"), ","), "tts", "a TTS fixture reaches tts")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_audio_asr_cells.das"), ","), "audio", "an audio cell module reaches audio")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_model_tier.das"), ","), every, "the shared tier helper reaches every area")
@@ -233,7 +236,7 @@ def test_areas_for_path(t : T?) {
 
 //! the pure planners behind an area run: the file set is the areas' census files, deduplicated and
 //! sorted, with the image suite's file appended once when any area owns image arms
-[test(description = "`area_plan` returns an area's census files sorted and deduplicated with the image file appended once and last when an area owns image arms, and `plan_files` lets an area override --suite")]
+[test(description = "`area_plan` returns an area's census files sorted and deduplicated with the image file appended once and last when an area owns image arms, plans the image-vulkan suite's file for the llm area, and `plan_files` lets an area override --suite")]
 def test_area_plan(t : T?) {
     let tts <- area_plan(["tts"])
     t |> equal(length(tts.files), 19, "tts plans its eighteen files and the image file its kitten arm rides")
@@ -258,18 +261,23 @@ def test_area_plan(t : T?) {
     t |> success(find(both.image_arms, "whisper") >= 0 && find(both.image_arms, "gemma3v") >= 0, "the arm string is the union: {both.image_arms}")
     let n_tower = length([for (f in both.files); f; where f == "{TESTS_DIR}/test_tower_helpers.das"])
     t |> equal(n_tower, 1, "a file in both areas plans once")
-    let cfg = RunArgs(suite = "decode", arm = "arm12")
+    let cfg = RunArgs(suite = "image", arm = "arm12")
     let none : array<string>
     let suite <- plan_files(cfg, none)
     t |> equal(length(suite.files), 1, "a suite run plans the suite table")
     t |> equal(suite.image_arms, "arm12", "a suite run passes --arm through")
     let area <- plan_files(cfg, ["tts"])
     t |> equal(length(area.files), 19, "an area run plans the area, whatever --suite says")
+    let llm <- area_plan(["llm"])
+    t |> success(has_value(llm.files, "{TESTS_DIR}/test_model_image_vulkan.das"),
+        "llm plans the image-vulkan suite's file")
 }
 
-//! the argument contracts: an area run refuses --arm/--full/--suite and an unknown area; a per-PR
-//! suite refuses --arm and --full; a model suite wants exactly one of --arm and --full, and --full is refused
-[test(description = "The runner refuses unknown areas and --area beside --suite or --arm, a per-PR suite refuses --arm, a model suite needs --arm and refuses --full, and child timeouts are 3600 for stocked and 1200 for arm runs")]
+//! the argument contracts: an area run refuses --full/--suite and an
+//! unknown area, takes --arm, and a changed run refuses --arm; a
+//! per-PR suite refuses --arm and --full; a model suite wants exactly
+//! one of --arm and --full, and --full is refused
+[test(description = "The runner refuses unknown areas, --area beside --suite and --changed beside --arm, runs --area beside --arm, a per-PR suite refuses --arm, a model suite needs --arm and refuses --full, and child timeouts are 3600 for stocked and 1200 for arm runs")]
 def test_argument_contracts(t : T?) {
     let plain = RunArgs()
     let none <- select_areas(plain)
@@ -281,21 +289,24 @@ def test_argument_contracts(t : T?) {
     t |> equal(join(two.areas, ","), "audio,tts", "areas come back in canonical order")
     let bogus = RunArgs(area = "bogus")
     t |> equal(select_areas(bogus).status, 2, "an unknown area is refused")
-    let mixed = RunArgs(area = "tts", suite = "decode")
+    let mixed = RunArgs(area = "tts", suite = "image")
     t |> equal(select_areas(mixed).status, 2, "--area beside --suite is refused")
-    let armed = RunArgs(area = "tts", arm = "x")
-    t |> equal(select_areas(armed).status, 2, "--area beside --arm is refused")
+    let armed = RunArgs(area = "llm", arm = "arm12")
+    let narrowed <- select_areas(armed)
+    t |> equal(narrowed.status, -1, "--area beside --arm runs: the arms narrow the area's children")
+    t |> equal(join(narrowed.areas, ","), "llm", "... over the named area")
+    t |> equal(select_areas(RunArgs(changed = true, arm = "x")).status, 2, "--changed beside --arm is refused")
     t |> equal(check_suite_args(RunArgs(suite = "stocked")), 0, "a per-PR suite runs bare")
     t |> equal(check_suite_args(RunArgs(suite = "stocked", arm = "x")), 2, "a per-PR suite refuses --arm")
     t |> equal(check_suite_args(RunArgs(suite = "wasm")), 0, "the wasm suite runs bare")
     t |> equal(check_suite_args(RunArgs(suite = "wasm", arm = "x")), 2, "the wasm suite refuses --arm")
-    t |> equal(check_suite_args(RunArgs(suite = "decode")), 2, "a model suite with neither --arm nor --full is refused")
-    t |> equal(check_suite_args(RunArgs(suite = "decode", arm = "arm12")), 0, "a model suite with --arm runs")
-    t |> equal(check_suite_args(RunArgs(suite = "decode", full = true)), 2, "--full is refused while the Metal build-out is in progress")
+    t |> equal(check_suite_args(RunArgs(suite = "mtp")), 2, "a model suite with neither --arm nor --full is refused")
+    t |> equal(check_suite_args(RunArgs(suite = "mtp", arm = "arm12")), 0, "a model suite with --arm runs")
+    t |> equal(check_suite_args(RunArgs(suite = "mtp", full = true)), 2, "--full is refused while the Metal build-out is in progress")
     t |> equal(child_timeout(RunArgs(suite = "stocked")), 3600, "the stocked gate's child holds the large tier's tails")
     t |> equal(child_timeout(RunArgs(changed = true)), 3600, "--changed runs the stocked files, so its child holds the same tails")
-    t |> equal(child_timeout(RunArgs(suite = "decode", full = true)), 3600, "the full gate's child too")
-    t |> equal(child_timeout(RunArgs(suite = "decode", arm = "arm12")), 1200, "an arm run keeps the arm-mode budget")
+    t |> equal(child_timeout(RunArgs(suite = "mtp", full = true)), 3600, "the full gate's child too")
+    t |> equal(child_timeout(RunArgs(suite = "mtp", arm = "arm12")), 1200, "an arm run keeps the arm-mode budget")
     t |> equal(child_timeout(RunArgs(area = "tts")), 1200, "... and so does an area run")
 }
 
@@ -797,15 +808,15 @@ def test_category_run(t : T?) {
     let by_path <- category_files("qwen15-moe")
     t |> success(find_index(by_path, "{TESTS_DIR}/test_gpu_resident_moe_formats.das") >= 0, "a file naming a category's model by its path under the models directory (`moe-formats/...`) is the category's: {join(by_path, " ")}")
     let named = RunArgs(category = "gemma4-e4b")
-    let matrix = "{TESTS_DIR}/test_metal_support_matrix.das"
-    let coverage = "{TESTS_DIR}/test_kernel_coverage.das"
+    let kernels = "{TESTS_DIR}/test_metal_decode_kernels.das"
+    let image = "{TESTS_DIR}/test_model_image.das"
     let plain <- [for (i in range(12)); "{TESTS_DIR}/test_plain_{i}.das"]
     var mixed <- [for (f in plain); f]
-    mixed |> push(matrix)
-    mixed |> push(coverage)
+    mixed |> push(image)
+    mixed |> push(kernels)
     let chunks <- category_chunks(mixed, batch_files(named))
     t |> equal(length(chunks), 4, "a process suite's files ride a child of their own, the others ten a child: {chunks}")
-    t |> success(length(chunks[0]) == 1 && chunks[0][0] == matrix && length(chunks[1]) == 1 && chunks[1][0] == coverage, "the matrix file and the coverage file each alone")
+    t |> success(length(chunks[0]) == 1 && chunks[0][0] == kernels && length(chunks[1]) == 1 && chunks[1][0] == image, "the kernels file and the image file each alone, in the process suites' order")
     t |> success(length(chunks[2]) == 10 && length(chunks[3]) == 2, "the twelve other files in two children")
     t |> equal(length(run_chunks(named, mixed, false)), 4, "a category run's children are the category's chunks")
     t |> equal(batch_files(named), batch_files(RunArgs(suite = "stocked")), "a category run batches as a model suite does")
@@ -1055,7 +1066,7 @@ def test_reach_for_path(t : T?) {
     let own <- reach_for_path("modules/dasLLAMA/tests/test_gemma3v.das")
     t |> equal(join(own.files, ","), "test_gemma3v.das", "a test file reaches itself")
     t |> success(empty(own.areas) && !own.core, "and nothing else")
-    let suite <- reach_for_path("modules/dasLLAMA/tests/test_metal_decode_parity.das")
+    let suite <- reach_for_path("modules/dasLLAMA/tests/test_metal_decode_kernels.das")
     t |> success(empty(suite.files) && !empty(suite.note), "a model-suite file reaches nothing and says why")
     let feed <- reach_for_path("modules/dasLLAMA/tests/_resident_feed.das")
     t |> success(find_index(feed.files, "test_gpu_resident_llama.das") >= 0, "a fixture reaches the tests requiring it ({length(feed.files)})")
@@ -1113,6 +1124,43 @@ def test_reach_for_path(t : T?) {
         let areas = MODULE_AREAS?[stem] ?? ""
         t |> success(find(areas, "llm") >= 0, "a witness row's module has a MODULE_AREAS row holding llm - a module with no row runs every area whole: {stem}")
     }
+}
+
+//! the `require` lines of the fixtures whose cells run the Metal
+//! drivers' code: every `_metal_*_cells` fixture and `_mlx_cells`
+def private metal_cells_requires() : array<string> {
+    var out : array<string>
+    fio::dir(TESTS_DIR) $(name) {
+        let cells = name |> starts_with("_metal_") && name |> ends_with("_cells.das")
+        if (cells || name == "_mlx_cells.das") {
+            out |> push("require {slice(name, 0, length(name) - 4)}")
+        }
+    }
+    return <- out
+}
+
+[test(description = "Every llm census file that requires a Metal cells fixture (`_metal_*_cells`, `_mlx_cells`), in its own text or through the fixtures it requires, is in the witness row of each Metal driver module - dasllama_metal_decode, dasllama_metal_prefill, dasllama_metal_mtp_gemma - over at least ten such files and five such fixtures")]
+def test_metal_witnesses_hold_metal_cells_files(t : T?) {
+    var inscope needles <- metal_cells_requires()
+    t |> success(length(needles) >= 5, "the Metal cells fixtures were found ({length(needles)})")
+    var listed <- free_files()
+    listed |> push_from(suite_files("stocked"))
+    var holders = 0
+    for (f in listed) {
+        let name = base_name(f)
+        var inscope areas <- test_file_areas(name)
+        continue if (find_index(areas, "llm") < 0)
+        var inscope seen : table<string>
+        continue if (!reaches_text(f, needles, -1, seen))
+        holders++
+        for (stem in fixed_array("dasllama_metal_decode", "dasllama_metal_prefill",
+                "dasllama_metal_mtp_gemma")) {
+            var inscope row <- split(MODULE_WITNESSES?[stem] ?? "", ",")
+            t |> success(find_index(row, name) >= 0,
+                "{name} requires a Metal cells fixture and the {stem} witness row lacks it")
+        }
+    }
+    t |> success(holders >= 10, "the llm files holding Metal cells were found ({holders})")
 }
 
 //! the children's per-test module cache: a folder keyed by the binary, the folders of other binaries removed on
@@ -1367,10 +1415,11 @@ def test_run_wiring(t : T?) {
     let dry = "--area infra --das /usr/bin/true"
     var vulkan, cuda, moved, full, audio : string
     let scratch_unset_env = "DASLLAMA_SCRATCH_DIR= "   //! a box that names a scratch folder for its own runs names none for these
-    t |> equal(run_runner(dry, vulkan, "{scratch_unset_env}DASLLAMA_GPU=1 "), 0, "a dry run on one GPU home exits clean:\n{vulkan}")
+    let one_home = "DASLLAMA_GPU=1 DASLLAMA_CUDA= "   //! a box on the CUDA home names it for its own runs
+    t |> equal(run_runner(dry, vulkan, "{scratch_unset_env}{one_home}"), 0, "a dry run on one GPU home exits clean:\n{vulkan}")
     t |> equal(run_runner(dry, cuda, "{scratch_unset_env}DASLLAMA_GPU=1 DASLLAMA_CUDA=1 "), 0, "and on another:\n{cuda}")
     let scratch = path_join(test_temp_dir(), "wiring_scratch")
-    t |> equal(run_runner(dry, moved, "DASLLAMA_GPU=1 DASLLAMA_SCRATCH_DIR='{scratch}' "), 0, "and with a scratch folder named:\n{moved}")
+    t |> equal(run_runner(dry, moved, "{one_home}DASLLAMA_SCRATCH_DIR='{scratch}' "), 0, "and with a scratch folder named:\n{moved}")
     t |> success(!empty(first_stamp(vulkan)), "a child carries a pass stamp:\n{vulkan}")
     t |> success(first_stamp(cuda) != first_stamp(vulkan), "another GPU home is another stamp ({first_stamp(vulkan)} / {first_stamp(cuda)})")
     t |> equal(first_stamp(moved), first_stamp(vulkan), "the scratch folder is no part of the stamp")
@@ -1714,4 +1763,175 @@ def test_box_runtime_lines(t : T?) {
     t |> success(!held.warn && empty(held.text),
         "the control: a valid file held says nothing: '{held.text}'")
     t |> equal(disabled_modules_line(""), "", "no module left out, no MODULES line")
+}
+
+[test(description = "A run is whole only over every standing area with no narrowing flag and no test filter inherited from the runner's environment, and its verdict child gets DASLLAMA_KERNEL_CENSUS_WHOLE=1 only where the whole run reported no file from an earlier pass and failed none")]
+def test_census_whole_run(t : T?) {
+    var inscope standing <- standing_areas()
+    t |> success(census_whole(RunArgs(), standing, ""),
+        "every standing area, nothing narrowing it: whole")
+    t |> success(!census_whole(RunArgs(family = "llama"), standing, ""),
+        "a --family run is not whole")
+    t |> success(!census_whole(RunArgs(only = "qwen"), standing, ""), "an --only run is not whole")
+    t |> success(!census_whole(RunArgs(), standing, "gemma4e"),
+        "a family filter the runner inherits from its environment narrows the run")
+    var inscope one <- [standing[0]]
+    t |> success(!census_whole(RunArgs(), one, ""), "one standing area alone is not whole")
+    let knob = " --run-env \"DASLLAMA_KERNEL_CENSUS_WHOLE=1\""
+    let clean = RunTally()
+    t |> equal(census_child_run_env(census_ran_whole(true, clean)), knob,
+        "a whole run with every file run and green hands its verdict child the knob")
+    t |> equal(census_child_run_env(census_ran_whole(true, RunTally(cached = 1))), "",
+        "a file reported from an earlier pass leaves the knob off")
+    t |> equal(census_child_run_env(census_ran_whole(true, RunTally(failures = 1))), "",
+        "a failed file leaves the knob off")
+    t |> equal(census_child_run_env(census_ran_whole(false, clean)), "",
+        "a narrowed run's verdict child gets no knob")
+}
+
+[test(description = "A dry run of every standing area runs the census verdict child last, hands it DASLLAMA_KERNEL_CENSUS_WHOLE=1 and says so on a CENSUS line, while the same run under an inherited DASLLAMA_TEST_FAMILY, _ARMS or _CATEGORIES and a one-area run hand it none")]
+def test_census_whole_dry_run(t : T?) {
+    if (get_platform_name() == "windows") {
+        t |> skip("the dry run stands in a POSIX no-op binary for the child")
+        return
+    }
+    var inscope standing <- standing_areas()
+    let all = join(standing, ",")
+    let knob = "DASLLAMA_KERNEL_CENSUS_WHOLE=1"
+    let verdict = "START test_kernel_coverage.das"
+    //! a run under a filter hands it to its test processes; these runs name their own
+    let unfiltered = "DASLLAMA_TEST_FAMILY= DASLLAMA_TEST_ARMS= DASLLAMA_TEST_CATEGORIES= "
+    var whole : string
+    t |> equal(run_runner("--area {all} --das /usr/bin/true", whole, unfiltered), 0,
+        "a dry run of every standing area exits clean:\n{whole}")
+    let at = find(whole, verdict)
+    t |> success(at >= 0, "the census verdict runs as a child:\n{whole}")
+    let line = at >= 0 ? slice(whole, at, find(whole, "\n", at)) : ""
+    t |> success(find(line, knob) >= 0, "its command carries the knob:\n{line}")
+    t |> success(find(whole, "CENSUS whole:") >= 0, "the CENSUS whole line is printed")
+    t |> equal(rfind(whole, "START "), at, "the verdict is the run's last child:\n{whole}")
+    for (env in fixed_array("FAMILY=llama", "ARMS=fxarm", "CATEGORIES=fxcat")) {
+        var inherited : string
+        t |> equal(run_runner("--area {all} --das /usr/bin/true", inherited, "{unfiltered}DASLLAMA_TEST_{env} "), 0,
+            "the run under an inherited {env} exits clean:\n{inherited}")
+        t |> success(find(inherited, verdict) >= 0 && find(inherited, knob) < 0,
+            "an inherited {env} leaves the knob off:\n{inherited}")
+    }
+    var narrowed : string
+    t |> equal(run_runner("--area audio --das /usr/bin/true", narrowed, unfiltered), 0,
+        "a one-area dry run exits clean")
+    t |> success(find(narrowed, verdict) >= 0 && find(narrowed, knob) < 0,
+        "a one-area run leaves the knob off:\n{narrowed}")
+}
+
+var private g_census_verdict_ran = false   //! whether a verdict block below ran
+
+[test(description = "The census verdict skips where no census folder is named, fails where a named folder holds no census file of the home, and reads the files where they stand: the merged table and the run's whole flag reach the verdict")]
+def test_census_verdict_reads(t : T?) {
+    t |> equal(census_read_of("", 0, true), CensusRead.skip_unset, "no folder named: the verdict skips")
+    t |> equal(census_read_of("/a/folder", 0, true), CensusRead.fail_empty,
+        "a whole run's folder with no file fails")
+    t |> equal(census_read_of("/a/folder", 0, false), CensusRead.skip_empty,
+        "a narrowed run's folder with no file skips")
+    for (whole in [false, true]) {
+        t |> equal(census_read_of("/a/folder", 2, whole), CensusRead.read, "files: the verdict reads them")
+    }
+    let folder = path_join(test_temp_dir(), "census_reads")
+    mkdir_rec(folder)
+    fopen(path_join(folder, "metal_1.json"), "wb") $(f) {
+        fwrite(f, sprint_json({ "k_a" => 3l }, false))
+    }
+    var inscope none <- kernel_census_merged(folder, CENSUS_VULKAN)
+    t |> equal(census_read_of(folder, none.files, true), CensusRead.fail_empty,
+        "the folder holds no file of the Vulkan home: that verdict fails on a whole run")
+    t |> run("an unset census folder skips") @(t : T?) {
+        g_census_verdict_ran = with_kernel_census(t, "", CENSUS_METAL, true) $(_cov, _whole) {
+            t |> failure("the verdict ran with no census folder")
+        }
+    }
+    t |> success(!g_census_verdict_ran, "the skip answers false")
+    for (whole in [false, true]) {
+        g_census_verdict_ran = false
+        let read = with_kernel_census(t, folder, CENSUS_METAL, whole) $(cov, got) {
+            t |> equal(cov?["k_a"] ?? -1l, 3l, "the verdict reads the merged table")
+            t |> equal(got, whole, "the verdict gets the run's whole flag")
+            g_census_verdict_ran = true
+        }
+        t |> success(read && g_census_verdict_ran, "a folder with the home's file runs the verdict")
+    }
+}
+
+[test(description = "A run is not whole under --changed, --arm, --category, --skip or an --exclude past the CUDA-only files; the census verdict is owed on every run but a category run and the model-free, gpu-kernels and wasm suites'; and the verdict rides a child of its own after every other, a category run's too")]
+def test_census_scope(t : T?) {
+    var inscope standing <- standing_areas()
+    var inscope narrowing <- [(why = "--changed", cfg = RunArgs(changed = true)),
+        (why = "--arm", cfg = RunArgs(arm = "x")), (why = "--category", cfg = RunArgs(category = "x")),
+        (why = "--exclude", cfg = RunArgs(exclude = "x")), (why = "--skip", cfg = RunArgs(skip = 1))]
+    for (n in narrowing) {
+        t |> success(!census_whole(n.cfg, standing, ""), "a {n.why} run is not whole")
+    }
+    t |> success(census_whole(RunArgs(exclude = CUDA_ONLY_EXCLUDE), standing, ""),
+        "a fleet Vulkan home's run, the CUDA-only files left out, is whole")
+    t |> success(!census_whole(RunArgs(exclude = "{CUDA_ONLY_EXCLUDE},test_audio"), standing, ""),
+        "one more file left out and it is not")
+    t |> success(census_verdict_owed(RunArgs()), "a plain run owes the verdict")
+    t |> success(census_verdict_owed(RunArgs(suite = "stocked")), "the stocked suite owes it")
+    t |> success(!census_verdict_owed(RunArgs(category = "x")), "a category run owes none")
+    for (suite in fixed_array("model-free", "gpu-kernels", "wasm")) {
+        t |> success(!census_verdict_owed(RunArgs(suite = suite)), "the {suite} suite owes none")
+    }
+    let files <- [CENSUS_VERDICT, "{TESTS_DIR}/test_a.das", "{TESTS_DIR}/test_b.das"]
+    for (cfg in [RunArgs(), RunArgs(category = "x")]) {
+        var inscope chunks <- run_chunks(cfg, files, false)
+        t |> equal(join(chunks[length(chunks) - 1], ","), CENSUS_VERDICT,
+            "the verdict is the last child, alone (category '{cfg.category}')")
+        t |> equal(length([for (c in chunks); c; where has_value(c, CENSUS_VERDICT)]), 1,
+            "and rides no other child")
+    }
+}
+
+[test(description = "A run's census folder reaches every child as DASLLAMA_KERNEL_CENSUS_DIR on the posix form and cmd.exe's, a run with none names none, and each repetition starts on the folder emptied")]
+def test_child_census_envs(t : T?) {
+    let cfg = RunArgs()
+    let posix = child_envs(cfg, false, false, "", "/disk/census")
+    t |> success(find(posix, "DASLLAMA_KERNEL_CENSUS_DIR=\"/disk/census\" ") >= 0, "the posix prefix: {posix}")
+    let cmd = child_envs(cfg, true, false, "", "D:\\census")
+    t |> success(find(cmd, "set \"DASLLAMA_KERNEL_CENSUS_DIR=D:\\census\"&& ") >= 0, "the cmd.exe form: {cmd}")
+    t |> success(find(child_envs(cfg, false), "KERNEL_CENSUS") < 0 && find(child_envs(cfg, true), "KERNEL_CENSUS") < 0,
+        "no census folder, none named")
+    let folder = path_join(test_temp_dir(), "census_rep")
+    mkdir_rec(folder)
+    t |> success(fwrite(path_join(folder, "metal_1.json"), "\{\}"), "a past repetition's file is planted")
+    census_rep_open(folder)
+    var left = 0
+    fio::dir(folder) $(name) {
+        if (name != "." && name != "..") {
+            left++
+        }
+    }
+    t |> success(stat(folder).is_dir && left == 0, "the folder stands, emptied ({left} left)")
+}
+
+[test(description = "A dry area run under --arm makes its census folder under the run's scratch folder, hands it to the verdict child and removes it after the run, and hands the image child the asked arm, not the area's union")]
+def test_census_folder_dry_run(t : T?) {
+    if (get_platform_name() == "windows") {
+        t |> skip("the dry run stands in a POSIX no-op binary for the child")
+        return
+    }
+    let scratch = path_join(test_temp_dir(), "census_scratch")
+    var out : string
+    t |> equal(run_runner("--area audio --arm fxarm --das /usr/bin/true", out, "DASLLAMA_SCRATCH_DIR='{scratch}' "), 0,
+        "a dry audio run under --arm exits clean:\n{out}")
+    let lead = "CENSUS {path_join(scratch, "dasllama_census_")}"
+    let at = find(out, lead)
+    t |> success(at >= 0, "the census folder sits under the scratch folder:\n{out}")
+    return if (at < 0)
+    let folder = slice(out, at + length("CENSUS "), find(out, " (DASLLAMA_KERNEL_CENSUS_DIR)", at))
+    let verdict = find(out, "START test_kernel_coverage.das")
+    let line = verdict >= 0 ? slice(out, verdict, find(out, "\n", verdict)) : ""
+    t |> success(find(line, "DASLLAMA_KERNEL_CENSUS_DIR=\"{folder}\"") >= 0, "the verdict child reads it:\n{line}")
+    t |> success(!stat(folder).is_valid, "the run removes it: {folder}")
+    let image = find(out, "START test_model_image.das")
+    let image_line = image >= 0 ? slice(out, image, find(out, "\n", image)) : ""
+    t |> success(find(image_line, "DASLLAMA_TEST_ARMS=fxarm\"") >= 0, "the image child takes the asked arm:\n{image_line}")
 }

@@ -38,6 +38,7 @@ require _image_memory   // read_page_aligned: a host's own copy of an image
 require dasllama/dasllama_image   // with_image_destination: the cold mint's scratch path
 require _child_run   // DASLLAMA_AUDIO_LANE loads once at context init: a value a process
 require _audio_asr_cells   // session_segs, transcribe_segs, the reused-session and flat-heap legs, segs_text
+require _kernel_coverage_cells   // coverage_tower_whisper_metal: the kernel census's whisper bakes
 
 // Whisper-proper tests. The f16/gelu/mel/id tests are self-contained; the loader and
 // transcription tests need a whisper.cpp ggml-tiny.bin (gitignored) and skip without it.
@@ -455,17 +456,59 @@ def private mint_whisper(var stg : WhisperStaging; enc_q8, dec_q8 : bool; zero_f
     return <- w
 }
 
-//! a whisper bin's form read off its name (`tower_form_of`): the lanes `q8` (both halves q8), `f32` (both exact) and
-//! `mixed` (the exact encoder beside the q8 decoder)
-def private whisper_form_of(form : string) : TowerForm => tower_form_of(form, ["q8", "f32", "mixed"], "whisper")
+//! the edit naming a Metal bake whose narrow decoder steps on the
+//! device: the bake `set_metal_wdec_small_cpu(false)` mints
+//! (`#tower-dev-step-cpu`)
+let private DEV_STEP = "dev_step"
 
-//! the staged read a whisper bin's form is minted from (`tower_stage_key_of`)
-def private whisper_stage_key(form : string) : string => tower_stage_key_of(whisper_form_of(form))
+//! a whisper bin's form read off its name (`tower_form_of`): the
+//! lanes `q8` (both halves q8), `f32` (both exact) and `mixed` (the
+//! exact encoder beside the q8 decoder); the one edit `+dev_step`
+def private whisper_form_of(form : string) : TowerForm {
+    let f = tower_form_of(form, ["q8", "f32", "mixed"], "whisper")
+    if (!empty(f.edit) && f.edit != DEV_STEP) {
+        panic("the whisper tests: '{form}' names no whisper edit")
+    }
+    return f
+}
 
-//! a whisper bin's staged read the key `key` names: its lanes, in its image flavor
+//! the staged read a whisper bin's form is minted from
+//! (`tower_stage_key_of`), its edit kept: the knob it pins lays the
+//! staging's planes
+def private whisper_stage_key(form : string) : string {
+    let f = whisper_form_of(form)
+    let key = tower_stage_key_of(f)
+    return empty(key) || empty(f.edit) ? key : "{key}+{f.edit}"
+}
+
+//! `stage` - a staging or a mint - under the narrow decoder's
+//! CPU-step knob the form `f` names, what it builds handed back: its
+//! `+dev_step` edit pins the knob off for it, read by the staging and
+//! the bake; any other form's `stage` alone
+[unused_argument(f)]
+def private form_step_staged(f : TowerForm; stage : block<() : auto(S)>) : S -const {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (f.edit == DEV_STEP) {
+            let was = metal_wdec_small_cpu()
+            set_metal_wdec_small_cpu(false)
+            var st <- invoke(stage)
+            set_metal_wdec_small_cpu(was)
+            return <- st
+        }
+    }
+    return <- invoke(stage)
+}
+
+//! a whisper bin's staged read the key `key` names: its lanes, in
+//! its image flavor, under its knob
 def private whisper_stage(path, key : string) : WhisperStaging {
     let f = whisper_form_of(key)
-    return <- tower_dev_staged(tower_form_dev_of(f, TowerFamily.whisper)) $ { return <- stage_whisper_model(path, f.lane == "q8", f.lane != "f32") }
+    let dev = tower_form_dev_of(f, TowerFamily.whisper)
+    return <- form_step_staged(f) $ {
+        return <- tower_dev_staged(dev) $ {
+            return <- stage_whisper_model(path, f.lane == "q8", f.lane != "f32")
+        }
+    }
 }
 
 //! One form of a whisper bin as the ASR facade holds it, its block's form loader (`whisper_form_of`). The image forms are
@@ -474,11 +517,15 @@ def private whisper_stage(path, key : string) : WhisperStaging {
 //! included. Any other form is minted in memory (`mint_whisper`) from `stg`, its own copy of the bin's staging: a
 //! `_z<block>` form with its encoder's blocks zeroed from that block on, an `@dev` form in the image flavor of whisper's
 //! serving home.
+//! A `+dev_step` form mints under the knob it was staged under.
 def private whisper_form(path, form : string; var stg : WhisperStaging) : AsrModel {
     let f = whisper_form_of(form)
     var inscope m = AsrModel(kind = AsrKind.whisper)
     if (!f.image) {
-        m.whisper <- mint_whisper(stg, f.lane == "q8", f.lane != "f32", f.zero_block, tower_form_dev_of(f, TowerFamily.whisper))
+        let dev = tower_form_dev_of(f, TowerFamily.whisper)
+        m.whisper <- form_step_staged(f) $ {
+            return <- mint_whisper(stg, f.lane == "q8", f.lane != "f32", f.zero_block, dev)
+        }
         return <- m
     }
     let knobs = gpu_knobs()
@@ -1203,6 +1250,7 @@ def test_whisper_crowned_word_level(t : T?) {
             let tower_was = metal_tower_knob()
             let wdec_was = metal_wdec_knob()
             let small_was = metal_wdec_small_cpu()
+            let step_was = get_metal_wdec_step()
             set_metal_tower(true)
             set_metal_wdec(true)
             set_metal_wdec_step(true)
@@ -1254,7 +1302,7 @@ def test_whisper_crowned_word_level(t : T?) {
             metal_prefill_shutdown()
             set_metal_tower(tower_was)
             set_metal_wdec(wdec_was)
-            set_metal_wdec_step(true)
+            set_metal_wdec_step(step_was)
             set_metal_wdec_small_cpu(small_was)
             delete m
             delete mm
@@ -1354,6 +1402,9 @@ def test_whisper_tiny(t : T?) {
     var inscope forms <- ["image", "image_f32", "image_q8", "q8"]
     add_served_forms(t, forms, TINY, ["f32", "mixed@dev"], either_why(metal_build_why(), twin_why))
     add_served_forms(t, forms, TINY, ["mixed_z2@dev", "q8@dev", "q8_z2@dev", "mixed"], twin_why)
+    if (metal_on && jit_enabled()) {   //! the kernel census's second Metal bake
+        add_served_forms(t, forms, TINY, ["mixed@dev+{DEV_STEP}"], arm_why("coverage"))
+    }
     let ran = with_model_once_at(t, "audio", "ggml-tiny.bin", forms, whisper_dir(), @@whisper_stage_key, @@whisper_stage, @@whisper_form) $(var m; form) {
         whisper_form_is(t, TINY, form, m)
         kept.form = form
@@ -1374,6 +1425,11 @@ def test_whisper_tiny(t : T?) {
                 tower_cell(t, "{TINY}: the post-norm seat's CPU leg", m, kept.ln, @@ln_post_cpu_leg)
             } elif (metal_on && form == "mixed@dev") {
                 tower_cell(t, "{TINY}: the post-norm seat's device leg", m, kept.ln, @@ln_post_dev_leg)
+            }
+            if (metal_on && (form == "mixed@dev" || form == "mixed@dev+{DEV_STEP}")) {
+                coverage_tower_whisper_metal(t,
+                    "{TINY}: the kernel census's jfk on the {form} form's Metal bake",
+                    m.whisper)
             }
             if (twin_on) {
                 tower_cell(t, "{TINY}: the discrete twin, the {form} form's legs", m, twin, @@whisper_twin_leg)
@@ -1398,18 +1454,107 @@ def test_whisper_tiny(t : T?) {
     }
 }
 
-// Whisper large-v3-turbo, one block: the discrete twin's forms alone.
-[test(description = "ggml-large-v3-turbo.bin loads once a form: on the discrete GPU home turbo's q8 lane reads jfk with the CPU q8 lane's text while counters prove each side ran where claimed; encoder rows hold the twin bar with a poison control, the f32 decoder and a bad alignment decline, and the exact encoder's lane is served on the device within its bar with a poison control, both exact lanes reading the same text")]
+//! turbo's exact lane on jfk as the Metal tower's two forms keep it:
+//! the CPU image's text, the Metal image's text, the forms that ran
+struct private TurboMetalKept {
+    cpu : string
+    gpu : string
+    legs : int
+}
+
+// The Metal tower's CPU leg, on the `mixed` form: jfk with the tower
+// off.
+[cold_path, unused_argument(tt, m, k)]
+def private turbo_metal_cpu_leg(tt : T?; m : AsrModel; var k : TurboMetalKept) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (!family_on(tt, "whisper") || !arm_on(tt, "mtower") || !jit_only(tt)) return
+        let samples <- asr_samples(tt, "jfk.wav")
+        return if (empty(samples))
+        with_dasllama_jobque_() {
+            with_gpu_knobs() {
+                set_metal_tower(false)
+                k.cpu = segs_text(transcribe_segs(m, samples))
+            }
+        }
+        k.legs++
+    }
+}
+
+// The Metal tower's device leg, on the `mixed@dev` form: turbo's 32
+// blocks and its conv front on one device encode.
+[cold_path, unused_argument(tt, md, k)]
+def private turbo_metal_dev_leg(tt : T?; md : AsrModel; var k : TurboMetalKept) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (!family_on(tt, "whisper") || !arm_on(tt, "mtower") || !jit_only(tt)) return
+        let samples <- asr_samples(tt, "jfk.wav")
+        return if (empty(samples))
+        with_dasllama_jobque_() {
+            with_gpu_knobs() {
+                set_metal_tower(true)
+                let s3 = metal_tower_stats()
+                k.gpu = segs_text(transcribe_segs(md, samples))
+                let s4 = metal_tower_stats()
+                tt |> equal(s4.encodes - s3.encodes, 1l, "large: one GPU chunk")
+                tt |> equal(s4.blocks - s3.blocks, 32l, "large: blocks delta = n_layer (32)")
+                tt |> equal(s4.convs - s3.convs, 1l, "large: the conv frontend served on the GPU")
+            }
+        }
+        k.legs++
+    }
+}
+
+// The Metal tower serves turbo's exact lane as the CPU image reads
+// it, after the block: the two forms' texts equal.
+[cold_path]
+def private test_turbo_metal_tower(tt : T?; k : TurboMetalKept) {
+    if (!family_on(tt, "whisper") || !arm_on(tt, "mtower") || !jit_only(tt)) return
+    if (!asr_clip_present("jfk.wav")) {
+        tt |> skip("jfk.wav not present")
+        return
+    }
+    tt |> equal(k.legs, 2, "large: the CPU and the Metal forms both transcribed jfk")
+    to_log(LOG_INFO, "whisper large mtower CPU eyeball: '{k.cpu}'\n")
+    to_log(LOG_INFO, "whisper large mtower GPU eyeball: '{k.gpu}'\n")
+    tt |> success(!empty(k.gpu), "large: non-empty transcript")
+    tt |> success(k.cpu == k.gpu, "large: transcript-exact CPU vs GPU")
+}
+
+// Whisper large-v3-turbo, one block: the discrete twin's forms and
+// the Metal tower's exact lane.
+[test(description = "ggml-large-v3-turbo.bin loads once a form: on the discrete GPU home turbo's q8 lane reads jfk with the CPU q8 lane's text while counters prove each side ran where claimed; encoder rows hold the twin bar with a poison control, the f32 decoder and a bad alignment decline, and the exact encoder's lane is served on the device within its bar with a poison control, both exact lanes reading the same text. On the Metal tower the exact lane's 32 blocks and conv front serve jfk in one device encode and transcribe it exactly as the CPU image does")]
 def test_whisper_turbo(t : T?) {
     var inscope twin = WhisperTwin(name = TURBO, half = 16l)
+    var inscope metal = TurboMetalKept()
+    let twin_why = jfk_twin_why(TowerFamily.whisper)
+    let twin_on = empty(twin_why)
+    let metal_on = typeinfo builtin_module_exists(das_metal)
+    let either = either_why(metal_build_why(), twin_why)
     var inscope forms : array<string>
-    add_served_forms(t, forms, TURBO, ["q8", "f32", "mixed", "q8@dev", "q8_z16@dev", "mixed@dev", "mixed_z16@dev"], jfk_twin_why(TowerFamily.whisper))
+    add_served_forms(t, forms, TURBO, ["q8", "f32"], twin_why)
+    add_served_forms(t, forms, TURBO, ["mixed"], either)
+    add_served_forms(t, forms, TURBO, ["q8@dev", "q8_z16@dev"], twin_why)
+    add_served_forms(t, forms, TURBO, ["mixed@dev"], either)
+    add_served_forms(t, forms, TURBO, ["mixed_z16@dev"], twin_why)
     let ran = with_model_once_at(t, "audio", "ggml-large-v3-turbo.bin", forms, whisper_dir(), @@whisper_stage_key, @@whisper_stage, @@whisper_form) $(var m; form) {
         whisper_form_is(t, TURBO, form, m)
         twin.form = form
-        tower_cell(t, "{TURBO}: the discrete twin, the {form} form's legs", m, twin, @@whisper_twin_leg)
+        if (metal_on && form == "mixed") {
+            tower_cell(t, "{TURBO}: the Metal tower's exact lane, the CPU leg", m, metal,
+                @@turbo_metal_cpu_leg)
+        } elif (metal_on && form == "mixed@dev") {
+            tower_cell(t, "{TURBO}: the Metal tower's exact lane, the device leg", m, metal,
+                @@turbo_metal_dev_leg)
+        }
+        if (twin_on) {
+            tower_cell(t, "{TURBO}: the discrete twin, the {form} form's legs", m, twin,
+                @@whisper_twin_leg)
+        }
     }
-    if (ran && !empty(forms)) {
+    if (ran && metal_on) {
+        kept_cell(t, "{TURBO}: the Metal tower's exact lane on jfk reads the CPU image's text",
+            metal, @@test_turbo_metal_tower)
+    }
+    if (ran && twin_on) {
         kept_cell(t, "{TURBO}: the discrete home's q8 lane vs the CPU q8 lane on jfk", twin, @@test_whisper_discrete_twin)
         gpu_tower_shutdown(TowerFamily.whisper)
     }

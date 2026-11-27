@@ -22,6 +22,7 @@ require _tower_twin   // set_every_gpu_tower, the Vulkan twin's seat and instrum
 require _vision_forms   // the towers' forms, a block's cell
 require _cpu_gpu_model   // with_cpu_and_gpu_model: a chat decoder's one block in the area
 require _vision_chat_cells   // the image chat turn's cells, run under the tower's image form
+require _kernel_coverage_cells   // coverage_tower_qwen25v_metal: the kernel census's window
 
 // Tier-1 qwen25v tower parity vs llama-mtmd-debug -p encode (the Qwen2.5-Omni window ViT).
 // Reference arm: the f32-widened mmproj, CPU, -fa off (qwen3vl-vision-oracle/mint_25o.sh).
@@ -411,6 +412,11 @@ def test_qwen25v_tower(t : T?) {
             qwen25o_decoder(t, e)
         } elif (form == "image_f32") {
             tower_cell(t, "tier-1 window-ViT parity vs the mtmd encode dumps (Qwen2.5-Omni-3B)", e.qwen25v, @@test_qwen25v_tier1)
+            if (metal_on) {
+                coverage_tower_qwen25v_metal(t,
+                    "qwen25v: the kernel census's one window on the Metal tower",
+                    e.qwen25v)
+            }
         } elif (form == "f32_z16@seat") {
             tower_cell(t, "tier-1 GPU attempt: a zeroed block through the device chain reds the bar", e.qwen25v, @@gpu_poison_leg)
         } elif (find(form, "+wa") >= 0) {

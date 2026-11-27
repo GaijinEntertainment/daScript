@@ -1106,6 +1106,13 @@ struct public TestEnv {
     @clarg_doc = "Directory the test runner's children make their scratch folders under (handed to each child as TMPDIR); unset, they make them under the runner's own. A box whose TMPDIR is a network folder points it at a local disk."
     scratch_dir : string = ""
 
+    @clarg_path
+    @clarg_doc = "Directory every test process of a run writes its kernel dispatch census into, one file a home and process (`metal_<n>.json`, `vulkan_<n>.json`), each overwritten after every GPU form a load-once block runs; the census verdict (tests/test_kernel_coverage.das) reads the merged files. Set by tests/run.das to a fresh folder a run; unset, nothing is written."
+    kernel_census_dir : string = ""
+
+    @clarg_doc = "Whether the run whose census the census verdict reads covered every standing area whole: no narrowing flag or inherited filter, no file reported from an earlier pass, no failed file. The census floors (40 distinct Metal kernels, 24 Vulkan) are asserted only then. Set by tests/run.das on the verdict child alone; unset, the floors are not asserted."
+    kernel_census_whole : bool = false
+
     @clarg_env = "TMPDIR"
     @clarg_path
     @clarg_default_doc = "/tmp"

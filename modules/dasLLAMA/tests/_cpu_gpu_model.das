@@ -30,6 +30,7 @@ require _gpu_tier_armed   // gpu_tier_why: the device forms skip where the tier 
 require _kv_codec_cells   // codec_env_why: a codec form the environment keeps off
 require ?cuda _cuda_feed   // with_cuda_feed_served, with_cuda_counters_still: the CUDA home's feed witnesses
 require _metal_blob_twin   // blob_twin, metal_home_seat: a Metal form's load and the home it puts back
+require _kernel_census   // kernel_census_write: a GPU form's census file
 
 //! a per-op form for each cell of `run` (`perop_next`): a cell a load, as the census counts a kernel as its command records
 //! and a later session replays it
@@ -49,20 +50,52 @@ def codec_forms(var forms : array<ModelForm>; var h : Held; kvs : array<KVDtype>
     }
 }
 
-//! `load` under the form's head pin (`set_mtp_head_path`) where `f` names one, the pin cleared after it
-def private head_pinned(f : ModelForm; load : block<() : Model>) : Model {
-    return <- invoke(load) if (empty(f.mtp_head))
-    set_mtp_head_path(path_join(models_dir(), f.mtp_head))
+//! `load` under the form's load-time pins, each put back after it: the head (`set_mtp_head_path`) where `f` names one, the
+//! f32 weight scale where asked, the IQ3_S serving mode where named
+def private load_pinned(f : ModelForm; load : block<() : Model>) : Model {
+    let scale = get_wscale_f16()
+    let iq3s = get_iq3s_serve_pin()
+    if (f.wscale_f32) {
+        set_wscale_f16(false)
+    }
+    if (!empty(f.iq3s_serve)) {
+        set_iq3s_serve_pin(f.iq3s_serve)
+    }
+    if (!empty(f.mtp_head)) {
+        set_mtp_head_path(path_join(models_dir(), f.mtp_head))
+    }
     var m <- invoke(load)
-    clear_mtp_head_path()
+    if (!empty(f.mtp_head)) {
+        clear_mtp_head_path()
+    }
+    if (!empty(f.iq3s_serve)) {
+        set_iq3s_serve_pin(iq3s)
+    }
+    set_wscale_f16(scale)
     return <- m
+}
+
+//! the image names a load of `path` writes beside it:
+//! `dlim_names_beside`'s for a file; for a snapshot directory the
+//! `.dlim` names beside it that open with its own name
+//! (`image_path_for`)
+def private lanes_beside(path : string) : array<string> {
+    return <- dlim_names_beside(path) if (!stat(path).is_dir)
+    let lead = "{base_name(path)}."
+    var names : array<string>
+    dir(dir_name(path)) $(name) {
+        if (name |> starts_with(lead) && name |> ends_with(".dlim")) {
+            names |> push(name)
+        }
+    }
+    return <- names
 }
 
 //! every lane beside `path` that `before` does not name goes: the block leaves the folder as it found it. Where a name of
 //! `before` is gone, a load adopted an image that stood there under its lane's name (`image_path_for`), and nothing goes:
 //! false then, true where the folder is back to `before`
 def private remove_minted_lanes(path : string; before : array<string>) : bool {
-    var inscope now <- dlim_names_beside(path)
+    var inscope now <- lanes_beside(path)
     return false if (!empty([for (name in before); name; where !has_value(now, name)]))
     for (name in now) {
         if (!has_value(before, name)) {
@@ -78,6 +111,7 @@ def private device_form_run(t : T?; path : string; ctx : int64; form : ModelForm
                             body : block<(var m : Model; form : ModelForm) : void>) : tuple<ran : bool; kv : KVDtype> {
     let levers = resident_levers()
     let pins = stream_pins()
+    let want = g_gpu_want
     if (form.pf_window_rows > 0l) {
         set_pf_window_rows_pin(form.pf_window_rows)   //! the cells read the window live
     }
@@ -95,8 +129,46 @@ def private device_form_run(t : T?; path : string; ctx : int64; form : ModelForm
     if (form.fuse_bisect >= 0l) {
         pin_fuse_bisect(form.fuse_bisect)   //! the decode plan reads the bits at load
     }
+    let dense = gpu_dense_ffn_pin()
+    if (form.dense_ffn >= 0) {
+        set_gpu_want_dense_ffn(form.dense_ffn)   //! the dense walk marks the FFN triples at load
+    }
+    if (form.moe_layers > 0l) {
+        want_routed_layers(t, form.moe_layers)
+    }
+    let out = device_form_seated(t, path, ctx, form, lane, body)
+    pin_fuse_bisect(bisect)
+    set_gpu_want_dense_ffn(dense)
+    restore_mtp_depth(depth)
+    restore_resident_levers(levers)
+    restore_stream_pins(pins)
+    if (form.moe_layers > 0l) {
+        set_gpu_tier_want_(want)
+        moe_gpu_tier_arm_()
+        heat_reset()
+    }
+    return out
+}
+
+//! `device_form_run`'s load under the form's driver seat, a seat put back after the form's cells: the Vulkan coopmat mode,
+//! the CUDA MMQ route or a CUDA fault seat; a skipped cell of its own where the build or the box lacks the seat's driver
+def private device_form_seated(t : T?; path : string; ctx : int64; form : ModelForm; lane : bool;
+                               body : block<(var m : Model; form : ModelForm) : void>) : tuple<ran : bool; kv : KVDtype> {
     var out = (ran = false, kv = form.kv)
-    if (form.mmq_off) {
+    if (form.coopmat >= 0) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (g_gpu == null) {
+                skip_cell(t, "{form_name(form)}: no Vulkan device armed - the coopmat mode is the Vulkan driver's")
+            } else {
+                let mode = g_gpu.coopmat_mode
+                g_gpu.coopmat_mode = form.coopmat   //! the driver's prepare and the prompt's MoE setup read the mode at load
+                out = device_form_pinned(t, path, ctx, form, lane, body)
+                g_gpu.coopmat_mode = mode
+            }
+        } else {
+            skip_cell(t, "{form_name(form)}: no Vulkan module on this build - the coopmat mode is the Vulkan driver's")
+        }
+    } elif (form.mmq_off) {
         static_if (typeinfo builtin_module_exists(cuda)) {
             with_cuda_mmq_pin(CUDA_MMQ_OFF) {
                 out = device_form_pinned(t, path, ctx, form, lane, body)
@@ -129,11 +201,18 @@ def private device_form_run(t : T?; path : string; ctx : int64; form : ModelForm
     } else {
         out = device_form_pinned(t, path, ctx, form, lane, body)
     }
-    pin_fuse_bisect(bisect)
-    restore_mtp_depth(depth)
-    restore_resident_levers(levers)
-    restore_stream_pins(pins)
     return out
+}
+
+//! the tier's want asking the last `resident` routed layers resident and the prompt streaming every layer below them, the
+//! pool's slot ask kept, the tier re-armed on it and the heat counters reset before the load
+def private want_routed_layers(t : T?; resident : int64) {
+    var want = g_gpu_want
+    want.moe_layers = resident
+    want.moe_stream = -1l
+    set_gpu_tier_want_(want)
+    t |> success(moe_gpu_tier_arm_(), "the tier re-armed at {resident} resident routed layers")
+    heat_reset()
 }
 
 //! the fuse bisect's pin as found (`g_vk_fuse_bisect_pin`): -1 with no vulkan module
@@ -188,7 +267,7 @@ def private device_form_load(t : T?; path : string; call_ctx : int64; form : Mod
         }
     }
     let t0 = ref_time_ticks()
-    var dev <- resident_trunk(t, path, form.host_ctx > 0l ? form.host_ctx : ctx, "") $() : Model => <- head_pinned(form) $() : Model {
+    var dev <- resident_trunk(t, path, form.host_ctx > 0l ? form.host_ctx : ctx, "") $() : Model => <- load_pinned(form) $() : Model {
         return <- load_resident_lane(path, form.regions) if (lane)
         var seat : RdecDraftFn
         if (form.head_off) {
@@ -206,7 +285,7 @@ def private device_form_load(t : T?; path : string; call_ctx : int64; form : Mod
         var armed = form
         armed.kv = mirror_kv_dtype()
         if (lane) {
-            var inscope lanes <- dlim_names_beside(path)
+            var inscope lanes <- lanes_beside(path)
             t |> success(!empty(lanes), "{form_name(armed)} loaded through the image rail: the file's lane stands beside it")
         }
         let t1 = ref_time_ticks()
@@ -222,6 +301,7 @@ def private device_form_load(t : T?; path : string; call_ctx : int64; form : Mod
             t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through {form_name(armed)}")
         }
         served_every_call(t)
+        kernel_census_write()
         moe_gpu_drop_model()
         out = (ran = true, kv = armed.kv)
     }
@@ -267,6 +347,7 @@ def private perop_form_load(t : T?; path : string; ctx : int64; form : ModelForm
                             body : block<(var m : Model; form : ModelForm) : void>) : tuple<ran : bool; kv : KVDtype> {
     let levers = resident_levers()
     set_gpu_resident_route(false)
+    moe_gpu_tier_arm_()   //! the form before dropped its model, which zeroes the tier's layer ask: the arm reads the want again
     let t0 = ref_time_ticks()
     var m <- load_model_(path, QuantMode.q8)
     restore_resident_levers(levers)
@@ -276,6 +357,7 @@ def private perop_form_load(t : T?; path : string; ctx : int64; form : ModelForm
     invoke(body, m, form)
     log_form_seconds(form_name(form), get_time_usec(t0) - get_time_usec(t1), get_time_usec(t1))
     t |> success(!moe_gpu_resident_active(), "the whole-model driver stayed off through {form_name(form)}")
+    kernel_census_write()
     moe_gpu_drop_model()
     delete m
     return (ran = true, kv = form.kv)
@@ -283,7 +365,7 @@ def private perop_form_load(t : T?; path : string; ctx : int64; form : ModelForm
 
 //! the block's Metal forms of `forms`, in the list's order, one load each (`metal_form_run`), each marked as it went; on a build
 //! with no das_metal each is a skipped cell of its own and `body` never sees it (`metal_pass`)
-def private metal_forms_run(t : T?; path, file : string; ctx : int64; forms : array<ModelForm>;
+def private metal_forms_run(t : T?; src : BlockSource; ctx : int64; forms : array<ModelForm>;
                             body : block<(var m : Model; form : ModelForm) : void>) {
     let lacks = metal_build_why()
     for (form, i in forms, count()) {
@@ -291,46 +373,56 @@ def private metal_forms_run(t : T?; path, file : string; ctx : int64; forms : ar
         continue if (todo == MetalPass.other)
         g_account.marks[i] = FormMark.skipped
         if (todo == MetalPass.skip) {
-            skip_cell(t, "{file}, {form_name(form)}: {lacks}")
-        } elif (metal_form_run(t, path, file, form.ctx > 0l ? form.ctx : ctx, form, body)) {
+            skip_cell(t, "{src.name}, {form_name(form)}: {lacks}")
+        } elif (metal_form_run(t, src, form.ctx > 0l ? form.ctx : ctx, form, body)) {
             g_account.marks[i] = FormMark.reached
         }
     }
 }
 
-//! one Metal form: the home's seat read, the form's mode set, the load - the blob twin, or the served image, a skipped cell where
-//! that image is no metal-blob on this box - its context cut to `ctx`, `body` once on it, the seat put back, the model gone;
-//! false where the load gave `body` no model
-def private metal_form_run(t : T?; path, file : string; ctx : int64; form : ModelForm;
+//! one Metal form: the home's seat read, the form's mode set, the
+//! load - the blob twin, or the served image, a skipped cell where
+//! that image is no metal-blob on this box - its context cut to
+//! `ctx`, `body` once on it, the census written, the seat put back,
+//! the model closed with the drivers down and no Metal object left
+//! live (`metal_form_close`); false where the load gave `body` no
+//! model
+def private metal_form_run(t : T?; src : BlockSource; ctx : int64; form : ModelForm;
                            body : block<(var m : Model; form : ModelForm) : void>) : bool {
+    let path = src.path
+    let file = src.name
     let seat = metal_home_seat()
     set_metal_mode(metal_form_mode(form))
     t |> equal(get_metal_mode(), metal_form_mode(form),
         "{file}, {form_name(form)}: the Metal mode took for the load")
     let t0 = ref_time_ticks()
-    var m <- form.metal_image ? load_model_cached(path, QuantMode.q8) : blob_twin(t, path, ctx)
+    var m <- load_pinned(form) {
+        return <- form.metal_image ? load_model_cached(path, QuantMode.q8) : blob_twin(t, path, ctx)
+    }
     let served = m.metal_blob
     if (served) {
         m.config.seq_len = min(m.config.seq_len, ctx)
         let t1 = ref_time_ticks()
         invoke(body, m, form)
         log_form_seconds(form_name(form), get_time_usec(t0) - get_time_usec(t1), get_time_usec(t1))
+        kernel_census_write()
     } elif (form.metal_image) {
         skip_cell(t,
             "{file}, {form_name(form)}: the served image is not the metal-blob flavor on this box")
     }
     restore_metal_home(seat)
-    delete m
+    metal_form_close(t, m, "{file}, {form_name(form)}")
     return served
 }
 
 //! the CPU form `form` of `path` (its load mode and loader), loaded once under its backend pin (`backend_pinned`): `body` on it
 //! once a codec of `kvs`; every CPU form of the block's that is this load marked as it went (`mark_load`)
-def private cpu_form_run(t : T?; path : string; ctx : int64; form : ModelForm; kvs : array<KVDtype>;
+def private cpu_form_run(t : T?; src : BlockSource; ctx : int64; form : ModelForm;
+                         kvs : array<KVDtype>;
                          body : block<(var m : Model; form : ModelForm) : void>) {
     var ran = false
-    backend_pinned(t, path, form) {
-        cpu_form_load(t, path, ctx, form, kvs, body)
+    backend_pinned(t, src.name, form) {
+        cpu_form_load(t, src.path, ctx, form, kvs, body)
         ran = true
     }
     mark_load(form, ran ? FormMark.reached : FormMark.skipped)
@@ -386,15 +478,19 @@ def private parity_accounted(t : T?; file : string; pf : ModelForm; passes : int
     t |> failure("{file}, {form_name(pf)}: the parity row's form is not among the block's forms")
 }
 
-//! `run` with the form's kernel backend pinned (`with_kernel_backend`), the backend and its pin put back after it; `run` alone
-//! where the form names none. A pin the box refuses skips the form loudly where DASLLAMA_PIN_BACKEND names that backend - the
-//! run asks what the box cannot do - and fails it otherwise, as a pin that does not take does
-def private backend_pinned(t : T?; path : string; f : ModelForm; run : block<void>) {
+//! `run` with the form's kernel backend pinned
+//! (`with_kernel_backend`), the backend and its pin put back after
+//! it; `run` alone where the form names none. A pin the box refuses
+//! skips the form loudly where DASLLAMA_PIN_BACKEND names that
+//! backend - the run asks what the box cannot do - and fails it
+//! otherwise, as a pin that does not take does; `name` the block's
+//! model
+def private backend_pinned(t : T?; name : string; f : ModelForm; run : block<void>) {
     if (empty(f.backend)) {
         invoke(run)
         return
     }
-    let what = "{base_name(path)}, {form_name(f)}"
+    let what = "{base_name(name)}, {form_name(f)}"
     let why = kernel_backend_pin_refusal(f.backend)
     if (!empty(why)) {
         if (f.backend == g_env_engine.pin_backend) {
@@ -441,7 +537,7 @@ def private cpu_form_load(t : T?; path : string; ctx : int64; form : ModelForm; 
     let planes = host_planes_pin()
     set_host_planes(true)   //! an uncached load onto a discrete home keeps no plane on the host: the CPU chain needs them
     let t0 = ref_time_ticks()
-    var cpu <- head_pinned(form) $() : Model => <- form.uncached ? load_model_uncached(path, form.quant) : load_model_(path, form.quant)
+    var cpu <- load_pinned(form) $() : Model => <- form.uncached ? load_model_uncached(path, form.quant) : load_model_(path, form.quant)
     restore_host_planes(planes)
     let kq_load = (kq = get_kquant_native(), q40 = get_kq_q40_native())
     if (form.kq_native != KqNative.kept) {
@@ -489,12 +585,61 @@ def with_cpu_and_gpu_model(t : T?; area, file : string; ctx : int64; forms : arr
 
 //! the same where `cpu` says whether the CPU form answering the device forms loads: false for a block whose every compare reads
 //! the device alone - a carrier the CPU form would load whole for no compare
-[arch(at = "../ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once")]
 def with_cpu_and_gpu_model(t : T?; area, file : string; ctx : int64; forms : array<ModelForm>; cpu : bool;
-                           body : block<(var m : Model; form : ModelForm) : void>) : bool {
-    let path = path_join(models_dir(), file)
+                           body : block<(var m : Model; form : ModelForm) : void>) : bool =>
+    cpu_and_gpu_block(t, area, BlockSource(path = path_join(models_dir(), file), name = file),
+        ctx, forms, cpu, body)
+
+//! `with_cpu_and_gpu_model` over the Hugging Face snapshot directory
+//! of `repo` (`hf_snapshot_dir`), a string literal `REVIEW.das` keys
+//! the block by
+def with_cpu_and_gpu_snapshot(t : T?; area, repo : string; ctx : int64; forms : array<ModelForm>;
+                              cpu : bool;
+                              body : block<(var m : Model; form : ModelForm) : void>) : bool {
+    let src = BlockSource(path = hf_snapshot_dir(repo), name = repo, snapshot = true)
+    return cpu_and_gpu_block(t, area, src, ctx, forms, cpu, body)
+}
+
+//! the snapshot block with the CPU form answering the device forms
+def with_cpu_and_gpu_snapshot(t : T?; area, repo : string; ctx : int64; forms : array<ModelForm>;
+                              body : block<(var m : Model; form : ModelForm) : void>) : bool =>
+    with_cpu_and_gpu_snapshot(t, area, repo, ctx, forms, true, body)
+
+//! where a block's model comes from: the path it loads, the name its
+//! messages and gates read - a file under `models_dir()`, or a
+//! snapshot's repo
+struct private BlockSource {
+    path : string
+    name : string
+    snapshot : bool
+}
+
+//! whether the block's model is here under the JIT: a file by
+//! `model_available`, a snapshot by its repo's category and family
+//! and by `snapshot_available`; else a loud skip
+def private source_available(t : T?; src : BlockSource) : bool {
+    return jit_model_available(t, src.path) if (!src.snapshot)
+    return false if (!jit_only(t))
+    let gate = category_gate(src.name, g_env_test.test_categories)
+    let why = empty(gate.why) ? family_skip_reason(src.name, g_env_test.test_family) : gate.why
+    let absent = "{src.name}: the snapshot is not in the Hugging Face cache"
+    let lacks = empty(why) && empty(src.path) ? absent : why
+    if (!empty(lacks)) {
+        t |> skip(lacks)
+        return false
+    }
+    return snapshot_available(t, src.path)
+}
+
+//! the block over `src` (`with_cpu_and_gpu_model`)
+[arch(at = "../ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once")]
+def private cpu_and_gpu_block(t : T?; area : string; src : BlockSource; ctx : int64;
+                              forms : array<ModelForm>; cpu : bool;
+                              body : block<(var m : Model; form : ModelForm) : void>) : bool {
+    let path = src.path
+    let file = src.name
     account_open(forms)
-    if (!jit_model_available(t, path)) {
+    if (!source_available(t, src)) {
         for (k in g_account.marks) {
             k = FormMark.skipped
         }
@@ -502,16 +647,16 @@ def with_cpu_and_gpu_model(t : T?; area, file : string; ctx : int64; forms : arr
     }
     to_log(LOG_INFO, "{area}: {file} in {length(forms)} forms and the CPU's, one at a time\n")
     var inscope kvs : array<KVDtype>
-    var inscope before <- dlim_names_beside(path)
+    var inscope before <- lanes_beside(path)
     with_dasllama_jobque_() {
         delete kvs
         kvs <- device_forms_run(t, path, file, ctx, forms, body)
         if (remove_minted_lanes(path, before)) {
-            var inscope after <- dlim_names_beside(path)
+            var inscope after <- lanes_beside(path)
             t |> equal(length(after), length(before), "the block left the lanes beside {file} as it found them: {after}")
         }
-        metal_forms_run(t, path, file, ctx, forms, body)
-        cpu_forms_run(t, path, ctx, forms, cpu, kvs, body)
+        metal_forms_run(t, src, ctx, forms, body)
+        cpu_forms_run(t, src, ctx, forms, cpu, kvs, body)
     }
     forms_accounted(t, file, !empty(kvs))
     return !empty(kvs)
@@ -596,23 +741,24 @@ def private earlier_cpu_load(forms : array<ModelForm>; i : int) : bool {
 //! armed where they ran and `cpu`; else, where a form asks it alone, once on f16 sessions (on the first armed codec where a
 //! device form ran). Then each other CPU load of `forms`, where a device form ran and `cpu` or one of its forms asks it alone,
 //! once on the first armed codec (f16 where none ran)
-def private cpu_forms_run(t : T?; path : string; ctx : int64; forms : array<ModelForm>; cpu : bool; kvs : array<KVDtype>;
+def private cpu_forms_run(t : T?; src : BlockSource; ctx : int64; forms : array<ModelForm>;
+                          cpu : bool; kvs : array<KVDtype>;
                           body : block<(var m : Model; form : ModelForm) : void>) {
     let ran = !empty(kvs) && cpu
     let first = empty(kvs) ? KVDtype.f16 : kvs[0]
     var main = cpu_quant_form(QuantMode.q8)
     main.alone = alone_asked(forms, main)
     if (ran) {
-        cpu_form_run(t, path, ctx, main, kvs, body)
+        cpu_form_run(t, src, ctx, main, kvs, body)
     } elif (main.alone) {
-        cpu_form_run(t, path, ctx, main, [first], body)
+        cpu_form_run(t, src, ctx, main, [first], body)
     }
     for (f, i in forms, count()) {
         continue if (f.on_gpu || same_cpu_load(f, main) || earlier_cpu_load(forms, i))
         var load = f
         load.alone = alone_asked(forms, f)
         if (ran || load.alone) {
-            cpu_form_run(t, path, ctx, load, [first], body)
+            cpu_form_run(t, src, ctx, load, [first], body)
         }
     }
 }

@@ -8,7 +8,6 @@ require dasllama/dasllama   // the public facade — public-path tests exercise 
 require dasllama/dasllama_transformer
 require dasllama/dasllama_common
 require dasllama/dasllama_gpu_resident
-require dasllama/dasllama_moe
 require dasllama/dasllama_math   // pin_kernel_backend / kernel_backend_pin_refusal / active_kernel_backend — the facade wraps none of them
 require dasllama/dasllama_env    // g_env_engine.pin_backend
 require daslib/defer   // the backend pin is restored on every path out of a pinned cell
@@ -28,8 +27,7 @@ require _parity_cells   // parity_prompt, embedding_rows
 // Models are gitignored multi-GB files: absent = clean skip (a real local regression, a no-op in CI).
 // Every model cell skips off the JIT, without its file, past the
 // size tier (`model_available`), or where DASLLAMA_PIN_BACKEND names
-// a backend this box cannot pin; the dump round trip without the armed
-// resident tier. The layer cuts' parity streams (`_parity_cells.das`)
+// a backend this box cannot pin. The layer cuts' parity streams (`_parity_cells.das`)
 // run on the cuts' blocks, and so do the model_specs rows
 // `PARITY_BLOCK_ROWS` names, each on its file's block.
 
@@ -138,6 +136,11 @@ def private parity_row_load(path : string; spec : ModelSpec) : Model {
     return <- tr
 }
 
+//! the spec rows a test of this file loads for itself: gpt-oss, both
+//! fixtures on one load - its ~13 GB native-mx4 resident is the
+//! suite's biggest, and two loads run a 64 GB box out of memory
+let private PARITY_OWN_ROWS = fixed_array("gpt-oss-20b-mxfp4.gguf")
+
 //! one walked row's arms (`parity_row_arms`) off ONE model load of its file at `path`
 def private parity_spec_arms(t : T?; spec : ModelSpec; path : string) {
     var tr <- parity_row_load(path, spec)
@@ -145,14 +148,12 @@ def private parity_spec_arms(t : T?; spec : ModelSpec; path : string) {
     delete tr
 }
 
-[test(description = "Every model_specs row with a pinned parity fixture whose file has no block of its own (`PARITY_BLOCK_ROWS` names the rows their files' blocks run) generates its frozen greedy ids token for token (or to the half-span prefix bar, with a flipped-id control), including its chunked, reference and per-expert prefill arms")]
+[test(description = "Every model_specs row with a pinned parity fixture whose file has no block of its own (`PARITY_BLOCK_ROWS` names the rows their files' blocks run) and no test of this file loading it (`PARITY_OWN_ROWS`) generates its frozen greedy ids token for token (or to the half-span prefix bar, with a flipped-id control), including its chunked, reference and per-expert prefill arms")]
 def test_parity_specs(t : T?) {
     var files : array<string>
     var all <- model_specs()
     for (s in all) {
-        // gpt-oss runs through its own shared-load arm below (both fixtures on ONE load — the
-        // ~13GB native-mx4 resident is the suite's biggest; loading twice OOMs a 64GB box)
-        if (!empty(s.parity.gen) && s.file != "gpt-oss-20b-mxfp4.gguf" && !has_value(PARITY_BLOCK_ROWS, s.file)) {
+        if (!empty(s.parity.gen) && !has_value(PARITY_OWN_ROWS, s.file) && !has_value(PARITY_BLOCK_ROWS, s.file)) {
             files |> push(s.file)
         }
     }
@@ -207,14 +208,10 @@ def test_parity_gptoss_20b(t : T?) {
     }
 }
 
-// The parity dump round trip on Qwen3.5-0.8B-MTP: the device arm's forced-feed run to a file, the CPU arm's with the device
-// arm's prompt, feed and routing tape replayed off that file, and the two files compared under the regions files' bar - the
-// in-process parity the stocked suite runs, through the files a model past the box has to use. A poisoned row reds the compare,
-// a reference with another feed is refused. Skips: no Qwen3.5-0.8B-MTP file under the models dir, the GPU tier not armed
-// (DASLLAMA_GPU=1 on a device that serves the whole-model driver), not `-jit`.
-
-let private MTP_FILE = "Qwen3.5-0.8B-MTP-Q8_0.gguf"
-let private BAR_REL = 0.20   //! the regions files' row bar
+// The parity dump's header refusals, model-free; the round trip on
+// Qwen3.5-0.8B-MTP - the device arm's forced-feed run to a file, the
+// CPU arm's replayed off it, the two compared - rides that file's
+// block (`test_gpu_resident_hybrid.das`).
 
 //! a file at `name` under the test's temp dir holding the two header words `magic` and `version` and nothing after
 def private header_file(name : string; magic, version : int64) : string {
@@ -238,57 +235,5 @@ def test_parity_dump_refuses_foreign_files(t0 : T?) {
         t |> success(find(why_old, "is another version's") >= 0, "another version word is refused by name ({why_old})")
         t |> equal(parity_dump_refusal(ours), "", "this build's header words are read")
         t |> success(find(parity_dump_refusal(path_join(test_temp_dir(), "missing.pd")), "cannot read") >= 0, "a missing file is refused by name")
-    }
-}
-
-[test(description = "On Qwen3.5-0.8B-MTP the device-arm dump reads back bit-exact, the CPU arm replayed on its prompt, feed and tape matches every row within the 0.20 relative bar, a one-row poison reds only that row, and a changed feed is refused")]
-def test_parity_dump_round_trip(t : T?) {
-    t |> run("Qwen3.5-0.8B-MTP: the device arm dumped, the CPU arm dumped on the device arm's tape, the files within the bar; a poisoned row reds, another feed is refused") @(t : T?) {
-        let path = path_join(models_dir(), MTP_FILE)
-        if (!resident_ready(t, path)) return
-        let dev_path = path_join(test_temp_dir(), "parity_dev.pd")
-        let cpu_path = path_join(test_temp_dir(), "parity_cpu.pd")
-        var tr <- load_model_(path, QuantMode.q8)
-        t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the carrier")
-        with_dasllama_jobque_() {
-            var prompt <- resident_prompt(40l)
-            let none : array<int64>
-            var dev <- parity_dump_run(tr, MTP_FILE, mirror_kv_dtype(), prompt, none, 6l, none)
-            t |> equal(dev.arm, "device", "the first arm is the device's")
-            t |> equal(length(dev.rows), 7, "the prefill's row and six fed steps")
-            t |> equal(length(dev.feed), 6, "six fed tokens, the run's own greedy continuation")
-            t |> equal(int(moe_pick_tape_mode().mode), int(MoePickTape.off), "the tape is off after the run")
-            parity_dump_write(dev_path, dev)
-            var back <- parity_dump_read(dev_path)
-            t |> success(back.arm == dev.arm && back.vocab == dev.vocab && back.picks_per_select == dev.picks_per_select && ids_equal(back.prompt, dev.prompt) && ids_equal(back.feed, dev.feed) && ids_equal(back.tape, dev.tape), "the dump reads back as written")
-            t |> equal(logits_maxdiff(back.rows[3], dev.rows[3]), 0.0, "... its rows bit for bit")
-            moe_gpu_drop_model()
-            var cpu <- parity_dump_run(tr, MTP_FILE, mirror_kv_dtype(), back.prompt, back.feed, 0l, back.tape)
-            t |> equal(cpu.arm, "cpu", "the second arm is the CPU chain's")
-            // the carrier is dense: its tape is empty and the replay sees no select; a routed carrier's replay counts every select
-            t |> success(dev.picks_per_select == 0l ? cpu.tape_seen == 0l && empty(back.tape) : cpu.tape_seen > 0l, "the CPU arm replayed the device arm's routing ({cpu.tape_seen} selects, {cpu.tape_miss} own picks off the tape, {dev.picks_per_select} picks a select)")
-            parity_dump_write(cpu_path, cpu)
-            var cpu_back <- parity_dump_read(cpu_path)
-            var r <- parity_dump_compare(back, cpu_back, BAR_REL)
-            for (row in r.rows) {
-                to_log(LOG_INFO, "parity dump row {row.row}: maxdiff {row.diff} (bar {row.bar}) one-step-off {row.ctrl}, argmax device {row.argmax_a} '{decode_(tr, [row.argmax_a])}' against cpu {row.argmax_b} '{decode_(tr, [row.argmax_b])}'\n")
-            }
-            t |> success(r.ok && empty(r.why), "the device dump is within the bar of the CPU dump on every row, every one-step-off control past it ({r.why})")
-            back.rows[2][17] = back.rows[2][17] + 3.0 * r.rows[2].bar
-            var poisoned <- parity_dump_compare(back, cpu_back, BAR_REL)
-            t |> success(!poisoned.ok && !poisoned.rows[2].ok && poisoned.rows[3].ok, "a poisoned row (one logit three bars off) reds its compare alone")
-            cpu_back.feed[0] = cpu_back.feed[0] + 1l
-            var refused <- parity_dump_compare(back, cpu_back, BAR_REL)
-            t |> success(!refused.ok && !empty(refused.why), "a reference with another feed is refused ({refused.why})")
-            delete refused
-            delete poisoned
-            delete r
-            delete cpu_back
-            delete cpu
-            delete back
-            delete dev
-            delete prompt
-        }
-        delete tr
     }
 }
