@@ -88,8 +88,9 @@ Measured ceiling of ALL remaining converts (`DASLLAMA_METAL_PREFILL_SKIP=act_cvt
   prefill vs llama.cpp is the f32 elementwise traffic itself (their graph moves half the
   bytes through every norm/add/act pass and needs no cvt at all). Touches plane formats,
   every elementwise kernel, attention, the CPU-fallback paths, logits/readback - and
-  re-opens the numerics bars across the parity and prefill suites. ITS OWN ARC, planned;
-  the acceptance bar is the existing parity suites plus a pp/tg board A/B per class.
+  re-opens the numerics bars across the Metal parity and prefill cells of the llm area's
+  blocks. ITS OWN ARC, planned; the acceptance bar is those parity cells plus a pp/tg board
+  A/B per class.
 
 ## 6. The Metal kernel twins - the census for the Mac session (Boris, 2026-09-07)
 
@@ -578,7 +579,7 @@ either box reaches - leaving `MetalMoeMulMm<Fmt>T` covered by nothing. Unquirked
 `MoeSplitForm.t` arm in `moe_split_twin` over every split format, dispatched by
 `moe_mulmm_split_gate` off the f32 X panel against the same per-expert oracle its half-X sibling
 uses. The bar is the eight `*T` entries of `CENSUS_NEVER_DISPATCHED` in
-`tests/test_kernel_coverage.das` naming that arm as their coverage, the no-coverage note gone.
+`tests/_kernel_census.das` naming that arm as their coverage, the no-coverage note gone.
 
 ## 15. Metal review gates found the shape of
 
@@ -764,8 +765,8 @@ control the fused form's cells red against, and a control is kept, not retired.
 
 ## 35. No pass has deleted a Metal kernel the serving paths stopped reaching
 
-`tests/test_kernel_coverage.das` counts every compiled stamp's dispatches over the zoo and warns
-on a zero; it deletes nothing, because a zero says only that no stocked carrier reached the stamp.
+The kernel census (`tests/_kernel_coverage_cells.das`'s zoo, `tests/_kernel_census.das`'s verdict)
+counts every compiled stamp's dispatches over the zoo and warns on a zero; it deletes nothing, because a zero says only that no stocked carrier reached the stamp.
 Stamps a later form replaced stay compiled, tested and maintained. The work: for each stamp the
 census reads at zero on a full large-tier run, the reachability audit of its dispatch predicate -
 the gate, the knob and the model shapes that select it - and either a carrier that reaches it or

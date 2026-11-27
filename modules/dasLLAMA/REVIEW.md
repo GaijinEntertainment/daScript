@@ -72,10 +72,10 @@ in the same change.** A module with no row runs every standing area; one with `l
 row runs every model-free `llm` file and the `LLM_CORE_WITNESSES` list: safe, and slower each PR.
 
 **A diff after which a test file of a standing area (every `tests/run.das` area but `examples`) runs an
-existing module's code, where that module's `MODULE_AREAS` row reaches the file through none of its
-areas and its `MODULE_WITNESSES` row does not name it, adds the file's area to that `MODULE_AREAS` row,
-or, for an `llm` file where that row holds `llm`, the file to its `MODULE_WITNESSES` row (adding the row
-where none exists), in the same change.** Any change counts - code added to or moved into the module, or
+existing module's code, where the `--changed` plan for a change to that module does not hold the file,
+adds the file's area to the module's `MODULE_AREAS` row, or, for an `llm` file where that row holds
+`llm`, the file to its `MODULE_WITNESSES` row (adding the row where none exists), in the same
+change.** Any change counts - code added to or moved into the module, or
 an edit to the test file or a module it requires; `tests/run.das -- --changed` plans no unlisted file. A
 test file that starts loading an LLM GGUF runs the `dasllama/dasllama_arch_*.das` file registering that
 GGUF's `general.architecture`.
@@ -198,11 +198,11 @@ global another module's `[init]` sets); moves a `dasllama/` stage's work onto a 
 GPU driver file's `[init]` sets), or registers a GPU backend's version of an existing hook; calls a
 `set_*_q8` lane setter under `dasllama/` or `harness/`.**
 
-**A diff that adds or changes an override - an environment knob, a non-private `dasllama/` setter
-a file outside `tests/` calls, or an on-disk state file (one whose only job is to persist a setting;
-model data is not one) a run writes or a user places, any of them moving a gate, policy or threshold
-off its default - or an override's announce (the line a run prints where it changes the outcome)
-applies `REVIEW_OVERRIDES.md` too.**
+**A diff that adds or changes an environment knob or code reading one, or an override - a non-private
+`dasllama/` setter a file outside `tests/` calls, or an on-disk state file (one whose only job is to
+persist a setting; model data is not one) a run writes or a user places, either moving a gate, policy or
+threshold off its default - or an override's announce, an environment knob's included (the line a run
+prints where it changes the outcome) applies `REVIEW_OVERRIDES.md` too.**
 
 **A call site a diff adds - not a call it moved from another site - of a CPU or GPU matrix
 multiply whose weight operand is an f32 plane, outside a correctness-comparison path (one only

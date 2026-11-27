@@ -7,8 +7,8 @@ docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_CELL_BARS.md`. Planned work: `../fo
 `REVIEW_PINNED_GATES.md` (beside this file), whose rules bind every entry here.**
 
 Terms this checklist does not define are as `REVIEW_PINNED_GATES.md` and `REVIEW.md` (both beside this file) define
-them. The pinned set's entries for the `test_*_kernels*.das` files, one entry a bullet, each with what it must keep
-holding:
+them; a whole run is as `../REVIEW_GPU_KERNEL_CLASSES.md` defines it. The pinned set's entries for the
+`test_*_kernels*.das` files, one entry a bullet, each with what it must keep holding:
 
 - `test_metal_prefill_kernels.das`'s `test_metal_prefill_kernels` cell must hold every kernel gate it calls, at the
   bar each gate sets, with its `attn_trio_gate` calls whose `AttnKeys` sets `softcap`, `hass`, `uend` or `ulo`; and by
@@ -112,21 +112,23 @@ holding:
   poisoned-element control, and `test_vkd_mmq_device_check` the device check passing on an AMD KHR device.
 - `test_vulkan_kernels_gemm.das`'s `test_vkd_q51_cm2_batch`, `test_vkd_mx4_cm2_batch`, `test_vkd_iq4nl32_cm2_batch`,
   `test_vkd_iq3s4_cm2_batch`, `test_vkd_f16_gemm_khr`, `test_vkd_f16_gemm_s`, `test_vkd_kq_batch_family`,
-  `test_vkd_khr_rot_tiles` and `test_vkd_nv4_cm2_batch` cells - the census's evidence for the classes no zoo row dispatches - must hold each class
-  against its CPU oracle at the bar the cell sets, with the cell's poisoned-element control.
+  `test_vkd_khr_rot_tiles` and `test_vkd_nv4_cm2_batch` cells - the census's evidence for the classes no cell of a
+  whole run dispatches - must hold each class against its CPU oracle at the bar the cell sets, with the cell's
+  poisoned-element control.
 - `test_vulkan_kernels_attn.das`'s `test_vkd_fa_cm2`, `test_vkd_fa_khr`, `test_vkd_fa_khr_h256_softcap`,
   `test_vkd_fa_khr_h256_gated`, `test_vkd_fa_khr_tfirst`, `test_vkd_fa_khr_small_twins`, `test_vkd_da_attn`,
-  `test_vkd_da_attn_rqk`, `test_vkd_da_attn_tile` and `test_vkd_da_attn_bw` cells - the
-  census's evidence for the classes no zoo row dispatches - must hold each class against its CPU oracle at the bar the
-  cell sets, with the cell's poisoned-element control.
+  `test_vkd_da_attn_rqk`, `test_vkd_da_attn_tile` and `test_vkd_da_attn_bw` cells - the census's evidence for the
+  classes no cell of a whole run dispatches - must hold each class against its CPU oracle at the bar the cell sets,
+  with the cell's poisoned-element control.
 - `test_vulkan_kernels.das`'s `test_vkd_mx4_gemv_gu`, `test_vkd_gemv_ncol`, `test_vkd_q8_gemv_gu_n`,
   `test_vkd_q8_gemv_pleact`, `test_vkd_act_family`, `test_vkd_moe_routing`, `test_vkd_dn_family`, `test_vkd_hc_seams`,
   `test_vkd_hc_rows`, `test_vkd_ple_side`, `test_vkd_moe_gather_row`, `test_vkd_combine_row` and
-  `test_vkd_emb_gather_family` cells - the census's evidence for the classes no zoo row dispatches - must hold each
-  class against its CPU oracle at the bar the cell sets, with the cell's poisoned-element control; `test_vkd_gemv_ncol`
-  must also hold every column of the N-column stamps to the one-column class bit for bit - within the float bar on the
-  rotated twins' leg (`../ARCHITECTURE_GPU_SHARED_GEMM.md#ncol-rotated-walk`) and where the one-column slot serves its
-  load-ahead alternate at another subgroup width (`../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps`).
+  `test_vkd_emb_gather_family` cells - the census's evidence for the classes no cell of a whole run dispatches - must
+  hold each class against its CPU oracle at the bar the cell sets, with the cell's poisoned-element control;
+  `test_vkd_gemv_ncol` must also hold every column of the N-column stamps to the one-column class bit for bit - within
+  the float bar on the rotated twins' leg (`../ARCHITECTURE_GPU_SHARED_GEMM.md#ncol-rotated-walk`) and where the
+  one-column slot serves its load-ahead alternate at another subgroup width
+  (`../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-alt-stamps`).
 - `test_vulkan_tower_kernels.das`'s `test_vkt_fa_bidir`, `test_vkt_tower_rows`, `test_vkt_tower_ln_rows`,
   `test_vkt_tower_f16_feeds`, `test_vkt_tower_vision_rows`, `test_vkt_tower_win_rows`, `test_vkt_tower_tail_rows`,
   `test_vkt_tower_front_movers`, `test_vkt_tower_front_mel`, `test_vkt_tower_ga_mel`,

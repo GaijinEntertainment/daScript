@@ -11,8 +11,6 @@ Terms this checklist does not define are as `REVIEW.md` (beside this file) defin
   carrier's own planes (kq), or the exact lane, whose form - f16 or f32 - the `.dlim` flavor baked
   for the serving GPU home (Vulkan, CUDA or Metal) picks; and, on any lane and for every family at
   once, whether a weight row a file stores as half floats serves as halves or as floats.
-- The blob form is a model after `convert_model_to_metal_blob`, the only form the Metal drivers
-  serve.
 - A lane setter is a call that pins a family's serving lane - `set_<name>_q8`, the ASR facade's
   `set_asr_fp32` / `set_asr_tower_fp32` / `set_asr_tower_q8`, `set_rows_f32` (serve a half-float
   weight row as floats, or as halves), `set_styletts2_recipe` (pin the StyleTTS2 lane to the
@@ -21,11 +19,12 @@ Terms this checklist does not define are as `REVIEW.md` (beside this file) defin
   `reset_rows_f32`, `reset_styletts2_recipe` - is a lane setter too, never a driver setter. A call
   that sets a knob a family's `*_serves_q8` accessor reads when no lane is pinned
   (`set_gpu_gigaam_exact_lane`) is a driver setter.
-- A driver setter is any other `../dasllama/` call the cell makes that sets a value stored in a
-  module global or process-global state that a later load, route choice or kernel dispatch reads,
-  whatever its name (`set_*`, `enable_*`, `disable_*`, `allow_*`, `pin_*`, `clear_*`, `reset_*`,
-  `restore_*`, `reinstall_*`, `register_*`, `unregister_*`, `select_*_override` and `unset_*` are
-  the common spellings); a call a loader makes on its own is not the cell's.
+- A driver setter is any other `../dasllama/` call the cell makes, or assignment it makes to a
+  `../dasllama/` global or a field of one (its getter the read of what it assigned), that sets a value
+  stored in a module global or process-global state that a later load, route choice or kernel
+  dispatch reads, whatever its name (`set_*`, `enable_*`, `disable_*`, `allow_*`, `pin_*`, `clear_*`, `reset_*`, `restore_*`,
+  `reinstall_*`, `register_*`, `unregister_*`, `select_*_override` and `unset_*` are the common
+  spellings); a call a loader makes on its own is not the cell's.
 - A route-deciding setter is a driver setter whose last-written value decides which route or
   kernel (which branch of a dispatch) an asserted call takes, whether an assert the cell makes
   passes, or what an assert's expected value is computed from. The GPU home is not one: the home the
@@ -39,11 +38,13 @@ Terms this checklist does not define are as `REVIEW.md` (beside this file) defin
 - A lane pin is a lane setter, a `set_metal_tensor_crowns` / `pin_metal_tensor_crowns` call, or
   the CPU kernel backend's pin (`pin_kernel_backend`, `DASLLAMA_PIN_BACKEND`) - a call or knob that
   picks the weight form, the Metal tensor crowns or the CPU kernel backend a load serves on.
+- A diff that adds or changes an `own_load` call edits the function holding it: the rules below bind
+  that function's whole body like any cell's.
 
-**A diff that adds or edits a cell or `[test]` function, or code one reaches through a helper,
-makes every cell that reaches the edited code call every route-deciding setter BEFORE the first
-call or assert its value decides, even when the value it writes is the DEFAULT - in the cell or
-the `[test]` function that runs it, directly or through a helper one of them calls.**
+**A diff that adds, moves or edits a cell or `[test]` function, or code one reaches through a
+helper, makes every cell that reaches the edited code run every route-deciding setter BEFORE the
+first call or assert its value decides, even when the value it writes is the DEFAULT - in the cell
+or the `[test]` function that runs it, directly or through a helper one of them calls.**
 
 **A cell whose claim depends on a family's serving lane pins that lane in the cell itself - through
 a lane setter or a loader parameter that takes the lane - never in the file's `[init]`.** A cell
@@ -57,25 +58,25 @@ families (`set_asr_tower_q8`), each pinned family's `reset_<name>_q8`, and `set_
 `set_asr_tower_fp32(false)` for a load through the ASR facade (`load_asr_model`).**
 A pin an earlier cell leaked moves the accessor's answer and the load alike.
 
-**A diff that adds or edits a cell or `[test]` function, or code one reaches through a helper, that
-calls a lane setter - directly or through a helper it calls - makes each cell that reaches the call
-return with each lane it pinned unset through the lane setter's paired unset call and, for a facade
+**A diff that adds, moves or edits a cell or `[test]` function, or code one reaches through a
+helper, that calls a lane setter, directly or through a helper, makes each cell that reaches the
+call return with each lane it pinned unset through its lane setter's paired unset and, for a facade
 setter that pins several families (`set_asr_tower_q8`), each pinned family's `reset_<name>_q8`.**
 
-**A diff that adds or edits a cell or `[test]` function, or code one reaches through a helper, that
-calls a driver setter other than a `register_*` call - directly or through a helper it calls -
-makes each cell that reaches the call return with that setter back at the value its getter
+**A diff that adds, moves or edits a cell or `[test]` function, or code one reaches through a
+helper, that calls or assigns a driver setter other than a `register_*` call - directly or through
+a helper it calls - makes each cell that reaches the call return with that setter back at the value its getter
 returned before the first call, never at a literal.**
 
-**A diff that adds or edits a cell or `[test]` function, or code one reaches through a helper, that
-calls a `register_*` - directly or through a helper of this folder - makes each cell that reaches
-the call return with that name's entry as the cell found it: an entry the call created removed by
-the `../dasllama/` call that removes that name's entry (added in the same change where none
-exists), an entry it overwrote put back.** A `register_*` inside a `../dasllama/` setter's own
-body is put back by restoring that setter to its getter's earlier value.
+**A diff that adds, moves or edits a cell or `[test]` function, or code one reaches through a
+helper, that calls a `register_*` - directly or through a helper of this folder - makes each cell
+that reaches the call return with that name's entry as the cell found it: an entry the call created
+removed by the `../dasllama/` call that removes it (added in the same change where none exists), an
+entry it overwrote put back.** A `register_*` inside a `../dasllama/` setter's own body is put back
+by restoring that setter to its getter's earlier value.
 
-**A diff that adds or edits a cell, or code one reaches through a helper, that writes through a
-driver setter that is not a `register_*` call and has no getter, or whose getter cannot return the
+**A diff that adds, moves or edits a cell, or code one reaches through a helper, that writes through
+a driver setter that is not a `register_*` call and has no getter, or whose getter cannot return the
 value written, adds in the same change a getter in `../dasllama/` that returns it.**
 
 **A cell asserting the unpinned default lane of a family that has a `*_serves_q8` accessor
@@ -93,12 +94,12 @@ identity loads through `load_model_image` (`../dasllama/dasllama_image.das`), th
 the `.dlim`, never through a staging path around it.** The pin is part of what the image identity
 records.
 
-**A CPU-vs-GPU cell on Metal that compares the outputs of a decode or prefill override - the Metal
-driver hook that runs the model's decode or prefill stages on the GPU - against the CPU's runs its
-CPU stages on a PLANAR model (the non-blob form, the only one CPU inference reads) and the
-override's stages on that model's blob twin (`blob_twin(t, path, seq_cap)`,
-`_metal_blob_twin.das`), both over one `Session`.** The planar model and its blob twin share one
-shape, so one `Session` serves both.
+**A CPU-vs-GPU cell on a block's Metal form that compares the outputs of a decode or prefill
+override - the Metal driver hook running the model's decode or prefill on the GPU - against the
+CPU's keeps, on the Metal form, what the compare reads (a session, a token stream or logits); the
+block's `cpu_cells_form` replays or continues it, and a verdict compares the two after the block
+returns - or, to compare live, a function that calls `own_load` loads both models; never a second
+model beside a block's Metal form.** A Metal form loads no CPU model.
 
 **A diff that adds a cell loading a chat `Model` on the Vulkan or CUDA home, or changes the load
 such a cell takes, loads through `load_resident`, `load_resident_lane`, `load_resident_host` with `image`

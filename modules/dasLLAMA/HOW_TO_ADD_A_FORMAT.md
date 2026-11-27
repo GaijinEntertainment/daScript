@@ -517,7 +517,7 @@ decoded scale row needs no upload work - only the id bridge and the kernels. The
    a `<Fmt>RowsMmaT` over `Sb16RowsMmaT` and its stamp `CuKqRowsMma<Fmt>` (`kq_rows_<fmt>_mma`), any other format joins
    `CUD_ROWS_MMA_SKIP`, and a format in neither fails the compile; the format joins `KQ_LEAF_FMTS` in `tests/test_vulkan_kernels.das`, which the ncol cell
    holds against `kq_gemv_fmts`, and its N stamp joins the census's blind list (its declared list of
-   kernels no census row dispatches) in `tests/test_kernel_coverage.das` naming the regions file
+   kernels no census row dispatches) in `tests/_kernel_census.das` naming the regions file
    that carries it (the census's one-region loads never engage the N-row command). A codebook is
    packed into four `uint4` words and selected with a dynamic vector index plus a byte shift
    (`(tbl[q >> 2] >> ((q & 3) * 8)) & 0xFF`): a `fixed_array` local indexed per nibble lowers to
@@ -768,7 +768,7 @@ arms:
    (`MetalKqMvB{2,4,8}<Fmt>H`: the f32 class with `override XHALF = true`, each with a
    `g_pso_kq_mvb*h_<fmt>` global compiled in `metal_decode_init` and released beside the f32 one), a
    `KQ_ROWS_RACE_FORMATS` row runs its `kq_rows_<fmt>` and `kq_rows_half_<fmt>` races, the gemv
-   file's `KQ_HALF_FORMATS` list and the coverage census (`test_kernel_coverage.das`) name the
+   file's `KQ_HALF_FORMATS` list and the coverage census (`_kernel_census.das`) name the
    stamps, and `enc_kq_mvb` asserts on a format with no row - a crowned half route (the half-x form
    a race crowned: recorded in the sidecar as the winner) on a format without its half stamps panics
    at the first dispatch. **Serving an expert plane is one table row and one decode arm**
@@ -854,10 +854,10 @@ Tests:
   `moe_gemv_gate` / `moe_mulmm_b32_gate` /
   `b32_gemv_wide_gate` / `b32_glu_gate` rows;
 - the four twin rows in the census's declared blind list (`CENSUS_NEVER_DISPATCHED`,
-  `tests/test_kernel_coverage.das`);
+  `tests/_kernel_census.das`);
 - the served list of `test_moe_metal_expert_formats` (`tests/test_gpu_serving_declines.das`);
 - the format's term in the census lists - `per32_planes` and `PER32_STEMS`
-  (`tests/test_metal_format_census.das`) and `per32_planes` (`tests/test_metal_decode_parity.das`),
+  (`tests/_metal_format_census_cells.das`) and `per32_planes` (`tests/_metal_decode_cells.das`),
   which count and name the per-32 sites the census holds the dispatch counts to.
 
 A Metal kernel lever is judged by a kernel-level probe, never by a tg128 row: an end-to-end row
@@ -947,7 +947,8 @@ Every backend's decline names the site (`kq_site_words`, `dasllama_kqformat.das`
 The kernel census holds the dispatch counts the cells assert, so a new stamp joins its
 backend's list in the same change:
 
-- a Metal MSL kernel or a Vulkan kernel class: `tests/test_kernel_coverage.das`, a zoo row or its
-  blind list (`CENSUS_NEVER_DISPATCHED` for Metal, `VK_CENSUS_NEVER_DISPATCHED` for Vulkan);
-- a Metal site's per-format count: `tests/test_metal_format_census.das`;
+- a Metal MSL kernel or a Vulkan kernel class: a zoo row of `tests/_kernel_coverage_cells.das` on its carrier's block
+  (`ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once`) or its blind list in `tests/_kernel_census.das`
+  (`CENSUS_NEVER_DISPATCHED` for Metal, `VK_CENSUS_NEVER_DISPATCHED` for Vulkan);
+- a Metal site's per-format count: `tests/_metal_format_census_cells.das`;
 - a Vulkan whole-model driver site: `tests/test_gpu_resident_format_census.das`.

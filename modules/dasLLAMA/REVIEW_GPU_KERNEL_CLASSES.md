@@ -134,49 +134,42 @@ compiled.** The winner
 is the card's and the driver's, not the kernels' - the same silicon favors the f16 tile under its
 Vulkan driver - so a card that flips the pick turns the pair into a per-box race, never a deletion.
 
-**A diff that adds a new census key a census row dispatches names, in the PR body, that row and
-its nonzero count for the key, read from a census run on the key's backend.** A census key is a
-kernel name `modules/dasLLAMA/tests/test_kernel_coverage.das` counts, that the engine's Metal or
-Vulkan driver compiles at any point of a run; it is new when the pre-change tree does not compile
-it.
+**A diff that adds a new census key a cell of a whole run dispatches names, in the PR body, that
+cell and its nonzero count for the key, read from a whole run's census on the key's backend.** A
+census key is a kernel name the census counts (its tables and its verdict
+`modules/dasLLAMA/tests/_kernel_census.das`) that the engine's Metal or Vulkan
+driver compiles at any point of a run; it is new when the pre-change tree does not compile it. A
+whole run is a `modules/dasLLAMA/tests/run.das` run of every standing area (every `AREAS` name but an
+on-demand one, `standing_areas`) that no flag or inherited filter narrows (`census_whole`); its census
+counts every cell of every test process the run starts.
 
-**A diff that adds a new census key which no census row of its backend dispatches where such a
-row could dispatch it - a model the census file loads for that backend, run the way the census
-runs it - adds that row, or that model, to `modules/dasLLAMA/tests/test_kernel_coverage.das` in
-the same change.**
+**A diff that adds a new census key which no cell of a whole run on its backend dispatches, where a
+cell could - on a model a block loads for that backend - adds such a cell, in the same change, on the
+block that loads that model.**
 
-**A diff that adds a new census key which no census row of its backend could dispatch - the
-model, the quant or the load shape sits outside what the census runs - names it in the blind-spot
-list of `modules/dasLLAMA/tests/test_kernel_coverage.das`: `CENSUS_NEVER_DISPATCHED` for Metal,
+**A diff that adds a new census key which no cell of a whole run on its backend could dispatch - the
+model, the quant or the load shape sits outside what a whole run loads - names it in the blind-spot
+list of `modules/dasLLAMA/tests/_kernel_census.das`: `CENSUS_NEVER_DISPATCHED` for Metal,
 `VK_CENSUS_NEVER_DISPATCHED` for Vulkan.**
 
 **A blind-spot entry a diff adds, and a blind-spot entry that names a new census key by exact name
-or covers it by prefix, carries for each key it covers the reason no census row reaches it, the
-stocked model that dispatches it where one does - one the `stocked` suite runs on a box that has
-it - and the model-free test cell that dispatches it.**
+or covers it by prefix, carries for each key it covers why no cell of a whole run dispatches it and
+the model-free test cell that dispatches it.**
 
 **A diff that adds a new Metal census key that is dispatched only under a crown (a kernel family a
-box's tune sidecar enables) adds, in the same
-change, either a census row that pins the crown (`pin_metal_tensor_crowns`), or a
-`CENSUS_NEVER_DISPATCHED` entry plus a `CENSUS_CROWN_CONDITIONAL` entry naming the crown (both in
-`modules/dasLLAMA/tests/test_kernel_coverage.das`); both entries spell the key exactly.** The
-blind-entry asserts look the row up by the entry's exact text, and they count the dispatches of every
-key the entry is a prefix of.
+box's tune sidecar enables) adds, in the same change, either a cell of a whole run that pins the
+crown itself (`pin_metal_tensor_crowns`), or - for a key no cell of a whole run dispatches under a
+crown that cell pins itself - a `CENSUS_NEVER_DISPATCHED` entry plus a `CENSUS_CROWN_CONDITIONAL`
+entry naming the crown (both in `modules/dasLLAMA/tests/_kernel_census.das`); both entries
+spell the key exactly.** The census verdict's checks of each blind entry
+(`modules/dasLLAMA/tests/_kernel_census.das`) look the entry up by its exact text, and they count
+the dispatches of every key the entry is a prefix of.
 
-**A diff that adds a new Vulkan census key that a census row dispatches on one kind of device and
-no census row reaches on another adds, in the same change, a `VK_CENSUS_NEVER_DISPATCHED` entry
-plus a `VK_CENSUS_PICK_CONDITIONAL` entry naming the driver pick (the driver function that chooses
-the kernel at the dispatch site) that tells the two kinds apart, both in
-`modules/dasLLAMA/tests/test_kernel_coverage.das` and both spelling the key exactly.**
-
-**A diff that adds a pick to `VK_CENSUS_PICK_CONDITIONAL` reads it through the function the driver
-calls at the dispatch site, and names the census rows that dispatch its entries - never a vendor
-or device name compared in the test.**
-
-**Weakening the blind-entry asserts in `modules/dasLLAMA/tests/test_kernel_coverage.das` - that
-an entry matches a compiled census key, that it matches no dispatched one, and that a conditional
-Vulkan entry whose pick holds counts a dispatch once every row that carries it ran - is a
-defect.**
+**A diff that adds a new Vulkan census key that a cell of a whole run dispatches on one kind of
+device and no cell of a whole run reaches on another adds, in the same change, a
+`VK_CENSUS_NEVER_DISPATCHED` entry plus a `VK_CENSUS_PICK_CONDITIONAL` entry naming the driver pick
+(the driver function that chooses the kernel at the dispatch site) that tells the two kinds apart,
+both in `modules/dasLLAMA/tests/_kernel_census.das` and both spelling the key exactly.**
 
 **Weakening any refusal a lens - the macro behind a `[*_dispatch]` annotation that derives each
 field's access and generates the builder - makes at compile time, or any cell that holds one, is a

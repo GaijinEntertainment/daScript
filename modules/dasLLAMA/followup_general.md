@@ -279,7 +279,7 @@
     all refuse `s.attn_uniform_end != 0`, and metal-blob models refuse a vision arm outright
     at create (no CPU weights to fall back on). Done = the GPU prefill chains take the
     uniform bound, the three declines and the blob refusals are deleted, and the kernel
-    coverage suite dispatches the non-causal arm. Scheduled for the Metal arc's tail -
+    census (`tests/test_kernel_coverage.das`) counts a dispatch of the non-causal arm. Scheduled for the Metal arc's tail -
     pulled forward only if CPU-fallback vision proves a blocker (Boris 2026-08-14).
     **Metal half DONE (metal-media chunk 1, 2026-08-16):** the trio takes the bound as
     `AttnArgs.uend` (no separate kernel - the census criterion is moot), the declines and
@@ -563,7 +563,7 @@
     (dormant by the box discipline). Done = the probe stamps `off` unless a session is live
     (a connected-client check per product), with the value naming the product only then.
 
-55. **The kernel-coverage census has no tower carrier.** `tests/test_kernel_coverage.das`'s
+55. **The kernel-coverage census has no tower carrier.** `tests/_kernel_coverage_cells.das`'s
     zoo is text-decoder-only, so the tower/ASR kernel classes (the tower flash, win-attn,
     kv_hc, row_gather, the g4a/cn/q3a chain families, the q3v stem) ride
     `CENSUS_NEVER_DISPATCHED` with reasons instead of census rows. Done = a tower carrier in

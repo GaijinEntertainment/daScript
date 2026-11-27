@@ -251,7 +251,7 @@ The test folder's documents track its files (`ARCHITECTURE_ENGINE.md#test-folder
   toy vocab), `test_model_image.das` (the exact lane's tag in the list whose identity keys one
   image under every CPU kernel backend `kernel_backend_names()` lists that is not batch-only, and
   the family's image arm: a cold build, a warm map, element-exact planes),
-  `test_kernel_coverage.das` (a `cov_tower` row once a GPU chain exists).
+  `_kernel_coverage_cells.das` (a `cov_tower` row on the family's tower block once a GPU chain exists).
 - **The document:** an entry for the new file in `tests/CLAUDE.md` naming its cells, and every
   `arm_on` token the file filters on inside a backtick span there - `check_arm_tokens_documented`
   and `check_doc_names_resolve` fail otherwise.
@@ -360,8 +360,9 @@ On a build without das_metal the family's dispatch sequence is ONE body generic 
   must exceed the bar) and its exact leg on the f16 flavor (`ExactFlavorKept`: the leg runs as a form of the file's block and `exact_flavor_held` compares after it,
   `ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once`), green
   on both homes - the CUDA pass's `--only` list in `tests/CLAUDE.md` names its file; the f16 image's
-  `gpu_lane_roundtrip` in `test_model_image.das`; the class in the census (`VK_CENSUS_NEVER_DISPATCHED` where no
-  stocked carrier dispatches it).
+  `gpu_lane_roundtrip` in `test_model_image.das`; the class in the census (a `VK_CENSUS_NEVER_DISPATCHED` entry in
+  `tests/_kernel_census.das` where no cell of the run dispatches it: the verdict holds every entry at zero
+  dispatches in the run's merged census).
 
 ## 11. End to end
 

@@ -13,9 +13,8 @@ Terms this checklist does not define are as `REVIEW.md` (beside this file) defin
   other than a loaded model's `Config` field the loader copies from the file's header - is a value
   the run computed. A family's `*_serves_q8` accessor, read before the load with every lane pin it
   consults unset, queries the box fact of the family's unpinned default lane directly.
-- A condition that decides which forms the form list of a `with_cpu_and_gpu_model`,
-  `with_model_once` or `with_model_once_at` call holds is a skip condition of every cell run on a
-  form it can leave out.
+- A condition that decides which forms the form list of a block call holds is a skip condition of
+  every cell run on a form it can leave out.
 - A return guarded by the condition an assert just before it checks, so that it returns only after
   that assert failed, is neither a skip condition nor a condition that picks an assert.
 - A model fact is a fact of the model file the cell loads (its architecture or a config field),
@@ -23,11 +22,10 @@ Terms this checklist does not define are as `REVIEW.md` (beside this file) defin
   from its name or path.
 
 **A box fact that leaves a form out of a block's form list registers a skipped cell naming the
-file, the form and the reason (`skip_cell`, `_model_form.das`): a `with_model_once` or
-`with_model_once_at` list of form names leaves it out through `served_forms`, which registers it; a
-`with_cpu_and_gpu_model` list of `ModelForm`s calls `skip_cell` where the form is not pushed - never
-a form dropped with no cell.** A form dropped with no cell takes its cells with it: they neither
-run nor skip.
+file, the form and the reason (`skip_cell`, `_model_form.das`): a list of form names leaves it out
+through `served_forms`, which registers it; a list of `ModelForm`s calls `skip_cell` where the form is
+not pushed - never a form dropped with no cell.** A form dropped with no cell takes its
+cells with it: they neither run nor skip.
 
 **A cell's skip condition reads only a box fact queried directly or a model fact. The GPU home the
 run armed through the environment (`DASLLAMA_GPU`, `DASLLAMA_CUDA`) is such a box fact: in a file no

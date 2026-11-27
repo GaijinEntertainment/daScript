@@ -3216,7 +3216,7 @@ half-width dot); the whole bf16 tower set shares that gap.
   (128 GB).** Every reading below is a `tests/run.das` run at c824d8e8a3, one model process on the box, the box profile
   `performance/m5.tune.json` (39,101 B), `DAS_TUNE_MANIFEST` at it with `DASLLAMA_ALLOW_UNTUNED=1
   DASLLAMA_METAL_HAZARD_STRICT=1 DASLLAMA_PARITY_FULL=1`.
-  - The driver-against-itself bar: `tests/test_metal_mtp_parity.das`'s `vff_cell` holds the Metal batch rail's same-slab
+  - The driver-against-itself bar: `tests/_metal_mtp_cells.das`'s `vff_cell` holds the Metal batch rail's same-slab
     verify against the Metal plain steps, every plain step counted a Metal decode. `MM_TOL` 1.0 now holds a K-quant
     carrier's two-to-eight-row verify wherever a rows site's half-x forms serve on the box (`kq_rows_half_<fmt>` crowned, the
     rail on - the M5 profile crowns thirteen formats'), over every verify row of twelve rounds; the f32-x forms keep the
@@ -3334,9 +3334,9 @@ half-width dot); the whole bf16 tower set shares that gap.
   (its constant where it has one), the reading and the box. The Vulkan box is the RTX PRO 4500 (32 GB) pod, its cells run
   one file through `dastest` under `DASLLAMA_GPU=1 DASLLAMA_PARITY_FULL=1` with the cell's arm in `DASLLAMA_TEST_ARMS`;
   the Metal box is the M5 Max, through `tests/run.das -- --arm <family>` under `DASLLAMA_PARITY_FULL=1`.
-  - gemma-4-31B Q4_K_M, the forced-feed freeform decode on Metal (`test_metal_support_matrix.das`'s
-    `gemma4_hetero_row`, tag `gemma4-31b/k4`, arm `fam-gemma4`): the 12B's bar, 8.0 on the whole-vocab logit gap, held over
-    the stream's first 29 rows of 128 (`free_rows`) where the 12B rows hold all 128. Reads under 8 on those rows; at the
+  - gemma-4-31B Q4_K_M, the forced-feed freeform decode on Metal (`_metal_matrix_cells.das`'s
+    `matrix_hetero_gemma4_31b`, tag `gemma4-31b/k4`, arm `fam-gemma4`): the 12B's bar, 8.0 on the whole-vocab logit gap, held
+    over a frozen stream of 29 ids (the row's `stream`) where the 12B row's holds 128. Reads under 8 on those rows; at the
     30th row the greedy stream (llama.cpp's too) falls into a one-token loop, both chains pick the loop token, and the gap
     inside it grows to 18, so the rows past the 29th carry no information the bar could read. M5.
   - gemma-4-26B-A4B Q4_K_M, the assistant drafter's device step against the CPU oracle on Vulkan
@@ -3376,7 +3376,7 @@ half-width dot); the whole bf16 tower set shares that gap.
   - gemma-4-E4B Q8_0 under a tq4 mirror (`test_gpu_resident_gemma4_e4b_block_codecs`, arm `g4f-codec`): `GEMMA_PPL_RATIO`
     1.05, hits within 3 (`ppl_compare`'s default). Reads 1.076 against 1.064 (1.011x), hits 148 against 148; the control's
     hits 0. Its q8_0 forced feed reads 0.53-1.57 against bars 4.11-4.65 at `GEMMA_LOGIT_BAR_REL`. Pod.
-  - gemma-3-12b Q4_K_M on Metal (`test_metal_support_matrix`, row `gemma3-12b/k4/f16`, arm `fam-gemma3`): the overrides'
+  - gemma-3-12b Q4_K_M on Metal (`tests/_metal_matrix_cells.das`, row `gemma3-12b/k4/f16`, arm `fam-gemma3`): the overrides'
     greedy generate held to the CPU chain token for token, eight tokens after the 30-number count prompt. Reads every
     token equal. M5.
   - gemma-4-26B-A4B UD-IQ3_XXS, UD-IQ4_XS and MXFP4_MOE (`-MXFP4_MOE-local`) on Metal (`gemma4moe_row`, arm
@@ -4026,7 +4026,7 @@ half-width dot); the whole bf16 tower set shares that gap.
   at 6.5 and 4.5. The dense sibling Qwen3.6-27B Q4_K_M reads a 2-token window at 235 ms on the M1 (decode step
   64.9) and 80 on the M5 (36.3): its K-quant mul_mm sites have no small-M form (`followup_metal.md` 48).
 
-  The bars the route's parity cells hold (`tests/test_metal_prefill_parity.das`, `test_metal_prefill_moe_gemv_route`,
+  The bars the route's parity cells hold (`tests/_metal_prefill_cells.das`,
   arm `moe-gemv`), each the largest |GPU - CPU| over the last row's logits as a share of the CPU row's largest,
   after a 300-row window on the tiles and a 2-, 7- or 24-row window on the route; the readings from the cells'
   own logs on the M1 Max (`bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite prefill --arm moe-gemv
@@ -6145,7 +6145,7 @@ half-width dot); the whole bf16 tower set shares that gap.
 - **LANDED - the mul_mm prefill billed ceil-32 M tiles, so an npos just past a tile boundary
   paid a whole extra tile-row of wall for rows nothing reads; the GEMV-tail dispatch peels
   npos % 32 in [1,8] onto the fixed-B mv family (measured 2026-08-24, M1 Max, the qwen
-  img:pp chase; plan: `qwen_pp_plan.md`).** The dig that got here killed two prior theories:
+  img:pp chase).** The dig that got here killed two prior theories:
   the "8B small-M text GEMM gap" (-6% at p341) was the cold-first-process page tax - the warm
   re-run prices das +2.1% AHEAD (never conclude from run 1, struck AGAIN); and the "4B
   wide-staging tax" was dead too - the one-process probe (`harness/image_turn_probe.das`,

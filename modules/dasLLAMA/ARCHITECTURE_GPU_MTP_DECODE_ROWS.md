@@ -59,8 +59,8 @@ route at two, four and eight rows in one timed encoder, on a 27B-class FFN plane
 last-level cache (the half route is "tensor"); `DASLLAMA_METAL_KQ_HALF=0` keeps the f32 forms
 under every crown. The numerics are the prefill tiles' f16 X, already inside every parity bar;
 the kernel cells hold every format's route at every row count (`test_metal_kq_half_forms`) and
-the rows parity cell holds k4 and k6 token for token (`test_metal_decode_parity.das`, the
-`batchB8-kq` arm's half-x leg).
+the rows parity cell holds k4 and k6 token for token (`tests/_metal_decode_cells.das`, the
+`batchB8-kq` arm's half-x leg on the llama blocks).
 
 **Three to eight rows take the matrix-unit form (`#rows8-matrix-unit`) on a k4 or q8 plane where the box's layout probe
 passed, else the eight-row tensor stamps where the plane's tensor tile is crowned.** The row forms above

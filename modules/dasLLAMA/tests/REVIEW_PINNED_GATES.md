@@ -9,32 +9,44 @@ docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_CELL_BARS.md`. Planned work: `../fo
 Terms this checklist does not define are as `REVIEW.md` (beside this file) defines them. A file entry opens on a file
 alone (`` `<file>` must hold ``) and pins every cell of that file. A named-cell entry opens on a `[test]` function, or
 on a cell function a block's `[test]` runs (`` `<file>`'s `<function>` cell must hold ``), and pins every cell that
-function runs. The pinned set is the entries below and those of `REVIEW_PINNED_KERNEL_GATES.md`. A pinned test cell is
-a cell an entry pins, in the set before the diff or in the set after it; the pinned set alone decides whether a cell
-is one. A bar is the tolerance a compare accepts; a bar on a compare whose two sides the cell computes is never a
-value an outside source can change, whatever model file it was measured on. This file's part of the pinned set, one
-entry a bullet, each with what it must keep holding:
+function runs, every function of the block that computes a side of a compare on what that function kept, and every
+verdict - a function run after the block returns - that asserts on it. The pinned set is the entries below and those of
+`REVIEW_PINNED_KERNEL_GATES.md`. A pinned test cell is a cell an entry pins, in the set before the diff or in the set
+after it; the pinned set alone decides whether a cell is one. A bar is the tolerance a compare accepts; a bar on a
+compare whose two sides the cell computes is never a value an outside source can change, whatever model file it was
+measured on. This file's part of the pinned set, one entry a bullet, each with what it must keep holding:
 
-- `test_run_suites.das` must hold the per-PR split (`model-free`, `gpu-kernels`, `stocked`), the folder census, the area
-  tables (each standing area over the per-PR census, the on-demand `examples` area the `examples` suite's files and none
-  of it), the `--exclude` and `--only` filters, the `--batch` chunking and defaults (`child_chunks`, `batch_files`:
-  `per` files a child in order; an area run's image file, a `cant_` / `failed_` / `invalid_` file and a tier contract
-  file alone, the files around it in one batch), the batch dry run (a batch child's `START` line carrying `--together`,
-  `--batch 1` one `--test` child a file), the test wall (`wall_seconds_in`, `log_wall_line`, a run's `LOST` stop at a
-  batch without every verdict, wall or none, no file of it run alone, the `--skip` resume), the reach plan behind
-  `--changed` - which test files each kind of changed path runs (an on-demand area's file for its own change alone),
-  every `MODULE_WITNESSES` row and `LLM_CORE_WITNESSES` naming only census files, and every witness row's module
-  existing with a `MODULE_AREAS` row that holds `llm` -, the children's module-cache folder, the model files a run names
-  that its models directory lacks (the `MISSING` lines, the bare `.gguf` suffix no file's name), the image reap behind
-  `--reap-images` and its gate, the K/V start `--poison-kv` hands the children, the `options persistent_heap` line of
-  the `stocked` files, the model categories and families, the `--category` run, a child's `--run-env` filters, the
-  forced tune file, the skip of what passed (`pass_stamp`'s inputs, the environment among them; the flag and stamp every
-  run's children carry but a `--rerun`'s, the full suite's keyed apart; the `REPORT` count of files not run), a media
-  run's heap setting, the children's scratch folder, the `--disable-module` flags each child of a
-  `DASLLAMA_DISABLE_MODULES` run carries and the pass stamp they key apart, the crown race's gate (`box_race_possible`,
-  `box_runtime_owed`, `box_manifest_pick`, the `BOXRACE` lines), every stocked model past the large tier a category's,
-  and the fleet's Vulkan-free slice of the model-free suite (`VULKAN_FREE_ONLY`) and the CUDA-only files a run drops
-  with dasCUDA left out (`CUDA_ONLY_EXCLUDE`).
+- `test_run_suites.das` must hold the per-PR split (`model-free`, `gpu-kernels`, `stocked`), the folder census (every
+  test file in a suite but the census verdict file, `CENSUS_VERDICT`, which sits in none), the area tables (each
+  standing area over the per-PR census and the `image` and `image-vulkan` suites, the on-demand `examples` area the
+  `examples` suite's files and none of it, every image arm literal reached by the arms of exactly one area), the
+  argument contracts (`--area` beside `--arm` runs, `--changed` beside `--arm` is refused), the `--exclude` and `--only`
+  filters, the `--batch` defaults (`batch_files`), the batch dry run (a batch child's `START` line carrying
+  `--together`, `--batch 1` one `--test` child a file), the test wall (`wall_seconds_in`, `log_wall_line`, a run's
+  `LOST` stop at a batch without every verdict, wall or none, no file of it run alone, the `--skip` resume), the reach
+  plan behind `--changed` (which test files each kind of changed path runs, an on-demand area's file for its own change
+  alone), the children's module-cache folder, the model files a run names that its models directory lacks (the
+  `MISSING` lines, the bare `.gguf` suffix no file's name), the image reap behind `--reap-images` and its gate, the K/V
+  start `--poison-kv` hands the children, the `options persistent_heap` line of the `stocked` files, the model
+  categories and families, the `--category` run, a child's `--run-env` filters, the forced tune file, the skip of what
+  passed (`pass_stamp`'s inputs, the environment among them; the flag and stamp every run's children carry but a
+  `--rerun`'s, the full suite's keyed apart; the `REPORT` count of files not run), a media run's heap setting, the
+  children's scratch folder, the `--disable-module` flags each child of a `DASLLAMA_DISABLE_MODULES` run carries and the
+  pass stamp they key apart, the crown race's gate (`box_race_possible`, `box_runtime_owed`, `box_manifest_pick`, the
+  `BOXRACE` lines), every stocked model past the large tier a category's, and the fleet's Vulkan-free slice of the
+  model-free suite (`VULKAN_FREE_ONLY`) and the CUDA-only files a run drops with dasCUDA left out (`CUDA_ONLY_EXCLUDE`).
+- `test_run_suites.das`'s `test_child_chunks` cell must hold the `--batch` chunking (`child_chunks`: `per` files a
+  child in order; an area run's image file, a `cant_` / `failed_` / `invalid_` file and a tier contract file alone, the
+  files around it in one batch).
+- `test_run_suites.das`'s `test_census_whole_run`, `test_census_whole_dry_run`, `test_census_verdict_reads`,
+  `test_reach_for_path` and `test_metal_witnesses_hold_metal_cells_files` cells must hold the census verdict's whole
+  run (`census_whole`, the first two cells: every standing area, no narrowing flag, no family filter inherited from the
+  environment, and the verdict child's `DASLLAMA_KERNEL_CENSUS_WHOLE=1` only after such a run reported no file from an
+  earlier pass and failed none) and its read (the third: a skip where no census folder is named, a failure where a
+  named folder holds no file of the home, the merged table and the whole flag reaching the verdict), every
+  `MODULE_WITNESSES` row and `LLM_CORE_WITNESSES` naming only census files and every witness row's module existing
+  with a `MODULE_AREAS` row that holds `llm` (the fourth), and every llm file that requires a Metal cells fixture in
+  the witness row of each Metal driver module (the fifth).
 - `test_facade_docs.das`'s `test_program_roots` cell must hold the `ROOT_DIRS` sweep, `options stack = 524288` and the
   prefill intent.
 - `test_env_registry.das` must hold the `../ENVIRONMENT.md` knob contract.
@@ -58,7 +70,8 @@ entry a bullet, each with what it must keep holding:
 - `test_rope_apply.das` must hold `../dasllama/dasllama_math.das`'s rope application (`rope_scaled_*`, `rope_apply`)
   and `yarn_rope_freqs` against their fp64 references, each tabled form against its un-tabled twin, and
   `build_rope_tabs` over 120000 rows and over none, at the bar each cell sets.
-- `test_metal_prefill_parity.das`'s `test_metal_prefill_kq_tail` cell must hold every stocked K-quant, grid and per-32
+- `_metal_prefill_cells.das`'s `short_window_metal` cell and its verdict `short_verdict` must hold, on every
+  `PrefillRow` whose `short_form` is `ShortForm.kq_tail` (the `kq-tail` rows), every stocked K-quant, grid and per-32
   short window's served form - the row-batched GEMV peel past the whole tiles and the split stamps of a window under
   one tile, the 16-row split stamps on a window of 16 rows or fewer - against the CPU control at its bar.
 - `test_site_records.das` must hold the byte-compare of `site/files/dasllama/bench_records.json` and of
@@ -161,12 +174,12 @@ cell ran. An assert added inside a gate of an entry that holds every kernel gate
 clause, and needs no item of its own.
 
 **A diff that widens a pinned test cell's tolerance, swaps its comparison for a looser one, rewrites an expected value
-its entry ties to an outside source (a document, a checked-in table, a knob list) to a value that source does not
-state, drops its input, or drops a `run.das` suite listing that reaches it is a defect - fix the code that fails the
-cell instead; a bar shown mis-derived is re-derived and ledgered in
-`../ARCHITECTURE_CELL_BARS.md#rederived-cell-bars`. A comparison that changes because the contract it held changed on
-purpose - a rule document or the data model now says so - is not a loosening where the same change rewrites the cell's
-entry to the new contract and names the rule or document that states it.**
+its entry ties to an outside source (a document, a checked-in table, a knob list) to a value that source does not state,
+drops its input, or drops a `run.das` suite or area listing that reaches it is a defect - fix the code that fails the
+cell instead; a bar shown mis-derived is re-derived and ledgered in `../ARCHITECTURE_CELL_BARS.md#rederived-cell-bars`.
+A comparison that changes because the contract it held changed on purpose - a rule document or the data model now says
+so - is not a loosening where the same change rewrites the cell's entry to the new contract and names the rule or
+document that states it.**
 
 **A diff that removes a pinned test cell's assert while the code it checks stays adds to the same cell, in the same
 change, an assert that holds the same values to an equal or tighter bound, with its control (an extra assert in the

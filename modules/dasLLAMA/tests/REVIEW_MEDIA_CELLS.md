@@ -53,9 +53,10 @@ kernel form and its tensor twin; a forced-feed logits compare within a tolerance
 rows-held transcript compare - never a text compare alone.** A tensor twin's rounding legitimately
 flips tokens.
 
-**A rows-held transcript compare in its words form runs, in the same cell, a device-route control
-whose `transcript_words` list differs from the other side's.** The words form forgives a flip of
-punctuation or casing, so only a control shows the compare can fail.
+**A rows-held transcript compare in its words form runs, in the same cell, a control: a transcript a
+chain computes - the device chain's, where a side is one - whose `transcript_words` list
+differs from the other side's; never a list the cell writes.** The words form forgives punctuation
+and casing flips, so only a control shows the compare can fail.
 
 **An ASR cell comparing a transcript against a reference text - a human's, or an external
 engine's that does not stand for the cell's lane - asserts a word-agreement floor (the share of

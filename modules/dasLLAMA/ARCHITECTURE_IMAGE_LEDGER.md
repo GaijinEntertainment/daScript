@@ -40,8 +40,8 @@ fire it and are ruled acceptable, each with its reason.
   loads no minted CPU form of the lane an unpinned load serves (the q8 form is a skipped cell without its `@dev`
   form); under `with_cpu_flavor` the load bakes the unpinned lane's CPU-flavor image, the one a box with no GPU home
   serves.
-- **The Metal MTP rails** - the fixtures of `tests/test_metal_mtp_parity.das` that load their served twin through
-  `load_model_cached`, and the Metal form of each 26B trunk's block in `tests/test_mtp_gemma_drafter.das`
+- **The Metal MTP rails** - the MTP carriers' blocks, whose served-image Metal form (`metal_form(image = true)`)
+  the cells of `tests/_metal_mtp_cells.das` run on, and the Metal form of each 26B trunk's block in `tests/test_mtp_gemma_drafter.das`
   (`metal_form(image = true)`: the Q4_K_M target for the served arms and the regular DFlash drafter's Metal arm, the
   UD-IQ3_XXS one for `mtp-gdraft-iq3`), loaded once a block - mint the target's
   metal-blob `.dlim`. The reason: the metal-blob flavor is what the Metal MTP rail and the drafter's attach serve. They pin
