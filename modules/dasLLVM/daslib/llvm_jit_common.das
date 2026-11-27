@@ -1132,10 +1132,7 @@ def public emit_object_bitcode(target : JitTarget; mod : LLVMOpaqueModule?; out_
         LLVMDisposeTargetData(dl)
     }
     let mod_triple = LLVMGetDefaultTargetTriple()
-    var file = artifact_path(out_path, JitArtifact.object)
-    if (get_platform_name() == "windows") {
-        file = "{out_path}.obj"
-    }
+    let file = get_platform_name() == "windows" ? "{out_path}.obj" : artifact_path(out_path, JitArtifact.object)
     let machine = default_target_cpu_features(target, use_host_cpu)
     let ok = write_lto_bitcode(mod, mod_triple, machine, file)
     LLVMDisposeMessage(mod_triple)
