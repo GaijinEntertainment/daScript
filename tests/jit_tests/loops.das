@@ -765,3 +765,52 @@ def test_phi(t : T?) {
         t |> equal(test_min(a, b, c), a < b ? (a < c ? a : c) : (b < c ? b : c))    // nolint:PERF015 -- the oracle mirrors the ternaries under test
     }
 }
+
+[jit, sideeffects]
+def urange_above_int_max_count_jit() : int {
+    var n = 0
+    for (_i in urange(5u, 0x80000005u)) {
+        n++
+        break if (n >= 4)
+    }
+    return n
+}
+
+[jit, sideeffects]
+def urange_reversed_count_jit() : int {
+    var n = 0
+    for (_i in urange(0x80000005u, 5u)) {
+        n++
+        break if (n >= 4)
+    }
+    return n
+}
+
+[jit, sideeffects]
+def urange_across_int_max_sum_jit() : uint {
+    var s = 0u
+    for (i in urange(0x7FFFFFFEu, 0x80000002u)) {
+        s += i
+    }
+    return s
+}
+
+[jit, sideeffects]
+def range_count_jit(a, b : int) : int {
+    var n = 0
+    for (_i in range(a, b)) {
+        n++
+    }
+    return n
+}
+
+[test(description = "a JIT-compiled range loop near the integer limits and a constant urange loop above INT_MAX run the interpreter's iterations")]
+def test_range_limits(t : T?) {
+    t |> success(!jit_enabled() || is_jit_function(@@urange_above_int_max_count_jit))
+    t |> equal(4, urange_above_int_max_count_jit())
+    t |> equal(0, urange_reversed_count_jit())
+    t |> equal(0xFFFFFFFEu, urange_across_int_max_sum_jit())
+    t |> equal(3, range_count_jit(INT_MAX - 3, INT_MAX))
+    t |> equal(6, range_count_jit(-3, 3))
+    t |> equal(0, range_count_jit(3, -3))
+}

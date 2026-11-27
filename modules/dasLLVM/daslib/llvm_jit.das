@@ -4286,7 +4286,10 @@ class public LlvmJitVisitor : AstVisitor {
                 var srange = getE(ssrc)
                 var sfrom = LLVMBuildExtractElement(g_builder, srange, types.ConstI32(0ul), "range_from_{svar.name}")
                 var sto = LLVMBuildExtractElement(g_builder, srange, types.ConstI32(1ul), "range_to_{svar.name}")
-                var cmp_from_to = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntSLT, sfrom, sto, "")
+                let unsignedRange = (ssrc._type.baseType == Type.tURange
+                    || ssrc._type.baseType == Type.tURange64)
+                let lt = unsignedRange ? LLVMIntPredicate.LLVMIntULT : LLVMIntPredicate.LLVMIntSLT
+                var cmp_from_to = LLVMBuildICmp(g_builder, lt, sfrom, sto, "")
                 var okay = append_basic_block("for_{svar.name}_not_empty")
                 var not_okay = append_basic_block("for_{svar.name}_empty")
                 LLVMBuildCondBr(g_builder, cmp_from_to, okay, not_okay)
