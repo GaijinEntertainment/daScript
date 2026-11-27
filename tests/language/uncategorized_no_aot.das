@@ -1,7 +1,8 @@
 options gen2
 // the shapes under test compile in-process or run in a spawned
 // interpreter child; the UnitTest ABI probes are not declared in AOT
-// headers
+// headers; the copy-order test pins the order the interpreter and JIT
+// evaluate a copy in, and AOT takes the C++ compiler's
 options no_aot
 
 require UnitTest
@@ -181,4 +182,69 @@ def test_loops_that_always_return_compile(t : T?) {
         t |> success(r.ok, "the fixture compiles, lint profile {lint_profile}")
         t |> equal(r.count, 0)
     }
+}
+
+struct CopyOrderSmall {
+    a, b, c : int
+}
+
+struct CopyOrderBig {
+    a, b, c, d, e, f, g, h, i, j : int
+}
+
+def copy_order_mark(var order : array<int>; mark, index : int) : int {
+    order |> push(mark)
+    return index
+}
+
+[test(description = "interpreter and JIT: a copy between two elements evaluates the right side, then the left")]
+def test_copy_evaluates_right_then_left(t : T?) {
+    var order : array<int>
+    var ints <- [10, 20]
+    ints[copy_order_mark(order, 1, 0)] = ints[copy_order_mark(order, 2, 1)]
+    t |> equal(ints[0], 20)
+    var small : array<CopyOrderSmall>
+    small |> resize(2)
+    small[1].c = 7
+    small[copy_order_mark(order, 3, 0)] = small[copy_order_mark(order, 4, 1)]
+    t |> equal(small[0].c, 7)
+    var big : array<CopyOrderBig>
+    big |> resize(2)
+    big[1].j = 9
+    big[copy_order_mark(order, 5, 0)] = big[copy_order_mark(order, 6, 1)]
+    t |> equal(big[0].j, 9)
+    t |> equal(length(order), 6)
+    t |> equal(order[0], 2)
+    t |> equal(order[1], 1)
+    t |> equal(order[2], 4)
+    t |> equal(order[3], 3)
+    t |> equal(order[4], 6)
+    t |> equal(order[5], 5)
+}
+
+struct CopyOrderBox {
+    v : CopyOrderBig
+}
+
+[sideeffects]
+def copy_order_retarget(var q : CopyOrderBox?&; var other : CopyOrderBox?; index : int) : int {
+    q = other
+    return index
+}
+
+[unsafe_deref]
+def copy_order_into_retargeted(var first, second : CopyOrderBox?; src : array<CopyOrderBig>) {
+    var q = first
+    q.v = src[copy_order_retarget(q, second, 1)]
+}
+
+[test(description = "interpreter and JIT: a copy through a pointer that the right side re-aims writes where the pointer aims after the right side ran")]
+def test_copy_destination_follows_the_right_side(t : T?) {
+    var first, second : CopyOrderBox
+    var src : array<CopyOrderBig>
+    src |> resize(2)
+    src[1].j = 9
+    copy_order_into_retargeted(unsafe(addr(first)), unsafe(addr(second)), src)
+    t |> equal(second.v.j, 9)
+    t |> equal(first.v.j, 0)
 }

@@ -12,6 +12,7 @@
 
 #include "daScript/simulate/sim_policy.h"
 #include "simulate_fusion_op2.h"
+#include "daScript/simulate/simulate_visit_op.h"
 
 namespace das {
 
@@ -46,6 +47,17 @@ namespace das {
     };
 
     struct SimNode_Op2FusionCopyRef : SimNode_Op2Fusion {
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            string name = op;
+            name += getSimSourceName(l.type);
+            name += getSimSourceName(r.type);
+            vis.op(name.c_str());
+            l.visit(vis);
+            r.visit(vis);
+            V_ARG(size);
+            V_END();
+        }
         uint32_t size;
     };
 
@@ -54,8 +66,8 @@ namespace das {
     struct SimNode_CopyRefValueFixed_##COMPUTEL##_##COMPUTER : SimNode_Op2FusionCopyRef { \
         virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
-            auto pl = l.compute##COMPUTEL(context); \
             auto pr = r.compute##COMPUTER(context); \
+            auto pl = l.compute##COMPUTEL(context); \
             memcpy(pl, pr, typeSize); \
             return v_zero(); \
         } \
@@ -63,8 +75,8 @@ namespace das {
     struct SimNode_CopyRefValue_##COMPUTEL##_##COMPUTER : SimNode_Op2FusionCopyRef { \
         virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
-            auto pl = l.compute##COMPUTEL(context); \
             auto pr = r.compute##COMPUTER(context); \
+            auto pl = l.compute##COMPUTEL(context); \
             memcpy(pl, pr, size); \
             return v_zero(); \
         } \
@@ -144,7 +156,7 @@ namespace das {
             else {
                 if (isFastCopyBytes(size)) {
                     anyLeft = anyRight = true;
-                    ccode.makeNodeUnrollNZ<SimNode_CopyRefValueFixed_AnyPtr_AnyPtr>(size);
+                    return ccode.makeNodeUnrollNZ<SimNode_CopyRefValueFixed_AnyPtr_AnyPtr>(size);
                 }
             }
             return nullptr;
