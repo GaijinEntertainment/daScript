@@ -223,8 +223,18 @@ def private vk_classes_text(red : bool) : string {
     return join(parts, "")
 }
 
-//! the kqformat fixture: the e-column alias roster the gate reads (`aliases` its words)
-def private kqformat_text(aliases : string) : string => "options gen2\n\nlet KQ_CM2E_ALIASES_M = \"{aliases}\"\n"
+//! the kqformat fixture: three members, one off the discrete homes,
+//! and the cm2 e-column aliases
+def private kqformat_text(aliases : string) : string =>
+    ("options gen2\n\nenum KqFmt : uint8 \{\n    q8\n    k4\n    mlx4\n\}\n\n" +
+        "let KQ_CM2E_ALIASES_M = \"{aliases}\"\nlet KQ_DISCRETE_UNSTAMPED = \"mlx4\"\n")
+
+//! the blocks fixture: the add+rms row gate and the one-copy rail's
+//! roster of the two stamped members
+let DASLLAMA_BLOCKS_GREEN = ("options gen2\n\n" +
+    "def private attn_dec_shape_ok(c : Config) : bool \{\n" +
+    "    return !(c.dim > 8192l)\n\}\n\ndef rm_dev_serves(f : KqFmt) : bool \{\n" +
+    "    return f == KqFmt.q8 || f == KqFmt.k4\n\}\n")
 
 //! the tier's two row-stash constants: the add+rms slab triple's
 //! (`dim` its value) and the small-slab twins'
@@ -269,7 +279,7 @@ def make_dasllama_fixture(t : T?; tree, root : string) {
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_gpu_knee.das", GPU_KNEE_TEXT)
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_vulkan_prefill.das", "options gen2\n")
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_kqformat.das", kqformat_text("q8 k4"))
-    write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_blocks.das", "options gen2\n\ndef private attn_dec_shape_ok(c : Config) : bool \{\n    return !(c.dim > 8192l)\n\}\n")
+    write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_blocks.das", DASLLAMA_BLOCKS_GREEN)
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama.das", "options gen2\n\ndef covered_fn() \{\n\}\n")
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_audio_embedder.das", "enum AudioKind \{\n    none\n    toyfam\n\}\n")
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_vision_embedder.das", "enum VisionKind \{\n    none\n    toyvis\n\}\n")
@@ -776,6 +786,27 @@ def private dasllama_alt_plants() : array<GatePlant> {
             "opening `let private CENSUS_NEVER_DISPATCHED <- [`")]
 }
 
+//! the member plants: a stamped member off the rail's roster, an
+//! unstamped one on it, no roster, no enum, a 33rd member
+def private dasllama_member_plants() : array<GatePlant> {
+    let blocks = (rel = "{DASLLAMA_ENGINE}/dasllama_blocks.das", text = DASLLAMA_BLOCKS_GREEN)
+    let formats = (rel = "{DASLLAMA_ENGINE}/dasllama_kqformat.das", text = kqformat_text("q8 k4"))
+    let roster = "f == KqFmt.q8 || f == KqFmt.k4"
+    let extra = join([for (i in range(30)); "    x{i}\n"], "")
+    return <- [
+        GatePlant(at = blocks, from = roster, to = "f == KqFmt.q8",
+            needle = "rm_dev_serves does not name KqFmt.k4, a member the discrete homes stamp"),
+        GatePlant(at = blocks, from = roster, to = "{roster} || f == KqFmt.mlx4",
+            needle = ("rm_dev_serves names KqFmt.mlx4, which KQ_DISCRETE_UNSTAMPED " +
+                "says no discrete home stamps")),
+        GatePlant(at = blocks, from = "def rm_dev_serves(", to = "def rm_dev_reads(",
+            needle = "dasllama_blocks.das: no `def rm_dev_serves(` function"),
+        GatePlant(at = formats, from = "enum KqFmt", to = "enum KqForm",
+            needle = "dasllama_kqformat.das: no `enum KqFmt` block"),
+        GatePlant(at = formats, from = "    mlx4\n\}", to = "    mlx4\n{extra}\}",
+            needle = "KqFmt has 33 members and a member set holds 32")]
+}
+
 //! each plant alone on the green tree at `root`: the gate is red, the
 //! plant's finding fires once, and the file gets its green text back
 def private fire_plants(t : T?; root, gate : string; plants : array<GatePlant>) {
@@ -790,7 +821,7 @@ def private fire_plants(t : T?; root, gate : string; plants : array<GatePlant>) 
     }
 }
 
-[test(description = "the dasLLAMA row-stash, rotated-alternate and census-table gates each fire once on their own plant alone, a missing census file fires its finding once, and the covered tree is green before the plants and after them", timeout = 1200)]
+[test(description = "the dasLLAMA row-stash, rotated-alternate, census-table, rail-roster and member-count gates each fire once on their own plant alone, a missing census file fires its finding once, and the covered tree is green before the plants and after them", timeout = 1200)]
 def test_dasllama_slab_alt_gates(t : T?) {
     let tree = getcwd()
     let fixture = repo_fixture(t, "modules/dasLLAMA/REVIEW.das", "review_dasllama_slab")
@@ -804,6 +835,7 @@ def test_dasllama_slab_alt_gates(t : T?) {
 
     fire_plants(t, fixture, gate, dasllama_slab_plants())
     fire_plants(t, fixture, gate, dasllama_alt_plants())
+    fire_plants(t, fixture, gate, dasllama_member_plants())
 
     t |> success(remove(path_join(fixture, DASLLAMA_CENSUS)), "the census file removed")
     let gone = spawn_at(fixture, [gate])

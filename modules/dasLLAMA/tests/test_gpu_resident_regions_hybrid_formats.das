@@ -46,7 +46,7 @@ def test_regions_hybrid_9b(t : T?) {
         if (form.on_metal) {
             mtp_parity_metal(t, m, form, mtp_parity_qwen35_9b())
         } elif (vk_census_form_is(form)) {
-            coverage_vk_model(t, m, form, cov_vk_c57_qwen35_9b())
+            coverage_vk_model(t, m, form, cov_vk_c61_qwen35_9b())
         } else {
             regions_batched_rows(h, m, LogitsBar.split_bar)
             regions_split_rows(h, m, LogitsBar.split_bar)

@@ -76,6 +76,11 @@ uints per superblock, except for iq4xs, iq3s, iq3xxs and iq2xxs, whose device ro
 (`kq_dev_ssb`): f16 d with the format's native high bits above it, then eight 4-bit sub-scale
 fields - iq4xs's `scales_h` and `scales_l` verbatim, the others' `s` nibbles - which the
 gather packs from the plane's decoded bytes and `iq4xs_sc` / `grid_sc` decode in the kernels.
+The ternary members' device row is their plane row, the f16 d alone (2 bytes): a scale plane holds two superblocks a word,
+superblock b's d the half of word b / 2 that b's parity picks (`q40_d_of`), and only a slab's end rounds
+to a whole word (`ARCHITECTURE_ENGINE_FORMATS_TQ2.md#tq2-device-row`); tq1's 52-byte quant row is read as words
+(`ARCHITECTURE_ENGINE_FORMATS_TQ2.md#tq1-device-row`). The 1-bit grid members' device rows are their planes, IQ1_S's d two
+superblocks a word as tq2's, IQ1_M's four scale words as two (`ARCHITECTURE_ENGINE_FORMATS_IQ1.md#iq1-device-row`).
 
 ### The cm2 tile body's k step, fast path and loop bounds {#cm2-tile-body}
 
@@ -83,7 +88,7 @@ gather packs from the plane's decoded bytes and `iq4xs_sc` / `grid_sc` decode in
 block.** The template's k step (`BK`) is 64 on the dense l and m tiles and on the expert stamps of the K-quants, q4_0, q8,
 the 4-bit LUT formats and the per-32 formats - there the e column IS the m stamp (`KQ_CM2E_ALIASES_M` in `dasllama_kqformat.das` names them, the
 `cm2_cls_*` ladder's e tail picks their m class through `kq_tile_target`, `REVIEW.das` holds the roster to the s stamps' k steps) - and 32 on the s and e stamps
-of the five grid-codebook formats (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s) and of mx4 (their e stamp is `<Fmt>Cm2EBatch`); a stamp's `AT`/`BT` carry its depth. The class pick ladders (`cm2_cls_*` for the engine, over every tile tail; `khr_cls_*` for the kernel cells' KHR arm, in the classes file) are stamped by `kq_tile_stamp` over every `KqFmt` member from one placeholder body, so a format without its stamp fails the compile, never a window. A grid decode is
+of the seven grid-codebook formats (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s, iq1s, iq1m) and of mx4 (their e stamp is `<Fmt>Cm2EBatch`); a stamp's `AT`/`BT` carry its depth. The class pick ladders (`cm2_cls_*` for the engine, over every tile tail; `khr_cls_*` for the kernel cells' KHR arm, in the classes file) are stamped by `kq_tile_stamp` over every `KqFmt` member from one placeholder body, so a format without its stamp fails the compile, never a window. A grid decode is
 occupancy-bound - a 64-deep column holds twice the A tile, and with the codebook lookup's live range
 a workgroup fewer fits an SM (the iq2xxs gate/up plane 0.611 against 0.730 ms at 32, `moe:<fmt>`,
 RTX 5060 Ti) - while a light decode is step-bound (the k4 s tile 0.744 against 0.679 at 32 (`moesk:k4`), its
@@ -209,7 +214,7 @@ the k4 band. `gemv_lanes_per_row` picks the lanes per row from the row's blocks 
 for the grid formats and 16 for the k-lattice to 48; 16 to 96; past that the whole subgroup for the
 k-lattice and 16 for the grid formats - and `gemv_enc` sizes the grid to match (a workgroup's
 subgroups each take subgroup_size / lanes rows). The grid formats are the codebook and grid decodes
-(iq2s, iq2xs, iq2xxs, iq3xxs, iq4xs, iq4nl, iq3s4, nv4, `gemv_grid_fmt`); iq3s takes the k-lattice split (K
+(iq2s, iq2xs, iq2xxs, iq3xxs, iq4xs, iq4nl, iq3s4, nv4, iq1s, iq1m, `gemv_grid_fmt`); iq3s takes the k-lattice split (K
 1408: 354 / 395 / 386 GB/s at 32 / 16 / 8 lanes). nv4 stays with the grid split past 96 blocks though
 its device unit decodes with no gather: on an RTX PRO 4500 the whole subgroup is slower at rows of 96
 and 104 blocks and at the llama-8B shapes on both discrete homes, and under 3% faster at the 27B's

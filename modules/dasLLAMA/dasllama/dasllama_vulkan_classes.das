@@ -3949,6 +3949,49 @@ class KqBatchK2 : KqBatchK6 {
     }
 }
 
+//! TQ2_0 tile: k2's staging and fold under sub-scale 1, min 1 and dmin = d - all four scale planes the superblock's d, read off
+//! the two-byte row (two superblocks a word, the half by parity)
+[vk_dispatch(name = "kq_batch_tq2_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchTq2 : KqBatchK2 {
+    def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
+        let slane = tid % 32u
+        let sblk = tid / 32u
+        var d = 0.0
+        if (wt * 32u + slane < pa.d) {
+            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
+            d = q40_d_of(wsu[wsb / 2u], wsb)
+        }
+        wsw[sblk * 32u + slane] = d
+        wsw2[sblk * 32u + slane] = d
+        wsw3[sblk * 32u + slane] = d
+        wsw4[sblk * 32u + slane] = d
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_tq2_cls_spv")]
+    def override run {
+        tile_shell()
+    }
+}
+
+//! TQ1_0 tile: tq2's scale stage and fold, each 16-weight half one column's trits off the superblock's 13 quant words
+[vk_dispatch(name = "kq_batch_tq1_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchTq1 : KqBatchTq2 {
+    [unused_argument(k)]
+    def override w_quad(wsb, bu, hh, k : uint) : uint4 {
+        let qb = wsb * TQ1_QWORDS
+        let w0 = bu * 8u + hh * 4u
+        return uint4(tq1_word(wq[qb + uint(tq1_dword_trit(int(w0)).x)], uint(tq1_dword_trit(int(w0)).y)),
+            tq1_word(wq[qb + uint(tq1_dword_trit(int(w0 + 1u)).x)], uint(tq1_dword_trit(int(w0 + 1u)).y)),
+            tq1_word(wq[qb + uint(tq1_dword_trit(int(w0 + 2u)).x)], uint(tq1_dword_trit(int(w0 + 2u)).y)),
+            tq1_word(wq[qb + uint(tq1_dword_trit(int(w0 + 3u)).x)], uint(tq1_dword_trit(int(w0 + 3u)).y)))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_tq1_cls_spv")]
+    def override run {
+        tile_shell()
+    }
+}
+
 // the iq2 grid formats' scale stage and fold: per-16 UNSIGNED strips on k6's wsw/wsw2 planes and a
 // plain split fma (no offset, no min term); iq2s and iq2xs stage their grids and gather on it
 class KqBatchIq2Base : KqBatchK6 {
@@ -4032,6 +4075,90 @@ class KqBatchIq2xs : KqBatchIq2Base {
             gridw[tid + uint(k) * 256u] = iq2xs_grid_word(int(tid + uint(k) * 256u))
         }
         barrier()   // the iq2xs grid visible before the first stage_w
+        tile_shell()
+    }
+}
+
+//! IQ1_S tile: iq2's per-16 two-plane split fold over the 1-bit grid - a staged quad is two octets' grid entries as signed
+//! lanes in eighths (`grid1_quad`), both planes the block's d x (2s + 1) / 8; the 4 KB grid stages once
+[vk_dispatch(name = "kq_batch_iq1s_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchIq1s : KqBatchIq2Base {
+    @workgroup gridw : uint[1024]
+
+    //! block `bu`'s 16 qh bits of superblock `wsb`
+    def g1_qh(wsb, bu : uint) : uint => (wq[wsb * IQ1_QWORDS + IQ1_QH_WORD + bu / 2u] >> ((bu & 1u) * 16u)) & 0xFFFFu
+
+    def g1_hi(qh, l : uint) : uint => iq1s_hi(qh, l)
+
+    [unused_argument(l)]
+    def g1_neg(qh, l : uint) : uint => iq1s_neg(qh)
+
+    [unused_argument(k)]
+    def override w_quad(wsb, bu, hh, k : uint) : uint4 {
+        let qsw = wq[wsb * IQ1_QWORDS + bu]
+        let qh = g1_qh(wsb, bu)
+        let l0 = hh * 2u
+        let i0 = ((qsw >> (l0 * 8u)) & 255u) | (g1_hi(qh, l0) << 8u)
+        let i1 = ((qsw >> (l0 * 8u + 8u)) & 255u) | (g1_hi(qh, l0 + 1u) << 8u)
+        return grid1_quad(grid1_entry(gridw[i0 >> 1u], i0), g1_neg(qh, l0), grid1_entry(gridw[i1 >> 1u], i1), g1_neg(qh, l0 + 1u))
+    }
+
+    def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
+        let slane = tid % 32u
+        let sblk = tid / 32u
+        var sa = 0.0
+        if (wt * 32u + slane < pa.d) {
+            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
+            sa = q40_d_of(wsu[wsb / 2u], wsb) * IQ1_DELTA * iq1s_sc(g1_qh(wsb, sblk))
+        }
+        wsw[sblk * 32u + slane] = sa
+        wsw2[sblk * 32u + slane] = sa
+    }
+
+    //! the 1-bit grid into the workgroup copy, ahead of the tile loop
+    def stage_grid1 {
+        let tid = gl_LocalInvocationID.x
+        for (k in range(4)) {
+            gridw[tid + uint(k) * 256u] = iq1s_grid_word(int(tid + uint(k) * 256u))
+        }
+        barrier()   // the grid visible before the first stage_w
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_iq1s_cls_spv")]
+    def override run {
+        stage_grid1()
+        tile_shell()
+    }
+}
+
+//! IQ1_M tile: the iq1s staging with an octet's high bits and delta sign off its qh nibble, the two planes the half-blocks'
+//! d x (2s + 1) / 8 off the scale row's two words
+[vk_dispatch(name = "kq_batch_iq1m_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchIq1m : KqBatchIq1s {
+    def override g1_hi(qh, l : uint) : uint => iq1m_hi(qh, l)
+
+    def override g1_neg(qh, l : uint) : uint => iq1m_neg(qh, l)
+
+    def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
+        let slane = tid % 32u
+        let sblk = tid / 32u
+        var sa = 0.0
+        var sbv = 0.0
+        if (wt * 32u + slane < pa.d) {
+            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
+            let w0 = wsu[wsb * IQ1M_SWORDS]
+            let w1 = wsu[wsb * IQ1M_SWORDS + 1u]
+            let d8 = iq1m_d(w0, w1) * IQ1_DELTA
+            sa = d8 * iq1m_sc(w0, w1, sblk * 2u)
+            sbv = d8 * iq1m_sc(w0, w1, sblk * 2u + 1u)
+        }
+        wsw[sblk * 32u + slane] = sa
+        wsw2[sblk * 32u + slane] = sbv
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_iq1m_cls_spv")]
+    def override run {
+        stage_grid1()
         tile_shell()
     }
 }
@@ -5020,6 +5147,79 @@ class template Q8MmqT : KqMmqKhrT {
     }
 }
 
+//! a 0/1-lane Q1_0 block's (scale, min) pair under its d: the lanes doubled, -d over the activation sum
+def mmq_bits01_scale(d : float) : float2 => float2(2.0 * d, -d)
+
+//! the per-32 low-bit pair on the int8 tile over its leaf's format tag (`FMT`): Q2_0 (`Q20MmqT`) and Q1_0 (`Q10MmqT`) off the word
+//! view, no min term, a block reading its scale group's f16 d through the per-32 family's scale word
+[ |> template_struct_instance]
+class template LowbitMmqBaseT : KqMmqKhrT {
+    override W32 = true
+    override MIN = false
+
+    def override plane_tile(pb : uint) : uint => pb / max(1u, (pa.n / 32u) * 128u)
+
+    //! block `b` of weight row `wrow` of the plane at `pb`
+    def blk_at(pb, wrow, b : uint) : uint => pb + wrow * (pa.n / 32u) + b
+
+    //! block `blk`'s f16 d (`blk32_sword`, `blk32_scale`)
+    def grp_d(blk : uint) : float => blk32_scale(type<FMT>, ws[blk32_sword(type<FMT>, blk)], blk).x
+}
+
+//! Q2_0: a block's two code words (element j at bits 2j of the little-endian pair), the codes spread to signed int8 lanes q - 1
+[ |> template_struct_instance]
+class template Q20MmqT : LowbitMmqBaseT {
+    typedef FMT = KqTag_q20
+
+    //! the two code words at word `at`
+    def code_pair(at : uint) : uint4 => uint4(wqw[at], wqw[at + 1u], 0u, 0u)
+
+    def override w_load0(pb, wrow, b : uint) : uint4 => code_pair(blk_at(pb, wrow, b) * KQ_Q20_QWORDS)
+
+    def override w_scale(pb, wrow, b : uint) : float2 => float2(grp_d(blk_at(pb, wrow, b)), 0.0)
+
+    def override w_put(base : uint; q0, q1 : uint4) : void {
+        let lo = blk32_q20_quad(q0.x)
+        let hi = blk32_q20_quad(q0.y)
+        for [unroll_full] (c in range(4)) {
+            mq_a[base + uint(c)] = lo[c]
+            mq_a[base + 4u + uint(c)] = hi[c]
+        }
+    }
+}
+
+//! Q1_0: a block's one sign word (element j at bit j), the bits spread to signed int8 lanes +-1 under d; under `BITS01` the bits
+//! stage as 0/1 lanes under 2d with -d on the activation sum, the min term (`MIN`)
+[ |> template_struct_instance]
+class template Q10MmqT : LowbitMmqBaseT {
+    typedef FMT = KqTag_q10
+    @template_constant BITS01 : bool = false   //!< the sign word staged as 0/1 lanes, the -d term folded over the activation sum
+
+    def override w_load0(pb, wrow, b : uint) : uint4 => uint4(wqw[blk_at(pb, wrow, b) * KQ_Q10_QWORDS], 0u, 0u, 0u)
+
+    def override w_scale(pb, wrow, b : uint) : float2 {
+        static_if (BITS01) {
+            return mmq_bits01_scale(grp_d(blk_at(pb, wrow, b)))
+        } else {
+            return float2(grp_d(blk_at(pb, wrow, b)), 0.0)
+        }
+    }
+
+    def override w_put(base : uint; q0, q1 : uint4) : void {
+        for [unroll_full] (c in range(4)) {
+            let lo = q10_bit_lanes(q0.x >> (uint(c) * 4u))
+            let hi = q10_bit_lanes(q0.x >> (16u + uint(c) * 4u))
+            static_if (BITS01) {
+                mq_a[base + uint(c)] = lo
+                mq_a[base + 4u + uint(c)] = hi
+            } else {
+                mq_a[base + uint(c)] = q10_signed_word(lo)
+                mq_a[base + 4u + uint(c)] = q10_signed_word(hi)
+            }
+        }
+    }
+}
+
 //! Q4_K on the int8 tile: 128 rows a tile, sixteen subgroups
 [vk_dispatch(name = "kq_batch_k4_mmq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K4Mmq : K4MmqT {
@@ -5130,6 +5330,48 @@ class Q5032MmqS : Q51MmqT {
     }
 }
 
+//! Q2_0 on the int8 tile: 128 rows a tile, sixteen subgroups
+[vk_dispatch(name = "q20_batch_mmq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q20Mmq : Q20MmqT {
+    [spirv_kernel(local_size_x = 512, name = "q20_batch_mmq_cls_spv")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! ... and its short tile: 32 rows, four subgroups, every one live on a short piece
+[vk_dispatch(name = "q20_batch_mmqs_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q20MmqS : Q20MmqT {
+    override TOKS = 32u
+    override LANES = 128u
+
+    [spirv_kernel(local_size_x = 128, name = "q20_batch_mmqs_cls_spv")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! Q1_0 on the int8 tile: 128 rows a tile, sixteen subgroups
+[vk_dispatch(name = "q10_batch_mmq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q10Mmq : Q10MmqT {
+    [spirv_kernel(local_size_x = 512, name = "q10_batch_mmq_cls_spv")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! ... and its short tile: 32 rows, four subgroups, every one live on a short piece
+[vk_dispatch(name = "q10_batch_mmqs_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q10MmqS : Q10MmqT {
+    override TOKS = 32u
+    override LANES = 128u
+
+    [spirv_kernel(local_size_x = 128, name = "q10_batch_mmqs_cls_spv")]
+    def run {
+        mmq_body()
+    }
+}
+
 //! Q8_0 on the int8 tile: 128 rows a tile, sixteen subgroups
 [vk_dispatch(name = "q8_batch_mmq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q8Mmq : Q8MmqT {
@@ -5153,7 +5395,7 @@ class Q8MmqS : Q8MmqT {
 
 let private MMQ_TILE_TAILS = "mmq_cls mmqs_cls"   //! the int8 tiles: the 128-row tile, the 32-row one
 //! the formats with no int8 tile
-let private MMQ_SKIP = "q40 iq4xs k3 iq3s iq3xxs iq4nl k2 iq2s iq2xs iq2xxs mx4 iq4nl32 iq3s4 q4032 nv4"
+let private MMQ_SKIP = "q40 iq4xs k3 iq3s iq3xxs iq4nl k2 tq2 tq1 iq2s iq2xs iq2xxs iq1s iq1m mx4 iq4nl32 iq3s4 q4032 nv4"
 
 //! whether a plane of format `fmt` has int8 tiles: a format the tiles' ladder stamps
 def mmq_cls_has(fmt : int) : bool {
@@ -5165,7 +5407,7 @@ def mmq_cls_has(fmt : int) : bool {
 //! superblocks of a superblock format, pairs of 32-blocks of any other
 def mmq_cls_fits(fmt : int; n : int64) : bool => mmq_cls_has(fmt) && (n % (kq_sb(fmt) ? KQ_SB_ELEMS : 2l * KQ_B32_ELEMS)) == 0l
 
-def mmq_cls_ensure(fmt : int; short : bool) : bool {
+def mmq_cls_ensure(fmt : int; short : bool) : bool {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a (format, tile) stamp
     let tail = short ? 1 : 0
     var r = false
     kq_tile_stamp(fmt, MMQ_SKIP, "batch", tail, MMQ_TILE_TAILS) <| $() {
@@ -5174,7 +5416,7 @@ def mmq_cls_ensure(fmt : int; short : bool) : bool {
     return r
 }
 
-def mmq_cls_set(fmt : int; short : bool; bufs : uint64 const[7]; sizes : int64 const[7]; gbits : uint const[7]) : VkDescriptorSet {
+def mmq_cls_set(fmt : int; short : bool; bufs : uint64 const[7]; sizes : int64 const[7]; gbits : uint const[7]) : VkDescriptorSet {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a (format, tile) stamp
     let tail = short ? 1 : 0
     var r : VkDescriptorSet
     kq_tile_stamp(fmt, MMQ_SKIP, "batch", tail, MMQ_TILE_TAILS) <| $() {
@@ -5183,7 +5425,7 @@ def mmq_cls_set(fmt : int; short : bool; bufs : uint64 const[7]; sizes : int64 c
     return r
 }
 
-def mmq_cls_enc(fmt : int; short : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
+def mmq_cls_enc(fmt : int; short : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a (format, tile) stamp
     let tail = short ? 1 : 0
     kq_tile_stamp(fmt, MMQ_SKIP, "batch", tail, MMQ_TILE_TAILS) <| $() {
         tile_enc(raw, h, s, pc, groups)
@@ -5446,6 +5688,62 @@ class Q5032Cm2MBatch : Q5032Cm2T {
     }
 }
 
+[vk_dispatch(name = "q20_batch_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q20Cm2LBatch : Q20Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+[vk_dispatch(name = "q10_batch_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q10Cm2LBatch : Q10Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+[vk_dispatch(name = "q20_batch_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q20Cm2MBatch : Q20Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+[vk_dispatch(name = "q10_batch_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q10Cm2MBatch : Q10Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 //! the q51 rail's s column: the expert schedule's 32-row pieces and the narrow window's column
 [vk_dispatch(name = "q51_batch_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q51Cm2SBatch : Q51Cm2T {
@@ -5497,6 +5795,38 @@ class Q4032Cm2SBatch : Q4032Cm2T {
 //! the q5032 rail's s column: q4032's shape (the window's dense planes and the expert schedule's 32-row pieces)
 [vk_dispatch(name = "q5032_batch_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q5032Cm2SBatch : Q5032Cm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! the q20 rail's s column: q4032's shape (the window's dense planes and the expert schedule's 32-row pieces)
+[vk_dispatch(name = "q20_batch_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q20Cm2SBatch : Q20Cm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! the q10 rail's s column: q4032's shape (the window's dense planes and the expert schedule's 32-row pieces)
+[vk_dispatch(name = "q10_batch_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q10Cm2SBatch : Q10Cm2T {
     override BN = 32u
     override STILE = true
     typedef AT = coopmatWgA_f16_128x64
@@ -6049,6 +6379,101 @@ class K2Cm2SBatch : K2Cm2T {
     }
 }
 
+//! `K2Cm2T`'s TQ2_0 stamps (`TQ2`): k2's l, m and s columns over the two-byte d row
+[vk_dispatch(name = "kq_batch_tq2_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Tq2Cm2LBatch : K2Cm2T {
+    override TQ2 = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `K2Cm2T`'s TQ2_0 m column
+[vk_dispatch(name = "kq_batch_tq2_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Tq2Cm2MBatch : K2Cm2T {
+    override TQ2 = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `K2Cm2T`'s TQ2_0 s column
+[vk_dispatch(name = "kq_batch_tq2_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Tq2Cm2SBatch : K2Cm2T {
+    override TQ2 = true
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Tq1Cm2T`'s stamps: tq2's l, m and s columns over the 52-byte block
+[vk_dispatch(name = "kq_batch_tq1_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Tq1Cm2LBatch : Tq1Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Tq1Cm2T`'s m column
+[vk_dispatch(name = "kq_batch_tq1_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Tq1Cm2MBatch : Tq1Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Tq1Cm2T`'s s column
+[vk_dispatch(name = "kq_batch_tq1_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Tq1Cm2SBatch : Tq1Cm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 [vk_dispatch(name = "kq_batch_iq2s_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq2sCm2LBatch : Iq2sCm2T {
     typedef AT = coopmatWgA_f16_128x64
@@ -6551,6 +6976,74 @@ class Q5032KhrBatchRot : Q5032Cm2T {
     }
 }
 
+[vk_dispatch(name = "q20_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q20KhrBatch : Q20Cm2T {
+    override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+[vk_dispatch(name = "q10_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q10KhrBatch : Q10Cm2T {
+    override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `q20_batch_khr_cls`'s alternate off `Q20Cm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "q20_batch_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "q20_batch_khr_cls", alt_bit = 1)]
+class Q20KhrBatchRot : Q20Cm2T {
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `q10_batch_khr_cls`'s alternate off `Q10Cm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "q10_batch_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "q10_batch_khr_cls", alt_bit = 1)]
+class Q10KhrBatchRot : Q10Cm2T {
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 [vk_dispatch(name = "mx4_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Mx4KhrBatch : Mx4Cm2T {
     override KHR = true
@@ -6960,6 +7453,78 @@ class K2KhrBatchRot : K2Cm2T {
     }
 }
 
+//! `K2Cm2T`'s TQ2_0 KHR stamp (`TQ2`)
+[vk_dispatch(name = "kq_batch_tq2_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Tq2KhrBatch : K2Cm2T {
+    override TQ2 = true
+    override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `kq_batch_tq2_khr_cls`'s alternate off `K2Cm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_tq2_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_tq2_khr_cls", alt_bit = 1)]
+class Tq2KhrBatchRot : K2Cm2T {
+    override TQ2 = true
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Tq1Cm2T`'s KHR stamp
+[vk_dispatch(name = "kq_batch_tq1_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Tq1KhrBatch : Tq1Cm2T {
+    override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `kq_batch_tq1_khr_cls`'s alternate off `Tq1Cm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_tq1_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_tq1_khr_cls", alt_bit = 1)]
+class Tq1KhrBatchRot : Tq1Cm2T {
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 [vk_dispatch(name = "kq_batch_iq2s_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq2sKhrBatch : Iq2sCm2T {
     override KHR = true
@@ -7047,6 +7612,208 @@ class Iq2xxsKhrBatch : Iq2xxsCm2T {
 //! `kq_batch_iq2xxs_khr_cls`'s alternate off `Iq2xxsCm2T`: its K walk rotated two steps a weight tile
 [vk_dispatch(name = "kq_batch_iq2xxs_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_iq2xxs_khr_cls", alt_bit = 1)]
 class Iq2xxsKhrBatchRot : Iq2xxsCm2T {
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Iq1sCm2T`'s l column
+[vk_dispatch(name = "kq_batch_iq1s_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq1sCm2LBatch : Iq1sCm2T {
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Iq1sCm2T`'s m column
+[vk_dispatch(name = "kq_batch_iq1s_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq1sCm2MBatch : Iq1sCm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Iq1sCm2T`'s s column, 32 deep
+[vk_dispatch(name = "kq_batch_iq1s_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq1sCm2SBatch : Iq1sCm2T {
+    override BN = 32u
+    override STILE = true
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Iq1sCm2T`'s e column: the expert schedule's m pieces, 32 deep
+[vk_dispatch(name = "kq_batch_iq1s_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq1sCm2EBatch : Iq1sCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Iq1sCm2T`'s KHR stamp
+[vk_dispatch(name = "kq_batch_iq1s_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq1sKhrBatch : Iq1sCm2T {
+    override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `kq_batch_iq1s_khr_cls`'s alternate off `Iq1sCm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_iq1s_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_iq1s_khr_cls", alt_bit = 1)]
+class Iq1sKhrBatchRot : Iq1sCm2T {
+    override KHR = true
+    override KROT = 2u
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Iq1mCm2T`'s l column
+[vk_dispatch(name = "kq_batch_iq1m_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq1mCm2LBatch : Iq1mCm2T {
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Iq1mCm2T`'s m column
+[vk_dispatch(name = "kq_batch_iq1m_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq1mCm2MBatch : Iq1mCm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Iq1mCm2T`'s s column, 32 deep
+[vk_dispatch(name = "kq_batch_iq1m_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq1mCm2SBatch : Iq1mCm2T {
+    override BN = 32u
+    override STILE = true
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Iq1mCm2T`'s e column: the expert schedule's m pieces, 32 deep
+[vk_dispatch(name = "kq_batch_iq1m_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq1mCm2EBatch : Iq1mCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Iq1mCm2T`'s KHR stamp
+[vk_dispatch(name = "kq_batch_iq1m_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq1mKhrBatch : Iq1mCm2T {
+    override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `kq_batch_iq1m_khr_cls`'s alternate off `Iq1mCm2T`: its K walk rotated two steps a weight tile
+[vk_dispatch(name = "kq_batch_iq1m_khr_rot_cls", kernel = "run", grid = "wgs", params = "wgs : int64", alt_of = "kq_batch_iq1m_khr_cls", alt_bit = 1)]
+class Iq1mKhrBatchRot : Iq1mCm2T {
     override KHR = true
     override KROT = 2u
     override BN = 128u
@@ -8651,6 +9418,28 @@ class Q5032GemvSum : Blk32GemvT {
     }
 }
 
+[vk_dispatch(name = "q20_gemv_sum_cls", kernel = "run", family = "q51_gemv_sum_cls", grid = "wgs", params = "wgs : int64")]
+class Q20GemvSum : Blk32GemvT {
+    typedef FMT = KqTag_q20
+    override SUM = true
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q20_gemv_sum_cls_spv")]
+    def run {
+        sum_shell()
+    }
+}
+
+[vk_dispatch(name = "q10_gemv_sum_cls", kernel = "run", family = "q51_gemv_sum_cls", grid = "wgs", params = "wgs : int64")]
+class Q10GemvSum : Blk32GemvT {
+    typedef FMT = KqTag_q10
+    override SUM = true
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q10_gemv_sum_cls_spv")]
+    def run {
+        sum_shell()
+    }
+}
+
 [vk_dispatch(name = "mx4_gemv_sum_cls", kernel = "run", family = "q51_gemv_sum_cls", grid = "wgs", params = "wgs : int64")]
 class Mx4GemvSum : Blk32GemvT {
     typedef FMT = KqTag_mx4
@@ -8770,6 +9559,70 @@ class Q5032GemvN : Blk32GemvRunT {
     }
 }
 
+[vk_dispatch(name = "q20_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class Q20Gemv : Blk32GemvRunT {
+    typedef FMT = KqTag_q20
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
+    def run {
+        b32_body()
+    }
+}
+
+[vk_dispatch(name = "q10_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class Q10Gemv : Blk32GemvRunT {
+    typedef FMT = KqTag_q10
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
+    def run {
+        b32_body()
+    }
+}
+
+[vk_dispatch(name = "q20_emb_cls", kernel = "run", family = "b32_emb_cls", grid = "wgs", params = "wgs : int64")]
+class Q20Emb : Blk32GemvRunT {
+    typedef FMT = KqTag_q20
+    override EMB = true
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
+    def run {
+        b32_body()
+    }
+}
+
+[vk_dispatch(name = "q10_emb_cls", kernel = "run", family = "b32_emb_cls", grid = "wgs", params = "wgs : int64")]
+class Q10Emb : Blk32GemvRunT {
+    typedef FMT = KqTag_q10
+    override EMB = true
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
+    def run {
+        b32_body()
+    }
+}
+
+[vk_dispatch(name = "q20_gemv_n_cls", kernel = "run", family = "q20_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class Q20GemvN : Blk32GemvRunT {
+    typedef FMT = KqTag_q20
+    override NCOL = true
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
+    def run {
+        b32_body()
+    }
+}
+
+[vk_dispatch(name = "q10_gemv_n_cls", kernel = "run", family = "q10_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class Q10GemvN : Blk32GemvRunT {
+    typedef FMT = KqTag_q10
+    override NCOL = true
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
+    def run {
+        b32_body()
+    }
+}
+
 [vk_dispatch(name = "mx4_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class Mx4Gemv : Blk32GemvRunT {
     typedef FMT = KqTag_mx4
@@ -8803,10 +9656,17 @@ class template Blk32BatchT : MoeCmBase {
     @workgroup wsw : float[256]    //! per-(block, col) d
     @workgroup wmw : float[256]    //! per-(block, col) m (Q5_1)
 
-    //! weight block `wb`'s half `sh` (`blk32_quad`): its words as this class binds the plane
+    //! weight block `wb`'s half `sh` (`blk32_quad`): its words as this class binds the plane, q20 off the half's one code word,
+    //! q10 off the block's one sign word
     def blk_quad(wb, sh : uint) : uint4 {
         let b = wb * blk32_qwords(type<FMT>)
-        return blk32_quad(type<FMT>, uint4(wq[b], wq[b + 1u], wq[b + 2u], wq[b + 3u]), wq[b + blk32_qh_off(type<FMT>)], sh)
+        static_if (typeinfo typename(type<FMT>) == typeinfo typename(type<KqTag_q20>)) {
+            return blk32_q20_quad(wq[b + sh / 4u])
+        } static_elif (typeinfo typename(type<FMT>) == typeinfo typename(type<KqTag_q10>)) {
+            return blk32_q10_quad(wq[b] >> (sh * 4u))
+        } else {
+            return blk32_quad(type<FMT>, uint4(wq[b], wq[b + 1u], wq[b + 2u], wq[b + 3u]), wq[b + blk32_qh_off(type<FMT>)], sh)
+        }
     }
 
     //! weight block `wb`'s scale pair (`blk32_scale`)
@@ -8950,6 +9810,26 @@ class Q4032Batch : Blk32BatchT {
 [vk_dispatch(name = "q5032_batch_cls", kernel = "run", family = "blk32_batch_cls", grid = "wgs", params = "wgs : int64")]
 class Q5032Batch : Blk32BatchT {
     typedef FMT = KqTag_q5032
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        blk32_body()
+    }
+}
+
+[vk_dispatch(name = "q20_batch_cls", kernel = "run", family = "blk32_batch_cls", grid = "wgs", params = "wgs : int64")]
+class Q20Batch : Blk32BatchT {
+    typedef FMT = KqTag_q20
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        blk32_body()
+    }
+}
+
+[vk_dispatch(name = "q10_batch_cls", kernel = "run", family = "blk32_batch_cls", grid = "wgs", params = "wgs : int64")]
+class Q10Batch : Blk32BatchT {
+    typedef FMT = KqTag_q10
 
     [spirv_kernel(local_size_x = 256)]
     def run {
@@ -9107,7 +9987,7 @@ let GEMV_SHELL_PLAIN = 0
 let GEMV_SHELL_SUM = 1   //! the per-32 formats past q8
 let GEMV_SHELL_GU = 2    //! the kq formats the twins stamp, and mx4's biased twin
 //! the (format, shell) pairs no stamp serves
-let GEMV_SHELL_SKIP = "q8/sum_cls k2/sum_cls k3/sum_cls k4/sum_cls k5/sum_cls k6/sum_cls q40/sum_cls iq4xs/sum_cls iq3s/sum_cls iq3xxs/sum_cls iq4nl/sum_cls iq2s/sum_cls iq2xs/sum_cls iq2xxs/sum_cls iq3s4/sum_cls nv4/sum_cls nv4/gu_cls q8/gu_cls q51/gu_cls iq4nl32/gu_cls q4032/gu_cls q5032/gu_cls k2/gu_cls k3/gu_cls k5/gu_cls k6/gu_cls q40/gu_cls iq3s/gu_cls iq3xxs/gu_cls iq4nl/gu_cls iq2xs/gu_cls iq2xxs/gu_cls"
+let GEMV_SHELL_SKIP = "q8/sum_cls k2/sum_cls tq2/sum_cls tq1/sum_cls k3/sum_cls k4/sum_cls k5/sum_cls k6/sum_cls q40/sum_cls iq4xs/sum_cls iq3s/sum_cls iq3xxs/sum_cls iq4nl/sum_cls iq2s/sum_cls iq2xs/sum_cls iq2xxs/sum_cls iq1s/sum_cls iq1m/sum_cls iq3s4/sum_cls nv4/sum_cls nv4/gu_cls q8/gu_cls q51/gu_cls iq4nl32/gu_cls q4032/gu_cls q5032/gu_cls q20/gu_cls q10/gu_cls k2/gu_cls tq2/gu_cls tq1/gu_cls k3/gu_cls k5/gu_cls k6/gu_cls q40/gu_cls iq3s/gu_cls iq3xxs/gu_cls iq4nl/gu_cls iq2xs/gu_cls iq2xxs/gu_cls iq1s/gu_cls iq1m/gu_cls"
 
 //! whether format `fmt` stamps decode GEMV shell `shell`: no pair of `GEMV_SHELL_SKIP` names it
 def gemv_shell_fmt(fmt, shell : int) : bool => kq_tile_stamped(fmt, GEMV_SHELL_SKIP, shell, GEMV_SHELLS)
@@ -9141,6 +10021,10 @@ def gemv_cls_set(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbit
         return set_q4032_gemv_cls(bufs, sizes, gbits)
     } elif (fmt == int(KqFmt.q5032)) {
         return set_q5032_gemv_cls(bufs, sizes, gbits)
+    } elif (fmt == int(KqFmt.q20)) {
+        return set_q20_gemv_cls(bufs, sizes, gbits)
+    } elif (fmt == int(KqFmt.q10)) {
+        return set_q10_gemv_cls(bufs, sizes, gbits)
     } elif (kq_sb(fmt)) {
         // the family shares one layout — one set serves every kq format
         return set_kq_gemv_cls(fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], bufs[5], kq_grid_dev()),
@@ -9185,10 +10069,10 @@ def gemv_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescr
 
 //! the N-column ladders' skips: the superblock formats' ladder (q8 picks its own stamps by row count, the per-32 formats
 //! and mx4 stamp another template), and the per-32 and mx4 one
-let private GEMV_N_KQ = "q8 q51 mx4 iq4nl32 q4032 q5032"
-let private GEMV_N_B32 = "q8 k4 q40 iq4xs iq3s4 iq3s iq3xxs iq4nl nv4 k3 k2 k5 k6 iq2s iq2xs iq2xxs"
+let private GEMV_N_KQ = "q8 q51 mx4 iq4nl32 q4032 q5032 q20 q10"
+let private GEMV_N_B32 = "q8 k4 q40 iq4xs iq3s4 iq3s iq3xxs iq4nl nv4 k3 k2 tq2 tq1 k5 k6 iq2s iq2xs iq2xxs iq1s iq1m"
 //! the rotated twins' ladder: the superblock formats with none (their quant rows never sit a power of two apart) join the skips
-let private GEMV_N_ROT = "q8 q51 mx4 iq4nl32 q4032 q5032 iq3s iq3xxs k3 k5 k6 iq2s"
+let private GEMV_N_ROT = "q8 q51 mx4 iq4nl32 q4032 q5032 q20 q10 iq3s iq3xxs k3 k5 k6 iq2s tq1 iq1s iq1m"
 
 let private GEMV_N_ROT_LEAVES = "nr_cls n4r_cls"   //! the rotated twins a format on the ladder stamps: the eight-column leaf, the four-column one
 
@@ -9217,9 +10101,8 @@ def gemv_n_rot_wanted(fmt : int; n : uint) : bool {
     return row >= GEMV_N_ROT_MIN_ROW && (f == KqFmt.iq4xs || row % GEMV_N_ROT_ROW_STEP == 0l)
 }
 
-//! the superblock decode GEMV family's roster - q8 and every kq leaf, in enum order: what the probe's ruler walks (the
-//! per-32 expert GEMVs carry another plane shape, so the kernel cells walk every member themselves)
-def kq_gemv_fmts() : array<KqFmt> => <- [for (f in type<KqFmt>); f; where f == KqFmt.q8 || kq_sb(f)]
+//! the decode GEMV roster the probe's ruler walks: q8 and every kq leaf the discrete homes stamp, in enum order
+def kq_gemv_fmts() : array<KqFmt> => <- [for (f in type<KqFmt>); f; where f == KqFmt.q8 || (kq_sb(f) && !kq_discrete_unstamped(f))]
 
 //! the reduction width past which the q8 N-column form pairs output rows a subgroup; off until a box's token command proves the pair
 var g_q8_n2_min_n = 0xFFFFFFFFu
@@ -9727,6 +10610,85 @@ class KqGemvK2N4 : K2GemvT {
     }
 }
 
+//! `K2GemvT`'s TQ2_0 leaf (`TQ2`): the one-column form
+[vk_dispatch(name = "kq_gemv_tq2_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvTq2 : K2GemvT {
+    override TQ2 = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K2GemvT`'s TQ2_0 N leaf
+[vk_dispatch(name = "kq_gemv_tq2_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvTq2N : K2GemvT {
+    override TQ2 = true
+    override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K2GemvT`'s TQ2_0 N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_tq2_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvTq2N4 : K2GemvT {
+    override TQ2 = true
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K2GemvT`'s TQ1_0 leaf (`TQ1` over `TQ2`'s scale row and fold): the one-column form
+[vk_dispatch(name = "kq_gemv_tq1_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvTq1 : K2GemvT {
+    override TQ2 = true
+    override TQ1 = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K2GemvT`'s TQ1_0 N leaf
+[vk_dispatch(name = "kq_gemv_tq1_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvTq1N : K2GemvT {
+    override TQ2 = true
+    override TQ1 = true
+    override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K2GemvT`'s TQ1_0 N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_tq1_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvTq1N4 : K2GemvT {
+    override TQ2 = true
+    override TQ1 = true
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
 
 [vk_dispatch(name = "kq_gemv_k5_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK5 : K5GemvT {
@@ -9892,6 +10854,78 @@ class KqGemvIq2xxsN : Iq2xxsGemvT {
 //! `Iq2xxsGemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
 [vk_dispatch(name = "kq_gemv_iq2xxs_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq2xxsN4 : Iq2xxsGemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq1GemvT`'s IQ1_S leaf: the one-column form
+[vk_dispatch(name = "kq_gemv_iq1s_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq1s : Iq1GemvT {
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq1GemvT`'s IQ1_S N leaf
+[vk_dispatch(name = "kq_gemv_iq1s_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq1sN : Iq1GemvT {
+    override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq1GemvT`'s IQ1_S N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_iq1s_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq1sN4 : Iq1GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq1GemvT`'s IQ1_M leaf (`IQ1M`): the one-column form
+[vk_dispatch(name = "kq_gemv_iq1m_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq1m : Iq1GemvT {
+    override IQ1M = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq1GemvT`'s IQ1_M N leaf
+[vk_dispatch(name = "kq_gemv_iq1m_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq1mN : Iq1GemvT {
+    override IQ1M = true
+    override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq1GemvT`'s IQ1_M N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_iq1m_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq1mN4 : Iq1GemvT {
+    override IQ1M = true
     override NCOL = true
     override RR = 2
     override NCMAX = 4
@@ -10093,6 +11127,35 @@ class KqGemvK2N4R : K2GemvT {
     }
 }
 
+//! `K2GemvT`'s TQ2_0 N leaves on the rotated walk (`KROT`): eight columns, then four
+[vk_dispatch(name = "kq_gemv_tq2_nr_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvTq2NR : K2GemvT {
+    override TQ2 = true
+    override NCOL = true
+    override RR = 2
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `KqGemvTq2NR` off `K2GemvT` at four columns
+[vk_dispatch(name = "kq_gemv_tq2_n4r_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvTq2N4R : K2GemvT {
+    override TQ2 = true
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+    override KROT = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
 //! `Iq2xsGemvT`'s N leaves on the rotated walk (`KROT`): eight columns, then four
 [vk_dispatch(name = "kq_gemv_iq2xs_nr_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq2xsNR : Iq2xsGemvT {
@@ -10258,6 +11321,31 @@ class KqEmbK2 : K2GemvT {
     }
 }
 
+//! `K2GemvT`'s TQ2_0 token-table gather (`TQ2`)
+[vk_dispatch(name = "kq_emb_tq2_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbTq2 : K2GemvT {
+    override TQ2 = true
+    override EMB = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K2GemvT`'s TQ1_0 token-table gather (`TQ1` over `TQ2`)
+[vk_dispatch(name = "kq_emb_tq1_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbTq1 : K2GemvT {
+    override TQ2 = true
+    override TQ1 = true
+    override EMB = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
 [vk_dispatch(name = "kq_emb_iq2s_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
 class KqEmbIq2s : Iq2sGemvT {
     override EMB = true
@@ -10280,6 +11368,29 @@ class KqEmbIq2xs : Iq2xsGemvT {
 
 [vk_dispatch(name = "kq_emb_iq2xxs_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
 class KqEmbIq2xxs : Iq2xxsGemvT {
+    override EMB = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq1GemvT`'s IQ1_S token-table gather
+[vk_dispatch(name = "kq_emb_iq1s_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbIq1s : Iq1GemvT {
+    override EMB = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq1GemvT`'s IQ1_M token-table gather (`IQ1M`)
+[vk_dispatch(name = "kq_emb_iq1m_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbIq1m : Iq1GemvT {
+    override IQ1M = true
     override EMB = true
 
     [spirv_kernel(local_size_x = 64)]

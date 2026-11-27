@@ -32,8 +32,7 @@ require math
 struct CudArena {
     cap_blocks : int64
     blocks : int64
-    qsb : int64   //! quant bytes a block
-    ssb : int64   //! scale bytes a block
+    bb : DevBlockBytes   //! the format's device block bytes (`dev_block_bytes`)
     wq : uint64
     ws : uint64
 }
@@ -68,8 +67,7 @@ def cud_mint_dry(on : bool) {
 
 def private cud_arena_reserve(fmt : int; cap_blocks : int64) : bool {
     if (g_cud.dry) {
-        let b = dev_block_bytes(kq_fmt_of_slot(fmt))
-        g_cud_dry_arenas[fmt] = CudArena(cap_blocks = cap_blocks, qsb = b.qsb, ssb = b.ssb)
+        g_cud_dry_arenas[fmt] = CudArena(cap_blocks = cap_blocks, bb = dev_block_bytes(kq_fmt_of_slot(fmt)))
         return true
     }
     if (key_exists(g_cud_arenas, fmt)) {   // a reload places over the old planes
@@ -78,14 +76,14 @@ def private cud_arena_reserve(fmt : int; cap_blocks : int64) : bool {
     }
     let b = dev_block_bytes(kq_fmt_of_slot(fmt))
     let wq = cuda_mem_alloc(uint64(cap_blocks * b.qsb))
-    let ws = cuda_mem_alloc(uint64(max(cap_blocks * b.ssb, 64l)))
+    let ws = cuda_mem_alloc(uint64(max(dev_scale_bytes(b, cap_blocks), 64l)))
     if (wq == 0ul || ws == 0ul) {
         to_log(LOG_WARNING, "dasLLAMA cuda arena: no room for {cap_blocks} blocks of format {fmt}: {cuda_last_error()}\n")
         cuda_mem_free(wq)
         cuda_mem_free(ws)
         return false
     }
-    g_cud_arenas[fmt] = CudArena(cap_blocks = cap_blocks, qsb = b.qsb, ssb = b.ssb, wq = wq, ws = ws)
+    g_cud_arenas[fmt] = CudArena(cap_blocks = cap_blocks, bb = b, wq = wq, ws = ws)
     return true
 }
 
@@ -108,14 +106,14 @@ def private cud_arena_place(wq : array<uint8>; ws : array<uint8>; n, rows : int6
         to_log(LOG_WARNING, "dasLLAMA cuda arena: format {fmt} holds {a.blocks} of {a.cap_blocks} blocks, the plane needs {need} ({rows} x {n})\n")
         return -1l
     }
-    if (long_length(wq) < need * a.qsb || long_length(ws) < need * a.ssb) {
-        to_log(LOG_WARNING, "dasLLAMA cuda arena: format {fmt} plane bytes {long_length(wq)} / {long_length(ws)} short of {need} blocks ({a.qsb} + {a.ssb} a block)\n")
+    if (long_length(wq) < need * a.bb.qsb || long_length(ws) < dev_scale_bytes(a.bb, need)) {
+        to_log(LOG_WARNING, "dasLLAMA cuda arena: format {fmt} plane bytes {long_length(wq)} / {long_length(ws)} short of {need} blocks ({a.bb.qsb} a block, {a.bb.ssb} a {a.bb.sgroup}-block scale unit)\n")
         return -1l
     }
     let blk = a.blocks
     unsafe {
-        if (!cuda_memcpy_htod(a.wq + uint64(blk * a.qsb), addr<void?>(wq[0]), uint64(need * a.qsb), g_cud.stream) ||
-            (a.ssb > 0l && !cuda_memcpy_htod(a.ws + uint64(blk * a.ssb), addr<void?>(ws[0]), uint64(need * a.ssb), g_cud.stream))) {
+        if (!cuda_memcpy_htod(a.wq + uint64(blk * a.bb.qsb), addr<void?>(wq[0]), uint64(need * a.bb.qsb), g_cud.stream) ||
+            !cuda_memcpy_htod(a.ws + uint64(dev_scale_off(a.bb, blk)), addr<void?>(ws[0]), uint64(dev_scale_bytes(a.bb, need)), g_cud.stream)) {
             to_log(LOG_WARNING, "dasLLAMA cuda arena: the upload of {need} blocks at block {blk} failed: {cuda_last_error()}\n")
             return -1l
         }
@@ -136,7 +134,7 @@ def private cud_arena_free {
 def cud_arena_bytes : int64 {
     var total = 0l
     for (a in values(g_cud.dry ? g_cud_dry_arenas : g_cud_arenas)) {
-        total += a.blocks * (a.qsb + a.ssb)
+        total += a.blocks * a.bb.qsb + dev_scale_bytes(a.bb, a.blocks)
     }
     return total
 }
@@ -3977,11 +3975,11 @@ def cud_rdec_hot_layer(l, slots : int64; f1, f3, f2 : int) : tuple<base : int64;
     let b3 = dev_block_bytes(kq_fmt_of_slot(f3))
     let b2 = dev_block_bytes(kq_fmt_of_slot(f2))
     H.wq1 = cud_dev_zeroed(slots * H.blk1 * b1.qsb)
-    H.ws1 = cud_dev_zeroed(max(slots * H.blk1 * b1.ssb, 64l))
+    H.ws1 = cud_dev_zeroed(max(dev_scale_bytes(b1, slots * H.blk1), 64l))
     H.wq3 = cud_dev_zeroed(slots * H.blk3 * b3.qsb)
-    H.ws3 = cud_dev_zeroed(max(slots * H.blk3 * b3.ssb, 64l))
+    H.ws3 = cud_dev_zeroed(max(dev_scale_bytes(b3, slots * H.blk3), 64l))
     H.wq2 = cud_dev_zeroed(slots * H.blk2 * b2.qsb)
-    H.ws2 = cud_dev_zeroed(max(slots * H.blk2 * b2.ssb, 64l))
+    H.ws2 = cud_dev_zeroed(max(dev_scale_bytes(b2, slots * H.blk2), 64l))
     if (H.wq1 == 0ul || H.wq3 == 0ul || H.wq2 == 0ul) {
         to_log(LOG_WARNING, "dasLLAMA cuda resident: layer {l}'s pool of {slots} slots found no room on the device - its experts stay on the host\n")
         for (b in [H.wq1, H.ws1, H.wq3, H.ws3, H.wq2, H.ws2]) {
@@ -4029,22 +4027,17 @@ def cud_rdec_hot_upload(l, slot : int64; wq1 : array<uint8>; ws1 : array<uint8>;
     let b3 = dev_block_bytes(kq_fmt_of_slot(H.f3))
     let b2 = dev_block_bytes(kq_fmt_of_slot(H.f2))
     if (long_length(wq1) != H.blk1 * b1.qsb || long_length(wq3) != H.blk3 * b3.qsb || long_length(wq2) != H.blk2 * b2.qsb
-            || long_length(ws1) < H.blk1 * b1.ssb || long_length(ws3) < H.blk3 * b3.ssb || long_length(ws2) < H.blk2 * b2.ssb) {
+            || long_length(ws1) < dev_scale_bytes(b1, H.blk1) || long_length(ws3) < dev_scale_bytes(b3, H.blk3)
+            || long_length(ws2) < dev_scale_bytes(b2, H.blk2)) {
         panic("cud_rdec_hot_upload: layer {l}'s gathered planes ({long_length(wq1)}/{long_length(wq3)}/{long_length(wq2)} quant bytes) are not one expert's in formats {H.f1}/{H.f3}/{H.f2}")
     }
     unsafe {
         cuda_memcpy_htod(H.wq1 + uint64(slot * H.blk1 * b1.qsb), addr<void?>(wq1[0]), uint64(H.blk1 * b1.qsb), g_cud.stream)
         cuda_memcpy_htod(H.wq3 + uint64(slot * H.blk3 * b3.qsb), addr<void?>(wq3[0]), uint64(H.blk3 * b3.qsb), g_cud.stream)
         cuda_memcpy_htod(H.wq2 + uint64(slot * H.blk2 * b2.qsb), addr<void?>(wq2[0]), uint64(H.blk2 * b2.qsb), g_cud.stream)
-        if (b1.ssb > 0l) {
-            cuda_memcpy_htod(H.ws1 + uint64(slot * H.blk1 * b1.ssb), addr<void?>(ws1[0]), uint64(H.blk1 * b1.ssb), g_cud.stream)
-        }
-        if (b3.ssb > 0l) {
-            cuda_memcpy_htod(H.ws3 + uint64(slot * H.blk3 * b3.ssb), addr<void?>(ws3[0]), uint64(H.blk3 * b3.ssb), g_cud.stream)
-        }
-        if (b2.ssb > 0l) {
-            cuda_memcpy_htod(H.ws2 + uint64(slot * H.blk2 * b2.ssb), addr<void?>(ws2[0]), uint64(H.blk2 * b2.ssb), g_cud.stream)
-        }
+        cuda_memcpy_htod(H.ws1 + uint64(dev_scale_off(b1, slot * H.blk1)), addr<void?>(ws1[0]), uint64(dev_scale_bytes(b1, H.blk1)), g_cud.stream)
+        cuda_memcpy_htod(H.ws3 + uint64(dev_scale_off(b3, slot * H.blk3)), addr<void?>(ws3[0]), uint64(dev_scale_bytes(b3, H.blk3)), g_cud.stream)
+        cuda_memcpy_htod(H.ws2 + uint64(dev_scale_off(b2, slot * H.blk2)), addr<void?>(ws2[0]), uint64(dev_scale_bytes(b2, H.blk2)), g_cud.stream)
     }
     verify(g_crd_hot_batch || cud_sync(), "cud decode: a pool upload did not land - the caller reuses its gather planes as soon as this returns")
 }

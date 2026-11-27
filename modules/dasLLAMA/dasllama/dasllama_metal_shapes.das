@@ -182,7 +182,7 @@ def record_needs(var tab : table<string; int64>; missing : MetalNeed) {
 def kq_fmt_gpu_supported(f : KqFmt) : bool =>
     (f == KqFmt.q8 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs
         || f == KqFmt.iq4nl || f == KqFmt.q40 || f == KqFmt.nv4 || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs || f == KqFmt.iq3s4
-        || kq_dense_b32(f))
+        || (kq_dense_b32(f) && f != KqFmt.q20 && f != KqFmt.q10))
 
 //! the first mixer or n-gram projection plane no Metal form reads, named by site and member; "" where every one has its form: a
 //! q8 plane the mixers' own fused forms, any other the staged chain's dense sites - the tag's one-row GEMV over the plane's K, and

@@ -32,7 +32,7 @@ struct MtlStored {
 }
 
 //! the formats with no stored-plane K-quant stamp on this home: every member but Q4_K, Q5_K and Q6_K
-let private MTL_ST2_SKIP = "q8 q40 q51 iq4xs k3 iq3s iq3xxs iq4nl k2 iq2s iq2xs iq2xxs mx4 iq4nl32 iq3s4 q4032 q5032 nv4"
+let private MTL_ST2_SKIP = "q8 q40 q51 iq4xs k3 iq3s iq3xxs iq4nl k2 tq2 tq1 iq2s iq2xs iq2xxs iq1s iq1m mx4 iq4nl32 iq3s4 q4032 q5032 nv4 q20 q10"
 let private MTL_ST2_CONV = "conv_mm conv_exact_mm"   //! the stored tile's stamps by tile type - f16-staged, float - of the forward conv ...
 let private MTL_ST2_CONV_TR = "conv_tr_mm conv_tr_exact_mm"   //! ... and the transposed conv
 
@@ -220,7 +220,7 @@ def private mtl_pk_own_ensure : bool {
 }
 
 //! the formats the row GEMV reads no own-layout leaf of: every member but Q8_0 and Q4_K
-let private MTL_PKOWN_SKIP = "k5 k6 q40 q51 iq4xs k3 iq3s iq3xxs iq4nl k2 iq2s iq2xs iq2xxs mx4 iq4nl32 iq3s4 q4032 q5032 nv4"
+let private MTL_PKOWN_SKIP = "k5 k6 q40 q51 iq4xs k3 iq3s iq3xxs iq4nl k2 tq2 tq1 iq2s iq2xs iq2xxs iq1s iq1m mx4 iq4nl32 iq3s4 q4032 q5032 nv4 q20 q10"
 
 //! a stored row GEMV over a leaf in this home's layout: its own stamp of the kind, over Q8_0 or Q4_K rows (`MtPkGemvStoredT`)
 def rail_tts_pk_own(var rl : MtRail; s : TtsPkStSite; args : GkPkGemvArgs; nout : int64) : bool {   // nolint:STYLE037 - kq_tile_stamp's generated arms, a format ladder a kind

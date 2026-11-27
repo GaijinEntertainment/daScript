@@ -48,6 +48,8 @@ def main {
     npanels += length(iq3xxsq8_panel_gen_variants())
     npanels += length(iq4nlq8_panel_gen_variants())
     npanels += length(k2q8_panel_gen_variants())
+    npanels += length(tq2q8_panel_gen_variants())
+    npanels += length(tq1q8_panel_gen_variants())
     npanels += length(iq2sq8_panel_gen_variants())
     npanels += length(iq2xsq8_panel_gen_variants())
     npanels += length(iq2xxsq8_panel_gen_variants())
@@ -56,8 +58,13 @@ def main {
     ntile4 += length(q40q8_tile4_gen_variants()) + length(iq4xsq8_tile4_gen_variants()) + length(iq3s4q8_tile4_gen_variants())
     ntile4 += length(k3q8_tile4_gen_variants()) + length(iq3sq8_tile4_gen_variants()) + length(iq3xxsq8_tile4_gen_variants())
     ntile4 += length(iq4nlq8_tile4_gen_variants()) + length(k2q8_tile4_gen_variants()) + length(iq2sq8_tile4_gen_variants())
-    ntile4 += length(iq2xsq8_tile4_gen_variants()) + length(iq2xxsq8_tile4_gen_variants())
-    print("tile variants: {length(vs)}, gemv: {length(gvs)}, mx4: {length(mvs)}, witness: {length(wvs)}, tokstep: {length(tvs)}, cfg: {length(cvs)}, tileform: {length(qfs)}, panel: {length(qps)}, k4 tile: {length(kvs)} (tileform {length(kfs)}, cfg {length(kcs)}, witness {length(kws)}, panel {length(kps)}), other panels {npanels}, tile4 {ntile4}\n")
+    ntile4 += length(iq2xsq8_tile4_gen_variants()) + length(iq2xxsq8_tile4_gen_variants()) + length(tq2q8_tile4_gen_variants())
+    ntile4 += length(tq1q8_tile4_gen_variants())
+    let nq20rm = length(q20q8_rm_gemv_gen_variants()) + length(q20q8_rm_tile4_gen_variants())
+    let nq10rm = length(q10q8_rm_gemv_gen_variants()) + length(q10q8_rm_tile4_gen_variants())
+    let niq1rm = (length(iq1sq8_rm_gemv_gen_variants()) + length(iq1sq8_rm_tile4_gen_variants())
+        + length(iq1mq8_rm_gemv_gen_variants()) + length(iq1mq8_rm_tile4_gen_variants()))
+    print("tile variants: {length(vs)}, gemv: {length(gvs)}, mx4: {length(mvs)}, witness: {length(wvs)}, tokstep: {length(tvs)}, cfg: {length(cvs)}, tileform: {length(qfs)}, panel: {length(qps)}, k4 tile: {length(kvs)} (tileform {length(kfs)}, cfg {length(kcs)}, witness {length(kws)}, panel {length(kps)}), other panels {npanels}, tile4 {ntile4}, q20 row-major {nq20rm}, q10 row-major {nq10rm}, 1-bit row-major {niq1rm}\n")
     delete kps
     delete qfs
     delete qps

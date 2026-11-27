@@ -394,7 +394,7 @@ def private hybrid_q8_rows(t : T?; var r : HybridQ8Rows; var m : Model; form : M
             scheduler_batching_deltanet_gpu_cell(t, m)
         }
     } elif (vk_census_form_is(form)) {
-        coverage_vk_model(t, m, form, cov_vk_c56_qwen35())
+        coverage_vk_model(t, m, form, cov_vk_c60_qwen35())
     } elif (!form.on_gpu && form.backend == "portable") {
         with_ctx_cut(m, HYBRID_BATCH_CTX) {
             batch_decode_hybrid_cells(t, m)

@@ -36,7 +36,7 @@ require daslib/strings_boost
 [CommandLineArgs]
 struct BenchArgs {
     @clarg_short = "f"
-    @clarg_doc = "KqFmt names, comma-separated (q8,k4,k5,k6,q40,q51,iq4xs,k3,iq3s,iq3xxs,iq4nl,k2,iq2s,iq2xs,iq2xxs,iq4nl32,iq3s4,nv4; mx4 = mxfp4; q8s16 = q8 over binary16 group scales, the GGUF q8_0 tensor's path), or all"
+    @clarg_doc = "KqFmt names, comma-separated (q8,k4,k5,k6,q40,q51,iq4xs,k3,iq3s,iq3xxs,iq4nl,k2,iq2s,iq2xs,iq2xxs,iq4nl32,iq3s4,nv4,iq1s,iq1m; mx4 = mxfp4; q8s16 = q8 over binary16 group scales, the GGUF q8_0 tensor's path), or all"
     fmt : string = "all"
     @clarg_doc = "Reduction length - the weight row length (k in test-backend-ops terms)"
     n : int = 14336
@@ -57,7 +57,7 @@ struct BenchArgs {
     base_align : int = 64
     @clarg_doc = "Bytes added past the aligned arena base (with --base-align 4096: the planes' phase inside the page)"
     base_offset : int = 0
-    @clarg_doc = "GEMV the engine's way: the engine's own splitter (matmul_chunks_gemv) and dispatcher (maybe_parallel_for_indexed) over DAS_JOBQUE_THREADS lanes, wall = the slowest lane, the lanes' fastest and slowest summed call time in two extra columns; 0 = one raw call on this thread"
+    @clarg_doc = "GEMV the engine's way: the engine's own splitter (matmul_chunks_gemv) and dispatcher (maybe_parallel_for_indexed) over DAS_JOBQUE_THREADS lanes, wall = the slowest lane, the lanes' fastest and slowest summed call time in two extra columns; 0 = one raw call on this thread. A superblock kq TILE section is one row: the engine's batched GEMM at the gen backend's stamped pick, split by the engine"
     team : bool
     @clarg_doc = "Append every round's sample (us, in round order) as one more column - the per-round view of a bimodal row"
     each : bool
@@ -65,6 +65,8 @@ struct BenchArgs {
     chunks_per_lane : int = 0
     @clarg_doc = "Add the row-major rows - the one-copy rail's kernels over the format's DEVICE planes (rm_gemv: rows [0, d) against one activation row; rm_tile: four tokens a call over every row)"
     rm : bool
+    @clarg_doc = "Add a superblock format's engine walk row: the gen backend's batch slot (`matmul_kq_batch_at`) over the grp planes at --ntok tokens, the profile's stamps, any panel decode inside its time, over DAS_JOBQUE_THREADS lanes"
+    walk : bool
 }
 
 typedef GemvFn = function<(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void>
@@ -111,8 +113,17 @@ def companion_ints(var lvs : array<tuple<string; LayoutFn>>) : table<string; int
     return <- vals
 }
 
-//! a TILE reads either the packed quant plane or a caller-unpacked byte panel (256 bytes per row per superblock: k5, k6 and the five grid formats) - kq_reads_packed_planes is the truth
-def tile_kq_bytes_per_sb(f : KqFmt) : int64 => kq_reads_packed_planes(int64(kq_schema_id(f))) ? kq_qsb(f) : 256l
+//! a TILE reads the packed quant plane or a caller-unpacked panel of 256 bytes a row a superblock (k5, k6, the five grid formats; a 1-bit member's decoded scale rows past it) - kq_reads_packed_planes decides
+def tile_kq_bytes_per_sb(f : KqFmt) : int64 {
+    return kq_qsb(f) if (kq_reads_packed_planes(int64(kq_schema_id(f))))
+    return kq_is_grid1(kq_schema_id(f)) ? KQ_SB_ELEMS + IQ2XS_SSB : KQ_SB_ELEMS
+}
+
+def tile_scales(fmt : int; wp, sp : uint8 const?; g, mr, nsb : int64; sh : PlaneShape) : uint8 const? {
+    unsafe {
+        return kq_is_grid1(fmt) ? wp + g * mr * sh.tileW_row + mr * nsb * KQ_SB_ELEMS : sp + g * mr * sh.ws_row
+    }
+}
 
 //! plane bytes per row: kq formats per 256-superblock, q51 per 32-block (20 + 4), iq4nl32 per 32-block (16 + 2), q8 n int8 + n/32 f32, mx4 n/2 nibbles + n/32 e8m0
 struct PlaneShape {
@@ -142,6 +153,10 @@ def plane_shape(f : KqFmt; mx4 : bool; n : int64) : PlaneShape {
     }
     if (f == KqFmt.iq4nl32) {
         return PlaneShape(gemvW_row = (n / 32l) * IQ4NL32_QB, tileW_row = (n / 32l) * IQ4NL32_QB, ws_row = (n / 32l) * IQ4NL32_SB, rmQ_row = rm._0, rmS_row = rm._1)
+    }
+    if (kq_dense_b32(f)) {
+        let nb = n / KQ_B32_ELEMS
+        return PlaneShape(gemvW_row = nb * kq_qsb(f), tileW_row = nb * kq_qsb(f), ws_row = kq_sbytes(f, nb), rmQ_row = rm._0, rmS_row = rm._1)
     }
     let nsb = n / 256l
     return PlaneShape(gemvW_row = nsb * kq_qsb(f), tileW_row = nsb * tile_kq_bytes_per_sb(f), ws_row = nsb * kq_ssb(f), rmQ_row = rm._0, rmS_row = rm._1)
@@ -264,6 +279,23 @@ def team_gemv(fn : GemvFn; var yp : float?; kqp, ksp : uint8 const?; xqp : int8 
     }
 }
 
+def team_rm_tile(fn : RmTileFn; var yp : float?; qp, sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?;
+                 n, d, ntok, nsc, qrow, srow : int64; var laneP : int64?) {
+    maybe_parallel_for_indexed(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(slot : int; rb : int; re : int) {
+        let l0 = ref_time_ticks()
+        let r0 = int64(rb)
+        let rows = int64(re) - r0
+        var t0 = 0l
+        unsafe {
+            while (t0 + TILE_TOKENS <= ntok) {
+                invoke(fn, yp + t0 * d + r0 * TILE_TOKENS, qp + r0 * qrow, sp + r0 * srow, xqp + t0 * n, xsp + t0 * nsc, xbsp + t0 * (n / 16l), n, rows)
+                t0 += TILE_TOKENS
+            }
+            laneP[slot] += int64(get_time_usec(l0))
+        }
+    }
+}
+
 //! team_gemv for a q8-family rows function (no activation sums), over the flavor's weight and scale plane types
 def team_gemv(fn : auto(FT); var yp : float?; wp : auto(WP); sp : auto(SP); xqp : int8 const?; xsp : float const?; n, d : int64; var laneP : int64?) {
     maybe_parallel_for_indexed(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(slot : int; rb : int; re : int) {
@@ -315,6 +347,7 @@ enum BenchTier {
     tile
     rm_gemv
     rm_tile
+    walk
 }
 
 def emit_row(var rows : int&; target : TuneTarget; name : string; tier : BenchTier; var st : RowStat; n, d, ntok, nsb : int64; plane_bytes : int64) {
@@ -438,7 +471,41 @@ def companion_row(vs : array<tuple<string; auto(FT)>>; suffix : string) : FT {
     return fn
 }
 
+//! the generated tier's kernel backend on this machine's architecture
+def private gen_tier_backend : string => get_target_architecture_name() == "arm64" ? "arm64-gen" : "x64-gen"
+
+def private engine_batch_timed(var rows : int&; cfg : BenchArgs; target : TuneTarget; name : string; fmt : int; var p : Planes; nsb : int64; sh : PlaneShape; perm : string; tier : BenchTier) {
+    let n = int64(cfg.n)
+    let d = int64(cfg.d)
+    let ntok = int64(cfg.ntok)
+    var stats <- [RowStat(perm = perm)]
+    unsafe {
+        let kqp = addr<uint8 const?>(p.arena[p.gemvKq])
+        let ksp = addr<uint8 const?>(p.arena[p.ks])
+        let xqp = addr<int8 const?>(p.arena[p.xq])
+        let xsp = addr<float const?>(p.arena[p.xs])
+        let xbsp = addr<int const?>(p.arena[p.xbs])
+        var yp = addr<float?>(p.arena[p.y])
+        time_rows(stats, cfg.rounds) $(_row : int) {
+            matmul_kq_batch_at(fmt, yp, kqp, ksp, xqp, xsp, xbsp, n, d, ntok)
+        }
+    }
+    emit_row(rows, target, name, tier, stats[0], n, d, ntok, nsb, d * (sh.gemvW_row + sh.ws_row))
+    delete stats
+}
+
+//! one engine row at the gen backend's stamped pick: the batched kq GEMM (`matmul_kq_batch_at`, its own lane split) of format id `fmt` off the grp planes, `perm` the row's name
+def engine_batch_row(var rows : int&; cfg : BenchArgs; target : TuneTarget; name : string; fmt : int; var p : Planes; nsb : int64; sh : PlaneShape; perm : string; tier : BenchTier) {
+    with_kernel_backend(gen_tier_backend()) {
+        engine_batch_timed(rows, cfg, target, name, fmt, p, nsb, sh, perm, tier)
+    }
+}
+
 def bench_tile_kq(var rows : int&; cfg : BenchArgs; target : TuneTarget; name : string; f : KqFmt; var p : Planes; nsb : int64; sh : PlaneShape) {
+    if (cfg.team) {
+        engine_batch_row(rows, cfg, target, name, kq_desc(f).schema_id, p, nsb, sh, "engine", BenchTier.tile)
+        return
+    }
     let plane_bytes = int64(cfg.d) * (sh.tileW_row + sh.ws_row)
     var regs <- fmt_registries(f)
     for (w in regs.witness) {   // the family's witness rows: the amx ones take the per-process tile permission their tiles need (SIGILL without it), as the q8 family's do
@@ -462,7 +529,7 @@ def bench_tile_kq(var rows : int&; cfg : BenchArgs; target : TuneTarget; name : 
         cfgs |> push(companion_row(regs.amx_cfg, st.perm))
     }
     unsafe {
-        time_tile_rows_kq(stats, cfg, int(f), fns, mrOf, stepOf, formOf, panels, cfgs, addr<uint8 const?>(p.arena[p.gemvKq]), addr<uint8 const?>(p.arena[p.tileKq]),
+        time_tile_rows_kq(stats, cfg, kq_desc(f).schema_id, fns, mrOf, stepOf, formOf, panels, cfgs, addr<uint8 const?>(p.arena[p.gemvKq]), addr<uint8 const?>(p.arena[p.tileKq]),
             addr<uint8 const?>(p.arena[p.ks]), sh, p)
     }
     for (st in stats) {
@@ -538,7 +605,7 @@ def time_tile_rows_kq(var stats : array<RowStat>; cfg : BenchArgs; fmt : int; fn
             for (g in range64(d / mr)) {
                 var t0k = 0l
                 while (t0k < ntok) {
-                    invoke(fns[row], yp, wp + g * mr * sh.tileW_row, sp + g * mr * sh.ws_row, xqp, xsp, xbsp, n, d, g, t0k)
+                    invoke(fns[row], yp, wp + g * mr * sh.tileW_row, tile_scales(fmt, wp, sp, g, mr, nsb, sh), xqp, xsp, xbsp, n, d, g, t0k)
                     t0k += stepOf[row]
                 }
             }
@@ -727,8 +794,8 @@ def time_rm_gemv(var stats : array<RowStat>; cfg : BenchArgs; fns : array<RmQ8Ge
     }
 }
 
-//! the row-major tile rows: four tokens a call over every row, the batch in steps of four
-def time_rm_tile(var stats : array<RowStat>; cfg : BenchArgs; fns : array<RmTileFn>; var p : Planes; n, d, nsc : int64) {
+//! the row-major tile rows, four tokens a call: solo, or under --team the splitter's row chunks (`qrow` / `srow` bytes a row) a lane each, each into its own y slice - not the token-major y
+def time_rm_tile(var stats : array<RowStat>; cfg : BenchArgs; fns : array<RmTileFn>; var p : Planes; n, d, nsc, qrow, srow : int64) {
     let ntok = int64(cfg.ntok)
     unsafe {
         let q = addr<uint8 const?>(p.arena[p.rmQ])
@@ -737,17 +804,25 @@ def time_rm_tile(var stats : array<RowStat>; cfg : BenchArgs; fns : array<RmTile
         let xsp = addr<float const?>(p.arena[p.xs])
         let xbsp = addr<int const?>(p.arena[p.xbs])
         var yp = addr<float?>(p.arena[p.y])
-        time_rows(stats, cfg.rounds) $(row : int) {
-            var t0 = 0l
-            while (t0 + TILE_TOKENS <= ntok) {
-                invoke(fns[row], yp + t0 * d, q, sp, xqp + t0 * n, xsp + t0 * nsc, xbsp + t0 * (n / 16l), n, d)
-                t0 += TILE_TOKENS
+        if (cfg.team) {
+            time_rows_team(stats, cfg.rounds) $(row : int; var laneP : int64?) {
+                team_rm_tile(fns[row], yp, q, sp, xqp, xsp, xbsp, n, d, ntok, nsc, qrow, srow, laneP)
+            }
+        } else {
+            time_rows(stats, cfg.rounds) $(row : int) {
+                var t0 = 0l
+                while (t0 + TILE_TOKENS <= ntok) {
+                    invoke(fns[row], yp + t0 * d, q, sp, xqp + t0 * n, xsp + t0 * nsc, xbsp + t0 * (n / 16l), n, d)
+                    t0 += TILE_TOKENS
+                }
             }
         }
     }
 }
 
-def time_rm_tile(var stats : array<RowStat>; cfg : BenchArgs; fns : array<RmQ8TileFn>; var p : Planes; n, d, nsc : int64) {
+//! the q8 row-major tile rows, solo on every arm
+[unused_argument(qrow, srow)]
+def time_rm_tile(var stats : array<RowStat>; cfg : BenchArgs; fns : array<RmQ8TileFn>; var p : Planes; n, d, nsc, qrow, srow : int64) {
     let ntok = int64(cfg.ntok)
     unsafe {
         let w = addr<int8 const?>(p.arena[p.rmQ])
@@ -788,7 +863,7 @@ def bench_rm_rows(var rows : int&; cfg : BenchArgs; target : TuneTarget; name : 
         var stats : array<RowStat>
         var fns : array<TF>
         select_rows(cfg, tvs, stats, fns)
-        time_rm_tile(stats, cfg, fns, p, n, d, nsc)
+        time_rm_tile(stats, cfg, fns, p, n, d, nsc, sh.rmQ_row, sh.rmS_row)
         delete fns
         for (st in stats) {
             emit_row(rows, target, name, BenchTier.rm_tile, st, n, d, (int64(cfg.ntok) / TILE_TOKENS) * TILE_TOKENS, nsb, plane_bytes)
@@ -845,6 +920,16 @@ def formats_of(spec : string) : array<tuple<string; KqFmt; bool>> {
     return <- fs
 }
 
+//! the row width every selected format's planes divide: 256 with a superblock or q8-family format among them, else the widest per-32 scale group
+def row_unit(fs : array<tuple<string; KqFmt; bool>>) : int {
+    var unit = 32
+    for (fe in fs) {
+        return 256 if (fe._2 || !kq_dense_b32(fe._1))
+        unit = max(unit, int(kq_group_elems(fe._1)))
+    }
+    return unit
+}
+
 [export]
 def main : int {
     var cfg = BenchArgs()
@@ -860,11 +945,13 @@ def main : int {
         to_log(LOG_ERROR, "run with -jit: the kq generators only fire under the JIT\n")
         return 2
     }
-    if (cfg.n % 256 != 0 || cfg.ntok % int(TILE_TOKENS) != 0) {
-        to_log(LOG_ERROR, "--n must be a multiple of 256 and --ntok of {TILE_TOKENS}\n")
+    var fs <- formats_of(cfg.fmt)
+    let unit = row_unit(fs)
+    if (cfg.n % unit != 0 || cfg.ntok % int(TILE_TOKENS) != 0) {
+        to_log(LOG_ERROR, "--n must be a multiple of {unit} (the selected formats' row unit) and --ntok of {TILE_TOKENS}\n")
+        delete fs
         return 2
     }
-    var fs <- formats_of(cfg.fmt)
     let target = tune_native_target()
     if (!cfg.tsv) {
         print("kq_kernel_bench: n={cfg.n} d={cfg.d} ntok={cfg.ntok} rounds={cfg.rounds} team={cfg.team} tune_mode={g_env_tune.tune_mode}\n")
@@ -905,6 +992,9 @@ def run_formats(cfg : BenchArgs; target : TuneTarget; fs : array<tuple<string; K
             }
             if (cfg.ntok > 0) {
                 bench_tile_kq(rows, cfg, target, fe._0, fe._1, p, nsb, sh)
+            }
+            if (cfg.walk && cfg.ntok > 0) {
+                engine_batch_row(rows, cfg, target, fe._0, kq_schema_id(fe._1), p, nsb, sh, "walk", BenchTier.walk)
             }
         }
         if (cfg.rm) {

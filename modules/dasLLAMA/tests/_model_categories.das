@@ -164,9 +164,9 @@ typedef ModelFamily = tuple<name : string; stems : string>
 //! every family with a row: the chat decoders, then the speech, VAD and translation carriers
 def model_families() : array<ModelFamily> {
     return <- [
-        (name = "llama", stems = "Llama-3.2,Meta-Llama-3.1,tinyllama,SmolLM2"),
+        (name = "llama", stems = "Llama-3.2,Meta-Llama-3.1,tinyllama,SmolLM2,TriLM_1.1B"),
         (name = "qwen2", stems = "Qwen2.5-0.5B,Qwen2.5-1.5B,Qwen2.5-Omni-"),
-        (name = "qwen3", stems = "Qwen3-,Qwen3VL-"),
+        (name = "qwen3", stems = "Qwen3-,Qwen3VL-,Bonsai-1.7B,Ternary-Bonsai-1.7B"),
         (name = "phi3", stems = "Phi-3.5"),
         (name = "gemma2", stems = "gemma-2-"),
         (name = "gemma3", stems = "gemma-3-"),

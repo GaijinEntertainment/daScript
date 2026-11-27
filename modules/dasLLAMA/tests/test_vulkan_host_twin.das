@@ -9,7 +9,8 @@ options _dasllama_internal = true
 // shell, the engine's own gather into the device layout, the planar dispatcher's rows and the twin's rows within the
 // summation bar, the poisoned expectation the control. The twin is the shared module's (`dasllama_gpu_host_twin`), registered by
 // the home a build arms; a build with neither discrete home registers none and skips. The row-major tile cell skips a format
-// the discrete homes stamp none of (`kq_discrete_unstamped`): the one-copy rail has no device layout of it.
+// the discrete homes stamp none of (`kq_discrete_unstamped`): the one-copy rail has no device layout of it. Beside them, on
+// every build, the q20 and q10 GEMV cells' row oracle against its plane-dequant float witness.
 
 require dastest/testing_boost public
 require math
@@ -26,11 +27,16 @@ require ?vulkan dasllama/dasllama_math_vulkan   // its [init] registers the twin
 require ?cuda dasllama/dasllama_math_cuda   // ... and on a CUDA build under DASLLAMA_CUDA
 require _kq_fixtures
 require _compares
+require _vk_kq_fixtures   // hashed_words: the low-bit witnesses' planes
+require _kernel_oracles   // lowbit_gemv_row_oracle, lowbit_gemv_float_oracle, iq4nl32_scale_words: the low-bit witnesses
 
 let private ROWS = 8l
 let private N_SB = 1280l   //! five superblocks: past the four-superblock trip of the row-major gemv's accumulator sets
 let private NV4_SITE_SCALE = 1.7   //! the nv4 shell's per-tensor scale, off unity so a kernel that drops it misses the bar
 let private N_B32 = 704l   //! 22 blocks, off the superblock lattice - the per-32 formats' reason
+
+//! a per-32 format's row width: `N_B32` in whole scale groups (q10's four-block groups take 640)
+def private b32_n(f : KqFmt) : int64 => N_B32 - N_B32 % kq_group_elems(f)
 
 def private x_row(n : int64) : array<float> {
     var x : array<float>
@@ -48,6 +54,12 @@ def private b32_block(f : KqFmt; blk : int) : array<uint8> {
     }
     if (f == KqFmt.q5032) {
         return <- build_q50_block(blk)
+    }
+    if (f == KqFmt.q20) {
+        return <- build_q20_block(blk)
+    }
+    if (f == KqFmt.q10) {
+        return <- build_q10_block(blk)
     }
     return <- build_iq4nl32_block(blk)   //! iq4nl32 and q4032 share the block form (a q4032 block is iq4nl32's read under q - 8)
 }
@@ -76,16 +88,16 @@ def private put_planar(var m : Model; f : KqFmt; rows, n : int64) {
         m.qblob <- wq
         m.qscales <- ws
         return
-    } else {
-        let qb = kq_qsb(f)
-        let sb = kq_ssb(f)
-        let nb = n / 32l
-        kq |> resize(rows * nb * qb)
-        ks |> resize(rows * nb * sb)
+    } else {   // a disk block a scale unit: one 32-block, q20's two-block group or q10's four-block one
+        let qb = kq_qsb(f) * kq_sgroup(f)
+        let sb = kq_desc(f).ssb
+        let nu = n / kq_group_elems(f)
+        kq |> resize(rows * nu * qb)
+        ks |> resize(rows * nu * sb)
         for (r in range64(rows)) {
-            for (b in range64(nb)) {
-                var inscope blkb <- b32_block(f, int(r * 31l + b))
-                kq_transcode_superblock(f, blkb, 0l, kq, (r * nb + b) * qb, ks, (r * nb + b) * sb)
+            for (u in range64(nu)) {
+                var inscope blkb <- b32_block(f, int(r * 31l + u))
+                kq_transcode_superblock(f, blkb, 0l, kq, (r * nu + u) * qb, ks, (r * nu + u) * sb)
             }
         }
     }
@@ -242,7 +254,7 @@ def private twin_cell(t : T?; f : KqFmt) {
         return
     }
     t |> success(moe_gpu_host_twin_serves(int(f)), "the host twin serves {f}")
-    let n = kq_sb(f) ? N_SB : N_B32
+    let n = kq_sb(f) ? N_SB : b32_n(f)
     var inscope m <- planar_shell(f, n)
     var inscope x <- x_row(n)
     var inscope want <- planar_rows(m, f, x, n, ROWS)
@@ -252,18 +264,19 @@ def private twin_cell(t : T?; f : KqFmt) {
     check(t, "the host twin over the {f} device planes against the planar kernels", got, want, twin_bar(want), Shape(row_width = int(ROWS)))
 }
 
-[test(description = "On the fifteen superblock formats the host twin over the engine gather of a planar stack into the device layout matches the planar kernels within 1e-4 relative, and they match a plain dequantized dot")]
+[test(description = "On the nineteen superblock formats the host twin over the engine gather of a planar stack into the device layout matches the planar kernels within 1e-4 relative, and they match a plain dequantized dot")]
 def test_host_twin_superblock(t : T?) {
-    for (f in [KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq3s4, KqFmt.nv4, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
+    for (f in [KqFmt.k2, KqFmt.tq2, KqFmt.tq1, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq3s4, KqFmt.nv4, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs,
+            KqFmt.iq1s, KqFmt.iq1m]) {
         t |> run("the host twin over a {f} expert stack") <| @(ct : T?) {
             twin_cell(ct, f)
         }
     }
 }
 
-[test(description = "On the four per-32 formats, mx4 and q8 the host twin over the gathered device planes matches the planar kernels within 1e-4 relative, and the planar kernels match a plain dequantized dot")]
+[test(description = "On the six per-32 formats, mx4 and q8 the host twin over the gathered device planes matches the planar kernels within 1e-4 relative, and the planar kernels match a plain dequantized dot")]
 def test_host_twin_block32(t : T?) {
-    for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.mx4, KqFmt.q8]) {
+    for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.q20, KqFmt.q10, KqFmt.mx4, KqFmt.q8]) {
         t |> run("the host twin over a {f} expert stack") <| @(ct : T?) {
             twin_cell(ct, f)
         }
@@ -316,6 +329,10 @@ def private rm_b32_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64)
             q51q8_rm_gemv_gen(yp, q, s, xqp, xsp, null, n, 0l, rows)
         } elif (f == KqFmt.q5032) {
             q5032q8_rm_gemv_gen(yp, q, s, xqp, xsp, null, n, 0l, rows)
+        } elif (f == KqFmt.q20) {
+            q20q8_rm_gemv_gen(yp, q, s, xqp, xsp, null, n, 0l, rows)
+        } elif (f == KqFmt.q10) {
+            q10q8_rm_gemv_gen(yp, q, s, xqp, xsp, null, n, 0l, rows)
         } else {
             mx4q8_rm_gemv_gen(yp, q, s, xqp, xsp, null, n, 0l, rows)
         }
@@ -323,17 +340,55 @@ def private rm_b32_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64)
     return <- got
 }
 
-[test(description = "The row-major GEMVs for iq4nl32, q4032, q51, q5032 and mx4 over the gathered device planes match the planar kernels within 1e-4 relative on 22-block rows")]
+[test(description = "The row-major GEMVs for iq4nl32, q4032, q51, q5032, q20, q10 and mx4 over the gathered device planes match the planar kernels within 1e-4 relative on 22-block rows, q10 on its 20 whole-group blocks")]
 def test_host_rm_block32(t : T?) {
-    for (f in [KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q51, KqFmt.q5032, KqFmt.mx4]) {
+    for (f in [KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q51, KqFmt.q5032, KqFmt.q20, KqFmt.q10, KqFmt.mx4]) {
         t |> run("the row-major kernel over a {f} expert stack") <| @(ct : T?) {
-            let n = N_B32
+            let n = b32_n(f)
             var inscope m <- planar_shell(f, n)
             var inscope x <- x_row(n)
             var inscope want <- planar_rows(m, f, x, n, ROWS)
             var inscope got <- rm_b32_rows(m, f, x, n, ROWS)
             check(ct, "the row-major kernel over the {f} device planes against the planar kernels", got, want, twin_bar(want), Shape(row_width = int(ROWS)))
         }
+    }
+}
+
+//! the low-bit witnesses' bar, of the witness's magnitude floored at 1: the scalar dot rounds each f32 block product and add of its
+//! 44-block fold within 2^-24, under 2.6e-6 of the terms' magnitude sum, against a witness exact in f64 over the f32 dequant;
+//! the q20 and q10 dots read 0 on rizen, a d read a block apart past LOWBIT_WITNESS_CTRL
+let private LOWBIT_WITNESS_BAR = 1.0e-4
+let private LOWBIT_WITNESS_CTRL = 1.0e-3
+
+//! a low-bit member's scalar dot (the GEMV cells' row oracle, `lowbit_gemv_row_oracle`) against its plane dequant in f64
+//! (`lowbit_gemv_float_oracle`) over `nb` hashed blocks - a witness the oracle and the kernel do not share
+def private lowbit_float_witness(t : T?; fmt : KqFmt; nb : int; wq_seed : uint) {
+    var inscope wq <- hashed_words(nb * int(kq_qsb(fmt) / 4l), 1u, wq_seed)
+    var inscope ws <- iq4nl32_scale_words(nb, 0.002)   // a d a block's worth of words: the control reads one a block
+    var inscope xq <- hashed_words(nb * 8, 37u, 5u)
+    var inscope xs <- [for (b in range(nb)); 0.05 + 0.01 * float(b % 5)]
+    let dot = lowbit_gemv_row_oracle(fmt, wq, ws, xq, xs, 0, nb)
+    let wit = lowbit_gemv_float_oracle(fmt, wq, ws, xq, xs, 0, nb)
+    let rel = abs(dot - wit) / max(1.0, abs(wit))
+    to_log(LOG_INFO, "the {fmt} scalar dot {dot} against the plane-dequant witness {wit}: {rel} of its magnitude floored at 1\n")
+    t |> success(rel <= LOWBIT_WITNESS_BAR, "the {fmt} scalar dot {dot} matches the plane-dequant witness {wit} within {LOWBIT_WITNESS_BAR} ({rel})")
+    let blockd = lowbit_gemv_float_oracle(fmt, wq, ws, xq, xs, 0, nb, true)
+    let off = abs(blockd - wit) / max(1.0, abs(wit))
+    to_log(LOG_INFO, "the {fmt} control: the witness reading a d a block {blockd}, {off} off\n")
+    t |> success(off > LOWBIT_WITNESS_CTRL, "the control: the planes read a d a block read apart ({blockd} vs {wit}, {off})")
+}
+
+[test(description = "The q20 scalar dot the GEMV cells use as oracle matches the plane-dequant float witness within 1e-4 over 44 hashed blocks, and the witness that reads a d a block in place of a d a group moves past 1e-3")]
+def test_q20_float_witness(t0 : T?) {
+    t0 |> run("q20: the scalar dot == the plane-dequant float witness over hashed planes, and a d read a block apart reads apart") <| @(t : T?) {
+        lowbit_float_witness(t, KqFmt.q20, 44, 79u)
+    }
+}
+
+[test(description = "The q10 scalar dot the GEMV cells use as oracle matches the plane-dequant float witness within 1e-4 over 44 hashed blocks, and the witness that reads a d a block in place of a d a four-block group moves past 1e-3")]
+def test_q10_float_witness(t0 : T?) {
+    t0 |> run("q10: the scalar dot == the plane-dequant float witness over hashed planes, and a d read a block apart reads apart") <| @(t : T?) {
+        lowbit_float_witness(t, KqFmt.q10, 44, 89u)
     }
 }
 
@@ -363,10 +418,10 @@ def private rm_kq_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) 
     return <- got
 }
 
-[test(description = "The row-major GEMVs of the fifteen superblock formats under the Q8_K activation match the planar kernels within 1e-4 relative over the gathered device planes on five-superblock rows")]
+[test(description = "The row-major GEMVs of the nineteen superblock formats under the Q8_K activation match the planar kernels within 1e-4 relative over the gathered device planes on five-superblock rows")]
 def test_host_rm_superblock(t : T?) {
-    for (f in [KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.iq4nl, KqFmt.iq4xs, KqFmt.iq3s4, KqFmt.nv4,
-               KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
+    for (f in [KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.tq2, KqFmt.tq1, KqFmt.q40, KqFmt.iq4nl, KqFmt.iq4xs, KqFmt.iq3s4, KqFmt.nv4,
+               KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq1s, KqFmt.iq1m]) {
         t |> run("the row-major kernel over a {f} expert stack") <| @(ct : T?) {
             let n = N_SB
             var inscope m <- planar_shell(f, n)
@@ -425,7 +480,7 @@ def test_host_rm_tile4(t : T?) {
                 ct |> skip("{f}: the discrete homes stamp none of it, so the one-copy rail has no device layout of it (rm_dev_serves declines it)")
                 return
             }
-            let n = kq_sb(f) ? N_SB : N_B32
+            let n = kq_sb(f) ? N_SB : b32_n(f)
             var inscope m <- planar_shell(f, n)
             var xs4, want : array<float>
             xs4 |> resize(4l * n)

@@ -166,7 +166,7 @@ attention gates on the sigmoid of the gate half (tq4's un-rotation in its place)
 
 ### A per-32 plane's window GEMM is a cm2 column or the per-32 batch tile {#vk-b32-window-gemm}
 
-A dense plane in a per-32 format (q51, q5032, q4032, iq4nl32) stamps its format's `<Fmt>Cm2T` at all three columns, so a
+A dense plane in a per-32 format (q51, q5032, q4032, iq4nl32, q20, q10) stamps its format's `<Fmt>Cm2T` at all three columns, so a
 window GEMM over it on the f16 feed takes the column and the k split the shape picks (`pf_split_pick`, the same wave model
 as a superblock format's), and the KHR tile in KHR mode; the s column is also the expert schedule's 32-row pieces. mx4 is an
 expert-only form with no dense plane, so it stamps the s column alone (`cm2_s_only`) and the pool's chain takes that column
@@ -181,11 +181,13 @@ own bytes.
 
 ### The decode GEMV family stages its grid codebooks from one device buffer {#kq-gemv-grid-buffer}
 
-The grid formats' codebooks (iq2s, iq2xs, iq2xxs, iq3s, iq3xxs) live in one 17 KB model-owned
-device buffer, bound at binding 6 of the kq GEMV family and built on the family's first set
+The grid formats' codebooks (iq2s, iq2xs, iq2xxs, iq3s, iq3xxs, and the 1-bit grid iq1s and iq1m share) live in one
+21 KB model-owned device buffer, bound at binding 6 of the kq GEMV family and built on the family's first set
 (`kq_grid_dev`); each format's table sits at a fixed word offset (`KQ_GRID_<FMT>`), and a grid format's GEMV template
 (`<Fmt>GemvT : KqGemvLeafT`, `override GRID = true`, its `GRID_WORDS` / `GRID_OFF` literals held to that chain by
-`check_kq_gemv_grid_literals`) stages its table into workgroup memory from that buffer - a coalesced 256 B read per 64 lanes. The tables also exist as per-index accessors over a `fixed_array` local
+`check_kq_gemv_grid_literals`) stages its table into workgroup memory from that buffer - a coalesced 256 B read per 64 lanes.
+A template may expand its table there into a form of its own instead (`GRIDX`, `stage_gridx`); the 1-bit members' raced
+that form and stage theirs as it is (`ARCHITECTURE_ENGINE_FORMATS_IQ1.md#iq1-device-row`). The tables also exist as per-index accessors over a `fixed_array` local
 (`iq2s_grid_word` and kin), which the batch and cm2 tiles stage from, because a tile amortizes
 one stage over 128 rows x 64 columns. A per-row kernel cannot: the emitter lowers such an
 accessor to a constant composite stored into a Function variable, the driver serves the

@@ -110,6 +110,24 @@ serves every file's plane as that one format, whatever its disk type.
 
 **Weakening `REVIEW.das`'s `check_load_big_format` is a defect.**
 
+**A diff that adds a `KqFmt` member that is not on `KQ_DISCRETE_UNSTAMPED`
+(`dasllama/dasllama_kqformat.das`), or takes a member off that list, gives the member, in the same
+change, one device plane layout that the Vulkan and the CUDA kernels both read and a CPU row-major
+kernel family (`dasllama/dasllama_gemm_gen.das`) that reads those planes in place.** The CPU reads a
+streamed MoE expert's weights from the device planes, so a member with no such kernel needs a second
+copy of them (`ARCHITECTURE_CPU_KERNELS.md#row-major-walk`).
+
+**A diff that adds a `KqFmt` member that is not on `KQ_DISCRETE_UNSTAMPED`, or takes a member off that
+list, lands, in the same change, a test where the member's CPU row-major kernel and a GPU backend's
+decode GEMV give the same result from the same plane bytes.**
+
+**Weakening `REVIEW.das`'s `check_rail_names_stamped_members` is a defect.** It holds the `KqFmt`
+members `rm_dev_serves` names equal to the members that are not on `KQ_DISCRETE_UNSTAMPED`.
+
+**Weakening `REVIEW.das`'s `check_kq_member_count` is a defect.** It holds the member count of `KqFmt`
+at or under `KQ_MEMBER_SET_BITS`, the bit width of the `uint` that holds a set of members
+(`ARCHITECTURE_ENGINE_FORMATS_TERMS.md#kq-member-set`).
+
 **A diff that states a backend serves a weight format - in any document, PR description, test
 name, or a predicate that returns true for "this backend runs this format" - while, on a run with
 every lever at its default, a site that backend's serving call reaches reads the format through a

@@ -163,10 +163,18 @@ per-format accessor (`kq_sb`, `kq_qsb`, `kq_ssb`, `kq_elems`, `kq_schema_id`, `k
   `tests/test_kqformat.das` in the same step: `test_b32_plane_words` holds words and bytes to the
   row's `disk_bytes`, and `test_metal_b32_block_constants` holds each Metal stamp's literal (`BE`,
   `QW`, `SH`, `B32W`, `B32S`, `B32E`) to the row's strides.
+- A per-32 member whose disk block is several 32-blocks under one scale (q20: Q2_0's 64 weights, one f16 d; q10: Q1_0's 128) sets the row's
+  `sgroup` to its blocks and `disk_bytes` to the whole disk block; its `kq_transcode_p` takes that block (the transcode's unit is
+  `kq_group_elems` weights), `kq_fmt_row_ok` admits whole groups alone, the portable kernels spread its row's units a block each
+  (`b32_block_scales`), and its planes stay in disk order - `repack_grp` refuses an interleave past 1
+  (`ARCHITECTURE_CPU_KERNELS.md#q20-device-layout-walk`).
 - A codebook goes here too; a grid or codebook table reaches worker lanes only as a function
   returning the literal (`iq4nl_lut()`, `iq3s_grid()`, `iq2s_grid2()`: a direct
   `return fixed_array<T>(...)`, no local), never as a module global - a team-lane kernel reads a
-  `let` global as zero; the global twin (`IQ4NL_LUT = iq4nl_lut()`) serves tests and oracles.
+  `let` global as zero; the global twin (`IQ4NL_LUT = iq4nl_lut()`) serves tests and oracles. A grid
+  of small values may pack (`iq1s_grid()`: two bits a weight, 4 KB - the size the device table
+  takes); every reader then decodes an entry where it reads it, the emitter's bake included
+  (`ARCHITECTURE_ENGINE_FORMATS_IQ1.md#iq1-grid`).
 - A signed-grid format (two grid words per octet, a sign byte flipping element j) shares the
   octet with the five it joins: `grid_octet_dot` (the dot), `store_grid_pair` (the dequant),
   `store_grid_panel_pair` + `sign_masks_iq` (the panel unpack) - what a new member writes is
@@ -178,7 +186,9 @@ per-format accessor (`kq_sb`, `kq_qsb`, `kq_ssb`, `kq_elems`, `kq_schema_id`, `k
 - `tests/test_kqformat.das`: pin the enum value, the predicate, the strides, the id, the stream
   code, and the codebook's edge values; its radix guard holds every `int(KqFmt)` value under
   `DAT_KEY_FMTS` (`dasllama_vulkan_common.das`, the Vulkan decode block's layer-key radix) - a
-  member whose `int(KqFmt)` reaches `DAT_KEY_FMTS` grows the radix in the same change.
+  member whose `int(KqFmt)` reaches `DAT_KEY_FMTS` grows the radix in the same change. `check_kq_member_count`
+  (`REVIEW.das`) holds the member count under a member set's width (`ARCHITECTURE_ENGINE_FORMATS_TERMS.md#kq-member-set`):
+  a member past it widens every `kq_fmts` word and that radix in the same change.
 
 ## 2. Codec - `dasllama/dasllama_convert.das`, `dasllama/dasllama_gguf.das`
 
@@ -190,7 +200,8 @@ Every conversion lives in `dasllama_convert.das`; the GGUF container finds bytes
   binds it, so a member without an overload fails the compile at the stamp. The tag is the
   LAST parameter of every family: the leaf's data pointers and `n` keep the six x64 register
   argument slots (a tag in slot 0 pushes `n` onto the stack and reshuffles the dot's register
-  allocation).
+  allocation). A tag union several members share (`KqTag_q20 | KqTag_q10`) is spelled inline at each
+  overload.
 - `kq_transcode_p(src, kq, ks; _f : KqTag_<fmt>)` - the ONE codec of the format: one stride
   unit (the superblock; q51's 32-block) from its disk bytes at `src` into the quant plane at
   `kq` and the scale plane at `ks`, pointer form. The array form the tests drive is the shared
@@ -298,7 +309,11 @@ resident plan seats the table under).
   where a `let` global reads zero, so a codebook format's rows come out zero on every worker row
   and right on the main-context rows - the GEMV probes (no job queue) pass, the forward is
   garbage. The probe that catches it is any kernel gate run under
-  `with_job_que() { setup_dasllama_jobque() ... }` with enough rows to fork.
+  `with_job_que() { setup_dasllama_jobque() ... }` with enough rows to fork. A superblock member whose
+  block is another member's under constants shares that member's bodies through one overload set on the
+  two tags rather than a second body - tq2 is k2's block under sub-scale 1, min 1 and dmin = d, and the
+  dot, the grp row dot and dequant, the plane dequant and the emitter's block body are k2's
+  (`ARCHITECTURE_ENGINE_FORMATS_TQ2.md#tq2-k2-lattice`).
 - `dequant_<fmt>_row_grp` - the grp<mr> row dequant (own helper; `dequant_kq_row_grp` dispatches).
 - `repack_grp(kq, ks, n, d, mr; _f : KqTag_<fmt>)` (`dasllama_repack.das`) - disk-order ->
   grp<mr> planes, the format's overload behind the shared `repack_kq_grp(fmt, ...)` router;
@@ -428,10 +443,24 @@ one-line overloads, never a kernel shape:
   rail lands for it too: the `[tune]` family over its disk-order dot, the code-generator rows (the
   affine members' `rm_aff_gen`), the registry and `rm_gemv_gen` / `rm_tile4_gen` rows, the probe
   fixture's planes (`build_b32_fixture`) and the class-profile entries; `rm_dev_serves` names it only
-  once a discrete home stamps it. A member the discrete homes do not stamp joins `KQ_DISCRETE_UNSTAMPED`
+  once a discrete home stamps it (`check_rail_names_stamped_members`, `REVIEW.das`, holds the two sets equal). A member the discrete homes do not stamp joins `KQ_DISCRETE_UNSTAMPED`
   (`dasllama_kqformat.das`): every Vulkan and CUDA `kq_tile_stamp` ladder skips it (a Metal ladder names
   the `metal` home in its skip words and keeps the arm), and the GPU upload and the whole-model driver
   decline the model naming the site and member (`discrete_unstamped_plane`).
+- **A per-32 member whose planes are its device planes** (q20, q10) has no grp<mr> family either, yet its gen
+  tier serves: its `B32Slots` row in `gen_b32_slots` names the three walks over its tag and nothing else
+  (the portable identity repack and interleave 1 stand), and its `b32g_*` overloads hand a walk group of
+  disk-order rows to the stamped row-major kernels - the GEMV direct, the tile through a group-sized scratch
+  (`ARCHITECTURE_CPU_KERNELS.md#q20-device-layout-walk`). A superblock member whose planes are its device
+  planes (iq1s, iq1m, `kq_dev_is_plane`) keeps them in disk order at every interleave and still carries a
+  grp tile family: its tile reads a panel decoded off a group's rows, its GEMV slots are the stamped
+  row-major GEMVs (`ARCHITECTURE_ENGINE_FORMATS_IQ1.md#iq1-grp-cpu`). A per-32
+  member's emitter arm is `rm_b32_gen`'s: a `TileEmit`
+  flag, a code loader the shared block body calls (q20's `rm_q20_codes` / `rm_rows_q20` over `q20_spread`, q10's
+  `rm_q10_signs` / `rm_rows_q10` over `q10_signs`),
+  and each knob its grid races in `TilePerm`, `parse_perm` and `perm_declines` - a rail outside
+  `perm_declines` leaves the witness companion answering for a perm the kernel declined. `test_kquant`'s
+  gen-slot cell holds the slots to the stamps bit for bit.
 
 Gate: `test_kqformat` + `test_kquant` under `-jit` (the stubs decline, so their reference bodies
 run either way; every dasLLAMA test run is a `-jit` run). A new `[tune]` family re-tunes every
@@ -486,8 +515,14 @@ by construction); then the end-to-end run.
 The tier reads the CPU planes verbatim (`stack_plane_bytes` -> `arena_block_bytes` ->
 `dev_block_bytes`: `kq_dev_qsb(fmt)` x `kq_dev_ssb(fmt)` - the plane's own quant stride and 20 B for a
 decoded row, 8 B for the codebook formats' two-word row the gather packs, nv4's 144 B unit with its
-site-scale word), so a format whose plane pair already has the 20 B
-decoded scale row needs no upload work - only the id bridge and the kernels. The IQ4_XS arms:
+site-scale word, tq2's 2 B plane row read two superblocks a word), so a format whose plane pair already has the 20 B
+decoded scale row needs no upload work - only the id bridge and the kernels. A member whose block is another
+member's under constants stamps that member's templates and classes under a template constant whose arm swaps the
+scale read and the fold (tq2 on k2's, `ARCHITECTURE_ENGINE_FORMATS_TQ2.md#tq2-device-row`); a member that shares another's
+scale row and fold but not its quant bytes takes a second constant for its block term, and where its cm2 block struct differs, a
+leaf template beside the other's over their shared body (tq1: `Tq1Cm2T` beside `K2Cm2T` over `K2Cm2BaseT`,
+`ARCHITECTURE_ENGINE_FORMATS_TQ2.md#tq1-device-row`).
+The IQ4_XS arms:
 
 1. `vk_kq_schema_id` (`dasllama_vulkan_common.das`): the `int(KqFmt)` -> kernel-id arm
    (`6 -> 44`). This is the third id space at its Vulkan seam; without the arm the arena plan
@@ -592,7 +627,12 @@ the kq lattice) takes none of the kq id bridge. It joins `kq_block32` (`dasllama
 one predicate the drivers, the resident plan and `pf_f16_feed` read) and `arena_block_bytes` (the
 CPU plane's own block strides; mx4's scale slab rounds to whole words, since the tiles read its
 byte scales four blocks a word; iq4nl32's 2 B d is half a word, so its decodes and its GEMV pick
-the half by the block's parity), and stamps the per-32 templates rather than a `KqGemvBase` child:
+the half by the block's parity), and stamps the per-32 templates rather than a `KqGemvBase` child.
+A member whose d serves a group of blocks (q20: two, q10: four) addresses the scale by the group - `blk32_sword` / `blk32_scale`, the cm2
+decodes, the KHR stage and the int8 tile's `w_scale` take the group index and its half - and keeps every template at
+`BLKW` 32; a block of fewer than four quant words reads only its own words in the families that load four
+(`Blk32GemvT.blk_quad`, `Blk32BatchT.blk_quad`: a `static_if` on the tag), since a four-word load crosses into the next
+block and, at a slab's last block, past the slab (`ARCHITECTURE_GPU_VULKAN.md#vk-b32-window-gemm`):
 
 - the tiles: a `KqCm2BatchT` format template at `BLKW` 32 (`Q51Cm2T` with a word scale plane,
   `Mx4Cm2T` decoding the doubled e2m1 magnitudes under the halved E8M0 scale, `Iq4nl32Cm2T` on the

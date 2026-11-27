@@ -42,7 +42,16 @@ require ../../dasLLVM/tests/_exe_test_common.das   // function_ir - a dumped fun
 // model_specs parity row on the row's CPU form (`parity_spec_cell`), skipped where the box cannot take DASLLAMA_PIN_BACKEND's pin.
 
 //! the superblock format ids the kq gates walk
-let private KQ_IDS = fixed_array(4, 5, 6, 40, 44, 3, 33, 34, 45, 2, 23, 24, 25, 35, 49)
+let private KQ_IDS = fixed_array(kq_schema_id(KqFmt.k4), kq_schema_id(KqFmt.k5), kq_schema_id(KqFmt.k6), kq_schema_id(KqFmt.q40),
+    kq_schema_id(KqFmt.iq4xs), kq_schema_id(KqFmt.k3), kq_schema_id(KqFmt.iq3s), kq_schema_id(KqFmt.iq3xxs), kq_schema_id(KqFmt.iq4nl),
+    kq_schema_id(KqFmt.k2), kq_schema_id(KqFmt.iq2s), kq_schema_id(KqFmt.iq2xs), kq_schema_id(KqFmt.iq2xxs), kq_schema_id(KqFmt.iq3s4),
+    kq_schema_id(KqFmt.nv4), kq_schema_id(KqFmt.iq1s), kq_schema_id(KqFmt.iq1m), kq_schema_id(KqFmt.tq2), kq_schema_id(KqFmt.tq1))
+
+//! the row-major bar: a row-major stamp against another kernel shape over the same rows, its folds on other accumulator sets
+let private BAR_ROW_MAJOR = Bar(kind = BarKind.rel_of_max, rel = 5.0e-5, abs_floor = 1.0e-4, poison = 1.0e-3, poison_of_max = true, poison_abs = 1.0e-2)
+
+//! a kq shape's bar against another: bit-exact on one fold order, the row-major bar where a row-major GEMV meets a panel tile (the 1-bit members)
+def private kq_shape_bar(fmt : int) : Bar => kq_is_grid1(fmt) ? BAR_ROW_MAJOR : BAR_EXACT
 
 // the codebook value of element k of synthetic block `blk` (k < 16 low nibble, else high)
 def private iq4nl32_w(blk, k : int) : float {
@@ -96,7 +105,7 @@ def test_q4k_synthetic(t : T?) {
 }
 
 //! One synthetic block's planes as format `kf` writes them and their dequant: a superblock's 256 values, or a per-32
-//! block's 32
+//! disk block's 32 (q20's two-block group's 64, q10's four-block group's 128)
 struct PlaneRow {
     kq : array<uint8>
     ks : array<uint8>
@@ -106,12 +115,15 @@ struct PlaneRow {
 //! `blkb` transcoded into format `kf`'s plane pair at the format's own strides, and that pair dequanted
 def private plane_row(kf : KqFmt; blkb : array<uint8>) : PlaneRow {
     var p : PlaneRow
-    p.kq |> resize(kq_qsb(kf))
-    p.ks |> resize(kq_ssb(kf))
+    let sg = kq_sgroup(kf)
+    p.kq |> resize(kq_qsb(kf) * sg)
+    p.ks |> resize(kq_sbytes(kf, sg))
     kq_transcode_superblock(kf, blkb, 0l, p.kq, 0l, p.ks, 0l)
-    p.w <- nan_plane(kq_block32(kf) ? 32 : 256)
+    p.w <- nan_plane(int(kq_block32(kf) ? kq_group_elems(kf) : KQ_SB_ELEMS))
     if (kq_block32(kf)) {
-        dequant_b32_plane_block(kf, p.kq, p.ks, 0l, p.w, 0l)
+        for (j in range64(sg)) {
+            dequant_b32_plane_block(kf, p.kq, p.ks, j, p.w, j * KQ_B32_ELEMS)
+        }
     } else {
         dequant_kq_plane_sb(kf, p.kq, p.ks, 0l, false, p.w, 0l)
     }
@@ -131,6 +143,68 @@ def test_kq_transcode_planes(t : T?) {
     kquant_plane_cells(t)
     grid_plane_cells(t)
     lattice_plane_cells(t)
+    q20_plane_cells(t)
+    q10_plane_cells(t)
+    grid1_plane_cells(t)
+}
+
+//! a hand-packed IQ1_S / IQ1_M synthetic superblock's weight: dl x (grid value + delta) off the packed grid, in ggml's float order
+def private grid1_formula(dl : float; ib, l, j : int; neg : bool) : float {
+    let g = int((iq1_grid_entry(IQ1S_GRID, iq1_ix_pat(ib, l)) >> uint(2 * j)) & 3u) - 1
+    return dl * (float(g) + (neg ? -IQ1_DELTA : IQ1_DELTA))
+}
+
+//! the 1-bit plane cells over the hand-packed IQ1_S and IQ1_M synthetic superblocks (`build_iq1s_block`, `build_iq1m_block`)
+def private grid1_plane_cells(t : T?) {
+    t |> run("iq1s planes keep the disk bytes and dequant the hand-packed IQ1_S superblock exactly") @(t : T?) {
+        let blkb <- build_iq1s_block()
+        var inscope p <- plane_row(KqFmt.iq1s, blkb)
+        for (i in range(48)) {
+            t |> equal(int(p.kq[i]), int(blkb[2 + i]), "quant byte {i}: the disk qs then qh, verbatim")
+        }
+        t |> success(int(p.ks[0]) == int(blkb[0]) && int(p.ks[1]) == int(blkb[1]), "the scale plane is the disk d")
+        let e601 = iq1_grid_entry(IQ1S_GRID, 601)
+        var vals : int[3]
+        for (j in range(8)) {
+            vals[int((e601 >> uint(2 * j)) & 3u)]++
+        }
+        t |> success(vals[0] > 0 && vals[1] > 0 && vals[2] > 0, "block 0's first octet reads a grid entry with -1, 0 and +1")
+        let want <- formula_row(256) $(k) {
+            let ib = k / 32
+            return grid1_formula(IQ1S_SYNTH_D * float(2 * iq1s_sc_pat(ib) + 1), ib, (k % 32) / 8, k % 8, iq1s_neg_pat(ib))
+        }
+        check(t, "iq1s plane against the hand-packed values", p.w, want, BAR_EXACT, FLAT_SHAPE)
+        let flip <- formula_row(256) $(k) {
+            let ib = k / 32
+            return grid1_formula(IQ1S_SYNTH_D * float(2 * iq1s_sc_pat(ib) + 1), ib, (k % 32) / 8, k % 8, !iq1s_neg_pat(ib))
+        }
+        check_exceeds(t, "control: the delta sign read the other way must miss", p.w, flip, BAR_EXACT)
+    }
+    t |> run("iq1m planes keep the disk bytes and dequant the hand-packed IQ1_M superblock exactly, d off four different nibbles") @(t : T?) {
+        let blkb <- build_iq1m_block()
+        var inscope p <- plane_row(KqFmt.iq1m, blkb)
+        for (i in range(48)) {
+            t |> equal(int(p.kq[i]), int(blkb[i]), "quant byte {i}: the disk qs then qh, verbatim")
+        }
+        for (i in range(8)) {
+            t |> equal(int(p.ks[i]), int(blkb[48 + i]), "scale byte {i}: the disk scale words, verbatim")
+        }
+        let dn = fixed_array(IQ1M_SYNTH_D_BITS & 15u, (IQ1M_SYNTH_D_BITS >> 4u) & 15u, (IQ1M_SYNTH_D_BITS >> 8u) & 15u, IQ1M_SYNTH_D_BITS >> 12u)
+        t |> success(dn[0] != dn[1] && dn[0] != dn[2] && dn[0] != dn[3] && dn[1] != dn[2] && dn[1] != dn[3] && dn[2] != dn[3], "the d's four nibbles differ")
+        let d = f16_to_f32(IQ1M_SYNTH_D_BITS)
+        let want <- formula_row(256) $(k) {
+            let ib = k / 32
+            let l = (k % 32) / 8
+            return grid1_formula(d * float(2 * iq1m_sc_pat(2 * ib + l / 2) + 1), ib, l, k % 8, iq1m_neg_pat(ib, l))
+        }
+        check(t, "iq1m plane against the hand-packed values", p.w, want, BAR_EXACT, FLAT_SHAPE)
+        let swapped <- formula_row(256) $(k) {
+            let ib = k / 32
+            let l = (k % 32) / 8
+            return grid1_formula(d * float(2 * iq1m_sc_pat(2 * ib + 1 - l / 2) + 1), ib, l, k % 8, iq1m_neg_pat(ib, l))
+        }
+        check_exceeds(t, "control: the half-blocks' scales read in swapped order must miss", p.w, swapped, BAR_EXACT)
+    }
 }
 
 //! the K-quant and q40 / iq4xs / k3 plane cells
@@ -192,7 +266,6 @@ def private kquant_plane_cells(t : T?) {
     }
 }
 
-//! the iq3s, iq3s4 and k2 plane cells
 def private grid_plane_cells(t : T?) {
     t |> run("iq3s planes decode the 4-bit sub-scales and gather the grid exactly") @(t : T?) {
         var inscope p <- plane_row(KqFmt.iq3s, build_iq3s_block())
@@ -236,6 +309,22 @@ def private grid_plane_cells(t : T?) {
             return SYNTH_D * float(SYNTH_SC[g % 8] & 15) * float(q2_pat(k)) - SYNTH_DMIN * float(SYNTH_MN[g % 8] & 15)
         }
         check(t, "k2 plane against the upstream dequant", p.w, want, BAR_EXACT, FLAT_SHAPE)
+    }
+    t |> run("tq2 planes keep the 2-bit quants verbatim under the one f16 d and dequant (q - 1) x d exactly") @(t : T?) {
+        let blkb <- build_tq2_block()
+        var inscope p <- plane_row(KqFmt.tq2, blkb)
+        check_exact(t, "the tq2 quant plane against the disk qs", p.kq, [for (i in range(64)); blkb[i]])
+        check_exact(t, "the tq2 scale plane against the disk d", p.ks, [for (i in range(64, 66)); blkb[i]])
+        let want <- formula_row(256) $(k) => float(ternary_pat(k) - 1) * SYNTH_D
+        check(t, "tq2 plane against the upstream dequant", p.w, want, BAR_EXACT, FLAT_SHAPE)
+    }
+    t |> run("tq1 planes keep the trit bytes verbatim under the one f16 d and dequant (q - 1) x d exactly over the qs, the 16-byte qs tail and the qh") @(t : T?) {
+        let blkb <- build_tq1_block()
+        var inscope p <- plane_row(KqFmt.tq1, blkb)
+        check_exact(t, "the tq1 quant plane against the disk qs and qh", p.kq, [for (i in range(52)); blkb[i]])
+        check_exact(t, "the tq1 scale plane against the disk d", p.ks, [for (i in range(52, 54)); blkb[i]])
+        let want <- formula_row(256) $(k) => float(ternary_pat(k) - 1) * SYNTH_D
+        check(t, "tq1 plane against the upstream dequant", p.w, want, BAR_EXACT, FLAT_SHAPE)
     }
 }
 
@@ -316,6 +405,62 @@ def private lattice_plane_cells(t : T?) {
             check(t, "q5032 block {blk} plane against the hand-packed values", p.w, want, BAR_EXACT, FLAT_SHAPE)
             var inscope off <- formula_row(32) $(k) => float(q5_pat(k + blk)) * q51_d(blk)
             t |> success(mismatch_exact(p.w, off) > 0, "control: the unsigned level (no - 16) must miss the plane dequant")
+        }
+    }
+}
+
+//! the q20 plane cell: hand-packed Q2_0 groups, both halves under the group's one d
+def private q20_plane_cells(t : T?) {
+    t |> run("q20 planes unpack the hand-packed Q2_0 groups to (q - 1) x d exactly, both 32-weight halves under the group's one d") @(t : T?) {
+        for (h in range(2)) {
+            var seen = 0
+            for (k in range(32)) {
+                seen |= 1 << q20_pat(0, h * 32 + k)
+            }
+            t |> equal(seen, 15, "half {h} of the synthetic group carries every code 0..3")
+        }
+        var apart = 0
+        for (k in range(32)) {
+            apart += q20_pat(0, k) != q20_pat(0, k + 32) ? 1 : 0
+        }
+        t |> success(apart > 0, "the synthetic group's two halves differ")
+        for (blk in range(4)) {
+            var inscope p <- plane_row(KqFmt.q20, build_q20_block(blk))
+            var inscope want <- formula_row(64) $(k) => float(q20_pat(blk, k) - 1) * q51_d(blk)
+            check(t, "q20 group {blk} plane against the hand-packed values", p.w, want, BAR_EXACT, FLAT_SHAPE)
+            var inscope off <- formula_row(64) $(k) => float(q20_pat(blk, k)) * q51_d(blk)
+            check_exceeds(t, "control: the unsigned level (no - 1) must miss the plane dequant", p.w, off, BAR_EXACT)
+            var inscope flip <- formula_row(64) $(k) => float(q20_pat(blk, k ^ 3) - 1) * q51_d(blk)
+            check_exceeds(t, "control: the codes read off a byte's top bits first must miss", p.w, flip, BAR_EXACT)
+        }
+    }
+}
+
+//! the q10 plane cell: hand-packed Q1_0 groups, all four 32-weight blocks under the group's one d
+def private q10_plane_cells(t : T?) {
+    t |> run("q10 planes unpack the hand-packed Q1_0 groups to +d where a bit is set and -d where it is clear, exactly, all four blocks under the group's one d") @(t : T?) {
+        for (h in range(4)) {
+            var ones = 0
+            for (k in range(32)) {
+                ones += q10_pat(0, h * 32 + k)
+            }
+            t |> success(ones > 0 && ones < 32, "block {h} of the synthetic group carries both signs ({ones} set)")
+            for (o in range(h)) {
+                var apart = 0
+                for (k in range(32)) {
+                    apart += q10_pat(0, h * 32 + k) != q10_pat(0, o * 32 + k) ? 1 : 0
+                }
+                t |> success(apart > 0, "the synthetic group's blocks {o} and {h} differ")
+            }
+        }
+        for (blk in range(4)) {
+            var inscope p <- plane_row(KqFmt.q10, build_q10_block(blk))
+            var inscope want <- formula_row(128) $(k) => q10_pat(blk, k) != 0 ? q51_d(blk) : -q51_d(blk)
+            check(t, "q10 group {blk} plane against the hand-packed values", p.w, want, BAR_EXACT, FLAT_SHAPE)
+            var inscope off <- formula_row(128) $(k) => float(q10_pat(blk, k)) * q51_d(blk)
+            check_exceeds(t, "control: the bit as an unsigned level (no 2 x bit - 1) must miss the plane dequant", p.w, off, BAR_EXACT)
+            var inscope flip <- formula_row(128) $(k) => q10_pat(blk, k ^ 7) != 0 ? q51_d(blk) : -q51_d(blk)
+            check_exceeds(t, "control: the bits read off a byte's top bit first must miss", p.w, flip, BAR_EXACT)
         }
     }
 }
@@ -402,15 +547,15 @@ def private p32_repack_model(var m : Model; n, d, mr : int64; f : auto(TT)) {
 //! `rows` per-32 plane rows of n; row r block b packs synthetic block r*31 + b, so no two blocks share data and offset bugs can't cancel
 def private p32_fill_planes(var kq : array<uint8>; var ks : array<uint8>; rows, n : int64; f : auto(TT)) {
     let kf = p32_fmt(f)
-    let qb = kq_qsb(kf)
-    let sb = kq_ssb(kf)
-    let nb = n / 32l
-    kq |> resize(rows * nb * qb)
-    ks |> resize(rows * nb * sb)
+    let qgb = kq_qsb(kf) * kq_sgroup(kf)
+    let sb = kq_sbytes(kf, kq_sgroup(kf))
+    let ng = n / kq_group_elems(kf)
+    kq |> resize(rows * ng * qgb)
+    ks |> resize(rows * ng * sb)
     for (r in range64(rows)) {
-        for (b in range64(nb)) {
+        for (b in range64(ng)) {
             var inscope blkb <- p32_block(int(r * 31l + b), f)
-            kq_transcode_superblock(kf, blkb, 0l, kq, (r * nb + b) * qb, ks, (r * nb + b) * sb)
+            kq_transcode_superblock(kf, blkb, 0l, kq, (r * ng + b) * qgb, ks, (r * ng + b) * sb)
         }
     }
 }
@@ -438,7 +583,7 @@ def private p32_dot_gate(t : T?; f : auto(TT)) {
     var inscope w : array<float>
     w |> resize(n)
     for (b in range64(n / 32l)) {
-        p32_dequant(kq, b * kq_qsb(kf), ks, b * kq_ssb(kf), w, b * 32l, f)
+        p32_dequant(kq, b * kq_qsb(kf), ks, kq_soff(kf, b), w, b * 32l, f)
     }
     var inscope xq : array<int8>
     var inscope xs : array<float>
@@ -459,7 +604,7 @@ def private p32_row_dots(kq, ks : array<uint8>; xq : array<int8>; xs : array<flo
                          wrow : block<(i : int64) : int64>; xrow : block<(i : int64) : int64>; f : auto(TT)) : array<float> {
     let kf = p32_fmt(f)
     let rq = n / 32l * kq_qsb(kf)
-    let rs = n / 32l * kq_ssb(kf)
+    let rs = kq_sbytes(kf, n / 32l)
     var want <- nan_plane(int(cnt))
     unsafe {
         for (i in range64(cnt)) {
@@ -471,10 +616,9 @@ def private p32_row_dots(kq, ks : array<uint8>; xq : array<int8>; xs : array<flo
     return <- want
 }
 
-def private p32_groupn_gate(t : T?; f : auto(TT)) {
+def private p32_groupn_gate(t : T?; f : auto(TT); bar : Bar = BAR_EXACT; d : int64 = 8l) {
     let n = p32_n(f)
     let kf = p32_fmt(f)
-    let d = 8l
     let nreg = 3l
     var inscope kq, ks : array<uint8>
     p32_fill_planes(kq, ks, nreg * d, n, f)
@@ -490,13 +634,12 @@ def private p32_groupn_gate(t : T?; f : auto(TT)) {
     var inscope y <- nan_plane(int(nreg * d))
     p32_groupn(y, kq, ks, offs, nreg, xq, xs, n, d, f)
     var inscope want <- p32_row_dots(kq, ks, xq, xs, n, nreg * d, $(i) => i, $(i) => i / d, f)
-    check(t, "{kf} groupn rows against the scalar row dots", y, want, BAR_EXACT, Shape(row_width = int(d)))
+    check(t, "{kf} groupn rows against the scalar row dots", y, want, bar, Shape(row_width = int(d)))
 }
 
-def private p32_batch_gate(t : T?; f : auto(TT)) {
+def private p32_batch_gate(t : T?; f : auto(TT); bar : Bar = BAR_EXACT; d : int64 = 8l) {
     let n = p32_n(f)
     let kf = p32_fmt(f)
-    let d = 8l
     let ntok = 5l
     let nreg = 2l
     var inscope kq, ks : array<uint8>
@@ -508,13 +651,13 @@ def private p32_batch_gate(t : T?; f : auto(TT)) {
     var inscope y <- nan_plane(int(ntok * d))
     p32_batch(y, kq, ks, d * n, xq, xs, n, d, ntok, f)
     var inscope want <- p32_row_dots(kq, ks, xq, xs, n, ntok * d, $(i) => d + i % d, $(i) => i / d, f)
-    check(t, "{kf} batch cells against the scalar row dots", y, want, BAR_EXACT, Shape(row_width = int(d)))
+    check(t, "{kf} batch cells against the scalar row dots", y, want, bar, Shape(row_width = int(d)))
     // batch groupn: (woff, row0, cnt) triples — tokens 0..2 hit region 0, 2..5 region 1
     let offs <- [0l, 0l, 2l, d * n, 2l, 3l]
     var inscope yg <- nan_plane(int(ntok * d))
     p32_batch_groupn(yg, kq, ks, offs, nreg, xq, xs, n, d, f)
     var inscope wantg <- p32_row_dots(kq, ks, xq, xs, n, ntok * d, $(i) => (i / d < 2l ? 0l : d) + i % d, $(i) => i / d, f)
-    check(t, "{kf} batch-groupn cells against the scalar row dots", yg, wantg, BAR_EXACT, Shape(row_width = int(d)))
+    check(t, "{kf} batch-groupn cells against the scalar row dots", yg, wantg, bar, Shape(row_width = int(d)))
 }
 
 // the grp<mr> per-32 layout (the emitter family's plane): repack round-trip, the grp scalar walk,
@@ -766,12 +909,11 @@ def private p32_grp_row_dot(qg : uint8 const?; sg : uint8 const?; r, mr : int64;
 }
 
 //! every row-major perm of the member - the gemv over `d` rows of one token, the four-token tile - against the scalar row
-//! dots over the same disk-order planes (the device layout: no repack interleaves an affine plane); a generated perm folds
-//! in vector order, so the bar is relative to the rows' largest magnitude
-def private mlx_rm_gate(t : T?; f : auto(TT)) {
+//! dots over the same disk-order planes (the device layout: no repack interleaves an affine or q20 plane); a generated perm
+//! folds in vector order, so the bar is relative to the rows' largest magnitude
+def private b32_rm_gate(t : T?; f : auto(TT); d : int64 = 12l) {
     let n = p32_n(f)
     let kf = p32_fmt(f)
-    let d = 12l
     static_if (!typeinfo builtin_module_exists(llvm)) {
         t |> skip("{kf}: no dasLLVM in this build - the row-major registry has no generated rows")
         return
@@ -789,7 +931,7 @@ def private mlx_rm_gate(t : T?; f : auto(TT)) {
     q51_fill_acts(xq, xs, 4l, n)
     var inscope want <- p32_row_dots(kq, ks, xq, xs, n, 4l * d, $(i) => i % d, $(i) => i / d, f)
     var inscope want0 <- copy_span(want, 0l, d)
-    let bar = Bar(kind = BarKind.rel_of_max, rel = 5.0e-5, abs_floor = 1.0e-4, poison = 1.0e-3, poison_of_max = true, poison_abs = 1.0e-2)
+    let bar = BAR_ROW_MAJOR
     var emitted = 0
     for (row, wit in regs.rm_gemv, regs.rm_witness) {
         var inscope y <- nan_plane(int(d))
@@ -851,8 +993,120 @@ def private mlx_cells(t : T?; f : auto(TT)) {
         p32_dense_gate(t, f)
     }
     t |> run("every {kf} row-major perm (gemv and four-token tile) matches the scalar row dots") @(t : T?) {
-        mlx_rm_gate(t, f)
+        b32_rm_gate(t, f)
     }
+}
+
+//! q20: the Q2_0 64-weight group - two 32-blocks of 2-bit codes in the disk order under one f16 d
+def private p32_fmt(_f : KqTag_q20) : KqFmt => KqFmt.q20
+def private p32_n(_f : KqTag_q20) : int64 => 1408l
+def private p32_block(blk : int; _f : KqTag_q20) : array<uint8> => build_q20_block(blk)
+def private p32_dequant(kq : array<uint8>; ko : int64; ks : array<uint8>; so : int64; var w : array<float>; wo : int64; _f : KqTag_q20) => dequant_q20_plane_block(kq, ko, ks, so, w, wo)
+def private p32_dot(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q20) : float => dot_q20q8_scalar(wq, ws, xq, xs, n)
+def private p32_rm_live(_f : KqTag_q20) : bool => q20q8_rm_witness_gen()
+
+//! q10: the Q1_0 128-weight group - four 32-blocks of sign bits in the disk order under one f16 d
+def private p32_fmt(_f : KqTag_q10) : KqFmt => KqFmt.q10
+def private p32_n(_f : KqTag_q10) : int64 => 1408l
+def private p32_block(blk : int; _f : KqTag_q10) : array<uint8> => build_q10_block(blk)
+def private p32_dequant(kq : array<uint8>; ko : int64; ks : array<uint8>; so : int64; var w : array<float>; wo : int64; _f : KqTag_q10) => dequant_q10_plane_block(kq, ko, ks, so, w, wo)
+def private p32_dot(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q10) : float => dot_q10q8_scalar(wq, ws, xq, xs, n)
+def private p32_rm_live(_f : KqTag_q10) : bool => q10q8_rm_witness_gen()
+
+//! a low-bit member's per-32 cells: `p32_cells`' gates less the grp repack and GPU gather; `rm_rows` sits off the row-lane multiple so the one-row tail runs
+def private lowbit_cells(t : T?; f : auto(TT); rm_rows : int64) {
+    let kf = p32_fmt(f)
+    let seat = kernel_backend_seat()
+    pin_kernel_backend("portable")
+    t |> run("the {kf} scalar dot matches the fp64 plane-dequant reference at n={int(p32_n(f))}") @(t : T?) {
+        p32_dot_gate(t, f)
+    }
+    t |> run("{kf} groupn bit-matches scalar row dots") @(t : T?) {
+        p32_groupn_gate(t, f)
+    }
+    t |> run("{kf} batch + batch-groupn bit-match scalar row dots") @(t : T?) {
+        p32_batch_gate(t, f)
+    }
+    t |> run("the dense routers over a {kf} plane (mm_f, mm_pre_f, mm_b_f) bit-match the scalar row dots") @(t : T?) {
+        p32_dense_gate(t, f)
+    }
+    t |> run("every {kf} row-major perm (gemv and four-token tile) matches the scalar row dots over {rm_rows} rows") @(t : T?) {
+        b32_rm_gate(t, f, rm_rows)
+    }
+    restore_kernel_backend(seat)
+}
+
+[test(description = "Under the portable backend at a 1408-wide row, the q20 scalar dot matches an fp64 plane-dequant reference, its groupn, batch, batch-groupn and dense-router kernels bit-match the disk-order scalar dots, and its row-major kernels hold the row-major bar")]
+def test_q20_kernels(t : T?) {
+    lowbit_cells(t, KqTag_q20(), 12l)
+}
+
+[test(description = "Under the portable backend at a 1408-wide row, the q10 scalar dot matches an fp64 plane-dequant reference, its groupn, batch, batch-groupn and dense-router kernels bit-match the disk-order scalar dots, and every row-major perm over 13 rows - the row-lane form and its one-row tail - lands within the row-major bar")]
+def test_q10_kernels(t : T?) {
+    lowbit_cells(t, KqTag_q10(), 13l)
+}
+
+//! a low-bit member's gen-tier batch over one 16-row walk group, bit for bit its row-major tile and GEMV stamps called direct: the slots hand them each group
+def private lowbit_gen_stamp_gate(t : T?; f : auto(TT)) {
+    let kf = p32_fmt(f)
+    let n = p32_n(f)
+    let d = 16l
+    var inscope kq, ks : array<uint8>
+    p32_fill_planes(kq, ks, d, n, f)
+    var inscope xq : array<int8>
+    var inscope xs : array<float>
+    q51_fill_acts(xq, xs, 4l, n)
+    var inscope want4 <- nan_plane(int(4l * d))
+    var inscope want1 <- nan_plane(int(d))
+    unsafe {
+        rm_tile4_gen(addr(want4[0]), addr<uint8 const?>(kq[0]), addr<uint8 const?>(ks[0]), addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), null, n, d, f)
+        rm_gemv_gen(addr(want1[0]), addr<uint8 const?>(kq[0]), addr<uint8 const?>(ks[0]), addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), null, n, 0l, d, f)
+    }
+    var inscope y4 <- nan_plane(int(4l * d))
+    p32_batch(y4, kq, ks, 0l, xq, xs, n, d, 4l, f)
+    check(t, "the {kf} gen batch over four tokens against the stamped row-major tile", y4, want4, BAR_EXACT, Shape(row_width = int(d)))
+    var inscope y1 <- nan_plane(int(d))
+    p32_batch(y1, kq, ks, 0l, xq, xs, n, d, 1l, f)
+    check(t, "the {kf} gen batch over one token against the stamped row-major GEMV", y1, want1, BAR_EXACT, Shape(row_width = int(d)))
+    var inscope next <- [for (i in range64(d)); want4[d + i]]
+    check_exceeds(t, "control: the {kf} one-token batch against the tile's second token, its activation row one off", y1, next, BAR_EXACT)
+    if (p32_rm_live(f)) {
+        var inscope scalar <- p32_row_dots(kq, ks, xq, xs, n, 4l * d, $(i) => i % d, $(i) => i / d, f)
+        check_exceeds(t, "control: the stamped tile folds in vector order, so the portable batch's scalar order would miss it", want4, scalar, BAR_EXACT)
+    }
+}
+
+//! true where the box carries a gen backend - the JIT, on arm64 or on an x64 CPU with AVX2 (`dasllama_math_gen`'s registration);
+//! else false, `what`'s skip registered
+def private gen_backend_box(t : T?; what : string) : bool {
+    return false if (!jit_only(t))
+    return true if (get_architecture_name() == "arm64" || cpu_supports("avx2"))
+    t |> skip("{what}: the x64 gen backend needs AVX2, which this CPU lacks")
+    return false
+}
+
+//! a low-bit member's gen slots on the box's gen backend: every slot shape over two walk groups and a tail, one walk group against the stamps
+def private lowbit_gen_slots(t : T?; f : auto(TT)) {
+    let kf = p32_fmt(f)
+    return if (!gen_backend_box(t, "the {kf} gen slots"))
+    let gen = get_architecture_name() == "arm64" ? "arm64-gen" : "x64-gen"
+    let ran = with_kernel_backend(gen) $ {
+        let bar = BAR_ROW_MAJOR
+        p32_groupn_gate(t, f, bar, 40l)
+        p32_batch_gate(t, f, bar, 40l)
+        lowbit_gen_stamp_gate(t, f)
+    }
+    t |> success(ran, "the {gen} backend took the pin on a box that registers it")
+}
+
+[test(description = "On the gen backend, q20's batch, groupn and batch-groupn slots run the stamped row-major kernels over the disk-order planes: a one-group batch equals the stamped tile and GEMV bit for bit and its one-token row misses the tile's next token, and every slot shape over two walk groups and a tail lands within the row-major bar of the scalar row dots")]
+def test_q20_gen_slots(t : T?) {
+    lowbit_gen_slots(t, KqTag_q20())
+}
+
+[test(description = "On the gen backend, q10's batch, groupn and batch-groupn slots run the stamped row-major kernels over the disk-order planes: a one-group batch equals the stamped tile and GEMV bit for bit and its one-token row misses the tile's next token, and every slot shape over two walk groups and a tail lands within the row-major bar of the scalar row dots")]
+def test_q10_gen_slots(t : T?) {
+    lowbit_gen_slots(t, KqTag_q10())
 }
 
 [test(description = "The five MLX affine members dequant hand-packed blocks to scale x q + bias exactly (another packing order misses), and their dot, groupn, grp, batch, dense-router and row-major kernels match the scalar row dots")]
@@ -1119,10 +1373,45 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {
     }
 }
 
-[test(description = "For every superblock format, the grp repack at mr 4, 8 and 16 keeps row dots and row dequants bit-exact to the disk plane, and at mr 16 the bf16 panels hold each weight within a bf16 step at its pair slot")]
+//! a 1-bit member's grp repack at `mr` over 40 rows - whole groups and a tail - moves no byte
+def private grid1_repack_bytes_cell(t : T?; fmt : int; mr : int64) {
+    let d = 40l
+    let n = 512l
+    let kf = kq_fmt_of_id(fmt, "grid1_repack_bytes_cell")
+    var inscope kq, ks : array<uint8>
+    synth_kq_region(fmt, kq, ks, d, n, 0x2545F491u, 0x9E3779Bu)
+    var inscope dq := kq
+    var inscope ds := ks
+    unsafe {
+        repack_kq_grp(kf, addr(kq[0]), addr(ks[0]), n, d, mr)
+    }
+    t |> equal(kq_qsb(fmt) + kq_ssb(fmt), kq_desc(kf).disk_bytes, "{kf}: the quant and scale planes carry the disk superblock's bytes")
+    t |> equal(length(kq), length(dq), "{kf} grp<{mr}>: the quant plane keeps its length")
+    t |> equal(length(ks), length(ds), "{kf} grp<{mr}>: the scale plane keeps its length")
+    t |> equal(count_differing_bytes(kq, dq), 0, "{kf} grp<{mr}>: no quant byte moves")
+    t |> equal(count_differing_bytes(ks, ds), 0, "{kf} grp<{mr}>: no scale byte moves")
+}
+
+//! the positions where two byte planes of one length differ
+def private count_differing_bytes(a, b : array<uint8>) : int {
+    var moved = 0
+    for (x, y in a, b) {
+        moved += x != y ? 1 : 0
+    }
+    return moved
+}
+
+[test(description = "For every superblock format, the grp repack at mr 4, 8 and 16 keeps row dots and row dequants bit-exact to the disk plane, and at mr 16 the bf16 panels hold each weight within a bf16 step at its pair slot; the 1-bit members' repack keeps the disk bytes in place, 50 or 56 a superblock")]
 def test_kq_repack_grp(t : T?) {
     for (fmt in KQ_IDS) {
         let kf = kq_fmt_of_id(fmt, "test_kq_repack_grp")
+        if (kq_is_grid1(fmt)) {
+            for (mr in fixed_array(4l, 8l, 16l)) {
+                t |> run("repack_{kf}_grp mr={mr} keeps the disk bytes") @(t : T?) {
+                    grid1_repack_bytes_cell(t, fmt, mr)
+                }
+            }
+        }
         for (mr in fixed_array(4l, 8l, 16l)) {
             t |> run("repack_{kf}_grp mr={mr} preserves dots and row dequants") @(t : T?) {
                 kq_repack_gate(t, fmt, mr)
@@ -1167,14 +1456,14 @@ def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {
     let packed = kq_reads_packed_planes(int64(fmt))
     var inscope panel : array<uint8>
     if (!packed) {
-        panel |> resize(mr * nsb * 256l)
+        panel |> resize(mr * nsb * 256l + (kq_is_grid1(fmt) ? grid1_scale_panel_bytes(mr, nsb) : 0l))
     }
     unsafe {
         for (g in range64(d / mr)) {
             let kqg = addr(kq[g * mr * nsb * qsb])
-            let ksg = addr(ks[g * mr * nsb * ssb])
+            var ksg = addr<uint8 const?>(ks[g * mr * nsb * ssb])
             if (!packed) {
-                unpack_kq_panel_grp(int64(fmt), kqg, addr(panel[0]), mr, nsb)
+                ksg = unpack_kq_tile_panel(int64(fmt), kqg, ksg, addr(panel[0]), mr, nsb)
             }
             let tsrc = packed ? kqg : addr(panel[0])
             var tk = 0l
@@ -1191,10 +1480,10 @@ def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {
             kq_gemv_rt(kf, addr(ygemv[p * d]), addr(kq[0]), addr(ks[0]), addr(x.xq[p * n]), addr(x.xs[p * nsb]), addr(x.xbs[p * (n / 16l)]), n, 0l, d)
         }
     }
-    check(t, "{kf} 4-token tile against per-token GEMVs", ytile, ygemv, BAR_EXACT, Shape(row_width = int(d)))
+    check(t, "{kf} 4-token tile against per-token GEMVs", ytile, ygemv, kq_shape_bar(fmt), Shape(row_width = int(d)))
 }
 
-[test(description = "For every superblock format not stamped as a bf16 tile, the 4-token kq tile over grp-repacked planes, with a 3-token GEMV tail, is bit-exact to one full GEMV per token")]
+[test(description = "For every superblock format not stamped as a bf16 tile, the 4-token kq tile over grp-repacked planes, with a 3-token GEMV tail, is bit-exact to one full GEMV per token - within the row-major bar on the 1-bit members, whose GEMV is the row-major stamp")]
 def test_kq_tile(t : T?) {
     for (fmt in KQ_IDS) {
         let kf = kq_fmt_of_id(fmt, "test_kq_tile")
@@ -1386,10 +1675,10 @@ def private kq_batch_groupn_cell(t : T?; fmt : int; n, d : int64) {
         }
     }
     matmul_kq_batch_groupn(fmt, y, kq, ks, offs, nreg, x.xq, x.xs, x.xbs, n, d)
-    check(t, "{kf} batch groupn against per-(region, token) rows-core calls", y, want, BAR_EXACT, Shape(row_width = int(d)))
+    check(t, "{kf} batch groupn against per-(region, token) rows-core calls", y, want, kq_shape_bar(fmt), Shape(row_width = int(d)))
 }
 
-[test(description = "On the gen backend, the fused-prefill `matmul_kq_batch_groupn` over runs of 1, 4, 6 and 13 tokens per region bit-matches per-(region, token) rows-core calls, up to the 122B slice shapes")]
+[test(description = "On the gen backend, the fused-prefill `matmul_kq_batch_groupn` over runs of 1, 4, 6 and 13 tokens per region bit-matches per-(region, token) rows-core calls - within the row-major bar on the 1-bit members -, up to the 122B slice shapes")]
 def test_kq_batch_groupn(t : T?) {
     for (fmt in KQ_IDS) {
         let kf = kq_fmt_of_id(fmt, "test_kq_batch_groupn")
@@ -1436,30 +1725,6 @@ def test_quantize_bs(t : T?) {
     }
 }
 
-// An activation whose Q8_K image is EXACT: integers in [-127, 127] with a +-127 peak in every
-// 256-block, so the per-256 scale is 1 and the quants are the values. A GEMV over it therefore
-// carries no activation-quantization error, and any deviation from the double dot of the file's
-// own dequant is a plane-placement or kernel defect, never rounding.
-def private exact_q8k_row(var x : array<float>; n, seed : int64) {
-    for (i in range64(n)) {
-        x[i] = float(((i * 37l + 11l + seed * 13l) % 255l) - 127l)
-    }
-}
-
-// Largest |y[r] - double-dot(w row r, x)| over `rows`, relative to the dot's own magnitude; a NaN reads as infinite.
-def private rows_dot_dev(w, x, y : array<float>; n, rows : int64) : float {
-    var worst = 0.0
-    for (r in range64(rows)) {
-        var acc = 0.0lf
-        for (i in range64(n)) {
-            acc += double(w[r * n + i]) * double(x[i])
-        }
-        let dev = float(abs(double(y[r]) - acc) / (abs(acc) + 1.0lf))
-        worst = max(worst, is_nan(dev) ? INFINITE_DIFF : dev)
-    }
-    return worst
-}
-
 //! the q40 tier's end-to-end placement oracle on gemma-4-26B Q4_0 QAT `tr`, loaded with the native K-quant and Q4_0 planes
 //! on under the portable pin (the planes stay disk-order): the file is 265 x Q4_0 + F32 norms/router + one Q6_K embd, its q40
 //! planes VERBATIM disk splits, so every plane-dequant prefix bit-matches the file dequant (the k6 exactness class)
@@ -1482,6 +1747,7 @@ def private q40_placement_cell(t : T?; tr : Model; path : string) {
 }
 
 let private Q40_CTX = 4096l   //! the 26B Q4_0 forms' context: their cells read planes, no session
+let private Q20_EXPS_CTX = 4096l   //! the Q2_0 expert mint's form's context: its cell reads planes, no session
 
 [test(description = "gemma-4-26B Q4_0 QAT, loaded once a form with the native K-quant and Q4_0 planes on: under the portable pin every Q4_0 plane-dequant prefix bit-matches the file dequant at its cursor offset; on the box's own backend the repacked expert gate and up regions dot the fused tensor's rows exactly on an exact Q8_K row, the tied k6 embedding matches the file, and the region-list dispatch matches per-region GEMVs; on the parity row's CPU form (the native K-quant planes, the Q4_0 knob as found), the file's frozen greedy ids token for token; each form loads once")]
 def test_kq_q40_planes(t : T?) {
@@ -1599,6 +1865,21 @@ def private routed_dispatch_cell(t : T?; tr : Model; x : array<float>; var xq : 
     delete want
     delete gu
     delete offs
+}
+
+[test(description = "The Qwen1.5-MoE mint with every routed expert stack Q2_0, on its K-quant native CPU form, on every box: every routed site loads native - the expert planes as q20 - and layer 0's expert gate, up and down rows match the file rows' dot within f32 reassociation; the form loads once")]
+def test_q20_expert_sites_cpu(t : T?) {
+    return if (!family_on(t, "qwen2moe"))
+    let forms <- [cpu_cells_form(kq_native = KqNative.on_q40)]
+    with_cpu_and_gpu_model(t, "llm", "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps-Q2_0.gguf", Q20_EXPS_CTX, forms, false) $(var m, form) {
+        return if (!form.alone)
+        let path = path_join(models_dir(), "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps-Q2_0.gguf")
+        unsafe {   //! the cell captures the loaded model by reference
+            t |> run("moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps-Q2_0.gguf: the routed expert stacks serve their own q20 bytes on the CPU") @capture(& m)(t : T ?) {
+                kq_expert_sites_cell(t, m, path, KqFmt.q20, 0l)
+            }
+        }
+    }
 }
 
 [test(description = "The iq3xxs plane pair dequants a hand-packed superblock bit for bit to an independent recomputation off the disk bytes through the grid and ksigns tables")]

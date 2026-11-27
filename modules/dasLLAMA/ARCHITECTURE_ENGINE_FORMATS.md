@@ -122,21 +122,21 @@ Every materialized cos/sin table is the same fill; the position source is what d
 
 ### The per-32 rail is one kernel body over a format tag {#per-32-rail}
 
-The per-32 formats (`q51`, `iq4nl32`, `q4032`, `q5032`) sit off the superblock lattice: 32-weight blocks, Q8_0-form
-activations, dedicated `Model` plane pairs (`ARCHITECTURE_IMAGE.md#image-kq-table-sb-only`), and in
-`dasllama_math_default.das` one body per kernel shape (`b32_batch_kernel`, `b32_groupn_kernel`,
-`b32_batch_groupn_kernel`) generic over the `KqTag_<fmt>` it takes last - the tag picks the
-strides, the row expand, the grp scale gather and the expanded-row dot; the two 5-bit members share
-q51's leaves under a level and fold arm (`b5_level`, `b5_fold`). Every per-format seat around them
-is a table indexed by `int(KqFmt)` - the backend's `B32Slots` (`KernelBackend.b32`), the layout and
-stream hooks - read by one fmt-taking call (`matmul_b32q8_*`, `mm_b32_pre`, `b32_planes_of`), the
-planes reached through `kq_plane_pair`. `iq4nl32` is the IQ4_NL
-disk block served per-32 and `q4032` the Q4_0 one: `kq_fmt_row_ok` chooses each for a plane whose
-rows are off the 256 lattice and on the 32 lattice (the superblock members `iq4nl` and `q40` serve a
-`% 256` row), and `q51` and `q5032` keep their tags on any 32-multiple row - Q5_0 has no superblock
-member. Every site takes that one rule - dense, expert and table planes alike (`#per-32-tables`).
-The codebook levels are int8, so a q8 requant of an IQ4_NL, Q4_0 or Q5_0 block would be
-value-exact: the per-32 form's gain is bytes - 18 or 22 a block against 34 - not precision.
+The per-32 formats (`q51`, `iq4nl32`, `q4032`, `q5032`, `q20`, `q10`) sit off the superblock lattice: 32-weight blocks, Q8_0-form
+activations, dedicated `Model` plane pairs (`ARCHITECTURE_IMAGE.md#image-kq-table-sb-only`), and in `dasllama_math_default.das`
+one body per kernel shape (`b32_batch_kernel`, `b32_groupn_kernel`, `b32_batch_groupn_kernel`) generic over the `KqTag_<fmt>` it
+takes last - the tag picks the strides, the row expand, the grp scale gather and the expanded-row dot; the two 5-bit members share
+q51's leaves under a level and fold arm (`b5_level`, `b5_fold`). Every per-format seat around them is a table indexed by
+`int(KqFmt)` - the backend's `B32Slots` (`KernelBackend.b32`), the layout and stream hooks - read by one fmt-taking call
+(`matmul_b32q8_*`, `mm_b32_pre`, `b32_planes_of`), the planes reached through `kq_plane_pair`. `iq4nl32` is the IQ4_NL disk block
+served per-32 and `q4032` the Q4_0 one: `kq_fmt_row_ok` chooses each for a plane whose rows are off the 256 lattice and on the 32
+lattice (the superblock members `iq4nl` and `q40` serve a `% 256` row), `q51` and `q5032` keep their tags on any 32-multiple row -
+Q5_0 has no superblock member - `q20` on any 64-multiple row and `q10` on any 128-multiple one. Every site takes that one rule - dense, expert and table planes
+alike (`#per-32-tables`). The codebook levels are int8, so a q8 requant of an IQ4_NL, Q4_0 or Q5_0 block would be value-exact: the
+per-32 form's gain is bytes - 18 or 22 a block against 34 - not precision. A `KqDesc.ssb`-byte scale unit serves `KqDesc.sgroup`
+32-blocks (1 on every member but `q20` and `q10`, whose f16 d serves the two of a 64-weight group and the four of a 128-weight one), and `KqDesc.disk_bytes` is one unit's
+blocks' bytes on disk, the transcode's unit: `kq_soff` is a block's scale offset and `kq_sbytes` whole blocks' (on a tag
+`b32_soff` / `b32_sbytes`, on a device row `dev_scale_off` / `dev_scale_bytes`); `kq_ssb` panics where `sgroup` > 1.
 
 ### The table planes serve per-32 like the dense ones {#per-32-tables}
 
@@ -150,17 +150,17 @@ is its `EMB` axis, the classifier and the per-op sites `resident_plane_ok`; Meta
 plane at `wcls_off`; an untied one sits past it at `emb_kq_off`.
 
 `q4032` is the member a Q4_0 row off the 256 lattice serves as, `q5032` the member every Q5_0 row
-serves as:
+serves as, `q20` and `q10` the members every Q2_0 and Q1_0 row serves as:
 
-| | q4032 | q5032 |
-|---|---|---|
-| disk type | GGML Q4_0, 18 bytes a 32-block (f16 d, 16 nibble bytes) | GGML Q5_0, 22 bytes a 32-block (f16 d, qh u32, 16 nibble bytes) |
-| planes | `q4032q` 16 nibble bytes a block (`Q4032_QB`), `q4032s` the f16 d (`Q4032_SB`) - iq4nl32's split | `q5032q` the 16 nibble bytes then the qh word (`Q5032_QB`, q51's quant form), `q5032s` the f16 d (`Q5032_SB`) |
-| code | `q - 8` (`q40_lut`, -8..7), the linear twin of iq4nl32's codebook | `q - 16`, q = nibble \| qh bit << 4 (-16..15), signed: no activation sum enters the fold |
-| CPU | the `q4032q8_tile_gen` `[tune]` family (iq4nl32's permutations and fallback, its own layout and GEMV companions, the generator's `q40` code), the portable per-32 bodies the hand tiers' slots and the controls | the `q5032q8_tile_gen` family (q51's grid and fallback, the emitter's `emit_block_q5032`: q51's nibble+qh unpack re-centred, the signed lattice, iq4nl32's fold), the portable bodies (`expand_q5032_row`, `dot_iq4nl32e`) |
-| Vulkan | the Blk32 leaves (`q40_signed_word`), the cm2 S/E stamps and the KHR tile (`Q4032Cm2T`), the `EMB` gather | the Blk32 leaves, the cm2 S/E stamps and the KHR tile (`Q5032Cm2T`), the `EMB` gather |
-| Metal | iq4nl32's stamps under `Q40L`: the GEMV and its K-split, the small-batch forms, `mul_mm`, the routed GEMV and tiles, the gather | iq4nl32's stamps under `Q50`: the GEMV, its K-split, the routed GEMV and the small-batch forms over a 32-entry `q - 16` table; the gather and `mul_mm` decode `q - 16` directly; the routed tensor twins on q51's staging under `Q50` |
-| ids | enum 18, stream tag `Q4032_STREAM_TAG`, no gemm schema | enum 19, stream tag `Q5032_STREAM_TAG`, no gemm schema |
+| | q4032 | q5032 | q20 | q10 |
+|---|---|---|---|---|
+| disk type | GGML Q4_0, 18 bytes a 32-block (f16 d, 16 nibble bytes) | GGML Q5_0, 22 bytes a 32-block (f16 d, qh u32, 16 nibble bytes) | GGML Q2_0, 18 bytes a 64-weight block (f16 d, 16 code bytes) | GGML Q1_0, 18 bytes a 128-weight block (f16 d, 16 sign bytes) |
+| planes | `q4032q` 16 nibble bytes a block (`Q4032_QB`), `q4032s` the f16 d (`Q4032_SB`) - iq4nl32's split | `q5032q` the 16 nibble bytes then the qh word (`Q5032_QB`, q51's quant form), `q5032s` the f16 d (`Q5032_SB`) | `q20q` 8 code bytes a block in the disk order (`Q20_QB`), `q20s` the group's f16 d (`Q20_SB`), one a 2-block unit (`Q20_SGROUP`) | `q10q` 4 sign bytes a block in the disk order (`Q10_QB`), `q10s` the group's f16 d (`Q10_SB`), one a 4-block unit (`Q10_SGROUP`) |
+| code | `q - 8` (`q40_lut`, -8..7), the linear twin of iq4nl32's codebook | `q - 16`, q = nibble \| qh bit << 4 (-16..15), signed: no activation sum enters the fold | `q - 1` (-1..2), element j's 2-bit code at bits (j % 4) x 2 of byte j / 4 (`q20_level`) | +1 where element j's bit (bit j % 8 of byte j / 8) is set, -1 where it is clear (`q10_level`); the plane dequant and the scalar dot are q20's bodies over the tag (`lowbit_level`) |
+| CPU | the `q4032q8_tile_gen` `[tune]` family (iq4nl32's permutations and fallback, its own layout and GEMV companions, the generator's `q40` code), the portable per-32 bodies the hand tiers' slots and the controls | the `q5032q8_tile_gen` family (q51's grid and fallback, the emitter's `emit_block_q5032`: q51's nibble+qh unpack re-centred, the signed lattice, iq4nl32's fold), the portable bodies (`expand_q5032_row`, `dot_iq4nl32e`) | the row-major `q20q8_rm_gemv_gen` family (`rm_b32_gen`'s q20 arm, its `lev` x `spread` grid, `ARCHITECTURE_CPU_KERNELS.md#q20-code-spreads`) and its reference `dot_q20q8_scalar`, serving every CPU site through the gen tier's `B32Slots` row over the disk-order planes (interleave 1, no repack, `ARCHITECTURE_CPU_KERNELS.md#q20-device-layout-walk`); the portable bodies (`expand_q20_row`, and `dot_iq4nl32e` over the row's units spread a block each in the worker's scratch, `b32_block_scales`) every other backend's slots | the row-major `q10q8_rm_gemv_gen` family (`rm_b32_gen`'s q10 arm, its `lev` x `spread` grid, `ARCHITECTURE_CPU_KERNELS.md#q10-sign-tests`) and its reference `dot_q10q8_scalar`, on q20's walk and `B32Slots` row over the tag; the portable bodies (`expand_q10_row`, `dot_iq4nl32e` over the spread units) every other backend's slots |
+| Vulkan | the Blk32 leaves (`q40_signed_word`), the cm2 S/E stamps and the KHR tile (`Q4032Cm2T`), the `EMB` gather | the Blk32 leaves, the cm2 S/E stamps and the KHR tile (`Q5032Cm2T`), the `EMB` gather | the Blk32 leaves over the half's one code word (`blk32_q20_quad`: each byte's four codes spread to byte lanes, `q20_byte_lanes`, then signed, `q20_signed_word`), the group's d a half-word by the group's parity, the cm2 l/m/s stamps and the KHR tile (`Q20Cm2T`, over `LowbitCm2BaseT`), the int8 tiles (`Q20MmqT`, over `LowbitMmqBaseT`) - both bases reading the group's d through `blk32_sword` / `blk32_scale`, the `EMB` gather; CUDA stamps the same Blk32 and cm2 templates, no MMQ or rows leaf | the Blk32 leaves over the block's one sign word (`blk32_q10_quad`: each nibble's four bits spread to 0/1 byte lanes, `q10_bit_lanes`, then signed +-1, `q10_signed_word` over q20's recentring), the four-block group's d a half-word by the group's parity, the cm2 l/m/s stamps and the KHR tile (`Q10Cm2T`, over `LowbitCm2BaseT`), the int8 tiles (`Q10MmqT` over `LowbitMmqBaseT`, +-1 lanes; `BITS01` the 0/1 staging under the min term), the `EMB` gather; CUDA stamps the same Blk32 and cm2 templates, no MMQ or rows leaf |
+| Metal | iq4nl32's stamps under `Q40L`: the GEMV and its K-split, the small-batch forms, `mul_mm`, the routed GEMV and tiles, the gather | iq4nl32's stamps under `Q50`: the GEMV, its K-split, the routed GEMV and the small-batch forms over a 32-entry `q - 16` table; the gather and `mul_mm` decode `q - 16` directly; the routed tensor twins on q51's staging under `Q50` | none: `kq_fmt_gpu_supported` refuses it | none: `kq_fmt_gpu_supported` refuses it |
+| ids | enum 18, stream tag `Q4032_STREAM_TAG`, no gemm schema | enum 19, stream tag `Q5032_STREAM_TAG`, no gemm schema | enum 26, stream tag `Q20_STREAM_TAG`, no gemm schema | enum 27, stream tag `Q10_STREAM_TAG`, no gemm schema |
 
 ### The load and image rail {#the-load-and-image-rail}
 
@@ -169,7 +169,7 @@ detection, the eager and streamed conversion ladders, and the load entry points.
 forward path touches at run time - a loaded `Model` is the whole handoff - and it requires
 `dasllama_common` back for `Model`/`Session`, so the transformer umbrella requires it `public` and
 breaks the cycle. That re-export is what keeps every consumer on the facade. A file carrying a tensor
-type the reader has no arm for (Q4_1, IQ1_S, IQ1_M, TQ1_0, TQ2_0) is declined before any plane is read,
+type the reader has no arm for (Q4_1) is declined before any plane is read,
 the panic naming the tensor and its type (`gguf_decline_unread_types`). Every big-weight
 conversion is accounted as it runs (`conv_account`, on both the eager and the streamed ladder),
 and a load that converts ends with the report: the file's bytes, then each (disk type ->

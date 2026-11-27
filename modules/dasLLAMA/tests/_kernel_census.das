@@ -830,6 +830,49 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // token-table gather and the cm2 stamps); their coverage is
     // test_vkd_kq_batch_family
     "kq_batch_nv4_cls_spv", "kq_batch_nv4_khr_cls_spv",
+    // the q20 rail's stamps no cell of a whole run dispatches (native
+    // Q2_0 planes: the Ternary-Bonsai and Llama-3.2-1B carriers of
+    // test_gpu_resident_format_census.das run one gather window on
+    // the box's own coopmat mode - under the cm2 mode the s stamp,
+    // under the KHR mode the KHR tile, and the decode GEMV, which
+    // count; the Qwen1.5-MoE carrier of
+    // test_gpu_resident_qwen_moe.das is the qwen15-moe category's,
+    // which no whole run opens) - its l and m stamps (the m stamp its
+    // e column too), its routed down's summing twin, and its int8
+    // tiles; their coverage is test_vkd_q20_cm2_batch,
+    // test_vkd_q20_gemv and test_vkd_mmq_tiles
+    "q20_batch_cm2l_cls_spv", "q20_batch_cm2m_cls_spv", "q20_gemv_sum_cls_spv",
+    "q20_batch_mmq_cls_spv", "q20_batch_mmqs_cls_spv",
+    // the q10 rail's stamps no cell of a whole run dispatches (native
+    // Q1_0 planes: the Bonsai and Llama-3.2-1B carriers of
+    // test_gpu_resident_format_census.das run the q20 carriers' one
+    // gather window - under the cm2 mode the s stamp, under the KHR
+    // mode the KHR tile, and the decode GEMV; the Qwen1.5-MoE carrier
+    // of test_gpu_resident_qwen_moe.das is the qwen15-moe
+    // category's) - its l and m stamps (the m stamp its e column
+    // too), its routed down's summing twin, and its int8 tiles;
+    // their coverage is test_vkd_q10_cm2_batch, test_vkd_q10_gemv
+    // and test_vkd_mmq_tiles
+    "q10_batch_cm2l_cls_spv", "q10_batch_cm2m_cls_spv", "q10_gemv_sum_cls_spv",
+    "q10_batch_mmq_cls_spv", "q10_batch_mmqs_cls_spv",
+    // the tq2 token-table gather (no catalogued file carries a TQ2_0
+    // token table: the Llama-3.2-1B TQ2_0 mint keeps Q6_K, TriLM 1.1B
+    // Q4_K); its coverage is test_vkd_emb_gather_family
+    "kq_emb_tq2_cls_spv",
+    // the tq1 token-table gather: no catalogued file carries a TQ1_0
+    // token table either (the Llama-3.2-1B TQ1_0 mint keeps Q6_K,
+    // TriLM 1.1B TQ1_0 Q4_K); its coverage is
+    // test_vkd_emb_gather_family
+    "kq_emb_tq1_cls_spv",
+    // the 1-bit grid members' token-table gathers (the Llama-3.2-1B
+    // IQ1_S and IQ1_M mints keep Q6_K tables) and their expert
+    // schedule's e columns (no cell of a whole run routes an IQ1
+    // expert stack: the carriers, the Qwen1.5-MoE exps3 IQ1 files of
+    // test_gpu_resident_moe_formats.das, are the qwen15-moe
+    // category's); their coverage is test_vkd_emb_gather_family,
+    // test_vkd_iq1s_cm2_batch and test_vkd_iq1m_cm2_batch
+    "kq_emb_iq1s_cls_spv", "kq_emb_iq1m_cls_spv", "kq_batch_iq1s_cm2e_cls_spv",
+    "kq_batch_iq1m_cm2e_cls_spv",
     // the hyper-connection chain (Qwen3.8-Flash-Next, the one
     // qwen4exp carrier, above the zoo's tier): the mixer seams and
     // the n-gram side input; their coverage is test_vkd_hc_seams,
@@ -969,6 +1012,12 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "kq_gemv_iq4nl_n_cls_spv", "kq_gemv_iq2s_n_cls_spv", "kq_gemv_iq2xs_n_cls_spv",
     "kq_gemv_iq2xxs_n_cls_spv", "kq_gemv_q40_n4_cls_spv", "kq_gemv_iq3s_n4_cls_spv",
     "kq_gemv_iq2xxs_n4_cls_spv",
+    // the 1-bit grid members' leaves: no cell of a whole run engages
+    // the N-row token command on an IQ1_S or IQ1_M carrier (the
+    // mints' blocks of test_gpu_resident_llama.das feed a window and
+    // one-row steps); test_vkd_gemv_ncol covers them
+    "kq_gemv_iq1s_n_cls_spv", "kq_gemv_iq1s_n4_cls_spv", "kq_gemv_iq1m_n_cls_spv",
+    "kq_gemv_iq1m_n4_cls_spv",
     // the sink stamp over a tq4 K/V mirror (gpt-oss with the mirror
     // asked in tq4: no cell of a whole run loads it so); its coverage
     // is the sink arm of test_vkc_tq4_da_attn in
@@ -1044,6 +1093,7 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "kq_gemv_nv4_n4r_cls_spv", "kq_gemv_k2_nr_cls_spv", "kq_gemv_k2_n4r_cls_spv",
     "kq_gemv_iq2xs_nr_cls_spv", "kq_gemv_iq2xs_n4r_cls_spv", "kq_gemv_iq2xxs_nr_cls_spv",
     "kq_gemv_iq2xxs_n4r_cls_spv",
+    "kq_gemv_tq2_nr_cls_spv", "kq_gemv_tq2_n4r_cls_spv",
     // the small-tile twins of the KHR flash tile's decode form, which
     // a carrier dispatches on a device under the tile's footprint
     // (`FA_KHR_WG_BYTES`); their coverage is test_vkd_da_attn_tile in

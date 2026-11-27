@@ -61,7 +61,12 @@ row. `moeq` is the first axis for the int8 tiles (`ARCHITECTURE_GPU_VULKAN_KHR.m
 routed buckets at the gate and up shape (Q4_K, d 512, K 2048, the rows fed from 512 f32 rows through the row map) and the
 down shape (Q5_K and Q6_K, d 2048, K 512, fed from the f16 hidden rows), the f16 KHR ladder against the int8 one, then each column
 apart, the feed's time on its own row, the int8 output read against the f16 one and - on Q8_0 planes - four outputs
-against a host sum; `mmqd` runs the two ladders over dense Q8_0 shapes. `mmqlay` prints the device's accumulator layout -
+against a host sum; `mmqd` runs the two ladders over dense Q8_0 shapes; `moeq20` runs them over q20 expert stacks -
+Qwen1.5-MoE's at 32, 77 and 128 window tokens and Flash-Next's at 128 (`PERF_LEDGER.md`, the q20 entry); `moeq10` over q10's,
+the int8 tile's +-1 staging beside its 0/1 staging (`ProbeQ10Mmq01`), and the dense 4096 x 14336 plane at 512 tokens for q10
+and q20, one plane replayed and 13 a dispatch (`PERF_LEDGER.md`, the q10 entry); `moekhr` runs the 2-bit members with no int8
+tile (k2, tq2, tq1) over the same expert shapes and the dense plane at 32, 77, 128 and 512 tokens, the KHR tile against its
+rotated K walk (`kq_batch_<fmt>_khr_rot_cls`) as the second ladder. `mmqlay` prints the device's accumulator layout -
 every lane's eight elements as (row, column) - with the depth and sign of a 16 x 32 product and of two 16-deep ones, and
 `mmqsg` the subgroup a lane sits in: the two readings a new device's int8 tile is written from. The `moe:<fmt>` and
 `moesk:<fmt>` arms are the first axis over the expert schedule: the
@@ -122,6 +127,10 @@ role sits between. Its `cold` arm dispatches one plane copy a dispatch and takes
 in turn - the served launch size in the DRAM regime - with the warm `single` row as its alternate
 (the pod's RTX PRO 4500, `-jit`, Llama-3.2-1B's shapes: gate 2048x8192 q8 28 us, 0.30 of the
 four-copy streaming row; down 8192x2048 35 us, 0.36; q 2048x2048 13 us, 0.37; cls 344 us, 0.26).
+Its `q20` race holds the shipped q20 GEMV beside the low-bit probe twin (`ProbeLowbitGemvT`) under signed and unsigned codes at
+three lane splits, and its `q10` race q20's and q10's shipped GEMVs beside the twin under signed lanes, mask-and-add and select,
+with both shipped N-column leaves at eight rows on the 14336-wide shape; a plane copy a dispatch over a ring past 96 MB, or
+under `warm` one copy replayed, two outputs alternated, the rounds interleaved.
 Its `cols` ruler holds the one-column class beside the N-column class at 1, 2, 4 and 8 rows; the
 chain alternates two output planes under their own hazard bits, so consecutive dispatches overlap
 the way the batched step's GEMVs do and the `vs N single` column compares two overlapped chains;

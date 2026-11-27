@@ -750,6 +750,96 @@ def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : 
     return acc
 }
 
+//! IQ1_S row dot off the DISK-ORDER planes: each octet in eighths (`grid1_octet_dot`), one fold a superblock under d x xs / 8
+[unused_argument(xbsp), hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_iq1s) : float {
+    var acc = 0.0
+    let grid = iq1s_grid()
+    unsafe {
+        for (sb in range64(n / KQ_SB_ELEMS)) {
+            let kqo = sb * IQ1S_QSB
+            let kso = sb * IQ1S_SSB
+            let d = f16_to_f32(u16_le(ksrow, kso))
+            var isum = 0
+            for (ib in range64(KQ_SB_ELEMS / KQ_B32_ELEMS)) {
+                let qh = u16_le(kqrow, kqo + IQ1_QS_BYTES + 2l * ib)
+                let delta = iq1s_neg(qh) != 0u ? -1 : 1
+                let ab = sb * KQ_SB_ELEMS + ib * KQ_B32_ELEMS
+                var bsum = 0
+                for (l in range64(4l)) {
+                    let idx = int(kqrow[kqo + 4l * ib + l]) | int(iq1s_hi(qh, uint(l)) << 8u)
+                    bsum += grid1_octet_dot(iq1_grid_entry(grid, idx), delta, xqp, ab + l * 8l)
+                }
+                isum += int(iq1s_sc(qh)) * bsum
+            }
+            acc += float(isum) * (d * xsp[sb] * IQ1_DELTA)
+        }
+    }
+    return acc
+}
+
+//! IQ1_M row dot off the DISK-ORDER planes: each octet in eighths (`grid1_octet_dot`) under its half-block scale, one fold a superblock
+[unused_argument(xbsp), hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_iq1m) : float {
+    var acc = 0.0
+    let grid = iq1s_grid()
+    unsafe {
+        for (sb in range64(n / KQ_SB_ELEMS)) {
+            let kqo = sb * IQ1M_QSB
+            let kso = sb * IQ1M_SSB
+            let sc = iq1m_scale_words(ksrow, kso)
+            let d = f16_to_f32(iq1m_d_bits(sc[0], sc[1], sc[2], sc[3]))
+            var isum = 0
+            for (hb in range(16)) {
+                let qhb = uint(kqrow[kqo + IQ1_QS_BYTES + int64(hb)])
+                var hsum = 0
+                for (o in range(2)) {
+                    let idx = int(kqrow[kqo + int64(2 * hb + o)]) | int(iq1m_hi(qhb, uint(o)) << 8u)
+                    hsum += grid1_octet_dot(iq1_grid_entry(grid, idx), iq1m_neg(qhb, uint(o)) != 0u ? -1 : 1, xqp, sb * KQ_SB_ELEMS + int64(16 * hb + 8 * o))
+                }
+                isum += (2 * iq1m_half_scale(sc[hb / 4], hb) + 1) * hsum
+            }
+            acc += float(isum) * (d * xsp[sb] * IQ1_DELTA)
+        }
+    }
+    return acc
+}
+
+//! One iq1s superblock off its planes (`kq` its 48 quant bytes, `ks` its f16 d) into dst[0 .. 256): w = dl x (grid value + delta)
+def dequant_grid1_sb(kq, ks : uint8 const?; var dst : float?; _f : KqTag_iq1s) {
+    let grid = iq1s_grid()
+    unsafe {
+        let d = f16_to_f32(u16_le(ks, 0l))
+        for (ib in range64(KQ_SB_ELEMS / KQ_B32_ELEMS)) {
+            let qh = u16_le(kq, IQ1_QS_BYTES + 2l * ib)
+            let dl = d * iq1s_sc(qh)
+            let delta = iq1s_neg(qh) != 0u ? -IQ1_DELTA : IQ1_DELTA
+            for (l in range64(4l)) {
+                let idx = int(kq[4l * ib + l]) | int(iq1s_hi(qh, uint(l)) << 8u)
+                store_grid1_octet(dst, ib * KQ_B32_ELEMS + l * 8l, dl, iq1_grid_entry(grid, idx), delta)
+            }
+        }
+    }
+}
+
+//! One iq1m superblock off its planes (`kq` its 48 quant bytes, `ks` its four scale words) into dst[0 .. 256): w = dl x (grid value + delta)
+def dequant_grid1_sb(kq, ks : uint8 const?; var dst : float?; _f : KqTag_iq1m) {
+    let grid = iq1s_grid()
+    unsafe {
+        let sc = iq1m_scale_words(ks, 0l)
+        let d = f16_to_f32(iq1m_d_bits(sc[0], sc[1], sc[2], sc[3]))
+        for (hb in range(16)) {
+            let dl = d * float(2 * iq1m_half_scale(sc[hb / 4], hb) + 1)
+            let qhb = uint(kq[IQ1_QS_BYTES + int64(hb)])
+            for (o in range(2)) {
+                let idx = int(kq[int64(2 * hb + o)]) | int(iq1m_hi(qhb, uint(o)) << 8u)
+                let delta = iq1m_neg(qhb, uint(o)) != 0u ? -IQ1_DELTA : IQ1_DELTA
+                store_grid1_octet(dst, int64(16 * hb + 8 * o), dl, iq1_grid_entry(grid, idx), delta)
+            }
+        }
+    }
+}
+
 def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_q8) : float {
     panic("q8 has no kq plane dot")
 }
@@ -776,6 +866,10 @@ def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xs
 
 def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : float {
     panic("an affine member rides the per-32 planes, not the kq lattice dot")
+}
+
+def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_q20 | KqTag_q10) : float {
+    panic("q20 and q10 ride the per-32 planes, not the kq lattice dot")
 }
 
 //! Rows [rb, re) of a kq region off the DISK-ORDER planes through the format's dot against one Q8_K activation row: y[i] =
@@ -843,19 +937,127 @@ def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : 
 //! Q2_K row dot off the DISK-ORDER planes: per 16-elem group g, sc/mn = the group's nibble
 //! pair, q = the unsigned 2-bit lane; the k4/k5 fold - isum on d*sc, the min term through the
 //! activation 16-sums (bsum on dmin*mn).
-[hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_k2) : float {
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_k2) : float =>
+    k2l_dot(kqrow, ksrow, xqp, xsp, xbsp, n, K2_SSB, KqTag_k2())
+
+//! TQ2_0 row dot off the disk-order planes: k2's walk under sub-scale 1 and min 1, one fold a superblock d x d8 x (sum(q x) - sum(x))
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_tq2) : float =>
+    k2l_dot(kqrow, ksrow, xqp, xsp, xbsp, n, TQ2_SSB, KqTag_tq2())
+
+//! TQ1_0 row dot off the disk-order planes: the grp walk at mr 1, `ggml_vec_dot_tq1_0_q8_K`'s one fold a superblock
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_tq1) : float =>
+    tq1_grp_dot(kqrow, ksrow, 0l, 1l, xqp, xsp, xbsp, n)
+
+//! k2's disk-order scale row reads: the group's nibble pair after the (d, dmin) header; generic, to inline in the caller's partition
+def k2l_row_pair(ksrow : auto(TP); kso, g : int64; _f : KqTag_k2) : int {
+    unsafe {
+        return int(ksrow[kso + 4l + g])
+    }
+}
+
+def k2l_row_pair(_ksrow : auto(TP); _kso, _g : int64; _f : KqTag_tq2) : int => TQ2_K2_PAIR
+
+def k2l_row_head(ksrow : auto(TP); kso : int64; _f : KqTag_k2) : float2 {
+    unsafe {
+        return float2(f16_to_f32(u16_le(ksrow, kso)), f16_to_f32(u16_le(ksrow, kso + 2l)))
+    }
+}
+
+def k2l_row_head(ksrow : auto(TP); kso : int64; _f : KqTag_tq2) : float2 {
+    unsafe {
+        let d = f16_to_f32(u16_le(ksrow, kso))
+        return float2(d, d)
+    }
+}
+
+//! k2's grp<mr> scale row reads: the group's pair in the [16 x mr] strip, d and dmin in the two f16 rows after it
+def k2l_grp_pair(ksg : auto(TP); sb, g, r, mr : int64; _f : KqTag_k2) : int {
+    unsafe {
+        return int(ksg[sb + g * mr + r])
+    }
+}
+
+def k2l_grp_pair(_ksg : auto(TP); _sb, _g, _r, _mr : int64; _f : KqTag_tq2) : int => TQ2_K2_PAIR
+
+def k2l_grp_head(ksg : auto(TP); sb, r, mr : int64; _f : KqTag_k2) : float2 {
+    unsafe {
+        let hd = sb + 16l * mr + 2l * r
+        let hm = sb + 18l * mr + 2l * r
+        return float2(f16_to_f32(u16_le(ksg, hd)), f16_to_f32(u16_le(ksg, hm)))
+    }
+}
+
+def k2l_grp_head(ksg : auto(TP); sb, r, mr : int64; _f : KqTag_tq2 | KqTag_tq1) : float2 {
+    unsafe {
+        let d = f16_to_f32(u16_le(ksg, sb + 2l * r))
+        return float2(d, d)
+    }
+}
+
+//! k2's superblock fold: isum on d x d8, then the min term bsum on dmin x d8
+def k2l_fold(acc : float; isum, bsum : int; dd, dm, d8 : float; _f : KqTag_k2) : float => acc + float(isum) * (dd * d8) - float(bsum) * (dm * d8)
+
+//! the ternary members' (tq2, tq1): one fold, (isum - bsum) on d x d8
+def k2l_fold(acc : float; isum, bsum : int; dd, _dm, d8 : float; _f : KqTag_tq2 | KqTag_tq1) : float => acc + float(isum - bsum) * (dd * d8)
+
+[arch(at = "../ARCHITECTURE_ENGINE_FORMATS_TQ2.md#tq1-trit-columns"),
+ hint(unsafe_range_check, noalias = kqg, noalias = ksg, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def tq1_grp_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+    var acc = 0.0
+    let nbs = KQ_SB_ELEMS / 16l
+    unsafe {
+        for (sbi in range64(n / KQ_SB_ELEMS)) {
+            let qb = sbi * TQ1_QSB * mr
+            let xb = sbi * KQ_SB_ELEMS
+            var isum = 0
+            for (w in range(TQ1_DWORDS)) {
+                let ct = tq1_dword_trit(w)
+                let cb = qb + (int64(ct.x) * mr + r) * 4l
+                let xo = xb + int64(4 * w)
+                for (t in range64(4l)) {
+                    isum += tq1_trit(kqg[cb + t], ct.y) * int(xqp[xo + t])
+                }
+            }
+            var bsum = 0
+            for (g in range64(nbs)) {
+                bsum += xbsp[sbi * nbs + g]
+            }
+            let dh = k2l_grp_head(ksg, sbi * TQ1_SSB * mr, r, mr, KqTag_tq1())
+            acc = k2l_fold(acc, isum, bsum, dh.x, dh.y, xsp[sbi], KqTag_tq1())
+        }
+    }
+    return acc
+}
+
+//! one TQ1_0 superblock's weights off row `r` of an mr-row group's quant columns at `qb` (disk order is mr 1): d x (q - 1)
+def tq1_dequant_sb(kq : auto(QT); qb, r, mr : int64; d : float; var dst : auto(DT); doff : int64) {
+    unsafe {
+        for (w in range(TQ1_DWORDS)) {
+            let ct = tq1_dword_trit(w)
+            let cb = qb + (int64(ct.x) * mr + r) * 4l
+            let eo = doff + int64(4 * w)
+            for (t in range64(4l)) {
+                dst[eo + t] = float(tq1_trit(kq[cb + t], ct.y) - 1) * d
+            }
+        }
+    }
+}
+
+[arch(at = "../ARCHITECTURE_ENGINE_FORMATS_TQ2.md#tq2-k2-lattice"),
+ hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def k2l_dot(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, ssb : int64; tag : auto(TT)) : float {
     var acc = 0.0
     unsafe {
         for (sb in range64(n / 256l)) {
             let kqo = sb * 64l
-            let kso = sb * 20l
-            let dd = f16_to_f32(uint(ksrow[kso]) | (uint(ksrow[kso + 1l]) << 8u))
-            let dm = f16_to_f32(uint(ksrow[kso + 2l]) | (uint(ksrow[kso + 3l]) << 8u))
+            let kso = sb * ssb
+            let dmh = k2l_row_head(ksrow, kso, tag)
+            let dd = dmh.x
+            let dm = dmh.y
             var isum = 0
             var bsum = 0
             for (g in range64(16l)) {
-                let scb = int(ksrow[kso + 4l + g])
+                let scb = k2l_row_pair(ksrow, kso, g, tag)
                 let qb = kqo + (g / 8l) * 32l + (g % 2l) * 16l
                 let sh = int(((g % 8l) / 2l) * 2l)
                 let ab = sb * 256l + g * 16l
@@ -866,9 +1068,7 @@ def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : 
                 isum += (scb & 15) * ig
                 bsum += (scb >> 4) * xbsp[sb * 16l + g]
             }
-            let d8 = xsp[sb]
-            acc += float(isum) * (dd * d8)
-            acc -= float(bsum) * (dm * d8)
+            acc = k2l_fold(acc, isum, bsum, dd, dm, xsp[sb], tag)
         }
     }
     return acc
@@ -1084,19 +1284,18 @@ def private dequant_iq4nl_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr,
     }
 }
 
-//! k2 grp row dequant: the 2-bit lanes stay in place as 16 four-byte columns x mr; scale row =
-//! [16 sc/min bytes interleaved x mr][mr x f16 d][mr x f16 dmin]. w = (d*sc)*q - (dmin*mn).
-def private dequant_k2_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, nsb : int64; var dst : float?) {
+//! The 2-bit lattice's grp row dequant (k2, tq2): the 2-bit lanes stay in place as 16 four-byte columns x mr; k2's scale
+//! row = [16 sc/min bytes interleaved x mr][mr x f16 d][mr x f16 dmin], tq2's [mr x f16 d]. w = (d*sc)*q - (dmin*mn).
+def private dequant_k2l_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, nsb, ssb : int64; var dst : float?; tag : auto(TT)) {
     unsafe {
         for (sbi in range64(nsb)) {
             let qb = sbi * 64l * mr
-            let sb = sbi * 20l * mr
-            let hd = sb + 16l * mr + 2l * r
-            let d = f16_to_f32(uint(ksg[hd]) | (uint(ksg[hd + 1l]) << 8u))
-            let hm = sb + 18l * mr + 2l * r
-            let dmin = f16_to_f32(uint(ksg[hm]) | (uint(ksg[hm + 1l]) << 8u))
+            let sb = sbi * ssb * mr
+            let dmh = k2l_grp_head(ksg, sb, r, mr, tag)
+            let d = dmh.x
+            let dmin = dmh.y
             for (g in range64(16l)) {
-                let scb = int(ksg[sb + g * mr + r])
+                let scb = k2l_grp_pair(ksg, sb, g, r, mr, tag)
                 let dl = d * float(scb & 15)
                 let ml = dmin * float(scb >> 4)
                 let base = (g / 8l) * 8l + (g % 2l) * 4l
@@ -1109,6 +1308,14 @@ def private dequant_k2_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, ns
                 }
             }
         }
+    }
+}
+
+//! tq1 grp row dequant: the 13 four-byte quant columns x mr in place under the [mr x f16 d] row
+def private dequant_tq1_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, nsb : int64; var dst : float?) {
+    for (sbi in range64(nsb)) {
+        let d = k2l_grp_head(ksg, sbi * TQ1_SSB * mr, r, mr, KqTag_tq1()).x
+        tq1_dequant_sb(kqg, sbi * TQ1_QSB * mr, r, mr, d, dst, sbi * KQ_SB_ELEMS)
     }
 }
 
@@ -1234,7 +1441,15 @@ def dequant_kq_row_grp(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, m
         return
     }
     if (fmt == 2l) {
-        dequant_k2_row_grp(kqg, ksg, r, mr, nsb, dst)
+        dequant_k2l_row_grp(kqg, ksg, r, mr, nsb, K2_SSB, dst, KqTag_k2())
+        return
+    }
+    if (fmt == 22l) {
+        dequant_k2l_row_grp(kqg, ksg, r, mr, nsb, TQ2_SSB, dst, KqTag_tq2())
+        return
+    }
+    if (fmt == 21l) {
+        dequant_tq1_row_grp(kqg, ksg, r, mr, nsb, dst)
         return
     }
     if (fmt == 23l) {
@@ -1247,6 +1462,20 @@ def dequant_kq_row_grp(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, m
     }
     if (fmt == 25l) {
         dequant_iq2xxs_row_grp(kqg, ksg, r, mr, nsb, dst)
+        return
+    }
+    if (kq_is_grid1(int(fmt))) {
+        unsafe {
+            for (sbi in range64(nsb)) {
+                let qp = kqg + (r * nsb + sbi) * qsb
+                let sp = ksg + (r * nsb + sbi) * ssb
+                if (fmt == 13l) {
+                    dequant_grid1_sb(qp, sp, dst + sbi * KQ_SB_ELEMS, KqTag_iq1s())
+                } else {
+                    dequant_grid1_sb(qp, sp, dst + sbi * KQ_SB_ELEMS, KqTag_iq1m())
+                }
+            }
+        }
         return
     }
     unsafe {
@@ -1632,7 +1861,7 @@ def private dot_b5q8_scalar(wq : uint8 const?; ws : uint8 const?; xq : int8 cons
                 isum += b5_level((b & 15) | h0, f) * a0 + b5_level((b >> 4) | h1, f) * a1
                 asum += a0 + a1
             }
-            acc += b5_fold(ws + bi * b32_sb(f), isum, asum, f) * xs[bi]
+            acc += b5_fold(ws + b32_soff(bi, f), isum, asum, f) * xs[bi]
         }
     }
     return acc
@@ -1962,6 +2191,61 @@ def dot_mlxe(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float c
     return acc
 }
 
+//! a low-bit member's scalar Q8 dot - THE float-order contract of q20 and q10: per 32-block exact isum = Σ level·a, f += d·isum·xs[b]
+[hint(unsafe_range_check, noalias = wq, noalias = ws, noalias = xq, noalias = xs)]
+def dot_lowbit_q8_scalar(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; f : auto(TT)) : float {
+    let nb = n / KQ_B32_ELEMS
+    let qb = b32_qb(f)
+    let c = lowbit_codes_a_byte(f)
+    var acc = 0.0
+    unsafe {
+        for (bi in range64(nb)) {
+            var isum = 0
+            for (j in range64(qb)) {
+                let b = int(wq[bi * qb + j])
+                let xb = (bi * qb + j) * c
+                for (k in range64(c)) {
+                    isum += lowbit_level(b, k, f) * int(xq[xb + k])
+                }
+            }
+            let sp = ws + b32_soff(bi, f)
+            let d = f16_to_f32(u16_le(sp, 0l))
+            acc += d * float(isum) * xs[bi]
+        }
+    }
+    return acc
+}
+
+//! Q2_0·Q8 dot, scalar reference: per 32-block isum = Σ (q - 1)·a under the 64-weight group's d
+def dot_q20q8_scalar(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float => dot_lowbit_q8_scalar(wq, ws, xq, xs, n, KqTag_q20())
+
+//! Q1_0·Q8 dot, scalar reference: per 32-block isum = Σ ±a, + where the bit is set, under the 128-weight group's d
+def dot_q10q8_scalar(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float => dot_lowbit_q8_scalar(wq, ws, xq, xs, n, KqTag_q10())
+
+//! Expand one low-bit row's codes to their int8 levels in `qe` (n bytes) - the row the fast kernels MAC over, exact
+[hint(unsafe_range_check, noalias = wq, noalias = qe)]
+def expand_lowbit_row(wq : uint8 const?; var qe : int8?; nb : int64; f : auto(TT)) {
+    let c = lowbit_codes_a_byte(f)
+    unsafe {
+        for (j in range64(nb * b32_qb(f))) {
+            let b = int(wq[j])
+            for (k in range64(c)) {
+                qe[j * c + k] = int8(lowbit_level(b, k, f))
+            }
+        }
+    }
+}
+
+//! Expand one q20 row's 2-bit codes to their int8 levels q - 1
+def expand_q20_row(wq : uint8 const?; var qe : int8?; nb : int64) {
+    expand_lowbit_row(wq, qe, nb, KqTag_q20())
+}
+
+//! Expand one q10 row's sign bits to their int8 levels ±1
+def expand_q10_row(wq : uint8 const?; var qe : int8?; nb : int64) {
+    expand_lowbit_row(wq, qe, nb, KqTag_q10())
+}
+
 // A per-32 format expands a row to int8 once and MACs over it; the
 // tag picks strides, expand and fold - the three shapes are one body.
 
@@ -1969,8 +2253,8 @@ def b32_qb(_f : KqTag_mlx4 | KqTag_mlx4b) : int64 => MLX4_QB
 def b32_qb(_f : KqTag_mlx8 | KqTag_mlx8b) : int64 => MLX8_QB
 def b32_qb(_f : KqTag_mlx6b) : int64 => MLX6_QB
 def b32_sb(_f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : int64 => MLX_SB
-//! the affine planes sit in disk order on every backend: no repack interleaves a block pair's shared group pair
-def private b32_layout_mr(_f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : int64 => 1l
+//! the affine and low-bit planes sit in disk order on every backend: no repack interleaves a block group's shared scale unit
+def private b32_layout_mr(_f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b | KqTag_q20 | KqTag_q10) : int64 => 1l
 def private b32_expand_row(wq : uint8 const?; var qe : int8?; nb : int64; f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) {
     expand_mlx_row(wq, qe, nb, f)
 }
@@ -1994,6 +2278,18 @@ def b32_sb(_f : KqTag_q51) : int64 => Q51_SB
 def b32_sb(_f : KqTag_iq4nl32) : int64 => IQ4NL32_SB
 def b32_sb(_f : KqTag_q4032) : int64 => Q4032_SB
 def b32_sb(_f : KqTag_q5032) : int64 => Q5032_SB
+def b32_qb(_f : KqTag_q20) : int64 => Q20_QB
+def b32_sb(_f : KqTag_q20) : int64 => Q20_SB
+def b32_qb(_f : KqTag_q10) : int64 => Q10_QB
+def b32_sb(_f : KqTag_q10) : int64 => Q10_SB
+//! the 32-blocks one scale unit of a per-32 member serves: its `kq_sgroup`
+def b32_sgroup(_f : KqTag_q51 | KqTag_iq4nl32 | KqTag_q4032 | KqTag_q5032 | KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : int64 => 1l
+def b32_sgroup(_f : KqTag_q20) : int64 => Q20_SGROUP
+def b32_sgroup(_f : KqTag_q10) : int64 => Q10_SGROUP
+//! the scale-plane byte offset of 32-block `blk`: its `kq_soff`
+def b32_soff(blk : int64; f : auto(TT)) : int64 => (blk / b32_sgroup(f)) * b32_sb(f)
+//! the scale-plane bytes of `nblocks` whole 32-blocks: its `kq_sbytes`
+def b32_sbytes(nblocks : int64; f : auto(TT)) : int64 => (nblocks / b32_sgroup(f)) * b32_sb(f)
 def private b32_layout_mr(_f : KqTag_q51) : int64 => active_b32_layout_mr(KqFmt.q51)
 def private b32_layout_mr(_f : KqTag_iq4nl32) : int64 => active_b32_layout_mr(KqFmt.iq4nl32)
 def private b32_layout_mr(_f : KqTag_q4032) : int64 => active_b32_layout_mr(KqFmt.q4032)
@@ -2010,6 +2306,15 @@ def private b32_expand_row(wq : uint8 const?; var qe : int8?; nb : int64; _f : K
 }
 def private b32_expand_row(wq : uint8 const?; var qe : int8?; nb : int64; _f : KqTag_q5032) {
     expand_q5032_row(wq, qe, nb)
+}
+def private b32_expand_row(wq : uint8 const?; var qe : int8?; nb : int64; f : KqTag_q20 | KqTag_q10) {
+    expand_lowbit_row(wq, qe, nb, f)
+}
+def private b32_expand_grp_row(_gq : uint8 const?; _r, _mr : int64; var _qe : int8?; _nb : int64; _f : KqTag_q20 | KqTag_q10) {
+    panic("b32_expand_grp_row: the q20 and q10 planes sit in disk order - no grp interleave carries a group's shared d")
+}
+def private b32_gather_grp_scales(_gs : uint8 const?; _r, _mr : int64; var _ss : uint8?; _nb : int64; _f : KqTag_q20 | KqTag_q10) {
+    panic("b32_gather_grp_scales: the q20 and q10 planes sit in disk order - no grp interleave carries a group's shared d")
 }
 def private b32_expand_grp_row(gq : uint8 const?; r, mr : int64; var qe : int8?; nb : int64;
                                _f : KqTag_q51) {
@@ -2043,19 +2348,36 @@ def private b32_dot_e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs 
 def private b32_dot_e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?;
                       n : int64; _f : auto(TT)) : float => dot_iq4nl32e(qe, ws, xq, xs, n)
 
+//! the scale row `b32_dot_e` reads, a unit a 32-block: the plane's row itself where a unit serves one block, else each unit
+//! spread over its group's blocks in the worker's scratch `scp`
+def private b32_block_scales(srow : uint8 const?; var scp : uint8?; nb : int64; f : auto(TT)) : uint8 const? {
+    let sg = b32_sgroup(f)
+    return srow if (sg == 1l)
+    let sb = b32_sb(f)
+    unsafe {
+        for (bi in range64(nb)) {
+            for (k in range64(sb)) {
+                scp[bi * sb + k] = srow[(bi / sg) * sb + k]
+            }
+        }
+    }
+    return scp
+}
+
 //! One (region, row) expanded into the worker's scratch: the disk
 //! row, or the grp<mr> group's row with its scales gathered
 def private b32_expand_at(wq : uint8 const?; ws : uint8 const?; blk0, row, nb, mr, grpRows : int64;
                           var qep : int8?; var scp : uint8?; var srow : uint8 const?&;
                           f : auto(TT)) {
     unsafe {
-        srow = ws + (blk0 + row * nb) * b32_sb(f)
+        srow = ws + b32_soff(blk0 + row * nb, f)
         if (mr == 1l || row >= grpRows) {
             b32_expand_row(wq + (blk0 + row * nb) * b32_qb(f), qep, nb, f)
+            srow = b32_block_scales(srow, scp, nb, f)
         } else {
             let gbase = blk0 + (row / mr) * mr * nb
             b32_expand_grp_row(wq + gbase * b32_qb(f), row % mr, mr, qep, nb, f)
-            b32_gather_grp_scales(ws + gbase * b32_sb(f), row % mr, mr, scp, nb, f)
+            b32_gather_grp_scales(ws + b32_soff(gbase, f), row % mr, mr, scp, nb, f)
             srow = scp
         }
     }
@@ -2069,15 +2391,15 @@ def private b32_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 cons
     let nb = n / KQ_B32_ELEMS
     let mr = b32_layout_mr(f)   // grp<mr> planes on the gen backend; tail rows stay disk-order
     let grpRows = (d / mr) * mr
-    let sb = b32_sb(f)
+    let sbytes = nb * b32_sb(f)
     var myp = yp
     unsafe {
         let chunks = matmul_chunks(int(d), get_q8_batch_chunks_per_job(), n * d * ntok)
         maybe_parallel_for(0, int(d), chunks) $(rb, re) {
             var qe : array<int8>
             qe |> resize(n)
-            var sc : array<uint8>
-            sc |> resize(nb * sb)
+            var @exact_size sc : array<uint8>
+            sc |> reserve_resize(sbytes)
             unsafe {
                 var qep = addr(qe[0])
                 var scp = addr(sc[0])
@@ -2104,15 +2426,15 @@ def private b32_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 con
     let nb = n / KQ_B32_ELEMS
     let mr = b32_layout_mr(f)   // grp<mr> planes on the gen backend; tail rows stay disk-order
     let grpRows = (d / mr) * mr
-    let sb = b32_sb(f)
+    let sbytes = nb * b32_sb(f)
     var myp = yp
     unsafe {
         let chunks = matmul_chunks_gemv(int(nregions * d), 1, n * d * nregions)
         maybe_parallel_for(0, int(nregions * d), chunks) $(rb, re) {
             var qe : array<int8>
             qe |> resize(n)
-            var sc : array<uint8>
-            sc |> resize(nb * sb)
+            var @exact_size sc : array<uint8>
+            sc |> reserve_resize(sbytes)
             unsafe {
                 var qep = addr(qe[0])
                 var scp = addr(sc[0])
@@ -2142,7 +2464,7 @@ def private b32_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uin
     let nb = n / KQ_B32_ELEMS
     let mr = b32_layout_mr(f)   // grp<mr> planes on the gen backend; tail rows stay disk-order
     let grpRows = (d / mr) * mr
-    let sb = b32_sb(f)
+    let sbytes = nb * b32_sb(f)
     var myp = yp
     unsafe {
         let nrows = int(nregions * d)
@@ -2150,8 +2472,8 @@ def private b32_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uin
         maybe_parallel_for(0, nrows, chunks) $(rb, re) {
             var qe : array<int8>
             qe |> resize(n)
-            var sc : array<uint8>
-            sc |> resize(nb * sb)
+            var @exact_size sc : array<uint8>
+            sc |> reserve_resize(sbytes)
             unsafe {
                 var qep = addr(qe[0])
                 var scp = addr(sc[0])

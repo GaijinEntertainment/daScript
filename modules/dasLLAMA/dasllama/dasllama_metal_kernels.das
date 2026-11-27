@@ -6001,7 +6001,7 @@ def enc_embed_table(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; off, wid
         var ka = EmbedB32Args(dim = uint(width), escale = escale, b0 = uint(bind.b0))
         let units = width / 16l
         let slot = int(fmt)
-        kq_tile_stamp(slot, "!b32 metal", "embed") <| $() {   //! the per-32 table gather (`MetalEmbedB32T`) stamps the per-32 formats alone, the affine members among them
+        kq_tile_stamp(slot, "!b32 metal q20 q10", "embed") <| $() {   // the per-32 table gather (`MetalEmbedB32T`) stamps the per-32 formats alone, the affine members among them
             tile_enc_b32(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
         }
     } else {

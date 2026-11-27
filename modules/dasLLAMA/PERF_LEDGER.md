@@ -10,6 +10,539 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-11-26) - the low-bit 1B mints' distance bar, `LOWBIT_F32_DIST_REL` 1.0
+  (`tests/test_gpu_resident_llama.das`, `lowbit_within` through `f32_chain_witness`), on the reference box (Threadripper
+  3990X, RTX 5060 Ti 16 GB, Windows).** On the Llama-3.2-1B TQ2_0, TQ1_0, IQ1_S and IQ1_M mints the CPU q8 chain itself
+  sits past the dense 6 percent bar off the file's f32 chain, so the device's feed is held to the device's summed distance
+  from the f32 chain over the CPU q8 chain's own, at 1.0, the one-step-off rows the control. The rows it holds: each
+  prompt one window chain - 40 tokens and two windows (2136 tokens) on Vulkan, 40 tokens on CUDA - plus eight steps
+  (`DENSE_FED_STEPS`). Readings, the device's distance against the CPU chain's:
+  - TQ2_0 (`test_llama_tq2`), Vulkan: 0.34 of the CPU chain's distance at 40 tokens, 0.56 at 2136.
+  - TQ1_0 (`test_llama_tq1`), Vulkan: 1.83 against 5.38 (0.34) at 40 tokens, 1.57 against 2.83 (0.56) at 2136; CUDA:
+    1.66 against 5.38 (0.31) at 40 tokens.
+  - IQ1_S and IQ1_M (`test_llama_iq1s`, `test_llama_iq1m`), Vulkan on rizen's Radeon 8060S (Ryzen AI Max, Windows):
+    IQ1_S 10.35 against 20.81 (0.50) at 40 tokens, 4.85 against 11.29 (0.43) at 2136; IQ1_M 10.53 against 22.01 (0.48)
+    at 40 tokens, 4.24 against 11.47 (0.37) at 2136; the one-step-off rows 5.0 to 6.4 times the CPU chain's distance.
+    The cells pass on the reference box's two homes; its CUDA readings are not on record.
+- **MEASURED (2026-11-26, `direction-grade`) - the iq1s and iq1m members' decode GEMV, cm2 and KHR tiles on both discrete homes of the
+  reference box (Threadripper 3990X, RTX 5060 Ti 16 GB - 36 SMs - driver 616.56, Windows; the GPU clock not locked -
+  `nvidia-smi -lgc` is refused to this user - 180 to 720 MHz idle before a race, 2760 to 2827 MHz under it), every
+  candidate once a round in one process.** The picks: the decode GEMV stages the 4 KB grid as it is, the grid members'
+  way (`GRID`), and keeps the lanes rule's grid side; the weights are eighths (`grid1_eighths`) on both members; the cm2 l
+  and m stamps lead the staged KHR tile on every dense shape. Every candidate stays a template constant of `Iq1GemvT`
+  (`G1BUF`, `G1NIB`, `GRIDX`, `G1SEP`) with a twin in `harness/vk_gemv_probe.das`. The one table the device holds is the 4
+  KB packed grid; the reference's 8 KB nibble-form table rides only as a race arm (the probe's own buffer).
+  - **The grid lookup and the delta term, the Vulkan decode GEMV** (`DASLLAMA_GPU=1 bin/Release/daslang.exe -jit
+    modules/dasLLAMA/harness/vk_gemv_probe.das -- iq1` at this entry's commit, a ring of plane copies past 96 MB a chain,
+    the outputs alternating, 8 rounds after 2 warm-up, the best round, us a dispatch; `warm` one copy replayed 32 times a
+    chain, the reference's cache-resident condition). Arms: shipped = the 4 KB grid staged into workgroup memory at the
+    rule's lanes; packed buffer = the same grid read off its buffer; nibble expand = the grid expanded into the nibble
+    form in workgroup memory (8 KB), at the rule's lanes and at 8; delta term = IQ1_S's codes as lanes and
+    d x (2s + 1) x (delta - 1) against the half's activation sum; nibble buffer = an 8 KB nibble-form table off a buffer of
+    its own (not shippable: a second device table). Ring, then warm, summed over the seven shapes:
+
+    | arm | iq1s ring | iq1s warm | iq1m ring | iq1m warm |
+    |---|---|---|---|---|
+    | shipped (rule) | 101.55 | 88.90 | 115.18 | 100.71 |
+    | shipped, lanes 32 / 16 / 8 | 115.29 / 100.25 / 104.03 | 102.01 / 88.40 / 88.19 | 126.87 / 113.92 / 117.76 | 113.09 / 100.24 / 101.71 |
+    | packed buffer | 103.45 | 91.02 | 117.59 | 104.49 |
+    | nibble expand, rule / 8 lanes | 109.01 / 101.25 | 95.83 / 89.52 | 112.83 / 107.30 | 101.90 / 94.93 |
+    | delta term | 100.09 | 87.87 | - | - |
+    | nibble buffer (race only) | 90.16 | 78.45 | 101.59 | 84.06 |
+    | iq2xxs shipped / q10 shipped | 117.43 / 104.71 | 86.59 / 104.12 | | |
+
+    Per shape, ring (shipped / packed buffer / nibble expand / expand x8 / delta term), iq1s: 2048 x 2048 5.53 / 5.43 /
+    6.56 / 5.55 / 5.52; 2048 x 8192 14.90 / 13.60 / 19.43 / 15.93 / 14.83; 8192 x 2048 13.53 / 14.93 / 13.87 / 14.00 /
+    13.47; 2560 x 2560 6.65 / 6.79 / 8.82 / 7.79 / 6.78; 4096 x 4096 13.90 / 13.80 / 15.13 / 14.20 / 13.90; 2048 x 1408 4.66
+    / 4.15 / 5.70 / 4.66 / 4.71; 14336 x 4096 42.38 / 44.75 / 39.50 / 39.12 / 40.88. iq1m (no delta arm): 5.57 / 5.50 /
+    6.52 / 5.65; 16.25 / 15.57 / 19.75 / 16.18; 15.82 / 16.75 / 14.29 / 14.96; 7.89 / 7.84 / 8.76 / 7.86; 16.00 / 15.96 /
+    16.00 / 14.96; 4.77 / 4.72 / 5.76 / 4.69; 48.88 / 51.25 / 41.75 / 43.00. The workgroup's stage is what the nibble
+    expansion pays: it leads at 14336 x 4096 (warm 31.22 against 33.72 for iq1s, 34.34 against 40.44 for iq1m) and trails at
+    the 1B's 2048-wide rows; at 8 lanes a row its stage spreads over more rows and it levels with or leads the shipped form
+    on Vulkan, but 8 lanes trail on the CUDA home (below), so neither form leads on both homes, and the shipped one is the
+    grid members' shape. The delta term reads level with the eighths and is IQ1_S's alone (IQ1_M's delta is per octet, a
+    sum the family's fold does not carry), so both members keep one block term.
+  - **The lane split, both homes** (`harness/gemv_cuda_vs_vulkan.das -- --only iq1s,iq1m` and the same with `--warm`, two
+    copies a ring inside the L2, the 2-bit lattice's ten shapes, best round of 20, us summed; noise the largest gap
+    between two rounds of one arm's sum):
+
+    | format, home | ring rule / 8 / 16 / 32 / noise | warm rule / 8 / 16 / 32 / noise |
+    |---|---|---|
+    | iq1s Vulkan | 154.74 / 160.80 / 154.64 / 169.72 / 11.24 | 135.96 / 135.80 / 135.80 / 149.48 / 6.96 |
+    | iq1s CUDA wall | 166.36 / 192.42 / 167.46 / 164.02 / 25.60 | 154.22 / 163.58 / 154.24 / 152.52 / 32.76 |
+    | iq1m Vulkan | 170.98 / 178.76 / 170.16 / 181.96 / 28.22 | 151.20 / 159.06 / 151.50 / 166.90 / 31.44 |
+    | iq1m CUDA wall | 182.58 / 210.72 / 184.44 / 177.38 / 8.94 | 170.10 / 180.84 / 170.94 / 169.54 / 31.14 |
+
+    The rule is level with the best split on both homes. At 14336 x 4096 under the rule: iq1s 41.50 us on Vulkan and
+    48.60 of CUDA wall (46.81 event) ringed, 37.18 and 44.38 (42.80) warm; iq1m 48.22 and 53.70 (52.39), 43.68 and 50.94
+    (49.29).
+  - **cm2 against the staged KHR tile** (`DASLLAMA_COOPMAT=cm2 ... vk_gemm_probe.das -- kqst:<fmt>`, us a dispatch, best of
+    4, 512 tokens unless named; cm2l / cm2m / cm2s / staged):
+
+    | shape (d x n) | iq1s | iq1m |
+    |---|---|---|
+    | gemma-4 E2B gate 6144 x 1536 | 165.09 / 191.65 / 385.42 / 346.64 | 168.62 / 205.16 / 450.46 / 354.42 |
+    | the same at 500 tokens | 296.98 / 191.24 / 386.50 / 347.88 | 313.28 / 204.17 / 450.22 / 355.26 |
+    | E2B down 1536 x 6144 | 157.16 / 183.15 / 403.17 / 358.89 | 159.86 / 198.29 / 487.27 / 370.42 |
+    | E2B q 2048 x 1536 | 58.50 / 66.32 / 131.42 / 119.93 | 59.77 / 70.86 / 152.44 / 123.04 |
+    | 4B gate 9728 x 2560 | 415.06 / 490.36 / 1003.62 / 896.92 | 434.70 / 528.33 / 1187.85 / 925.39 |
+    | 1B up 8192 x 2048 | 282.67 / 335.46 / 719.05 / 635.66 | 289.26 / 358.51 / 843.96 / 652.03 |
+    | 1B down 2048 x 8192 | 281.58 / 317.95 / 721.34 / 629.37 | 286.67 / 344.08 / 888.25 / 647.67 |
+    | the reference's 4096 x 14336 | 967.73 / 1119.08 / 2591.73 / 2186.82 | 974.86 / 1199.44 / 3028.64 / 2243.87 |
+
+  - **The cm2 tiles, both homes** (`harness/gemm_cuda_vs_vulkan.das -- --only iq1s,iq1m,iq2xxs`, and `8b` for the 8B's
+    shapes, 512 tokens, us a dispatch, Vulkan / CUDA wall):
+
+    | stamp, k x d | iq2xxs | iq1s | iq1m |
+    |---|---|---|---|
+    | l, 2048 x 2048 | 87.40 / 102.05 | 84.95 / 95.90 | 87.00 / 101.30 |
+    | l, 2048 x 8192 | 321.80 / 287.55 | 337.50 / 279.45 | 348.75 / 296.75 |
+    | l, 8192 x 2048 | 312.45 / 385.75 | 306.20 / 352.70 | 311.15 / 375.25 |
+    | m, 2048 x 2048 | 99.00 / 93.80 | 97.50 / 94.65 | 105.45 / 98.30 |
+    | m, 2048 x 8192 | 379.60 / 343.40 | 376.85 / 345.95 | 404.20 / 361.50 |
+    | m, 8192 x 2048 | 366.40 / 351.50 | 356.60 / 343.55 | 384.95 / 361.60 |
+    | l, 4096 x 4096 | | 307.80 / 278.30 | 321.85 / 296.45 |
+    | l, 14336 x 4096 | | 1078.45 / 953.10 | 1095.50 / 1016.20 |
+    | m, 14336 x 4096 | | 1240.15 / 1183.75 | 1348.65 / 1245.15 |
+
+  - **llama.cpp's rows on this box** (`test-backend-ops perf -o MUL_MAT -p "type_a=<t>,type_b=f32,m=4096,n=<n>,k=14336,"`,
+    the Vulkan rows `build-vk-ref`, the CUDA rows a new `build-cuda-tbo` beside `build-cuda` - which builds no tests - at
+    the same source commit c70f320df, CUDA arch 120; one plane replayed, inside the L2), us a run, against ours at the same
+    shape (n = 1 the shipped decode GEMV, the in-cache row first; n = 8 the N-column leaf; n = 512 the cm2 l tile):
+
+    | type, n | llama.cpp Vulkan, `external` | ours Vulkan | llama.cpp CUDA, `external` | ours CUDA (wall) |
+    |---|---|---|---|---|
+    | iq1_s, 1 | 34.01 | 33.72 warm, 42.38 ring | 43.00 | 44.38 warm, 48.60 ring |
+    | iq1_s, 8 | 195.34 | 78.72 warm, 95.00 ring | 111.44 | not timed |
+    | iq1_s, 512 | 1186.78 | 1078.45 | 1026.12 | 953.10 |
+    | iq1_m, 1 | 49.28 | 40.44 warm, 48.88 ring | 46.05 | 50.94 warm, 53.70 ring |
+    | iq1_m, 8 | 318.54 | 84.62 warm, 94.12 ring | 121.96 | not timed |
+    | iq1_m, 512 | 1440.80 | 1095.50 | 1321.27 | 1016.20 |
+    | iq2_xxs, 1 | 61.36 | 33.31 warm | 38.19 | |
+
+    Behind: the CUDA decode GEMV at n = 1 - iq1s 3% and iq1m 11% of wall in cache (the event time 42.80 and 49.29). The
+    probe's `nibble expand` arm races the nibble-expanded workgroup grid on Vulkan; a per-row-length pick between the two
+    stamps is not made. The CUDA home's N-column leaf was not timed against the n = 8 row.
+- **MEASURED (2026-11-26, `direction-grade`) - the tq1 member's decode GEMV, cm2 and KHR tiles on both discrete homes of the reference box
+  (Threadripper 3990X, RTX 5060 Ti 16 GB - 36 SMs - driver 616.56, Windows; the GPU clock not locked - `nvidia-smi -lgc`
+  is refused to this user - 210 to 240 MHz idle before the races, 2842 MHz after), every candidate once a round in one
+  process.** The picks: the digit extraction is the word multiply (`tq1_word`) on every family - a staged 256-entry
+  table of each byte's five digits loses on the decode GEMV (its twin `ProbeTq1GemvLut`, the probe's `tq1lut` mode); the
+  lanes rule (`gemv_lanes_per_row`, the k-lattice side) is level with or ahead of every fixed split on both homes; the four-wide
+  cm2 decode twin leads the scalar callback on every row; the cm2 l and m stamps lead the staged KHR tile on every dense
+  shape. No other plane arrangement was raced: the 52-byte row is the one the one-layout rule admits.
+  - **The digit extraction, the decode GEMV** (`DASLLAMA_GPU=1 bin/Release/daslang.exe -jit
+    modules/dasLLAMA/harness/vk_gemv_probe.das -- tq1lut` at the commit "dasLLAMA: tq1 served on the Vulkan and CUDA
+    homes", 128 MB of plane copies a dispatch, 5 rounds, the best round, us a dispatch at the rule's lanes):
+
+    | n x d | lanes | multiply | table | table / multiply |
+    |---|---|---|---|---|
+    | 2048 x 2048 | 16 | 470.69 | 671.80 | 1.427 |
+    | 2048 x 8192 | 16 | 469.59 | 672.79 | 1.433 |
+    | 8192 x 2048 | 32 | 445.54 | 633.88 | 1.423 |
+    | 2048 x 512 | 16 | 472.52 | 672.13 | 1.422 |
+    | 2048 x 5632 | 16 | 477.22 | 682.09 | 1.429 |
+    | 5632 x 2048 | 32 | 505.49 | 715.41 | 1.415 |
+    | 2048 x 1408 | 16 | 471.57 | 675.36 | 1.432 |
+    | 14336 x 4096 | 32 | 443.51 | 633.43 | 1.428 |
+    | summed | | 3756.13 | 5356.89 | 1.426 |
+
+    The same race over the first spelling, the column map taken a dword at a time, read 4813.14 against 6287.44 us
+    summed: the per-block map took 22% off the multiply arm.
+  - **The decode GEMV's lane split, both homes** (instrument `harness/gemv_cuda_vs_vulkan.das` at this entry's commit,
+    `DASLLAMA_GPU=1 ... -- --only k2,tq2,tq1`, the 2-bit lattice's ten shapes, the weights streamed from rings, best
+    round of 20, the noise the largest gap between two rounds of one arm's sum), summed us:
+
+    | format | home | the rule | lanes 8 | lanes 16 | lanes 32 | noise |
+    |---|---|---|---|---|---|---|
+    | k2 | Vulkan | 167.34 | 215.38 | 173.50 | 166.68 | 7.66 |
+    | k2 | CUDA wall | 177.88 | 239.58 | 191.70 | 175.32 | 10.24 |
+    | tq2 | Vulkan | 141.32 | 174.20 | 142.40 | 144.66 | 31.14 |
+    | tq2 | CUDA wall | 147.54 | 177.82 | 150.62 | 147.16 | 8.96 |
+    | tq1 | Vulkan | 160.60 | 193.92 | 163.70 | 164.36 | 19.48 |
+    | tq1 | CUDA wall | 170.22 | 231.76 | 179.90 | 172.22 | 8.88 |
+
+    At 14336 x 4096 under the rule: tq1 47.50 us on Vulkan (261.07 GB/s) and 50.76 us of CUDA wall, tq2 41.38 (366.20)
+    and 42.44, k2 51.32 (375.72) and 52.86.
+  - **The cm2 tiles, both homes** (`harness/gemm_cuda_vs_vulkan.das -- --only k2,tq2,tq1` at this entry's commit, us a
+    dispatch, Vulkan / CUDA wall):
+
+    | stamp, k x d | k2 | tq2 | tq1 |
+    |---|---|---|---|
+    | l, 2048 x 2048 | 82.90 / 93.90 | 80.70 / 89.70 | 81.00 / 93.35 |
+    | l, 2048 x 8192 | 309.75 / 272.05 | 311.55 / 264.70 | 296.75 / 278.05 |
+    | l, 8192 x 2048 | 302.60 / 350.75 | 286.65 / 331.05 | 285.75 / 337.40 |
+    | m, 2048 x 2048 | 93.00 / 84.55 | 88.55 / 79.75 | 92.95 / 84.25 |
+    | m, 2048 x 8192 | 350.40 / 306.00 | 333.10 / 289.45 | 341.10 / 297.40 |
+    | m, 8192 x 2048 | 338.80 / 318.60 | 321.00 / 291.20 | 333.30 / 302.85 |
+
+  - **The four-wide decode twin** (`vk_gemm_probe.das -- cm2:tq1`, ms a dispatch, twin on / off, round 1): gate cm2l
+    0.393 / 0.455, cm2m 0.458 / 0.543, cm2s 0.775 / 1.124; down cm2l 0.379 / 0.446, cm2m 0.442 / 0.519, cm2s 0.764 /
+    1.123; q / wo cm2l 0.165 / 0.193; shexp cm2l 0.0222 / 0.0239; shdown cm2l 0.0228 / 0.0251.
+  - **cm2 against the staged KHR tile** (`vk_gemm_probe.das -- kqst:tq1`, us, best of 4): gate cm2l 151.73, cm2m 176.03,
+    staged 263.08; down 146.60 / 170.51 / 269.92; q 53.84 / 61.19 / 92.36; 4B gate 388.44 / 456.53 / 676.11; at 500 tokens
+    the l column 269.87 against the staged 263.57, its m column 175.09.
+
+  Why tq1 trails tq2 on the GEMV: both read a 32-block as eight words and dot them with eight `sdot4`, and tq1 reads 21%
+  fewer bytes, but each of its words costs about fifteen integer ops (two multiplies by 3^n, two by three, masks and
+  shifts) where tq2's costs two, so the leaf is bound by issue - 261 GB/s at the reference shape against tq2's 366 - and
+  its sums run 1.14x tq2's on Vulkan and 1.15x on CUDA, still ahead of k2's. On the tiles the decode sits under the MMA:
+  tq1 is level with tq2 and k2, within 5% on every row. The Vulkan home leads CUDA on the tq1 GEMV sums (160.60 against
+  170.22 us); on the tiles each home leads on some rows, as for tq2.
+- **MEASURED (2026-11-26, `direction-grade`) - the tq1 member's CPU GEMV and 512-token tile against llama.cpp's on the reference box
+  (Threadripper 3990X, Zen 2, Windows; class `x86-avx2`), with tq2 and k2 at the same shape.** The stamped tq1 maddubs
+  perm ran its digit extraction as widened 16-bit adds: the halving adds spelled as zero-extend, add, shift and truncate
+  let the combiner fold the pair into a 16-bit multiply by three, so every quant vector paid two unpacks, a pack and a
+  lane permute (154 `vpmovzxbw`, 64 `vpackuswb`, 64 `vpermq`, 13 `vpavgb` in the GEMV's body). The emitter now calls the
+  target's VPAVGB and VPSUBUSB, runs each i16 chain the whole superblock and reads the activation sums once a superblock.
+  The tuner's pick on this class is the halving-add spelling (`dot_maddubs_width256_mr8`)
+  over the two raced alternates; tq2's x86-avx2 tile and GEMV entries match its tuner's pick, its row-major entry did not
+  (`dot_maddubs_width256_mr8`, 774 us streamed, against the pick `dot_maddubs_width256_mr8_accs1`, 713 us) and now
+  carries the pick.
+  - **Ours** (instrument `benchmarks/matmul/kq_kernel_bench.das` at this entry's commit, `-jit`, n 14336, d 4096, `--base-align
+    4096`, 5 rounds after the warm ones, best of the rounds; one thread: `DAS_TUNE_MODE=tune ... -- --fmt tq1,tq2,k2 --perm
+    maddubs`; 16 lanes: `DAS_JOBQUE_THREADS=16 ... -- --fmt tq1,tq2,k2 --team`, the stamped GEMV through the engine's splitter
+    and the TILE row the engine's batched GEMM, `matmul_kq_batch_at`, at its token blocks):
+
+    | format, perm | GEMV 1 thread | tile 512, 1 thread | GEMV 16 lanes | tile 512, 16 lanes |
+    |---|---|---|---|---|
+    | tq1 `dot_maddubs_width256_mr8` (the pick) | 1708 | 540604 | 200 (143 under `DAS_JOBQUE_AFFINITY=2`) | 36889 (36236) |
+    | tq1 `..._trit_mulhi` | 2356 | 595691 | 199 (tune mode) | - |
+    | tq1 `..._trit_shuf` | 1977 | 666958 | 258 (tune mode) | - |
+    | tq2 `dot_maddubs_width256_mr8` | 1060 | 483051 | 95 (87) | 31469 (31606) |
+    | k2 `dot_maddubs_width256_mr8` | 1438 | 682181 | 168 (122) | 44558 (44111) |
+
+  - **The reference**, `external`: llama.cpp at c70f320df, `test-backend-ops` built for this entry in its own folder
+    (MSVC 2026, `GGML_NATIVE=ON`, OpenMP, CPU only) with TQ1_0 restored to the tool's type list - upstream leaves it out of
+    `all_types` ("TODO: implement for all backends") - and the `GGML_BENCH_THREADS` define; `GGML_BENCH_THREADS=<1|16>
+    test-backend-ops perf -b CPU -o MUL_MAT -p "type_a=<t>,type_b=f32,m=4096,n=<1|512>,k=14336,"`:
+
+        threads=1  tq1_0 n=1    552 runs -  2042.16 us/run - 117.44 MFLOP/run -  57.51 GFLOPS
+        threads=1  tq1_0 n=512    1 runs - 1022575.00 us/run - 60.13 GFLOP/run -  58.80 GFLOPS
+        threads=1  tq2_0 n=1    966 runs -  1050.37 us/run - 117.44 MFLOP/run - 111.81 GFLOPS
+        threads=1  tq2_0 n=512    3 runs - 478066.33 us/run - 60.13 GFLOP/run - 125.78 GFLOPS
+        threads=1  q2_K  n=1    483 runs -  2166.88 us/run - 117.44 MFLOP/run -  54.20 GFLOPS
+        threads=1  q2_K  n=512    2 runs - 779417.00 us/run - 60.13 GFLOP/run -  77.15 GFLOPS
+        threads=16 tq1_0 n=1   6762 runs -   149.18 us/run - 117.44 MFLOP/run - 787.25 GFLOPS
+        threads=16 tq1_0 n=512   16 runs - 66166.25 us/run - 60.13 GFLOP/run - 908.76 GFLOPS
+        threads=16 tq2_0 n=1  13041 runs -    76.79 us/run - 117.44 MFLOP/run -   1.53 TFLOPS
+        threads=16 tq2_0 n=512   30 runs - 34054.77 us/run - 60.13 GFLOP/run -   1.77 TFLOPS
+        threads=16 q2_K  n=1   8280 runs -   121.57 us/run - 117.44 MFLOP/run - 966.03 GFLOPS
+        threads=16 q2_K  n=512   20 runs - 52312.65 us/run - 60.13 GFLOP/run -   1.15 TFLOPS
+
+  tq1 leads the reference on the one-thread GEMV (1708 against 2042 us) and on both tiles (540604 against 1022575,
+  36889 against 66166), and trails it on the 16-lane GEMV at the engine's default affinity, 200 against 149 us: the
+  lanes' kernel sums spread from 111 to 199 us (`lane_lo` / `lane_hi`) where the one-thread rate gives every lane 107, a
+  lane sharing its core's issue with another; under `DAS_JOBQUE_AFFINITY=2` (the hard mask) the row reads 143 us, ahead.
+  The same lane spread holds tq2 and k2 at 95 and 168 us against 77 and 122. tq1's GEMV is 1.61x tq2's at one thread:
+  both read the 32 weights of a quant vector off one load and dot them with one maddubs; tq1 adds the digit extraction,
+  about seven byte ops a vector (the 3^n chain shared over a column's five trits, then the saturated subtract, two
+  halving adds, a shift and a mask) over tq2's shift and mask - the plane is 21% smaller, which the one-thread GEMV,
+  bound by issue, does not cash.
+- **MEASURED (2026-11-26) - the tq2 member's decode GEMV, cm2 and KHR tiles on both discrete homes of the reference box
+  (Threadripper 3990X, RTX 5060 Ti 16 GB - 36 SMs - driver 616.56, Windows, the GPU clock not locked: 900 MHz idle before the
+  races, 2827 MHz after), every candidate in one process a round.** The picks: the lanes rule (`gemv_lanes_per_row`, tq2 on
+  the k-lattice side) is level with its best fixed split on both homes and leads 8 lanes; the four-wide cm2 decode twin
+  (`decode_v4`, `DECV4`) leads the scalar callback on every row; the cm2 l and m stamps lead the staged KHR tile on every
+  dense shape. tq2 is no slower than k2 over the same shapes - the same code bytes under a 2-byte scale row where k2 reads
+  20: the GEMV sums at the shipped lanes read 145.20 against 169.52 us on Vulkan and 154.50 against 184.20 us of CUDA wall
+  (noise 45.06 and 51.04 us), and the cm2 tiles run faster on 5 of the 6 Vulkan rows and all 6 CUDA rows. The Vulkan home
+  and the CUDA home are level on the GEMV sums (145.20 and 154.50 us). No other scale-row read was raced: the 2-byte row is
+  the only arrangement the one-layout rule admits (`ARCHITECTURE_ENGINE_FORMATS_TQ2.md#tq2-device-row`).
+  - **The decode GEMV's lane split, both homes, weights streamed past the L2 from rings** (instrument
+    `harness/gemv_cuda_vs_vulkan.das` at this entry's commit, `DASLLAMA_GPU=1 bin/Release/daslang.exe -jit
+    modules/dasLLAMA/harness/gemv_cuda_vs_vulkan.das -- --only k2,tq2`; 20 rounds of 50 dispatches a round, 2 warm-up
+    rounds dropped, a figure its best round; `rule` the shipped lanes, the noise the largest gap between two rounds of one
+    arm's sum):
+
+    k2 n 2048 d 2048 rule 16       vulkan      8.38 us (  164.48 GB/s) timing-only
+    k2 n 2048 d 2048 rule 16       cuda wall     11.12 us (  123.95 GB/s) event     10.23 us (  134.79 GB/s) timing-only
+    k2 n 2048 d 2048 lanes 8       vulkan      8.76 us (  157.34 GB/s) timing-only
+    k2 n 2048 d 2048 lanes 8       cuda wall     11.92 us (  115.63 GB/s) event     11.05 us (  124.69 GB/s) timing-only
+    k2 n 2048 d 2048 lanes 16      vulkan      8.36 us (  164.87 GB/s) timing-only
+    k2 n 2048 d 2048 lanes 16      cuda wall     11.32 us (  121.76 GB/s) event      9.43 us (  146.16 GB/s) timing-only
+    k2 n 2048 d 2048 lanes 32      vulkan      8.32 us (  165.67 GB/s) timing-only
+    k2 n 2048 d 2048 lanes 32      cuda wall     10.58 us (  130.28 GB/s) event     10.91 us (  126.36 GB/s) timing-only
+    k2 n 2048 d 8192 rule 16       vulkan     18.66 us (  295.13 GB/s) timing-only
+    k2 n 2048 d 8192 rule 16       cuda wall     19.88 us (  277.02 GB/s) event     18.56 us (  296.67 GB/s) timing-only
+    k2 n 2048 d 8192 lanes 8       vulkan     18.86 us (  292.00 GB/s) timing-only
+    k2 n 2048 d 8192 lanes 8       cuda wall     20.12 us (  273.71 GB/s) event     18.74 us (  293.80 GB/s) timing-only
+    k2 n 2048 d 8192 lanes 16      vulkan     18.86 us (  292.00 GB/s) timing-only
+    k2 n 2048 d 8192 lanes 16      cuda wall     19.88 us (  277.02 GB/s) event     18.52 us (  297.43 GB/s) timing-only
+    k2 n 2048 d 8192 lanes 32      vulkan     18.82 us (  292.62 GB/s) timing-only
+    k2 n 2048 d 8192 lanes 32      cuda wall     18.00 us (  305.95 GB/s) event     16.39 us (  335.94 GB/s) timing-only
+    k2 n 8192 d 2048 rule 32       vulkan     18.48 us (  298.34 GB/s) timing-only
+    k2 n 8192 d 2048 rule 32       cuda wall     21.48 us (  256.67 GB/s) event     20.21 us (  272.80 GB/s) timing-only
+    k2 n 8192 d 2048 lanes 8       vulkan     26.84 us (  205.42 GB/s) timing-only
+    k2 n 8192 d 2048 lanes 8       cuda wall     30.22 us (  182.44 GB/s) event     28.67 us (  192.30 GB/s) timing-only
+    k2 n 8192 d 2048 lanes 16      vulkan     18.62 us (  296.10 GB/s) timing-only
+    k2 n 8192 d 2048 lanes 16      cuda wall     20.10 us (  274.30 GB/s) event     18.58 us (  296.67 GB/s) timing-only
+    k2 n 8192 d 2048 lanes 32      vulkan     18.64 us (  295.78 GB/s) timing-only
+    k2 n 8192 d 2048 lanes 32      cuda wall     21.66 us (  254.54 GB/s) event     19.98 us (  275.99 GB/s) timing-only
+    k2 n 1792 d 1792 rule 16       vulkan      8.42 us (  125.36 GB/s) timing-only
+    k2 n 1792 d 1792 rule 16       cuda wall      8.94 us (  118.07 GB/s) event      8.97 us (  117.72 GB/s) timing-only
+    k2 n 1792 d 1792 lanes 8       vulkan      8.24 us (  128.10 GB/s) timing-only
+    k2 n 1792 d 1792 lanes 8       cuda wall      9.52 us (  110.87 GB/s) event      8.47 us (  124.62 GB/s) timing-only
+    k2 n 1792 d 1792 lanes 16      vulkan      8.46 us (  124.77 GB/s) timing-only
+    k2 n 1792 d 1792 lanes 16      cuda wall      9.34 us (  113.01 GB/s) event      8.65 us (  122.02 GB/s) timing-only
+    k2 n 1792 d 1792 lanes 32      vulkan      8.44 us (  125.06 GB/s) timing-only
+    k2 n 1792 d 1792 lanes 32      cuda wall      9.12 us (  115.74 GB/s) event      8.20 us (  128.73 GB/s) timing-only
+    k2 n 1792 d 4864 rule 16       vulkan     12.36 us (  231.54 GB/s) timing-only
+    k2 n 1792 d 4864 rule 16       cuda wall     12.00 us (  238.49 GB/s) event     11.24 us (  254.66 GB/s) timing-only
+    k2 n 1792 d 4864 lanes 8       vulkan     12.16 us (  235.35 GB/s) timing-only
+    k2 n 1792 d 4864 lanes 8       cuda wall     13.06 us (  219.13 GB/s) event     11.96 us (  239.38 GB/s) timing-only
+    k2 n 1792 d 4864 lanes 16      vulkan     12.40 us (  230.79 GB/s) timing-only
+    k2 n 1792 d 4864 lanes 16      cuda wall     12.16 us (  235.35 GB/s) event     11.36 us (  251.98 GB/s) timing-only
+    k2 n 1792 d 4864 lanes 32      vulkan     12.48 us (  229.32 GB/s) timing-only
+    k2 n 1792 d 4864 lanes 32      cuda wall     12.24 us (  233.81 GB/s) event     11.37 us (  251.63 GB/s) timing-only
+    k2 n 4864 d 1792 rule 32       vulkan     12.72 us (  225.23 GB/s) timing-only
+    k2 n 4864 d 1792 rule 32       cuda wall     14.14 us (  202.61 GB/s) event     12.98 us (  220.74 GB/s) timing-only
+    k2 n 4864 d 1792 lanes 8       vulkan     15.36 us (  186.52 GB/s) timing-only
+    k2 n 4864 d 1792 lanes 8       cuda wall     18.22 us (  157.24 GB/s) event     16.81 us (  170.48 GB/s) timing-only
+    k2 n 4864 d 1792 lanes 16      vulkan     12.66 us (  226.30 GB/s) timing-only
+    k2 n 4864 d 1792 lanes 16      cuda wall     13.62 us (  210.35 GB/s) event     12.48 us (  229.62 GB/s) timing-only
+    k2 n 4864 d 1792 lanes 32      vulkan     12.66 us (  226.30 GB/s) timing-only
+    k2 n 4864 d 1792 lanes 32      cuda wall     14.28 us (  200.63 GB/s) event     13.53 us (  211.73 GB/s) timing-only
+    k2 n 2560 d 2560 rule 16       vulkan     11.20 us (  192.23 GB/s) timing-only
+    k2 n 2560 d 2560 rule 16       cuda wall     11.32 us (  190.19 GB/s) event      9.96 us (  216.06 GB/s) timing-only
+    k2 n 2560 d 2560 lanes 8       vulkan     10.84 us (  198.62 GB/s) timing-only
+    k2 n 2560 d 2560 lanes 8       cuda wall     12.48 us (  172.52 GB/s) event     11.19 us (  192.49 GB/s) timing-only
+    k2 n 2560 d 2560 lanes 16      vulkan     10.66 us (  201.97 GB/s) timing-only
+    k2 n 2560 d 2560 lanes 16      cuda wall     11.24 us (  191.55 GB/s) event     10.08 us (  213.50 GB/s) timing-only
+    k2 n 2560 d 2560 lanes 32      vulkan     10.72 us (  200.84 GB/s) timing-only
+    k2 n 2560 d 2560 lanes 32      cuda wall     11.20 us (  192.23 GB/s) event     10.79 us (  199.55 GB/s) timing-only
+    k2 n 4096 d 4096 rule 32       vulkan     18.80 us (  293.04 GB/s) timing-only
+    k2 n 4096 d 4096 rule 32       cuda wall     19.86 us (  277.40 GB/s) event     18.40 us (  299.44 GB/s) timing-only
+    k2 n 4096 d 4096 lanes 8       vulkan     19.24 us (  286.34 GB/s) timing-only
+    k2 n 4096 d 4096 lanes 8       cuda wall     20.10 us (  274.09 GB/s) event     18.62 us (  295.84 GB/s) timing-only
+    k2 n 4096 d 4096 lanes 16      vulkan     18.86 us (  292.11 GB/s) timing-only
+    k2 n 4096 d 4096 lanes 16      cuda wall     21.44 us (  256.96 GB/s) event     20.17 us (  273.14 GB/s) timing-only
+    k2 n 4096 d 4096 lanes 32      vulkan     19.00 us (  289.96 GB/s) timing-only
+    k2 n 4096 d 4096 lanes 32      cuda wall     19.84 us (  277.68 GB/s) event     18.34 us (  300.35 GB/s) timing-only
+    k2 n 2048 d 1408 rule 16       vulkan      8.70 us (  108.99 GB/s) timing-only
+    k2 n 2048 d 1408 rule 16       cuda wall     12.50 us (   75.86 GB/s) event     12.41 us (   76.39 GB/s) timing-only
+    k2 n 2048 d 1408 lanes 8       vulkan      8.82 us (  107.51 GB/s) timing-only
+    k2 n 2048 d 1408 lanes 8       cuda wall     11.62 us (   81.61 GB/s) event     10.88 us (   87.15 GB/s) timing-only
+    k2 n 2048 d 1408 lanes 16      vulkan      8.82 us (  107.51 GB/s) timing-only
+    k2 n 2048 d 1408 lanes 16      cuda wall     10.66 us (   88.95 GB/s) event     11.54 us (   82.18 GB/s) timing-only
+    k2 n 2048 d 1408 lanes 32      vulkan      8.84 us (  107.27 GB/s) timing-only
+    k2 n 2048 d 1408 lanes 32      cuda wall     11.04 us (   85.89 GB/s) event     11.98 us (   79.18 GB/s) timing-only
+    k2 n 14336 d 4096 rule 32      vulkan     51.80 us (  372.24 GB/s) timing-only
+    k2 n 14336 d 4096 rule 32      cuda wall     52.96 us (  364.09 GB/s) event     51.42 us (  374.98 GB/s) timing-only
+    k2 n 14336 d 4096 lanes 8      vulkan     90.48 us (  213.11 GB/s) timing-only
+    k2 n 14336 d 4096 lanes 8      cuda wall     96.16 us (  200.52 GB/s) event     93.67 us (  205.86 GB/s) timing-only
+    k2 n 14336 d 4096 lanes 16     vulkan     59.78 us (  322.55 GB/s) timing-only
+    k2 n 14336 d 4096 lanes 16     cuda wall     67.74 us (  284.65 GB/s) event     66.51 us (  289.92 GB/s) timing-only
+    k2 n 14336 d 4096 lanes 32     vulkan     52.24 us (  369.11 GB/s) timing-only
+    k2 n 14336 d 4096 lanes 32     cuda wall     52.90 us (  364.50 GB/s) event     51.43 us (  374.94 GB/s) timing-only
+    k2 summed over the shapes, the rule's lanes, vulkan    169.52 us timing-only
+    k2 summed over the shapes, lanes 8, vulkan    219.60 us timing-only
+    k2 summed over the shapes, lanes 16, vulkan    177.48 us timing-only
+    k2 summed over the shapes, lanes 32, vulkan    170.16 us timing-only
+    k2 summed over the shapes, noise, vulkan     33.34 us timing-only
+    k2 summed over the shapes, the rule's lanes, cuda wall    184.20 us timing-only
+    k2 summed over the shapes, lanes 8, cuda wall    243.42 us timing-only
+    k2 summed over the shapes, lanes 16, cuda wall    197.50 us timing-only
+    k2 summed over the shapes, lanes 32, cuda wall    180.86 us timing-only
+    k2 summed over the shapes, noise, cuda wall     35.22 us timing-only
+    tq2 n 2048 d 2048 rule 16      vulkan      9.34 us (  116.00 GB/s) timing-only
+    tq2 n 2048 d 2048 rule 16      cuda wall     10.00 us (  108.34 GB/s) event     10.24 us (  105.80 GB/s) timing-only
+    tq2 n 2048 d 2048 lanes 8      vulkan      8.78 us (  123.40 GB/s) timing-only
+    tq2 n 2048 d 2048 lanes 8      cuda wall     10.08 us (  107.48 GB/s) event      9.90 us (  109.40 GB/s) timing-only
+    tq2 n 2048 d 2048 lanes 16     vulkan      8.74 us (  123.96 GB/s) timing-only
+    tq2 n 2048 d 2048 lanes 16     cuda wall     10.18 us (  106.43 GB/s) event     10.19 us (  106.34 GB/s) timing-only
+    tq2 n 2048 d 2048 lanes 32     vulkan      8.82 us (  122.84 GB/s) timing-only
+    tq2 n 2048 d 2048 lanes 32     cuda wall     10.10 us (  107.27 GB/s) event     10.29 us (  105.26 GB/s) timing-only
+    tq2 n 2048 d 8192 rule 16      vulkan     15.08 us (  286.97 GB/s) timing-only
+    tq2 n 2048 d 8192 rule 16      cuda wall     15.90 us (  272.17 GB/s) event     14.58 us (  296.89 GB/s) timing-only
+    tq2 n 2048 d 8192 lanes 8      vulkan     16.74 us (  258.51 GB/s) timing-only
+    tq2 n 2048 d 8192 lanes 8      cuda wall     16.10 us (  268.79 GB/s) event     14.94 us (  289.63 GB/s) timing-only
+    tq2 n 2048 d 8192 lanes 16     vulkan     15.14 us (  285.83 GB/s) timing-only
+    tq2 n 2048 d 8192 lanes 16     cuda wall     15.86 us (  272.85 GB/s) event     14.60 us (  296.38 GB/s) timing-only
+    tq2 n 2048 d 8192 lanes 32     vulkan     16.58 us (  261.00 GB/s) timing-only
+    tq2 n 2048 d 8192 lanes 32     cuda wall     15.46 us (  279.91 GB/s) event     14.19 us (  304.92 GB/s) timing-only
+    tq2 n 8192 d 2048 rule 32      vulkan     16.94 us (  255.83 GB/s) timing-only
+    tq2 n 8192 d 2048 rule 32      cuda wall     16.40 us (  264.25 GB/s) event     14.84 us (  291.95 GB/s) timing-only
+    tq2 n 8192 d 2048 lanes 8      vulkan     22.66 us (  191.25 GB/s) timing-only
+    tq2 n 8192 d 2048 lanes 8      cuda wall     22.06 us (  196.45 GB/s) event     20.63 us (  210.07 GB/s) timing-only
+    tq2 n 8192 d 2048 lanes 16     vulkan     14.76 us (  293.61 GB/s) timing-only
+    tq2 n 8192 d 2048 lanes 16     cuda wall     15.96 us (  271.53 GB/s) event     14.36 us (  301.80 GB/s) timing-only
+    tq2 n 8192 d 2048 lanes 32     vulkan     16.74 us (  258.88 GB/s) timing-only
+    tq2 n 8192 d 2048 lanes 32     cuda wall     16.30 us (  265.87 GB/s) event     14.77 us (  293.36 GB/s) timing-only
+    tq2 n 1792 d 1792 rule 16      vulkan      8.12 us (  102.18 GB/s) timing-only
+    tq2 n 1792 d 1792 rule 16      cuda wall      8.98 us (   92.40 GB/s) event      9.85 us (   84.26 GB/s) timing-only
+    tq2 n 1792 d 1792 lanes 8      vulkan      8.56 us (   96.93 GB/s) timing-only
+    tq2 n 1792 d 1792 lanes 8      cuda wall     10.40 us (   79.78 GB/s) event      9.23 us (   89.85 GB/s) timing-only
+    tq2 n 1792 d 1792 lanes 16     vulkan      7.68 us (  108.04 GB/s) timing-only
+    tq2 n 1792 d 1792 lanes 16     cuda wall      9.68 us (   85.72 GB/s) event      8.89 us (   93.32 GB/s) timing-only
+    tq2 n 1792 d 1792 lanes 32     vulkan      8.80 us (   94.29 GB/s) timing-only
+    tq2 n 1792 d 1792 lanes 32     cuda wall      9.00 us (   92.19 GB/s) event      9.40 us (   88.30 GB/s) timing-only
+    tq2 n 1792 d 4864 rule 16      vulkan     10.86 us (  207.09 GB/s) timing-only
+    tq2 n 1792 d 4864 rule 16      cuda wall     12.14 us (  185.25 GB/s) event     10.60 us (  212.15 GB/s) timing-only
+    tq2 n 1792 d 4864 lanes 8      vulkan     10.48 us (  214.60 GB/s) timing-only
+    tq2 n 1792 d 4864 lanes 8      cuda wall     11.10 us (  202.61 GB/s) event     11.47 us (  196.11 GB/s) timing-only
+    tq2 n 1792 d 4864 lanes 16     vulkan     10.80 us (  208.24 GB/s) timing-only
+    tq2 n 1792 d 4864 lanes 16     cuda wall     12.28 us (  183.14 GB/s) event     11.47 us (  196.00 GB/s) timing-only
+    tq2 n 1792 d 4864 lanes 32     vulkan     10.98 us (  204.83 GB/s) timing-only
+    tq2 n 1792 d 4864 lanes 32     cuda wall     11.38 us (  197.63 GB/s) event     10.89 us (  206.49 GB/s) timing-only
+    tq2 n 4864 d 1792 rule 32      vulkan     12.44 us (  181.04 GB/s) timing-only
+    tq2 n 4864 d 1792 rule 32      cuda wall     12.12 us (  185.82 GB/s) event     10.98 us (  205.07 GB/s) timing-only
+    tq2 n 4864 d 1792 lanes 8      vulkan     12.60 us (  178.74 GB/s) timing-only
+    tq2 n 4864 d 1792 lanes 8      cuda wall     13.94 us (  161.56 GB/s) event     12.73 us (  176.92 GB/s) timing-only
+    tq2 n 4864 d 1792 lanes 16     vulkan     10.42 us (  216.13 GB/s) timing-only
+    tq2 n 4864 d 1792 lanes 16     cuda wall     11.46 us (  196.52 GB/s) event     10.17 us (  221.51 GB/s) timing-only
+    tq2 n 4864 d 1792 lanes 32     vulkan     12.48 us (  180.46 GB/s) timing-only
+    tq2 n 4864 d 1792 lanes 32     cuda wall     12.00 us (  187.68 GB/s) event     11.06 us (  203.59 GB/s) timing-only
+    tq2 n 2560 d 2560 rule 16      vulkan      9.26 us (  182.74 GB/s) timing-only
+    tq2 n 2560 d 2560 rule 16      cuda wall     10.66 us (  158.74 GB/s) event     10.57 us (  160.04 GB/s) timing-only
+    tq2 n 2560 d 2560 lanes 8      vulkan     10.76 us (  157.27 GB/s) timing-only
+    tq2 n 2560 d 2560 lanes 8      cuda wall     11.04 us (  153.28 GB/s) event     10.99 us (  154.00 GB/s) timing-only
+    tq2 n 2560 d 2560 lanes 16     vulkan      9.24 us (  183.14 GB/s) timing-only
+    tq2 n 2560 d 2560 lanes 16     cuda wall     10.88 us (  155.53 GB/s) event      9.79 us (  172.84 GB/s) timing-only
+    tq2 n 2560 d 2560 lanes 32     vulkan     10.82 us (  156.40 GB/s) timing-only
+    tq2 n 2560 d 2560 lanes 32     cuda wall     10.52 us (  160.86 GB/s) event     10.49 us (  161.28 GB/s) timing-only
+    tq2 n 4096 d 4096 rule 32      vulkan     15.50 us (  279.32 GB/s) timing-only
+    tq2 n 4096 d 4096 rule 32      cuda wall     15.72 us (  275.42 GB/s) event     14.45 us (  299.58 GB/s) timing-only
+    tq2 n 4096 d 4096 lanes 8      vulkan     14.88 us (  290.96 GB/s) timing-only
+    tq2 n 4096 d 4096 lanes 8      cuda wall     15.84 us (  273.33 GB/s) event     14.56 us (  297.44 GB/s) timing-only
+    tq2 n 4096 d 4096 lanes 16     vulkan     16.58 us (  261.13 GB/s) timing-only
+    tq2 n 4096 d 4096 lanes 16     cuda wall     16.10 us (  268.92 GB/s) event     14.68 us (  294.92 GB/s) timing-only
+    tq2 n 4096 d 4096 lanes 32     vulkan     15.76 us (  274.72 GB/s) timing-only
+    tq2 n 4096 d 4096 lanes 32     cuda wall     15.92 us (  271.96 GB/s) event     14.49 us (  298.76 GB/s) timing-only
+    tq2 n 2048 d 1408 rule 16      vulkan      6.52 us (  114.34 GB/s) timing-only
+    tq2 n 2048 d 1408 rule 16      cuda wall      9.92 us (   75.15 GB/s) event      9.40 us (   79.27 GB/s) timing-only
+    tq2 n 2048 d 1408 lanes 8      vulkan      8.70 us (   85.69 GB/s) timing-only
+    tq2 n 2048 d 1408 lanes 8      cuda wall     10.16 us (   73.38 GB/s) event     10.39 us (   71.74 GB/s) timing-only
+    tq2 n 2048 d 1408 lanes 16     vulkan      6.60 us (  112.96 GB/s) timing-only
+    tq2 n 2048 d 1408 lanes 16     cuda wall     10.04 us (   74.25 GB/s) event     10.53 us (   70.78 GB/s) timing-only
+    tq2 n 2048 d 1408 lanes 32     vulkan      6.76 us (  110.28 GB/s) timing-only
+    tq2 n 2048 d 1408 lanes 32     cuda wall      9.50 us (   78.47 GB/s) event      8.72 us (   85.48 GB/s) timing-only
+    tq2 n 14336 d 4096 rule 32     vulkan     41.14 us (  368.34 GB/s) timing-only
+    tq2 n 14336 d 4096 rule 32     cuda wall     42.66 us (  355.21 GB/s) event     41.10 us (  368.70 GB/s) timing-only
+    tq2 n 14336 d 4096 lanes 8     vulkan     63.58 us (  238.34 GB/s) timing-only
+    tq2 n 14336 d 4096 lanes 8     cuda wall     63.80 us (  237.51 GB/s) event     62.23 us (  243.49 GB/s) timing-only
+    tq2 n 14336 d 4096 lanes 16    vulkan     45.54 us (  332.75 GB/s) timing-only
+    tq2 n 14336 d 4096 lanes 16    cuda wall     46.66 us (  324.76 GB/s) event     45.20 us (  335.22 GB/s) timing-only
+    tq2 n 14336 d 4096 lanes 32    vulkan     41.34 us (  366.55 GB/s) timing-only
+    tq2 n 14336 d 4096 lanes 32    cuda wall     42.72 us (  354.71 GB/s) event     41.15 us (  368.22 GB/s) timing-only
+    tq2 summed over the shapes, the rule's lanes, vulkan    145.20 us timing-only
+    tq2 summed over the shapes, lanes 8, vulkan    177.74 us timing-only
+    tq2 summed over the shapes, lanes 16, vulkan    145.50 us timing-only
+    tq2 summed over the shapes, lanes 32, vulkan    149.08 us timing-only
+    tq2 summed over the shapes, noise, vulkan     45.06 us timing-only
+    tq2 summed over the shapes, the rule's lanes, cuda wall    154.50 us timing-only
+    tq2 summed over the shapes, lanes 8, cuda wall    184.52 us timing-only
+    tq2 summed over the shapes, lanes 16, cuda wall    159.10 us timing-only
+    tq2 summed over the shapes, lanes 32, cuda wall    152.90 us timing-only
+    tq2 summed over the shapes, noise, cuda wall     51.04 us timing-only
+
+  - **The cm2 l and m tiles at 512 rows, both homes, k2 against tq2 in one process** (`harness/gemm_cuda_vs_vulkan.das --
+    --only k2,tq2`, 10 rounds of 20 dispatches, 2 warm-up rounds, two output planes alternated on the CUDA arms):
+
+    k2 l k 2048 d 2048       vulkan     86.55 us (   49.62 TFLOP/s) timing-only
+    k2 l k 2048 d 2048       cuda wall     94.50 us (   45.45 TFLOP/s) event     90.55 us (   47.43 TFLOP/s) timing-only
+    k2 l k 2048 d 8192       vulkan    344.95 us (   49.80 TFLOP/s) timing-only
+    k2 l k 2048 d 8192       cuda wall    296.15 us (   58.01 TFLOP/s) event    291.76 us (   58.88 TFLOP/s) timing-only
+    k2 l k 8192 d 2048       vulkan    329.80 us (   52.09 TFLOP/s) timing-only
+    k2 l k 8192 d 2048       cuda wall    406.60 us (   42.25 TFLOP/s) event    377.56 us (   45.50 TFLOP/s) timing-only
+    k2 m k 2048 d 2048       vulkan     95.05 us (   45.19 TFLOP/s) timing-only
+    k2 m k 2048 d 2048       cuda wall     85.00 us (   50.53 TFLOP/s) event     81.20 us (   52.89 TFLOP/s) timing-only
+    k2 m k 2048 d 8192       vulkan    397.70 us (   43.20 TFLOP/s) timing-only
+    k2 m k 2048 d 8192       cuda wall    341.65 us (   50.28 TFLOP/s) event    330.12 us (   52.04 TFLOP/s) timing-only
+    k2 m k 8192 d 2048       vulkan    359.95 us (   47.73 TFLOP/s) timing-only
+    k2 m k 8192 d 2048       cuda wall    344.85 us (   49.82 TFLOP/s) event    336.84 us (   51.00 TFLOP/s) timing-only
+    tq2 l k 2048 d 2048      vulkan     81.40 us (   52.76 TFLOP/s) timing-only
+    tq2 l k 2048 d 2048      cuda wall     90.30 us (   47.56 TFLOP/s) event     86.29 us (   49.77 TFLOP/s) timing-only
+    tq2 l k 2048 d 8192      vulkan    320.75 us (   53.56 TFLOP/s) timing-only
+    tq2 l k 2048 d 8192      cuda wall    293.55 us (   58.52 TFLOP/s) event    279.98 us (   61.36 TFLOP/s) timing-only
+    tq2 l k 8192 d 2048      vulkan    304.30 us (   56.46 TFLOP/s) timing-only
+    tq2 l k 8192 d 2048      cuda wall    360.80 us (   47.62 TFLOP/s) event    354.58 us (   48.45 TFLOP/s) timing-only
+    tq2 m k 2048 d 2048      vulkan     89.90 us (   47.77 TFLOP/s) timing-only
+    tq2 m k 2048 d 2048      cuda wall     80.05 us (   53.65 TFLOP/s) event     76.20 us (   56.36 TFLOP/s) timing-only
+    tq2 m k 2048 d 8192      vulkan    349.55 us (   49.15 TFLOP/s) timing-only
+    tq2 m k 2048 d 8192      cuda wall    337.05 us (   50.97 TFLOP/s) event    286.41 us (   59.98 TFLOP/s) timing-only
+    tq2 m k 8192 d 2048      vulkan    369.55 us (   46.49 TFLOP/s) timing-only
+    tq2 m k 8192 d 2048      cuda wall    317.30 us (   54.14 TFLOP/s) event    310.66 us (   55.30 TFLOP/s) timing-only
+
+  - **The four-wide decode twin against the scalar callback, Vulkan, tq2's l, m and s stamps** (`DASLLAMA_GPU=1
+    DASLLAMA_VK_DECVEC=1 bin/Release/daslang.exe -jit modules/dasLLAMA/harness/vk_gemm_probe.das -- cm2:tq2`, both arms
+    a round, two rounds, ms a dispatch; the `DASLLAMA_VK_DECVEC=0` run reads the scalar rows alone; the driver reports no
+    `VK_NV_cooperative_matrix_decode_vector`, so production serves the scalar arm on this box):
+
+    r0 twin off gate cm2l: 0.50638375 ms/dispatch  50.359768298252064 TFLOP/s  timing-only
+    r0 twin off gate cm2m: 0.62898375 ms/dispatch  40.54376336431585 TFLOP/s  timing-only
+    r0 twin off gate cm2s: 1.3544681250000001 ms/dispatch  18.827588371634807 TFLOP/s  timing-only
+    r0 twin off down cm2l: 0.50140375 ms/dispatch  50.859947337848986 TFLOP/s  timing-only
+    r0 twin off down cm2m: 0.586940625 ms/dispatch  43.447952371673026 TFLOP/s  timing-only
+    r0 twin off down cm2s: 1.34498 ms/dispatch  18.96040708412021 TFLOP/s  timing-only
+    r0 twin off q/wo cm2l: 0.231459375 ms/dispatch  46.390077049158194 TFLOP/s  timing-only
+    r0 twin off q/wo cm2m: 0.27203125 ms/dispatch  39.47126751062608 TFLOP/s  timing-only
+    r0 twin off q/wo cm2s: 0.5927843749999999 ms/dispatch  18.1135311469706 TFLOP/s  timing-only
+    r1 twin off gate cm2l: 0.49293125 ms/dispatch  51.734127872801736 TFLOP/s  timing-only
+    r1 twin off gate cm2m: 0.6146475 ms/dispatch  41.48942006597277 TFLOP/s  timing-only
+    r1 twin off gate cm2s: 1.335013125 ms/dispatch  19.101960754131163 TFLOP/s  timing-only
+    r1 twin off down cm2l: 0.54043125 ms/dispatch  47.187072028125684 TFLOP/s  timing-only
+    r1 twin off down cm2m: 0.5920181250000001 ms/dispatch  43.0753168579087 TFLOP/s  timing-only
+    r1 twin off down cm2s: 1.348683125 ms/dispatch  18.908346851303563 TFLOP/s  timing-only
+    r1 twin off q/wo cm2l: 0.2162775 ms/dispatch  49.646487683647166 TFLOP/s  timing-only
+    r1 twin off q/wo cm2m: 0.25228812500000003 ms/dispatch  42.5601412670533 TFLOP/s  timing-only
+    r1 twin off q/wo cm2s: 0.570411875 ms/dispatch  18.823973887289775 TFLOP/s  timing-only
+
+  - **The cm2 stamps against the staged KHR tile, Vulkan, tq2 then k2** (`vk_gemm_probe.das -- kqst:tq2` and `-- kqst:k2`,
+    one process each, the arms interleaved round by round, a row its best of 4 rounds):
+
+    gate      cm2l : 155.025 us/dispatch  62.33624522496372 TFLOP/s  wgs=96  best of 4  timing-only
+    gate      cm2m : 172.6875 us/dispatch  55.96048594136808 TFLOP/s  wgs=192  best of 4  timing-only
+    gate      cm2s : 287.1125 us/dispatch  33.65815287039052 TFLOP/s  wgs=768  best of 4  timing-only
+    gate      staged: 255.9075 us/dispatch  37.76238061018141 TFLOP/s  wgs=192  best of 4  timing-only
+    down      cm2l : 147.9875 us/dispatch  65.30062617450798 TFLOP/s  wgs=24  best of 4  timing-only
+    down      cm2m : 165.9125 us/dispatch  58.2456199261659 TFLOP/s  wgs=48  best of 4  timing-only
+    down      cm2s : 283.51 us/dispatch  34.08583970935769 TFLOP/s  wgs=192  best of 4  timing-only
+    down      staged: 260.125 us/dispatch  37.150125578087454 TFLOP/s  wgs=48  best of 4  timing-only
+    q         cm2l : 54.9375 us/dispatch  58.63436581569966 TFLOP/s  wgs=32  best of 4  timing-only
+    q         cm2m : 59.575 us/dispatch  54.070087654217375 TFLOP/s  wgs=64  best of 4  timing-only
+    q         cm2s : 96.565 us/dispatch  33.35810564904469 TFLOP/s  wgs=256  best of 4  timing-only
+    q         staged: 88.82 us/dispatch  36.26689340238685 TFLOP/s  wgs=64  best of 4  timing-only
+    wo        cm2l : 53.2 us/dispatch  60.54935097744361 TFLOP/s  wgs=24  best of 4  timing-only
+    wo        cm2m : 59.185 us/dispatch  54.426382901072905 TFLOP/s  wgs=48  best of 4  timing-only
+    wo        cm2s : 96.495 us/dispatch  33.38230449246075 TFLOP/s  wgs=192  best of 4  timing-only
+    wo        staged: 90.0325 us/dispatch  35.778474128786826 TFLOP/s  wgs=48  best of 4  timing-only
+
+    gate      cm2l : 161.8375 us/dispatch  59.71222007260369 TFLOP/s  wgs=96  best of 4  timing-only
+    gate      cm2m : 179.5975 us/dispatch  53.80741054858782 TFLOP/s  wgs=192  best of 4  timing-only
+    gate      cm2s : 322.925 us/dispatch  29.925451470155608 TFLOP/s  wgs=768  best of 4  timing-only
+    gate      staged: 259.0675 us/dispatch  37.301770449786254 TFLOP/s  wgs=192  best of 4  timing-only
+    down      cm2l : 196.0475 us/dispatch  49.29252561751616 TFLOP/s  wgs=24  best of 4  timing-only
+    down      cm2m : 217.0875 us/dispatch  44.51512139575056 TFLOP/s  wgs=48  best of 4  timing-only
+    down      cm2s : 402.5725 us/dispatch  24.00481010501214 TFLOP/s  wgs=192  best of 4  timing-only
+    down      staged: 326.715 us/dispatch  29.57830652403471 TFLOP/s  wgs=48  best of 4  timing-only
+    q         cm2l : 58.59 us/dispatch  54.979100051203275 TFLOP/s  wgs=32  best of 4  timing-only
+    q         cm2m : 63.3675 us/dispatch  50.834031198958456 TFLOP/s  wgs=64  best of 4  timing-only
+    q         cm2s : 110.8 us/dispatch  29.072432057761734 TFLOP/s  wgs=256  best of 4  timing-only
+    q         staged: 91.805 us/dispatch  35.087690997222374 TFLOP/s  wgs=64  best of 4  timing-only
+    wo        cm2l : 56.475 us/dispatch  57.0380783001328 TFLOP/s  wgs=24  best of 4  timing-only
+    wo        cm2m : 62.3675 us/dispatch  51.64910365174169 TFLOP/s  wgs=48  best of 4  timing-only
+    wo        cm2s : 109.9575 us/dispatch  29.295186522065343 TFLOP/s  wgs=192  best of 4  timing-only
+    wo        staged: 92.065 us/dispatch  34.988600141204586 TFLOP/s  wgs=48  best of 4  timing-only
+
+- **MEASURED (2026-11-25, `external`) - llama.cpp's own Vulkan MUL_MAT rows for TQ2_0 and Q2_K on the reference box
+  (Threadripper 3990X, RTX 5060 Ti 16 GB, Windows, Vulkan SDK 1.4.357, the driver's NV_coopmat2 path), the reference the
+  tq2 entry above is read against.** llama.cpp at c70f320df (2026-10-24), `test-backend-ops` built for this entry with
+  `-DGGML_VULKAN=ON -DLLAMA_BUILD_TESTS=ON` (Release); `test-backend-ops perf -b Vulkan0 -o MUL_MAT -p
+  "type_a=(tq2_0|q2_K),type_b=f32"` - the tool's own perf cases, which time one weight copy replayed (a 15 to 19 MB plane
+  sits inside the card's 32 MB L2), so these rows are not the DRAM rate the races above stream at. llama.cpp has no CUDA
+  kernel for TQ2_0. us a run (TFLOPS):
+
+    | m x k, n | tq2_0 | q2_K |
+    |---|---|---|
+    | 4096 x 14336, 1 | 48.14 (2.44) | 30.40 (3.86) |
+    | 32768 x 14336, 1 | 463.38 (2.03) | 377.51 (2.49) |
+    | 4096 x 14336, 2 | 96.15 (2.44) | 43.60 (5.39) |
+    | 4096 x 14336, 3 | 139.38 (2.53) | 61.59 (5.72) |
+    | 4096 x 14336, 4 | 225.73 (2.08) | 78.76 (5.96) |
+    | 4096 x 14336, 5 | 349.38 (1.68) | 91.76 (6.40) |
+    | 4096 x 14336, 8 | 785.63 (1.20) | 147.96 (6.35) |
+    | 4096 x 14336, 512 | 1194.56 (50.34) | 1121.69 (53.61) |
 - **MEASURED (2026-11-26) - the row-major GEMVs' row loop on x64: once the `[tune]` clones carry their family's
   `noalias` hints, LLVM unroll-and-jams that loop, and a one-process race on zen4 (AMD Ryzen 7 PRO 8700GE, Zen 4,
   Linux; class `x86-vnni512`) finds the jam slower on six rows it changes, faster on one and level on the rest, so the
@@ -10667,3 +11200,653 @@ between cells (two rows reading under one), so a cell reads against its own pair
   arithmetic, no run): `rows x n_heads x (hs / 128) x entries x 132 x 4` bytes. A step under the far count holds the
   fused form's 16 entries, a step that takes the tile form its 128 pieces: 270,336 then 2,162,688 bytes for one row of
   8 heads of 512, and 17,301,504 for a verify of eight rows.
+### The q20 decode GEMV and window tiles on the Radeon 8060S (2026-11-25, rizen: Ryzen AI Max+ 395, Radeon 8060S, Windows, Vulkan; `-jit`, `DAS_TUNE_POLICY` unset; `direction-grade`)
+
+- **The decode GEMV's block term and lane split** (`DASLLAMA_GPU=1 bin/Release/daslang.exe -jit
+  modules/dasLLAMA/harness/vk_gemv_probe.das -- q20`, subgroup 32 pinned over the device's 64, 2 rows a workgroup; a
+  dispatch is one plane copy at the served launch size, the copies in turn past 96 MB, two outputs alternated, 8 rounds
+  after 2 warm-up, an arm's row its best round; every arm's output within 1.04e-3 of the shipped arm's). Microseconds a
+  dispatch, best round; the shipped arm is `q20_gemv_cls` (signed lanes `q - 1`, the whole subgroup a row), the twins
+  `ProbeQ20GemvT` signed and, under `UNS`, unsigned codes with the activation sum taken off the integer dot:
+
+  | shape (n x d rows) | shipped x32 | signed x32 | signed x16 | signed x8 | unsigned x32 | unsigned x16 | unsigned x8 |
+  |---|---|---|---|---|---|---|---|
+  | Bonsai q/o 2048 x 2048 | 7.10 | 8.34 | 9.68 | 9.79 | 9.09 | 10.47 | 10.46 |
+  | Bonsai kv 2048 x 1024 | 4.30 | 5.06 | 5.70 | 5.25 | 5.63 | 5.87 | 5.84 |
+  | Bonsai up 2048 x 6144 | 17.83 | 19.74 | 21.32 | 24.45 | 21.45 | 24.89 | 26.54 |
+  | Bonsai down 6144 x 2048 | 19.14 | 19.67 | 22.42 | 23.50 | 20.51 | 25.69 | 25.65 |
+  | Llama up 2048 x 8192 | 23.08 | 25.43 | 26.87 | 29.79 | 27.55 | 31.23 | 32.73 |
+  | Llama down 8192 x 2048 | 35.98 | 34.27 | 46.55 | 65.86 | 38.36 | 54.14 | 78.43 |
+  | MoE expert up 2048 x 1408 | 5.66 | 6.85 | 7.60 | 6.97 | 7.12 | 8.32 | 7.53 |
+  | MoE expert down 1408 x 2048 | 5.41 | 5.82 | 5.23 | 4.83 | 6.29 | 5.49 | 5.25 |
+  | Flash-Next expert up 2560 x 640 | 2.91 | 2.91 | 2.90 | 3.53 | 3.21 | 3.43 | 4.17 |
+  | Flash-Next expert down 640 x 2560 | 3.46 | 4.11 | 3.99 | 3.34 | 4.22 | 3.99 | 3.40 |
+  | 14336 x 4096 | 76.33 | 75.75 | 88.12 | 90.46 | 79.04 | 95.46 | 100.00 |
+  | sum | 201.20 | 207.95 | 240.38 | 267.77 | 222.47 | 268.98 | 300.00 |
+  | sum of the rounds' spreads | 6.67 | 4.12 | 6.65 | 4.20 | 8.67 | 8.50 | 12.28 |
+
+  The signed block term leads the unsigned one at the same lane split (207.95 against 222.47, past either spread), so the
+  shipped GEMV stays on signed lanes; the whole subgroup a row leads the 16- and 8-lane splits summed. The 8-lane split
+  leads on the 44- and 20-block rows (the MoE and Flash-Next expert-down widths: 4.83 against the shipped 5.41, 3.34
+  against 3.46), widths the served models reach through the summed down shell, which this race does not time.
+- **The routed block's window tiles: the f16 KHR tile against the int8 tile** (`DASLLAMA_GPU=1 DASLLAMA_COOPMAT=mm
+  DASLLAMA_VK_SUBGROUP=32 bin/Release/daslang.exe -jit modules/dasLLAMA/harness/vk_gemm_probe.das -- moeq20`, the expert
+  schedule's m and s pieces over a trace-skewed bucket profile, sixteen dispatches over two alternating outputs, the
+  int8 output within 7.0e-4 of the f16 one). Milliseconds a dispatch pair (m and s columns), round 0 rep 0 / round 1 rep 0:
+
+  | shape | khr f16 | int8 |
+  |---|---|---|
+  | Qwen1.5-MoE gate/up 1408 rows x 2048, 32 tokens top-4 | 1.366 / 1.473 | 0.498 / 0.542 |
+  | ... down 2048 rows x 1408, 32 tokens | 1.459 / 1.378 | 0.566 / 0.563 |
+  | ... gate/up, 77 tokens | 1.443 / 1.456 | 0.556 / 0.562 |
+  | ... down, 77 tokens | 1.520 / 1.395 | 0.582 / 0.584 |
+  | ... gate/up, 128 tokens | 1.479 / 1.497 | 0.595 / 0.599 |
+  | ... down, 128 tokens | 1.390 / 1.401 | 0.614 / 0.618 |
+  | Flash-Next gate/up 640 rows x 2560, 128 tokens top-10 | 6.783 / 6.836 | 2.766 / 2.779 |
+  | ... down 2560 rows x 640, 128 tokens | 7.821 / 7.966 | 2.745 / 3.112 |
+
+  The int8 tile leads at every shape, so q20 keeps its int8 stamps (`Q20MmqT`) and stays off `MMQ_SKIP`.
+- **The reference's rows on the same box**, `external` (llama.cpp 9581154a2, `build-vulkan` configured `-DGGML_VULKAN=ON
+  -DLLAMA_BUILD_TESTS=ON`, `test-backend-ops perf -b Vulkan0 -o MUL_MAT -p 'type_a=q2_0,type_b=f32,'`; its perf list carries
+  q2_0 at m 4096, k 14336 alone): n 1 30.46 us/run, n 8 137.81, n 512 2806.61 (21.42 TFLOPS). Its runs repeat one 16.5 MB
+  weight buffer, which the 32 MB last-level cache holds, where the GEMV race above reads VRAM (76.33 us at the same shape,
+  216 GB/s); q8_0 at the same shape, 62 MB, reads 277.62 us there. The CPU build, `external` (`build-clean-cpu`, the same commit):
+  `GGML_BENCH_THREADS=1` 1017.38 us/run, `GGML_BENCH_THREADS=16` 173.34 us/run.
+
+### The q20 row-major CPU kernels on the Zen 5 cores (2026-11-26, rizen: Ryzen AI Max+ 395, 16 Zen 5 cores, AVX-512 VNNI and VBMI, Windows, class `x86-vnni512`; `-jit`, the tree at 8194afb3c4; `direction-grade`)
+
+- **The race** (`DAS_TUNE_MODE=tune bin/Release/daslang.exe -jit modules/dasLLAMA/benchmarks/matmul/kq_kernel_bench.das --
+  --fmt q20 --rm --ntok <32|512>`, one process a column, every row once a round, 5 rounds after the warm ones, the best
+  round; `--team` under `DAS_JOBQUE_THREADS=16` for the 16-lane columns; the 512-token columns time the `dot_` rows alone
+  (`--perm dot_,reference`, the 16-lane one `--perm width512,reference`), so `-` is a row that column did not time; the
+  `mr4` rows are the NEON spellings, which run the reference body on x64). Microseconds a call, 4096 rows x 14336:
+
+  | perm | 1T GEMV | 1T tile n32 | 1T tile n512 | 16T GEMV | 16T tile n32 | 16T tile n512 |
+  |---|---|---|---|---|---|---|
+  | reference | 5629 | 180242 | 2882912 | 641 | 21053 | 326355 |
+  | maddubs 256 u shift | 1373 | 29453 | 472155 | 189 | 4200 | - |
+  | maddubs 256 u shuf | 1696 | 29579 | 472594 | 232 | 4225 | - |
+  | maddubs 256 s shift | 1564 | 28742 | 459311 | 211 | 3537 | - |
+  | maddubs 256 s shuf | 1867 | 28428 | 454079 | 244 | 3591 | - |
+  | vpdpbusd 256 u shift | 1165 | 22643 | 362521 | 162 | 3114 | - |
+  | vpdpbusd 256 u shuf | 1508 | 24652 | 393867 | 206 | 3341 | - |
+  | vpdpbusd 256 s shift | 1419 | 24648 | 393833 | 195 | 3203 | - |
+  | vpdpbusd 256 s shuf | 1704 | 24270 | 387589 | 226 | 3195 | - |
+  | vpdpbusd 512 u shift | 837 | 14808 | 237661 | 118 | 2038 | 34004 |
+  | vpdpbusd 512 u shuf | 912 | 13925 | 223178 | 126 | 1797 | 30584 |
+  | vpdpbusd 512 u mshift | 663 | 12149 | 195249 | 95 | 1685 | 28847 |
+  | vpdpbusd 512 s shift | 1040 | 16096 | 257317 | 140 | 2191 | 36612 |
+  | vpdpbusd 512 s shuf | 1151 | 15324 | 245276 | 151 | 2053 | 33157 |
+  | vpdpbusd 512 s mshift | 870 | 13830 | 221912 | 119 | 1887 | 30506 |
+  | mr4 s shift / shuf | 5668 / 5640 | 180327 / 180220 | - | - | - | - |
+  | maddubs 256 u shift accs1 | 1313 | 29923 | 480570 | 180 | 4443 | - |
+  | maddubs 256 u shuf accs1 | 1509 | 30904 | 494574 | 203 | 4671 | - |
+  | maddubs 256 s shift accs1 | 1459 | 28526 | 455694 | 191 | 3686 | - |
+  | maddubs 256 s shuf accs1 | 1671 | 28390 | 453247 | 219 | 3638 | - |
+  | vpdpbusd 256 u shift accs1 | 1114 | 22557 | 360518 | 154 | 3147 | - |
+  | vpdpbusd 256 u shuf accs1 | 1348 | 24667 | 393780 | 178 | 3390 | - |
+  | vpdpbusd 256 s shift accs1 | 1369 | 24261 | 387368 | 183 | 3223 | - |
+  | vpdpbusd 256 s shuf accs1 | 1651 | 24281 | 387882 | 213 | 3164 | - |
+  | vpdpbusd 512 u shift accs1 | 797 | 15038 | 241322 | 107 | 2038 | 35113 |
+  | vpdpbusd 512 u shuf accs1 | 855 | 13917 | 223095 | 114 | 1811 | 31331 |
+  | **vpdpbusd 512 u mshift accs1** | **647** | 12248 | 196660 | **91** | **1667** | **28433** |
+  | vpdpbusd 512 s shift accs1 | 987 | 16240 | 258353 | 130 | 2192 | 36813 |
+  | vpdpbusd 512 s shuf accs1 | 1081 | 15471 | 247466 | 141 | 2044 | 33398 |
+  | vpdpbusd 512 s mshift accs1 | 845 | 13839 | 221897 | 115 | 1844 | 30597 |
+  | mr4 s shift / shuf accs1 | 5679 / 5650 | 180312 / 180250 | - | - | - | - |
+  | maddubs 256 u shift accs2 | 1363 | 29473 | 473150 | 188 | 4323 | - |
+  | maddubs 256 u shuf accs2 | 1601 | 29586 | 473685 | 221 | 4371 | - |
+  | maddubs 256 s shift accs2 | 1568 | 28748 | 459704 | 212 | 3658 | - |
+  | maddubs 256 s shuf accs2 | 1865 | 28409 | 454710 | 245 | 3653 | - |
+  | vpdpbusd 256 u shift accs2 | 1168 | 22636 | 362840 | 162 | 3128 | - |
+  | vpdpbusd 256 u shuf accs2 | 1508 | 24665 | 394491 | 206 | 3381 | - |
+  | vpdpbusd 256 s shift accs2 | 1558 | 24620 | 393972 | 194 | 3292 | - |
+  | vpdpbusd 256 s shuf accs2 | 1715 | 24249 | 388073 | 228 | 3196 | - |
+  | vpdpbusd 512 u shift accs2 | 840 | 14797 | 237935 | 119 | 2035 | 35046 |
+  | vpdpbusd 512 u shuf accs2 | 914 | 13926 | 223192 | 125 | 1830 | 31448 |
+  | vpdpbusd 512 u mshift accs2 | 668 | 12144 | 195383 | 95 | 1688 | 28961 |
+  | vpdpbusd 512 s shift accs2 | 1046 | 16123 | 257392 | 141 | 2193 | 36321 |
+  | vpdpbusd 512 s shuf accs2 | 1162 | 15322 | 245339 | 152 | 2047 | 33583 |
+  | vpdpbusd 512 s mshift accs2 | 967 | 13854 | 222009 | 131 | 1877 | 30668 |
+  | mr4 s shift / shuf accs2 | 5665 / 5645 | 180340 / 180266 | - | - | - | - |
+
+  A row's median sat within 5 us of its best in every GEMV column and within 5% in every tile column (1% at one lane);
+  the crowned row's 16-lane tile medians are 1696 and 29012. The multishift
+  spread over unsigned codes leads every other spread and level at every width and column; among its three accumulator
+  counts `accs1` leads the GEMV (647 against 663 and 668 at one lane, 91 against 95 and 95 at sixteen) and is level on the
+  tiles. The tuner crowns the same row on its own streamed fixture (`DAS_TUNE_MODE=tune DAS_TUNE_ONLY=q20q8_rm_gemv_gen
+  DAS_TUNE_MANIFEST=<scratch> DAS_JOBQUE_THREADS=8 bin/Release/daslang.exe -jit modules/dasLLAMA/harness/dasllama_tuner.das`,
+  noise probes cv 0.58 / 0.19 / 0.17 / 0.30%): `@tune end name=q20q8_rm_gemv_gen
+  winner=dot_vpdpbusd_width512_mr16_lev_u_spread_mshift_accs1 verdict=beats ms=299` - the `x86-vnni512` profile's entry.
+- **The reference's rows on the same box**, `external` (llama.cpp 9581154a2, `build-clean-cpu`, `GGML_BENCH_THREADS=<1|16>
+  test-backend-ops perf -b CPU -o MUL_MAT -p 'type_a=q2_0,type_b=f32,'`; its perf list carries q2_0 at m 4096, k 14336, n
+  1, 2, 3, 4, 5, 8 and 512 alone - no n 32 row and no expert shape). Microseconds a run:
+
+  | n | 1 thread | 16 threads |
+  |---|---|---|
+  | 1 | 1015.42 | 168.52 |
+  | 8 | 8046.76 | 1221.32 |
+  | 512 | 516381.50 | 84519.83 |
+
+  Against the crowned row: the GEMV leads 647 against 1015.42 at one thread and 91 against 168.52 at sixteen; the
+  512-token tile leads 196660 against 516381.50 and 28433 against 84519.83; the 32-token tile (12248 at one thread, 1667
+  at sixteen) takes less than the reference's 8-token row at either count (8046.76, 1221.32).
+- **The expert shapes** (the same bench, `--n <n> --d <d> --ntok 32 --perm width512,reference`, solo and `--team` at 16
+  lanes): the crowned row leads or ties every other width-512 row at every shape. Microseconds, crowned / reference body:
+
+  | n x d rows | 1T GEMV | 1T tile n32 | 16T GEMV | 16T tile n32 |
+  |---|---|---|---|---|
+  | 2048 x 1408 (Qwen1.5-MoE expert up) | 31 / 269 | 611 / 8718 | 7 / 32 | 83 / 954 |
+  | 1408 x 2048 (... expert down) | 32 / 266 | 619 / 8583 | 7 / 32 | 85 / 963 |
+  | 2560 x 640 (Flash-Next expert up) | 17 / 153 | 341 / 4953 | 5 / 19 | 50 / 537 |
+  | 640 x 2560 (... expert down) | 20 / 147 | 375 / 4766 | 5 / 19 | 52 / 539 |
+
+- **End to end on the CPU** (`DAS_JOBQUE_THREADS=16 bin/Release/daslang.exe -jit utils/dasllama-server/cli.das -- chat
+  --model Ternary-Bonsai-1.7B-Q2_0_g64.gguf --ctx 4096 --temp 0 -n 64 --no-think --gpu off --script <prompt> --verbose`,
+  the prompt "What is the capital of France? Answer in one sentence.", 20 prompt tokens, 11 generated, every run
+  answering "The capital of France is Paris."). The reference on the same file, `external` (`llama-bench -m <gguf>
+  -t 16 -r 3`): pp20 267.07 +/- 2.82, tg64 112.77 +/- 0.24, pp512 289.55 +/- 0.64, tg128 109.51 +/- 0.78 t/s.
+- **The other per-32 members on this tree** (`kq_kernel_bench -- --fmt q51,iq4nl32 --rm --ntok 32`, normal mode, the
+  profile's stamps, one thread, microseconds): q51 gemv 1232, tile 7618, rm_gemv 3210, rm_tile 38686; iq4nl32 gemv 696,
+  tile 7729, rm_gemv 1512, rm_tile 20383. No earlier CPU row of either member on this box is on record to hold them to.
+
+### The q10 row-major CPU kernels on the Zen 5 cores (2026-11-26, rizen: Ryzen AI Max+ 395, 16 Zen 5 cores, AVX-512 VNNI and VBMI, Windows, class `x86-vnni512`; `-jit`, the tree at ca742bb81c; `direction-grade`)
+
+- **The race** (`DAS_TUNE_MODE=tune bin/Release/daslang.exe -jit modules/dasLLAMA/benchmarks/matmul/kq_kernel_bench.das --
+  --fmt q10 --rm --ntok 512 --perm dot_,reference`, one process a column pair, every row once a round, 5 rounds after the
+  warm ones, the best round; `--team --perm width512,reference` under `DAS_JOBQUE_THREADS=16` for the 16-lane columns, so
+  `-` is a row that column did not time; the `mr4` NEON rows run the reference body on x64 and are left out).
+  Microseconds a call, 4096 rows x 14336:
+
+  | perm | 1T GEMV | 1T tile n512 | 16T GEMV | 16T tile n512 |
+  |---|---|---|---|---|
+  | reference | 5484 | 2809689 | 589 | 318119 |
+  | maddubs 256 u shuf | 1458 | 513855 | - | - |
+  | maddubs 256 s shuf | 1056 | 382364 | - | - |
+  | vpdpbusd 256 u shuf | 1244 | 427510 | - | - |
+  | vpdpbusd 256 s shuf | 927 | 331461 | - | - |
+  | vpdpbusd 256 u mask | 1126 | 395187 | - | - |
+  | vpdpbusd 256 s mask | 978 | 349929 | - | - |
+  | vpdpbusd 512 u shuf | 790 | 248608 | 104 | 33136 |
+  | vpdpbusd 512 s shuf | 669 | 199529 | 89 | 28093 |
+  | vpdpbusd 512 u mask | 757 | 237114 | 100 | 32816 |
+  | vpdpbusd 512 s mask | 617 | 216162 | 84 | 29898 |
+  | maddubs 256 u shuf accs1 | 1351 | 501771 | - | - |
+  | maddubs 256 s shuf accs1 | 1064 | 368736 | - | - |
+  | vpdpbusd 256 u shuf accs1 | 1178 | 401576 | - | - |
+  | vpdpbusd 256 s shuf accs1 | 930 | 314499 | - | - |
+  | vpdpbusd 256 u mask accs1 | 1107 | 374196 | - | - |
+  | vpdpbusd 256 s mask accs1 | 934 | 329429 | - | - |
+  | vpdpbusd 512 u shuf accs1 | 657 | 227167 | 87 | 31889 |
+  | **vpdpbusd 512 s shuf accs1** | **558** | **188538** | **76** | **26442** |
+  | vpdpbusd 512 u mask accs1 | 694 | 218052 | 94 | 30575 |
+  | vpdpbusd 512 s mask accs1 | 616 | 194461 | 83 | 27585 |
+  | maddubs 256 u shuf accs2 | 1539 | 515304 | - | - |
+  | maddubs 256 s shuf accs2 | 1157 | 383548 | - | - |
+  | vpdpbusd 256 u shuf accs2 | 1329 | 427686 | - | - |
+  | vpdpbusd 256 s shuf accs2 | 1010 | 331774 | - | - |
+  | vpdpbusd 256 u mask accs2 | 1207 | 395832 | - | - |
+  | vpdpbusd 256 s mask accs2 | 1031 | 349873 | - | - |
+  | vpdpbusd 512 u shuf accs2 | 919 | 248450 | 122 | 34260 |
+  | vpdpbusd 512 s shuf accs2 | 824 | 199278 | 108 | 28182 |
+  | vpdpbusd 512 u mask accs2 | 885 | 237316 | 116 | 32536 |
+  | vpdpbusd 512 s mask accs2 | 689 | 216194 | 93 | 29788 |
+
+  Every row's median sat within 5 us of its best in the GEMV columns and within 2% in the tile columns. The sign flip
+  (`s`) leads the 0/1 levels under the activation sum (`u`) at every width, test and column; at width 512 the byte
+  replicate (`shuf`) leads the mask register (`mask`) under one accumulator set (558 against 616 at one lane, 76 against
+  83 at sixteen), and `accs1` leads the four and two sets. The tuner crowns the same row on its own streamed fixture
+  (`DAS_TUNE_MODE=tune DAS_TUNE_ONLY=q10q8_rm_gemv_gen DAS_TUNE_MANIFEST=<scratch> DAS_JOBQUE_THREADS=8
+  bin/Release/daslang.exe -jit modules/dasLLAMA/harness/dasllama_tuner.das`, noise probes cv 0.50 / 0.40 / 0.34 / 0.23%):
+  `@tune end name=q10q8_rm_gemv_gen winner=dot_vpdpbusd_width512_mr16_lev_s_spread_shuf_accs1 verdict=beats ms=214` - the
+  `x86-vnni512` profile's entry.
+- **The reference's rows on the same box**, `external` (llama.cpp 9581154a2, `build-clean-cpu`, `GGML_BENCH_THREADS=<1|16>
+  test-backend-ops perf -b CPU -o MUL_MAT -p 'type_a=q1_0,type_b=f32,m=4096,n=<1|512>,k=14336,'`). Microseconds a run:
+
+  | n | 1 thread | 16 threads |
+  |---|---|---|
+  | 1 | 915.75 | 162.29 |
+  | 512 | 469600.00 | 75845.21 |
+
+  Against the crowned row: the GEMV leads 558 against 915.75 at one thread and 76 against 162.29 at sixteen; the
+  512-token tile leads 188538 against 469600.00 and 26442 against 75845.21.
+- **End to end on the CPU** (`DAS_JOBQUE_THREADS=16 bin/Release/daslang.exe -jit utils/dasllama-server/cli.das -- chat
+  --model Bonsai-1.7B-Q1_0.gguf --gpu off --ctx 4096 --temp 0 -n <64|128> --no-think --script <prompt> --verbose`, Q1_0 on
+  every matrix and the tied token table, each run a fresh process on the minted image). "What is the capital of France?
+  Answer in one sentence." (20 prompt tokens, 11 generated): every run "The capital of France is Paris." "List three
+  colors." (12 prompt tokens, 60 generated): every run Red, Blue, Yellow. The reference on the same file, `external`
+  (`llama-bench -m <gguf> -t 16 -r 3 -p 20,512 -n 64,128`): pp20 303.12 +/- 0.82, pp512 320.65 +/- 0.27, tg64 164.48
+  +/- 1.97, tg128 162.41 +/- 0.60 t/s.
+
+### The q10 decode GEMV and window tiles on the Radeon 8060S (2026-11-26, rizen: Ryzen AI Max+ 395, Radeon 8060S, Windows, Vulkan; `-jit`, `DAS_TUNE_POLICY` unset; `direction-grade`)
+
+- **The decode GEMV's block term, lane split and shell, q10 beside q20** (`DASLLAMA_GPU=1 bin/Release/daslang.exe -jit
+  modules/dasLLAMA/harness/vk_gemv_probe.das -- q10`, subgroup 32 pinned over the device's 64, 2 rows a workgroup; a dispatch
+  is one plane copy at the served launch size, the copies in turn past 96 MB, two outputs alternated, 8 rounds after 2
+  warm-up, an arm's row its best round; every arm's first output row within 5.8e-4 of its format's shipped arm's). The q20
+  rows of the 2026-11-25 entry were timed by this race's `q20` mode at 3f291d04f8, before its twin became
+  `ProbeLowbitGemvT`. Microseconds a dispatch, best round; the shipped arms are `q20_gemv_cls` and `q10_gemv_cls` (signed
+  lanes, the whole subgroup a row), the twins `ProbeLowbitGemvT` on q10 - signed lanes +-1, mask-and-add (0/1 lanes doubled,
+  the activation sum off the integer dot, `UNS`) and select (each activation byte kept or negated by its bit, `SEL`):
+
+  | shape (n x d rows) | q20 shipped x32 | q10 shipped x32 | signed x32 | signed x16 | signed x8 | mask-add x32 | mask-add x16 | mask-add x8 | select x32 | select x16 | select x8 |
+  |---|---|---|---|---|---|---|---|---|---|---|---|
+  | Bonsai q/o 2048 x 2048 | 7.52 | 4.61 | 4.47 | 4.50 | 4.75 | 4.41 | 4.55 | 4.78 | 6.25 | 6.15 | 6.95 |
+  | Bonsai kv 2048 x 1024 | 4.58 | 2.68 | 2.61 | 2.43 | 2.67 | 2.64 | 2.47 | 2.74 | 3.58 | 3.74 | 3.58 |
+  | Bonsai up 2048 x 6144 | 18.79 | 11.66 | 12.07 | 11.64 | 12.91 | 11.98 | 11.73 | 13.09 | 17.11 | 16.04 | 16.77 |
+  | Bonsai down 6144 x 2048 | 20.21 | 12.39 | 10.70 | 10.93 | 11.29 | 10.48 | 11.11 | 11.27 | 16.07 | 16.77 | 18.91 |
+  | Llama up 2048 x 8192 | 24.64 | 15.62 | 15.79 | 15.17 | 16.29 | 15.52 | 15.07 | 16.62 | 22.74 | 21.21 | 21.64 |
+  | Llama down 8192 x 2048 | 36.82 | 26.55 | 20.74 | 24.52 | 30.57 | 23.74 | 25.24 | 30.40 | 30.02 | 30.52 | 38.19 |
+  | MoE expert up 2048 x 1408 | 6.12 | 3.98 | 3.51 | 3.75 | 3.48 | 3.50 | 3.75 | 3.52 | 4.37 | 4.61 | 4.63 |
+  | MoE expert down 1408 x 2048 | 5.58 | 4.09 | 4.42 | 3.77 | 3.42 | 4.46 | 3.86 | 3.48 | 6.08 | 5.01 | 5.26 |
+  | Flash-Next expert up 2560 x 640 | 3.08 | 2.34 | 2.23 | 2.24 | 2.73 | 2.28 | 2.27 | 2.76 | 3.53 | 2.98 | 3.63 |
+  | Flash-Next expert down 640 x 2560 | 3.65 | 3.09 | 3.46 | 3.03 | 2.33 | 3.50 | 3.07 | 2.36 | 4.61 | 4.12 | 3.23 |
+  | 14336 x 4096 | 82.33 | 51.83 | 42.92 | 46.00 | 50.33 | 43.00 | 46.33 | 50.75 | 69.08 | 71.83 | 74.58 |
+  | sum | 213.32 | 138.84 | 122.92 | 127.98 | 140.77 | 125.51 | 129.45 | 141.77 | 183.44 | 182.98 | 197.37 |
+  | sum of the rounds' spreads | 16.30 | 4.96 | 11.52 | 3.91 | 3.44 | 3.84 | 3.96 | 5.73 | 3.77 | 2.86 | 5.77 |
+
+  The N-column leaves at eight rows, 14336 x 4096: q20 182.33 (spread 7.00), q10 141.17 (spread 2.58).
+
+  Half the code bytes reads faster at every shape: q10's shipped GEMV sums 138.84 against q20's 213.32. The signed and
+  mask-and-add terms are level on the twin (122.92 against 125.51, inside the signed twin's 11.52 spread) and select trails
+  both (183.44), so the shipped GEMV keeps signed lanes; the whole subgroup a row leads the 16- and 8-lane splits summed
+  (122.92 against 127.98 and 140.77). The signed twin, the shipped term in the twin's loop, leads the shipped GEMV by 15.92
+  on this ring - at the wide reductions (14336 x 4096 42.92 against 51.83, Llama down 20.74 against 26.55, Bonsai down 10.70
+  against 12.39) - and trails it cache-resident below; the loop is `Blk32GemvT.row_dot`, every per-32 member's, so the q10
+  stamp keeps it.
+- **The same race cache-resident, the reference's condition** (`... -- q10 warm`: one plane copy replayed 32 times a chain,
+  the rest as above):
+
+  | shape (n x d rows) | q20 shipped x32 | q10 shipped x32 | signed x32 | signed x16 | signed x8 | mask-add x32 | mask-add x16 | mask-add x8 | select x32 | select x16 | select x8 |
+  |---|---|---|---|---|---|---|---|---|---|---|---|
+  | Bonsai q/o 2048 x 2048 | 3.84 | 3.59 | 3.88 | 3.66 | 3.31 | 4.12 | 3.81 | 3.19 | 6.00 | 6.00 | 6.03 |
+  | Bonsai kv 2048 x 1024 | 2.94 | 2.44 | 2.72 | 2.19 | 2.31 | 2.53 | 2.34 | 2.50 | 3.84 | 3.66 | 3.62 |
+  | Bonsai up 2048 x 6144 | 8.12 | 7.44 | 8.84 | 7.72 | 7.56 | 9.44 | 8.09 | 8.03 | 15.81 | 14.59 | 14.31 |
+  | Bonsai down 6144 x 2048 | 8.34 | 7.19 | 7.50 | 7.38 | 6.66 | 7.88 | 7.81 | 6.91 | 14.28 | 14.44 | 14.62 |
+  | Llama up 2048 x 8192 | 10.28 | 9.72 | 11.44 | 9.72 | 9.38 | 11.94 | 10.09 | 10.06 | 21.00 | 19.44 | 19.09 |
+  | Llama down 8192 x 2048 | 14.34 | 10.56 | 9.75 | 10.94 | 9.19 | 10.22 | 11.06 | 9.69 | 18.72 | 19.25 | 19.66 |
+  | MoE expert up 2048 x 1408 | 3.31 | 3.19 | 3.22 | 3.06 | 3.16 | 3.47 | 3.28 | 3.12 | 4.78 | 4.78 | 4.19 |
+  | MoE expert down 1408 x 2048 | 3.97 | 3.59 | 4.09 | 3.28 | 3.12 | 3.97 | 3.44 | 3.16 | 6.38 | 5.12 | 4.88 |
+  | Flash-Next expert up 2560 x 640 | 2.38 | 2.25 | 2.31 | 2.25 | 2.47 | 2.34 | 2.25 | 2.50 | 3.56 | 3.22 | 3.47 |
+  | Flash-Next expert down 640 x 2560 | 3.16 | 3.12 | 3.66 | 2.91 | 2.44 | 3.72 | 3.12 | 2.47 | 5.09 | 4.75 | 3.62 |
+  | 14336 x 4096 | 30.84 | 27.84 | 28.34 | 28.38 | 29.28 | 30.44 | 30.44 | 31.03 | 63.38 | 63.12 | 64.41 |
+  | sum | 91.52 | 80.93 | 85.75 | 81.49 | 78.88 | 90.07 | 85.73 | 82.66 | 162.84 | 158.37 | 157.90 |
+  | sum of the rounds' spreads | 3.49 | 4.06 | 7.84 | 3.47 | 3.93 | 6.99 | 7.75 | 7.18 | 7.72 | 9.56 | 5.16 |
+
+  The N-column leaves at eight rows, 14336 x 4096: q20 102.91 (spread 1.19), q10 105.94 (spread 1.22).
+
+  Cache-resident the shipped GEMV leads the signed twin (80.93 against 85.75) and q10 still reads faster than q20 at
+  every one-row shape (80.93 against 91.52); the eight-row N-column leaf is the one row where q10 trails q20 there (105.94
+  against 102.91, past both spreads; the cause is not traced) - past the cache q10's leaf leads (141.17 against 182.33).
+
+- **The routed block's window tiles and the dense plane at 512 tokens** (`DASLLAMA_GPU=1 DASLLAMA_COOPMAT=mm
+  DASLLAMA_VK_SUBGROUP=32 bin/Release/daslang.exe -jit modules/dasLLAMA/harness/vk_gemm_probe.das -- moeq10`, the expert
+  schedule's m and s pieces over a trace-skewed bucket profile, sixteen dispatches over two alternating outputs, each shape
+  under the shipped int8 tile (`Q10MmqT`, +-1 lanes) and then under its 0/1-lane alternate (`ProbeQ10Mmq01`: 2d on the
+  products, -d on the activation sum) in the same round, every int8 output within 2.4e-3 of the f16 one). Milliseconds a
+  dispatch pair (m and s columns), rep 0 of round 0 / round 1; a dense row is one region of 512 rows, the 13-plane row
+  thirteen such regions over thirteen planes (95 MB of q10, 207 MB of q20) a dispatch, its time over 13:
+
+  | shape | khr f16 | int8 +-1 | khr f16 (0/1 pass) | int8 0/1 |
+  |---|---|---|---|---|
+  | Qwen1.5-MoE gate/up 1408 rows x 2048, 32 tokens top-4 | 1.139 / 1.246 | 0.457 / 0.492 | 1.267 / 1.254 | 0.514 / 0.514 |
+  | ... down 2048 rows x 1408, 32 tokens | 1.275 / 1.304 | 0.494 / 0.501 | 1.285 / 1.306 | 0.525 / 0.522 |
+  | ... gate/up, 77 tokens | 1.227 / 1.258 | 0.507 / 0.513 | 1.242 / 1.261 | 0.537 / 0.533 |
+  | ... down, 77 tokens | 1.294 / 1.310 | 0.514 / 0.521 | 1.302 / 1.308 | 0.539 / 0.550 |
+  | ... gate/up, 128 tokens | 1.244 / 1.276 | 0.531 / 0.541 | 1.256 / 1.278 | 0.558 / 0.562 |
+  | ... down, 128 tokens | 1.304 / 1.314 | 0.545 / 0.557 | 1.314 / 1.310 | 0.575 / 0.575 |
+  | Flash-Next gate/up 640 rows x 2560, 128 tokens top-10 | 6.385 / 6.288 | 2.587 / 2.507 | 6.532 / 6.286 | 2.697 / 2.593 |
+  | ... down 2560 rows x 640, 128 tokens | 6.941 / 6.393 | 2.375 / 2.393 | 6.878 / 6.403 | 2.497 / 2.775 |
+  | sum | 20.809 / 20.389 | 8.010 / 8.025 | 21.076 / 20.406 | 8.442 / 8.624 |
+  | q10 dense 4096 rows x 14336, 512 tokens, one plane | 2.146 / 2.146 | 2.304 / 2.309 | - | - |
+  | ... 13 planes, a plane's share | 2.487 / 2.492 | 2.300 / 2.308 | - | - |
+  | q20 dense, one plane | 2.222 / 2.282 | 2.281 / 2.302 | - | - |
+  | ... 13 planes, a plane's share | 2.608 / 2.613 | 2.275 / 2.281 | - | - |
+
+  The int8 tile leads the f16 KHR tile at every expert shape, so q10 keeps its int8 stamps and stays off `MMQ_SKIP`; its
+  +-1 staging leads the 0/1 staging (8.010 / 8.025 against 8.442 / 8.624, past the rounds' gaps summed over the shapes,
+  0.18 and 0.40), so `Q10MmqT` ships `BITS01` off. On the dense plane at 512 tokens the f16 KHR tile leads cache-resident
+  (2.146 against 2.304 on q10, 2.222 / 2.282 against 2.281 / 2.302 on q20) and the int8 tile past the cache (2.300 against
+  2.487 on q10, 2.275 against 2.608 on q20); the window's dense column pick is outside this race.
+
+- **The reference's rows on the same box** (llama.cpp 9581154a2, `build-vulkan`, `test-backend-ops perf -b Vulkan0 -o MUL_MAT
+  -p 'type_a=<q1_0|q2_0>,type_b=f32,m=4096,n=<n>,k=14336,'`; its runs repeat one weight buffer - 7.3 MB for Q1_0, 16.5 MB
+  for Q2_0 - which the 32 MB last-level cache holds) against ours at the same shape, cache-resident (one plane replayed) and
+  past the cache (a ring, or 13 planes a dispatch at n 512):
+
+  | row | reference, `external` | ours cache-resident | ours past the cache |
+  |---|---|---|---|
+  | q1_0 n 1 | 47.91 us | 27.84 us (`q10_gemv_cls`) | 51.83 us |
+  | q1_0 n 8 | 199.15 us | 105.94 us (`q10_gemv_n_cls`) | 141.17 us |
+  | q1_0 n 512 | 2633.79 us | 2146 us (KHR f16), 2304 us (int8) | 2487 us (KHR f16), 2300 us (int8) |
+  | q2_0 n 1 | 31.51 us | 30.84 us (`q20_gemv_cls`) | 82.33 us |
+  | q2_0 n 8 | 141.82 us | 102.91 us (`q20_gemv_n_cls`) | 182.33 us |
+  | q2_0 n 512 | 2888.63 us | 2222 us (KHR f16), 2281 us (int8) | 2608 us (KHR f16), 2275 us (int8) |
+
+  The n 1 rows are the like-for-like pair the 2026-11-25 entry lacked for q2_0: cache-resident our q20 GEMV reads 30.84 us
+  against the reference's 31.51, and q10's 27.84 against 47.91.
+
+### The iq1s and iq1m row-major CPU kernels on the Zen 5 cores (2026-11-26, rizen: Ryzen AI Max+ 395, 16 Zen 5 cores, AVX-512 VNNI and VBMI, Windows, class `x86-vnni512`; `-jit`, the tree at 9cc9e793cd with the emitter's vector delta bytes; `direction-grade`)
+
+- **The race** (`DAS_TUNE_MODE=tune bin/Release/daslang.exe -jit modules/dasLLAMA/benchmarks/matmul/kq_kernel_bench.das --
+  --fmt <iq1s|iq1m> --rm --ntok 512 --perm dot_`, one process a format, every row once a round, 5 rounds after the warm
+  ones, the best round; `--team --perm dot_vpdpbusd_width512_mr16,dot_maddubs_width256_mr8` under
+  `DAS_JOBQUE_THREADS=16` for the 16-lane columns, so `-` is a row that column did not time; the reference row is the
+  portable `dot_kq`, timed before the delta change, which it does not read). Microseconds a call, 4096 rows x 14336:
+
+  | perm | iq1s 1T GEMV | iq1s 1T tile n512 | iq1s 16T GEMV | iq1s 16T tile | iq1m 1T GEMV | iq1m 1T tile n512 | iq1m 16T GEMV | iq1m 16T tile |
+  |---|---|---|---|---|---|---|---|---|
+  | reference | 8198 | 4197987 | - | - | 9442 | 4749189 | - | - |
+  | maddubs 256 | 2236 | 539838 | 284 | 75011 | 2613 | 594255 | 315 | 73769 |
+  | vpdpbusd 256 | 2543 | 601071 | - | - | 2841 | 691771 | - | - |
+  | **vpdpbusd 512** | **2248** | **495839** | **279** | **66360** | **2566** | **547660** | **305** | **68749** |
+  | maddubs 256 accs1 | 2324 | 552265 | 290 | 77695 | 2660 | 560698 | 320 | 75506 |
+  | vpdpbusd 256 accs1 | 2485 | 629287 | - | - | 3136 | 717060 | - | - |
+  | vpdpbusd 512 accs1 | 2674 | 492376 | 313 | 70702 | 2919 | 559831 | 334 | 71148 |
+  | maddubs 256 accs2 | 2213 | 540159 | 288 | 74168 | 2586 | 594050 | 320 | 72516 |
+  | vpdpbusd 256 accs2 | 2393 | 600777 | - | - | 2944 | 691326 | - | - |
+  | vpdpbusd 512 accs2 | 2274 | 496038 | 278 | 67073 | 2770 | 548341 | 341 | 69361 |
+
+  The `x86-vnni512` profile names `dot_vpdpbusd_width512_mr16` for both members: the best 16-lane GEMV on iq1m, within
+  1 us of the best on iq1s, the best or within 1% of the best tile in every tile column, and within 2% of iq1s's best
+  one-lane GEMV. Under that profile the stamped rows read iq1s 2241 / 494928 at one lane and 272 / 67118 at sixteen, iq1m
+  2633 / 532613 and 295 / 70553. Before the delta bytes were built as one vector a block (a per-octet scalar select ORed
+  into each eight-byte entry), iq1m's rows read 5958 to 7097 at one lane and its tiles 988968 to 1204695, iq1s's
+  2662 to 2981 and 573736 to 703390; iq1s's 512-wide row read 26048 with the 16-lane test-and-select form iq1m takes,
+  so iq1s ORs one splatted byte a block instead.
+- **The reference's rows on the same box**, `external` (llama.cpp 9581154a2, `build-clean-cpu`, `GGML_BENCH_THREADS=<1|16>
+  test-backend-ops perf -b CPU -o MUL_MAT -p 'type_a=<iq1_s|iq1_m|iq2_xxs>,type_b=f32,m=4096,n=<1|512>,k=14336,'`).
+  Microseconds a run:
+
+  | type | n 1, 1 thread | n 1, 16 threads | n 512, 1 thread | n 512, 16 threads |
+  |---|---|---|---|---|
+  | iq1_s | 2362.44 | 384.86 | 88737.25 | 16969.49 |
+  | iq1_m | 2107.75 | 314.75 | 99084.00 | 19556.83 |
+  | iq2_xxs | 2175.11 | 379.52 | 89916.42 | 13853.40 |
+
+  Against the stamped rows: the iq1s GEMV leads at both widths (2241 against 2362.44, 272 against 384.86), the iq1m GEMV
+  leads at sixteen lanes (295 against 314.75) and trails at one by 25% (2633 against 2107.75). The 512-token tiles trail
+  at every width: iq1s 5.6x at one lane and 4.0x at sixteen, iq1m 5.4x and 3.6x. The reference's n 512 rows read about
+  680 GFLOPS a thread for iq1_s, iq1_m and iq2_xxs alike - format-blind - where its n 1 rows read 50 to 56: its batch
+  rows amortize a weight decode over far more tokens than the four the row-major tile shares one decode with.
+- **The engine's own iq2xxs on the same shapes** (the same bench, `DAS_TUNE_MODE` unset, the profile's stamps): its grp
+  GEMV 795 us at one lane and 116 at sixteen, its grp tile 111706 at one lane; its row-major family, the one the 1-bit
+  members take, 2400 / 430460 at one lane and 309 / 60657 at sixteen. The 1-bit rows sit level with the grid family's
+  row-major rows; the grid members' grp GEMV (the VBMI symbol lattice) and their panel tile are the forms the 1-bit
+  members do not have yet.
+
+### The iq1s and iq1m grp tile and the reference's batch rows on the Zen 5 cores (2026-11-26, rizen: Ryzen AI Max+ 395, 16 Zen 5 cores, AVX-512 VNNI and VBMI, Windows, class `x86-vnni512`; `-jit`, the tree at 372d586c9f with the grp tile change; `direction-grade`)
+
+- **The reference's rows, read again.** The earlier entry reads the reference's n 512 rows as about 680 GFLOPS a
+  thread. That reading is wrong on both counts. Its n 1 to n 5 rows grow with n, a vec_dot pass a column; from n 8 its
+  CPU MUL_MAT is format-blind - the weights dequantized, then a float GEMM - so iq1_s and iq2_xxs read alike (`external`, n 8:
+  6993.32 us iq1_s, 9378.65 iq1_m; n 512: 89407.42 iq1_s, 100791.90 iq1_m). And the `GGML_BENCH_THREADS=1` rows do
+  not run on one thread, `external`: over a whole `test-backend-ops perf` run the process used 3.2 to 3.4 s of CPU a wall second
+  (iq1_s n 512: 30.63 s CPU in 9.45 s; iq1_m n 8: 31.00 s in 9.30 s), so no reference row is a one-lane bar. The
+  honest bars are the engine's own iq2xxs grp tile at the same shape and the reference's sixteen-thread rows.
+- **The form.** The planes stay in disk order; the grp tile decodes a group's rows into a panel - weights as signed
+  eighths in the grid members' panel form, scale rows in iq2xs's grp form - and runs iq2xs's panel body. The grp
+  interleave was built (twelve four-byte columns, the same 50 and 56 bytes) and measured: iq1s's GEMV read off it lost
+  40% at one lane (3106 against 2223) and a quarter at sixteen (387 against 302), iq1m's read level (2441 against
+  2445), so the planes stay where the GEMV reads them, and the repack moves no byte. A per-superblock
+  gather into a panel for the GEMV read 4357 (iq1s) and 21159 (iq1m) at one lane.
+- **The tile** (`kq_kernel_bench.das --fmt iq1s,iq1m,iq2xxs --ntok 512`, `DAS_TUNE_MODE=tune` for the race,
+  `--team` under `DAS_JOBQUE_THREADS=16` for the sixteen-lane rows, the panel decoded before the clock). Microseconds,
+  4096 rows x 14336, 512 tokens:
+
+  | perm | iq1s 1T | iq1m 1T | iq2xxs 1T | iq1s 16T | iq1m 16T | iq2xxs 16T |
+  |---|---|---|---|---|---|---|
+  | maddubs 256 mr8 | 243145 | 246550 | 232693 | 34186 | 34951 | 32883 |
+  | vpdpbusd 256 mr8 | 181275 | 186218 | 175408 | 25975 | 26558 | 25431 |
+  | **vpdpbusd 512 mr16** | **104944** | **107696** | 101141 | **14787** | **15020** | 14604 |
+  | vpdpbusd 256 mr16 | 212547 | 212411 | 183237 | 29151 | 29343 | 25860 |
+  | vpdpbusd 512 mr16 vbmi | - | - | 112433 | - | - | 14318 |
+
+  The profile names `dot_vpdpbusd_width512_mr16` for both tiles. Stamped (`DAS_TUNE_MODE` unset): iq1s 118860 and
+  iq1m 106689 at one lane, 15041 and 15182 at sixteen, against iq2xxs's stamped 102734 and 15158. The engine's walk -
+  the gen backend's batch slot with the panel decode inside the clock (`--walk`) - reads iq1s 20561, iq1m 22161 and
+  iq2xxs 16780 at sixteen lanes, against the reference's 16969.49 (iq1_s) and 19556.83 (iq1_m) sixteen-thread rows.
+- **The GEMV** (the row-major body over the disk-order rows; iq1m's delta sign is now an index bit of the table and
+  its sixteen strip scales one vector a superblock). One lane: iq1s 2221 (`maddubs 256 mr8
+  accs2`), 2258 (`vpdpbusd 512 mr16`, the profile's pick), iq1m 2291 (`maddubs 256 mr8`, now the profile's pick),
+  against the reference's 2362.44 and 2107.75. Sixteen lanes: iq1s 302, iq1m 310 (tune mode; the stamped rows read
+  325 and 334), against 384.86 and 314.75. Tried and dropped: the offset term as one vector product a superblock
+  (iq1s 2850, iq1m 2588), iq1s's strip scales off one vector load (2726).
+- **Text.** `Llama-3.2-1B-Instruct-IQ1_M-local.gguf`, `The capital of France is`: " Paris. The French are the ones
+  who have been given the instruction to be to be ...", the reference's own words; TinyLlama 1.1B IQ1_M chat: "The
+  capital of France is Paris."
+
+### The iq1s and iq1m emitted panel decode and the prefill pass on the Zen 5 cores (2026-11-26, rizen: Ryzen AI Max+ 395, 16 Zen 5 cores, AVX-512 VNNI and VBMI, Windows, class `x86-vnni512`; `-jit`, the tree at e827519bac with the emitted decode; `direction-grade`)
+
+- **The decode's share of the pass.** The walk decodes a group's panel once a token block, so its cost repeats
+  about seven times a 512-token pass at 14336 columns. Its share is the `--walk` row less the team tile row
+  (`kq_kernel_bench.das --ntok 512 --team --walk`, `DAS_JOBQUE_THREADS=16`, the profile's stamps): before the change
+  iq2xs 3085 us (17949 against 14864), iq2xxs 2456 (17213 against 14757), iq1s 5179 (20323 against 15144), iq1m 7556
+  (22728 against 15172). The grid members' own decode is daslang too (`unpack_kq_panel_grp`), lighter a weight.
+- **The emitted decode** (`grid1_unpack_gen`, four rows a step, the row-major block decode less 9, dwords
+  transposed into the panel's columns). A row at a time with dword stores it read iq1s 18061 and iq1m 18466 for the
+  pass; four rows a step, 16762 and 16385. Microseconds, 4096 rows x 14336, the stamped rows:
+
+  | row | iq1s | iq1m | iq2xxs |
+  |---|---|---|---|
+  | GEMV slot, 1 lane | 2330 | 2302 | 938 |
+  | GEMV slot, 16 lanes | 335 | 343 | 129 |
+  | tile n 512, 1 lane | 118008 | 116392 | 111460 |
+  | tile n 512, 16 lanes | 15084 | 15668 | 14829 |
+  | pass n 512, 16 lanes (`--walk`) | 15885 | 16114 | 17122 |
+
+  The decode's share is now about 0.8 ms (iq1s) and 0.4 ms (iq1m), against iq2xxs's 2.3 ms.
+- **The reference's rows, three runs each on the idle box**, `external` (llama.cpp 9581154a2, `build-clean-cpu`,
+  `GGML_BENCH_THREADS=16 test-backend-ops perf -b CPU -o MUL_MAT -p 'type_a=<t>,type_b=f32,m=4096,n=512,k=14336,'`):
+  iq1_s 16583.11, 15681.53, 17332.26 us (a 10% spread); iq1_m 15601.48, 16275.06, 15523.14 (5%); iq2_xxs 14959.73,
+  17268.91, 17703.53 (18%). The earlier entries' 16969.49 / 19556.83 and the coordinator's 13859 / 13897, `external`, sit at the
+  edges of that spread. The n 1 rows, once, `external`: iq1_s 2431.60 at one thread and 410.48 at sixteen, iq1_m 2115.90 and
+  371.41, iq2_xxs 2191.45 and 340.79.
+- **Against them.** The iq1s pass, 15885, sits inside its reference's spread, ahead of two runs of three; the iq1m
+  pass, 16114, ahead of one of three, 3.8% behind the best. Both passes lead iq2xxs's 17122. The GEMV slots lead the
+  reference at sixteen lanes on both members and at one lane on iq1s; iq1m's one-lane GEMV trails by 8.8% (2302
+  against 2115.90). The reference's AVX2 iq1_m dot builds its four indices with two BMI2 `pdep`s and the delta
+  signs with a third; no `x86-vnni512` class feature names BMI2, so the JIT cannot emit `pdep`, and that candidate
+  was not raced.
+
+### The tq2 and tq1 kernels on rizen's Zen 5 cores and Radeon 8060S (2026-11-26, rizen: Ryzen AI Max+ 395, 16 Zen 5 cores, AVX-512 VNNI and VBMI, Radeon 8060S, Windows, class `x86-vnni512`, Vulkan; `-jit`, the tree at 3f3ca4e6b9; `direction-grade`)
+
+- **The CPU kernels, one thread** (`DAS_TUNE_MODE=tune bin/Release/daslang.exe -jit
+  modules/dasLLAMA/benchmarks/matmul/kq_kernel_bench.das -- --fmt tq2,tq1,k2 --base-align 4096 --rm`, n 14336, d 4096, 512
+  tokens for the tile, every registry row once a round, 5 rounds after the warm ones, the best round; the 512-wide tq1 rows
+  read the tune probe's oracle only after the commit "dasLLAMA: tq1's superblock activation sum through one reduce").
+  Microseconds a call:
+
+  | perm | tq2 GEMV | tq2 tile 512 | tq1 GEMV | tq1 tile 512 | k2 GEMV | k2 tile 512 |
+  |---|---|---|---|---|---|---|
+  | maddubs 256 mr8 | 494 | 285602 | 926 | 268284 | - | - |
+  | vpdpbusd 256 mr8 | 316 | 210802 | 838 | 195138 | - | - |
+  | vpdpbusd 256 mr16 | 328 | 146482 | 828 | 234930 | 508 | 223431 |
+  | **vpdpbusd 512 mr16** | **168** | **112465** | **413** | **99928** | 235 | 158340 |
+  | maddubs 256 mr8 trit mulhi / shuf | - | - | 887 / 1024 | 261398 / 286500 | - | - |
+  | vpdpbusd 256 mr8 trit mulhi / shuf | - | - | 811 / 939 | 204813 / 201171 | - | - |
+  | vpdpbusd 512 mr16 trit mulhi / shuf | - | - | 403 / 478 | 106459 / 110563 | - | - |
+
+  The row-major family at one thread (`rm_gemv`, the one-copy rail over the device planes): tq2 499 us under
+  `dot_vpdpbusd_width512_mr16_accs1` against 510 to 580 for the other live rows, tq1 1036 against 1102 to 1252, k2 1142
+  to 1509. The tuner crowns the same rows on its own fixtures (`DAS_TUNE_MODE=tune DAS_TUNE_ONLY=tq2q8,tq1q8
+  DAS_TUNE_MANIFEST=<scratch> DAS_JOBQUE_THREADS=8 bin/Release/daslang.exe -jit modules/dasLLAMA/harness/dasllama_tuner.das`,
+  noise probes cv 0.59 / 0.38 / 0.75 / 0.32%): `@tune end name=tq2q8_tile_gen winner=dot_vpdpbusd_width512_mr16 verdict=beats
+  ms=13958`, `@tune end name=tq1q8_tile_gen winner=dot_vpdpbusd_width512_mr16 verdict=beats ms=23881`, `@tune end
+  name=tq2q8_rm_gemv_gen winner=dot_vpdpbusd_width512_mr16_accs1 verdict=beats ms=349`, `@tune end name=tq1q8_rm_gemv_gen
+  winner=dot_vpdpbusd_width512_mr16_accs1 verdict=beats ms=1927` - the `x86-vnni512` profile's entries, the tile family's gemv
+  seats taking the tile winner. The tq1 multiply-high spelling reads 403 against the pick's 413 on the GEMV and trails it on
+  the tile, 106459 against 99928.
+- **The engine's 16 lanes, threaded, chunking not examined** (`DAS_JOBQUE_THREADS=16 ... kq_kernel_bench.das -- --fmt
+  tq2,tq1,k2 --base-align 4096 --team`, the profile's stamps, the GEMV through the engine's splitter, the tile row the
+  engine's batched GEMM): tq2 GEMV 48 us (lanes 33 to 48), tile 16338; tq1 58 (39 to 114), 13318; k2 70 (48 to 64), 28779.
+- **The reference's CPU rows on the same box** (`external`: llama.cpp 9581154a2, `build-clean-cpu`, whose tool lists TQ1_0;
+  `GGML_BENCH_THREADS=<1|16> test-backend-ops perf -b CPU -o MUL_MAT -p "type_a=<tq2_0|tq1_0|q2_K>,type_b=f32,m=4096,n=<1|512>,k=14336,"`),
+  microseconds a run:
+
+  | type | n 1, 1 thread | n 512, 1 thread | n 1, 16 threads | n 512, 16 threads |
+  |---|---|---|---|---|
+  | tq2_0 | 460.64 | 236616.00 | 76.29 | 37083.89 |
+  | tq1_0 | 1326.80 | 679607.50 | 198.64 | 97854.09 |
+  | q2_K | 739.82 | 102425.20 | 112.14 | 16108.25 |
+
+  At one thread the picks lead the reference on both rows of both members: tq2 168 against 460.64 us on the GEMV and
+  112465 against 236616 on the 512-token tile, tq1 413 against 1326.80 and 99928 against 679607.50. Both sides time one
+  weight plane replayed, which rizen's 64 MB of L3 holds (15 MB of tq2, 12 MB of tq1).
+- **The Radeon's decode GEMV, the lane split** (instrument `harness/gemv_cuda_vs_vulkan.das`, `DASLLAMA_GPU=1 ... -- --only
+  k2,tq2,tq1`, the 2-bit lattice's ten shapes, the weights streamed from rings past 256 MB, and `--warm`, two copies a ring;
+  best round of 20, the noise the largest gap between two rounds of one arm's sum; the CUDA arm refuses on this box), summed
+  us:
+
+  | format | condition | the rule | lanes 8 | lanes 16 | lanes 32 | noise |
+  |---|---|---|---|---|---|---|
+  | k2 | ring | 348.28 | 432.62 | 389.98 | 325.66 | 244.90 |
+  | tq2 | ring | 212.80 | 284.40 | 239.06 | 226.38 | 41.00 |
+  | tq1 | ring | 300.14 | 335.06 | 308.04 | 290.22 | 5.92 |
+  | k2 | warm | 182.64 | 209.44 | 198.04 | 179.66 | 13.68 |
+  | tq2 | warm | 98.10 | 108.54 | 103.26 | 105.64 | 4.74 |
+  | tq1 | warm | 199.14 | 216.78 | 200.06 | 198.26 | 11.24 |
+
+  The rule leads or is level everywhere but tq1 over the ring, where the whole subgroup a row leads it by 9.92 us summed
+  past the 5.92 noise (level cache-resident); no device pin was made. At 14336 x 4096 under the rule: tq2 71.82 us over the
+  ring and 32.14 warm, tq1 115.14 and 74.02, k2 112.66 and 90.42.
+- **The N-column leaves at eight rows** (`DASLLAMA_GPU=1 ... harness/vk_gemv_probe.das -- cols 14336 4096`, plane copies to
+  the probe's stream size a dispatch, and `-- cols single 14336 4096`, one plane copy a dispatch): one plane's share past the
+  cache tq2 135 us (112.1 GB/s), tq1 175 (70.8), k2 146 (132.3); cache-resident tq2 129.9, tq1 158.7, k2 139.0; the one-column
+  leaf cache-resident tq2 29.3, tq1 71.3, k2 41.0.
+- **The KHR window tile against its rotated K walk** (`DASLLAMA_GPU=1 DASLLAMA_COOPMAT=mm DASLLAMA_VK_SUBGROUP=32
+  bin/Release/daslang.exe -jit modules/dasLLAMA/harness/vk_gemm_probe.das -- moekhr`, alternate stamps 0 in the probe, so the
+  first arm is the class's own stamp; Qwen1.5-MoE's expert schedule at 32, 77 and 128 window tokens top-4 and the dense
+  4096 x 14336 plane, one plane replayed and 13 planes a dispatch; sixteen dispatches over two alternating outputs, both arms a
+  round, the rotated output within 3e-5 of the served one). Milliseconds a dispatch, rep 0 of round 0 / round 1:
+
+  | shape | tq2 khr | tq2 rotated | tq1 khr | tq1 rotated | k2 khr | k2 rotated |
+  |---|---|---|---|---|---|---|
+  | gate/up 1408 x 2048, 32 tokens | 1.256 / 1.383 | 0.557 / 0.572 | 1.391 / 1.386 | 0.741 / 0.742 | 1.559 / 1.686 | 1.074 / 1.149 |
+  | down 2048 x 1408, 32 tokens | 1.305 / 1.281 | 0.576 / 0.571 | 1.394 / 1.395 | 0.747 / 0.747 | 1.390 / 1.408 | 0.746 / 0.755 |
+  | gate/up, 77 tokens | 1.427 / 1.262 | 0.587 / 0.577 | 1.408 / 1.417 | 0.756 / 0.755 | 1.630 / 1.683 | 1.165 / 1.168 |
+  | down, 77 tokens | 1.279 / 1.302 | 0.586 / 0.587 | 1.402 / 1.413 | 0.759 / 0.761 | 1.398 / 1.415 | 0.777 / 0.781 |
+  | gate/up, 128 tokens | 1.467 / 1.277 | 0.608 / 0.602 | 1.404 / 1.469 | 0.773 / 0.771 | 1.670 / 1.715 | 1.218 / 1.222 |
+  | down, 128 tokens | 1.282 / 1.333 | 0.610 / 0.622 | 1.447 / 1.414 | 0.784 / 0.776 | 1.408 / 1.421 | 0.801 / 0.805 |
+  | dense, 32 tokens, one plane | 0.502 / 0.502 | 0.238 / 0.236 | 0.550 / 0.549 | 0.299 / 0.300 | 0.536 / 0.541 | 0.351 / 0.360 |
+  | dense, 32 tokens, 13 planes | 6.975 / 7.009 | 5.777 / 5.779 | 7.858 / 7.853 | 6.432 / 6.431 | 7.991 / 8.020 | 6.804 / 6.802 |
+  | dense, 77 tokens, one plane | 0.520 / 0.524 | 0.433 / 0.433 | 0.572 / 0.570 | 0.491 / 0.491 | 0.563 / 0.567 | 0.478 / 0.481 |
+  | dense, 77 tokens, 13 planes | 8.024 / 8.015 | 7.929 / 7.930 | 8.990 / 9.011 | 8.738 / 8.754 | 8.935 / 9.126 | 8.856 / 8.877 |
+  | dense, 128 tokens, one plane | 0.556 / 0.550 | 0.555 / 0.552 | 0.596 / 0.597 | 0.610 / 0.609 | 0.613 / 0.619 | 0.620 / 0.629 |
+  | dense, 128 tokens, 13 planes | 9.606 / 9.610 | 9.793 / 9.797 | 10.347 / 10.349 | 10.615 / 10.612 | 10.444 / 10.458 | 10.917 / 10.942 |
+  | dense, 512 tokens, one plane | 2.252 / 2.083 | 2.168 / 2.104 | 2.239 / 2.409 | 2.285 / 2.423 | 2.613 / 2.278 | 2.413 / 2.415 |
+  | dense, 512 tokens, 13 planes | 31.949 / 32.004 | 32.671 / 31.734 | 35.114 / 35.071 | 34.855 / 34.309 | 36.983 / 37.223 | 37.061 / 37.144 |
+
+  The rotated walk leads the served stamp on every expert-schedule row of the three members - tq2 0.557 to 0.622 against
+  1.256 to 1.467, tq1 0.741 to 0.784 against 1.386 to 1.469 - and on the dense rows at 32 and 77 tokens; it trails by 2 to
+  5% at 128 tokens over 13 planes and is level at 512. Which stamp a window serves on this device is the box's
+  alternate-stamp race (`vk_alt_stamp_race`, the q8 tile at K 2048), which no arm here reran; no pick was changed.
+- **The reference's Vulkan rows on the same box** (`external`: llama.cpp 9581154a2, `build-vulkan`, `test-backend-ops perf -b
+  Vulkan0 -o MUL_MAT -p "type_a=<tq2_0|tq1_0|q2_K>,type_b=f32,m=4096,n=<1|8|512>,k=14336,"`; its runs replay one weight buffer,
+  which the 32 MB last-level cache holds) against ours at the same shape, cache-resident (one plane replayed) and past the cache
+  (a ring, or 13 planes a dispatch at n 512):
+
+  | row | reference | ours cache-resident | ours past the cache |
+  |---|---|---|---|
+  | tq2_0 n 1 | 40.15 us | 29.3 us (`vk_gemv_probe single`), 32.14 (`--warm`) | 71.82 us |
+  | tq2_0 n 8 | 229.74 us | 129.9 us (N-column leaf) | 135 us |
+  | tq2_0 n 512 | 2829.70 us | 2083 us (KHR), 2104 (rotated) | 2458 us (KHR), 2441 (rotated) |
+  | tq1_0 n 1 | 105.42 us | 71.3 us, 74.02 (`--warm`) | 115.14 us |
+  | tq1_0 n 8 | 861.64 us | 158.7 us | 175 us |
+  | tq1_0 n 512 | 3333.77 us | 2239 us (KHR), 2285 (rotated) | 2698 us (KHR), 2639 (rotated) |
+  | q2_K n 1 (ours k2) | 38.47 us | 41.0 us, 90.42 (`--warm`) | 112.66 us |
+  | q2_K n 8 | 140.62 us | 139.0 us | 146 us |
+  | q2_K n 512 | 2968.38 us | 2278 us (KHR), 2413 (rotated) | 2845 us (KHR), 2851 (rotated) |
+
+  Cache-resident, both ternary members lead the reference on every row. Past the cache the one-row GEMVs read 71.82 and
+  115.14 us against the reference's cache-resident 40.15 and 105.42.
+
+### The q20, q10, iq1s and iq1m class mint, AVX2 kernel rows and the iq1 decode GEMV on the reference box (2026-11-26, zen2: Threadripper 3990X, Zen 2, class `x86-avx2`, RTX 5060 Ti 16 GB - 36 SMs - driver 616.56, Windows; `-jit`, the tree at edb7305084, `bin/Release/daslang.exe` not rebuilt; the GPU clock not locked - `nvidia-smi -lgc` is refused to this user - 210 to 300 MHz idle before a race, 2752 to 2827 MHz under the races of ours and 2557 to 2827 MHz under the reference's, read before and after every process and sampled once a second; `direction-grade`)
+
+- **The class mint**, the tree at 3dbbd0f9ec - the profile change's parent, the sidecar's `engine_sha` -
+  (`DAS_TUNE_MODE=tune DAS_TUNE_ONLY=q20q8,q10q8,iq1sq8,iq1mq8 DAS_TUNE_MANIFEST=<scratch>
+  DAS_JOBQUE_THREADS=8 bin/Release/daslang.exe -jit modules/dasLLAMA/harness/dasllama_tuner.das`, `.cache/daslang`
+  deleted before the first run; noise probes cv 0.16 / 0.16 / 1.08 / 0.55%, the end probe 2.23% before it settled, the
+  sidecar `noise: ok`): `@tune end name=iq1sq8_tile_gen winner=dot_maddubs_width256_mr8 verdict=beats ms=34446`, `@tune
+  end name=iq1mq8_tile_gen winner=dot_maddubs_width256_mr8 verdict=beats ms=44396`, `@tune end name=q20q8_rm_gemv_gen
+  winner=dot_maddubs_width256_mr8_lev_s_spread_shift verdict=beats ms=1895`, `@tune end name=q10q8_rm_gemv_gen
+  winner=dot_maddubs_width256_mr8_lev_s_spread_shuf_accs2 verdict=beats ms=1211`, `@tune end name=iq1sq8_rm_gemv_gen
+  winner=dot_maddubs_width256_mr8_accs1 verdict=beats ms=1060`, `@tune end name=iq1mq8_rm_gemv_gen
+  winner=dot_maddubs_width256_mr8_accs1 verdict=beats ms=1729` - the `x86-avx2` profile's entries, the `iq1sq8_gemv_gen`
+  and `iq1mq8_gemv_gen` seats taking their tile winner. A first run of the same line, its start probe 4.21% right after
+  the JIT build (sidecar `noise: noisy`, the other probes 0.71 / 0.42 / 0.49%), crowned the same six. No family stays on
+  the reference body: every `vpdpbusd` and `mr4` perm runs the reference body on this class and reads level with it (the
+  tuner's streamed fixture: q20 5101 to 5147 us against the reference's 5154 and the pick's 1265; iq1s 10213 to 10557
+  against 10381 and 2607), and the `maddubs` perms carry every win. After the profile change
+  `bin/Release/daslang.exe modules/dasLLAMA/performance/REVIEW.das` exits 0 and `DAS_TUNE_MODE=test
+  bin/Release/daslang.exe -jit modules/dasLLAMA/harness/gen_tune_probe.das` prints `GEN TUNE TEST OK`.
+- **The stamped kernels at one thread** (`bin/Release/daslang.exe -jit modules/dasLLAMA/benchmarks/matmul/kq_kernel_bench.das
+  -- --fmt iq1s,iq1m,iq2xxs --base-align 4096`, and `-- --fmt <q20,q10|q4032> --ntok 0 --rm --base-align 4096` for the
+  per-32 members, normal mode, every row `stamped` from `x86-avx2.tune-defaults.json`; n 14336, d 4096, 5 rounds after the
+  warm ones, best and median). Microseconds a call:
+
+  | row | iq1s | iq1m | iq2xxs | q20 | q10 | q4032 |
+  |---|---|---|---|---|---|---|
+  | GEMV (`gemv`, the per-32 members `rm_gemv`), best / median | 4728 / 4757 | 4221 / 4232 | 5081 / 5315 | 3861 / 4008 | 2317 / 2371 | 2655 / 2821 |
+  | tile n 512, best / median | 804173 / 809817 | 791606 / 802679 | 747323 / 781166 | - | - | - |
+
+  No 512-token tile row of q20, q10 or q4032 is timed: at `--ntok` 512 the bench's superblock tile arm calls
+  `kq_schema_id` on the per-32 member and stops on `kq_schema_id: not a kq superblock format` before the row-major tile
+  row runs.
+- **The iq1 decode GEMV, both homes, at the reference's 14336 x 4096 row** (`DASLLAMA_GPU=1 bin/Release/daslang.exe -jit
+  modules/dasLLAMA/harness/gemv_cuda_vs_vulkan.das -- --only iq1s,iq1m`, and the same with `--warm`, five processes a
+  condition, each its best round of 20; `DASLLAMA_GPU=1 bin/Release/daslang.exe -jit
+  modules/dasLLAMA/harness/vk_gemv_probe.das -- iq1`, and `iq1 warm`, one process each, 8 rounds after 2 warm-up, best,
+  median and spread over the rounds - the instruments and conditions of the entry on the iq1s and iq1m members' decode
+  GEMV, cm2 and KHR tiles). Ours under the lanes rule (16 lanes a row here), us a dispatch, the range over the five
+  processes, the CUDA event time in parentheses:
+
+  | member | condition | Vulkan, `gemv_cuda_vs_vulkan` | Vulkan, `vk_gemv_probe` best / median / spread | CUDA wall (event) |
+  |---|---|---|---|---|
+  | iq1s | warm | 36.98 - 37.10 | 33.47 / 33.78 / 2.59 | 44.34 - 44.56 (42.75 - 42.81) |
+  | iq1s | ring | 41.02 - 41.62 | 41.88 / 42.38 / 8.00 | 48.56 - 48.86 (46.57 - 46.87) |
+  | iq1m | warm | 43.60 - 44.22 | 40.19 / 40.66 / 0.78 | 50.82 - 51.06 (49.22 - 49.33) |
+  | iq1m | ring | 47.30 - 48.08 | 46.25 / 48.00 / 3.00 | 53.70 - 54.56 (51.91 - 52.88) |
+
+  At n = 8 the probe's N-column leaf on Vulkan, best / median / spread: iq1s 78.38 / 79.06 / 5.97 warm, 91.50 / 92.38 /
+  2.38 ring; iq1m 84.41 / 84.97 / 4.31 warm, 94.12 / 94.88 / 1.75 ring. No CUDA N-column row is timed: no instrument in
+  the tree times that leaf for an iq1 member (`gemv_cuda_vs_vulkan.das` times one column, `cuda_rows_mma_probe.das`'s
+  `--fmt` takes only members with a rows tensor leaf).
+- **The reference's rows in the same session**, `external` (llama.cpp c70f320df, `build-cuda-tbo` and `build-vk-ref`,
+  `test-backend-ops perf -b <CUDA0|Vulkan0> -o MUL_MAT -p "type_a=<iq1_s|iq1_m>,type_b=f32,m=4096,n=<1|8>,k=14336,"`,
+  no environment setting, three runs each; its `MUL_MAT` runs replay one weight buffer, the `warm` condition's), us a run:
+
+  | type, n | CUDA0 | Vulkan0 |
+  |---|---|---|
+  | iq1_s, 1 | 43.01, 42.85, 42.92 | 33.97, 34.04, 34.00 |
+  | iq1_s, 8 | 108.57, 108.57, 107.69 | 194.61, 193.78, 194.15 |
+  | iq1_m, 1 | 46.52, 46.54, 45.95 | 49.16, 49.17, 49.37 |
+  | iq1_m, 8 | 121.29, 121.32, 121.51 | 317.99, 317.67, 317.76 |
+
+- **Against them, cache-resident.** iq1m's CUDA decode GEMV at n = 1 is still behind past both spreads: wall 50.82 to
+  51.06 us against the reference's (`external`: 45.95 to 46.54), 4.28 to 5.11 us (9.2 to 11.1%), the event time 49.22
+  to 49.33, 2.68 to 3.38 us (5.8 to 7.4%); our five processes spread 0.24 us of wall, the reference's three (`external`:
+  0.59). The entry on the iq1s and iq1m members' decode GEMV recorded 50.94 warm and 53.70 ringed (49.29 event) against
+  the reference's (`external`: 46.05) on a loaded box; the idle box reads the same. iq1s on CUDA trails by 3.1 to 4.0%
+  of wall, 44.34 to 44.56 against the reference's (`external`: 42.85 to 43.01), and its event time, 42.75 to 42.81, is
+  level. On Vulkan both members lead the reference at n = 1 but for iq1s under `gemv_cuda_vs_vulkan`'s two-copy ring,
+  36.98 to 37.10 against the reference's (`external`: 33.97 to 34.04), where `vk_gemv_probe`'s one replayed copy reads
+  33.47; the N-column leaf leads at n = 8, 78.38 and 84.41 against the reference's (`external`: 193.78 to 194.61 and
+  317.67 to 317.99). At the reference shape 32 lanes a row reads below the rule's 16 on CUDA in every process - iq1m
+  warm wall 48.80 to 49.06 (event 47.20 to 47.25) - and still trails the reference.
+- **The lane split, summed over the ten shapes** (the same `gemv_cuda_vs_vulkan` runs, us, the range over the five
+  processes; noise the instrument's largest gap between two rounds of one arm's sum, its range over the processes):
+
+  | member, home, condition | rule | 8 | 16 | 32 | noise |
+  |---|---|---|---|---|---|
+  | iq1s Vulkan ring | 153.84 - 154.48 | 158.94 - 160.12 | 153.60 - 154.76 | 167.92 - 168.86 | 6.68 - 7.86 |
+  | iq1s CUDA wall ring | 166.22 - 167.38 | 191.64 - 193.04 | 166.06 - 167.38 | 163.32 - 164.58 | 8.82 - 12.36 |
+  | iq1m Vulkan ring | 168.94 - 170.02 | 178.08 - 179.12 | 168.84 - 170.54 | 181.18 - 182.30 | 27.72 - 33.12 |
+  | iq1m CUDA wall ring | 181.70 - 182.66 | 210.10 - 212.04 | 182.18 - 183.88 | 177.14 - 178.18 | 10.08 - 18.08 |
+  | iq1s Vulkan warm | 134.88 - 136.00 | 134.80 - 136.20 | 134.54 - 136.04 | 149.12 - 149.92 | 6.24 - 8.02 |
+  | iq1s CUDA wall warm | 152.08 - 153.92 | 163.12 - 164.40 | 153.18 - 153.60 | 152.72 - 154.26 | 8.20 - 12.94 |
+  | iq1m Vulkan warm | 150.62 - 151.06 | 157.98 - 158.72 | 150.40 - 151.92 | 165.38 - 166.84 | 30.12 - 33.34 |
+  | iq1m CUDA wall warm | 169.44 - 170.38 | 178.98 - 180.40 | 168.20 - 170.46 | 168.12 - 169.70 | 6.46 - 12.68 |
+
+  The rule is level with the best split on every row. No shape of either instrument has n at or under 1536: their shape
+  lists are fixed in the source and take no shape by flag, so the rule's 8-lane branch is not timed here.

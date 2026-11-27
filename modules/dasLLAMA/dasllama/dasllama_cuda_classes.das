@@ -772,6 +772,29 @@ class CuKqGemvK2 : K2GemvT {
     }
 }
 
+//! `K2GemvT`'s TQ2_0 leaf (`TQ2`): the one-column form
+[cuda_dispatch(name = "kq_gemv_tq2_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvTq2 : K2GemvT {
+    override TQ2 = true
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_tq2_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K2GemvT`'s TQ1_0 leaf (`TQ1` over `TQ2`'s scale row and fold): the one-column form
+[cuda_dispatch(name = "kq_gemv_tq1_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvTq1 : K2GemvT {
+    override TQ2 = true
+    override TQ1 = true
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_tq1_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
 [cuda_dispatch(name = "kq_gemv_k5_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvK5 : K5GemvT {
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_k5_cls_cuda")]
@@ -807,6 +830,26 @@ class CuKqGemvIq2xs : Iq2xsGemvT {
 [cuda_dispatch(name = "kq_gemv_iq2xxs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvIq2xxs : Iq2xxsGemvT {
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq2xxs_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq1GemvT`'s IQ1_S leaf: the one-column form
+[cuda_dispatch(name = "kq_gemv_iq1s_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvIq1s : Iq1GemvT {
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq1s_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq1GemvT`'s IQ1_M leaf (`IQ1M`): the one-column form
+[cuda_dispatch(name = "kq_gemv_iq1m_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvIq1m : Iq1GemvT {
+    override IQ1M = true
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq1m_cls_cuda")]
     def run {
         leaf_body()
     }
@@ -1055,6 +1098,62 @@ class CuKqGemvK2N4 : K2GemvT {
     }
 }
 
+//! `K2GemvT`'s TQ2_0 N leaf
+[cuda_dispatch(name = "kq_gemv_tq2_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvTq2N : K2GemvT {
+    override TQ2 = true
+    override NCOL = true
+    override RR = 2
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_tq2_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K2GemvT`'s TQ2_0 N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_tq2_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvTq2N4 : K2GemvT {
+    override TQ2 = true
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_tq2_n4_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K2GemvT`'s TQ1_0 N leaf
+[cuda_dispatch(name = "kq_gemv_tq1_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvTq1N : K2GemvT {
+    override TQ2 = true
+    override TQ1 = true
+    override NCOL = true
+    override RR = 2
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_tq1_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K2GemvT`'s TQ1_0 N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_tq1_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvTq1N4 : K2GemvT {
+    override TQ2 = true
+    override TQ1 = true
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_tq1_n4_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
 [cuda_dispatch(name = "kq_gemv_k5_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvK5N : K5GemvT {
     override NCOL = true
@@ -1175,6 +1274,58 @@ class CuKqGemvIq2xxsN4 : Iq2xxsGemvT {
     }
 }
 
+//! `Iq1GemvT`'s IQ1_S N leaf
+[cuda_dispatch(name = "kq_gemv_iq1s_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvIq1sN : Iq1GemvT {
+    override NCOL = true
+    override RR = 2
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq1s_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq1GemvT`'s IQ1_S N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_iq1s_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvIq1sN4 : Iq1GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq1s_n4_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq1GemvT`'s IQ1_M N leaf
+[cuda_dispatch(name = "kq_gemv_iq1m_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvIq1mN : Iq1GemvT {
+    override IQ1M = true
+    override NCOL = true
+    override RR = 2
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq1m_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq1GemvT`'s IQ1_M N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_iq1m_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvIq1mN4 : Iq1GemvT {
+    override IQ1M = true
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq1m_n4_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
 [cuda_dispatch(name = "q51_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuQ51Gemv : Blk32GemvRunT {
     typedef FMT = KqTag_q51
@@ -1262,6 +1413,28 @@ class CuQ5032GemvN : Blk32GemvRunT {
     }
 }
 
+[cuda_dispatch(name = "q20_gemv_n_cls", grid = "wgs", params = "wgs : int64")]
+class CuQ20GemvN : Blk32GemvRunT {
+    typedef FMT = KqTag_q20
+    override NCOL = true
+
+    [cuda_kernel(local_size_x = 64, name = "q20_gemv_n_cls_cuda")]
+    def run {
+        b32_body()
+    }
+}
+
+[cuda_dispatch(name = "q10_gemv_n_cls", grid = "wgs", params = "wgs : int64")]
+class CuQ10GemvN : Blk32GemvRunT {
+    typedef FMT = KqTag_q10
+    override NCOL = true
+
+    [cuda_kernel(local_size_x = 64, name = "q10_gemv_n_cls_cuda")]
+    def run {
+        b32_body()
+    }
+}
+
 [cuda_dispatch(name = "iq4nl32_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuIq4nl32Gemv : Iq4nl32GemvCudT {
     [cuda_kernel(local_size_x = 64, name = "iq4nl32_gemv_cls_cuda")]
@@ -1285,6 +1458,26 @@ class CuQ5032Gemv : Blk32GemvRunT {
     typedef FMT = KqTag_q5032
 
     [cuda_kernel(local_size_x = 64, name = "q5032_gemv_cls_cuda")]
+    def run {
+        b32_body()
+    }
+}
+
+[cuda_dispatch(name = "q20_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuQ20Gemv : Blk32GemvRunT {
+    typedef FMT = KqTag_q20
+
+    [cuda_kernel(local_size_x = 64, name = "q20_gemv_cls_cuda")]
+    def run {
+        b32_body()
+    }
+}
+
+[cuda_dispatch(name = "q10_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuQ10Gemv : Blk32GemvRunT {
+    typedef FMT = KqTag_q10
+
+    [cuda_kernel(local_size_x = 64, name = "q10_gemv_cls_cuda")]
     def run {
         b32_body()
     }
@@ -1392,6 +1585,31 @@ class CuKqEmbK2 : K2GemvT {
     }
 }
 
+//! `K2GemvT`'s TQ2_0 token-table gather (`TQ2`)
+[cuda_dispatch(name = "kq_emb_tq2_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqEmbTq2 : K2GemvT {
+    override TQ2 = true
+    override EMB = true
+
+    [cuda_kernel(local_size_x = 64, name = "kq_emb_tq2_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K2GemvT`'s TQ1_0 token-table gather (`TQ1` over `TQ2`)
+[cuda_dispatch(name = "kq_emb_tq1_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqEmbTq1 : K2GemvT {
+    override TQ2 = true
+    override TQ1 = true
+    override EMB = true
+
+    [cuda_kernel(local_size_x = 64, name = "kq_emb_tq1_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
 [cuda_dispatch(name = "kq_emb_k5_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqEmbK5 : K5GemvT {
     override EMB = true
@@ -1442,6 +1660,29 @@ class CuKqEmbIq2xxs : Iq2xxsGemvT {
     }
 }
 
+//! `Iq1GemvT`'s IQ1_S token-table gather
+[cuda_dispatch(name = "kq_emb_iq1s_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqEmbIq1s : Iq1GemvT {
+    override EMB = true
+
+    [cuda_kernel(local_size_x = 64, name = "kq_emb_iq1s_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq1GemvT`'s IQ1_M token-table gather (`IQ1M`)
+[cuda_dispatch(name = "kq_emb_iq1m_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqEmbIq1m : Iq1GemvT {
+    override IQ1M = true
+    override EMB = true
+
+    [cuda_kernel(local_size_x = 64, name = "kq_emb_iq1m_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
 [cuda_dispatch(name = "q51_emb_cls", kernel = "run", family = "b32_emb_cls", grid = "wgs", params = "wgs : int64")]
 class CuQ51Emb : Blk32GemvRunT {
     typedef FMT = KqTag_q51
@@ -1485,12 +1726,34 @@ class CuQ5032Emb : Blk32GemvRunT {
     }
 }
 
+[cuda_dispatch(name = "q20_emb_cls", kernel = "run", family = "b32_emb_cls", grid = "wgs", params = "wgs : int64")]
+class CuQ20Emb : Blk32GemvRunT {
+    typedef FMT = KqTag_q20
+    override EMB = true
+
+    [cuda_kernel(local_size_x = 64, name = "q20_emb_cls_cuda")]
+    def run {
+        b32_body()
+    }
+}
+
+[cuda_dispatch(name = "q10_emb_cls", kernel = "run", family = "b32_emb_cls", grid = "wgs", params = "wgs : int64")]
+class CuQ10Emb : Blk32GemvRunT {
+    typedef FMT = KqTag_q10
+    override EMB = true
+
+    [cuda_kernel(local_size_x = 64, name = "q10_emb_cls_cuda")]
+    def run {
+        b32_body()
+    }
+}
+
 //! the format the CUDA home's ladders stamp no leaf for: mx4, an expert-only form with no dense plane on the slice; the table gather's
 //! q8 arm is `EmbGather`, outside the ladder
 let private CUD_FMT_SKIP = "mx4"
 let private CUD_EMB_SKIP = "q8 mx4"
 //! the ladders' arms by plane shape: a superblock leaf binds the grid codebooks as a seventh plane, a per-32 leaf six (`!b32`: every format but the dense per-32 ones)
-let private CUD_SKIP_KQ = "q8 q51 mx4 iq4nl32 q4032 q5032"
+let private CUD_SKIP_KQ = "q8 q51 mx4 iq4nl32 q4032 q5032 q20 q10"
 let private CUD_SKIP_B32 = "!b32"
 
 var private g_cud_kq_grid = 0ul
@@ -2217,6 +2480,101 @@ class CuK2Cm2S : K2Cm2T {
     }
 }
 
+//! `K2Cm2T`'s TQ2_0 stamps (`TQ2`): k2's l, m and s columns over the two-byte d row
+[cuda_dispatch(name = "kq_batch_tq2_cm2l_cls", grid = "wgs", params = "wgs : int64")]
+class CuTq2Cm2L : K2Cm2T {
+    override TQ2 = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+
+    [cuda_kernel(local_size_x = 256, min_blocks = 2, name = "kq_batch_tq2_cm2l_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `K2Cm2T`'s TQ2_0 m column
+[cuda_dispatch(name = "kq_batch_tq2_cm2m_cls", grid = "wgs", params = "wgs : int64")]
+class CuTq2Cm2M : K2Cm2T {
+    override TQ2 = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [cuda_kernel(local_size_x = 256, name = "kq_batch_tq2_cm2m_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `K2Cm2T`'s TQ2_0 s column
+[cuda_dispatch(name = "kq_batch_tq2_cm2s_cls", grid = "wgs", params = "wgs : int64")]
+class CuTq2Cm2S : K2Cm2T {
+    override TQ2 = true
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [cuda_kernel(local_size_x = 256, name = "kq_batch_tq2_cm2s_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Tq1Cm2T`'s stamps: tq2's l, m and s columns over the 52-byte block
+[cuda_dispatch(name = "kq_batch_tq1_cm2l_cls", grid = "wgs", params = "wgs : int64")]
+class CuTq1Cm2L : Tq1Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+
+    [cuda_kernel(local_size_x = 256, min_blocks = 2, name = "kq_batch_tq1_cm2l_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Tq1Cm2T`'s m column
+[cuda_dispatch(name = "kq_batch_tq1_cm2m_cls", grid = "wgs", params = "wgs : int64")]
+class CuTq1Cm2M : Tq1Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [cuda_kernel(local_size_x = 256, name = "kq_batch_tq1_cm2m_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Tq1Cm2T`'s s column
+[cuda_dispatch(name = "kq_batch_tq1_cm2s_cls", grid = "wgs", params = "wgs : int64")]
+class CuTq1Cm2S : Tq1Cm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [cuda_kernel(local_size_x = 256, name = "kq_batch_tq1_cm2s_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
 [cuda_dispatch(name = "kq_batch_iq2s_cm2l_cls", grid = "wgs", params = "wgs : int64")]
 class CuIq2sCm2L : Iq2sCm2T {
     typedef AT = coopmatWgA_f16_128x64
@@ -2341,6 +2699,98 @@ class CuIq2xxsCm2S : Iq2xxsCm2T {
     typedef ACCW = coopmatWgAcc_f32_128x32
 
     [cuda_kernel(local_size_x = 256, name = "kq_batch_iq2xxs_cm2s_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Iq1sCm2T`'s l column
+[cuda_dispatch(name = "kq_batch_iq1s_cm2l_cls", grid = "wgs", params = "wgs : int64")]
+class CuIq1sCm2L : Iq1sCm2T {
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+
+    [cuda_kernel(local_size_x = 256, min_blocks = 2, name = "kq_batch_iq1s_cm2l_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Iq1sCm2T`'s m column
+[cuda_dispatch(name = "kq_batch_iq1s_cm2m_cls", grid = "wgs", params = "wgs : int64")]
+class CuIq1sCm2M : Iq1sCm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [cuda_kernel(local_size_x = 256, name = "kq_batch_iq1s_cm2m_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Iq1sCm2T`'s s column
+[cuda_dispatch(name = "kq_batch_iq1s_cm2s_cls", grid = "wgs", params = "wgs : int64")]
+class CuIq1sCm2S : Iq1sCm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [cuda_kernel(local_size_x = 256, name = "kq_batch_iq1s_cm2s_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Iq1mCm2T`'s l column
+[cuda_dispatch(name = "kq_batch_iq1m_cm2l_cls", grid = "wgs", params = "wgs : int64")]
+class CuIq1mCm2L : Iq1mCm2T {
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+
+    [cuda_kernel(local_size_x = 256, min_blocks = 2, name = "kq_batch_iq1m_cm2l_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Iq1mCm2T`'s m column
+[cuda_dispatch(name = "kq_batch_iq1m_cm2m_cls", grid = "wgs", params = "wgs : int64")]
+class CuIq1mCm2M : Iq1mCm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [cuda_kernel(local_size_x = 256, name = "kq_batch_iq1m_cm2m_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Iq1mCm2T`'s s column
+[cuda_dispatch(name = "kq_batch_iq1m_cm2s_cls", grid = "wgs", params = "wgs : int64")]
+class CuIq1mCm2S : Iq1mCm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [cuda_kernel(local_size_x = 256, name = "kq_batch_iq1m_cm2s_cls_cuda")]
     def run {
         cm2_body()
     }
@@ -2501,6 +2951,62 @@ class CuQ5032Cm2M : Q5032Cm2T {
     }
 }
 
+[cuda_dispatch(name = "q20_batch_cm2l_cls", grid = "wgs", params = "wgs : int64")]
+class CuQ20Cm2L : Q20Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+
+    [cuda_kernel(local_size_x = 256, min_blocks = 2, name = "q20_batch_cm2l_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+[cuda_dispatch(name = "q10_batch_cm2l_cls", grid = "wgs", params = "wgs : int64")]
+class CuQ10Cm2L : Q10Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+
+    [cuda_kernel(local_size_x = 256, min_blocks = 2, name = "q10_batch_cm2l_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+[cuda_dispatch(name = "q20_batch_cm2m_cls", grid = "wgs", params = "wgs : int64")]
+class CuQ20Cm2M : Q20Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [cuda_kernel(local_size_x = 256, name = "q20_batch_cm2m_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+[cuda_dispatch(name = "q10_batch_cm2m_cls", grid = "wgs", params = "wgs : int64")]
+class CuQ10Cm2M : Q10Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [cuda_kernel(local_size_x = 256, name = "q10_batch_cm2m_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
 [cuda_dispatch(name = "q51_batch_cm2s_cls", grid = "wgs", params = "wgs : int64")]
 class CuQ51Cm2S : Q51Cm2T {
     override BN = 32u
@@ -2588,6 +3094,36 @@ class CuQ5032Cm2S : Q5032Cm2T {
     typedef ACCW = coopmatWgAcc_f32_128x32
 
     [cuda_kernel(local_size_x = 256, name = "q5032_batch_cm2s_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+[cuda_dispatch(name = "q20_batch_cm2s_cls", grid = "wgs", params = "wgs : int64")]
+class CuQ20Cm2S : Q20Cm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [cuda_kernel(local_size_x = 256, name = "q20_batch_cm2s_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+[cuda_dispatch(name = "q10_batch_cm2s_cls", grid = "wgs", params = "wgs : int64")]
+class CuQ10Cm2S : Q10Cm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [cuda_kernel(local_size_x = 256, name = "q10_batch_cm2s_cls_cuda")]
     def run {
         cm2_body()
     }
@@ -2728,6 +3264,42 @@ class CuIq2xxsCm2E : Iq2xxsCm2T {
     typedef ACCW = coopmatWgAcc_f32_128x128
 
     [cuda_kernel(local_size_x = 256, name = "kq_batch_iq2xxs_cm2e_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Iq1sCm2T`'s e column, 32 deep
+[cuda_dispatch(name = "kq_batch_iq1s_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuIq1sCm2E : Iq1sCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [cuda_kernel(local_size_x = 256, name = "kq_batch_iq1s_cm2e_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+//! `Iq1mCm2T`'s e column, 32 deep
+[cuda_dispatch(name = "kq_batch_iq1m_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuIq1mCm2E : Iq1mCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [cuda_kernel(local_size_x = 256, name = "kq_batch_iq1m_cm2e_cls_cuda")]
     def run {
         cm2_body()
     }

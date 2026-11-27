@@ -102,6 +102,14 @@ def k2_quad(q : uint4; sh : uint) : uint4 {
     return uint4((q.x >> sh) & m2, (q.y >> sh) & m2, (q.z >> sh) & m2, (q.w >> sh) & m2)
 }
 
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_TQ2.md#tq1-device-row")]
+def tq1_word(w, n : uint) : uint {
+    let p3 = uint(tq1_pow3(n))
+    let e = ((w & 0x00FF00FFu) * p3) & 0x00FF00FFu
+    let o = (((w >> 8u) & 0x00FF00FFu) * p3) & 0x00FF00FFu
+    return (((e * 3u) >> 8u) & 0x00030003u) | ((((o * 3u) >> 8u) & 0x00030003u) << 8u)
+}
+
 //! the sign nibbles of two sign bytes, low nibble first
 def sgn4(sg0, sg1 : uint) : uint4 => uint4(sg0 & 15u, sg0 >> 4u, sg1 & 15u, sg1 >> 4u)
 
@@ -163,6 +171,10 @@ def iq2s_grid_word(i : int) : uint {}
 [grid_words(of = "iq3xxs_grid")]
 def iq3xxs_grid_word(i : int) : uint {}
 
+//! the 1-bit grid's 2048 entries, two a word (`iq1s_grid`)
+[grid_words(of = "iq1s_grid")]
+def iq1s_grid_word(i : int) : uint {}
+
 //! kvalues_iq4nl, the IQ4_NL codebook as four packed words, four signed bytes a word, in order
 let IQ4NL_WORD0 = 3215825025u
 let IQ4NL_WORD1 = 4142587343u
@@ -201,6 +213,37 @@ def iq4xs_sc(w0, w1, blk : uint) : int {
 
 [arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#kq-dev-scale-row")]
 def grid_sc(w1, blk : uint) : int => 1 + 2 * int((w1 >> (4u * blk)) & 15u)
+
+//! the 1-bit grid's entry `idx` off the word `w` holding it (two entries a word): its eight 2-bit codes, weight 0 lowest
+def grid1_entry(w, idx : uint) : uint => (w >> ((idx & 1u) * 16u)) & 0xFFFFu
+
+//! four 2-bit codes (`c4`, weight 0 lowest) a byte each
+def grid1_codes(c4 : uint) : uint => (c4 | (c4 << 6u) | (c4 << 12u) | (c4 << 18u)) & 0x03030303u
+
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_IQ1.md#iq1-device-row")]
+def grid1_eighths(b, neg : uint) : uint => ((b << 3u) + (0x79797979u - neg * 0x02020202u)) ^ 0x80808080u
+
+//! four 2-bit codes (`c4`) as signed int8 lanes in eighths (`grid1_eighths`)
+def grid1_word(c4, neg : uint) : uint => grid1_eighths(grid1_codes(c4), neg)
+
+//! two octets' grid entries `e0`, `e1` under their delta signs as a half-block's 16 signed lanes in eighths
+def grid1_quad(e0, n0, e1, n1 : uint) : uint4 => uint4(grid1_word(e0 & 255u, n0), grid1_word(e0 >> 8u, n0), grid1_word(e1 & 255u, n1), grid1_word(e1 >> 8u, n1))
+
+//! a grid entry's eight codes a nibble each: weights 0-3 the word's low nibbles (byte k), 4-7 its high ones (byte k - 4)
+def grid1_nibbles(e : uint) : uint => grid1_codes(e & 255u) | (grid1_codes(e >> 8u) << 4u)
+
+//! a 1-bit weight: `dl` x (code - 1 + `dlt`), the delta `dlt` +-1/8
+def grid1_val(code : uint; dl, dlt : float) : float => dl * (float(int(code) - 1) + dlt)
+
+//! four consecutive 1-bit weights off four 2-bit codes (`c4`, weight 0 lowest) under one scale and delta (`grid1_val`)
+def grid1_f4(c4 : uint; dl, dlt : float) : float4 =>
+    float4(grid1_val(c4 & 3u, dl, dlt), grid1_val((c4 >> 2u) & 3u, dl, dlt), grid1_val((c4 >> 4u) & 3u, dl, dlt), grid1_val((c4 >> 6u) & 3u, dl, dlt))
+
+//! IQ1_M: the f16 d off the superblock's two scale-plane words (`iq1m_d_bits` over their four halves)
+def iq1m_d(w0, w1 : uint) : float => unpackHalf2x16(iq1m_d_bits(w0 & 0xFFFFu, w0 >> 16u, w1 & 0xFFFFu, w1 >> 16u)).x
+
+//! IQ1_M: half-block `hb`'s (0 .. 15) scale 2s + 1 off the same two words (`iq1m_half_scale` of the scale half holding it)
+def iq1m_sc(w0, w1, hb : uint) : float => float(2 * iq1m_half_scale(((hb & 8u) != 0u ? w1 : w0) >> (((hb >> 2u) & 1u) * 16u), int(hb)) + 1)
 
 //! the DOUBLED e2m1 magnitudes {0, 1, 2, 3, 4, 6, 8, 12} of four nibble codes, one per byte of `nib`, built without a table
 def mx4_mag2x4(nib : uint) : uint {
@@ -857,6 +900,35 @@ def blk32_q50_quad(w : uint4; qh, sh : uint) : uint4 {
     return uint4(q50_signed_word(q.x), q50_signed_word(q.y), q50_signed_word(q.z), q50_signed_word(q.w))
 }
 
+//! the four 2-bit codes of the low byte of `b` (element k at bits 2k) as byte lanes 0..3 (the reference's `unpack_q2_0`)
+[spirv_inline]
+def q20_byte_lanes(b : uint) : uint {
+    let p = ((b & 0xFFu) | ((b & 0xFFu) << 12u)) & 0x000F000Fu
+    return (p | (p << 6u)) & 0x03030303u
+}
+
+//! four Q2_0 code lanes `u` (0..3 a byte) as signed int8 lanes `u - 1`: `u + 0x7F` carries into no neighbour, and the xor turns it back
+[spirv_inline]
+def q20_signed_word(u : uint) : uint => (u + 0x7F7F7F7Fu) ^ 0x80808080u
+
+//! ... Q2_0's sixteen codes of one code word `w` (a block's half) as signed int8 lanes `q - 1`, element k at byte k
+[spirv_inline]
+def blk32_q20_quad(w : uint) : uint4 =>
+    uint4(q20_signed_word(q20_byte_lanes(w)), q20_signed_word(q20_byte_lanes(w >> 8u)), q20_signed_word(q20_byte_lanes(w >> 16u)), q20_signed_word(q20_byte_lanes(w >> 24u)))
+
+//! the four sign bits of the low nibble of `b` (element k at bit k) as byte lanes 0 or 1
+[spirv_inline]
+def q10_bit_lanes(b : uint) : uint => ((b & 0xFu) * 0x00204081u) & 0x01010101u
+
+//! four Q1_0 sign lanes `v` (0 or 1 a byte) as signed int8 lanes +-1: q20's recentring of the code 2v
+[spirv_inline]
+def q10_signed_word(v : uint) : uint => q20_signed_word(v << 1u)
+
+//! ... Q1_0's sixteen sign bits of `h` (a block's half, element k at bit k) as signed int8 lanes +-1, element k at byte k
+[spirv_inline]
+def blk32_q10_quad(h : uint) : uint4 =>
+    uint4(q10_signed_word(q10_bit_lanes(h)), q10_signed_word(q10_bit_lanes(h >> 4u)), q10_signed_word(q10_bit_lanes(h >> 8u)), q10_signed_word(q10_bit_lanes(h >> 12u)))
+
 //! the per-32 decode `Blk32GemvT` and `Blk32BatchT` share, dispatched at compile time on the format's tag (`type<KqTag_<fmt>>`,
 //! stripped by `[template]`): a block's quant words in the quant plane
 [template(fmt), spirv_inline, unused_argument(fmt)]
@@ -869,6 +941,10 @@ def blk32_qwords(fmt : KqTag_mx4) : uint => KQ_B32_QWORDS
 def blk32_qwords(fmt : KqTag_q4032) : uint => KQ_B32_QWORDS
 [template(fmt), spirv_inline, unused_argument(fmt)]
 def blk32_qwords(fmt : KqTag_q5032) : uint => KQ_Q5032_QWORDS
+[template(fmt), spirv_inline, unused_argument(fmt)]
+def blk32_qwords(fmt : KqTag_q20) : uint => KQ_Q20_QWORDS
+[template(fmt), spirv_inline, unused_argument(fmt)]
+def blk32_qwords(fmt : KqTag_q10) : uint => KQ_Q10_QWORDS
 
 //! ... the quant word a block's decode reads past its four nibble words - Q5_1's qh word, the first nibble word elsewhere (read
 //! again and unused, so no load passes the block)
@@ -906,8 +982,12 @@ def blk32_sword(fmt : KqTag_mx4; wb : uint) : uint => wb / (4u / KQ_MX4_SBYTES)
 def blk32_sword(fmt : KqTag_q4032; wb : uint) : uint => wb / (4u / KQ_Q4032_SBYTES)
 [template(fmt), spirv_inline, unused_argument(fmt)]
 def blk32_sword(fmt : KqTag_q5032; wb : uint) : uint => wb / (4u / KQ_Q5032_SBYTES)
+[template(fmt), spirv_inline, unused_argument(fmt)]
+def blk32_sword(fmt : KqTag_q20; wb : uint) : uint => (wb / KQ_Q20_SGROUP) / (4u / KQ_Q20_SBYTES)
+[template(fmt), spirv_inline, unused_argument(fmt)]
+def blk32_sword(fmt : KqTag_q10; wb : uint) : uint => (wb / KQ_Q10_SGROUP) / (4u / KQ_Q10_SBYTES)
 
-//! ... the block's scale pair off the scale word `sw` holding it: Q5_1 (d, m), IQ4_NL (d, -), MXFP4 (the halved E8M0, -)
+//! ... the block's scale pair off its scale word `sw`: Q5_1 (d, m), MXFP4 (the halved E8M0, -), the rest (d, -), q20's and q10's the group's
 [template(fmt), spirv_inline, unused_argument(fmt, wb)]
 def blk32_scale(fmt : KqTag_q51; sw, wb : uint) : float2 => unpackHalf2x16(sw)
 [template(fmt), spirv_inline, unused_argument(fmt)]
@@ -916,6 +996,10 @@ def blk32_scale(fmt : KqTag_iq4nl32; sw, wb : uint) : float2 => float2(q40_d_of(
 def blk32_scale(fmt : KqTag_q4032; sw, wb : uint) : float2 => float2(q40_d_of(sw, wb), 0.0)
 [template(fmt), spirv_inline, unused_argument(fmt)]
 def blk32_scale(fmt : KqTag_q5032; sw, wb : uint) : float2 => float2(q40_d_of(sw, wb), 0.0)
+[template(fmt), spirv_inline, unused_argument(fmt)]
+def blk32_scale(fmt : KqTag_q20; sw, wb : uint) : float2 => float2(q40_d_of(sw, wb / KQ_Q20_SGROUP), 0.0)
+[template(fmt), spirv_inline, unused_argument(fmt)]
+def blk32_scale(fmt : KqTag_q10; sw, wb : uint) : float2 => float2(q40_d_of(sw, wb / KQ_Q10_SGROUP), 0.0)
 [template(fmt), spirv_inline, unused_argument(fmt)]
 def blk32_scale(fmt : KqTag_mx4; sw, wb : uint) : float2 {
     let per = 4u / KQ_MX4_SBYTES
@@ -951,13 +1035,19 @@ class template Blk32GemvT {
     }
 
     def blk_quad(wb, sh : uint) : uint4 {
-        //! weight block `wb`'s half `sh` (`blk32_quad`): its words as this class binds the plane; the codebook format through `iq4_word_of`
+        //! weight block `wb`'s half `sh` (`blk32_quad`): its words as this class binds the plane; the codebook format through `iq4_word_of`, q20 off the half's one code word, q10 off the block's one sign word
         let b = wb * blk32_qwords(type<FMT>)
-        let w = uint4(wq[b], wq[b + 1u], wq[b + 2u], wq[b + 3u])
-        static_if (typeinfo typename(type<FMT>) == typeinfo typename(type<KqTag_iq4nl32>)) {
-            return uint4(iq4_word_of((w.x >> sh) & KQC_NIBBLE_MASK), iq4_word_of((w.y >> sh) & KQC_NIBBLE_MASK), iq4_word_of((w.z >> sh) & KQC_NIBBLE_MASK), iq4_word_of((w.w >> sh) & KQC_NIBBLE_MASK))
+        static_if (typeinfo typename(type<FMT>) == typeinfo typename(type<KqTag_q20>)) {
+            return blk32_q20_quad(wq[b + sh / 4u])
+        } static_elif (typeinfo typename(type<FMT>) == typeinfo typename(type<KqTag_q10>)) {
+            return blk32_q10_quad(wq[b] >> (sh * 4u))
         } else {
-            return blk32_quad(type<FMT>, w, wq[b + blk32_qh_off(type<FMT>)], sh)
+            let w = uint4(wq[b], wq[b + 1u], wq[b + 2u], wq[b + 3u])
+            static_if (typeinfo typename(type<FMT>) == typeinfo typename(type<KqTag_iq4nl32>)) {
+                return uint4(iq4_word_of((w.x >> sh) & KQC_NIBBLE_MASK), iq4_word_of((w.y >> sh) & KQC_NIBBLE_MASK), iq4_word_of((w.z >> sh) & KQC_NIBBLE_MASK), iq4_word_of((w.w >> sh) & KQC_NIBBLE_MASK))
+            } else {
+                return blk32_quad(type<FMT>, w, wq[b + blk32_qh_off(type<FMT>)], sh)
+            }
         }
     }
 
@@ -1217,12 +1307,14 @@ let KQ_GRID_IQ2XS_WORDS = 1024u
 let KQ_GRID_IQ2XXS_WORDS = 512u
 let KQ_GRID_IQ3S_WORDS = 512u
 let KQ_GRID_IQ3XXS_WORDS = 256u
+let KQ_GRID_IQ1_WORDS = 1024u
 let KQ_GRID_IQ2S = 0u
 let KQ_GRID_IQ2XS = KQ_GRID_IQ2S + KQ_GRID_IQ2S_WORDS
 let KQ_GRID_IQ2XXS = KQ_GRID_IQ2XS + KQ_GRID_IQ2XS_WORDS
 let KQ_GRID_IQ3S = KQ_GRID_IQ2XXS + KQ_GRID_IQ2XXS_WORDS
 let KQ_GRID_IQ3XXS = KQ_GRID_IQ3S + KQ_GRID_IQ3S_WORDS
-let KQ_GRID_WORDS = int(KQ_GRID_IQ3XXS + KQ_GRID_IQ3XXS_WORDS)
+let KQ_GRID_IQ1 = KQ_GRID_IQ3XXS + KQ_GRID_IQ3XXS_WORDS
+let KQ_GRID_WORDS = int(KQ_GRID_IQ1 + KQ_GRID_IQ1_WORDS)
 let KQ_GRID_BYTES = int64(KQ_GRID_WORDS) * 4l
 
 //! the grid codebooks laid end to end as the kq leaves' `gridb` binding reads them (`KQ_GRID_<FMT>` the word each starts at)
@@ -1242,12 +1334,16 @@ def kq_grid_words() : array<uint> {
     for (i in range(int(KQ_GRID_IQ3XXS_WORDS))) {
         words[int(KQ_GRID_IQ3XXS) + i] = iq3xxs_grid_word(i)
     }
+    for (i in range(int(KQ_GRID_IQ1_WORDS))) {
+        words[int(KQ_GRID_IQ1) + i] = iq1s_grid_word(i)
+    }
     return <- words
 }
 
 //! the codebook and grid formats: a block's decode gathers, so a lane wants more blocks in flight than the k-lattice's
 def gemv_grid_fmt(fmt : int) : bool =>
-    fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.iq3s4) || fmt == int(KqFmt.nv4)
+    (fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.iq3s4) || fmt == int(KqFmt.nv4)
+        || fmt == int(KqFmt.iq1s) || fmt == int(KqFmt.iq1m))
 
 [arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#kq-gemv-lanes")]
 def gemv_lanes_per_row(fmt : int; n : int64) : uint {
@@ -1575,6 +1671,10 @@ class template KqGemvLeafT : KqGemvShellT {
     @template_constant GRID_WORDS : uint = 64u  //!< the codebook's words and its first word in `gridb` - literals (template constants), held equal to the format's `KQ_GRID_<FMT>_WORDS` / `KQ_GRID_<FMT>` by REVIEW.das
     @template_constant GRID_OFF : uint = 0u
     @workgroup @template_gate = GRID gridw : uint[int(GRID_WORDS)]
+    @template_constant GRIDX : bool = false     //!< a grid format whose table stages in a form of its own: `stage_gridx` expands `gridb` into workgroup memory ahead of the shell
+
+    //! the format's own staging of its grid (`GRIDX`)
+    def stage_gridx {}
 
     def stage_grid {
         static_if (GRID) {
@@ -1723,6 +1823,9 @@ class template KqGemvLeafT : KqGemvShellT {
     def leaf_body {
         static_if (GRID) {
             stage_grid()
+        }
+        static_if (GRIDX) {
+            stage_gridx()
         }
         static_if (EMB) {
             emb_shell()
@@ -1886,16 +1989,41 @@ class template K3GemvT : KqGemvLeafT {
 //! Q2_K: q = the 2-bit qs lane; per-16 sc/min nibble pairs x d/dmin
 [ |> template_struct_instance]
 class template K2GemvT : KqGemvLeafT {
+    @template_constant TQ2 : bool = false   //!< TQ2_0: sub-scale 1, min 1, dmin = d, the scale row the f16 d alone (two superblocks a word, the half by parity)
+    @template_constant TQ1 : bool = false   //!< TQ1_0 under `TQ2`'s scale row and fold: each half of a 32-block is one trit of four of the superblock's 13 quant words (`tq1_dword_trit`'s map a block)
+
+    //! TQ1_0 - digit `n` of quant word `i`'s four bytes, a byte lane each (`tq1_word`)
+    def tq1_dw(i, n : uint) : uint => tq1_word(wq[i], n)
+
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
-        let q4 = wsb * 4u + (blk / 4u) * 2u
-        let sh = (blk % 4u) * 2u
-        wl = k2_quad(wq4[q4], sh)
-        wh = k2_quad(wq4[q4 + 1u], sh)
-        let w = wsu[wsb * 5u + 1u + blk / 2u]
-        let b0 = (w >> ((blk % 2u) * 16u)) & 255u
-        let b1 = (w >> ((blk % 2u) * 16u + 8u)) & 255u
-        let dm = unpackHalf2x16(wsu[wsb * 5u])
-        return float4(dm.x * float(b0 & 15u), -dm.y * float(b0 >> 4u), dm.x * float(b1 & 15u), -dm.y * float(b1 >> 4u))
+        static_if (TQ1) {
+            let qb = wsb * TQ1_QWORDS
+            let lo5 = blk < 5u
+            let b7 = blk == 7u
+            let nlo = lo5 ? blk : (blk - 5u) * 2u
+            let nhi = lo5 ? blk : nlo + 1u
+            let clo = qb + (lo5 ? 0u : 8u)
+            let chi = qb + (lo5 ? 4u : (b7 ? 12u : 8u))
+            let hs = b7 ? 0u : 1u
+            wl = uint4(tq1_dw(clo, nlo), tq1_dw(clo + 1u, nlo), tq1_dw(clo + 2u, nlo), tq1_dw(clo + 3u, nlo))
+            wh = uint4(tq1_dw(chi, b7 ? 0u : nhi), tq1_dw(chi + hs, b7 ? 1u : nhi), tq1_dw(chi + 2u * hs, b7 ? 2u : nhi),
+                tq1_dw(chi + 3u * hs, b7 ? 3u : nhi))
+        } else {
+            let q4 = wsb * 4u + (blk / 4u) * 2u
+            let sh = (blk % 4u) * 2u
+            wl = k2_quad(wq4[q4], sh)
+            wh = k2_quad(wq4[q4 + 1u], sh)
+        }
+        static_if (TQ2) {
+            let d = q40_d_of(wsu[wsb / 2u], wsb)
+            return float4(d, -d, d, -d)
+        } else {
+            let w = wsu[wsb * 5u + 1u + blk / 2u]
+            let b0 = (w >> ((blk % 2u) * 16u)) & 255u
+            let b1 = (w >> ((blk % 2u) * 16u + 8u)) & 255u
+            let dm = unpackHalf2x16(wsu[wsb * 5u])
+            return float4(dm.x * float(b0 & 15u), -dm.y * float(b0 >> 4u), dm.x * float(b1 & 15u), -dm.y * float(b1 >> 4u))
+        }
     }
 
     def override fold_reads_bsum : bool => true
@@ -1986,6 +2114,116 @@ class template Iq2xxsGemvT : KqGemvLeafT {
         return grid_terms(wsb, blk)
     }
 
+}
+
+[ |> template_struct_instance, arch(at="../ARCHITECTURE_ENGINE_FORMATS_IQ1.md#iq1-device-row")]
+class template Iq1GemvT : KqGemvLeafT {
+    override GRID = true
+    override GRID_WORDS = 1024u
+    override GRID_OFF = 4352u
+    @template_constant IQ1M : bool = false   //!< IQ1_M: an octet's high bits and delta sign its qh nibble, the half-block scales off the two-word row
+    @template_constant G1NIB : bool = false  //!< the grid in the nibble form (`grid1_nibbles`), an entry a word - expanded into `g1nibw` off the 4 KB grid (`GRIDX`), or read off `gridb` from word 0 under `G1BUF`
+    @template_constant G1BUF : bool = false  //!< the grid read off `gridb` with no workgroup copy: the 4 KB grid at `KQ_GRID_IQ1`, or a nibble-form table (`G1NIB`)
+    @template_constant G1SEP : bool = false  //!< IQ1_S's delta as its own term: the lanes the codes, the fold d x (2s + 1) x (delta - 1) against the half's activation sum
+    @workgroup @template_gate = GRIDX g1nibw : uint[int(KQ_GRID_IQ1_WORDS) * 2]   //! the grid's entries in the nibble form, a word each
+
+    def override stage_gridx {
+        static_if (GRIDX) {
+            let lid = gl_LocalInvocationID.x
+            for (k in range(int(KQ_GRID_IQ1_WORDS / 64u))) {
+                let i = lid + uint(k) * 64u
+                let w = gridb[KQ_GRID_IQ1 + i]
+                g1nibw[2u * i] = grid1_nibbles(w & 0xFFFFu)
+                g1nibw[2u * i + 1u] = grid1_nibbles(w >> 16u)
+            }
+            barrier()
+        }
+    }
+
+    //! entry `idx` in the nibble form: the expanded workgroup copy, or under `G1BUF` a nibble-form table's word off the buffer
+    def g1_nib(idx : uint) : uint {
+        static_if (G1BUF) {
+            return gridb[idx]
+        } static_elif (GRIDX) {
+            return g1nibw[idx]
+        } else {
+            return 0u
+        }
+    }
+
+    //! word `i` of the 4 KB grid: its workgroup copy (`GRID`), or under `G1BUF` the grid buffer's
+    def g1_word(i : uint) : uint {
+        static_if (G1BUF) {
+            return gridb[KQ_GRID_IQ1 + i]
+        } static_elif (GRID) {
+            return gridw[i]
+        } else {
+            return 0u
+        }
+    }
+
+    def g1_hi(qh, l : uint) : uint {
+        static_if (IQ1M) {
+            return iq1m_hi(qh, l)
+        } else {
+            return iq1s_hi(qh, l)
+        }
+    }
+
+    [unused_argument(l)]
+    def g1_neg(qh, l : uint) : uint {
+        static_if (IQ1M) {
+            return iq1m_neg(qh, l)
+        } else {
+            return iq1s_neg(qh)
+        }
+    }
+
+    //! octet `l`'s eight lanes off its block's qs word and qh bits: weights 0-3, then 4-7
+    def g1_octet(qsw, qh, l : uint) : uint2 {
+        let idx = ((qsw >> (l * 8u)) & 255u) | (g1_hi(qh, l) << 8u)
+        let neg = g1_neg(qh, l)
+        static_if (G1NIB) {
+            let w = g1_nib(idx)
+            static_if (G1SEP) {
+                return uint2(w & 0x0F0F0F0Fu, (w >> 4u) & 0x0F0F0F0Fu)
+            } else {
+                return uint2(grid1_eighths(w & 0x0F0F0F0Fu, neg), grid1_eighths((w >> 4u) & 0x0F0F0F0Fu, neg))
+            }
+        } static_elif (G1SEP) {
+            let e = grid1_entry(g1_word(idx >> 1u), idx)
+            return uint2(grid1_codes(e & 255u), grid1_codes(e >> 8u))
+        } else {
+            let e = grid1_entry(g1_word(idx >> 1u), idx)
+            return uint2(grid1_word(e & 255u, neg), grid1_word(e >> 8u, neg))
+        }
+    }
+
+    def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
+        let qsw = wq[wsb * IQ1_QWORDS + blk]
+        let qh = (wq[wsb * IQ1_QWORDS + IQ1_QH_WORD + blk / 2u] >> ((blk & 1u) * 16u)) & 0xFFFFu
+        let o0 = g1_octet(qsw, qh, 0u)
+        let o1 = g1_octet(qsw, qh, 1u)
+        let o2 = g1_octet(qsw, qh, 2u)
+        let o3 = g1_octet(qsw, qh, 3u)
+        wl = uint4(o0.x, o0.y, o1.x, o1.y)
+        wh = uint4(o2.x, o2.y, o3.x, o3.y)
+        static_if (IQ1M) {
+            let w0 = wsu[wsb * IQ1M_SWORDS]
+            let w1 = wsu[wsb * IQ1M_SWORDS + 1u]
+            let d8 = iq1m_d(w0, w1) * IQ1_DELTA
+            return float4(d8 * iq1m_sc(w0, w1, blk * 2u), 0.0, d8 * iq1m_sc(w0, w1, blk * 2u + 1u), 0.0)
+        } static_elif (G1SEP) {
+            let dl = q40_d_of(wsu[wsb / 2u], wsb) * iq1s_sc(qh)
+            let b = dl * ((iq1s_neg(qh) != 0u ? -IQ1_DELTA : IQ1_DELTA) - 1.0)
+            return float4(dl, b, dl, b)
+        } else {
+            let a = q40_d_of(wsu[wsb / 2u], wsb) * IQ1_DELTA * iq1s_sc(qh)
+            return float4(a, 0.0, a, 0.0)
+        }
+    }
+
+    def override fold_reads_bsum : bool => G1SEP
 }
 
 //! the per-token words: push constants freeze at record time
@@ -5163,6 +5401,14 @@ struct VkIq4nl32Blk {
     qs : int16[8]   //! one IQ4_NL 32-block: 16 nibble bytes (element j low, j + 16 high, the codebook index); the f16 d lives in ws, two blocks a word
 }
 
+struct VkQ20Blk {
+    qs : int16[4]   //! one Q2_0 32-block: 8 code bytes (element j at byte j / 4, bits (j % 4) x 2); the f16 d of its two-block group lives in ws, two groups a word
+}
+
+struct VkQ10Blk {
+    qs : int16[2]   //! one Q1_0 32-block: 4 sign bytes (element j at bit j % 8 of byte j / 8); the f16 d of its four-block group lives in ws, two groups a word
+}
+
 struct VkK6Blk {
     ql : int16[64]   //! one Q6_K superblock's 128 low-nibble bytes as 16-bit lanes
     qh : int16[32]   //! ... its 64 high-2-bit bytes; scales (16 int8 + f16 d) in ws
@@ -5193,6 +5439,10 @@ struct VkK2Blk {
     qs : int16[32]   //! a Q2_K superblock's 64 qs bytes, four 2-bit lanes each
 }
 
+struct VkTq1Blk {
+    qs : int16[26]   //! a TQ1_0 superblock's 52 quant bytes: the 48 five-trit qs bytes, then the 4 four-trit qh bytes
+}
+
 struct VkIq2sBlk {
     qs : int16[16]   //! one IQ2_S superblock's 32 grid-index bytes as 16-bit lanes
     sg : int16[16]   //! ... its 32 sign bytes; scales (f16 d8 + 16 (1 + 2s) strips)
@@ -5205,6 +5455,10 @@ struct VkIq2xsBlk {
 
 struct VkIq2xxsBlk {
     qs : int16[32]   //! 64B qs: a block's 4 grid byte indices + aux32 (ksigns, ls)
+}
+
+struct VkIq1Blk {
+    qs : int16[24]   //! an IQ1_S / IQ1_M superblock's 48 quant bytes: 32 grid-index low bytes, then a 32-block's 16 qh bits each
 }
 
 let SC_STRIDE = 130u   //! the cm2 scale cache's sub-block stride: the tile's 128 rows and two of pad
@@ -5245,6 +5499,8 @@ class template KqCm2BatchT : MoeCmBase {
     @workgroup @template_gate = IQ2XSGRID iq2xs_gridc : uint[1024]
     @template_constant IQ2XXSGRID : bool = false          //! stage the 2 KB iq2xxs u64 grid into workgroup memory
     @workgroup @template_gate = IQ2XXSGRID iq2xxs_gridc : uint[512]
+    @template_constant IQ1GRID : bool = false             //! stage the 4 KB 1-bit grid into workgroup memory
+    @workgroup @template_gate = IQ1GRID iq1_gridc : uint[int(KQ_GRID_IQ1_WORDS)]
     @template_constant SCALES : bool = true               //!< the format reads a scale plane at binding 1 (a file's f32 rows carry none)
     @template_constant KHR : bool = false                 //!< the KHR cooperative-matrix arm: hand-staged f16 tiles over the format's own decode, no cm2 API (a card without NV_coopmat2)
     @workgroup @template_gate = KHR khr_ao : uint[int(128u * KHR_STRIDE)]   //! the A stage: 128 weight rows of f16 pairs; then the edge tile's f32 store bounce, 8 subgroups x 256 words
@@ -5337,11 +5593,24 @@ class template KqCm2BatchT : MoeCmBase {
                 iq2xxs_gridc[g2xx + uint(k) * 256u] = iq2xxs_grid_word(int(g2xx + uint(k) * 256u))
             }
         }
+        static_if (IQ1GRID) {
+            stage_iq1_grid()
+        }
         barrier()   // wg_blk0 and the gated codebook visible before the first decode
         static_if (KHR) {
             khr_tile(wblk0, row0, cnt, k0, k1, ybase, tok_tile, w_tile)
         } else {
             cm2_tile(wblk0, row0, cnt, k0, k1, ybase, tok_tile, w_tile)
+        }
+    }
+
+    //! the 1-bit grid into its workgroup copy (`IQ1GRID`), four words a thread
+    def stage_iq1_grid {
+        static_if (IQ1GRID) {
+            let g1 = gl_LocalInvocationID.x
+            for (k in range(int(KQ_GRID_IQ1_WORDS / 256u))) {
+                iq1_gridc[g1 + uint(k) * 256u] = iq1s_grid_word(int(g1 + uint(k) * 256u))
+            }
         }
     }
 
@@ -6182,6 +6451,98 @@ class template Q5032Cm2T : Q51Cm2T {
     override Q50 = true
 }
 
+//! the per-32 low-bit pair's cm2 base over its leaf's block (`BLK`) and format tag (`FMT`): Q2_0's (`Q20Cm2T`) and Q1_0's
+//! (`Q10Cm2T`); a block reads its scale group's f16 d through the per-32 family's scale word (`blk32_sword`, `blk32_scale`) - in
+//! the `[spirv_decode]` callbacks too, which call no method of the class
+[ |> template_struct_instance]
+class template LowbitCm2BaseT : KqCm2BatchT {
+    typedef ST = uint
+    override BLKW = 32u
+    override DECV4 = true
+
+    //! block `blk`'s f16 d
+    def grp_d(blk : uint) : float => blk32_scale(type<FMT>, ws[blk32_sword(type<FMT>, blk)], blk).x
+}
+
+//! Q2_0 per-32 on the cm2 tile: the per-32 plane verbatim (eight code bytes a block, element j at byte j / 4, bits (j % 4) x 2),
+//! w = d * (q - 1)
+[ |> template_struct_instance]
+class template Q20Cm2T : LowbitCm2BaseT {
+    typedef BLK = VkQ20Blk
+    typedef FMT = KqTag_q20
+
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let w = wqw[blk * KQ_Q20_QWORDS + (e0 >> 4u)]
+            let d = grp_d(blk)
+            for [unroll_full] (c in range(4)) {
+                let q = float4(int4(unpack8(int(q20_signed_word(q20_byte_lanes(w >> (uint(c) * 8u))))))) * d
+                khr_put4(sbase + uint(c) * 2u, q)
+            }
+        }
+    }
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes")]
+    def decode(blk : VkQ20Blk; bc, cib : uint2) : float16 {
+        let e = cib.y
+        let lane = uint(int(blk.qs[int(e >> 3u)])) & 0xFFFFu
+        let q = (lane >> ((e & 7u) * 2u)) & 3u
+        let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
+        let d = blk32_scale(type<FMT>, ws[blk32_sword(type<FMT>, idx)], idx).x
+        return float16(d * float(int(q) - 1))
+    }
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes")]
+    def decode_v4(blk : VkQ20Blk; bc, cib : uint2) : half4 {
+        let e = cib.y
+        let by = ((uint(int(blk.qs[int(e >> 3u)])) & 0xFFFFu) >> ((e & 4u) * 2u)) & 0xFFu
+        let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
+        let d = blk32_scale(type<FMT>, ws[blk32_sword(type<FMT>, idx)], idx).x
+        return half4(float4(d * float(int(by & 3u) - 1), d * float(int((by >> 2u) & 3u) - 1),
+            d * float(int((by >> 4u) & 3u) - 1), d * float(int(by >> 6u) - 1)))
+    }
+}
+
+//! Q1_0 per-32 on the cm2 tile: the per-32 plane verbatim (four sign bytes a block, element j at bit j % 8 of byte j / 8),
+//! w = +d where the bit is set, -d where it is clear
+[ |> template_struct_instance]
+class template Q10Cm2T : LowbitCm2BaseT {
+    typedef BLK = VkQ10Blk
+    typedef FMT = KqTag_q10
+
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let h = wqw[blk * KQ_Q10_QWORDS] >> e0
+            let d = grp_d(blk)
+            for [unroll_full] (c in range(4)) {
+                let q = float4(int4(unpack8(int(q10_signed_word(q10_bit_lanes(h >> (uint(c) * 4u))))))) * d
+                khr_put4(sbase + uint(c) * 2u, q)
+            }
+        }
+    }
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes")]
+    def decode(blk : VkQ10Blk; bc, cib : uint2) : float16 {
+        let e = cib.y
+        let p = e & ~1u
+        let bits = (uint(int(blk.qs[int(p >> 4u)])) & 0xFFFFu) >> (p & 15u)
+        let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
+        let d = blk32_scale(type<FMT>, ws[blk32_sword(type<FMT>, idx)], idx).x
+        let v0 = (bits & 1u) != 0u ? d : -d
+        let v1 = (bits & 2u) != 0u ? d : -d
+        return float16((e & 1u) != 0u ? v1 : v0)
+    }
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes")]
+    def decode_v4(blk : VkQ10Blk; bc, cib : uint2) : half4 {
+        let e = cib.y
+        let nib = ((uint(int(blk.qs[int(e >> 4u)])) & 0xFFFFu) >> (e & 12u)) & 0xFu
+        let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
+        let d = blk32_scale(type<FMT>, ws[blk32_sword(type<FMT>, idx)], idx).x
+        return half4(float4((nib & 1u) != 0u ? d : -d, (nib & 2u) != 0u ? d : -d, (nib & 4u) != 0u ? d : -d, (nib & 8u) != 0u ? d : -d))
+    }
+}
+
 [ |> template_struct_instance]
 class template Mx4Cm2T : KqCm2BatchT {
     typedef BLK = VkMx4Blk
@@ -6311,61 +6672,126 @@ class template K3Cm2T : KqCm2BatchT {
     }
 }
 
+//! the 2-bit lattice's cm2 body over the format template's block (`BLK`): Q2_K's and TQ2_0's 64 bytes (`K2Cm2T`), TQ1_0's 52 (`Tq1Cm2T`)
 [ |> template_struct_instance]
-class template K2Cm2T : KqCm2BatchT {
-    typedef BLK = VkK2Blk
+class template K2Cm2BaseT : KqCm2BatchT {
     typedef ST = uint
     override DECV4 = true
+    @template_constant TQ2 : bool = false   //!< TQ2_0: sub-scale 1, min 1, dmin = d, the scale row the f16 d alone (two superblocks a word, the half by parity)
+    @template_constant TQ1 : bool = false   //!< TQ1_0 (`BLK` the 52-byte block, tq2's scale row): element e is a trit of byte (column x 4 + e % 4) (`tq1_dword_trit`)
 
     def override khr_stage16(blk, e0, sbase : uint) : void {
         static_if (KHR) {
-            let g = e0 >> 4u
-            let qw4 = wq4[blk * 4u + (g >> 3u) * 2u + (g & 1u)]   // the qs bytes (g >> 3) * 32 + (g & 1) * 16 + l
-            let qs2 = ((g >> 1u) & 3u) * 2u
-            let srow = blk * 5u
-            let dm = unpackHalf2x16(ws[srow])
-            let pb = (ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
-            let ds = dm.x * float(pb & 15u)
-            let dmn = dm.y * float(pb >> 4u)
-            for [unroll_full] (c in range(4)) {
-                let qw = qw4[c] >> qs2
-                khr_put4(sbase + uint(c) * 2u, float4(ds * float(qw & 3u) - dmn, ds * float((qw >> 8u) & 3u) - dmn,
-                    ds * float((qw >> 16u) & 3u) - dmn, ds * float((qw >> 24u) & 3u) - dmn))
+            static_if (TQ1) {
+                let d = q40_d_of(ws[blk / 2u], blk)
+                for [unroll_full] (c in range(4)) {
+                    let ct = tq1_dword_trit(int(e0 >> 2u) + c)
+                    let qw = tq1_word(wqw[blk * TQ1_QWORDS + uint(ct.x)], uint(ct.y))
+                    khr_put4(sbase + uint(c) * 2u, float4(d * float(qw & 3u) - d, d * float((qw >> 8u) & 3u) - d,
+                        d * float((qw >> 16u) & 3u) - d, d * float((qw >> 24u) & 3u) - d))
+                }
+            } else {
+                let g = e0 >> 4u
+                let qw4 = wq4[blk * 4u + (g >> 3u) * 2u + (g & 1u)]   // the qs bytes (g >> 3) * 32 + (g & 1) * 16 + l
+                let qs2 = ((g >> 1u) & 3u) * 2u
+                static_if (TQ2) {
+                    let d = q40_d_of(ws[blk / 2u], blk)
+                    for [unroll_full] (c in range(4)) {
+                        let qw = qw4[c] >> qs2
+                        khr_put4(sbase + uint(c) * 2u, float4(d * float(qw & 3u) - d, d * float((qw >> 8u) & 3u) - d,
+                            d * float((qw >> 16u) & 3u) - d, d * float((qw >> 24u) & 3u) - d))
+                    }
+                } else {
+                    let srow = blk * 5u
+                    let dm = unpackHalf2x16(ws[srow])
+                    let pb = (ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
+                    let ds = dm.x * float(pb & 15u)
+                    let dmn = dm.y * float(pb >> 4u)
+                    for [unroll_full] (c in range(4)) {
+                        let qw = qw4[c] >> qs2
+                        khr_put4(sbase + uint(c) * 2u, float4(ds * float(qw & 3u) - dmn, ds * float((qw >> 8u) & 3u) - dmn,
+                            ds * float((qw >> 16u) & 3u) - dmn, ds * float((qw >> 24u) & 3u) - dmn))
+                    }
+                }
+            }
+        }
+    }
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes")]
+    def decode(blk : BLK; bc, cib : uint2) : float16 {
+        let e = cib.y
+        static_if (TQ1) {
+            let ct = tq1_dword_trit(int(e >> 2u))
+            let pw = uint(int(blk.qs[ct.x * 2 + int((e & 3u) >> 1u)])) & 0xFFFFu
+            let q = (tq1_word(pw, uint(ct.y)) >> ((e & 1u) * 8u)) & 3u
+            let bi = wg_blk0 + bc.x * (pa.n >> 8u) + bc.y
+            let d = q40_d_of(ws[bi / 2u], bi)
+            return float16(d * float(q) - d)
+        } else {
+            let g = e >> 4u
+            let l = e & 15u
+            let qi = (g >> 3u) * 32u + (g & 1u) * 16u + l
+            let qby = ((uint(int(blk.qs[int(qi >> 1u)])) & 0xFFFFu) >> ((qi & 1u) * 8u)) & 0xFFu
+            let q = (qby >> (((g >> 1u) & 3u) * 2u)) & 3u
+            static_if (TQ2) {
+                let bi = wg_blk0 + bc.x * (pa.n >> 8u) + bc.y
+                let d = q40_d_of(ws[bi / 2u], bi)
+                return float16(d * float(q) - d)
+            } else {
+                let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+                let dm = unpackHalf2x16(ws[srow])
+                let pb = (ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
+                return float16(dm.x * float(pb & 15u) * float(q) - dm.y * float(pb >> 4u))
             }
         }
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes")]
-    def decode(blk : VkK2Blk; bc, cib : uint2) : float16 {
+    def decode_v4(blk : BLK; bc, cib : uint2) : half4 {
         let e = cib.y
-        let g = e >> 4u
-        let l = e & 15u
-        let qi = (g >> 3u) * 32u + (g & 1u) * 16u + l
-        let qby = ((uint(int(blk.qs[int(qi >> 1u)])) & 0xFFFFu) >> ((qi & 1u) * 8u)) & 0xFFu
-        let q = (qby >> (((g >> 1u) & 3u) * 2u)) & 3u
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dm = unpackHalf2x16(ws[srow])
-        let pb = (ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
-        return float16(dm.x * float(pb & 15u) * float(q) - dm.y * float(pb >> 4u))
+        static_if (TQ1) {
+            let ct = tq1_dword_trit(int(e >> 2u))
+            let pw = (uint(int(blk.qs[ct.x * 2])) & 0xFFFFu) | ((uint(int(blk.qs[ct.x * 2 + 1])) & 0xFFFFu) << 16u)
+            let qw = tq1_word(pw, uint(ct.y))
+            let bi = wg_blk0 + bc.x * (pa.n >> 8u) + bc.y
+            let d = q40_d_of(ws[bi / 2u], bi)
+            return half4(float4(d * float(qw & 3u) - d, d * float((qw >> 8u) & 3u) - d,
+                d * float((qw >> 16u) & 3u) - d, d * float((qw >> 24u) & 3u) - d))
+        } else {
+            let g = e >> 4u
+            let l = e & 15u
+            let qi = int(((g >> 3u) * 32u + (g & 1u) * 16u + l) >> 1u)
+            let q0w = uint(int(blk.qs[qi])) & 0xFFFFu
+            let q1w = uint(int(blk.qs[qi + 1])) & 0xFFFFu
+            let qs2 = ((g >> 1u) & 3u) * 2u
+            static_if (TQ2) {
+                let bi = wg_blk0 + bc.x * (pa.n >> 8u) + bc.y
+                let d = q40_d_of(ws[bi / 2u], bi)
+                return half4(float4(d * float((q0w >> qs2) & 3u) - d, d * float((q0w >> (qs2 + 8u)) & 3u) - d,
+                    d * float((q1w >> qs2) & 3u) - d, d * float((q1w >> (qs2 + 8u)) & 3u) - d))
+            } else {
+                let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+                let dm = unpackHalf2x16(ws[srow])
+                let pb = (ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
+                let ds = dm.x * float(pb & 15u)
+                let dmn = dm.y * float(pb >> 4u)
+                return half4(float4(ds * float((q0w >> qs2) & 3u) - dmn, ds * float((q0w >> (qs2 + 8u)) & 3u) - dmn,
+                    ds * float((q1w >> qs2) & 3u) - dmn, ds * float((q1w >> (qs2 + 8u)) & 3u) - dmn))
+            }
+        }
     }
+}
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes")]
-    def decode_v4(blk : VkK2Blk; bc, cib : uint2) : half4 {
-        let e = cib.y
-        let g = e >> 4u
-        let l = e & 15u
-        let qi = int(((g >> 3u) * 32u + (g & 1u) * 16u + l) >> 1u)
-        let q0w = uint(int(blk.qs[qi])) & 0xFFFFu
-        let q1w = uint(int(blk.qs[qi + 1])) & 0xFFFFu
-        let qs2 = ((g >> 1u) & 3u) * 2u
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dm = unpackHalf2x16(ws[srow])
-        let pb = (ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
-        let ds = dm.x * float(pb & 15u)
-        let dmn = dm.y * float(pb >> 4u)
-        return half4(float4(ds * float((q0w >> qs2) & 3u) - dmn, ds * float((q0w >> (qs2 + 8u)) & 3u) - dmn,
-            ds * float((q1w >> qs2) & 3u) - dmn, ds * float((q1w >> (qs2 + 8u)) & 3u) - dmn))
-    }
+//! Q2_K's and TQ2_0's cm2 template: `K2Cm2BaseT` over the 64-byte block
+[ |> template_struct_instance]
+class template K2Cm2T : K2Cm2BaseT {
+    typedef BLK = VkK2Blk
+}
+
+//! TQ1_0's cm2 template: `K2Cm2BaseT` under `TQ1`'s trits, over the 52-byte block
+[ |> template_struct_instance]
+class template Tq1Cm2T : K2Cm2BaseT {
+    typedef BLK = VkTq1Blk
+    override TQ1 = true
 }
 
 [ |> template_struct_instance]
@@ -6763,6 +7189,115 @@ class template Iq2xxsCm2T : KqCm2BatchT {
         let sgn = sgb >> j
         return half4(grid_sv4(gw, sgn, ds))
     }
+}
+
+[ |> template_struct_instance, arch(at="../ARCHITECTURE_ENGINE_FORMATS_IQ1.md#iq1-device-row")]
+class template Iq1Cm2BaseT : KqCm2BatchT {
+    typedef BLK = VkIq1Blk
+    typedef ST = uint
+    override IQ1GRID = true
+    override DECV4 = true
+    @template_constant IQ1M : bool = false   //!< IQ1_M: an octet's high bits and delta sign its qh nibble, the half-block scale off the two-word row
+
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let ib = e0 >> 5u
+            let hh = (e0 >> 4u) & 1u
+            let qsw = wqw[blk * IQ1_QWORDS + ib]
+            let qh = (wqw[blk * IQ1_QWORDS + IQ1_QH_WORD + (ib >> 1u)] >> ((ib & 1u) * 16u)) & 0xFFFFu
+            var dl : float
+            static_if (IQ1M) {
+                let w0 = ws[blk * IQ1M_SWORDS]
+                let w1 = ws[blk * IQ1M_SWORDS + 1u]
+                dl = iq1m_d(w0, w1) * iq1m_sc(w0, w1, ib * 2u + hh)
+            } else {
+                dl = q40_d_of(ws[blk / 2u], blk) * iq1s_sc(qh)
+            }
+            for [unroll_full] (i in range(2)) {
+                let l = hh * 2u + uint(i)
+                var hi, neg : uint
+                static_if (IQ1M) {
+                    hi = iq1m_hi(qh, l)
+                    neg = iq1m_neg(qh, l)
+                } else {
+                    hi = iq1s_hi(qh, l)
+                    neg = iq1s_neg(qh)
+                }
+                let idx = ((qsw >> (l * 8u)) & 255u) | (hi << 8u)
+                let ent = grid1_entry(iq1_gridc[idx >> 1u], idx)
+                let dlt = neg != 0u ? -IQ1_DELTA : IQ1_DELTA
+                khr_put4(sbase + uint(i) * 4u, grid1_f4(ent, dl, dlt))
+                khr_put4(sbase + uint(i) * 4u + 2u, grid1_f4(ent >> 8u, dl, dlt))
+            }
+        }
+    }
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes")]
+    def decode(blk : VkIq1Blk; bc, cib : uint2) : float16 {
+        let e = cib.y
+        let ib = e >> 5u
+        let l = (e >> 3u) & 3u
+        let qi = ib * 4u + l
+        let qb = ((uint(int(blk.qs[int(qi >> 1u)])) & 0xFFFFu) >> ((qi & 1u) * 8u)) & 0xFFu
+        let qh = uint(int(blk.qs[int(IQ1_QH_WORD * 2u + ib)])) & 0xFFFFu
+        let bi = wg_blk0 + bc.x * (pa.n >> 8u) + bc.y
+        var hi, neg : uint
+        var dl : float
+        static_if (IQ1M) {
+            hi = iq1m_hi(qh, l)
+            neg = iq1m_neg(qh, l)
+            let w0 = ws[bi * IQ1M_SWORDS]
+            let w1 = ws[bi * IQ1M_SWORDS + 1u]
+            dl = iq1m_d(w0, w1) * iq1m_sc(w0, w1, e >> 4u)
+        } else {
+            hi = iq1s_hi(qh, l)
+            neg = iq1s_neg(qh)
+            dl = q40_d_of(ws[bi / 2u], bi) * iq1s_sc(qh)
+        }
+        let idx = qb | (hi << 8u)
+        let cp = grid1_entry(iq1_gridc[idx >> 1u], idx) >> ((e & 6u) * 2u)
+        let dlt = neg != 0u ? -IQ1_DELTA : IQ1_DELTA
+        let v0 = grid1_val(cp & 3u, dl, dlt)
+        let v1 = grid1_val((cp >> 2u) & 3u, dl, dlt)
+        return float16((e & 1u) != 0u ? v1 : v0)
+    }
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes")]
+    def decode_v4(blk : VkIq1Blk; bc, cib : uint2) : half4 {
+        let e = cib.y
+        let ib = e >> 5u
+        let l = (e >> 3u) & 3u
+        let qi = ib * 4u + l
+        let qb = ((uint(int(blk.qs[int(qi >> 1u)])) & 0xFFFFu) >> ((qi & 1u) * 8u)) & 0xFFu
+        let qh = uint(int(blk.qs[int(IQ1_QH_WORD * 2u + ib)])) & 0xFFFFu
+        let bi = wg_blk0 + bc.x * (pa.n >> 8u) + bc.y
+        var hi, neg : uint
+        var dl : float
+        static_if (IQ1M) {
+            hi = iq1m_hi(qh, l)
+            neg = iq1m_neg(qh, l)
+            let w0 = ws[bi * IQ1M_SWORDS]
+            let w1 = ws[bi * IQ1M_SWORDS + 1u]
+            dl = iq1m_d(w0, w1) * iq1m_sc(w0, w1, e >> 4u)
+        } else {
+            hi = iq1s_hi(qh, l)
+            neg = iq1s_neg(qh)
+            dl = q40_d_of(ws[bi / 2u], bi) * iq1s_sc(qh)
+        }
+        let idx = qb | (hi << 8u)
+        let c4 = grid1_entry(iq1_gridc[idx >> 1u], idx) >> ((e & 4u) * 2u)
+        return half4(grid1_f4(c4, dl, neg != 0u ? -IQ1_DELTA : IQ1_DELTA))
+    }
+}
+
+//! IQ1_S's cm2 template: `Iq1Cm2BaseT` under the block's qh bits
+[ |> template_struct_instance]
+class template Iq1sCm2T : Iq1Cm2BaseT {}
+
+//! IQ1_M's cm2 template: `Iq1Cm2BaseT` under `IQ1M`
+[ |> template_struct_instance]
+class template Iq1mCm2T : Iq1Cm2BaseT {
+    override IQ1M = true
 }
 
 //! the router GEMV on the template every home stamps (`GkRouterGemv`): a workgroup of 256 an expert row, eight columns a dispatch,

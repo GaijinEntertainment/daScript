@@ -367,7 +367,7 @@ def run_kq_tile(tile; fx : KqFixture; kq : array<uint8>; ks : array<uint8>; mr :
     let packed = kq_reads_packed_planes(fx.fmt)
     var panel : array<uint8>
     if (!packed) {
-        panel |> resize(int(mr * fx.nsb * 256l))
+        panel |> resize(int(mr * fx.nsb * 256l + (kq_is_grid1(int(fx.fmt)) ? grid1_scale_panel_bytes(mr, fx.nsb) : 0l)))
     }
     unsafe {
         let kqp = addr(kq[0])
@@ -378,9 +378,9 @@ def run_kq_tile(tile; fx : KqFixture; kq : array<uint8>; ks : array<uint8>; mr :
         var yp = addr(y[0])
         for (g in range64(ng)) {
             var kqg = kqp + g * mr * fx.nsb * kq_qsb(fx.fmt)
-            let ksg = ksp + g * mr * fx.nsb * kq_ssb(fx.fmt)
+            var ksg = ksp + g * mr * fx.nsb * kq_ssb(fx.fmt)
             if (!packed) {
-                unpack_kq_panel_grp(fx.fmt, kqg, addr(panel[0]), mr, fx.nsb)
+                ksg = unpack_kq_tile_panel(fx.fmt, kqg, ksg, addr(panel[0]), mr, fx.nsb)
                 kqg = addr(panel[0])
             }
             var t0 = 0l
@@ -579,7 +579,7 @@ def b32_tune_family(fmt : KqFmt; var rows_out : table<string; JsonValue?>) : str
             run_gemv_sums(v._1, sfx, sq, ss, mr, y)
             dt = min(dt, get_time_usec(t0))
         }
-        let gb = double(sfx.d * sfx.nb * (sfx.qb + sfx.sb)) / double(max(dt, 1)) / 1000.0lf
+        let gb = double(sfx.d * (sfx.nb * sfx.block_qbytes + kq_sbytes(sfx.fmt, sfx.nb))) / double(max(dt, 1)) / 1000.0lf
         rows_out[v._0] = JV((streamed_us = double(dt)))
         names |> push(v._0)
         times |> push(double(dt))
@@ -753,7 +753,7 @@ def rm_test_family(f : KqFmt) : bool {
     }
     var ns <- kq_sb(f) ? [768l, 2048l] : [704l, 1408l]
     for (n in ns) {
-        var fx <- build_rm_fixture(f, n, 64l)
+        var fx <- build_rm_fixture(f, n - n % kq_group_elems(f), 64l)   // whole scale groups: q10's 704 is 640
         var y : array<float>
         y |> resize(fx.d)
         var g <- rm_gate(entry, rv, fx, y, true)

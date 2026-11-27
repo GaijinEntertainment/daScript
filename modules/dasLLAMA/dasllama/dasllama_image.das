@@ -41,7 +41,7 @@ require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 66   // the header records the split head the image was minted with
+let IMAGE_VERSION = 70   // the low-bit members' planes: q20, q10, iq1s, iq1m, tq2, tq1
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -1592,7 +1592,7 @@ def private streamed_q_planes() : array<string> {
     names |> push("q4032q")
     names |> push("q5032q")
     names |> push("mxq")
-    names |> push_from([for (f in [KqFmt.mlx4, KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b, KqFmt.mlx6b]); "{f}q"])
+    names |> push_from([for (f in [KqFmt.mlx4, KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b, KqFmt.mlx6b, KqFmt.q20, KqFmt.q10]); "{f}q"])
     return <- names
 }
 
@@ -1722,10 +1722,10 @@ def private vk_mint_zero_view(f : KqFmt; woff, n : int64) {
     g_vk_mint_view_run |> clear()
     g_vk_mint_view_rebase = woff
     g_vk_mint_job_view.quant = g_vk_mint_streamed_model.quant
-    let units = n / kq_elems(f) + 1l
-    let paired = kq_plane_pair(g_vk_mint_job_view, f) $(var q : array<uint8>; var s : array<uint8>) {
-        q |> resize(units * kq_qsb(f))
-        s |> resize(units * kq_ssb(f))
+    let units = n / kq_elems(f) + kq_sgroup(f)
+    let paired = kq_plane_pair(g_vk_mint_job_view, f) $(@exact_size var q : array<uint8>; @exact_size var s : array<uint8>) {
+        q |> reserve_resize(units * kq_qsb(f))
+        s |> reserve_resize(kq_sbytes(f, units))
     }
     if (!paired) {
         g_vk_mint_job_view.qblob |> resize(n)

@@ -1944,8 +1944,7 @@ def write_buf_desc(var writes : array<WriteDescriptorSet>; set_ : VkDescriptorSe
 // weight plane byte sizes for one [rows x n] stack in the tier's device layout
 def stack_plane_bytes(n, rows : int64; fmt : int) : tuple<wq : int64; ws : int64> {
     let nb = kq_blocks_for(n, rows, fmt)
-    let bb = arena_block_bytes(fmt)
-    return (wq = nb * bb.wq, ws = nb * bb.ws)
+    return (wq = nb * arena_block_bytes(fmt).wq, ws = arena_ws_bytes(fmt, nb))
 }
 
 // build a VkStack shell (weight plane buffers only — the GEMV/cls scratch is lazy, see
@@ -2506,10 +2505,19 @@ def vk_kq_schema_id(fmt : int) : int {
 
 
 [arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#kq-dev-scale-row")]
-def arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
+def arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64; sgroup : int64> {
     let b = dev_block_bytes(kq_fmt_of_slot(fmt))
-    return (wq = b.qsb, ws = b.ssb)
+    if (b.ssb <= 0l) {
+        panic("arena_block_bytes: stack format {kq_fmt_of_slot(fmt)} has no device scale bytes")
+    }
+    return (wq = b.qsb, ws = b.ssb, sgroup = b.sgroup)
 }
+
+//! the device scale-plane byte offset of block `blk` of stack format `fmt` (`dev_scale_off`)
+def arena_ws_off(fmt : int; blk : int64) : int64 => dev_scale_off(dev_block_bytes(kq_fmt_of_slot(fmt)), blk)
+
+//! the device scale-plane bytes of `nblocks` whole blocks of stack format `fmt` (`dev_scale_bytes`)
+def arena_ws_bytes(fmt : int; nblocks : int64) : int64 => dev_scale_bytes(dev_block_bytes(kq_fmt_of_slot(fmt)), nblocks)
 
 var private g_arena_slab_override = 0l
 
@@ -2533,11 +2541,8 @@ def private arena_slab_blocks(fmt : int) : int64 {
         return g_arena_slab_override
     }
     let bb = arena_block_bytes(fmt)
-    var cap = g_gpu.msr / bb.wq
-    if (bb.ws > 0l) {
-        cap = min(cap, g_gpu.msr / bb.ws)
-    }
-    return cap
+    let cap = min(g_gpu.msr / bb.wq, (g_gpu.msr / bb.ws) * bb.sgroup)
+    return cap - cap % bb.sgroup
 }
 
 // open the next slab, sized to what the content still needs (the last slab is usually partial).
@@ -2550,7 +2555,7 @@ def private arena_open_slab(var a : ArenaFmt) : bool {
         to_log(LOG_INFO, "dasLLAMA vulkan arena: fmt {a.fmt} slab {length(a.slabs)} opens ({cap} blocks; {tail} tail blocks unused in slab {length(a.slabs) - 1})\n")
     }
     let qb = cap * bb.wq
-    let sb = ws_floored(round_up(cap * bb.ws, 4l))   // whole words, since a byte-scale plane (mx4) is read four blocks a word
+    let sb = ws_floored(round_up(arena_ws_bytes(a.fmt, cap), 4l))   // whole words, since a byte-scale plane (mx4) is read four blocks a word
     let wqbuf = g_gpu.dry ? 0ul : try_weights_buf(qb)
     let wsbuf = g_gpu.dry ? 0ul : try_weights_buf(sb)
     if (!g_gpu.dry && (wqbuf == 0ul || wsbuf == 0ul)) {   //! the device had no room for the slab: the placement declines instead of dying mid-upload
@@ -2620,9 +2625,7 @@ def arena_place(wq : uint8 const?; ws : uint8 const?; n, rows : int64; fmt : int
         let bb = arena_block_bytes(fmt)
         if (!g_gpu.dry) {
             upload_region_at(s.wqbuf, blk * bb.wq, wq, need * bb.wq)
-            if (bb.ws > 0l) {
-                upload_region_at(s.wsbuf, blk * bb.ws, ws, need * bb.ws)
-            }
+            upload_region_at(s.wsbuf, arena_ws_off(fmt, blk), ws, arena_ws_bytes(fmt, need))
         }
         return int64(a.cur) << 32l | blk
     }

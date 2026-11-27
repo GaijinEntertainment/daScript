@@ -1926,6 +1926,10 @@ struct Model {
     mlx8bs : array<uint8>
     mlx6bq : array<uint8>
     mlx6bs : array<uint8>
+    q20q : array<uint8>
+    q20s : array<uint8>
+    q10q : array<uint8>
+    q10s : array<uint8>
     kquant_native : bool = false
     // kq stage 4: the kq planes were repacked at load into the active backend's grp<mr> layout.
     // From then on every kq matmul MUST run the backend slots — disk-order portable kernels would
@@ -2276,6 +2280,8 @@ def model_weights_bytes(t : Model) : int64 {
         + long_length(t.iq4nl32q) + long_length(t.iq4nl32s)
         + long_length(t.q4032q) + long_length(t.q4032s)
         + long_length(t.q5032q) + long_length(t.q5032s)
+        + long_length(t.q20q) + long_length(t.q20s)
+        + long_length(t.q10q) + long_length(t.q10s)
         + mlx_plane_bytes(t).q + mlx_plane_bytes(t).s
         + long_length(t.mblob) + long_length(t.vkblob)
         + long_length(t.embq) + long_length(t.embs))
@@ -3035,6 +3041,10 @@ def kq_plane_pair(var t : Model; f : KqFmt;
         invoke(blk, t.mlx8bq, t.mlx8bs)
     } elif (f == KqFmt.mlx6b) {
         invoke(blk, t.mlx6bq, t.mlx6bs)
+    } elif (f == KqFmt.q20) {
+        invoke(blk, t.q20q, t.q20s)
+    } elif (f == KqFmt.q10) {
+        invoke(blk, t.q10q, t.q10s)
     } else {
         return false
     }
@@ -3073,6 +3083,10 @@ def kq_plane_pair(t : Model; f : KqFmt;
         invoke(blk, t.mlx8bq, t.mlx8bs)
     } elif (f == KqFmt.mlx6b) {
         invoke(blk, t.mlx6bq, t.mlx6bs)
+    } elif (f == KqFmt.q20) {
+        invoke(blk, t.q20q, t.q20s)
+    } elif (f == KqFmt.q10) {
+        invoke(blk, t.q10q, t.q10s)
     } else {
         return false
     }
@@ -3090,6 +3104,7 @@ def kq_fmt_row_ok(f : KqFmt; n : int64) : KqFmt {
         return f
     }
     if (f == KqFmt.q51 || f == KqFmt.q5032) return on32 ? f : KqFmt.q8
+    if (kq_grouped_b32(f)) return n % kq_group_elems(f) == 0l ? f : KqFmt.q8
     if (f == KqFmt.iq4nl && off256) return on32 ? KqFmt.iq4nl32 : KqFmt.q8
     if (f == KqFmt.q40 && off256) return on32 ? KqFmt.q4032 : KqFmt.q8
     return (f == KqFmt.k5 || f == KqFmt.nv4) && off256 ? KqFmt.q8 : f   //! NVFP4's 64-weight disk block lands on rows the superblock member cannot hold
@@ -3223,8 +3238,8 @@ def footprint(t : Model) : MemFootprint {
     let mx4s = long_length(t.mxs)                 // raw E8M0 -> 1 byte per 32-block
     let kqb = kq_plane_bytes(t)
     let mlx = mlx_plane_bytes(t)
-    let kq = kqb.q + long_length(t.q51q) + long_length(t.iq4nl32q) + long_length(t.q4032q) + long_length(t.q5032q) + mlx.q
-    let kqs = kqb.s + long_length(t.q51s) + long_length(t.iq4nl32s) + long_length(t.q4032s) + long_length(t.q5032s) + mlx.s
+    let kq = kqb.q + long_length(t.q51q) + long_length(t.iq4nl32q) + long_length(t.q4032q) + long_length(t.q5032q) + long_length(t.q20q) + long_length(t.q10q) + mlx.q
+    let kqs = kqb.s + long_length(t.q51s) + long_length(t.iq4nl32s) + long_length(t.q4032s) + long_length(t.q5032s) + long_length(t.q20s) + long_length(t.q10s) + mlx.s
     return MemFootprint(aux_fp32_bytes = aux, weight_fp32_bytes = wf, q8_bytes = q8, q8_scale_bytes = q8s,
                         q4_bytes = q4, q4_scale_bytes = q4s, mx4_bytes = mx4, mx4_scale_bytes = mx4s,
                         kq_bytes = kq, kq_scale_bytes = kqs,

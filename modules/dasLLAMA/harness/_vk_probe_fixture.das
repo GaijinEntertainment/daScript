@@ -55,6 +55,18 @@ def time_chain(submits, dispatches, warmups : int; rec : block<(raw : VkCommandB
     return submit_avg_us(raw, submits, dispatches, warmups)
 }
 
+//! the first `bytes` of device buffer `dev` as floats, through a cached host buffer; reserved ahead, since a dense row's
+//! planes pass the unreserved-growth cap
+def readback_floats(dev : uint64; bytes : int64) : array<float> {
+    var out : array<float>
+    out |> reserve(bytes / 4l)
+    out |> resize(bytes / 4l)
+    var host = make_host_buf(bytes, true, [cached = true])
+    readback_range(dev, 0u, host, unsafe(addr(out[0])), bytes)
+    destroy_host_buf(host)
+    return <- out
+}
+
 //! two packed f16 scales per word, small positive values (the kernel-suite fixture shape)
 def cool_f16_pair(i : uint) : uint {
     let h = 0x2c00u + (i % 64u)

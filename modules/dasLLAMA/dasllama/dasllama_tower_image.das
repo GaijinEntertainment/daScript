@@ -356,10 +356,10 @@ def tower_kq_seat_take(var cur : TowerKqCursor; f : KqFmt; n : int64) : TowerGem
     }
     let nsb = n / kq_elems(f)
     cur.kq = round_up(cur.kq, kq_qsb(f))
-    cur.ks = round_up(cur.ks, kq_ssb(f))
+    cur.ks = round_up(cur.ks, kq_sbytes(f, kq_sgroup(f)))
     let s = TowerGemmSeat(fmt = f, qoff = cur.kq, soff = cur.ks)
     cur.kq += nsb * kq_qsb(f)
-    cur.ks += nsb * kq_ssb(f)
+    cur.ks += kq_sbytes(f, nsb)
     return s
 }
 

@@ -72,8 +72,12 @@ let KQ_DEV_SSB = 20l
 //! native high bits above it, word 1 = eight 4-bit fields.
 def kq_two_word_row(f : KqFmt) : bool => f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2xxs || f == KqFmt.iq3s4
 
-//! The device scale-row stride of a kq format: 8 B for the two-word-row formats, nv4's one site-scale word, KQ_DEV_SSB for the rest.
-def kq_dev_ssb(f : KqFmt) : int64 => f == KqFmt.nv4 ? NV4_DEV_SSB : (kq_two_word_row(f) ? 8l : KQ_DEV_SSB)
+//! the members whose device planes are their CPU planes, the disk bytes verbatim at every interleave (iq1s, iq1m)
+def kq_dev_is_plane(f : KqFmt) : bool => f == KqFmt.iq1s || f == KqFmt.iq1m
+
+//! The device scale-row stride of a kq format a superblock.
+[arch(at = "../ARCHITECTURE_ENGINE_FORMATS_TQ2.md#tq2-device-row")]
+def kq_dev_ssb(f : KqFmt) : int64 => f == KqFmt.nv4 ? NV4_DEV_SSB : (f == KqFmt.tq2 || f == KqFmt.tq1 ? TQ2_SSB : (kq_two_word_row(f) ? 8l : (kq_dev_is_plane(f) ? kq_ssb(f) : KQ_DEV_SSB)))
 
 //! The device quant stride of a kq format a superblock: the plane's own, but nv4's, whose device unit carries its scale quad.
 def kq_dev_qsb(f : KqFmt) : int64 => f == KqFmt.nv4 ? NV4_DEV_QSB : kq_qsb(f)
@@ -86,20 +90,32 @@ def kq_dev_ssb_i(fmt : int) : int64 {
     return KQ_DEV_SSB
 }
 
-//! the device layout's block strides of a format - the quant bytes and the scale bytes a block, and the block's elements: q8 a
-//! 32-wide block of int8 under one f16 scale, a per-32 or mx4 format its CPU planes verbatim, a superblock format its quants
-//! under the device's scale row
-def dev_block_bytes(f : KqFmt) : tuple<qsb : int64; ssb : int64; belems : int64> {
-    return (qsb = 32l, ssb = 2l, belems = 32l) if (f == KqFmt.q8)
-    return (qsb = kq_dev_qsb(f), ssb = kq_dev_ssb(f), belems = 256l) if (kq_sb(f))
-    return (qsb = kq_qsb(f), ssb = kq_ssb(f), belems = 32l)
+typedef DevBlockBytes = tuple<qsb : int64; ssb : int64; belems : int64; sgroup : int64>
+
+//! the device layout's block strides of a format: quant bytes a block, `ssb` the bytes of one scale unit serving `sgroup` blocks
+def dev_block_bytes(f : KqFmt) : DevBlockBytes {
+    let sg = kq_sgroup(f)
+    return (qsb = 32l, ssb = 2l, belems = 32l, sgroup = sg) if (f == KqFmt.q8)
+    return (qsb = kq_dev_qsb(f), ssb = kq_dev_ssb(f), belems = 256l, sgroup = sg) if (kq_sb(f))
+    return (qsb = kq_qsb(f), ssb = kq_sbytes(f, sg), belems = 32l, sgroup = sg)
+}
+
+//! the device scale-plane byte offset of block `blk` of a `dev_block_bytes` row: the scale unit of its group
+def dev_scale_off(b : DevBlockBytes; blk : int64) : int64 => (blk / b.sgroup) * b.ssb
+
+//! the device scale-plane bytes of `nblocks` whole blocks of a `dev_block_bytes` row; panics when they end inside a group
+def dev_scale_bytes(b : DevBlockBytes; nblocks : int64) : int64 {
+    if (nblocks % b.sgroup != 0l) {
+        panic("dev_scale_bytes: {nblocks} blocks end inside a {b.sgroup}-block scale group")
+    }
+    return (nblocks / b.sgroup) * b.ssb
 }
 
 //! the device-layout bytes of `rows` rows of `n` elements of format `f`: the quant plane and the scale plane
 def dev_rows_bytes(f : KqFmt; n, rows : int64) : tuple<q : int64; s : int64> {
     let b = dev_block_bytes(f)
     let blocks = n / b.belems * rows
-    return (q = blocks * b.qsb, s = blocks * b.ssb)
+    return (q = blocks * b.qsb, s = dev_scale_bytes(b, blocks))
 }
 
 //! q5_1 per-32-block plane strides: 16B nibbles + 4B qh quants, f16 d + f16 m scales.
@@ -115,7 +131,10 @@ def kq_ssb(fmt : int) : int64 => kq_ssb(kq_fmt_of_id(fmt, "kq_ssb"))
 //! True for the kq ids whose tile reads the packed quant plane directly; the others (k5/k6 and
 //! the grid formats) read a byte-expanded panel unpacked once per (group, token-block).
 def kq_reads_packed_planes(fmt : int64) : bool =>
-    fmt == 4l || fmt == 40l || fmt == 44l || fmt == 3l || fmt == 45l || fmt == 2l || fmt == 35l || fmt == 49l
+    fmt == 4l || fmt == 40l || fmt == 44l || fmt == 3l || fmt == 45l || fmt == 2l || fmt == 35l || fmt == 49l || fmt == 22l || fmt == 21l
+
+//! the kq ids of the 1-bit grid formats (iq1s, iq1m): their block body is iq2xs's panel body over a decoded panel and scale rows
+def kq_is_grid1(fmt : int) : bool => fmt == kq_schema_id(KqFmt.iq1s) || fmt == kq_schema_id(KqFmt.iq1m)
 
 //! the kq ids whose block body decodes a codebook grid (iq3s, iq3xxs, iq2s, iq2xs, iq2xxs)
 def kq_is_grid(fmt : int) : bool => fmt == 33 || fmt == 34 || fmt == 23 || fmt == 24 || fmt == 25
@@ -129,7 +148,7 @@ def panel_is_nibble(fmt : int) : bool => fmt == 4 || fmt == 5 || fmt == 6 || fmt
 //! True for the kq ids `dasllama_gemm_gen` carries a block body for: their generators and every
 //! companion stamp a perm together. Any other member's stubs decline on every rail, the layout
 //! companion included, so its planes stay at the reference interleave the reference bodies read.
-def kq_has_emitter(fmt : int) : bool => panel_is_nibble(fmt) || kq_is_grid(fmt) || fmt == 3 || fmt == 2
+def kq_has_emitter(fmt : int) : bool => panel_is_nibble(fmt) || kq_is_grid(fmt) || fmt == 3 || fmt == 2 || kq_is_grid1(fmt) || fmt == 22 || fmt == 21
 
 //! eight +-1 bytes for sign byte `sb`, lane k negative when bit k is set
 def pm1_of(sb : int) : uint64 {

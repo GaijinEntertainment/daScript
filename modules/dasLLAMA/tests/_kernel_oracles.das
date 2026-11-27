@@ -19,6 +19,9 @@ require dasllama/dasllama_plane   // PlaneF / PlaneU16: the CPU depthwise loops'
 require dasllama/dasllama_tower   // fc_dw_bias_rows / fc_dw_bias_rows_f16: the CPU depthwise loops
 require dasllama/dasllama_gpu_rail   // TowerBuf: the cell rigs' plane seats
 require _compares   // erf_series: the erf GELU's double form
+require dasllama/dasllama_kqformat   // kq_sgroup, kq_qsb, kq_desc: the low-bit oracles' plane strides
+require dasllama/dasllama_math_default   // dot_lowbit_q8_scalar: the low-bit row oracle
+require dasllama/dasllama_convert   // dequant_q20_plane_block, dequant_q10_plane_block: the low-bit float witness
 
 //! the rail role a cell rig seats its plane `p` at: a cell's planes ride the roles in the order the cell laid them
 def cell_role(p : int) : TowerBuf => unsafe(reinterpret<TowerBuf>(p))
@@ -664,6 +667,57 @@ def byte_s8(a : array<uint>; i : int) : int {
 def half_at(a : array<uint>; hi : int) : float {
     let w = unpackHalf2x16(a[hi / 2])
     return hi % 2 == 0 ? w.x : w.y
+}
+
+//! the iq4nl32 cells' scale words: cool f16 d, two blocks a word, so the tile's f16 sums stay far from 65504
+def iq4nl32_scale_words(totblk : int; mul : float) : array<uint> {
+    var w : array<uint>
+    w |> resize((totblk + 1) / 2)
+    for (i in range(length(w))) {
+        w[i] = packHalf2x16(float2(mul * float(1 + (2 * i) % 7), mul * float(1 + (2 * i + 1) % 7)))
+    }
+    return <- w
+}
+
+//! a per-32 low-bit member's GEMV row oracle (q20, q10): the engine's scalar dot - the CPU rail's float order - over `nb` blocks
+//! from block `wb0`, a scale group's first
+def lowbit_gemv_row_oracle(f : KqFmt; wq, ws, xq : array<uint>; xs : array<float>; wb0, nb : int) : float {
+    let grp = int(kq_sgroup(f))
+    let qwords = int(kq_qsb(f)) / 4
+    let sbytes = kq_desc(f).ssb
+    unsafe {
+        let wp = addr<uint8 const?>(wq[wb0 * qwords])
+        let sp = addr<uint8 const?>(ws[wb0 / (grp * 2)]) + int64((wb0 / grp) % 2) * sbytes
+        let xp = addr<int8 const?>(xq[0])
+        return (f == KqFmt.q20 ? dot_lowbit_q8_scalar(wp, sp, xp, addr(xs[0]), int64(nb) * 32l, KqTag_q20())
+            : dot_lowbit_q8_scalar(wp, sp, xp, addr(xs[0]), int64(nb) * 32l, KqTag_q10()))
+    }
+}
+
+//! a per-32 low-bit member's plane bytes' float witness (q20, q10): each block's plane dequant against the Q8_0 row in f64, no
+//! kernel lane read; `block_d` reads one d a block in place of one a scale group - the witness's control
+def lowbit_gemv_float_oracle(f : KqFmt; wq, ws, xq : array<uint>; xs : array<float>; wb0, nb : int; block_d : bool = false) : float {
+    let grp = block_d ? 1 : int(kq_sgroup(f))
+    let qbn = int(kq_qsb(f))
+    let sbn = int(kq_desc(f).ssb)
+    var inscope w : array<float>
+    w |> resize(32)
+    var acc = 0.0lf
+    for (b in range(nb)) {
+        let wb = wb0 + b
+        var inscope qb <- [for (i in range(qbn)); uint8(byte_u8(wq, wb * qbn + i))]
+        var inscope sb <- [for (i in range(sbn)); uint8(byte_u8(ws, (wb / grp) * sbn + i))]
+        if (f == KqFmt.q20) {
+            dequant_q20_plane_block(qb, 0l, sb, 0l, w, 0l)
+        } else {
+            dequant_q10_plane_block(qb, 0l, sb, 0l, w, 0l)
+        }
+        for (k in range(32)) {
+            let xv = (byte_u8(xq, b * 32 + k) ^ 0x80) - 0x80
+            acc += double(w[k]) * double(xv) * double(xs[b])
+        }
+    }
+    return float(acc)
 }
 
 //! summed per (row, col) in block order; the device tiles reassociate, so a compare takes the approx bar

@@ -193,11 +193,6 @@ def dequant_q6k_superblock(bytes : array<uint8> | #; bo : int64; var dst : array
 
 // Pointer twins of the three superblock dequants — same math op-for-op, no bounds checks; the
 // threaded gguf_read_tensor_f32 arms drive these from worker lanes (raw pointers only).
-def private rd_u16_p(p : uint8 const?; o : int64) : uint {
-    unsafe {
-        return uint(p[o]) | (uint(p[o + 1l]) << 8u)
-    }
-}
 
 def private rd_i8_p(p : uint8 const?; o : int64) : int {
     unsafe {
@@ -208,8 +203,8 @@ def private rd_i8_p(p : uint8 const?; o : int64) : int {
 
 def dequant_q4k_superblock_p(sp : uint8 const?; bo : int64; var dp : float?; doff : int64) {
     unsafe {
-        let d = f16_to_f32(rd_u16_p(sp, bo))
-        let dmin = f16_to_f32(rd_u16_p(sp, bo + 2l))
+        let d = f16_to_f32(u16_le(sp, bo))
+        let dmin = f16_to_f32(u16_le(sp, bo + 2l))
         let so = bo + 4l
         var qo = bo + 16l
         var dsto = doff
@@ -233,8 +228,8 @@ def dequant_q4k_superblock_p(sp : uint8 const?; bo : int64; var dp : float?; dof
 
 def dequant_q5k_superblock_p(sp : uint8 const?; bo : int64; var dp : float?; doff : int64) {
     unsafe {
-        let d = f16_to_f32(rd_u16_p(sp, bo))
-        let dmin = f16_to_f32(rd_u16_p(sp, bo + 2l))
+        let d = f16_to_f32(u16_le(sp, bo))
+        let dmin = f16_to_f32(u16_le(sp, bo + 2l))
         let so = bo + 4l
         let qho = bo + 16l
         var qo = bo + 48l
@@ -262,7 +257,7 @@ def dequant_q5k_superblock_p(sp : uint8 const?; bo : int64; var dp : float?; dof
 
 def dequant_q6k_superblock_p(sp : uint8 const?; bo : int64; var dp : float?; doff : int64) {
     unsafe {
-        let d = f16_to_f32(rd_u16_p(sp, bo + 208l))
+        let d = f16_to_f32(u16_le(sp, bo + 208l))
         var qlo = bo
         var qho = bo + 128l
         var sco = bo + 192l
@@ -340,21 +335,19 @@ def private nib_strips(var dst : uint8?; src : uint8 const?; n : int64) {
     }
 }
 
-//! One stride unit's disk -> plane transcode keyed by format - the array form with bounds checks
-//! (what the tests, the harness fixtures and the f32 fallback drive; the bulk loader is
-//! `gguf_transcode_kq`). `bo` indexes `bytes`, `kqo` / `kso` the two planes, all in bytes.
+//! One disk block (a scale group) of `fmt` into its planes, bounds-checked; `bo`, `kqo`, `kso` are byte offsets into `bytes`, `kq`, `ks`
 def kq_transcode_superblock(fmt : KqFmt; bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) {
     let d = kq_desc(fmt)
-    if (bo < 0l || bo + d.disk_bytes > long_length(bytes) || kqo < 0l || kqo + d.qsb > long_length(kq) || kso < 0l || kso + d.ssb > long_length(ks)) {
-        panic("kq_transcode_superblock: {fmt} block at {bo} (+{d.disk_bytes} of {long_length(bytes)}) -> kq {kqo} (+{d.qsb} of {long_length(kq)}), ks {kso} (+{d.ssb} of {long_length(ks)}) is out of range")
+    let qgb = d.qsb * d.sgroup
+    if (bo < 0l || bo + d.disk_bytes > long_length(bytes) || kqo < 0l || kqo + qgb > long_length(kq) || kso < 0l || kso + d.ssb > long_length(ks)) {
+        panic("kq_transcode_superblock: {fmt} block at {bo} (+{d.disk_bytes} of {long_length(bytes)}) -> kq {kqo} (+{qgb} of {long_length(kq)}), ks {kso} (+{d.ssb} of {long_length(ks)}) is out of range")
     }
     unsafe {
         kq_transcode_units(fmt, addr<uint8 const?>(bytes[bo]), addr(kq[kqo]), addr(ks[kso]), 0l, 1l, 0l, 0l, 0l)
     }
 }
 
-//! Units [b0, b1) of a tensor's stride-unit stream through the format's codec - a plain function
-//! beside the codecs, stamped here, so the per-unit codec and byte-copy calls inline.
+//! Disk blocks [b0, b1) of a tensor's block stream through the format's codec: `qsb` quant and `ssb` scale bytes a block
 [arch(at = "../ARCHITECTURE_CPU_KERNELS.md#jit-partition-inlining")]
 def kq_transcode_units(fmt : KqFmt; srcp : uint8 const?; var kqp : uint8?; var ksp : uint8?; b0, b1, disk, qsb, ssb : int64) {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
     kq_fmt_stamp(fmt) <| $(F) {
@@ -744,7 +737,7 @@ struct private KqFit {
 }
 
 //! the members with no encoder: one list for the predicate and the refusal
-typedef KqTagNoEncoder = KqTag_q8 | KqTag_q40 | KqTag_q51 | KqTag_iq4xs | KqTag_k3 | KqTag_iq3s | KqTag_iq3xxs | KqTag_iq4nl | KqTag_k2 | KqTag_iq2s | KqTag_iq2xs | KqTag_iq2xxs | KqTag_mx4 | KqTag_iq4nl32 | KqTag_iq3s4 | KqTag_q4032 | KqTag_q5032 | KqTag_nv4 | KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b
+typedef KqTagNoEncoder = KqTag_q8 | KqTag_q40 | KqTag_q51 | KqTag_iq4xs | KqTag_k3 | KqTag_iq3s | KqTag_iq3xxs | KqTag_iq4nl | KqTag_k2 | KqTag_iq2s | KqTag_iq2xs | KqTag_iq2xxs | KqTag_mx4 | KqTag_iq4nl32 | KqTag_iq3s4 | KqTag_q4032 | KqTag_q5032 | KqTag_nv4 | KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b | KqTag_q20 | KqTag_q10 | KqTag_iq1s | KqTag_iq1m | KqTag_tq2 | KqTag_tq1
 
 // the encoder of a member, behind its tag: Q4_K and Q5_K share the scale-and-min superblock, Q6_K is scale-only; a member with
 // no overload here has no encoder, and `kq_has_encoder` says so before a plane is touched
@@ -893,6 +886,10 @@ def dequant_kq_plane_sb(fmt : KqFmt; kq : array<uint8> | #; ks : array<uint8> | 
         dequant_iq4nl_plane_superblock(kq, sb * Q40_QSB, ks, sb * Q40_SSB, dst, doff)
     } elif (fmt == KqFmt.nv4) {   //! the compact UE4M3 row is one form on both carriers
         dequant_nv4_plane_superblock(kq, sb * NV4_QSB, ks, sb * NV4_SSB, dst, doff)
+    } elif (fmt == KqFmt.iq1s) {
+        dequant_iq1s_plane_superblock(kq, sb * IQ1S_QSB, ks, sb * IQ1S_SSB, dst, doff)
+    } elif (fmt == KqFmt.iq1m) {
+        dequant_iq1m_plane_superblock(kq, sb * IQ1M_QSB, ks, sb * IQ1M_SSB, dst, doff)
     } elif (!metal_blob) {
         if (fmt == KqFmt.k6) {
             dequant_k6_plane_superblock(kq, sb * K6_QSB, ks, sb * K6_SSB, dst, doff)
@@ -908,6 +905,10 @@ def dequant_kq_plane_sb(fmt : KqFmt; kq : array<uint8> | #; ks : array<uint8> | 
             dequant_iq3xxs_plane_superblock(kq, sb * IQ3XXS_QSB, ks, sb * IQ3XXS_SSB, dst, doff)
         } elif (fmt == KqFmt.k2) {
             dequant_k2_plane_superblock(kq, sb * K2_QSB, ks, sb * K2_SSB, dst, doff)
+        } elif (fmt == KqFmt.tq2) {
+            dequant_tq2_plane_superblock(kq, sb * TQ2_QSB, ks, sb * TQ2_SSB, dst, doff)
+        } elif (fmt == KqFmt.tq1) {
+            dequant_tq1_plane_superblock(kq, sb * TQ1_QSB, ks, sb * TQ1_SSB, dst, doff)
         } elif (fmt == KqFmt.iq2s) {
             dequant_iq2s_plane_superblock(kq, sb * IQ2S_QSB, ks, sb * IQ2S_SSB, dst, doff)
         } elif (fmt == KqFmt.iq2xs) {
@@ -1119,10 +1120,32 @@ def dequant_k2_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<u
 //! The split-layout twin: `sso` names the 16 pair-byte strip, `dso` the 4B d+dmin header -
 //! independent bases, so the metal-blob split plane reads through the same math.
 def dequant_k2_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; sso, dso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_k2l_superblock_at(kq, kqo, ks, sso, dso, dst, doff, KqTag_k2())
+}
+
+//! k2's group g sub-scale and min nibble pair (`sc | mn << 4`), the strip byte g at `so`
+def k2l_pair(ks : array<uint8> | #; so, g : int64; _f : KqTag_k2) : int => int(ks[so + g])
+
+//! tq2's: every sub-scale and min is 1
+def k2l_pair(_ks : array<uint8> | #; _so, _g : int64; _f : KqTag_tq2) : int => TQ2_K2_PAIR
+
+//! k2's (d, dmin) header at `dso`
+def k2l_head(ks : array<uint8> | #; dso : int64; _f : KqTag_k2) : float2 => float2(f16_to_f32(rd_u16(ks, dso)), f16_to_f32(rd_u16(ks, dso + 2l)))
+
+//! tq2's: its one d is dmin too
+def k2l_head(ks : array<uint8> | #; dso : int64; _f : KqTag_tq2) : float2 {
     let d = f16_to_f32(rd_u16(ks, dso))
-    let dmin = f16_to_f32(rd_u16(ks, dso + 2l))
+    return float2(d, d)
+}
+
+//! The 2-bit lattice's superblock dequant k2 and tq2 share, over the member's `k2l_pair` / `k2l_head` reads: w = (d * sc) * q -
+//! (dmin * mn) per 16-elem group g, in ggml's float order - tq2's d * q - d is `dequantize_row_tq2_0`'s (q - 1) * d exactly
+def private dequant_k2l_superblock_at(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; sso, dso : int64; var dst : array<float> | #; doff : int64; tag : auto(TT)) {
+    let dm = k2l_head(ks, dso, tag)
+    let d = dm.x
+    let dmin = dm.y
     for (g in range64(16l)) {
-        let scb = int(ks[sso + g])
+        let scb = k2l_pair(ks, sso, g, tag)
         let dl = d * float(scb & 15)
         let ml = dmin * float(scb >> 4)
         let qb = kqo + (g / 8l) * 32l + (g % 2l) * 16l
@@ -1131,6 +1154,28 @@ def dequant_k2_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : arra
             dst[doff + g * 16l + l] = dl * float((int(kq[qb + l]) >> sh) & 3) - ml
         }
     }
+}
+
+def private verbatim_fmt(_f : KqTag_tq2) : KqFmt => KqFmt.tq2
+def private verbatim_fmt(_f : KqTag_tq1) : KqFmt => KqFmt.tq1
+def private verbatim_fmt(_f : KqTag_iq1m) : KqFmt => KqFmt.iq1m
+
+//! Transcode one TQ2_0 (66 bytes: 64 qs, f16 d), TQ1_0 (54: 48 qs, 4 qh, f16 d) or IQ1_M (56: 32 qs, 16 qh, 8 scale bytes)
+//! superblock into its planes verbatim: the quant bytes ahead to kq, the scale bytes after them to ks (exact)
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; f : KqTag_tq2 | KqTag_tq1 | KqTag_iq1m) {
+    let qsb = kq_qsb(verbatim_fmt(f))
+    bcopy(kq, src, qsb)
+    bcopy(ks, unsafe(src + qsb), kq_ssb(verbatim_fmt(f)))
+}
+
+//! Reference dequant of one tq2-plane superblock: k2's walk under sub-scale 1, min 1 and dmin = d.
+def dequant_tq2_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_k2l_superblock_at(kq, kqo, ks, kso, kso, dst, doff, KqTag_tq2())
+}
+
+//! Reference dequant of one tq1-plane superblock: d x (q - 1) a trit, `dequantize_row_tq1_0`'s float order.
+def dequant_tq1_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    tq1_dequant_sb(kq, kqo, 0l, 1l, f16_to_f32(rd_u16(ks, kso)), dst, doff)
 }
 
 //! The 6-bit sub-scale i (0..15) of a Q3_K disk block off its 12 packed scale bytes at `so` —
@@ -1420,6 +1465,32 @@ def dequant_iq2xxs_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : 
     }
 }
 
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_IQ1.md#iq1-planes")]
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_iq1s) {
+    bcopy(kq, unsafe(src + IQ1S_SSB), IQ1S_QSB)
+    bcopy(ks, src, IQ1S_SSB)
+}
+
+//! Reference dequant of one iq1s-plane superblock: `dequant_grid1_sb`'s body, `dequantize_row_iq1_s`'s order
+def dequant_iq1s_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_grid1_plane_sb(KqFmt.iq1s, kq, kqo, ks, kso, dst, doff, KqTag_iq1s())
+}
+
+//! Reference dequant of one iq1m-plane superblock: `dequant_grid1_sb`'s body, `dequantize_row_iq1_m`'s order
+def dequant_iq1m_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_grid1_plane_sb(KqFmt.iq1m, kq, kqo, ks, kso, dst, doff, KqTag_iq1m())
+}
+
+//! a 1-bit superblock of the plane arrays through the pointer-form dequant, its planes' and the output's bounds checked
+def private dequant_grid1_plane_sb(fmt : KqFmt; kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64; f : auto(TT)) {
+    if (kqo + kq_qsb(fmt) > long_length(kq) || kso + kq_ssb(fmt) > long_length(ks) || doff + KQ_SB_ELEMS > long_length(dst)) {
+        panic("dequant_grid1_plane_sb: a {fmt} superblock at kq {kqo}, ks {kso} -> dst {doff} is out of range")
+    }
+    unsafe {
+        dequant_grid1_sb(addr(kq[kqo]), addr(ks[kso]), addr(dst[doff]), f)
+    }
+}
+
 //! Transcode one Q5_1 disk block (24 bytes at `src`: d f16, m f16, qh u32, 16 nibble bytes) into
 //! the q51 planes — verbatim splits, exact: the 4 scale bytes to ks, the nibbles then qh to kq.
 def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_q51) {
@@ -1458,6 +1529,30 @@ def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : Kq
 def dequant_q5032_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #;
                               kso : int64; var dst : array<float> | #; doff : int64) {
     dequant_b5_plane_block(kq, kqo, ks, kso, dst, doff, KqTag_q5032())
+}
+
+//! Transcode one Q2_0 or Q1_0 disk block (18 bytes: f16 d, 16 code bytes) verbatim: d to ks as the group's scale unit, codes to kq
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_q20 | KqTag_q10) {
+    kq_transcode_p(src, kq, ks, KqTag_iq4nl32())
+}
+
+//! Reference dequant of one low-bit plane 32-block: w = level x d, element k at slot k % c of byte k / c, d the group's
+def dequant_lowbit_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64; f : auto(TT)) {
+    let d = f16_to_f32(rd_u16(ks, kso))
+    let c = lowbit_codes_a_byte(f)
+    for (k in range64(KQ_B32_ELEMS)) {
+        let byte = int(kq[kqo + k / c])
+        dst[doff + k] = float(lowbit_level(byte, k % c, f)) * d
+    }
+}
+
+def dequant_q20_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_lowbit_plane_block(kq, kqo, ks, kso, dst, doff, KqTag_q20())
+}
+
+//! Reference dequant of one q10-plane 32-block: +d where bit k % 8 of byte k / 8 is set, -d where it is clear
+def dequant_q10_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_lowbit_plane_block(kq, kqo, ks, kso, dst, doff, KqTag_q10())
 }
 
 //! the affine planes ride `gguf_transcode_mlx`: their disk form is three tensors, never one block stream
@@ -1539,7 +1634,7 @@ def private dequant_mlx_block_of(f : KqFmt; kq : array<uint8> | #; qo : int64; k
 def dequant_b32_plane_block(f : KqFmt; kq : array<uint8> | #; ks : array<uint8> | #; bi : int64;
                             var dst : array<float> | #; doff : int64) {
     let qo = bi * kq_qsb(f)
-    let so = bi * kq_ssb(f)
+    let so = kq_soff(f, bi)
     if (f == KqFmt.q51) {
         dequant_q51_plane_block(kq, qo, ks, so, dst, doff)
     } elif (f == KqFmt.iq4nl32) {
@@ -1548,6 +1643,10 @@ def dequant_b32_plane_block(f : KqFmt; kq : array<uint8> | #; ks : array<uint8> 
         dequant_q4032_plane_block(kq, qo, ks, so, dst, doff)
     } elif (f == KqFmt.q5032) {
         dequant_q5032_plane_block(kq, qo, ks, so, dst, doff)
+    } elif (f == KqFmt.q20) {
+        dequant_q20_plane_block(kq, qo, ks, so, dst, doff)
+    } elif (f == KqFmt.q10) {
+        dequant_q10_plane_block(kq, qo, ks, so, dst, doff)
     } elif (kq_mlx_affine(f)) {
         dequant_mlx_block_of(f, kq, qo, ks, so, dst, doff)
     } else {
@@ -1561,8 +1660,8 @@ def dequant_b32_plane_block(f : KqFmt; kq : array<uint8> | #; ks : array<uint8> 
 def private b32_plane_row_f32(f : KqFmt; kq, ks : array<uint8>; nin, nout, mr, r : int64;
                               var dst : array<float>; doff : int64; blk0 : int64) {
     let nb = nin / KQ_B32_ELEMS
-    if (kq_mlx_affine(f) && mr > 1l) {
-        panic("b32_plane_row_f32: the {f} planes sit in disk order - no grp<{mr}> interleave carries their shared group pairs")
+    if ((kq_mlx_affine(f) || kq_sgroup(f) > 1l) && mr > 1l) {
+        panic("b32_plane_row_f32: the {f} planes sit in disk order - no grp<{mr}> interleave carries their shared scale units")
     }
     if (mr <= 1l || r >= (nout / mr) * mr) {
         for (bi in range64(nb)) {

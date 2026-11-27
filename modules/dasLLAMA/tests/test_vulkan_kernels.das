@@ -29,11 +29,13 @@ require ?vulkan dasllama/dasllama_vulkan_decode   // da_nsplit - the decode atte
 require ?vulkan dasllama/dasllama_vulkan_seams
 require ?vulkan dasllama/dasllama_kqformat
 require ?vulkan dasllama/dasllama_convert   // quantize_q8_0_into: the hyper-connection low-rank requant's oracle
+require ?vulkan dasllama/dasllama_math_gen   // q20q8_rm_gemv_gen, q10q8_rm_gemv_gen: the one-copy rail's row-major kernels, read off the device GEMV's own plane bytes
 require ?vulkan spirv/spirv_dis   // foreach_inst / count_op_operand_at: the stamp-shape cells' instruction walks
 require ?vulkan spirv/spirv_grammar   // SpvOp / SpvDecoration / SpvStorageClass
 require dasllama/dasllama_gemm_schema   // nolint:STYLE029,LINT019 — kq_dev_ssb_i sizes the fixtures' device scale planes inside the vulkan arm; the darwin world reads only its kqformat re-export
 require ?vulkan daslib/shader_lingua_franca   // gl_GlobalInvocationID — the CPU replay drives it per lane (only vulkan-guarded arms replay)
 require dasllama/dasllama_common   // MoeGate: the routing cells' select oracle takes the softmax router
+require dasllama/dasllama_math_gen   // rm_gemv_gen: the one-copy rail's row-major kernel the tq2 agreement cell reads off the device plane
 require dasllama/dasllama_arch_qwen35
 require daslib/strings_boost   // join: the spawned fixture's source
 require daslib/math_bits   // float_bits_to_uint / uint_bits_to_float: the NaN sentinel by bit pattern, the read-back planes as floats
@@ -1591,8 +1593,9 @@ def private check_qbytes(t : T?; tag : string; got, want : array<uint>) {
     delete poisoned
 }
 
-//! the fifteen kq formats with a decode GEMV leaf and a batch tile, the order the family cells walk
-let private KQ_LEAF_FMTS = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3), int(KqFmt.iq3s), int(KqFmt.iq3xxs), int(KqFmt.iq4nl), int(KqFmt.k2), int(KqFmt.iq2s), int(KqFmt.iq2xs), int(KqFmt.iq2xxs), int(KqFmt.iq3s4), int(KqFmt.nv4))
+//! the nineteen kq formats with a decode GEMV leaf and a batch tile, the order the family cells walk
+let private KQ_LEAF_FMTS = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3), int(KqFmt.iq3s), int(KqFmt.iq3xxs), int(KqFmt.iq4nl), int(KqFmt.k2), int(KqFmt.iq2s), int(KqFmt.iq2xs), int(KqFmt.iq2xxs), int(KqFmt.iq3s4), int(KqFmt.nv4), int(KqFmt.tq2), int(KqFmt.tq1),
+    int(KqFmt.iq1s), int(KqFmt.iq1m))
 
 //! the family's class rails engage on the device: every leaf's pipeline builds, else the cell skips
 def private kq_leaf_rails_engage(ensure : block<(fmt : int) : bool>) : bool {
@@ -1747,9 +1750,9 @@ def private per32_sum_rows_cell(t : T?; fmt : KqFmt; n, wq_words : int; wq_seed,
     }
 }
 
-[test(description = "The decode GEMV of all fifteen kq leaf formats matches the class CPU oracle within 2e-3 at 1, 2 and 20 superblocks a row and at every lane split, and the oracle matches the float dequant witness where one exists")]
+[test(description = "The decode GEMV of all nineteen kq leaf formats matches the class CPU oracle within 2e-3 at 1, 2 and 20 superblocks a row and at every lane split, and the oracle matches the float dequant witness where one exists")]
 def test_vkd_kq_gemv_family(t0 : T?) {
-    t0 |> run("kq GEMV class family == the CPU oracle (all 15 formats)") <| @(t : T?) {
+    t0 |> run("kq GEMV class family == the CPU oracle (all 19 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!kq_leaf_rails_engage() <| $(fmt : int) => gemv_cls_ensure(fmt)) {
                 t |> skip("no Vulkan device, or a kq GEMV class pipeline failed to build")
@@ -1760,7 +1763,7 @@ def test_vkd_kq_gemv_family(t0 : T?) {
             let nreg = 2
             let rows = nreg * d
             for (fmt in KQ_LEAF_FMTS) {
-                let ws_words_n = rows * nsb * int(kq_dev_ssb_i(fmt) / 4l)
+                let ws_words_n = kq_ws_words(fmt, rows * nsb)
                 var inscope wsh <- kq_ws_plane(fmt, ws_words_n, 1u, uint(fmt) * 13u, d * nsb)   //! a region a plane: its own site scale
                 var f <- kq_gemv_fix(fmt, nreg, d, nsb, uint(fmt) * 77777u, wsh, nsb, 64, 31u, 5u, 0.5, 0.25, 7)
                 var inscope y_ref <- kq_gemv_oracle(fmt, f.wqh, f.wsh, f.xqh, f.xsh, f.regs, nsb * 256, d, nreg)
@@ -1802,13 +1805,70 @@ def test_vkd_kq_gemv_family(t0 : T?) {
     }
 }
 
+//! the int sums of each 16 activation quants of `xq` - the Q8_K form's block sums the row-major kernels' min term reads
+def private q8k_block_sums(xq : array<uint>; n : int) : array<int> => <- [for (b in range(n / 16)); q8k_sum16(xq, b)]
+
+def private q8k_sum16(xq : array<uint>; b : int) : int {
+    var acc = 0
+    for (i in range(16)) {
+        acc += byte_s8(xq, b * 16 + i)
+    }
+    return acc
+}
+
+[test(description = "Off the same device plane bytes of each ternary and 1-bit grid member - seven-superblock rows, so every odd row starts on a two-byte scale row's high half, tq1's 52-byte and the 1-bit members' 48-byte quant rows on no 16-byte boundary - the device decode GEMV and the one-copy rail's CPU row-major kernel (`rm_gemv_gen`) each match the class CPU oracle within 2e-3 on every one of 24 rows and each other within the same bar, a poisoned expected element reddening each bar")]
+def test_vkd_lowbit_rm_agrees(t0 : T?) {
+    for (tf in [KqFmt.tq2, KqFmt.tq1, KqFmt.iq1s, KqFmt.iq1m]) {
+        t0 |> run("{tf}: the row-major CPU kernel == the device decode GEMV off one plane") <| @(t : T?) {
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                let fmt = int(tf)
+                if (!gemv_cls_ensure(fmt)) {
+                    t |> skip("no Vulkan device")
+                    return
+                }
+                let nsb = 7
+                let d = 24
+                let n = nsb * 256
+                var inscope wsh <- kq_ws_plane(fmt, kq_ws_words(fmt, d * nsb), 1u, 29u)
+                var f <- kq_gemv_fix(fmt, 1, d, nsb, 4242u, wsh, nsb, 64, 31u, 5u, 0.5, 0.25, 7)
+                var inscope y_dev : array<float>
+                with_cell_planes() $(var cp : CellPlanes) {
+                    gemv_cell_planes(cp, f, d)
+                    var s_cls = gemv_cls_set(fmt, gather_planes(cp.dev, GEMV_PLANES), gather_planes(cp.bytes, GEMV_PLANES), gather_planes(cp.hazard_bit, GEMV_PLANES))
+                    var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u)
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        gemv_enc(fmt, raw, h, s_cls, pc, int64(d))
+                    }
+                    delete y_dev
+                    y_dev <- plane_run(cp, 5)
+                }
+                var inscope xbs <- q8k_block_sums(f.xqh, n)
+                var inscope y_rm <- nan_plane(d)
+                unsafe {
+                    kq_fmt_stamp(tf) $(F) {
+                        rm_gemv_gen(addr(y_rm[0]), addr<uint8 const?>(f.wqh[0]), addr<uint8 const?>(f.wsh[0]),
+                            addr<int8 const?>(f.xqh[0]), addr<float const?>(f.xsh[0]), addr<int const?>(xbs[0]), int64(n), 0l, int64(d), F)
+                    }
+                }
+                var inscope y_ref <- kq_gemv_oracle(fmt, f.wqh, f.wsh, f.xqh, f.xsh, f.regs, n, d, 1)
+                check_rows(t, "{tf} device decode GEMV at {nsb} superblocks a row against the class CPU oracle", y_dev, y_ref, BAR_APPROX_CTRL, FLAT_ROWS)
+                check_rows(t, "{tf} row-major CPU kernel at {nsb} superblocks a row against the class CPU oracle", y_rm, y_ref, BAR_APPROX_CTRL, FLAT_ROWS)
+                check_rows(t, "{tf} device decode GEMV against the row-major CPU kernel off the same plane", y_dev, y_rm, BAR_APPROX_CTRL, FLAT_ROWS)
+                delete f
+            } else {
+                t |> skip("dasVulkan not present")
+            }
+        }
+    }
+}
+
 //! the token-table gather's leaves (`KqEmb<Fmt>`, `KqGemvLeafT` under `EMB`) for every superblock format: four rows - three token
 //! ids off a five-row table past a one-row lead (the plane's block base), one `EMB_ID_HOST` row copying the host's staged row -
 //! against the class's own lane decode, and on the formats with a float witness each gathered row dotted with a Q8_K activation
 //! row against `kq_gemv_float_oracle` over the same table row (the lanes in element order, independent of the class bit-math)
-[test(description = "The token-table gather of all fifteen superblock formats matches the class lane decode within 2e-3 on three ids past a lead row and one host-staged row, each gathered row dotting to the float GEMV within 1e-3")]
+[test(description = "The token-table gather of all nineteen superblock formats matches the class lane decode within 2e-3 on three ids past a lead row and one host-staged row, each gathered row dotting to the float GEMV within 1e-3")]
 def test_vkd_emb_gather_family(t0 : T?) {
-    t0 |> run("the token-table gather's leaves == the class lane decode, and the float witness, for all 15 superblock formats") <| @(t : T?) {
+    t0 |> run("the token-table gather's leaves == the class lane decode, and the float witness, for all 19 superblock formats") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!kq_leaf_rails_engage() <| $(fmt : int) => emb_cls_ensure(fmt)) {
                 t |> skip("no Vulkan device, or a token-table gather pipeline failed to build")
@@ -1824,7 +1884,7 @@ def test_vkd_emb_gather_family(t0 : T?) {
             var inscope xh <- row_fill(rows * n, 7, 3, 0.01, -0.5)
             for (fmt in KQ_LEAF_FMTS) {
                 var inscope wq <- kq_dev_wq_plane(fmt, (vocab + lead) * nsb, 1u, uint(fmt) * 9973u)
-                var inscope ws <- kq_ws_plane(fmt, (vocab + lead) * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 17u)
+                var inscope ws <- kq_ws_plane(fmt, kq_ws_words(fmt, (vocab + lead) * nsb), 1u, uint(fmt) * 17u)
                 let wblk0 = uint(lead * nsb)
                 var inscope y_ref <- emb_gather_oracle(fmt, wq, ws, ids, xh, n, wblk0, escale)
                 with_cell_planes() $(var cp : CellPlanes) {
@@ -1864,25 +1924,24 @@ def test_vkd_emb_gather_family(t0 : T?) {
     }
 }
 
-//! the per-32 token-table gathers (`<Fmt>Emb`, `Blk32GemvRunT` under `EMB`) for q51, iq4nl32, q4032 and q5032: the same four rows
-//! against the engine's per-32 plane dequant (`dequant_b32_plane_block`) over the cell's own plane bytes, under the embed scale
-[test(description = "The per-32 token-table gathers for q51, iq4nl32, q4032 and q5032 match the engine plane dequant under the embed scale within 2e-3, three ids past a lead row and one host-staged row")]
+[test(description = "The per-32 token-table gathers for q51, iq4nl32, q4032, q5032, q20 and q10 match the engine plane dequant under the embed scale within 2e-3, three ids past a lead row and one host-staged row")]
 def test_vkd_emb_gather_b32(t0 : T?) {
-    t0 |> run("the per-32 token-table gathers == the engine's plane dequant, for q51, iq4nl32, q4032 and q5032") <| @(t : T?) {
+    t0 |> run("the per-32 token-table gathers == the engine's plane dequant, for q51, iq4nl32, q4032, q5032, q20 and q10") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!emb_cls_ensure(int(KqFmt.q51)) || !emb_cls_ensure(int(KqFmt.iq4nl32)) || !emb_cls_ensure(int(KqFmt.q4032)) || !emb_cls_ensure(int(KqFmt.q5032))) {
+            if (!emb_cls_ensure(int(KqFmt.q51)) || !emb_cls_ensure(int(KqFmt.iq4nl32)) || !emb_cls_ensure(int(KqFmt.q4032)) || !emb_cls_ensure(int(KqFmt.q5032))
+                    || !emb_cls_ensure(int(KqFmt.q20)) || !emb_cls_ensure(int(KqFmt.q10))) {
                 t |> skip("no Vulkan device, or a per-32 gather pipeline failed to build")
                 return
             }
-            let n = 96   //! three 32-blocks a row
-            let nb = n / 32
             let vocab = 5
             let lead = 1
             let escale = 1.5
             var inscope ids <- [3u, 0u, EMB_ID_HOST, 4u]
             let rows = length(ids)
-            var inscope xh <- row_fill(rows * n, 7, 3, 0.01, -0.5)
-            for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
+            for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.q20, KqFmt.q10]) {
+                let n = kq_grouped_b32(f) ? 128 : 96   // three 32-blocks a row; a grouped member's rows are whole groups, four blocks
+                let nb = n / 32
+                var inscope xh <- row_fill(rows * n, 7, 3, 0.01, -0.5)
                 let totblk = (vocab + lead) * nb
                 let qwords = int(kq_qsb(f) / 4l)
                 var inscope wq <- hashed_words(totblk * qwords, 1u, uint(f) * 9973u)
@@ -1953,7 +2012,7 @@ def test_vkd_kq_gemv_k4_gu(t0 : T?) {
             let nblk = rows / 32
             let nwsb = 2 * rows * nsb   // the gate stack's rows, then the up stack's
             let wq_words = nwsb * 32
-            let ws_words_n = nwsb * int(kq_dev_ssb_i(fmt) / 4l)
+            let ws_words_n = kq_ws_words(fmt, nwsb)
             var inscope wqh <- hashed_words(wq_words, 7u, 4441u)
             var inscope wsh <- ws_plane(ws_words_n, 3u, 91u)
             var inscope xqh <- hashed_words(nsb * 64, 23u, 17u)
@@ -2659,6 +2718,104 @@ def test_vkd_q5032_float_witness(t0 : T?) {
         } else {
             t |> skip("dasVulkan not present")
         }
+    }
+}
+
+[test(description = "The q20 decode GEMV over Q8_0 activations matches the scalar dot within 2e-3 at 1408 and 2048 wide, and its summed twin folds one, two and four token rows of two weighted slots")]
+def test_vkd_q20_gemv(t0 : T?) {
+    t0 |> run("q20 GEMV class kernel == the scalar dot's float order (2-bit codes spread to signed lanes q - 1 under the group's half-word d; 1408 and 2048 wide)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q20_gemv_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            // 1408: 44 blocks, the expert down width of the MoE carrier; 2048: 64, the dense width of the 1.7B and the MoE's gate and up
+            per32_gemv_cell(t, KqFmt.q20, [1408, 2048], int(KQ_Q20_QWORDS), 79u, 37u, 5u,
+                    @@(wq, ws, xq : array<uint>; xs : array<float>; wb0, nb : int) : float {
+                        return lowbit_gemv_row_oracle(KqFmt.q20, wq, ws, xq, xs, wb0, nb)
+                    }) $(totblk : int) {
+                return <- blk32_scale_plane(KqFmt.q20, totblk)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the one-copy rail's premise for a low-bit member: the CPU row-major kernel (`<fmt>q8_rm_gemv_gen`) and the device GEMV read the SAME plane bytes
+def private lowbit_rm_same_bytes(t : T?; fmt : KqFmt; wq_seed : uint) {   // nolint:STYLE037 - kq_fmt_stamp's generated arms, one a format
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (!gemv_cls_ensure(int(fmt))) {
+            t |> skip("no Vulkan device")
+            return
+        }
+        let n = 2048
+        let nb = n / 32
+        let d = 6
+        var inscope wsh <- blk32_scale_plane(fmt, d * nb)
+        var f <- gemv_fix(1, d, nb, int(kq_qsb(fmt) / 4l), wq_seed, wsh, nb, 8, 41u, 3u, 0.25, 0.125, 5)
+        for (w in f.xqh) {   // the Q8_0 range, -127 .. 127: q10's row-major sign flip (`lev s`) reads a -128 byte as itself
+            for (k in range(4)) {
+                if (((w >> uint(k * 8)) & 0xFFu) == 0x80u) {
+                    w ^= 0x01u << uint(k * 8)
+                }
+            }
+        }
+        var inscope y_rm <- nan_plane(d)
+        unsafe {
+            kq_fmt_stamp(fmt) $(F) {
+                rm_gemv_gen(addr(y_rm[0]), addr<uint8 const?>(f.wqh[0]), addr<uint8 const?>(f.wsh[0]), addr<int8 const?>(f.xqh[0]),
+                    addr<float const?>(f.xsh[0]), null, int64(n), 0l, int64(d), F)
+            }
+        }
+        with_cell_planes() $(var cp : CellPlanes) {
+            gemv_cell_planes(cp, f, d)
+            var s_cls = gemv_cls_set(int(fmt), gather_planes(cp.dev, GEMV_PLANES), gather_planes(cp.bytes, GEMV_PLANES), gather_planes(cp.hazard_bit, GEMV_PLANES))
+            var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u)
+            cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                gemv_enc(int(fmt), raw2, h2, s_cls, pc, int64(d))
+            }
+            var inscope y_dev <- plane_run(cp, 5)
+            check_rows(t, "the {fmt} device GEMV against the CPU row-major kernel over the same bytes", y_dev, y_rm, BAR_APPROX_CTRL, FLAT_ROWS)
+        }
+        delete f
+    } else {
+        t |> skip("dasVulkan not present")
+    }
+}
+
+[test(description = "Off one q20 plane pair the CPU row-major kernel of the one-copy rail and the Vulkan decode GEMV land the same rows within 2e-3 at 2048 wide, and a poisoned row reds the bar")]
+def test_vkd_q20_gemv_rm_same_bytes(t0 : T?) {
+    t0 |> run("q20: the CPU row-major kernel == the device GEMV over the same plane bytes") <| @(t : T?) {
+        lowbit_rm_same_bytes(t, KqFmt.q20, 83u)
+    }
+}
+
+[test(description = "The q10 decode GEMV over Q8_0 activations matches the scalar dot within 2e-3 at 1408 and 2048 wide, and its summed twin folds one, two and four token rows of two weighted slots")]
+def test_vkd_q10_gemv(t0 : T?) {
+    t0 |> run("q10 GEMV class kernel == the scalar dot's float order (sign bits spread to signed lanes +-1 under the four-block group's half-word d; 1408 and 2048 wide)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q10_gemv_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            // 1408: 44 blocks in 11 groups, the expert down width of the MoE carrier; 2048: 64, the dense width of the 1.7B and the MoE's gate and up
+            per32_gemv_cell(t, KqFmt.q10, [1408, 2048], int(KQ_Q10_QWORDS), 89u, 37u, 5u,
+                    @@(wq, ws, xq : array<uint>; xs : array<float>; wb0, nb : int) : float {
+                        return lowbit_gemv_row_oracle(KqFmt.q10, wq, ws, xq, xs, wb0, nb)
+                    }) $(totblk : int) {
+                return <- blk32_scale_plane(KqFmt.q10, totblk)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test(description = "Off one q10 plane pair the CPU row-major kernel of the one-copy rail and the Vulkan decode GEMV land the same rows within 2e-3 at 2048 wide, and a poisoned row reds the bar")]
+def test_vkd_q10_gemv_rm_same_bytes(t0 : T?) {
+    t0 |> run("q10: the CPU row-major kernel == the device GEMV over the same plane bytes") <| @(t : T?) {
+        lowbit_rm_same_bytes(t, KqFmt.q10, 97u)
     }
 }
 
@@ -3741,7 +3898,8 @@ def private blk32_ncol_oracle(f : KqFmt; wqh, wsh, xqh : array<uint>; xsh : arra
                     : (f == KqFmt.iq4nl32 ? iq4nl32_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
                     : (f == KqFmt.q4032 ? q4032_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
                     : (f == KqFmt.q5032 ? q5032_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
-                    : mx4_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)))))
+                    : ((f == KqFmt.q20 || f == KqFmt.q10) ? lowbit_gemv_row_oracle(f, wqh, wsh, xq_c, xs_c, row * nb, nb)
+                    : mx4_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb))))))
             }
         }
     }
@@ -3783,7 +3941,7 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
             wsh |> push_from(blk32_scale_plane(f, d * xblk))
         } else {
             wqh |> push_from(kq_dev_wq_plane(fmt, d * xblk, 1u, uint(fmt) * 77777u))
-            wsh |> push_from(kq_ws_plane(fmt, d * xblk * int(kq_dev_ssb(f) / 4l), 1u, uint(fmt) * 13u))
+            wsh |> push_from(kq_ws_plane(fmt, kq_ws_words(fmt, d * xblk), 1u, uint(fmt) * 13u))
         }
         var xqh <- hashed_words(xq_col * ncol_max, 31u, 5u)
         var xsh <- row_fill(xblk * ncol_max, 1, 0, 0.25, -0.5, 7)
@@ -3872,7 +4030,7 @@ def test_vkd_gemv_ncol(t0 : T?) {
                 return
             }
             let fmts <- kq_gemv_fmts()
-            t |> equal(length(fmts), 1 + length(KQ_LEAF_FMTS), "the superblock roster is q8 and the fifteen kq leaves")
+            t |> equal(length(fmts), 1 + length(KQ_LEAF_FMTS), "the superblock roster is q8 and the nineteen kq leaves")
             for (f in type<KqFmt>) {
                 continue if (kq_discrete_unstamped(f))
                 t |> success(gemv_cls_ensure(int(f)), "{f}: the one-column class rail engages")

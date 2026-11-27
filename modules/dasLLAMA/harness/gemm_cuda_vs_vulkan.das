@@ -35,7 +35,6 @@ require daslib/strings_boost
 require daslib/math_bits   // uint_bits_to_float: the nv4 fixture plane's per-tensor factor word
 require math
 require dasllama/dasllama_kqformat
-require dasllama/dasllama_gemm_schema
 
 let ROUNDS = 10
 let WARMUPS = 2
@@ -152,7 +151,7 @@ def kq_tile_planes(fmt, k, d, tc : int) : Planes {
     var p = Planes(rows = ROWS, map_off = 2 * 4)
     let nsb = k / 256
     p.wq <- kq_dev_wq_plane(fmt, d * nsb, 1u, uint(fmt) * 77777u)
-    p.ws <- kq_ws_plane(fmt, d * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 13u)
+    p.ws <- kq_ws_plane(fmt, kq_ws_words(fmt, d * nsb), 1u, uint(fmt) * 13u)
     p.xf <- ws_plane((ROWS + int(TILE_READ_SLACK)) * k / 2, 3u, 5u)
     var sr <- two_region_sched(ROWS, 0, 0, tc, (d + 127) / 128, 0)
     p.sched <- sr.words
@@ -199,7 +198,7 @@ def moe_planes(fmt, k, d, nreg, rows_per, ttile : int) : Planes {
     let blocks = d * nb
     if (sb) {
         p.wq <- kq_dev_wq_plane(fmt, nreg * blocks, 1u, uint(fmt) * 77777u)
-        p.ws <- kq_ws_plane(fmt, nreg * blocks * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 13u)
+        p.ws <- kq_ws_plane(fmt, kq_ws_words(fmt, nreg * blocks), 1u, uint(fmt) * 13u)
     } else {
         p.wq <- hashed_words(nreg * blocks * int(kq_qsb(f) / 4l), 1u, uint(fmt) * 77777u)
         p.ws <- ws_plane((nreg * blocks * int(kq_ssb(f)) + 3) / 4, 1u, uint(fmt) * 13u)
@@ -675,8 +674,9 @@ def race_q8_rows(shapes : array<tuple<k : int; d : int>>) : int {
 //! the superblock formats' cm2 l and m tiles - every format of the list, or the ones `only` names; the rows measured
 def race_sb_rows(shapes : array<tuple<k : int; d : int>>; only : table<string; void>) : int {
     var measured = 0
-    print("superblock cm2 tiles (the Q4_K_M file's formats; the three 4-bit lattices - Q4_0, IQ4_NL, NVFP4)\n")
-    for (fmt in fixed_array(int(KqFmt.k4), int(KqFmt.k6), int(KqFmt.q40), int(KqFmt.iq4nl), int(KqFmt.nv4))) {
+    print("superblock cm2 tiles (the Q4_K_M file's formats; the three 4-bit lattices - Q4_0, IQ4_NL, NVFP4; the 2-bit lattice - Q2_K, TQ2_0; TQ1_0; IQ2_XXS and the 1-bit grid - IQ1_S, IQ1_M)\n")
+    for (fmt in fixed_array(int(KqFmt.k4), int(KqFmt.k6), int(KqFmt.q40), int(KqFmt.iq4nl), int(KqFmt.nv4), int(KqFmt.k2), int(KqFmt.tq2), int(KqFmt.tq1),
+            int(KqFmt.iq2xxs), int(KqFmt.iq1s), int(KqFmt.iq1m))) {
         if (!empty(only) && !key_exists(only, "{kq_fmt_of_slot(fmt)}")) continue
         for (tc in [256, 128]) {
             for (s in shapes) {

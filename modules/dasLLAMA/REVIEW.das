@@ -194,23 +194,27 @@ var private VISION_SEAM_EXEMPT <- {
     "modules/dasLLAMA/harness/vision_lane_probe.das"   //! the lane probe pins a family's lane and mints its tower in memory - neither reaches the carrier
 }
 
-def private carried_families(carrier, kind_enum : string) : array<string> {
-    var fams : array<string>
-    var in_kind = false
-    for (line in split(fread(carrier), "\n")) {
-        if (starts_with(line, "enum {kind_enum}") || starts_with(line, "enum private {kind_enum}")) {
-            in_kind = true
-        } elif (in_kind && starts_with(line, "}")) {
+//! the member names of `enum <name>` in `path`, in declaration order; none when the file declares no such enum
+def private enum_members(path, name : string) : array<string> {
+    var members : array<string>
+    var inside = false
+    for (line in split(fread(path), "\n")) {
+        if (starts_with(line, "enum {name}") || starts_with(line, "enum private {name}")) {
+            inside = true
+        } elif (inside && starts_with(line, "}")) {
             break
-        } elif (in_kind) {
-            let name = ident_prefix(slice(line, 4))
-            if (!empty(name) && name != "none") {
-                fams |> push("dasllama_{name}")
+        } elif (inside) {
+            let member = ident_prefix(slice(line, 4))
+            if (!empty(member)) {
+                members |> push(member)
             }
         }
     }
-    return <- fams
+    return <- members
 }
+
+def private carried_families(carrier, kind_enum : string) : array<string> =>
+    <- [for (name in enum_members(carrier, kind_enum)); "dasllama_{name}"; where name != "none"]
 
 def private family_owned_names(fam : string; fam_path : string; var out : array<string>) {
     let prefix = slice(fam, length("dasllama_"))
@@ -1440,8 +1444,8 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // the TTS block file's *_prepare mints, the layout helpers and the layout constants' declaration
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
-let private IMAGE_LAYOUT_STAMP_VERSION = 66
-let private IMAGE_LAYOUT_STAMP_HASH = 0x2b0bb37fa2eac985ul
+let private IMAGE_LAYOUT_STAMP_VERSION = 70
+let private IMAGE_LAYOUT_STAMP_HASH = 0x529d4bcc5c0fcc0eul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
@@ -1455,6 +1459,7 @@ var private LAYOUT_HELPERS <- {
     "w_append", "w_zeros", "w_header", "store_at", "store_head_record", "image_lane_head", "kq_plane_name",
     "blob_push", "weight_slot", "table_slot", "conv1d_weight_row",
     "conv1d_quant_rows", "conv1d_quant_k", "conv1d_quant_row", "q8_matrix_mint", "q8_matrix_seat", "conv1d_size_kq", "kq_planes_seat", "kq_planes_size",
+    "kq_sbytes", "kq_soff", "kq_sgroup",
     "vk_mint_plane", "vk_mint_walk", "vk_mint_sink_append",
     "gg_stream_plane", "gg_job_span", "gg_plane_total", "tower_dev_put", "tower_bake_q8",
     "kq_gather_rows_dev", "nv4_dev_unit", "kq_dev_qsb", "kq_dev_ssb", "pack_iq_dev_row", "wd_gather", "tower_fc_gather_kq_member", "tower_gather_q8_regions",
@@ -1858,13 +1863,13 @@ def private cm2_template_chain_lines(name : string) : array<string> {
 //! one class ladder trio every format template on the cm2 base joins
 struct private LadderTrio {
     suffix : string     //! the stamp's class suffix: `<Fmt>` + suffix
-    tail : string       //! the dispatch name's tail: `kq_batch_<fmt>_` + tail; a per-32 format (q8, q51, mx4, iq4nl32, q4032, q5032) spells `<fmt>_batch_` + tail
+    tail : string       //! the dispatch name's tail: `kq_batch_<fmt>_` + tail; a per-32 format (q8, q51, mx4, iq4nl32, q4032, q5032, q20, q10) spells `<fmt>_batch_` + tail
     ladder : string     //! a ladder trio of this tile's own beside the engine's `cm2_cls_*` (the kernel cells' `khr_cls_`), "" where there is none
     why : string        //! what a missing arm does at run time
 }
 
 def private cm2_dispatch_name(fmt, tail : string) : string =>
-    fmt == "q8" || fmt == "q51" || fmt == "mx4" || fmt == "iq4nl32" || fmt == "q4032" || fmt == "q5032" ? "{fmt}_batch_{tail}" : "kq_batch_{fmt}_{tail}"
+    fmt == "q8" || fmt == "q51" || fmt == "mx4" || fmt == "iq4nl32" || fmt == "q4032" || fmt == "q5032" || fmt == "q20" || fmt == "q10" ? "{fmt}_batch_{tail}" : "kq_batch_{fmt}_{tail}"
 
 //! the words of a `let [private] NAME = "..."` line in `path`, or none with a finding: a roster the gate reads where the code reads it
 def private let_words(path, name : string) : array<string> {
@@ -2299,6 +2304,53 @@ def private ident_tokens_after(text, prefix : string; quoted : bool) : array<str
     return <- out
 }
 
+let private KQ_MEMBER_SET_BITS = 32   //! a set of members is one uint, a bit a member; the Vulkan decode block's layer-key radix is the same 32
+
+//! `rm_dev_serves` names exactly the `KqFmt` members off `KQ_DISCRETE_UNSTAMPED`
+def private check_rail_names_stamped_members {
+    let section = "ARCHITECTURE_CPU_KERNELS.md#row-major-walk"
+    var inscope members <- enum_members(KQ_FORMAT, "KqFmt")
+    if (empty(members)) {
+        gate_finding(KQ_FORMAT, "no `enum KqFmt` block - the one-copy rail's roster rule has no member list to walk; keep the spelling or move this check with it ({section})")
+        return
+    }
+    var inscope unstamped <- let_words(KQ_FORMAT, "KQ_DISCRETE_UNSTAMPED")
+    var inscope named : table<string>
+    var at = 0
+    var inscope fns <- function_bodies(BLOCKS_FILE) $(header) {
+        return header |> starts_with("def rm_dev_serves(")
+    }
+    for (fn in fns) {
+        at = fn.line
+        for (member in ident_tokens_after(fn.body, "KqFmt.", false)) {
+            named |> insert(member)
+        }
+    }
+    if (at == 0) {
+        gate_finding(BLOCKS_FILE, "no `def rm_dev_serves(` function - the one-copy rail's roster rule has no roster to read; keep the spelling or move this check with it ({section})")
+        return
+    }
+    for (member in members) {
+        let stamped = find_index(unstamped, member) < 0
+        if (stamped && !key_exists(named, member)) {
+            gate_finding(BLOCKS_FILE, at,
+                "rm_dev_serves does not name KqFmt.{member}, a member the discrete homes stamp (it is off KQ_DISCRETE_UNSTAMPED) - the CPU reads a streamed expert stack off the pinned device planes through the member's row-major kernel, and a member the roster leaves out takes a second copy of its weights; give the member a row-major family over its device layout and name it here ({section})")
+        } elif (!stamped && key_exists(named, member)) {
+            gate_finding(BLOCKS_FILE, at,
+                "rm_dev_serves names KqFmt.{member}, which KQ_DISCRETE_UNSTAMPED says no discrete home stamps - no device layout of it exists for a row-major kernel to read; drop the name, or stamp the member and take it off that list ({section})")
+        }
+    }
+}
+
+//! `enum KqFmt` holds no more members than a member set has bits
+def private check_kq_member_count {
+    let count = length(enum_members(KQ_FORMAT, "KqFmt"))
+    if (count > KQ_MEMBER_SET_BITS) {
+        gate_finding(KQ_FORMAT,
+            "KqFmt has {count} members and a member set holds {KQ_MEMBER_SET_BITS} - a tower's kq_fmts word is a uint with bit int(member), and the Vulkan decode block's layer key takes DAT_KEY_FMTS = {KQ_MEMBER_SET_BITS} as its radix, so the next member's bit wraps and its key lands on another layer's; widen every kq_fmts word and that radix in the same change, then raise KQ_MEMBER_SET_BITS here (ARCHITECTURE_ENGINE_FORMATS_TERMS.md#kq-member-set)")
+    }
+}
+
 // every whole-string `"VK_*"` literal of `text` - an extension read by name, never a name inside prose
 def private vk_ext_literals(text : string) : array<string> {
     var out <- [for (name in ident_tokens_after(text, "\"", true)); name; where name |> starts_with("VK_")]
@@ -2700,7 +2752,7 @@ let private GEMM_GEN_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_gemm_gen_f32.das",
     "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das"
 ]
-let private GEMM_GEN_STAMP_HASH = 0x81f66262556ab2d6ul
+let private GEMM_GEN_STAMP_HASH = 0xb3f204ac2bb47f85ul
 
 [arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
 def private check_gemm_gen_stamp {
@@ -4018,6 +4070,8 @@ def main() : int {
     check_ncol_rr_literal(DISCRETE_KERNELS, [CUDA_CLASSES_FILE, VK_CLASSES])
     check_rows8_kernel_strides()
     check_kq_form_matrix()
+    check_rail_names_stamped_members()
+    check_kq_member_count()
     check_vk_extension_roster()
     check_cuda_stream_discipline()
     check_discrete_seat_parity()

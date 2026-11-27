@@ -211,9 +211,8 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     return true
 }
 
-//! A superblock format's Metal scale form differs from the engine's plane: every format but q40, iq4nl and nv4, which serve as
-//! they are
-def metal_kq_scale_moves(f : KqFmt) : bool => f != KqFmt.q40 && f != KqFmt.iq4nl && f != KqFmt.nv4
+//! whether a superblock format's Metal scale form differs from its engine plane: all but q40, iq4nl, nv4 and the in-place members
+def metal_kq_scale_moves(f : KqFmt) : bool => f != KqFmt.q40 && f != KqFmt.iq4nl && f != KqFmt.nv4 && !kq_dev_is_plane(f)
 
 //! the Metal device form of a K-quant scale plane: left as the engine holds it, the strip a superblock, or scale and d rows
 enum KqScaleForm {
@@ -423,7 +422,7 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
                         }
                         let u = rp[i].off / kq_elems(rf)
                         var qp = kqpp[int(rf)] + u * kq_qsb(rf)
-                        var sp = kspp[int(rf)] + u * kq_ssb(rf)
+                        var sp = kspp[int(rf)] + kq_soff(rf, u)
                         if (kq_sb(rf)) {
                             invoke(rkq, kq_schema_id(rf), qp, sp, rp[i].n, rp[i].d)
                         } else {
@@ -1020,23 +1019,26 @@ def private pack_iq_dev_row(fmt : KqFmt; var out : uint8?; d : uint8 const?; sc 
 }
 
 //! Gather one PREPARED per-32 expert stack (q51, iq4nl32) into the GPU tier's device planes: the
-//! disk layout (`qb` quant bytes and `sb` scale bytes a 32-block, row-major), out of whatever
+//! disk layout (`kq_qsb` quant bytes a 32-block, `kq_sbytes` scale bytes a row, row-major), out of whatever
 //! grp<mr> interleave the repack left - the quant bytes as four-byte columns, the scale bytes verbatim per row.
-def private moe_gpu_gather_stack_b32(qplane, splane : array<uint8>; qb, sb : int64; woff : int64; n, rows, slice_rows : int64;
+def private moe_gpu_gather_stack_b32(qplane, splane : array<uint8>; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
                                      repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
     let nb = n / Q8_BLOCK_ELEMS
+    let qb = kq_qsb(fmt)
     assert(n % Q8_BLOCK_ELEMS == 0l, "GPU MoE per-32 gather: row length must be a 32-block multiple")
     assert(rows * nb * qb <= 2147483647l, "GPU MoE per-32 stack exceeds the int32 gather-buffer rail")
-    wq |> grow_resize(rows * nb * qb)
-    ws |> grow_resize(rows * nb * sb)
-    let nslices = int(rows / slice_rows)
     let qrow = nb * qb
-    let srow = nb * sb
-    let ng = repacked ? slice_rows / mr : 0l
+    let srow = kq_sbytes(fmt, nb)
+    wq |> grow_resize(rows * qrow)
+    ws |> grow_resize(rows * srow)
+    let nslices = int(rows / slice_rows)
+    let interleaved = repacked && mr > 1l
+    let sb = interleaved ? kq_ssb(fmt) : 0l
+    let ng = interleaved ? slice_rows / mr : 0l
     unsafe {
         let b0 = woff / Q8_BLOCK_ELEMS
         let qp = addr<uint8 const?>(qplane[b0 * qb])
-        let sp = addr<uint8 const?>(splane[b0 * sb])
+        let sp = addr<uint8 const?>(splane[kq_soff(fmt, b0)])
         var wqp = addr(wq[0])
         var wsp = addr(ws[0])
         let nrows = nslices * int(slice_rows)
@@ -1048,15 +1050,15 @@ def private moe_gpu_gather_stack_b32(qplane, splane : array<uint8>; qb, sb : int
                     let ri = rr % slice_rows
                     let sliceQ = (rr - ri) * qrow
                     let sliceS = (rr - ri) * srow
-                    let grouped = repacked && ri < ng * mr
+                    let grouped = interleaved && ri < ng * mr
                     let g = ri / mr
                     let r = ri % mr
                     for (bi in range64(nb)) {
                         var dq = wqp + rr * qrow + bi * qb
-                        var dsc = wsp + (rr * nb + bi) * sb
                         if (grouped) {
                             let gq = qp + sliceQ + g * mr * qrow + bi * qb * mr
                             let gs = sp + sliceS + g * mr * srow + bi * sb * mr
+                            var dsc = wsp + rr * srow + bi * sb
                             for (j in range64(qb)) {
                                 dq[j] = gq[(j / 4l) * 4l * mr + r * 4l + j % 4l]
                             }
@@ -1065,14 +1067,13 @@ def private moe_gpu_gather_stack_b32(qplane, splane : array<uint8>; qb, sb : int
                             }
                         } else {
                             let rq = qp + sliceQ + ri * qrow + bi * qb
-                            let rs = sp + sliceS + ri * srow + bi * sb
                             for (m in range64(qb)) {
                                 dq[m] = rq[m]
                             }
-                            for (m in range64(sb)) {
-                                dsc[m] = rs[m]
-                            }
                         }
+                    }
+                    if (!grouped) {
+                        memcpy(reinterpret<void?>(wsp + rr * srow), reinterpret<void const?>(sp + sliceS + ri * srow), srow)
                     }
                 }
             }
@@ -1085,8 +1086,7 @@ def moe_gpu_gather_b32_stack(t : Model; fmt : KqFmt; woff : int64; n, rows, slic
                              repacked : bool; mr : int64; var wq : array<uint8>;
                              var ws : array<uint8>) {
     kq_plane_pair(t, fmt) $(q, s) {
-        moe_gpu_gather_stack_b32(q, s, kq_qsb(fmt), kq_ssb(fmt), woff, n, rows, slice_rows,
-            repacked, mr, wq, ws)
+        moe_gpu_gather_stack_b32(q, s, fmt, woff, n, rows, slice_rows, repacked, mr, wq, ws)
     }
 }
 
@@ -1220,7 +1220,7 @@ def kq_gather_rows_dev(fmt : KqFmt; qp, sp : uint8 const?; n, rows, slice_rows :
                     let site_word = site_words != null ? site_words[(rr - ri) / slice_rows] : 0u
                     let sliceQ = (rr - ri) * qrow
                     let sliceS = (rr - ri) * srow
-                    let grouped = repacked && ri < ng * mr
+                    let grouped = repacked && ri < ng * mr && !kq_dev_is_plane(fmt)
                     let g = ri / mr
                     let r = ri % mr
                     for (sbi in range64(nsb)) {
@@ -1258,8 +1258,8 @@ def kq_gather_rows_dev(fmt : KqFmt; qp, sp : uint8 const?; n, rows, slice_rows :
                                     }
                                     dq[64l + m] = uint8(hbyte)
                                 }
-                            } elif (fmt == KqFmt.k2) {   // 16 qs columns, nothing else
-                                for (m in range64(64l)) {
+                            } elif (fmt == KqFmt.k2 || fmt == KqFmt.tq2 || fmt == KqFmt.tq1) {
+                                for (m in range64(qsb)) {
                                     dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
                                 }
                             } elif (fmt == KqFmt.iq2s) {   // 18 uniform 4-byte columns over [idx][signs][qh]
@@ -1311,6 +1311,9 @@ def kq_gather_rows_dev(fmt : KqFmt; qp, sp : uint8 const?; n, rows, slice_rows :
                                 for (idx in range64(16l, 20l)) {
                                     dsc[idx] = uint8((site_word >> uint((idx - 16l) * 8l)) & 0xFFu)
                                 }
+                            } elif (fmt == KqFmt.tq2 || fmt == KqFmt.tq1) {
+                                dsc[0] = gs[2l * r]
+                                dsc[1] = gs[2l * r + 1l]
                             } elif (fmt == KqFmt.k2) {   // the field-major grp header re-packs to [d][dmin][16 pair bytes]
                                 dsc[0] = gs[16l * mr + 2l * r]
                                 dsc[1] = gs[16l * mr + 2l * r + 1l]
@@ -1334,7 +1337,7 @@ def kq_gather_rows_dev(fmt : KqFmt; qp, sp : uint8 const?; n, rows, slice_rows :
                         } else {
                             let rq = qp + sliceQ + ri * qrow + sbi * qsb
                             let rs = sp + sliceS + ri * srow + sbi * dssb
-                            if (fmt == KqFmt.q40 || fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s4 || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq4nl || fmt == KqFmt.nv4 || fmt == KqFmt.k2 || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) {
+                            if (fmt == KqFmt.q40 || fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s4 || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq4nl || fmt == KqFmt.nv4 || fmt == KqFmt.k2 || fmt == KqFmt.tq2 || fmt == KqFmt.tq1 || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs || kq_dev_is_plane(fmt)) {
                                 for (m in range64(qsb)) {   // disk bytes already in the device form (k/k+16 pairs; k3's lanes)
                                     dq[m] = rq[m]
                                 }
@@ -1363,6 +1366,13 @@ def kq_gather_rows_dev(fmt : KqFmt; qp, sp : uint8 const?; n, rows, slice_rows :
                             }
                             if (two_word_row) {   // the plane row (d, then the eight decoded sub-scale bytes at 4) packs to two words
                                 pack_iq_dev_row(fmt, dsc, rs, rs + 4l, 1l)
+                            } elif (kq_dev_is_plane(fmt)) {
+                                for (idx in range64(dssb)) {
+                                    dsc[idx] = rs[idx]
+                                }
+                            } elif (fmt == KqFmt.tq2 || fmt == KqFmt.tq1) {
+                                dsc[0] = rs[0]
+                                dsc[1] = rs[1]
                             } elif (fmt == KqFmt.k6 || fmt == KqFmt.q40 || fmt == KqFmt.k3 || fmt == KqFmt.iq4nl || fmt == KqFmt.nv4 || fmt == KqFmt.k2 || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs) {   // rows already in the decoded device form
                                 for (idx in range64(dssb)) {
                                     dsc[idx] = rs[idx]

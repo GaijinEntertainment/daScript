@@ -2430,7 +2430,7 @@ struct private TsPkSite {
 def private ts_pk_site(x : RailBuf; xoff : int64; y : RailBuf; yoff : int64 = 0l) : TsPkSite => TsPkSite(x = x, xoff = xoff, y = y, yoff = yoff)
 
 //! the formats the stored row GEMV has no stamp for: every member but Q8_0, Q4_K, Q5_K and Q6_K
-let private TS_PKST_SKIP = "q40 q51 iq4xs k3 iq3s iq3xxs iq4nl k2 iq2s iq2xs iq2xxs mx4 iq4nl32 iq3s4 q4032 q5032 nv4"
+let private TS_PKST_SKIP = "q40 q51 iq4xs k3 iq3s iq3xxs iq4nl k2 tq2 tq1 iq2s iq2xs iq2xxs iq1s iq1m mx4 iq4nl32 iq3s4 q4032 q5032 nv4 q20 q10"
 
 //! the stored row GEMV at `s`: the stamp of its kind over the leaf's member, a member a stamp (`TtsPkGemvStoredT`)
 def tts_pkst_enc(var rl : auto(R); s : TtsPkStSite; args : GkPkGemvArgs; nout : int64) {   // nolint:STYLE037,STYLE038 - kq_tile_stamp's generated arms, a format ladder a kind

@@ -351,6 +351,10 @@ struct ImgTableProbe {
     mlx8bs : array<uint8>
     mlx6bq : array<uint8>
     mlx6bs : array<uint8>
+    q20q : array<uint8>
+    q20s : array<uint8>
+    q10q : array<uint8>
+    q10s : array<uint8>
     image_map : void?
     image_bytes : uint64
 }
@@ -397,7 +401,7 @@ def private fill_bytes(var a : array<uint8>; n : int; seed : int) {
     }
 }
 
-[test(description = "A synthetic image carrier round-trips the q51, iq4nl32 and mlx planes byte-exact through their top-level section pairs while the same formats' table slots write no section, so no two sections share a name")]
+[test(description = "A synthetic image carrier round-trips the q51, iq4nl32, mlx, q20 and q10 planes byte-exact through their top-level section pairs while the same formats' table slots write no section, so no two sections share a name")]
 def test_image_table_slot_names(t : T?) {
     t |> run("synthetic carrier: a 32-block format's table slot never writes - its planes are the top-level pair of the same section name") @(t : T?) {
         if (!arm_on(t, "mechanics")) {
@@ -421,6 +425,12 @@ def test_image_table_slot_names(t : T?) {
         fill_bytes(p.mlx6bq, 768, 14)
         fill_bytes(p.mlx6bs, 64, 15)
         fill_bytes(p.kq[int(KqFmt.mlx6b)].q, 222, 16)
+        fill_bytes(p.q20q, 512, 17)
+        fill_bytes(p.q20s, 64, 18)
+        fill_bytes(p.kq[int(KqFmt.q20)].q, 111, 19)
+        fill_bytes(p.q10q, 256, 20)
+        fill_bytes(p.q10s, 32, 21)
+        fill_bytes(p.kq[int(KqFmt.q10)].q, 77, 22)
         t |> success(save_image(p, path, "img-table"), "save")
         var m = ImgTableProbe()
         t |> success(load_image(path, m, "img-table"), "the image maps back (no two sections share a name)")
@@ -440,6 +450,12 @@ def test_image_table_slot_names(t : T?) {
         t |> equal(count_mismatch(m.mlx6bq, p.mlx6bq), 0l, "mlx6bq element-exact from the top-level pair")
         t |> equal(count_mismatch(m.mlx6bs, p.mlx6bs), 0l, "mlx6bs element-exact")
         t |> equal(long_length(m.kq[int(KqFmt.mlx6b)].q), 0l, "the mlx6b slot rode no section")
+        t |> equal(count_mismatch(m.q20q, p.q20q), 0l, "q20q element-exact from the top-level pair")
+        t |> equal(count_mismatch(m.q20s, p.q20s), 0l, "q20s element-exact")
+        t |> equal(long_length(m.kq[int(KqFmt.q20)].q), 0l, "the q20 slot rode no section")
+        t |> equal(count_mismatch(m.q10q, p.q10q), 0l, "q10q element-exact from the top-level pair")
+        t |> equal(count_mismatch(m.q10s, p.q10s), 0l, "q10s element-exact")
+        t |> equal(long_length(m.kq[int(KqFmt.q10)].q), 0l, "the q10 slot rode no section")
         delete m
         t |> success(remove(path), "probe image removed")
         delete p
