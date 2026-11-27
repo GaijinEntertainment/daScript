@@ -178,6 +178,17 @@ def private expert_column() : tuple<col : string; per_plane : int64> {
     }
 }
 
+//! the run's home has the f16-fed expert chain a window's meet claims regions through: the CUDA home's, the Vulkan home's on an
+//! NV_coopmat2 device
+def home_has_meet_chain() : bool {
+    return true if (gpu_want_cuda())
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return g_gpu != null && g_gpu.has_coopmat2
+    } else {
+        return false
+    }
+}
+
 //! the device carries an f16-fed tile family for the routed block's expert pieces: the cm2 s and e stamps in cm2 mode, the KHR
 //! 128 x 128 tile in mm mode at subgroup 32; without either the Q8-fed chain's batch tiles serve them
 def private device_has_expert_tiles() : bool {

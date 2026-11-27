@@ -72,7 +72,11 @@ def private host_rail_at() : HostRailAt => HostRailAt(met = g_moe_meet_cpu_exper
 //! since `at`, held into `h`: the meet handed the host experts over `what`; under `dev_rows` the rare rail read rows off the
 //! device planes; under `one_row_rail` the fed steps' host picks went through the rail
 def private witness_since(var h : Held; at : HostRailAt; one_row_rail, dev_rows : bool; what : string) {
-    h |> held_fact(g_moe_meet_cpu_experts > at.met, "the meet handed the host {g_moe_meet_cpu_experts - at.met} experts over {what}")
+    if (home_has_meet_chain()) {
+        h |> held_fact(g_moe_meet_cpu_experts > at.met, "the meet handed the host {g_moe_meet_cpu_experts - at.met} experts over {what}")
+    } else {
+        h |> held_cell_skip("the meet's host share over {what}: this home has no f16-fed expert chain (a Vulkan device without NV_coopmat2), so no window meets")
+    }
     if (dev_rows) {
         h |> held_fact(g_rare_dev_rows > at.dev_rows, "the rare rail read {g_rare_dev_rows - at.dev_rows} rows off the device planes over {what} - the kernels' rows are in the bar")
     }
