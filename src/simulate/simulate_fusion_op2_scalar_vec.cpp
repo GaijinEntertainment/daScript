@@ -15,7 +15,7 @@
 // fake DAS_NODE to support regular eval
 #undef DAS_NODE
 #define DAS_NODE(TYPE,CTYPE)                                    \
-    DAS_EVAL_ABI virtual vec4f eval ( das::Context & context ) override {    \
+    virtual vec4f DAS_EVAL_ABI eval ( das::Context & context ) override {    \
         return compute(context);                                \
     }
 

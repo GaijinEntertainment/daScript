@@ -49,7 +49,7 @@ namespace das {
         SimNode_Jit ( const LineInfo & at, JitFunction eval )
             : SimNode(at), func(eval) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         virtual bool rtti_node_isJit() const override { return true; }
         virtual void * rtti_node_jitFunction() const override { return (void *) func; }
         JitFunction func = nullptr;
@@ -144,7 +144,7 @@ namespace das {
         SimNode_JitBlock ( const LineInfo & at, JitBlockFunction eval, Block * bptr, uint64_t ad )
             : SimNode_ClosureBlock(at,false,false,ad), func(eval), blockPtr(bptr) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         JitBlockFunction func = nullptr;
         Block * blockPtr = nullptr;
     };

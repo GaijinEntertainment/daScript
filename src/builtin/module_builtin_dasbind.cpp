@@ -449,7 +449,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                 context.throw_error_at(debugInfo, "%s", message);
             }
         }
-        DAS_EVAL_ABI vec4f eval ( Context & context ) override {
+        vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             if ( !fnptr ) {
                 bind(context);
@@ -850,7 +850,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             if ( is_in_completion() ) return nullptr;
             struct SimNode_NoIndirect : SimNode {
                 SimNode_NoIndirect ( const LineInfo & at ) : SimNode(at) {}
-                virtual vec4f eval ( Context & ctx ) override {
+                virtual vec4f DAS_EVAL_ABI eval ( Context & ctx ) override {
                     ctx.throw_error_at(debugInfo, "a dasbind extern has no body to call - it is reached "
                         "through its call site, which transformCall rewrites, not through a function pointer");
                     return v_zero();

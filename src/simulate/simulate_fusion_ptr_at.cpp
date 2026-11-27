@@ -142,7 +142,7 @@ namespace das {
 #define IMPLEMENT_PTR_AT_LOAD_VECTOR(CTYPE) \
     template <typename ADDR> \
     struct SimNode_PtrAtLoad<ADDR,CTYPE> : ADDR { \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
             vec4f __r; \
             DAS_LDU_WORKHORSE(__r, this->address(context), CTYPE); \
@@ -165,7 +165,7 @@ namespace das {
 
     template <typename ADDR, typename CTYPE>
     struct SimNode_PtrSet : ADDR {
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto R = EvalTT<CTYPE>::eval(context, this->value);
             CTYPE * pl = (CTYPE *) this->address(context);
