@@ -205,6 +205,8 @@ namespace das
         SimNode * sv_trySimulate_At(const ExprAt * expr, uint32_t extraOffset, const TypeDeclPtr & r2vType);
         SimNode * sv_trySimulate_Swizzle(const ExprSwizzle * expr, uint32_t extraOffset, const TypeDeclPtr & r2vType);
         SimNode * sv_trySimulate_Field(const ExprField * expr, uint32_t extraOffset, const TypeDeclPtr & r2vType);
+        SimNode * sv_trySimulate_OffsetSource(const Expression * expr, uint32_t offset,
+                                                 const TypeDeclPtr & r2vType);
         vector<SimNode*> sv_simulateLocal(const ExprMakeLocal * expr);
         SimNode * sv_simulateLetInit(const VariablePtr & var, bool local);
         vector<SimNode *> sv_simulateLetInits(const ExprLet * pLet);
@@ -2366,6 +2368,25 @@ namespace das
         }
     }
 
+    // src/simulate/ARCHITECTURE.md#unchecked-field-source
+    SimNode * SimulateVisitor::sv_trySimulate_OffsetSource(const Expression * expr, uint32_t offset,
+                                                              const TypeDeclPtr & r2vType) {
+        if ( !expr->rtti_isVar() ) return nullptr;
+        auto evar = static_cast<const ExprVar *>(expr);
+        auto var = evar->variable;
+        if ( evar->block || !var->type->isPointer() || var->type->ref ) return nullptr;
+        if ( evar->argument ) return sv_trySimulate_Var(evar, offset, r2vType);
+        if ( !evar->local || var->aliasCMRES || var->extraLocalOffset!=0 ) return nullptr;
+        const auto &at = evar->at;
+        auto & code = *context.code;
+        uint32_t stackTop = var->stackTop;
+        if ( r2vType->baseType==Type::none ) {
+            return code.makeNode<SimNode_GetLocalRefOff>(at, stackTop, offset);
+        }
+        auto vt = r2vType->getR2VType();
+        return code.makeValueNode<SimNode_GetLocalRefOffR2V>(vt, at, stackTop, offset);
+    }
+
     SimNode * SimulateVisitor::sv_trySimulate_Field(const ExprField * expr, uint32_t extraOffset, const TypeDeclPtr & r2vType) {
         const auto &at = expr->at;
         if ( expr->value->type->isBitfield() ) {
@@ -2396,11 +2417,15 @@ namespace das
         DAS_ASSERTF(fieldOffset>=0,"field offset is somehow not there");
         if (expr->value->type->isPointer()) {
             if ( expr->unsafeDeref ) {
+                uint32_t offset = fieldOffset + extraOffset;
+                if ( auto source = sv_trySimulate_OffsetSource(expr->value, offset, r2vType) ) {
+                    return source;
+                }
                 auto simV = simulateExpression(expr->value);
                 if ( r2vType->baseType!=Type::none ) {
-                    return context.code->makeValueNode<SimNode_FieldDerefR2V>(r2vType->getR2VType(), at, simV, fieldOffset + extraOffset);
+                    return context.code->makeValueNode<SimNode_FieldDerefR2V>(r2vType->getR2VType(), at, simV, offset);
                 } else {
-                    return context.code->makeNode<SimNode_FieldDeref>(at, simV, fieldOffset + extraOffset);
+                    return context.code->makeNode<SimNode_FieldDeref>(at, simV, offset);
                 }
             } else {
                 auto simV = simulateExpression(expr->value);
