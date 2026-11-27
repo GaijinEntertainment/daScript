@@ -2169,6 +2169,10 @@ def public set_moe_gpu_shexp_route(on : bool) {
     g_moe_gpu_shexp_route = on
 }
 
+//! The shared-expert routing gate `set_moe_gpu_shexp_route` last set
+//! - what a caller that sets it puts back
+def public get_moe_gpu_shexp_route : bool => g_moe_gpu_shexp_route
+
 // ===== decode q/k/v group (attention layers, one submit) =====
 // Serial-chain work — nothing hides behind it, so it pays only where the GPU reads the planes
 // faster than the CPU. That crossover moves with core count and card, hence the gate.

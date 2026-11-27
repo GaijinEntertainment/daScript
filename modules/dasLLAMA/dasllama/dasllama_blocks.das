@@ -3484,6 +3484,10 @@ def public set_span_fuse(on : bool) {
     g_span_fuse = on
 }
 
+//! The span fuse `set_span_fuse` (or DASLLAMA_SPAN_FUSE) last set -
+//! what a caller that sets it puts back
+def public get_span_fuse : bool => g_span_fuse
+
 // An override that cannot serve the per-query span mask registers the split-span capability
 // (register_prefill_override_split_span) and keeps the three-eval splice; Metal serves the
 // fused mask (AttnArgs.ulo), and the CPU arms mask per query.
