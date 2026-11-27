@@ -87,6 +87,15 @@ struct SLabel {
     blk : LLVMOpaqueBasicBlock?
 }
 
+//! a das scalar or pointer value is never undef; a vector is left
+//! out, since a float3 travels in a float4 whose last lane nobody
+//! wrote
+def private is_noundef_type(t : LLVMOpaqueType?) : bool {
+    let kind = LLVMGetTypeKind(t)
+    return (kind == LLVMTypeKind.LLVMIntegerTypeKind || kind == LLVMTypeKind.LLVMPointerTypeKind
+        || kind == LLVMTypeKind.LLVMFloatTypeKind || kind == LLVMTypeKind.LLVMDoubleTypeKind)
+}
+
 // Use internal linkage without unnamed address so symbol names are preserved in the
 // object file's .symtab, making backtraces and debuggers (lldb/gdb) readable.
 def set_debug_linkage(value : LLVMOpaqueValue?) {
@@ -690,8 +699,14 @@ class public LlvmJitVisitor : AstVisitor {
             LLVMAddAttributeAtIndex(fn, 0u, LLVMCreateEnumAttribute(g_ctx,
                 LLVMGetEnumAttributeKindForName("align"), uint64(result.alignOf)))
         }
+        if (is_noundef_type(LLVMGetReturnType(LLVMGlobalGetValueType(fn)))) {
+            LLVMAddAttributeAtIndex(fn, 0u, attributes.noundef)
+        }
         for (a, ai in arguments, ucount()) {
             var param = LLVMGetParam(fn, ai)
+            if (is_noundef_type(LLVMTypeOf(param))) {
+                LLVMAddAttributeToFunctionArgument(fn, ai, attributes.noundef)
+            }
             if (a._type.isRef) {
                 LLVMSetParamAlignment(param, uint(a._type.alignOf))
                 LLVMAddAttributeToFunctionArgument(fn, ai, attributes.nonnull)
@@ -722,10 +737,12 @@ class public LlvmJitVisitor : AstVisitor {
         }
         LLVMAddAttributeToFunctionArgument(fn, nai, attributes.nocapture)
         LLVMAddAttributeToFunctionArgument(fn, nai, attributes.noalias)        // context
+        LLVMAddAttributeToFunctionArgument(fn, nai, attributes.noundef)
         LLVMSetParamAlignment(LLVMGetParam(fn, nai++), 16u)
         if (isCmres) {
             LLVMAddAttributeToFunctionArgument(fn, nai, attributes.nocapture)
             LLVMAddAttributeToFunctionArgument(fn, nai, attributes.noalias)    // cmres
+            LLVMAddAttributeToFunctionArgument(fn, nai, attributes.noundef)
             LLVMSetParamAlignment(LLVMGetParam(fn, nai), uint(result.alignOf))
         }
     }
