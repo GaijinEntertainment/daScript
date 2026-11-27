@@ -302,7 +302,7 @@ def private device_form_load(t : T?; path : string; call_ctx : int64; form : Mod
         }
         served_every_call(t)
         kernel_census_write()
-        moe_gpu_drop_model()
+        drop_device_state()
         out = (ran = true, kv = armed.kv)
     }
     delete dev
@@ -310,6 +310,13 @@ def private device_form_load(t : T?; path : string; call_ctx : int64; form : Mod
 }
 
 var private g_drop_cells = 0   //! the drop cells the running device form ran (`device_drop_cell`)
+
+//! the loaded model's device state dropped (`moe_gpu_drop_model`) and the tier armed again: the drop zeroes the tier's MoE layer
+//! request, which only an arm sets back, and the block's next load or a later cell's places its expert stacks by it
+def private drop_device_state() {
+    moe_gpu_drop_model()
+    moe_gpu_tier_arm()
+}
 
 //! `cell`, which drops the device model, as the last cell of a device form marked `drops_device`: the driver held armed up to
 //! it, one such cell a form; on any other form a failure, and `cell` does not run
@@ -358,7 +365,7 @@ def private perop_form_load(t : T?; path : string; ctx : int64; form : ModelForm
     log_form_seconds(form_name(form), get_time_usec(t0) - get_time_usec(t1), get_time_usec(t1))
     t |> success(!moe_gpu_resident_active(), "the whole-model driver stayed off through {form_name(form)}")
     kernel_census_write()
-    moe_gpu_drop_model()
+    drop_device_state()
     delete m
     return (ran = true, kv = form.kv)
 }
@@ -547,7 +554,7 @@ def private cpu_form_load(t : T?; path : string; ctx : int64; form : ModelForm; 
         set_kq_q40_native(kq_was.q40)
     }
     restore_resident_levers(levers)
-    moe_gpu_drop_model()   //! whatever device state the load installed goes: the form is the CPU chain's
+    drop_device_state()   //! whatever device state the load installed goes: the form is the CPU chain's
     cpu.config.seq_len = min(cpu.config.seq_len, ctx)
     var f = form
     t |> success(!moe_gpu_resident_active(), "no driver is armed through {form_name(f)}")
