@@ -62,24 +62,6 @@ namespace das {
 
     IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,PtrFieldDeref,,vec4f,vec4f)
 
-/* FieldDeref any */
-
-#undef IMPLEMENT_ANY_OP1_NODE
-#define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
-    struct SimNode_Op1##COMPUTE : SimNode_Op1PtrFdr { \
-        INLINE char * compute(Context & context) { \
-            DAS_PROFILE_NODE \
-            auto prv = (char **) subexpr.compute##COMPUTE(context); \
-            return (*prv) + offset; \
-        } \
-        DAS_PTR_NODE; \
-    };
-
-#include "simulate_fusion_op1_impl.h"
-#include "simulate_fusion_op1_perm.h"
-
-    IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,FieldDeref,,vec4f,vec4f)
-
 /* PtrFieldDeref<Scalar> */
 
 #undef IMPLEMENT_OP1_SETUP_NODE
@@ -105,24 +87,6 @@ namespace das {
 
     IMPLEMENT_OP1_WORKHORSE_FUSION_POINT(PtrFieldDerefR2V);
 
-/* FieldDeref<Scalar> */
-
-#undef IMPLEMENT_ANY_OP1_NODE
-#define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
-    struct SimNode_Op1##COMPUTE : SimNode_Op1PtrFdr { \
-        INLINE auto compute(Context & context) { \
-            DAS_PROFILE_NODE \
-            auto prv = (char **) subexpr.compute##COMPUTE(context); \
-            return *((RCTYPE *)((*prv) + offset)); \
-        } \
-        DAS_NODE(TYPE,RCTYPE); \
-    };
-
-#include "simulate_fusion_op1_impl.h"
-#include "simulate_fusion_op1_perm.h"
-
-    IMPLEMENT_OP1_WORKHORSE_FUSION_POINT(FieldDerefR2V);
-
 /* PtrFieldDeref<Vec> */
 
 #undef IMPLEMENT_ANY_OP1_NODE
@@ -142,6 +106,58 @@ namespace das {
 #include "simulate_fusion_op1_perm.h"
 
     IMPLEMENT_OP1_NUMERIC_VEC(PtrFieldDerefR2V);
+
+/* FieldDeref any */
+
+#undef FUSION_OP1_SUBEXPR
+#define FUSION_OP1_SUBEXPR(CTYPE,node)      ((static_cast<SimNode_FieldDeref*>(node))->value)
+
+#undef IMPLEMENT_OP1_SETUP_NODE
+#define IMPLEMENT_OP1_SETUP_NODE(result,node) \
+    auto rn = (SimNode_Op1PtrFdr *)result; \
+    auto sn = (SimNode_FieldDeref *)node; \
+    rn->offset = sn->offset; \
+    rn->baseType = Type::none;
+
+#undef IMPLEMENT_ANY_OP1_NODE
+#define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
+    struct SimNode_Op1##COMPUTE : SimNode_Op1PtrFdr { \
+        INLINE char * compute(Context & context) { \
+            DAS_PROFILE_NODE \
+            auto prv = (char **) subexpr.compute##COMPUTE(context); \
+            return (*prv) + offset; \
+        } \
+        DAS_PTR_NODE; \
+    };
+
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
+
+    IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,FieldDeref,,vec4f,vec4f)
+
+/* FieldDeref<Scalar> */
+
+#undef IMPLEMENT_OP1_SETUP_NODE
+#define IMPLEMENT_OP1_SETUP_NODE(result,node) \
+    auto rn = (SimNode_Op1PtrFdr *)result; \
+    auto sn = (SimNode_FieldDeref *)node; \
+    rn->offset = sn->offset;
+
+#undef IMPLEMENT_ANY_OP1_NODE
+#define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
+    struct SimNode_Op1##COMPUTE : SimNode_Op1PtrFdr { \
+        INLINE auto compute(Context & context) { \
+            DAS_PROFILE_NODE \
+            auto prv = (char **) subexpr.compute##COMPUTE(context); \
+            return *((RCTYPE *)((*prv) + offset)); \
+        } \
+        DAS_NODE(TYPE,RCTYPE); \
+    };
+
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
+
+    IMPLEMENT_OP1_WORKHORSE_FUSION_POINT(FieldDerefR2V);
 
 /* FieldDeref<Vec> */
 
