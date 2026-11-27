@@ -259,10 +259,10 @@ struct das_host_call<R (CC::*)(Args...) const, fn>
 
 // Binds a host function or method through das_host_call. It never folds: a constant call folded in the AOT compiler
 // would run the stub, and folding in only one of the two builds would give them different AOT hashes.
-template <typename FuncT, FuncT fn, bool ValueRet = false>
+template <auto fn, bool ValueRet = false>
 inline auto addExternHost(Module &mod, const ModuleLibrary &lib, const char *name, SideEffects seFlags, const char *cppName)
 {
-  using W = das_host_call<FuncT, fn>;
+  using W = das_host_call<decltype(fn), fn>;
   auto fnX = [&] {
     if constexpr (ValueRet)
       return addExtern<decltype(&W::invoke), &W::invoke, SimNode_ExtFuncCallAndCopyOrMove>(mod, lib, name, seFlags, cppName);
@@ -281,16 +281,24 @@ inline auto addExternHost(Module &mod, const ModuleLibrary &lib, const char *nam
 #define DAS_MACRO_STRINGIFY0(...) DAS_MACRO_STRINGIFY1(__VA_ARGS__)
 #define DAS_MACRO_STRINGIFY(...)  DAS_MACRO_STRINGIFY0(__VA_ARGS__)
 
+#if DAS_SHOULD_USE_STUBS && defined(_MSC_VER) && !defined(__clang__)
+#define DAS_HOST_FN(...)                   static_cast<decltype(&__VA_ARGS__)>(nullptr)
+#define DAS_PROP_FN(GETTER, ...)           static_cast<decltype(das::detail::GETTER(&__VA_ARGS__))>(nullptr)
+#define DAS_OVERLOAD_EX(TYPE, ...)         das::detail::FunOverloadWrap<TYPE, static_cast<TYPE>(nullptr)>()
+#else
+#define DAS_HOST_FN(...)                   &__VA_ARGS__
+#define DAS_PROP_FN(GETTER, ...)           &__VA_ARGS__
 #define DAS_OVERLOAD_EX(TYPE, ...)         das::detail::FunOverloadWrap<TYPE, __VA_ARGS__>()
+#endif
 #define DAS_OVERLOAD(FUNC, ...)            DAS_OVERLOAD_EX(decltype(das::detail::ResolveOverload<__VA_ARGS__>::find_overload(&::FUNC)), &::FUNC)
 #define DAS_METHOD_OVERLOAD_CONST(...)     DAS_OVERLOAD_EX(decltype(das::detail::get_const_method(&__VA_ARGS__)), &__VA_ARGS__)
 #define DAS_METHOD_OVERLOAD_NON_CONST(...) DAS_OVERLOAD_EX(decltype(das::detail::get_non_const_method(&__VA_ARGS__)), &__VA_ARGS__)
 
 // fields/props
-#define DAS_PROP_DECL(...) decltype(das::detail::get_prop_method(&__VA_ARGS__)), &__VA_ARGS__
-#define DAS_PROP_DECL_CONST(...)                                                \
-  decltype(das::detail::get_non_const_prop_method(&__VA_ARGS__)), &__VA_ARGS__, \
-    decltype(das::detail::get_const_prop_method(&__VA_ARGS__)), &__VA_ARGS__
+#define DAS_PROP_DECL(...)       decltype(das::detail::get_prop_method(&__VA_ARGS__)), DAS_PROP_FN(get_prop_method, __VA_ARGS__)
+#define DAS_PROP_DECL_CONST(...)                                                                                     \
+  decltype(das::detail::get_non_const_prop_method(&__VA_ARGS__)), DAS_PROP_FN(get_non_const_prop_method, __VA_ARGS__), \
+    decltype(das::detail::get_const_prop_method(&__VA_ARGS__)), DAS_PROP_FN(get_const_prop_method, __VA_ARGS__)
 #define DAS_ADD_FIELD_BIND_EX(DAS_NAME, NAME) addField<DAS_BIND_MANAGED_FIELD(NAME)>(DAS_NAME, DAS_MACRO_STRINGIFY(NAME))
 #define DAS_ADD_FIELD_BIND(NAME)              DAS_ADD_FIELD_BIND_EX(DAS_MACRO_STRINGIFY(NAME), NAME)
 #define DAS_ADD_PROP_BIND(DAS_NAME, ...) \
@@ -300,16 +308,16 @@ inline auto addExternHost(Module &mod, const ModuleLibrary &lib, const char *nam
 
 // functions
 #define DAS_ADD_FUN_BIND(NAME, SIDE_EFFECTS, ...)                                                                        \
-  das::addExternHost<decltype(&::__VA_ARGS__), &::__VA_ARGS__>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, \
+  das::addExternHost<DAS_HOST_FN(::__VA_ARGS__)>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, \
     "::" DAS_MACRO_STRINGIFY(__VA_ARGS__))
 #define DAS_ADD_FUN_BIND_VALUE_RET(NAME, SIDE_EFFECTS, ...)                                                            \
-  das::addExternHost<decltype(&::__VA_ARGS__), &::__VA_ARGS__, true>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, \
+  das::addExternHost<DAS_HOST_FN(::__VA_ARGS__), true>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, \
     "::" DAS_MACRO_STRINGIFY(__VA_ARGS__))
 #define DAS_ADD_METHOD_BIND(NAME, SIDE_EFFECTS, ...)                                                                   \
-  das::addExternHost<decltype(&::__VA_ARGS__), &::__VA_ARGS__>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, \
+  das::addExternHost<DAS_HOST_FN(::__VA_ARGS__)>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, \
     "::das::das_call_member<decltype(&::" DAS_MACRO_STRINGIFY(__VA_ARGS__) "),&::" DAS_MACRO_STRINGIFY(__VA_ARGS__) ">::invoke")
 #define DAS_ADD_METHOD_BIND_VALUE_RET(NAME, SIDE_EFFECTS, ...)                                                               \
-  das::addExternHost<decltype(&::__VA_ARGS__), &::__VA_ARGS__, true>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, \
+  das::addExternHost<DAS_HOST_FN(::__VA_ARGS__), true>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, \
     "::das::das_call_member<decltype(&::" DAS_MACRO_STRINGIFY(__VA_ARGS__) "),&::" DAS_MACRO_STRINGIFY(__VA_ARGS__) ">::invoke")
 #define DAS_ADD_METHOD_BIND_CONST_EX(NAME, SIDE_EFFECTS_CONST, SIDE_EFFECTS_NON_CONST, ...) \
   DAS_ADD_METHOD_BIND(NAME, SIDE_EFFECTS_CONST, DAS_METHOD_OVERLOAD_CONST(__VA_ARGS__));    \

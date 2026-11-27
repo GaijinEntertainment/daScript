@@ -32,9 +32,9 @@ public:
         ModuleLibrary lib(this);
         lib.addBuiltInModule();
         addAnnotation(new StubHostAnnotation(lib));
-        addExternHost<decltype(&stub_inline), &stub_inline>(*this, lib, "stub_inline",
+        addExternHost<&stub_inline>(*this, lib, "stub_inline",
             SideEffects::none, "stub_inline");
-        addExternHost<decltype(&StubHost::add), &StubHost::add>(*this, lib, "stub_add",
+        addExternHost<&StubHost::add>(*this, lib, "stub_add",
             SideEffects::none, "das_call_member<decltype(&StubHost::add),&StubHost::add>::invoke");
     }
 };
