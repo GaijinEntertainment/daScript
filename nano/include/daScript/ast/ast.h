@@ -25,8 +25,11 @@ namespace das {
 
     struct DataWalker;
 
-    struct Module {
+    class Module {
+    public:
         string name;
+        das_hash_map<string, FileInfo *> cppBindingFileInfos;
+        vector<FileInfoPtr> cachedFileInfos;
     };
 
     struct Annotation : BasicAnnotation {

@@ -798,33 +798,27 @@ namespace das
 
     LineInfo LineInfo::g_LineInfoNULL;
 
-    // One FileInfo per binding name, keyed by the display name so a deserialized location maps
-    // back to the same singleton. Intentionally never freed - these outlive every Program, and
-    // no FileAccess owns them. The tracker guard keeps these immortals out of the leak report:
-    // without it every process exit in a DAS_TRACK_ALLOC build symbolizes ~3000 of them
-    // (~5s), which starves timing-sensitive child-process tests.
-    static LineInfo & cppBindingLineInfoNamed ( const string & display ) {
-        AllocTrackerInternalGuard trackerGuard;
-        static das_map<string, LineInfo> * infos = new das_map<string, LineInfo>();
-        static mutex * infosMutex = new mutex();
-        lock_guard<mutex> guard(*infosMutex);
-        auto it = infos->find(display);
-        if ( it != infos->end() ) return it->second;
-        auto fi = new FileInfo();
-        fi->name = display;
-        return (*infos)[display] = LineInfo(fi, 0, 0, 0, 0);
+    static FileInfo * cppBindingFileInfo ( Module * mod, const char * name ) {
+        if ( !mod ) {
+            static struct AnonymousCppBinding : FileInfo {
+                AnonymousCppBinding () { this->name = "<c++ binding>"; }
+            } info;
+            return &info;
+        }
+        const string key = name ? name : "";
+        auto & info = mod->cppBindingFileInfos[key];
+        if ( !info ) {
+            info = new FileInfo();
+            if ( key.empty() ) info->name = "<c++ binding: " + mod->name + ">";
+            else if ( key.find("::") != string::npos ) info->name = "<c++ binding: " + key + ">";
+            else info->name = "<c++ binding: " + mod->name + "::" + key + ">";
+            mod->cachedFileInfos.emplace_back(info);
+        }
+        return info;
     }
 
-    static string cppBindingDisplayName ( const char * name ) {
-        return (name && *name) ? ("<c++ binding: " + string(name) + ">") : string("<c++ binding>");
-    }
-
-    const LineInfo & cppBindingLineInfo ( const char * name ) {
-        return cppBindingLineInfoNamed(cppBindingDisplayName(name));
-    }
-
-    FileInfo * cppBindingFileInfo ( const char * name ) {
-        return cppBindingLineInfo(name).fileInfo;
+    LineInfo cppBindingLineInfo ( Module * mod, const char * name ) {
+        return LineInfo(cppBindingFileInfo(mod, name), 0, 0, 0, 0);
     }
 
     bool isCppBindingAt ( const LineInfo & at ) {

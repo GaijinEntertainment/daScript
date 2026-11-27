@@ -1365,7 +1365,7 @@ namespace das {
     }
 
     TypeDeclPtr ModuleLibrary::makeStructureType ( const string & name ) const {
-        auto t = new TypeDecl(Type::tStructure, cppBindingLineInfo(name.c_str()));
+        auto t = new TypeDecl(Type::tStructure, cppBindingLineInfo(thisModule, name.c_str()));
         auto structs = findStructure(name,nullptr);
         if ( structs.size()==1 ) {
             t->structType = structs.back();
@@ -1390,7 +1390,7 @@ namespace das {
     }
 
     TypeDeclPtr ModuleLibrary::makeHandleType ( const string & name ) const {
-        auto t = new TypeDecl(Type::tHandle, cppBindingLineInfo(name.c_str()));
+        auto t = new TypeDecl(Type::tHandle, cppBindingLineInfo(thisModule, name.c_str()));
         auto handles = findAnnotation(name,nullptr);
 #if DAS_ALLOW_ANNOTATION_LOOKUP
         bool need_require = false;
@@ -1451,11 +1451,11 @@ namespace das {
             return nullptr;
         }
         auto dann = static_cast<DistinctTypeAnnotation *>(handles.back());
-        auto t = new TypeDecl(Type::tDistinct, cppBindingLineInfo(name.c_str()));
+        auto t = new TypeDecl(Type::tDistinct, cppBindingLineInfo(thisModule, name.c_str()));
         t->annotation = dann;
         if ( dann->underlyingType ) {
             t->firstType = new TypeDecl(*dann->underlyingType);
-            t->firstType->at = cppBindingLineInfo(name.c_str());
+            t->firstType->at = cppBindingLineInfo(thisModule, name.c_str());
         }
         return t;
     }
