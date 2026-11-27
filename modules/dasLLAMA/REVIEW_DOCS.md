@@ -36,9 +36,9 @@ number.** A row rewritten under its number turns every citation of
 that number into a citation of something else.
 
 **A diff that renames, moves or deletes an identifier or a file a surviving `followup_*.md` row or
-item names writes into that row or item, under its number, in the same change, the new name - for a
+item names in a backtick span writes into that row or item, under its number, in the same change, the new name - for a
 deleted one, the name of what now holds its content, or, when nothing does, the row drops the name
-and keeps its problem; a rename, move or deletion does not change the problem the row states.**
+and keeps its problem.**
 
 **A diff files planned work in the ledger that owns it: `followup_metal.md` for work that would
 change a Metal kernel, driver or dispatch and no Vulkan or CUDA one, or CPU engine work whose
@@ -70,9 +70,10 @@ that names the companion file alone for that heading's subject - it repoints the
 heading's new home as `<doc>.md#<anchor>`, or drops it.** LINT026 checks a `<doc>.md#<anchor>`
 citation, never one that names a file alone.
 
-**A diff that adds or rewrites text in a `HOW_TO_*.md` under this folder writes each step as an
-imperative or a specification of the code to write - never a narrative - citing the
-`ARCHITECTURE*.md#<anchor>` section that owns the mechanism the step touches, and never restating
+**A diff that adds or rewrites text in a `HOW_TO_*.md` under this folder (a diff retargeting a path
+or a name in a step rewrites that step) writes each step as an imperative or a specification of the
+code to write - never a narrative - citing the `ARCHITECTURE*.md#<anchor>` section that owns the
+mechanism the step touches, or nothing where no `ARCHITECTURE*.md` section owns it, and never restating
 that section's reasoning.**
 
 **A trap a diff writes into a `HOW_TO_*.md` under this folder - a place where the procedure does

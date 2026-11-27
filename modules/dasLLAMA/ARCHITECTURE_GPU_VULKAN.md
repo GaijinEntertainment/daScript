@@ -52,7 +52,7 @@ walks `dasllama/` for every `"VK_*"` extension name and every `*_supported` prob
 `vkCreateComputePipelines(` call and licenses no names inside them; the two llama.cpp shader ports
 under `performance/` (`coopmat_mulmm_reference.das`, `coopmat_mulmm_port.das`) sit outside the
 walk as reference measurements of another engine's kernels. `check_vk_census_conditional_blind` reads the Vulkan census's
-two tables in `tests/test_kernel_coverage.das` and requires every key of `VK_CENSUS_PICK_CONDITIONAL` among the entries of
+two tables in `tests/_kernel_census.das` and requires every key of `VK_CENSUS_PICK_CONDITIONAL` among the entries of
 `VK_CENSUS_NEVER_DISPATCHED`, by its exact text; it licenses no names. The census asserts the same only on a box with a device.
 
 ### The Vulkan resident prefill window chain {#vk-prefill-window-chain}

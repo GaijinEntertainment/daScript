@@ -254,8 +254,8 @@ the compares the bars read. `REVIEW.das` holds each to the files, and each check
   by its function name, by the name the `_resident_regions.das` list gives it (the phrase ahead of its parenthetical),
   or by the head of the bullet that holds it.
 - `check_census_evidence_pinned` - every `test_vk*` / `test_metal_*` cell and `*_gate` a census table's comments in
-  `tests/test_kernel_coverage.das` cite as a blind spot's evidence is in the pinned set: named in an entry, in a file a
-  file entry pins, or a gate a pinned cell calls.
+  `tests/_kernel_census.das` cite as a blind spot's evidence is in the pinned set: named in an entry, in a file a
+  file entry pins, or a gate a pinned cell calls; a missing census file, or either table's opening line, is a finding.
 - `check_running_max_nan` - no tests file keeps a running largest difference as `max(m, abs(a - b))`: `max` drops a
   NaN a later finite element follows, and `nan_wide_diff(a, b)` reads a NaN on either side as infinite.
 

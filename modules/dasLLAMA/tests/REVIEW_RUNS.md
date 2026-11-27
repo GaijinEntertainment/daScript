@@ -46,8 +46,8 @@ other run opens a category's files, the full suite's included.
 
 **A final PR whose change reaches a cell that runs only in the full suite (`parity_full_mode`) runs
 that cell under `DASLLAMA_PARITY_FULL=1` - in a `run.das -- --changed` run whose `PLAN` holds the
-cell's file, or in a `run.das --suite` run listing the file, with `--arm` naming the cell where
-that suite takes `--arm` - and names the box in the PR body.** A run without
+cell's file, or in a `run.das --suite` or `--area` run listing the file, with `--arm` naming the
+cell where that run takes `--arm` - and names the box in the PR body.** A run without
 `DASLLAMA_PARITY_FULL=1` skips every such cell and passes.
 
 **The `--changed` run a final PR cites carries no `--exclude` and no `--only`.** A trimmed run never

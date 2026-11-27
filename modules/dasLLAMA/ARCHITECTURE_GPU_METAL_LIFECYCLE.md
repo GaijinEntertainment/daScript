@@ -31,7 +31,8 @@ tower's `metal_tower_context_shutdown`, the ASR decoders' `metal_asr_dec_context
 and pipelines those files own, which no decode or prefill shutdown reaches): device state a context left alive would outlive it in the process - dastest's `--together`
 runs a file a context, a host may hold several - and the next context's leak gate would count it. A released buffer leaves the process footprint because the binding reads `contents` inside an autorelease pool
 (`../dasMetal/ARCHITECTURE.md`), and the footprint (`metal_footprint_settled`), not the live-object count, witnesses it -
-the support matrix's release row (`metal_release_row`) holds three load-serve-delete cycles of E2B to their first close.
+the release row (`test_gpu_resident_gemma4_e2b_release`, `tests/test_gpu_resident_gemma4_e2b.das`) holds three
+load-serve-delete cycles of E2B to their first close.
 
 **Race and tune code for a kernel family lives beside the family.** The shared scaffolding
 (`race_buf`, `race_envelope_ok`, `race_pair_ms`, `MetalTensorRaceResult`) is `<gpu>_common`'s;

@@ -3,6 +3,10 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `../ARCHITECTURE.md`.
 
+A model-free test is a `[test]` that reaches no stocked artifact (as `REVIEW.md` beside this file
+defines it) and reads no run's merged kernel census (the census files a run's processes write, which
+`run.das`'s `CENSUS_VERDICT` file asserts on).
+
 **A diff that adds or moves a `[test]` here applies `tests/REVIEW.md` (repo root) too, with this
 folder's `REVIEW.das` as its gate.**
 
@@ -10,20 +14,20 @@ folder's `REVIEW.das` as its gate.**
 `REVIEW.md` (beside this file) or a companion beside it that a diff adding or moving a test or a
 cell triggers binds it, whether or not the move reaches the cell.**
 
-**A `[test]` a diff adds or moves into a file that an `--arm` suite lists (every `run.das` suite but
-`model-free`, `gpu-kernels` and `stocked`) gates each model-loading cell on `arm_on(t, name)`
+**A `[test]` a diff adds or moves into a file that an `--arm` suite lists (a suite `run.das`'s
+`check_suite_args` refuses to run without `--arm`) gates each model-loading cell on `arm_on(t, name)`
 (`_model_tier.das`) with that suite's arm; a test with no arm goes into a `model-free`,
 `gpu-kernels` or `stocked` file.** A file an `--arm` suite lists runs only where a run names its
 arms - `--arm`, or the `image` suite arms a `--changed` or `--area` plan owns (`area_image_arms`,
 `run.das`) - never in a `model-free`, `gpu-kernels` or `stocked` run.
 
-**A `[test]` that reaches no stocked artifact once a diff adds it, moves it, or moves cells out of
-it goes into a `model-free` file - a `gpu-kernels` file where it compiles a kernel on a Vulkan or
-CUDA device, an `--arm` suite's file where it compiles one on the Metal device or, its cells gated
-through `arm_on`, its claim holds only under that suite's arm - never a `stocked` one.** A stocked
-file runs only where models are stocked, an `--arm` file only where a run names its arms, so a
-model-free test in either leaves the per-PR run; a device's first kernel compile is driver time
-the model-free test wall does not admit.
+**A model-free test, once a diff adds it, moves it, or moves cells out of it, goes into a
+`model-free` file - a `gpu-kernels` file where it compiles a kernel on a Vulkan or CUDA device, an
+`--arm` suite's file where it compiles one on the Metal device or, its cells gated through `arm_on`,
+its claim holds only under that suite's arm - never a `stocked` one.** A stocked file runs only
+where models are stocked, an `--arm` file only where a run names its arms, so a model-free test in
+either leaves the per-PR run; a device's first kernel compile is driver time the model-free suite's
+per-test time budget does not admit.
 
 **A diff that weakens the model-free/stocked check of `test_run_suites.das`, which reds a
 model-free or `gpu-kernels` file whose text reaches a model file, is a defect.**

@@ -145,77 +145,70 @@ carries the categories for a reader, a table row a category under `## Categories
 
 ### A model file loads once a form {#test-load-once}
 
-`tests/_cpu_gpu_model.das` owns the load of a model file for the cells of a run area, on the
-discrete homes and on the CPU. `with_cpu_and_gpu_model` takes the area, the file and a list of
-forms - a device form is one set of the driver's load-time knobs, a CPU form one load mode and
-loader - loads each form once, one loaded model at a time, and runs the caller's body on it; the
-body collects what the compares across forms read, and those compares follow the call. Where the
-GPU tier is not armed each device form is a skipped cell of its own. The CPU form answering the
-device forms, and a `cpu_quant_form` reference, load only where a device form ran; a CPU form whose
-cells stand alone (`cpu_cells_form`) loads on every box, so a CPU file's cells on a block keep
-running on a box with no discrete home. A CPU form's load knobs - the load mode, the uncached
-loader, the NextN head file pinned for the load (`mtp_head`), the kernel backend pinned for the load
-and its cells (`backend`), the K-quant native switches set for the load (`kq_native`: `kept`, `on`,
-`on_q40` with the native Q4_0 planes, `off`) - make CPU forms differing in any of them separate
-loads, and a pinned or K-quant form answers no device form. The body sees a CPU load once a codec
-the device forms armed, and `form.alone` holds on one pass a load, so a cell that stands alone runs
-once a block. A device form marked `drops_device` holds the driver armed up to its one drop cell
-(`device_drop_cell`), run last. The block accounts for every form it was asked: each form, and the parity row's
-form where the knob is on, reaches the body or skips loudly, else the block fails naming it; a form asked alone that
-never runs is a failure, and a CPU form not asked alone skips loudly where no device form ran (`form_owed`,
-`alone_pass_of`). The forms, their pure parts and `own_load` are `tests/_model_form.das`'s,
-a module free of the fixture root. The first device form streams the file, and where the
-list holds three or more such forms each later one maps the file's device lane
-(`ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`). A call's `parity` knob adds the file's model_specs
-parity row's CPU form (`parity_spec_form`, `tests/_parity_cells.das`) and runs the row's cell on it. A
-call names its area and its file by string literals. A Metal form (`metal_form`) is a form of the call on a das_metal
-build: the file's blob twin, or its served image, loaded once after the device forms under its Metal mode, the body run on
-it once, and the home - the mode, the overrides, the kernel backend's pin - put back as the form found it; on any other
-build it is one skipped cell. A knob the Metal drivers read live - the ring pin, a session's codec, a drafter attached or
-not - is a cell's on the one load, so forms differ by the flavor and the mode alone. A Metal form loads no CPU model: a
-cell comparing the twin with a CPU reference reads the reference on a CPU form of the call and compares once both ran, or,
-to compare live, loads the CPU model itself (`own_load`).
+`tests/_cpu_gpu_model.das` owns the load of a model file for the cells of a run area, on the discrete homes and on the
+CPU. `with_cpu_and_gpu_model` takes the area, the file and a list of forms - a device form is one set of the driver's
+load-time knobs, a CPU form one load mode and loader - loads each form once, one loaded model at a time, and runs the
+caller's body on it; the body collects what the compares across forms read, and those compares follow the call. Where
+the GPU tier is not armed each device form is a skipped cell of its own. The CPU form answering the device forms, and a
+`cpu_quant_form` reference, load only where a device form ran; a CPU form whose cells stand alone (`cpu_cells_form`)
+loads on every box, so a CPU file's cells on a block keep running on a box with no discrete home. A CPU form's load
+knobs - the load mode, the uncached loader, the NextN head file pinned for the load (`mtp_head`), the kernel backend
+pinned for the load and its cells (`backend`), the K-quant native switches set for the load (`kq_native`: `kept`, `on`,
+`on_q40` with the native Q4_0 planes, `off`) - make CPU forms differing in any of them separate loads, and a pinned or
+K-quant form answers no device form. The body sees a CPU load once a codec the device forms armed, and `form.alone`
+holds on one pass a load, so a cell that stands alone runs once a block. A device form marked `drops_device` holds the
+driver armed up to its one drop cell (`device_drop_cell`), run last. The block accounts for every form it was asked:
+each form, and the parity row's form where the knob is on, reaches the body or skips loudly, else the block fails naming
+it; a form asked alone that never runs is a failure, and a CPU form not asked alone skips loudly where no device form
+ran (`form_owed`, `alone_pass_of`). The forms, their pure parts and `own_load` are `tests/_model_form.das`'s, a module
+free of the fixture root. The first device form streams the file, and where the list holds three or more such forms each
+later one maps the file's device lane (`ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`). A call's `parity` knob adds
+the file's model_specs parity row's CPU form (`parity_spec_form`, `tests/_parity_cells.das`) and runs the row's cell on
+it. A call names its area and its file by string literals; `with_cpu_and_gpu_snapshot` is the same block over the
+Hugging Face snapshot directory a repo names (`hf_snapshot_dir`), the repo its literal. A Metal form (`metal_form`) is a
+form of the call on a das_metal build: the file's blob twin, or its served image, loaded once after the device forms
+under its Metal mode, the body run on it once, the home - the mode, the overrides, the kernel backend's pin - put back
+as the form found it, and the drivers shut down with no Metal object left live (`metal_form_close`); on any other build
+it is one skipped cell. After each GPU form, and each form of `with_model_once`, a run's process writes its kernel
+census (`tests/_kernel_census.das`), which the census verdict reads merged. A knob the Metal drivers read live - the
+ring pin, a session's codec, a drafter attached or not - is a cell's on the one load, so forms differ by the flavor and
+the mode alone. A Metal form loads no CPU model: a cell comparing the twin with a CPU reference reads the reference on a
+CPU form of the call and compares once both ran, or, to compare live, loads the CPU model itself (`own_load`).
 
-`tests/_model_once.das` owns the load of a model file that is no chat model - a TTS voice, a front-end
-pack, a stress model, a translation student, a decoder a facade wraps, a vision tower. `with_model_once` takes the area, the file, a list of form names and the
-family's form loader, a function of the file's path and a form's name: it loads each form once, runs
-the caller's cells on it and drops it before the next form loads, so no two forms of a file stand
-in memory together; a file the box lacks is one loud skip and no cell. `with_model_once_at` reads
-the file under a root the call names; the loop is `tests/_model_form.das`'s `model_once_at`, which takes
-the file's gate as an argument, so a model-free test runs it on a fake model. A file whose forms are
-minted from one staged read takes the staged overload (`staged_once_at`): a key names the read a form
-mints from - its lane and image flavor, "" for a form that loads on its own - the file is staged once a
-key, and each form builds its model from a staging of its own (`own_staging`: a copy, the kept read
-itself on the last form of its key), so the cut, the zeroed block or the edit one form writes reaches
-no other form. The kept read stands beside a form's model while its cells run and drops where a form
-of another key stages, so a list puts one key's forms side by side where no cell reads their order.
-The TTS voices' form loaders (`tests/_tts_parity.das`) answer
-the facade's `TtsModel`, which holds either family's model and the packs: `styletts2_form` loads a
-KittenTTS or Kokoro file through the image rail (`image`) or mints a lane in memory (`f32`, `q8`,
-`kq`); `pocket_form` loads a Pocket file through the image rail or mints it with no lane pinned
-(`native`), under the f32 pin or under the q8 pin, the lane unset after the mint, a panic included. The facade
-loads a voice's front-end packs beside the voice, so a voice form's load includes them and the
-check reads no site for them. A file's block
-is one call across the area's test files, so the cells that read a file live under that call - a
-cell another topic file held runs from a fixture cell module (`tests/_tts_facade_cells.das`,
-`tests/_tts_postag_cells.das`) - and a cell that reads two files runs in the inner of two nested
-calls, each file loaded once. The parity rail of a StyleTTS2 voice runs a form at a time: the f32
-form's cell keeps each bring-up case's decode inputs, and the q8 and recipe forms' cells feed them
-to the decode seat.
+`tests/_model_once.das` owns the load of a model file that is no chat model - a TTS voice, a front-end pack, a stress
+model, a translation student, a decoder a facade wraps, a vision tower. `with_model_once` takes the area, the file, a
+list of form names and the family's form loader, a function of the file's path and a form's name: it loads each form
+once, runs the caller's cells on it and drops it before the next form loads, so no two forms of a file stand in memory
+together; a file the box lacks is one loud skip and no cell. `with_model_once_at` reads the file under a root the call
+names; the loop is `tests/_model_form.das`'s `model_once_at`, which takes the file's gate as an argument, so a
+model-free test runs it on a fake model. A file whose forms are minted from one staged read takes the staged overload
+(`staged_once_at`): a key names the read a form mints from - its lane and image flavor, "" for a form that loads on its
+own - the file is staged once a key, and each form builds its model from a staging of its own (`own_staging`: a copy,
+the kept read itself on the last form of its key), so the cut, the zeroed block or the edit one form writes reaches no
+other form. The kept read stands beside a form's model while its cells run and drops where a form of another key stages,
+so a list puts one key's forms side by side where no cell reads their order. The TTS voices' form loaders
+(`tests/_tts_parity.das`) answer the facade's `TtsModel`, which holds either family's model and the packs:
+`styletts2_form` loads a KittenTTS or Kokoro file through the image rail (`image`) or mints a lane in memory (`f32`,
+`q8`, `kq`); `pocket_form` loads a Pocket file through the image rail or mints it with no lane pinned (`native`), under
+the f32 pin or under the q8 pin, the lane unset after the mint, a panic included. The facade loads a voice's front-end
+packs beside the voice, so a voice form's load includes them and the check reads no site for them. A file's block is one
+call across the area's test files, so the cells that read a file live under that call - a cell another topic file held
+runs from a fixture cell module (`tests/_tts_facade_cells.das`, `tests/_tts_postag_cells.das`) - and a cell that reads
+two files runs in the inner of two nested calls, each file loaded once. The parity rail of a StyleTTS2 voice runs a form
+at a time: the f32 form's cell keeps each bring-up case's decode inputs, and the q8 and recipe forms' cells feed them to
+the decode seat.
 
-A form a device serves is a form of its own, listed beside the CPU lanes, and the list goes through
-`served_forms` (`tests/_model_form.das`, beside the loop and as free of the fixture root): the
-family's account of what the box lacks for a form - a function of the form's name, empty where the
-box serves it - makes a form with a reason a skipped cell of its own (`skip_cell`), named the file,
-the form and the reason, and leaves it out of the list, so its load never starts. The translate area's forms are `translator_form`'s (`tests/test_nmt.das`), each
-answering the facade's `Translator`: a Bergamot student minted in memory on the exact lane (`f32`),
-on the q8 lane (`q8`), on the q8 lane with its classifier zeroed (`q8_cls_zeroed`, the q8 cell's
-control) and on the q8 lane as the copy the build's translation seat serves (`device`), or loaded
-as the facade loads it (`image`, `image_f32`). The device form's cells pin the seat on; the q8
-form's cell that keeps the CPU chain's lines pins it off, and the compare of the two follows the
-block. The seat holds one student at a time, so the cell that swaps it between two files runs in
-nested blocks: en-ru's block is called from ru-en's device form, and after ru-en's block where
-that form did not run.
+A form a device serves is a form of its own, listed beside the CPU lanes, and the list goes through `served_forms`
+(`tests/_model_form.das`, beside the loop and as free of the fixture root): the family's account of what the box lacks
+for a form - a function of the form's name, empty where the box serves it - makes a form with a reason a skipped cell of
+its own (`skip_cell`), named the file, the form and the reason, and leaves it out of the list, so its load never starts.
+The translate area's forms are `translator_form`'s (`tests/test_nmt.das`), each answering the facade's `Translator`: a
+Bergamot student minted in memory on the exact lane (`f32`), on the q8 lane (`q8`), on the q8 lane with its classifier
+zeroed (`q8_cls_zeroed`, the q8 cell's control) and on the q8 lane as the copy the build's translation seat serves
+(`device`), or loaded as the facade loads it (`image`, `image_f32`). The device form's cells pin the seat on; the q8
+form's cell that keeps the CPU chain's lines pins it off, and the compare of the two follows the block. The seat holds
+one student at a time, so the cell that swaps it between two files runs in nested blocks: en-ru's block is called from
+ru-en's device form, and after ru-en's block where that form did not run.
 
 The vision area's tower blocks answer the vision carrier, `VisionEmbedder`, each family's form loader beside its
 block (`gemma3v_form`, `gemma4v_form`, `gemma4uv_form`, `qwen3v_form`, `qwen25v_form`); the form names are
@@ -253,32 +246,38 @@ carriers' cells read the exact carrier's kept lane, and the compares follow the 
 `Model` - the Canary-Qwen and gemma-4 E2B Q4_K_M decoders, SmolLM2 - is the area's `with_cpu_and_gpu_model` block, nested
 with the tower block whose form its cell reads.
 
-A decoder a facade wraps in a holder of its own - `load_translator`'s `Translator` over a chat GGUF -
-is a block of `with_model_once` whose one form (`image`) is the facade's load: its cells assert on
-what that load builds - the kind read off the file, the session, the direction left unpicked - and
-the chat block's `Model` carries none of it. A file the llm area's chat block also loads has a block
-of its own in the translate area.
+A decoder a facade wraps in a holder of its own - `load_translator`'s `Translator` over a chat GGUF - is a block of
+`with_model_once` whose one form (`image`) is the facade's load: its cells assert on what that load builds - the kind
+read off the file, the session, the direction left unpicked - and the chat block's `Model` carries none of it. A file
+the llm area's chat block also loads has a block of its own in the translate area.
 
-`tests/REVIEW.das`'s `check_models_load_once` reads the folder's test files as text. It holds one
-block call (`BLOCKS`: `with_cpu_and_gpu_model`, `with_model_once`, `with_model_once_at`) an area
-and file, and in each area `LOAD_ONCE_AREAS` names (`llm`, `tts`, `translate`, `vision`, `audio`) it reads every load site of the
-area's test files (`run.das`'s `area_tests`): a call of an engine loader or of a helper `LOADERS`
-lists, its model file a `.gguf` literal - or, outside the llm area, a `.bin` pack's - in the call's
-arguments or one an identifier is bound to in
-the holding function, at the file's top level (a `let` outside every brace, judged by depth, not column) or in a
-fixture module. A site of a file a call loads,
-or one of two sites of a file no call loads, is a finding unless the holding function calls
-`own_load("<why>")` with a non-empty literal reason. A function that passes its own parameter to a
-loader is itself a loader, and one `LOADERS` does not list is a finding; a site whose file is built at run time is
-counted, not read. A block whose body indexes a table literal of its file (`NAME[<n>]`) is held to
-that row naming its file - a string of the row is the file's stem or a `-` token of it
-(`check_block_rows`, which licenses none), so a table of languages or sizes and the unrolled blocks that load each file
-cannot drift apart. The llama2.c `stories15M.bin` checkpoint loads once a cell through `load_checkpoint`
-(27 loads in 10 test files, under a second in all), outside the blocks: in an area `GGUF_ONLY_AREAS`
-lists - `llm`, whose `.bin` names are checkpoints - the check drops every `.bin` site, so a checkpoint load there is not a site. No
-test file is exempt: every finding fails the gate. Its `check_cell_pins` reads the fixture cell modules (`tests/_*_cells.das`): a call there that pins,
-clears or re-pins the kernel backend or the K-quant native knob is a finding, since both are a
-property of the form's load; the check licenses none.
+`tests/REVIEW.das`'s `check_models_load_once` reads the folder's test files as text. It holds one block call (`BLOCKS`:
+`with_cpu_and_gpu_model`, `with_cpu_and_gpu_snapshot`, `with_model_once`, `with_model_once_at`) an area and file, and in
+each area `LOAD_ONCE_AREAS` names (`llm`, `tts`, `translate`, `vision`, `audio`) it reads every load site of the area's
+test files (`run.das`'s `area_tests`): a call of an engine loader or of a helper `LOADERS` lists, its model file a
+`.gguf` literal - or, outside the llm area, a `.bin` pack's, or the repo literal of an `hf_snapshot_dir("<repo>")` -
+in the call's arguments or one an identifier is bound to in the holding function, at the file's top level (a `let`
+outside every brace, judged by depth, not column) or in a fixture module. A site of a file a call loads, or one of two
+sites of a file no call loads, is a finding unless the holding function calls `own_load("<why>")` with a non-empty
+literal reason. A function that passes its own parameter to
+a loader is itself a loader, and one `LOADERS` does not list is a finding; so is a site whose file the check cannot read
+(a name built at run time, `unread_site`) where the holding function declares no `own_load`. A fixture module's
+function that loads a file is a site of that file at each call of it, once a caller; a test file's own helper is one
+site, however many cells call it. A call of the parity spec walk (`parity_spec_arms`, `tests/test_parity.das`) whose
+file the check cannot read is a site, at the call, of each `performance/model_specs.das` row carrying a parity fixture
+whose file neither `PARITY_BLOCK_ROWS` (`tests/_parity_cells.das`) nor `PARITY_OWN_ROWS` names. A block whose body indexes
+a table literal of its file (`NAME[<n>]`) is held to that row naming its file - a string of the row is the file's stem
+or a `-` token of it (`check_block_rows`, which licenses none), so a table of languages or sizes and the unrolled blocks
+that load each file cannot drift apart. The llama2.c `stories15M.bin` checkpoint loads once a cell through
+`load_checkpoint` (27 loads in 10 test files, under a second in all), outside the blocks: in an area `GGUF_ONLY_AREAS`
+lists - `llm`, whose `.bin` names are checkpoints - the check drops every `.bin` site, so a checkpoint load there is not
+a site. No test file is exempt: every finding fails the gate. The same gate's `check_cell_pins` holds the fixture cell
+modules (`tests/_*_cells.das`) to no call that pins, clears or re-pins the kernel backend or the K-quant native knob,
+since both are a property of the form's load; `check_census_resets` (`check_census_resets_in`) holds every tests file
+but `tests/_kernel_census.das` to no direct call of an engine census reset (`CENSUS_RESETS`), which would drop the
+dispatches the process's census has not folded yet; `check_tests_placed` holds every test file to a run list of
+`run.das` - an area of `area_tests`, a model-free or kernel suite of `suite_files` (`PLACED_SUITES`), or
+`CENSUS_VERDICT` - since a file in none runs in no area's run. Each of the three licenses none.
 
 A block folds a model file's tests into one `[test]` whose cells are the tests, so a test file that
 calls a block is outside the three-tests floor of `tests/ARCHITECTURE.md#file-shape`: the gate's

@@ -6,30 +6,28 @@ docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_IMAGE_LEDGER.md`. Planned work:
 
 **A kernel-unit cell applies `REVIEW_KERNEL_CELLS.md` (beside this file) too, wherever the diff puts it.**
 
-**A diff that touches a cell `REVIEW_PINNED_GATES.md` or `REVIEW_PINNED_KERNEL_GATES.md` (both
-beside this file) pins, or any cell of a file either pins whole, or changes which `run.das` suites
-list a file holding such a cell, applies `REVIEW_PINNED_GATES.md` too, whose rules bind the entries
-of both files.**
+**A diff that touches a cell `REVIEW_PINNED_GATES.md` or `REVIEW_PINNED_KERNEL_GATES.md` (both beside this
+file) pins, or any cell of a file either pins whole, or changes which `run.das` suites or areas list a file
+holding such a cell, applies `REVIEW_PINNED_GATES.md` too, whose rules bind the entries of both files.**
 
-**A diff that adds, moves, merges, renames or removes a test file or a `[test]`, or adds an optional
-`require ?<mod>` to a file, or adds or changes a function in a file that has one, applies
-`REVIEW_FILES.md` (beside this file) too - where a test lives, what the runner's file names keep,
-what an optional require allows.**
+**A diff that adds, moves, merges, renames or removes a test file or a `[test]`, or adds an optional `require
+?<mod>` to a file, or adds or changes a function in a file that has one, applies `REVIEW_FILES.md` (beside
+this file) too - where a test lives, what the runner's file names keep, what an optional require allows.**
 
 **A diff that adds or changes an assert whose expected value restates or reads something that can
 change while nothing in this repository changes, or whose expected value a checked-in table names as
 its evidence, applies `REVIEW_PINNED_GATES.md` (beside this file) too.** A bar on a compare whose
 two sides the cell computes is never such a value, whatever model file it was measured on.
 
-**A cell that calls - in its own code or through a helper - a `../dasllama/` call that sets a
-module or process global a later load, route choice or kernel dispatch reads (that property is
-the trigger, whatever the name; `set_*`, `enable_*`, `disable_*`, `allow_*`, `pin_*`, `clear_*`,
-`reset_*`, `restore_*`, `reinstall_*`, `register_*`, `unregister_*`, `select_*_override` and
-`unset_*` are the common spellings), or that passes a loader parameter choosing a family's serving
-lane (the weight form the family runs: q8 planes, a quantized carrier's own planes, or the f16 or
-f32 planes of the exact lane - and whether a weight row stored as half floats serves as halves or
-as floats), or whose claim depends on which route or serving lane runs it - a compare of a CPU run
-against a GPU run among them - applies `REVIEW_LANE_PINS.md` (beside this file) too.**
+**A cell that makes - in its own code or through a helper - a `../dasllama/` call, or an assignment to a
+`../dasllama/` global, that sets a module or process global a later load, route choice or kernel dispatch
+reads (that property is the trigger, whatever the name; `set_*`, `enable_*`, `disable_*`, `allow_*`, `pin_*`,
+`clear_*`, `reset_*`, `restore_*`, `reinstall_*`, `register_*`, `unregister_*`, `select_*_override` and
+`unset_*` are the common spellings), or that passes a loader parameter choosing a family's serving lane (the
+weight form the family runs: q8 planes, a quantized carrier's own planes, or the f16 or f32 planes of the
+exact lane - and whether a weight row stored as half floats serves as halves or as floats), or whose claim
+depends on which route or serving lane runs it - a compare of a CPU run against a GPU run among them - applies
+`REVIEW_LANE_PINS.md` (beside this file) too.**
 
 **A cell that feeds, preprocesses, or asserts on media bytes an encoder consumes - pixels or
 audio samples - compares an encoder's output rows against a second source, or compares ASR
@@ -39,28 +37,29 @@ transcripts, applies `REVIEW_MEDIA_CELLS.md` (beside this file) too.**
 changes such a condition, or changes the body of a function in this folder that such a condition
 calls, applies `REVIEW_SKIPS.md` (beside this file) too.**
 
-**A diff that adds, moves or changes a cell that loads a model file, a `with_cpu_and_gpu_model`,
-`with_model_once` or `with_model_once_at` call, an `own_load` call, a `family_on` call, or a TTS
-form helper (`styletts2_form`, `pocket_form`, `styletts2_form_is`, `pocket_form_is`,
-`_tts_parity.das`), or changes `REVIEW.das`'s `check_models_load_once`, `check_block_rows`,
-`check_family_tags`, `FAMILY_FREE`, `LOAD_ONCE_AREAS` or `LOADERS`, applies `REVIEW_LOAD_ONCE.md`
-(beside this file) too - the one block a model file loads on, the family a load is tagged with, and
-the load a CPU-run cell takes.**
+**A diff that adds, moves or changes a cell that loads a model file, a block call, an `own_load` call, a
+`family_on` call, or a TTS form helper (`styletts2_form`, `pocket_form`, `styletts2_form_is`,
+`pocket_form_is`, `_tts_parity.das`), or changes `REVIEW.das`'s `check_models_load_once`, `check_block_rows`,
+`check_family_tags`, `FAMILY_FREE`, `LOAD_ONCE_AREAS` or `LOADERS`, applies `REVIEW_LOAD_ONCE.md` (beside this
+file) too - the one block a model file loads on, the family a load is tagged with, and the load a CPU-run cell
+takes.**
 
-- A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest. It owns the asserts
-  of every helper it calls and, where it runs inside the body of a `with_cpu_and_gpu_model`,
-  `with_model_once` or `with_model_once_at` call, the load of the form it runs on - the form loader
-  and stage function included - and each assert that body makes on that form outside a subtest.
+- A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest. It owns the asserts of every
+  helper it calls and, inside the body of a block call, the load of the form it runs on - the form loader and
+  stage function included - and each assert that body makes on that form outside a subtest.
+- A block call is a call of a name `REVIEW.das`'s `BLOCKS` lists.
+- A diff moves a cell or code when it puts it, its text changed or not, in another function or file or onto
+  another form, of its own block or another's.
 - A test file is a `.das` dastest runs - one holding a `[test]` function, or one whose `cant_`,
   `failed_` or `invalid_` prefix makes its compile the assertion.
-- A gate function is a named function a cell of a `test_*_kernels.das` file calls to compare one
-  kernel against its CPU oracle.
-- A file's `CLAUDE.md` entry is every `CLAUDE.md` clause stating a fact about the file (named with
-  or without its `.das` suffix), one of its cells, or one of its gate functions, wherever in
-  `CLAUDE.md` the clause sits; a brace list naming several files at once
-  (`test_metal_{prefill,decode}_kernels`) or a suite roster states none.
-- A compare's two sides are the two computations whose mismatch reds the assert; a reference that
-  only decides where the compare stops is neither side.
+- A gate function is a named function a `test_*_kernels.das` cell calls to compare one kernel with its
+  CPU oracle.
+- A file's `CLAUDE.md` entry is every `CLAUDE.md` clause stating a fact about the file (named with or
+  without its `.das` suffix), one of its cells, or one of its gate functions, wherever in `CLAUDE.md`
+  the clause sits; a brace list naming several files at once (`test_metal_{prefill,decode}_kernels`)
+  or a suite roster states none.
+- A compare's two sides are the two computations whose mismatch reds the assert; a reference that only
+  decides where the compare stops is neither side.
 - A bound assert is a compare of two computed sides, or a measured quality figure against a
   tolerance; an exact compare - equality of ids, an argmax or an integer count, with no tolerance in
   either side's computation - is not one; a float compare, bit-exact or not, and a miss count of a
@@ -68,14 +67,12 @@ the load a CPU-run cell takes.**
   or roster sizes, an index guard, a route counter, or a timing or rate bound.
 - A stocked artifact is a file a test reads from under `models_dir()` that neither this repo's build
   nor its tests produce - model files, mmprojs, front-end packs, image fixtures, oracle dumps.
-- An area is a name in `run.das`'s `AREAS` list, standing for the files `run.das`'s `area_tests`
-  returns for it.
-- A box fact is a condition one box or run mode meets and another does not: the device or its
-  memory, whether the build carries a module (`typeinfo module_exists` or `typeinfo
-  builtin_module_exists`), the value of an environment variable or runner flag the run reads, the
-  value a tune companion returns (a function whose body is the winner the `[tune]` framework
-  picked for this box), the CPU kernel backend the box's CPU features pick
-  (`active_kernel_backend`), a host toolchain, or a stocked artifact's presence.
+- An area is a name in `run.das`'s `AREAS` list, standing for the files `area_tests` returns for it.
+- A box fact is a condition one box or run mode meets and another does not: the device or its memory, whether
+  the build carries a module (`typeinfo module_exists` or `typeinfo builtin_module_exists`), the value of an
+  environment variable or runner flag the run reads, the value a tune companion returns (a function whose body
+  is the winner the `[tune]` framework picked for this box), the CPU kernel backend the box's CPU features
+  pick (`active_kernel_backend`), a host toolchain, or a stocked artifact's presence.
 - A change reaches a test file or a cell when it alters anything its result depends on - its test
   file, a shared helper, engine code it exercises, an in-tree fixture or corpus it reads, or a name
   it asserts on; an edit that changes only whitespace or comments, or that moves code with its text
@@ -85,9 +82,20 @@ These definitions bind the `REVIEW_*.md` companions beside this file wherever a 
 define the term itself. A kernel-unit cell, a kernel class and a CPU oracle are as
 `REVIEW_KERNEL_CELLS.md` (beside this file) defines them; an encoder is as `REVIEW_MEDIA_CELLS.md` defines it.
 
-**A test file in this folder whose cells cannot hold under `DASLLAMA_CPU_PREFILL=1` says so in its
-header (its top comment block) and joins the list of files that sit in no suite (`exempt` in
-`test_run_suites.das`) in the same change.** `DASLLAMA_CPU_PREFILL=1` is what the runner arms for every suite.
+**A cell in this folder that cannot hold under `DASLLAMA_CPU_PREFILL=1` pins the CPU-prefill declaration off
+around the prefills it asserts on (`with_cpu_prefill(false)`), and its file's header (its top comment block)
+says so.** `DASLLAMA_CPU_PREFILL=1` is what the runner arms for every child.
+
+**A diff that weakens `check_tests_placed` (`REVIEW.das`), which holds every test file of this
+folder to a run list of `run.das`, is a defect.**
+
+**A diff that adds a pick to `VK_CENSUS_PICK_CONDITIONAL` (`_kernel_census.das`) reads it through the
+function the driver calls at the dispatch site, and its `vk_census_pick` arm reads a carrier-row count whose
+`//!` line names the cells that dispatch its entries (`VK_ROUTED_ROWS`) - never a vendor or device name compared.**
+
+**Weakening the blind-entry asserts in `_kernel_census.das` - that an entry matches a compiled
+census key, that it matches no dispatched one, and that a conditional Vulkan entry whose pick holds
+counts a dispatch once every cell that carries it ran - is a defect.**
 
 **A diff that gives `run.das` a global whose initializer spawns, logs, writes the environment or
 touches the filesystem is a defect - do that work inside the function that needs it.** Anything
@@ -96,7 +104,7 @@ that fires on require fires inside every test that requires `run` by bare same-d
 **A diff that gives `_model_tier.das`, or a fixture in this folder it requires, an `[init]` that
 declares the CPU-prefill intent (`allow_cpu_prefill`) is a defect - the intent is declared in
 the `[init]` of the test file that needs it.** `test_cpu_prefill_tripwire.das` requires
-`_model_tier` and asserts that the guard trips while the intent is undeclared.
+`_model_tier` and asserts that the guard trips while its cell pins the intent off.
 
 **A cell asserting a chat template's INSTRUCT wire - a closed empty thought block and no
 thinking gate - calls `set_thinking(c, false)` on its `ChatSession` before the first turn.**
@@ -104,8 +112,8 @@ thinking gate - calls `set_thinking(c, false)` on its `ChatSession` before the f
 `set_thinking(c, false)` call renders the thinking gate and the cell asserts the wrong wire.
 
 **A test RUN outside the `FILES` list of a per-PR lane in `../CMakeLists.txt` runs under `-jit` -
-never the interpreter, never AOT.** Under the interpreter a
-model-gated suite's cells skip, and a run of skips is not the coverage the suite owes.
+never the interpreter, never AOT.** Under the interpreter a model-gated suite's cells skip, and a run
+of skips is not the coverage the suite owes.
 
 **A diff that adds a test file here adds its `CLAUDE.md` entry in the same change, every clause
 of it true of the file as added.**
@@ -134,8 +142,8 @@ class - the cells of one helper, or the arms of one name pattern - keeps that cl
 skip clauses true for every cell in the class.**
 
 **A diff that adds, renames, or drops an arm name - the literal passed to `arm_on(t, name)`
-(`_model_tier.das`), what `--arm` matches - updates its suite's backticked arm roster in
-`CLAUDE.md`'s "Arm filter mechanics" section in the same change.** An arm the roster does not name
+(`_model_tier.das`), what `--arm` matches - adds, renames or drops it in the backticked arm roster
+of `CLAUDE.md`'s "Arm filter mechanics" section in the same change.** An arm the roster does not name
 is unreachable to whoever is choosing what to run.
 
 **A diff that adds, changes, or drops a cell's skip condition other than the runner's own
@@ -144,11 +152,11 @@ header of every test file that runs the cell, wherever the cell is defined, so t
 names every fact the cells that file runs skip on.**
 
 **A diff that changes `run.das`'s surface - a flag, a suite name, an area name, what a flag does,
-which suite or area a run with no flag runs, or an environment knob the runner reads - adds it to
-or corrects it in `CLAUDE.md`'s "Run suites ONLY through the runner" block and `../CLAUDE.md` in the
-same change.** A data row in a table `run.das` looks up - `MODULE_AREAS`, a
-suite's or an area's file list or arm list (`area_image_arms`) - is not the surface. A stale copy
-sends its reader to a flag that no longer does what the text says.
+which suite or area a run with no flag runs, or an environment knob the runner reads or sets for its
+children - adds it to or corrects it in `CLAUDE.md`'s "Run suites ONLY through the runner" block and
+`../CLAUDE.md` in the same change.** A data row in a table `run.das` looks up - `MODULE_AREAS`, a
+suite's or an area's file list or arm list (`area_image_arms`) - is not the surface. A stale copy sends
+its reader to a flag that no longer does what the text says.
 
 **On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell that
 returns without asserting registers `t |> skip` there; `feint` is a print, not a skip.

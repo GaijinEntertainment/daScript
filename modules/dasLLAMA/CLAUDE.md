@@ -58,9 +58,10 @@ CUDA device kernel files - no model, no wall; the stocked suite runs them first.
 
 **What `--changed` reaches.** A test file itself, a fixture the tests requiring it, an engine module its
 `MODULE_WITNESSES` row or - a core module - every model-free `llm` file and one stocked witness a family and home,
-and its other areas whole. A changed file in a model suite (decode | mtp | prefill | matrix | image) reaches
-nothing - `--changed` names it; run that suite with `--arm` scoped to the change. `--area examples` runs the browser
-examples' smoke tests, which no other run plans.
+and its other areas whole. A changed file of the `kernels`, `image` or `image-vulkan` suite reaches
+nothing - `--changed` names it; run that suite with `--arm` scoped to the change. The Mac model cells - the
+decode, prefill, MTP and support-matrix rows, the format census - ride the llm area's blocks:
+`--area llm --arm <token>`. `--area examples` runs the browser examples' smoke tests, which no other run plans.
 
 **The fleet** (`harness/pod_fleet.das -- up | sync | run | status | times | down`) is two pods, one a GPU home: the
 Vulkan home runs every file but the CUDA-only ones, the CUDA home its pass's, each with the other home's module
