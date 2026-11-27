@@ -15,12 +15,14 @@ require dasllama/dasllama_math   // with_dasllama_jobque_
 require _image_memory   // read_page_aligned, zero_bytes: a host's own copy of the bin
 require _kv_prefix_cells   // the context file's cells on a synthetic Config
 require _tower_twin   // twin_rows_held: a twin's held verdict on synthetic rows
-require _compares   // probe_fails: the held verdict's failed asserts counted
-require strings   // find: a refusal's words
+require _compares   // probe_fails, probe_counts: a verdict's failed asserts and skips counted
+require strings   // find: a refusal's words; starts_with: a blind entry no other opens
 require dasllama/dasllama_gpu_rail   // RailProfSums, rail_prof_lines: the homes' one profile report
 require daslib/enum_trait   // every RailProfRole walked against the ledger's width
 require dasllama/dasllama_env   // g_env_gpu: the knob the ledger reads with the pin off
 require math
+require _kernel_census   // the census files a run's processes write, merged, and the verdicts
+require ?das_metal dasllama/dasllama_metal_common   // nolint:STYLE030,LINT019 - the census counter
 
 // The SPIR-V dump differ (harness/vk_spv_diff.das) - the identity gate every kernel fold's
 // "byte-identical" claim rests on: its four bins over two in-memory dumps, and the verdict's refusal
@@ -348,4 +350,205 @@ def test_rail_prof_report(t : T?) {
     set_rail_prof_pin(false)
     t |> equal(rail_prof_on(), g_env_gpu.gpu_prof)   // the pin off, the knob decides
     set_rail_prof_pin(was)
+}
+
+//! a census file of `name` in `folder`, written as a process writes
+//! one
+def private census_file_at(folder, name : string; cov : table<string; int64>) {
+    fopen(path_join(folder, name), "wb") $(f) {
+        fwrite(f, sprint_json(cov, false))
+    }
+}
+
+var private g_census_verdict_ran = true   //! whether the skip case's verdict call answered true
+
+[test(description = "A home's census files merge into one table - every key summed over the files, the keys' union, a note flag set in one file set in the merge - with another home's file and a file of no home left out; the verdict gets the merged table and the whole flag the run passes; a named folder holding no file of a home reads as a failed verdict; an unset folder skips loudly and its verdict never runs")]
+def test_kernel_census_merge(t : T?) {
+    let folder = path_join(test_temp_dir(), "kernel_census")
+    mkdir_rec(folder)
+    census_file_at(folder, "metal_1.json", { "k_a" => 2l, "k_b" => 0l, "@metal_crown.x" => 1l })
+    census_file_at(folder, "metal_2.json", { "k_a" => 3l, "k_c" => 5l, "@vk_routed" => 2l })
+    census_file_at(folder, "vulkan_1.json", { "k_a" => 100l })
+    census_file_at(folder, "notes.json", { "k_a" => 1000l })
+    var inscope m <- kernel_census_merged(folder, CENSUS_METAL)
+    t |> equal(m.files, 2, "the two Metal files merge")
+    t |> equal(m.cov?["k_a"] ?? -1l, 5l, "a key both files hold sums; no other file adds to it")
+    t |> equal(m.cov?["k_c"] ?? -1l, 5l, "a key one file holds keeps its count")
+    t |> success(key_exists(m.cov, "k_b"), "a kernel at zero stays a key: the union")
+    t |> equal(m.cov?["@metal_crown.x"] ?? 0l, 1l, "a flag one file set is set")
+    t |> equal(m.cov?["@vk_routed"] ?? 0l, 2l, "a note sums")
+    var wholes : array<bool>
+    for (whole in [false, true]) {
+        with_kernel_census(t, folder, CENSUS_METAL, whole) $(cov, got) {
+            t |> equal(cov?["k_a"] ?? -1l, 5l, "the verdict reads the merged table")
+            wholes |> push(got)
+        }
+    }
+    t |> equal(wholes, [false, true], "the verdict gets the whole flag the run passes")
+    var inscope none <- kernel_census_merged(folder, "cuda")
+    t |> equal(none.files, 0, "a home with no census file in the folder merges none")
+    t |> equal(census_read_of(folder, none.files, true), CensusRead.fail_empty,
+        "a home with no census file in a whole run's folder fails the verdict")
+    t |> run("an unset census folder skips loudly") @(t : T?) {
+        g_census_verdict_ran = with_kernel_census(t, "", CENSUS_METAL, false) $(_cov, _whole) {
+            t |> failure("the verdict ran with no census folder")
+        }
+    }
+    t |> success(!g_census_verdict_ran, "the skip answers false")
+}
+
+[test(description = "A census folder holding no file of the home fails the verdict of a whole run through `with_kernel_census` itself and skips a narrowed run's, and a failure too is a census file that does not parse: it adds no key, counts as no file, and is named in the failure")]
+def test_kernel_census_fail_and_corrupt(t : T?) {
+    let folder = path_join(test_temp_dir(), "kernel_census_corrupt")
+    mkdir_rec(folder)
+    var ran = false
+    let whole = probe_counts() $(p) {
+        ran = with_kernel_census(p, folder, CENSUS_METAL, true) $(_cov, _whole) {
+            p |> failure("the verdict ran over an empty folder")
+        }
+    }
+    t |> equal(whole, int2(1, 0), "a whole run's empty folder is one failure, the verdict unrun")
+    t |> success(!ran, "and the read answers false")
+    let narrowed = probe_counts() $(p) {
+        ran = with_kernel_census(p, folder, CENSUS_METAL, false) $(_cov, _whole) {
+            p |> failure("the verdict ran over an empty folder")
+        }
+    }
+    t |> equal(narrowed, int2(0, 1), "a narrowed run's empty folder is one skip, the verdict unrun")
+    t |> success(!ran, "and that read answers false too")
+    census_file_at(folder, "metal_1.json", { "k_a" => 2l })
+    t |> success(fwrite(path_join(folder, "metal_2.json"), "\{\"k_a\": 40, oops"), "a cut file is planted")
+    var inscope m <- kernel_census_merged(folder, CENSUS_METAL)
+    t |> equal(m.files, 1, "the corrupt file counts as no file")
+    t |> equal(m.cov?["k_a"] ?? -1l, 2l, "and adds no key")
+    t |> equal(length(m.corrupt), 1, "and is named as corrupt")
+    var judged = false
+    let cut = probe_fails() $(p) {
+        judged = with_kernel_census(p, folder, CENSUS_METAL, false) $(_cov, _whole) {
+            p |> failure("the verdict ran over an undercounted census")
+        }
+    }
+    t |> equal(cut, 1, "a corrupt file beside a good one is one failure, the verdict unrun")
+    t |> success(!judged, "and the read answers false")
+}
+
+[test(description = "A census reset under a named folder keeps the dispatches before it in the process's sum, which `kernel_census_write_in` writes with the notes and the dispatches since into one file a home that merges back; a reset with no folder drops them, and a home the build lacks writes no file")]
+def test_kernel_census_write(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let folder = path_join(test_temp_dir(), "kernel_census_write")
+        var why : string
+        rmdir_rec(folder, why)
+        g_kcov_folded["fx_kernel"] = 3l
+        kernel_census_reset_metal_in(folder)
+        t |> equal(metal_kernel_coverage()?["fx_kernel"] ?? 0l, 0l, "the reset clears the engine's count")
+        g_kcov_folded["fx_kernel"] = 2l
+        kernel_census_note_add("@fx_note", 4l)
+        kernel_census_write_in(folder)
+        kernel_census_write_in(folder)
+        var inscope m <- kernel_census_merged(folder, CENSUS_METAL)
+        t |> equal(m.files, 1, "one file a home, written over")
+        t |> equal(m.cov?["fx_kernel"] ?? -1l, 5l, "the dispatches before the reset and since")
+        t |> equal(m.cov?["@fx_note"] ?? -1l, 4l, "the notes beside them")
+        static_if (!typeinfo builtin_module_exists(vulkan)) {
+            var inscope vk <- kernel_census_merged(folder, CENSUS_VULKAN)
+            t |> equal(vk.files, 0, "a home the build lacks writes no file")
+        }
+        g_kcov_folded["fx_kernel"] = 7l
+        kernel_census_reset_metal_in("")
+        g_kcov_folded["fx_other"] = 1l
+        kernel_census_write_in(folder)
+        var inscope dropped <- kernel_census_merged(folder, CENSUS_METAL)
+        t |> equal(dropped.cov?["fx_kernel"] ?? -1l, 3l, "a reset with no folder drops its dispatches")
+        kernel_census_reset_metal_in("")
+        kernel_census_notes_reset()
+    } else {
+        t |> skip("das_metal is not built: no census counter to drive")
+    }
+}
+
+//! `n` kernels counted once each, named apart from every census
+//! entry, beside every one of `blinds` at zero
+def private planted(blinds : array<string>; n : int) : table<string; int64> {
+    var cov <- {for (b in blinds); b => 0l}
+    for (i in range(n)) {
+        cov["fx_kernel_{i}"] = 1l
+    }
+    return <- cov
+}
+
+//! the first of `entries` that no other entry opens and that opens
+//! none, of the ones `keep` holds: its hits count for itself alone
+def private lone_entry(entries : array<string>; keep : block<(e : string) : bool>) : string {
+    for (e in entries) {
+        continue if (!invoke(keep, e))
+        var alone = true
+        for (o in entries) {
+            alone &&= o == e || (!starts_with(o, e) && !starts_with(e, o))
+        }
+        return e if (alone)
+    }
+    return ""
+}
+
+//! the Metal verdict's failed asserts and skips on `cov`
+def private metal_probe(cov : table<string; int64>; whole : bool) : int2 {
+    return probe_counts() $(p) {
+        metal_census_verdict(p, cov, whole)
+    }
+}
+
+[test(description = "The Metal census verdict on planted tables: a blind entry a cell dispatched fails, a crown-conditional one is skipped under its `@metal_crown.` note and fails without it, the floor of 40 dispatched kernels asserts only on a whole run and counts no note key")]
+def test_metal_census_verdict_branches(t : T?) {
+    var inscope crowns <- metal_census_crown_entries()
+    var inscope blinds <- metal_census_blind_entries()
+    let plain = lone_entry(blinds) $(e) => !key_exists(crowns, e)
+    let crowned = lone_entry(blinds) $(e) => key_exists(crowns, e)
+    t |> success(!empty(plain) && !empty(crowned), "a plain and a crowned blind entry stand alone")
+    var inscope floor <- planted(blinds, 40)
+    t |> equal(metal_probe(floor, true), int2(0, 0), "40 kernels on a whole run hold the floor")
+    var inscope short <- planted(blinds, 39)
+    t |> equal(metal_probe(short, true).x, 1, "39 kernels on a whole run fail the floor")
+    t |> equal(metal_probe(short, false).x, 0, "a run that is not whole asserts no floor")
+    short["@fx_note"] = 1l
+    t |> equal(metal_probe(short, true).x, 1, "a note key is no dispatched kernel")
+    var inscope hit <- clone_to_move(floor)
+    hit[plain] = 2l
+    t |> equal(metal_probe(hit, false).x, 1, "a dispatched blind entry fails: {plain}")
+    var inscope crown_hit <- clone_to_move(floor)
+    crown_hit[crowned] = 2l
+    t |> equal(metal_probe(crown_hit, false), int2(1, 0), "a crowned entry dispatched off its crown fails")
+    crown_hit["@metal_crown.{crowns?[crowned] ?? ""}"] = 1l
+    t |> equal(metal_probe(crown_hit, false), int2(0, 1), "under its crown's note it skips: {crowned}")
+}
+
+//! the Vulkan verdict's failed asserts on `cov`
+def private vk_fails(cov : table<string; int64>; whole : bool) : int {
+    return probe_counts($(p) {
+        vulkan_census_verdict(p, cov, whole)
+    }).x
+}
+
+[test(description = "The Vulkan census verdict on planted tables: a dispatched blind entry fails, a pick-conditional entry is held to a dispatch only where its pick's note holds (`@vk_int8_columns`, read over every routed row) - and the floor of 24 asserts only on a whole run and counts no note key")]
+def test_vulkan_census_verdict_branches(t : T?) {
+    var inscope blinds <- vulkan_census_blind_entries()
+    var inscope picks <- vulkan_census_pick_entries()
+    var inscope floor <- planted(blinds, 24)
+    t |> equal(vk_fails(floor, true), 0, "24 kernels on a whole run hold the floor")
+    var inscope short <- planted(blinds, 23)
+    t |> equal(vk_fails(short, true), 1, "23 kernels on a whole run fail the floor")
+    t |> equal(vk_fails(short, false), 0, "a run that is not whole asserts no floor")
+    short["@vk_routed"] = 4l
+    t |> equal(vk_fails(short, true), 1, "a note key is no dispatched kernel")
+    let plain = lone_entry(blinds) $(e) => !key_exists(picks, e)
+    var inscope hit <- clone_to_move(floor)
+    hit[plain] = 2l
+    t |> equal(vk_fails(hit, false), 1, "a dispatched blind entry fails: {plain}")
+    var inscope served <- clone_to_move(floor)
+    for (k in keys(picks)) {
+        served[k] = 1l
+    }
+    served["@vk_routed"] = 4l
+    t |> equal(vk_fails(served, false), length(picks), "no pick holds: every conditional entry dispatched fails")
+    served["@vk_int8_columns"] = 1l
+    t |> equal(vk_fails(served, false), 0, "the pick holds: every conditional entry may dispatch")
 }

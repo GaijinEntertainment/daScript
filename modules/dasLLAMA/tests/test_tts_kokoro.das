@@ -18,6 +18,7 @@ require strings
 require _tts_parity
 require _model_once
 require _model_tier
+require _kernel_coverage_cells   // coverage_tower_styletts2: the kernel census's synthesis
 require _scratch_dir   // scratch_path, scratch_file: the stress-model probe's directory
 
 // The Kokoro family. Model-free: the token rule and the style-row rule over a hand-built
@@ -252,6 +253,11 @@ def test_kokoro_82m(t : T?) {
             } else {
                 test_kokoro_synthesis_metal(t, m, form, path, rows)
                 test_kokoro_oracle(t, m, form, rows)
+                if (form == "f32@dev") {
+                    coverage_tower_styletts2(t,
+                        "kokoro: the census's synthesis, the f32 lane's home image",
+                        cov_home_of(TowerFamily.tts), m.model, "kokoro-82m.gguf")
+                }
             }
         }
         if (ran) {

@@ -1,6 +1,8 @@
-// The Vulkan tier-gate cells (the ple f32 tile, the h128 twin, the subgroup pin, the prefill chunk cap) skip without
-// the vulkan module; the subgroup pin cell also skips without a Vulkan device, and the chunk-cap cell when
-// DASLLAMA_VK_CHUNK is set.
+// The Vulkan tier-gate cells (the ple f32 tile, the h128 twin, the
+// subgroup pin, the prefill chunk cap) and the census cells (a
+// kernel's count, the lens spec's seeded census) skip without the
+// vulkan module; the subgroup pin cell also skips without a Vulkan
+// device, and the chunk-cap cell when DASLLAMA_VK_CHUNK is set.
 options gen2
 options stack = 524288   // three Model shells live in one cell's frame - the default test stack overflows on them
 options _dasllama_internal = true
@@ -9,6 +11,7 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 require dastest/testing_boost public
 require dasllama/dasllama_common
 require _override_probes   // decode_declines: the fake override's step
+require _kernel_census   // nolint:STYLE030,LINT019 - kernel_census_reset_vulkan, in the vulkan arms
 require dasllama/dasllama_sampling
 require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias seat a served qwen2 needs
@@ -2019,11 +2022,30 @@ def test_vk_census_count_keeps_its_kernel(t : T?) {
         var inscope rebuilt <- vk_kernel_coverage()
         t |> equal(rebuilt?[second] ?? 0l, 5l, "a kernel rebuilt on its own handle adds to its count")
         t |> equal(rebuilt?[first] ?? 0l, 5l, "... and the first kernel's count stands")
-        vk_kernel_coverage_reset()
+        kernel_census_reset_vulkan()
         var inscope cleared <- vk_kernel_coverage()
         t |> equal((cleared?[first] ?? 0l) + (cleared?[second] ?? 0l), 0l, "a reset leaves no count under either name")
         g_pipe_names |> erase(handle)
         g_pipe_access |> erase(handle)
+    } else {
+        t |> skip("no vulkan module in this build")
+    }
+}
+
+[test(description = "Device-free: the compile-time Vulkan lens spec seeds the coverage census with at least 40 kernels, every one reading zero after a reset")]
+def test_vulkan_kernel_coverage_rail(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        //! an earlier cell may have dispatched on a live device
+        kernel_census_reset_vulkan()
+        var inscope cov <- vk_kernel_coverage()
+        t |> success(length(cov) >= 40, "the lens spec seeds {length(cov)} kernels (floor 40)")
+        var zeros = 0
+        for (n in values(cov)) {
+            if (n == 0l) {
+                zeros++
+            }
+        }
+        t |> equal(zeros, length(cov), "every seeded kernel reads zero after the reset")
     } else {
         t |> skip("no vulkan module in this build")
     }

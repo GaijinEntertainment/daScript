@@ -360,6 +360,36 @@ def greedy_from(tr : Model; var s : Session; pos, n : int64) : array<int64> {
     return <- ids
 }
 
+//! `n` greedy picks through `eval_` from the logits `s` holds: each
+//! pick the first argmax of the row the eval before it left, every
+//! pick fed back. Takes no job queue
+def greedy_eval_steps(m : Model; var s : Session; n : int) : array<int64> {
+    let vocab = m.config.vocab_size
+    var ids : array<int64>
+    ids |> reserve(n)
+    var one <- [argmax_of(s.logits, vocab)]
+    for (_i in range(n)) {
+        ids |> push(one[0])
+        eval_(m, s, one)
+        one[0] = argmax_of(s.logits, vocab)
+    }
+    delete one
+    return <- ids
+}
+
+//! the last row's logits after one window of `prompt` on a fresh f16
+//! session of `m`, under a job queue of its own
+def window_last_logits(m : Model; prompt : array<int64>) : array<float> {
+    var out : array<float>
+    with_dasllama_jobque_() {
+        var s = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
+        eval_(m, s, prompt)
+        out := s.logits
+        delete s
+    }
+    return <- out
+}
+
 //! `body` under the bit-exact kernel modes a token-exact oracle needs - classic prefill attention, the scalar libm activations and
 //! the per-token recurrent deltanet prefill (chunked under `dn_chunked`) - the previous modes put back after
 def with_pinned_kernels(dn_chunked : bool; body : block) {

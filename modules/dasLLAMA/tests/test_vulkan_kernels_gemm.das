@@ -14,6 +14,7 @@ require _kernel_oracles   // nolint:STYLE030,LINT019 — the vulkan cells' oracl
 require _moe_routing_oracles
 require _vk_kq_fixtures
 require _kq_fixtures
+require _kernel_census   // nolint:STYLE030,LINT019 - kernel_census_reset_vulkan, in the vulkan arms
 require ?vulkan _vkd_toy
 require ?vulkan _vkd_oracles
 require ?vulkan _vk_codec_attn
@@ -742,7 +743,7 @@ def test_vkd_khr_rot_tiles(t0 : T?) {
             t |> equal(vkd_slot_kernel("q8_batch_khr_cls_spv"), "q8_batch_khr_rot_cls_spv", "the q8 KHR slot serves its rotated alternate under the bit")
             t |> equal(vkd_slot_kernel("kq_batch_k4_khr_cls_spv"), "kq_batch_k4_khr_rot_cls_spv", "... and a K-quant format's does")
             t |> equal(vkd_slot_kernel("f32_batch_khr_cls_spv"), "f32_batch_khr_rot_cls_spv", "... and the staged f32 tile's does")
-            vk_kernel_coverage_reset()
+            kernel_census_reset_vulkan()
             q8_khr_cell(t)
             f32_khr_cell(t, "the staged f32 tile's rotated alternate")
             for (r in rows) {

@@ -28,7 +28,6 @@ require _dflash_cells   // the walks every trunk runs: lossless, sampled, the pl
 require _mtp_cpu_cells   // invariance_ok, forced_invariance_ok, MTP_PROMPT: the NextN head's invariance pair on the large -MTP- carriers
 require _compares   // first_mismatch: the facade streams' ids
 require _metal_blob_twin   // metal_kernel_count: the tile attention's dispatches
-require dasllama/dasllama_scheduler   // the joint round's two streams
 require _scheduler_rig   // make_req, drain, toks_of
 require _resident_feed   // resident_trunk, load_resident_at: the discrete homes' trunk
 require _cpu_gpu_model   // with_cpu_and_gpu_model, the forms: the 27B trunk's block
@@ -36,6 +35,9 @@ require _parity_cells   // the parity cells the block's parity knob reaches (`_:
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_verifies: the discrete walks' verifies on the resident driver
 require ?vulkan dasllama/dasllama_vulkan_dflash   // nolint:STYLE030,LINT019 - the Vulkan arm registers at init
 require ?cuda dasllama/dasllama_cuda_dflash   // nolint:STYLE030,LINT019 - the CUDA arm registers at init
+require _kernel_census   // nolint:STYLE030,LINT019 - kernel_census_reset_metal, inside the das_metal halves
+require _metal_mtp_cells   // the Metal MTP rail's arms on the 27B trunks' served images
+require _mlx_cells   // the 27B snapshot's own cells against mlx-lm, on its snapshot block
 
 // The DFlash2 block drafter (`dasllama/dasllama_dflash`): the loader's refusal contract, and the lossless gate every arm of
 // the pass is held to - a greedy speculative walk's ids equal the plain walk's, with drafts accepted along the way - on the
@@ -48,23 +50,27 @@ require ?cuda dasllama/dasllama_cuda_dflash   // nolint:STYLE030,LINT019 - the C
 // `test_gpu_resident_gemma4_moe.das`; the regular DFlash drafter's Metal arms on the routed 26B and the dense Qwen3-4B ride
 // the Metal form of those trunks' blocks (`metal_drafter_cell`, `_dflash_cells.das`), the 26B's prompt-capture rows its
 // CPU and Metal forms (`test_mtp_gemma_drafter.das`); the 27B GGUF trunk's Metal cells ride its block's Metal form, the blob
-// twin under the required mode; the snapshot trunk's and the E2B facade's Metal cells load their trunk off the image rail
-// through `with_metal_trunk`. A cell skips
+// twin under the required mode, beside its served images for the batch rail's verify
+// and, with the split NextN head, the MTP rail's arms (`_metal_mtp_cells.das`); the 27B
+// snapshot trunk's Metal cells ride its snapshot block's blob twin (the same model's affine
+// 4-bit snapshot: mlx4b planes, no NextN head); the E2B facade's Metal cells ride the E2B
+// block's required blob twin (`dflash_e2b_facade_cell`, `_dflash_cells.das`). A cell skips
 // without its files (the trunk, the drafters, the 27B snapshot), on a model file whose category the run does not name
 // (`../TEST_CATEGORIES.md`), on the 27B snapshot without DASLLAMA_PARITY_FULL=1, and
 // on the Metal device arms on a build without das_metal; the discrete-home cells skip on a build with no discrete GPU home,
 // with no armed GPU tier (`gpu_tier_armed`), where the residency plan does not fit the card, and when interpreted.
-// The NextN head's lossless gate on the large -MTP- carriers no block loads sits beside them: self-speculative greedy decode
-// token for token against plain decode on the 64-trunk-layer Qwen3.6-27B-MTP and on the non-recurrent GLM-4.5-Air (forced
-// rejects included), the first the `qwen35-27b` category's and the second the `glm45-air` category's, the invariance pair
-// `_mtp_cpu_cells.das`'s.
+// The NextN head's lossless gate on the large -MTP- carriers sits beside them:
+// self-speculative greedy decode token for token against plain decode on the
+// 64-trunk-layer Qwen3.6-27B-MTP, on its block's CPU form beside its served image's MTP
+// rail arms, and on the non-recurrent GLM-4.5-Air (forced rejects included), the first
+// the `qwen35-27b` category's and the second the `glm45-air` category's, the invariance
+// pair `_mtp_cpu_cells.das`'s.
 
 [init]
 def private allow_cpu_prefill_intent() {
     allow_cpu_prefill()   // the CPU arm prefills on the CPU by design
 }
 
-let private SNAPSHOT_REPO = "mlx-community/Qwen3.8-27B-4bit"   //! the same model's affine 4-bit snapshot: mlx4b planes, no NextN head
 let private DRAFTER_FILE = "drafters/Qwen3.8-27B-DFlash2-GGUF/Qwen3.8-27B-DFlash2-Q8_0.gguf"
 let private DRAFTER_K4_FILE = "drafters/Qwen3.8-27B-DFlash2-GGUF/Qwen3.8-27B-DFlash2-Q4_K_M.gguf"
 let private DRAFTER_NV4_FILE = "drafters/Qwen3.8-27B-DFlash2-NVFP4-GGUF/Qwen3.8-27B-DFlash2-NVFP4.gguf"   //! every weight plane NVFP4, no `.scale` beside any
@@ -198,18 +204,6 @@ def test_dflash_refusals(t : T?) {
     }
 }
 
-//! the trunk at `path` loaded off the image rail - parsed into RAM, no `.dlim` minted or mapped beside it - and, for the Metal
-//! home (`metal`), turned into the blob form the drivers serve, as the engine's own load does with the rail off
-def private load_trunk(t : T?; path : string; metal : bool) : Model {
-    var m <- load_model_(path, QuantMode.q8)
-    m.config.seq_len = min(m.config.seq_len, HOST_CTX)
-    if (metal) {
-        t |> success(convert_model_to_metal_blob(m), "the trunk takes the metal-blob form")
-    }
-    return <- m
-}
-
-
 let private SHALLOW_DEPTH = 3l   //! the asked round's drafts, under the block's seven
 
 //! the device arm's greedy walk round by round at `depth` (0 = no depth set, the drafter's whole block): every drafting round
@@ -280,21 +274,6 @@ def private depth_walk(t : T?; m : Model; drafter : string; depth : int64; tag :
         delete s1
         delete s2
     }
-}
-
-//! the affine snapshot trunk's directory (large tier, as `test_mlx_snapshot.das`'s 27B cell); "" with the loud skip where it is
-//! absent or the tier is off
-def private snapshot_trunk(t : T?) : string {
-    let snap = hf_snapshot_dir(SNAPSHOT_REPO)
-    if (empty(snap)) {
-        t |> skip("the 27B snapshot not present")
-        return ""
-    }
-    if (!parity_full_mode()) {
-        t |> skip("the 27B snapshot is large-tier - set DASLLAMA_PARITY_FULL=1 to run")
-        return ""
-    }
-    return snap
 }
 
 //! the rows8 form's layout probe, run by this test on the system device: false where the box's cooperative layout is another
@@ -372,31 +351,6 @@ def private set_metal_dflash_knobs(k : MetalDflashKnobs) {
     }
 }
 
-//! `body` on the served `trunk` loaded for the Metal home - the mode required, the box's crowns applied as the server applies
-//! them - then the mode put back
-def private load_metal_trunk(t : T?; trunk : string; body : block<(var m : Model) : void>) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let prior = get_metal_mode()
-        set_metal_mode(MetalMode.required)
-        apply_box_profile_runtime()
-        with_dasllama_jobque() {
-            var m <- load_trunk(t, trunk, true)
-            invoke(body, m)
-            delete m
-        }
-        set_metal_mode(prior)
-    }
-}
-
-//! `body` on the served `trunk` (`load_metal_trunk`) under the Metal home's decode override (`on_metal_trunk`)
-def private with_metal_trunk(t : T?; trunk : string; body : block<(var m : Model) : void>) {
-    load_metal_trunk(t, trunk) $(var m) {
-        on_metal_trunk() {
-            invoke(body, m)
-        }
-    }
-}
-
 //! the lossless gate on the Metal home's device arm over the served `trunk` with the drafter file `drafter`, every format in
 //! `fmts` counted among the pass's sites and the rows8 form serving where the box runs it - and every format in `trunk_fmts`
 //! among the trunk's rows8 sites -, every pass's selector on the device and held for the verify, every held verify's accept on
@@ -462,14 +416,13 @@ def private metal_lossless_legs(t : T?; var m : Model; drafter : string; fmts, t
     }
 }
 
-//! the lossless legs (`metal_lossless_legs`) over the served `trunk` ("" where its skip is taken), the drafter file present
-def private metal_lossless_cell(t : T?; trunk, drafter : string; fmts, trunk_fmts : array<KqFmt>;
-                                tag : string; rows8 : bool = true) {
+//! the lossless legs (`metal_lossless_legs`) over the served trunk `m`, the drafter file present
+def private lossless_metal_cell(t : T?; var m : Model; drafter : string;
+                                fmts, trunk_fmts : array<KqFmt>; tag : string;
+                                rows8 : bool = true) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        return if (empty(trunk) || !model_available(t, path_join(_model_tier::models_dir(), drafter)))
-        load_metal_trunk(t, trunk) $(var m) {
-            metal_lossless_legs(t, m, drafter, fmts, trunk_fmts, tag, rows8)
-        }
+        return if (!model_available(t, path_join(_model_tier::models_dir(), drafter)))
+        metal_lossless_legs(t, m, drafter, fmts, trunk_fmts, tag, rows8)
     } else {
         t |> skip("{tag}: no das_metal in this build")
     }
@@ -587,25 +540,19 @@ def test_on_metal_trunk(t : T?) {
     }
 }
 
-[test(description = "On the planar Qwen3.8-27B Q4_K_M trunk on the CPU arm, with the Q8_0 DFlash2 drafter the exact-accept sampled speculative walk spends one draw a judged row with drafts accepted and opens on the plain seeded sampled walk's first id, honors a stop id, and both rejection walks accept some drafts and reject some, and the greedy speculative walks of the Q8_0, Q4_K_M and NVFP4 drafters emit the plain greedy walk's ids token for token with drafts accepted, the K-quant and NVFP4 files' planes tagged with their disk types; on the serving discrete home's drafter form each drafter's greedy walk on the device arm is the plain walk's on the same device, every pass ending on the device's top-k and walk, the host's walk and selector drafting the same ids; on the Metal form, the file's blob twin under the required mode, the exact sampled walk holds the CPU arm's draws and equals the plain seeded sampled walk token for token, the rejection walks accept some drafts and reject some with drawn drafts on the device selector, each drafter file's greedy walk on the device arm is lossless with its formats' sites encoded by the pass, device and host accept and selector agreeing, replays unwaited on the tape and the CPU arm on the device's captures accepting the same count, depth pins hold, and two streams through the scheduler ride the verify seat's joint groups, each the plain scheduler's token for token; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked-prefill arm; each form loads once")]
+[test(description = "On the planar Qwen3.8-27B Q4_K_M trunk on the CPU arm, with the Q8_0 DFlash2 drafter the exact-accept sampled speculative walk spends one draw a judged row with drafts accepted and opens on the plain seeded sampled walk's first id, honors a stop id, and both rejection walks accept some drafts and reject some, and the greedy speculative walks of the Q8_0, Q4_K_M and NVFP4 drafters emit the plain greedy walk's ids token for token with drafts accepted, the K-quant and NVFP4 files' planes tagged with their disk types; on the serving discrete home's drafter form each drafter's greedy walk on the device arm is the plain walk's on the same device, every pass ending on the device's top-k and walk, the host's walk and selector drafting the same ids; on the Metal form, the file's blob twin under the required mode, the exact sampled walk holds the CPU arm's draws and equals the plain seeded sampled walk token for token, the rejection walks accept some drafts and reject some with drawn drafts on the device selector, each drafter file's greedy walk on the device arm is lossless with its formats' sites encoded by the pass, device and host accept and selector agreeing, replays unwaited on the tape and the CPU arm on the device's captures accepting the same count, depth pins hold, and two streams through the scheduler ride the verify seat's joint groups, each the plain scheduler's token for token; on the Metal home's served image, one load on a das_metal build, the batch rail serves a same-slab verify's recurrent deltanet rows as one group, with no decline, the rows within 2.0 of the plain GPU step; on the served image with the Q8_0 NextN head loaded as a split shard beside the trunk, where the head file sits, the Metal MTP rail's verify rows within 0.5 of the plain GPU step and speculative free-run matching plain exactly; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked-prefill arm; each form loads once")]
 def test_dflash_27b_trunk(t : T?) {
     return if (!family_on(t, "qwen35"))
-    if (!dflash_27b_arms_on()) {
-        t |> skip("the arm filter keeps none of the 27B trunk's cells (DASLLAMA_TEST_ARMS={g_env_test.test_arms})")
+    var forms <- dflash_27b_forms(t)
+    let parity = empty(arm_why("dflash-27b-cpu"))
+    if (empty(forms) && !parity) {
+        delete forms
         return
     }
-    var forms <- [cpu_cells_form()]
-    static_if (typeinfo module_exists(dasllama_vulkan_dflash) || typeinfo module_exists(dasllama_cuda_dflash)) {
-        forms |> push(discrete_drafter_form())
-    } else {
-        t |> skip("27B discrete: no discrete GPU home in this build")
-    }
-    if (any_arm_on(DFLASH_27B_METAL_ARMS)) {
-        forms |> push(metal_form(required = true, ctx = HOST_CTX))
-    }
-    let parity = empty(arm_why("dflash-27b-cpu"))
     with_cpu_and_gpu_model(t, "llm", "Qwen3.8-27B-Q4_K_M.gguf", HOST_CTX, forms, parity = parity) $(var m, form) {
-        if (form.on_metal) {
+        if (form.metal_image) {
+            dflash_27b_image_cells(t, m, form)
+        } elif (form.on_metal) {
             dflash_27b_metal_cells(t, m)
         } elif (form.on_gpu) {
             dflash_27b_discrete_cells(t, m)
@@ -616,12 +563,66 @@ def test_dflash_27b_trunk(t : T?) {
     delete forms
 }
 
-//! the three acceptances on the Metal home's device arm over the served `trunk` with the Q8_0 drafter
+let private DFLASH_27B_TRUNK = "Qwen3.8-27B-Q4_K_M.gguf"   //! the drafter cells' trunk
+//! the 27B trunk's Q8_0 NextN head as a split shard
+let private SPLIT_HEAD_FILE = "mtp-Qwen3.8-27B-Q8_0.gguf"
+
+//! the 27B trunk's forms: the drafter's CPU, discrete and Metal twin
+//! forms where the arm filter keeps a drafter cell; the served image
+//! for the batch rail's verify where its arms reach it; the served
+//! image with the split head pinned where the head file sits
+def private dflash_27b_forms(t : T?) : array<ModelForm> {
+    var forms : array<ModelForm>
+    if (dflash_27b_arms_on()) {
+        forms |> push(cpu_cells_form())
+        static_if (typeinfo module_exists(dasllama_vulkan_dflash)
+                || typeinfo module_exists(dasllama_cuda_dflash)) {
+            forms |> push(discrete_drafter_form())
+        } else {
+            skip_cell(t, ("{DFLASH_27B_TRUNK}, {form_name(discrete_drafter_form())}: " +
+                "27B discrete: no discrete GPU home in this build"))
+        }
+        if (any_arm_on(DFLASH_27B_METAL_ARMS)) {
+            forms |> push(metal_form(required = true, ctx = HOST_CTX))
+        }
+    } else {
+        skip_cell(t, ("the arm filter keeps none of the 27B trunk's drafter cells " +
+            "(DASLLAMA_TEST_ARMS={g_env_test.test_arms})"))
+    }
+    var inscope verify_arms <- mtp_verify_arms(mtp_verify_qwen38_27b().tag)
+    if (any_arm_on(verify_arms)) {
+        forms |> push(metal_form(image = true, ctx = METAL_MTP_CELLS_CTX))
+    }
+    let split = metal_form(image = true, ctx = METAL_MTP_CELLS_CTX, mtp_head = SPLIT_HEAD_FILE)
+    var split_on = false
+    unsafe {   //! the head file's skip lands on a subtest naming the form
+        t |> run("{DFLASH_27B_TRUNK}, {form_name(split)}") @capture(& split_on)(t : T ?) {
+            split_on = model_available(t, path_join(_model_tier::models_dir(), SPLIT_HEAD_FILE))
+        }
+    }
+    if (split_on) {
+        forms |> push(split)
+    }
+    return <- forms
+}
+
+//! the 27B trunk's served-image cells: the batch rail's verify on the
+//! plain image, the MTP rail's arms on the split-head image
+def private dflash_27b_image_cells(t : T?; var m : Model; form : ModelForm) {
+    if (empty(form.mtp_head)) {
+        mtp_verify_metal(t, m, form, mtp_verify_qwen38_27b())
+    } else {
+        mtp_parity_metal(t, m, form, mtp_parity_qwen38_27b_split_head())
+    }
+}
+
+//! the three acceptances on the Metal home's device arm over the
+//! served trunk `m` with the Q8_0 drafter
 [cold_path]
-def private sampled_metal_cell(t : T?; trunk : string; tag : string) {
+def private sampled_walks_cell(t : T?; var m : Model; tag : string) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        return if (empty(trunk) || !model_available(t, path_join(_model_tier::models_dir(), DRAFTER_FILE)))
-        with_metal_trunk(t, trunk) $(var m) {
+        return if (!model_available(t, path_join(_model_tier::models_dir(), DRAFTER_FILE)))
+        on_metal_trunk() {
             sampled_modes_walk(t, m, DRAFTER_FILE, true, tag)
         }
     } else {
@@ -629,255 +630,97 @@ def private sampled_metal_cell(t : T?; trunk : string; tag : string) {
     }
 }
 
-[test(description = "The sampled DFlash walks on the Metal device arm hold over the 27B affine mlx 4-bit snapshot trunk: exact spends one draw a judged row with drafts accepted and opens on the plain sampled walk's first id, rejection walks accept and reject, and device and host draws give the same stream")]
-def test_dflash_27b_mlx_sampled(t : T?) {
-    if (!arm_on(t, "dflash-27b-mlx-sampled") || !family_on(t, "qwen35")) {
-        return
-    }
-    sampled_metal_cell(t, snapshot_trunk(t), "mlx sampled metal")
-}
-
-[test(description = "The lossless greedy DFlash gate on the Metal device arm holds over the 27B mlx 4-bit snapshot trunk, with device and host accept and selector agreeing and mlx4b planes among the trunk's rows8 verify sites where rows8 runs")]
-def test_dflash_27b_mlx_metal(t : T?) {
-    if (!arm_on(t, "dflash-27b-mlx-metal") || !family_on(t, "qwen35")) {
-        return
-    }
-    metal_lossless_cell(t, snapshot_trunk(t), DRAFTER_FILE, [KqFmt.q8], [KqFmt.mlx4b], "mlx metal")
-}
-
-let private CHAT_TURNS = fixed_array("Describe the TCP three-way handshake in three sentences.", "Now name the side that picks the first sequence number, in one sentence.")
-let private CHAT_MAX_NEW = 96l
-
-//! a two-turn greedy chat on `m`, thinking off: each turn's reply
-def private chat_replies(m : Model) : array<string> {
-    var replies : array<string>
-    var chat <- create_chat(m, "", CHAT_MAX_NEW)
-    set_thinking(chat, false)
-    replies |> reserve(length(CHAT_TURNS))
-    for (turn in CHAT_TURNS) {
-        add_user(chat, turn)
-        replies |> push(respond(m, chat, SamplingParams(temp = 0.0)) $(_piece) => true)
-    }
-    delete chat
-    return <- replies
-}
-
-//! a scheduler's streams over `prompts`, `budget` ids each, speculating or plain: every stream's ids, the drafts the
-//! scheduler accepted into `accepted`, the most streams one of its verifies carried into `joined`
-def private sched_streams(m : Model; prompts : array<array<int64>>; budget : int64; spec : bool; var accepted, joined : int64&) : array<array<int64>> {
-    var ev : array<SchedEvent>
-    let n = long_length(prompts)
-    var sch <- create_scheduler(m, n, n, 0l, 64l, 0l, KVDtype.f16, spec)
-    for (i in range64(n)) {
-        submit(m, sch, make_req(i + 1l, prompts[i], budget))
-    }
-    drain(m, sch, ev)
-    var out <- [for (i in range64(n)); toks_of(ev, i + 1l)]
-    accepted = sch.mtp_accepted
-    joined = sch.mtp_joined_max
-    delete sch
-    delete ev
-    return <- out
-}
-
-//! two streams through the scheduler with the drafter attached, at three drafts a round: a tick's rounds draft in one joint
-//! pass and verify in one joint step, each stream the plain scheduler's token for token (the driver against itself) and the
-//! two together accepting what each accepts alone within a fifth (the joint pass's drafts are each stream's own: a pass
-//! reading another stream's rows drafts noise and accepts next to nothing); the rounds before it carried one stream each (the
-//! joint count's control), and on a hybrid the joint verifies ride the seat's groups
-def private joint_streams_leg(t : T?; m : Model) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        var inscope prompts <- [for (turn in CHAT_TURNS); encode(m, turn, true)]
-        var none, alone, together, joined, lone = 0l
-        var inscope plain <- sched_streams(m, prompts, CHAT_MAX_NEW, false, none, joined)
-        let depth_pin = mtp_depth_pin()
-        set_mtp_depth(3l)
-        for (p in prompts) {
-            var inscope one : array<array<int64>>
-            one |> push_clone(p)
-            var acc = 0l
-            var inscope solo <- sched_streams(m, one, CHAT_MAX_NEW, true, acc, lone)
-            alone += acc
-            t |> success(lone <= 1l, "a stream alone rides no joint verify ({lone}) - the joint count's control")
-        }
-        let j0 = metal_dflash_joint_rounds()
-        let gv0 = metal_mtp_group_verifies()
-        let held0 = metal_dflash_selected().held
-        var inscope drafted <- sched_streams(m, prompts, CHAT_MAX_NEW, true, together, joined)
-        restore_mtp_depth(depth_pin)
-        let held = metal_dflash_selected().held - held0
-        let j1 = metal_dflash_joint_rounds()
-        if (metal_rows8_on()) {
-            t |> success(alone > 0l, "each stream alone accepts drafts ({alone})")
-            t |> success(together * 5l >= alone * 4l, "the two streams together accept what they accept alone within a fifth ({together} against {alone})")
-            t |> equal(joined, 2l, "a tick's verify carried both streams' rows")
-            t |> success(j1.rounds > j0.rounds, "the two streams ran joint rounds ({j1.rounds - j0.rounds})")
-            t |> equal(held, 0l, "a joint round lands its drafts ahead of its verify, so no pass is held for the verify seat")
-            if (m.config.recr_mask != 0ul) {
-                t |> success(metal_mtp_group_verifies() > gv0, "a hybrid's joint verifies rode the seat's groups ({metal_mtp_group_verifies() - gv0})")
-            }
-        } else {
-            t |> success(joined <= 1l, "off the matrix-unit form two streams stand down to the plain batched step")
-        }
-        for (i in range(length(prompts))) {
-            t |> equal(length(drafted[i]), length(plain[i]), "stream {i}: the drafted stream runs the plain stream's length")
-            t |> equal(first_mismatch(drafted[i], plain[i]), -1, "stream {i}: the drafted scheduler's ids are the plain scheduler's")
-        }
-    }
-}
-
-[test(description = "On gemma-4-E2B's Metal home with its DFlash2 drafter attached through the facade, a two-turn greedy chat's replies and a greedy completion's ids are the plain model's token for token (a driver-against-itself compare, the drafted chat's steps counted on the device), the drafted walks accepting drafts; two streams through the scheduler ride joint rounds with no pass held, each the plain scheduler's token for token; the stream with a stop id ends on that id's first occurrence; on the same load the exact sampled DFlash walk spends one draw a judged row with drafts accepted and opens on the plain sampled walk's first id, both rejection walks accept some drafts and reject some, drawn drafts end on the device selector, and verify-ahead off or the soft pick off reproduce the same stream, no sampled round holding its pass; over a prompt past one of the drafter's windows the ring that grew its dense layer drafts id for id what a ring reserved that wide drafts, and with every layer held to the window the drafts differ")]
-def test_dflash_e2b_facade_streams(t : T?) {
-    if (!arm_on(t, "dflash-e2b-facade") || !family_on(t, "gemma4e")) {
-        return
-    }
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let trunk = path_join(_model_tier::models_dir(), E2B_TRUNK_FILE)
-        let drafter = path_join(_model_tier::models_dir(), E2B_DRAFTER_FILE)
-        return if (!model_available(t, trunk) || !model_available(t, drafter))
-        with_metal_trunk(t, trunk) $(var m) {
-            let prompt <- encode(m, PROMPT, true)
-            var inscope plain_replies <- chat_replies(m)
-            var s1 = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
-            var inscope plain_ids : array<int64>
-            generate(m, s1, prompt, SamplingParams(temp = 0.0), COMPLETE_STEPS) $(id, _piece) {
-                plain_ids |> push(id)
-                return true
-            }
-            delete s1
-            set_dflash_device(true)
-            t |> equal(attach_block_drafter(m, drafter), "", "the drafter attaches through the facade")
-            t |> success(block_drafter_attached(m), "the facade reports it attached")
-            let st0 = metal_dflash_stats()
-            let dev0 = metal_decode_stats().decodes + metal_batch_decode_stats().steps
-            var inscope drafted_replies <- chat_replies(m)
-            let st1 = metal_dflash_stats()
-            t |> success(st1.passes > st0.passes, "the chat's turns ran draft passes ({st1.passes - st0.passes})")
-            let dev1 = metal_decode_stats().decodes + metal_batch_decode_stats().steps
-            t |> success(dev1 > dev0, "the drafted chat's steps ran on the device ({dev1 - dev0})")
-            t |> equal(length(drafted_replies), length(plain_replies))
-            for (a, b, i in drafted_replies, plain_replies, count()) {
-                t |> equal(a, b, "turn {i}: the drafted chat's reply is the plain chat's")
-            }
-            var s2 = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
-            var inscope drafted_ids, no_stops : array<int64>
-            let n = generate_drafted(m, s2, prompt, SamplingParams(temp = 0.0), COMPLETE_STEPS, no_stops) $(id, _piece) {
-                drafted_ids |> push(id)
-                return true
-            }
-            t |> equal(n, COMPLETE_STEPS, "the drafted completion runs its budget")
-            t |> success(s2.mtp_accepted > 0l, "the completion accepted drafts ({s2.mtp_accepted} of {s2.mtp_drafted})")
-            t |> equal(length(drafted_ids), length(plain_ids))
-            t |> equal(first_mismatch(drafted_ids, plain_ids), -1, "the drafted completion's ids are the plain completion's")
-            delete s2
-            //! a stop id: the stream ends on its first occurrence, nothing past it emitted
-            let stop_id = plain_ids[length(plain_ids) / 2]
-            var first = 0
-            while (plain_ids[first] != stop_id) {
-                first++
-            }
-            var s3 = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
-            var inscope stops <- [stop_id]
-            var inscope stopped_ids : array<int64>
-            generate_drafted(m, s3, prompt, SamplingParams(temp = 0.0), COMPLETE_STEPS, stops) $(id, _piece) {
-                return false if (id == stop_id)
-                stopped_ids |> push(id)
-                return true
-            }
-            t |> equal(length(stopped_ids), first, "the stopped stream emits the ids before the stop's first occurrence ({first})")
-            t |> success(first < length(plain_ids) - 1, "the stop sits inside the budget (the control: the stopless stream ran past it)")
-            delete s3
-            tile_attention_leg(t, m, prompt, plain_ids)
-            joint_streams_leg(t, m)
-            detach_block_drafter()
-            t |> success(!block_drafter_attached(m), "the facade reports it detached")
-            e2b_metal_twins(t, m)
-        }
+//! the 27B snapshot's forms: its drafter cells' blob twin under the
+//! required mode where the arm filter keeps one, beside the
+//! snapshot's own forms against mlx-lm (`mlx_qwen38_27b_forms`)
+def private dflash_27b_mlx_forms(t : T?; drafter : bool) : array<ModelForm> {
+    var forms : array<ModelForm>
+    if (drafter) {
+        forms |> push(metal_form(required = true, ctx = HOST_CTX))
     } else {
-        t |> skip("E2B facade streams: no das_metal in this build")
+        skip_cell(t, ("the arm filter keeps none of the 27B snapshot's drafter cells " +
+            "(DASLLAMA_TEST_ARMS={g_env_test.test_arms})"))
     }
+    var inscope mlx <- mlx_qwen38_27b_forms(t)
+    forms |> push_from(mlx)
+    return <- forms
 }
 
-let private TILE_BAR = 5e-3   //! the tile form's logits against the fused form's, of a row's largest live logit: the two sum a row's keys in different orders
-
-//! The tile form of a full-context layer's attention, pinned on at every depth and pinned off (the control: no dispatch):
-//! the plain completion's ids fed a step at a time give the fused form's logits within `TILE_BAR`, each step's control the
-//! fused row a step off; the drafted completion's verify and the scheduler's two-stream step take the form too. The
-//! verify's and the batch's rows are held to the oracle by the kernel cells (`sq_tile_gate`): a drafted walk's ids can tie
-[cold_path]
-def private tile_attention_leg(t : T?; var m : Model; prompt, plain_ids : array<int64>) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        var inscope fed : array<array<array<float>>>
-        var inscope walks : array<array<int64>>
-        var inscope prompts <- [for (turn in CHAT_TURNS); encode(m, turn, true)]
-        for (far in [0l, -1l]) {
-            let on = far == 0l
-            with_metal_attn_tile_far(far) {
-                metal_kernel_coverage_reset()
-                fed |> emplace <| feed_alone(m, KVDtype.f16, prompt, plain_ids)
-                let steps = metal_kernel_count("metal_sq_attn_tile")
-                metal_kernel_coverage_reset()
-                var s = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
-                var ids, no_stops : array<int64>
-                generate_drafted(m, s, prompt, SamplingParams(temp = 0.0), COMPLETE_STEPS, no_stops) $(id, _piece) {
-                    ids |> push(id)
-                    return true
-                }
-                delete s
-                delete no_stops
-                let verifies = metal_kernel_count("metal_sq_attn_tile")
-                walks |> emplace(ids)
-                metal_kernel_coverage_reset()
-                var none, joined = 0l
-                var inscope streams <- sched_streams(m, prompts, CHAT_MAX_NEW, false, none, joined)
-                let batched = metal_kernel_count("metal_sq_attn_tile")
-                if (on) {
-                    t |> success(steps > 0l, "the fed steps took the tile form on the full-context layers ({steps} dispatches)")
-                    t |> success(verifies > 0l, "the drafted completion's steps took it ({verifies} dispatches)")
-                    t |> success(batched > 0l, "the scheduler's two streams' steps took it ({batched} dispatches)")
-                } else {
-                    t |> equal(steps + verifies + batched, 0l, "control: the tile form pinned off dispatches none")
-                }
+//! the 27B snapshot's drafter cells on its required blob twin `m`: the
+//! sampled walks and the lossless gate, each under its arm
+def private dflash_27b_mlx_cells(t : T?; var m : Model; sampled, lossless : bool) {
+    unsafe {   //! the cells capture the loaded trunk by reference
+        if (sampled) {
+            let title = ("the sampled DFlash walks on the Metal device arm over the 27B mlx " +
+                "4-bit snapshot trunk")
+            t |> run(title) @capture(& m)(t : T ?) {
+                sampled_walks_cell(t, m, "mlx sampled metal")
             }
         }
-        log_gen_texts(m, "E2B drafted completion, fused (as CPU) against tile (as GPU):", walks[1], walks[0])
-        feed_steps_within(t, m, "E2B fed steps, tile against fused", long_length(prompt), fed[0], fed[1], plain_ids, TILE_BAR, "the tile form", "the fused form")
+        if (lossless) {
+            let title = ("the lossless greedy DFlash gate on the Metal device arm over the 27B " +
+                "mlx 4-bit snapshot trunk")
+            t |> run(title) @capture(& m)(t : T ?) {
+                lossless_metal_cell(t, m, DRAFTER_FILE, [KqFmt.q8], [KqFmt.mlx4b], "mlx metal")
+            }
+        }
     }
 }
 
-//! the 27B's sampled Metal cell on the E2B pair, on the facade cell's load: the three sampled acceptances on the Q8_0 file
-[cold_path]
-def private e2b_metal_twins(t : T?; var m : Model) {
-    unsafe {   //! the cell captures the loaded trunk by reference
-        t |> run("gemma-4-E2B, the sampled DFlash walks on the Metal device arm: the exact walk spends one draw a judged row and opens on the plain sampled walk's first id, a stop id, the rejection walks accept some and reject some, the device selector, verify-ahead and soft pick give the same stream") @capture(& m)(t : T ?) {
-            sampled_modes_walk(t, m, E2B_DRAFTER_FILE, device = true, tag = "E2B sampled metal", joint = true)
-        }
-        t |> run("gemma-4-E2B on the Metal device arm, over a prompt past one of the DFlash2 drafter's windows: the ring that grew its dense layer drafts id for id what a ring reserved that wide drafts, and with every layer held to the window the drafts differ") @capture(& m)(t : T ?) {
-            dense_ring_leg(t, m, E2B_DRAFTER_FILE, "E2B Metal, the dense layer", METAL_DENSE_ITEMS, HOST_CTX, 1l, true)
+[test(description = "Over the 27B affine mlx 4-bit snapshot trunk on the Metal home's blob twin under the required mode, one load on a das_metal build: the sampled DFlash walks on the device arm hold - exact spends one draw a judged row with drafts accepted and opens on the plain sampled walk's first id, rejection walks accept and reject, and device and host draws give the same stream; the lossless greedy DFlash gate on the device arm holds, with device and host accept and selector agreeing and mlx4b planes among the trunk's rows8 verify sites where rows8 runs; on the snapshot's own forms (`mlx_qwen38_27b_forms`) its cells against mlx-lm - on the snapshot's Metal twin the teacher-forced logits and the served window and greedy steps, on its CPU form the mlx4b planes, the tokenizer's ids and the teacher-forced logits, the served cell's CPU side on the portable CPU form; each form loads once")]
+def test_dflash_27b_mlx(t : T?) {
+    return if (!family_on(t, "qwen35"))
+    let sampled = empty(arm_why("dflash-27b-mlx-sampled"))
+    let lossless = empty(arm_why("dflash-27b-mlx-metal"))
+    var served : MlxServedKept
+    var forms <- dflash_27b_mlx_forms(t, sampled || lossless)
+    if (empty(forms)) {
+        delete forms
+        return
+    }
+    with_cpu_and_gpu_snapshot(t, "llm", "mlx-community/Qwen3.8-27B-4bit", HOST_CTX, forms,
+            false) $(var m, form) {
+        if (form.on_metal && form.metal_required) {
+            dflash_27b_mlx_cells(t, m, sampled, lossless)
+        } else {
+            mlx_qwen38_27b_cells(t, m, form, served)
         }
     }
+    mlx_served_verdict(t, served)
+    delete forms
 }
 
 // Qwen3.6-27B-MTP Q4_K_M — the 64-trunk-layer carrier: its draft block sits at layer index 64, the
 // exact index where the pre-fix per-layer masks wrapped (mask >> 64 == mask >> 0 on x86) — this
 // arm regresses that whole bug class (layer_is_recurrent / layer_is_sliding / wv_offs guards)
 // besides being the model the feature is FOR (1.39x decode when frozen). The `qwen35-27b`
-// category's (~16 GB): run.das --category qwen35-27b.
-[test(description = "On Qwen3.6-27B-MTP Q4_K_M, whose draft block sits at layer index 64 where per-layer masks once wrapped, self-speculative greedy decode emits plain decode's counting tokens exactly")]
+// category's (~16 GB): run.das --category qwen35-27b. Its served image on the Metal home carries
+// the MTP rail's arms.
+[test(description = "On Qwen3.6-27B-MTP Q4_K_M, whose draft block sits at layer index 64 where per-layer masks once wrapped, on the q8 CPU form self-speculative greedy decode emits plain decode's counting tokens exactly; on the Metal home's served image, one load on a das_metal build, the Metal MTP rail's verify rows within 0.5 of the plain GPU step on forced feed and its replayed rounds, and speculative free-run emitting the plain run's tokens exactly; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
 def test_mtp_invariance_27b(t : T?) {
-    t |> run("MTP self-spec output-invariance (Qwen3.6-27B-MTP Q4_K_M, draft block at layer 64)") @(t : T?) {
-        let path = path_join(models_dir(), "Qwen3.6-27B-MTP-Q4_K_M.gguf")
-        return if (!jit_model_available(t, path))
-        var tr <- load_gguf(path, QuantMode.q8)
-        t |> equal(tr.config.n_layer_nextn, 1l)
-        t |> equal(tr.config.n_layers, 64l)
-        tr.config.seq_len = 2048l
-        with_pinned_kernels() {
-            t |> invariance_ok(tr, MTP_PROMPT, 48, "counting-27b")
+    var forms <- [cpu_cells_form(), metal_form(image = true, ctx = METAL_MTP_CELLS_CTX)]
+    with_cpu_and_gpu_model(t, "llm", "Qwen3.6-27B-MTP-Q4_K_M.gguf", MTP_27B_CTX, forms,
+            parity = true) $(var m, form) {
+        if (form.on_metal) {
+            mtp_parity_metal(t, m, form, mtp_parity_qwen36_27b())
+        } elif (alone_pass_of(form, cpu_cells_form())) {
+            let title = ("MTP self-spec output-invariance (Qwen3.6-27B-MTP Q4_K_M, draft block " +
+                "at layer 64)")
+            unsafe {   //! the cell reads the block's model by reference
+                t |> run(title) @capture(& m)(t : T ?) {
+                    t |> equal(m.config.n_layer_nextn, 1l)
+                    t |> equal(m.config.n_layers, 64l)
+                    with_pinned_kernels() {
+                        t |> invariance_ok(m, MTP_PROMPT, 48, "counting-27b")
+                    }
+                }
+            }
         }
-        delete tr
     }
+    delete forms
 }
+
+let private MTP_27B_CTX = 2048l   //! the invariance pair's sessions and the parity row's
 
 // GLM-4.5-Air Q4_K_M — the only NON-RECURRENT MTP model we have, so this is the sole arm covering
 // mtp_spec_eval's `recr_mask == 0` reject branch (a rejected draft consumes the verify's own row-0

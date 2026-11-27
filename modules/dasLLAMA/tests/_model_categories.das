@@ -62,10 +62,10 @@ def model_categories() : array<ModelCategory> {
         (name = "qwen35-27b", stems = "Qwen3.6-27B,Qwen3.8-27B-Q,Qwen3.8-27B-UD,Qwen3.8-27B.i1,Qwen3.8-27B-4bit,Qwen3.8-27B-DFlash2,mtp-Qwen3.6-27B,mtp-Qwen3.8-27B", opens = "",
             topics = "the deltanet hybrid at its sixty-four trunk layers: the NextN draft block at layer index 64 under self-speculative decode, the DFlash block drafter's rounds on the 27B trunk, the NextN head files' architectures, the tokenizer.json twin of the 27B's GGUF, the Metal MTP rail on the 27B"),
         (name = "qwen15-moe", stems = "Qwen1.5-MoE-A2.7B-Chat", opens = "",
-            topics = "the shared-expert routed block at its twenty-four blocks: the host twin's model-level matrix - the routed experts requantized to one format a file, routed layers' experts pinned to the host under the streamed prompt, the hot pool and the expert cache on twenty host layers"),
+            topics = "the shared-expert routed block at its twenty-four blocks: the host twin's model-level matrix - the routed experts requantized to one format a file, routed layers' experts pinned to the host under the streamed prompt, the hot pool and the expert cache on twenty host layers; the Metal home's row of the whole Q8_0 file - prefill, decode and the batched step against the portable CPU chain, the short prefill window on the gathered expert route"),
         (name = "qwen3moe-30b", stems = ("Qwen3-30B-A3B-Instruct-2507,Qwen3-30B-A3B-Q8_0,"
                 + "Qwen3-30B-A3B-Thinking-2507,Qwen3-30B-A3B-NVFP4-pure"), opens = "",
-            topics = "the routed block with no shared expert at its forty-eight blocks: the host-layer split a strict 32768 context forces on a 16 GB card - the split token command and the cut window chain against the CPU chain, a 30-layer ask past the forced count, a two-token prompt on the window chain, layer 0's mirror rows the cut chain writes; the frozen greedy fixtures of the base Q8_0 and the Thinking files"),
+            topics = "the routed block with no shared expert at its forty-eight blocks: the host-layer split a strict 32768 context forces on a 16 GB card - the split token command and the cut window chain against the CPU chain, a 30-layer ask past the forced count, a two-token prompt on the window chain, layer 0's mirror rows the cut chain writes; the Metal home's row of the Q4_K_M file - qwen3 attention and the GPU MoE route on every path, the generate and the continuation against the portable CPU chain, the short prefill window on the gathered expert route; the frozen greedy fixtures of the base Q8_0 and the Thinking files"),
         (name = "qwen35moe-35b", stems = ("Qwen3.6-35B-A3B-UD,Qwen3.6-35B-A3B-MTP,"
                 + "Qwen3.6-35B-A3B-NVFP4,Qwen3.6-35B-A3B-Q8_0,Qwen3.5-35B-A3B-UD"), opens = "",
             topics = "the deltanet hybrid MoE at its forty layers: the host split a strict 131072 context forces on a 16 GB card against the CPU chain, the published NVFP4 file's attention and expert sites on the nv4 kernels beside four host layers, the Metal support matrix row's generate token for token against the CPU truth, the Metal MTP rail's sampled selection landed on the device against the rows-landed stream; the frozen greedy fixtures of the Q8_0 file and the Qwen3.5 i-quant files"),
@@ -97,15 +97,15 @@ def model_categories() : array<ModelCategory> {
             topics = ("the gemma3v image turn at the 3840-wide projection on the 12B pair, the "
                 + "Metal family matrix's K-quant gemma3 row on k4 and k6 planes and the Q6_K token "
                 + "table, the 12B's frozen greedy fixture")),
-        (name = "llama31-8b", stems = "Meta-Llama-3.1-8B-Instruct-Q8_0",
-            opens = "Llama-3.2-1B-Instruct-Q8_0",
-            topics = ("the Metal dim ladder at the 8B's 4096-wide rows, nested in the 1B's tests: "
-                + "batched decode past B=4 on the q8 GEMM tier in the decode and prefill parity "
-                + "files, the support matrix's 8B matrix cell and batched dim ladder")),
-        (name = "llama33-70b", stems = "Llama-3.3-70B", opens = "Llama-3.2-1B-Instruct-Q8_0",
-            topics = ("the Metal dim ladder at the 70B's 8192-wide rows, nested in the 1B's tests: "
-                + "the decode parity's 70B decode served on the GPU, the support matrix's 70B "
-                + "K-quant matrix cell and batched dim ladder on the kq mul_mm twin")),
+        (name = "llama31-8b", stems = "Meta-Llama-3.1-8B-Instruct-Q8_0", opens = "",
+            topics = ("the Metal dim ladder at the 8B's 4096-wide rows on the 8B's own block "
+                + "(test_gpu_resident_llama.das): batched decode past B=4 on the q8 GEMM tier in "
+                + "the decode and prefill parity cells, the support matrix's 8B matrix cell and "
+                + "batched dim ladder")),
+        (name = "llama33-70b", stems = "Llama-3.3-70B", opens = "",
+            topics = ("the Metal dim ladder at the 70B's 8192-wide rows on the 70B's own block "
+                + "(test_gpu_resident_llama.das): the support matrix's 70B K-quant matrix cell "
+                + "and batched dim ladder on the kq mul_mm twin")),
         (name = "mistral-7b", stems = "Mistral-7B-Instruct-v0.3-Q8_0", opens = "",
             topics = ("the Mistral v0.3 decoder's frozen greedy fixture, the v0.3 vocabulary's "
                 + "byte pieces past its 768 control tokens")),

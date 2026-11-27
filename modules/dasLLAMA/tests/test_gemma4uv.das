@@ -20,6 +20,7 @@ require _tower_twin
 require _vision_forms   // the towers' forms, a block's cell
 require _cpu_gpu_model   // with_cpu_and_gpu_model: a chat decoder's one block in the area
 require _vision_chat_cells   // the image chat turn's cells, run under the tower's image form
+require _kernel_coverage_cells   // coverage_tower_gemma4uv_metal: the kernel census's canvas
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown — the crown-pin cell drops the trio's cached flags
 
 // Tier-1 gemma4uv embedder parity vs llama-mtmd-debug -p encode (CPU, --no-mmproj-offload, dumps
@@ -40,6 +41,7 @@ require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown �
 // The twin's control zeroes the patch weights and must miss the bar.
 
 let private MM = "mmproj-gemma-4-12B-it-BF16.gguf"
+let private MM_F32 = "mmproj-gemma-4-12B-it-F32.gguf"
 
 // the tier-1 gate: encode a fixture, compare per-token mean/v0..v3 against the oracle dump.
 // %.6f print rounding is ±5e-7 and the measured accumulation-order noise is ~2e-5 (logged per
@@ -74,10 +76,13 @@ def private gemma4uv_form(path, form : string; var stg : Gemma4uvStaging) : Visi
     return <- e
 }
 
-//! The form is the family it names: the carrier holds the gemma4uv embedder on the file's planes. Nothing on a loaded
-//! embedder says which home's cells read it, nor that its patch weights are zeroed.
-def private gemma4uv_form_is(t : T?; e : VisionEmbedder; form : string) {
-    t |> success(e.kind == VisionKind.gemma4uv && vision_exec_fmt(e) == "f32", "{MM}: the {form} form is the gemma4uv embedder on the file's planes")
+//! The form is the family it names: the carrier holds the gemma4uv
+//! embedder on the planes of `file`. Nothing on a loaded embedder
+//! says which home's cells read it, nor that its patch weights are
+//! zeroed.
+def private gemma4uv_form_is(t : T?; file : string; e : VisionEmbedder; form : string) {
+    t |> success(e.kind == VisionKind.gemma4uv && vision_exec_fmt(e) == "f32",
+        "{file}: the {form} form is the gemma4uv embedder on the file's planes")
 }
 
 [cold_path]
@@ -306,6 +311,88 @@ def private tier1_vulkan_poison(tt : T?; embp : Gemma4uvEmbedder) {
     }
 }
 
+// The Metal tower against the CPU chain on synthetic canvases, on the
+// `image` form: engage evidence is counter deltas, and the knob-off
+// leg runs beside the device leg on the one load, so the knob is
+// proven both ways.
+[cold_path, unused_argument(tt, emb)]
+def private test_gemma4uv_metal_tower(tt : T?; emb : Gemma4uvEmbedder) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (!family_on(tt, "gemma4v") || !arm_on(tt, "gemma4uv-metal") || !jit_only(tt)) return
+        with_gpu_knobs() {
+            var st = Gemma4uvState()
+            // 672x336 is the non-square/orientation gate, 384x384 the
+            // no-pad shape (npos % 32 == 0)
+            let shapes = [(w = 480l, h = 480l), (w = 336l, h = 336l), (w = 672l, h = 336l),
+                          (w = 384l, h = 384l), (w = 96l, h = 96l)]
+            for (sh in shapes) {
+                let tag = "gemma4uv tower {sh.w}x{sh.h}"
+                var planes : array<float>
+                planes |> resize(sh.w * sh.h * 3l)
+                for (i in range64(sh.w * sh.h * 3l)) {
+                    planes[i] = sin(float(i % 977l) * 0.013) * 0.7
+                }
+                let s0 = metal_tower_stats()
+                set_metal_tower(false)
+                var cpu_out : array<float>
+                let np_cpu = gemma4uv_encode(emb, st, planes, sh.w, sh.h, cpu_out)
+                set_metal_tower(true)
+                let s1 = metal_tower_stats()
+                tt |> equal(s1.encodes, s0.encodes, "{tag}: OFF leg never dispatches")
+                tt |> equal(s1.declines - s0.declines, 1l,
+                    "{tag}: OFF leg records the knob decline")
+                var gpu_out : array<float>
+                let np_gpu = gemma4uv_encode(emb, st, planes, sh.w, sh.h, gpu_out)
+                let s2 = metal_tower_stats()
+                let np_geo = (sh.w / emb.patch) * (sh.h / emb.patch)
+                tt |> equal(np_cpu, np_geo, "{tag}: npos from geometry")
+                tt |> equal(np_gpu, np_cpu, "{tag}: both legs agree on npos")
+                tt |> equal(s2.encodes - s1.encodes, 1l, "{tag}: GPU leg served (encodes delta)")
+                tt |> equal(s2.rows - s1.rows, np_gpu, "{tag}: rows delta is npos")
+                tt |> equal(s2.declines, s1.declines, "{tag}: GPU leg declined nothing")
+                tower_parity(tt, tag, cpu_out, gpu_out)
+                delete gpu_out
+                delete cpu_out
+                delete planes
+            }
+            delete st
+        }
+    }
+}
+
+// The all-F32 mmproj on the Metal tower, on its `image` form: both
+// GEMMs ride the f32 plane, the projection arm the BF16 file's mixed
+// layout never exercises.
+[cold_path, unused_argument(tt, emb32)]
+def private test_gemma4uv_f32_metal_tower(tt : T?; emb32 : Gemma4uvEmbedder) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (!family_on(tt, "gemma4v") || !arm_on(tt, "gemma4uv-metal") || !jit_only(tt)) return
+        tt |> success(!emb32.patch_bf16 && !emb32.proj_bf16,
+            "the F32 file keeps both GEMMs on the f32 plane")
+        with_gpu_knobs() {
+            var st32 = Gemma4uvState()
+            var planes32 : array<float>
+            planes32 |> resize(96l * 96l * 3l)
+            for (i in range64(96l * 96l * 3l)) {
+                planes32[i] = sin(float(i) * 0.013) * 0.7
+            }
+            set_metal_tower(false)
+            var cpu32 : array<float>
+            gemma4uv_encode(emb32, st32, planes32, 96l, 96l, cpu32)
+            set_metal_tower(true)
+            let sf0 = metal_tower_stats()
+            var gpu32 : array<float>
+            gemma4uv_encode(emb32, st32, planes32, 96l, 96l, gpu32)
+            tt |> equal(metal_tower_stats().encodes - sf0.encodes, 1l, "f32-mmproj leg GPU-served")
+            tower_parity(tt, "gemma4uv tower f32-mmproj 96x96", cpu32, gpu32)
+            delete gpu32
+            delete cpu32
+            delete planes32
+            delete st32
+        }
+    }
+}
+
 // The gemma-4 12B decoder's block, nested in the tower's `image` form: an image chat turn reads both files.
 [cold_path]
 def private gemma4_12b_decoder(t : T?; var emb : VisionEmbedder) {
@@ -320,7 +407,7 @@ def private gemma4_12b_decoder(t : T?; var emb : VisionEmbedder) {
 }
 
 // The 12B mmproj, one block.
-[test(description = "The gemma-4 12B mmproj loads once a form. The gemma4uv embedder on the CPU reads the mmproj geometry and matches the mtmd encode dumps per token within 2e-4 on square fixtures and a non-square 672 x 336 position fingerprint, and panics on a grid wider than the position table. On the Metal tower with the SIMDGROUP kernel set pinned it matches the dumps within 2e-4 plus 4e-3 of token rms on four fixtures, each GPU-served by one encode. Through the vision carrier the mmproj sniffs as gemma4uv with a 48 px superpatch alignment, a 3840-wide projection and the f32 exec stamp. On the serving discrete home the embedder, stem included, holds the twin bar against the CPU chain on square and non-square canvases with matching token counts, while a patch-zeroed embedder misses it; whole on that home's device it holds the CPU 2e-4 bar on the mtmd encode dumps with the stem on device, a patch-zeroed control reds, and it serves again after a model-state drop. Under the mmproj's image form the gemma-4 12B decoder loads once: the image turn on the cats photo splices 130 rows between the image markers with the user text after them, refuses queued audio beside the image, and greedily captions the cats in over 40 characters, also with the Metal tower off")]
+[test(description = "The gemma-4 12B mmproj loads once a form. The gemma4uv embedder on the CPU reads the mmproj geometry and matches the mtmd encode dumps per token within 2e-4 on square fixtures and a non-square 672 x 336 position fingerprint, and panics on a grid wider than the position table. On the Metal tower with the SIMDGROUP kernel set pinned it matches the dumps within 2e-4 plus 4e-3 of token rms on four fixtures, each GPU-served by one encode. Through the vision carrier the mmproj sniffs as gemma4uv with a 48 px superpatch alignment, a 3840-wide projection and the f32 exec stamp. On the serving discrete home the embedder, stem included, holds the twin bar against the CPU chain on square and non-square canvases with matching token counts, while a patch-zeroed embedder misses it; whole on that home's device it holds the CPU 2e-4 bar on the mtmd encode dumps with the stem on device, a patch-zeroed control reds, and it serves again after a model-state drop. Under the mmproj's image form the gemma-4 12B decoder loads once: the image turn on the cats photo splices 130 rows between the image markers with the user text after them, refuses queued audio beside the image, and greedily captions the cats in over 40 characters, also with the Metal tower off. On the Metal tower the embedder matches the CPU chain on five synthetic canvas shapes within tower parity (rel_l2 and norm_dev at most 4e-3, cos at least 1-1e-5), with npos and encode counters from the geometry and a counted knob decline")]
 def test_gemma4uv_embedder(t : T?) {
     return if (!family_on(t, "gemma4v"))
     var inscope twin = UvTwin()
@@ -329,11 +416,19 @@ def test_gemma4uv_embedder(t : T?) {
     add_served_forms(t, forms, MM, ["f32", "f32@seat", "f32@seat+patch_zeroed"], @@either_home_twin_form_why)
     var twin_ran = false
     with_model_once(t, "vision", "mmproj-gemma-4-12B-it-BF16.gguf", forms, @@tower_stage_key, @@gemma4uv_stage, @@gemma4uv_form) $(var e; form) {
-        gemma4uv_form_is(t, e, form)
+        gemma4uv_form_is(t, MM, e, form)
         twin.form = form
         if (form == "image") {
             tower_cell(t, "tier-1 GPU attempt vs the mtmd encode dumps (scale-relative rung)", e.gemma4uv, @@test_gemma4uv_tier1_gpu)
             tower_cell(t, "the 12B mmproj sniffs as gemma4uv and reports its geometry", e, @@test_vision_embedder_gemma4uv_arms)
+            tower_cell(t,
+                "gemma4uv: the Metal tower serves the embedder - parity + counters + knob",
+                e.gemma4uv, @@test_gemma4uv_metal_tower)
+            if (empty(metal_build_why())) {
+                coverage_tower_gemma4uv_metal(t,
+                    "gemma4uv: the kernel census's small canvas on the Metal tower",
+                    e.gemma4uv)
+            }
             gemma4_12b_decoder(t, e)
         } elif (form == "image_f32") {
             tower_cell(t, "tier-1 embedder parity vs the mtmd encode dumps", e.gemma4uv, @@test_gemma4uv_tier1)
@@ -350,5 +445,17 @@ def test_gemma4uv_embedder(t : T?) {
     if (twin_ran) {
         kept_cell(t, "the device embedder vs the CPU chain, dump-free, and the patch-zeroed control", twin, @@test_gemma4uv_device_twin)
         gpu_tower_shutdown(TowerFamily.vision)
+    }
+}
+
+// The all-F32 12B mmproj, one block.
+[test(description = "The gemma-4 12B all-F32 mmproj loads once a form: its gemma4uv embedder keeps both GEMMs on the f32 plane, and on the Metal tower it matches the CPU chain on a 96 x 96 canvas within tower parity, GPU-served by one encode")]
+def test_gemma4uv_f32_embedder(t : T?) {
+    return if (!family_on(t, "gemma4v"))
+    with_model_once(t, "vision", "mmproj-gemma-4-12B-it-F32.gguf", ["image"],
+            @@tower_stage_key, @@gemma4uv_stage, @@gemma4uv_form) $(var e; form) {
+        gemma4uv_form_is(t, MM_F32, e, form)
+        tower_cell(t, "gemma4uv: the all-F32 mmproj on the Metal tower - parity + counter",
+            e.gemma4uv, @@test_gemma4uv_f32_metal_tower)
     }
 }

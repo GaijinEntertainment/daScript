@@ -37,6 +37,14 @@ require _kquant_cells   // kq_ple_table_cell: the Q4_K_M file's K-quant-native p
 require _cpu_gpu_model   // ModelForm: the parity rows' forms beside the blocks' own
 require _parity_cells   // the parity cells the block's parity knob reaches (`_::`): the files' model_specs parity rows on their blocks
 require _metal_batched_cells   // metal_gemma4_e2b_cells: the Q8_0 file's Metal form's cells
+require _metal_matrix_cells   // the Metal family matrix's E-series and ring rows, the release cycle
+require _metal_prefill_cells   // prefill_gemma4_e2b: the Q8_0 file's Metal prefill cells
+require _fused_decode_cells   // fused_decode_row_cell: the portable CPU form's fused chains
+require _kernel_coverage_cells   // cov_zoo_c10_gemma4e: the kernel census's zoo row
+require _metal_blob_twin   // blob_twin: the own-load test's twins
+require ?das_metal dasllama/dasllama_metal_decode   // nolint:STYLE030,LINT019 - the release's close
+require ?das_metal dasllama/dasllama_metal_prefill   // nolint:STYLE030,LINT019 - the release's close
+require ?das_metal metal/das_metal_boost   // nolint:STYLE030,LINT019 - the footprint, the leaks
 
 // gemma-4-E2B Q8_0 (the E-series carrier: per-layer embeddings, the upper layers sharing the K/V of the ones below, two
 // dense FFN widths, a sliding window the two-window cell engages): arm `g4e`. Skips off the JIT or without the file under
@@ -59,8 +67,82 @@ require _metal_batched_cells   // metal_gemma4_e2b_cells: the Q8_0 file's Metal 
 // greedy ids (`parity_spec_cell`); such a form skips where the box cannot take the pin. The Q8_0 file's Metal form
 // (`metal_form`, the blob twin) carries the Metal batched driver's E-series cells (`_metal_batched_cells.das`: the batched row
 // through the PLE rows form, and the batched gather under the `gemma` family token), one skipped cell on a build without
-// das_metal, and under the test's `g4e` arm.
+// das_metal, and under the test's `g4e` arm. That form, of
+// MATRIX_RING_CTX positions, also carries the family matrix's
+// E-series and ring rows (arm `fam-gemma4e`), the kernel census's zoo
+// row (`coverage`) and the Metal prefill's last-row and bf16-split
+// cells (`lastrow-g`, `bf16-split`; the split cell shuts the prefill
+// driver down, so the prefill cells run last); the portable-pinned
+// CPU form, on every box, the matrix row's CPU side and the fused
+// decode chains.
 let private GEMMA4E_FILE = GemmaFile(file = "gemma-4-E2B-it-Q8_0.gguf", arm = "g4e")
+let private E2B_METAL_ARMS = fixed_array("fam-gemma4e", "coverage", "lastrow-g", "bf16-split")
+let private E2B_FACADE_ARM = "dflash-e2b-facade"   //! the facade's cells, the required twin
+
+//! what the Q8_0 file's Metal form keeps for its portable CPU form
+//! and the compares after the block
+struct E2bMetalKept {
+    eseries : MatrixEseriesKept
+    prefill : PrefillKept
+}
+
+//! the Q8_0 file's cells off the block's own arm (`own` holds the
+//! batched cells), each on its form: the Metal rows, the prefill
+//! cells last; their CPU sides and the fused chains; false where the
+//! form is the block's own
+def private e2b_metal_cells(t : T?; var k : E2bMetalKept; var m : Model; form : ModelForm;
+                            own : bool) : bool {
+    if (form.on_metal && form.metal_required) {
+        dflash_e2b_facade_cell(t, m)
+        return true
+    }
+    if (form.on_metal) {
+        if (own) {
+            metal_gemma4_e2b_cells(t, m)
+        }
+        matrix_eseries_metal(t, m, form, matrix_eseries_e2b(), k.eseries)
+        matrix_ring_metal(t, m, form, matrix_ring_gemma4_e2b())
+        coverage_zoo_metal(t, m, form, cov_zoo_c10_gemma4e())
+        prefill_parity_metal(t, m, form, prefill_gemma4_e2b(), k.prefill)
+        return true
+    }
+    return false if (!alone_pass_of(form, matrix_cpu_form()))
+    matrix_eseries_cpu(t, m, form, matrix_eseries_e2b(), k.eseries)
+    prefill_parity_cpu(t, m, form, k.prefill)
+    fused_decode_row_cell(t, m, form, fused_row_gemma4_e2b())
+    return true
+}
+
+//! the Q8_0 file's forms: the block's own under its arm (`own`), the
+//! Metal form where its own cells or the matrix, census and prefill
+//! rows' arms ask it, the portable CPU form
+def private e2b_forms(t : T?; own : bool) : array<ModelForm> {
+    var forms : array<ModelForm>
+    if (own) {
+        forms |> push_from([device_form(), device_form() |> asking(KVDtype.q8_0),
+            device_form() |> asking(KVDtype.tq4), device_form(ring = false),
+            device_form(ring = false) |> asking(KVDtype.tq4),
+            device_form(regions = 2l, ctx = REGIONS_RIG_CTX),
+            device_form(gather = false, regions = 2l, host = true, ctx = REGIONS_RIG_CTX),
+            device_form(regions = 9l, ctx = REGIONS_RIG_CTX), cpu_cells_form(),
+            cpu_cells_form(QuantMode.fp32), cpu_cells_form(QuantMode.q4_0)])
+        forms_or_skips(t, forms, GEMMA4E_FILE.file,
+            [device_form(regions = 2l, split_forms = true, ctx = REGIONS_RIG_CTX)],
+            vulkan_home_why("the fuse knob is the Vulkan driver's"))
+        forms |> push(discrete_drafter_form())
+        forms |> push(dense_drafter_form())
+        forms |> push(device_form(regions = 2l, host = true, ctx = REGIONS_RIG_CTX,
+            pf_window_rows = SEG_WINDOW))
+    }
+    if (own || any_arm_on(E2B_METAL_ARMS)) {
+        forms |> push(metal_form(ctx = MATRIX_RING_CTX))
+    }
+    if (any_arm_on([E2B_FACADE_ARM])) {
+        forms |> push(metal_form(required = true, ctx = HOST_CTX))
+    }
+    forms |> push(matrix_cpu_form())
+    return <- forms
+}
 
 let private PRE_STEP_TOK = 1234l   //! the token the pre-step cell's decode step takes
 
@@ -297,9 +379,12 @@ def private e2b_rows_within(t : T?; r : E2bRows; walks : array<GemmaWalk>) {
     }
 }
 
-[test(description = "On gemma-4-E2B Q8_0 the resident driver holds the CPU chain's forty-token forced feed, its perplexity over a two-window prefill and 80 teacher-forced positions, and its window chain against token command gap within 6x of the CPU chain's own; tails of 1, 2 and 5 rows peel within the split bar of the row-at-a-time tail; the all-Q8_0 per-layer planes dispatch no format GEMV and no f32 class; a q8_0 K/V mirror holds the CPU chain's forty-token logits and a tq4 mirror its perplexity; the sliding layers' rings match a flat mirror bit for bit over 1300 ids and eight steps on the default and the tq4 mirror; the decode step builds its side row on the device off the gathered id within 1e-4 of the CPU pre-step's, and with the gather off no row gathers; the greedy chain walks bit for bit the plain greedy walk; over two mirror regions interleaved single steps (past the wide position too, where a one-row step's global layers take the decode tile form), batched steps (past the unsplit position too, and on the split one-row forms on Vulkan) and nine sessions batched in command groups read what each session reads alone, every side row and token row gathered on the device bit for bit the host-embedded rows (within the batched-row bar, the row one step off outside it, on a device whose compiler rounds the gather apart), two device-home sessions step bit for bit a host-cached session while a live region is never handed to an outsider, a device-mode scheduler emits the host-cached scheduler's tokens and hands two streams to one segmented window, and the window's fused q/k norm reads within the wide bar of the split pair; on the CUDA driver forty-token forced-feed logits, a 150-position perplexity and the device-built side rows hold the CPU chain's, a prefill-pinned prompt passing to the CPU as pinned_off, and a one-row step on the decode tile form reads within the split bar of the row form; a 300-row window cutting every row but its last ahead of the shared-K/V tail reads within the split bar of every row walking every layer; the PLE table of an fp32 load sits on an exactly-sized q8 plane bit-identical to the file and refuses both in-place requants, and greedy chat turns in the q8, fp32 and q4_0 serving modes are text; with the E2B's DFlash2 drafter on the CPU arm a planes-trimmed trunk refuses the attach and the untrimmed one attaches, the greedy speculative walk emits the plain walk's ids with drafts accepted for the Q8_0, Q4_K_M and NVFP4 drafter files (each file's planes tagged with their disk type), and the exact sampled walk spends one draw a judged row with drafts accepted, opens on the plain sampled walk's first id and honors a stop id while both rejection walks accept some drafts and reject some; on the discrete home's drafter form each drafter file's greedy walk on the device arm is the plain walk's, every pass on the device's top-k and walk, the host's walk and selector drafting the same ids, and with the Q8_0 file a stop id ends the drafted stream on its first occurrence and an embedding call commits no drafter context; on the dense drafter form, over a prompt past two of the drafter's windows, the device arm whose ring grew its dense layer to the context drafts id for id what a ring reserved that wide drafts, and with every layer held to the window the drafts differ; the 26B's assistant head refuses the E-series trunk naming its per-layer embeddings; on the segment form each segment's side rows gather off its ids in one segmented window within 16% of solo windows, and with the token-table gate unseated host-embedded rows decline the segmented form; on the default form, with per-layer embeddings and sliding layers, no scratch window is promised or run and the mean-pooled batch matches its singles at cosine above 0.9999; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token on its encoded text prompt; on the Metal home's blob twin, one load on a das_metal build: on gemma-4-E2B Q8, the batched bench row serves four streams at a rate through the Metal batched driver's PLE rows form, every timed step a device step, none on the CPU stack; on gemma-4-E2B Q8, the Metal batched step gathers every row of three sessions off its token id on the device, its logits bit for bit those with the gather off, where the host embeds every row; each form loads once")]
+[test(description = "On gemma-4-E2B Q8_0 the resident driver holds the CPU chain's forty-token forced feed, its perplexity over a two-window prefill and 80 teacher-forced positions, and its window chain against token command gap within 6x of the CPU chain's own; tails of 1, 2 and 5 rows peel within the split bar of the row-at-a-time tail; the all-Q8_0 per-layer planes dispatch no format GEMV and no f32 class; a q8_0 K/V mirror holds the CPU chain's forty-token logits and a tq4 mirror its perplexity; the sliding layers' rings match a flat mirror bit for bit over 1300 ids and eight steps on the default and the tq4 mirror; the decode step builds its side row on the device off the gathered id within 1e-4 of the CPU pre-step's, and with the gather off no row gathers; the greedy chain walks bit for bit the plain greedy walk; over two mirror regions interleaved single steps (past the wide position too, where a one-row step's global layers take the decode tile form), batched steps (past the unsplit position too, and on the split one-row forms on Vulkan) and nine sessions batched in command groups read what each session reads alone, every side row and token row gathered on the device bit for bit the host-embedded rows (within the batched-row bar, the row one step off outside it, on a device whose compiler rounds the gather apart), two device-home sessions step bit for bit a host-cached session while a live region is never handed to an outsider, a device-mode scheduler emits the host-cached scheduler's tokens and hands two streams to one segmented window, and the window's fused q/k norm reads within the wide bar of the split pair; on the CUDA driver forty-token forced-feed logits, a 150-position perplexity and the device-built side rows hold the CPU chain's, a prefill-pinned prompt passing to the CPU as pinned_off, and a one-row step on the decode tile form reads within the split bar of the row form; a 300-row window cutting every row but its last ahead of the shared-K/V tail reads within the split bar of every row walking every layer; the PLE table of an fp32 load sits on an exactly-sized q8 plane bit-identical to the file and refuses both in-place requants, and greedy chat turns in the q8, fp32 and q4_0 serving modes are text; with the E2B's DFlash2 drafter on the CPU arm a planes-trimmed trunk refuses the attach and the untrimmed one attaches, the greedy speculative walk emits the plain walk's ids with drafts accepted for the Q8_0, Q4_K_M and NVFP4 drafter files (each file's planes tagged with their disk type), and the exact sampled walk spends one draw a judged row with drafts accepted, opens on the plain sampled walk's first id and honors a stop id while both rejection walks accept some drafts and reject some; on the discrete home's drafter form each drafter file's greedy walk on the device arm is the plain walk's, every pass on the device's top-k and walk, the host's walk and selector drafting the same ids, and with the Q8_0 file a stop id ends the drafted stream on its first occurrence and an embedding call commits no drafter context; on the dense drafter form, over a prompt past two of the drafter's windows, the device arm whose ring grew its dense layer to the context drafts id for id what a ring reserved that wide drafts, and with every layer held to the window the drafts differ; the 26B's assistant head refuses the E-series trunk naming its per-layer embeddings; on the segment form each segment's side rows gather off its ids in one segmented window within 16% of solo windows, and with the token-table gate unseated host-embedded rows decline the segmented form; on the default form, with per-layer embeddings and sliding layers, no scratch window is promised or run and the mean-pooled batch matches its singles at cosine above 0.9999; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token on its encoded text prompt; on the Metal home's blob twin, one load on a das_metal build: on gemma-4-E2B Q8, the batched bench row serves four streams at a rate through the Metal batched driver's PLE rows form, every timed step a device step, none on the CPU stack; on gemma-4-E2B Q8, the Metal batched step gathers every row of three sessions off its token id on the device, its logits bit for bit those with the gather off, where the host embeds every row; on the same twin the E-series row derives its needs, shares the upper layers' K/V, serves both FFN widths, counts the per-layer planes on the device against the planar controls, holds the forced steps, the batched step, the depth steps and a continuation within its bar of the portable CPU truth and walks the greedy chain on and off, the ringed Metal mirror emits the flat mirror's tokens past its wrap, three K/V codecs' prompts and continuations feed the kernel census, the narrowed last-row prefill tail reads within 0.05 of every row's, and the bf16 projection runs on the split tile with split stamps, none with split-K off; on the Metal home's required blob twin, with the DFlash2 drafter attached through the facade, a two-turn greedy chat's replies and a greedy completion's ids are the plain model's token for token, the drafted walks accepting drafts, the stream with a stop id ends on that id's first occurrence, two streams through the scheduler ride joint rounds each the plain scheduler's token for token, the exact sampled walk and both rejection walks hold, and over a prompt past one of the drafter's windows the grown ring drafts what a ring reserved that wide drafts; on the portable-pinned CPU form, on every box, the fused decode chains match the per-op path's greedy ids and final logits bit for bit; each form loads once")]
 def test_gpu_resident_gemma4_e2b(t : T?) {
-    return if (!family_on(t, "gemma4e") || !arm_on(t, GEMMA4E_FILE.arm))
+    var arms <- [GEMMA4E_FILE.arm, E2B_FACADE_ARM]
+    arms |> push_from(E2B_METAL_ARMS)
+    return if (!family_on(t, "gemma4e") || !arms_on(t, arms))
+    let own = empty(arm_why(GEMMA4E_FILE.arm))
     var walks : array<GemmaWalk>
     if (assert_pf_window(t)) {   //! two windows, the sliding window engaged on the last eight, where the prompt window is the cells' own
         walks |> push((n = PF_WINDOW_ROWS + 8l, steps = 80l))
@@ -310,24 +395,13 @@ def test_gpu_resident_gemma4_e2b(t : T?) {
         walks |> push((n = 150l, steps = 150l))
     }
     var r : E2bRows
-    var forms <- [device_form(), device_form() |> asking(KVDtype.q8_0), device_form() |> asking(KVDtype.tq4), device_form(ring = false),
-        device_form(ring = false) |> asking(KVDtype.tq4), device_form(regions = 2l, ctx = REGIONS_RIG_CTX),
-        device_form(gather = false, regions = 2l, host = true, ctx = REGIONS_RIG_CTX), device_form(regions = 9l, ctx = REGIONS_RIG_CTX),
-        cpu_cells_form(), cpu_cells_form(QuantMode.fp32), cpu_cells_form(QuantMode.q4_0)]
-    if (!gpu_want_cuda()) {   //! the fuse knob is the Vulkan driver's
-        forms |> push(device_form(regions = 2l, split_forms = true, ctx = REGIONS_RIG_CTX))
-    }
-    forms |> push(discrete_drafter_form())
-    forms |> push(dense_drafter_form())
-    forms |> push(device_form(regions = 2l, host = true, ctx = REGIONS_RIG_CTX, pf_window_rows = SEG_WINDOW))
-    forms |> push(metal_form(ctx = METAL_ROW_CTX))
+    var k : E2bMetalKept
+    var forms <- e2b_forms(t, own)
     var ran = false
     with_cuda_mmq_winners() {
-        ran = with_cpu_and_gpu_model(t, "llm", "gemma-4-E2B-it-Q8_0.gguf", GEMMA_RIG_CTX, forms, parity = true) $(var m, form) {
-            if (form.on_metal) {
-                metal_gemma4_e2b_cells(t, m)
-                return
-            }
+        ran = with_cpu_and_gpu_model(t, "llm", "gemma-4-E2B-it-Q8_0.gguf", GEMMA_RIG_CTX,
+                forms, own, parity = own) $(var m, form) {
+            return if (e2b_metal_cells(t, k, m, form, own))
             if (form.strict_ctx && form.host_ctx > 0l) {
                 e2b_drafter_discrete_cells(t, m)
                 return
@@ -354,10 +428,83 @@ def test_gpu_resident_gemma4_e2b(t : T?) {
         e2b_rows_within(t, r, walks)
     }
     e2b_cpu_within(t, r)
+    matrix_eseries_verdict(t, matrix_eseries_e2b(), k.eseries)
+    prefill_parity_verdict(t, k.prefill)
     delete r
+    delete k
+    delete arms
     delete forms
     delete feeds
     delete walks
+}
+
+//! a release cycle's close, its twin deleted: the drivers torn down,
+//! the footprint once it settles
+def private release_close(tag : string; cycle : int) : uint64 {   // nolint:LINT012,LINT019
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        metal_decode_shutdown()
+        metal_prefill_shutdown()
+        let close = metal_footprint_settled()
+        to_log(LOG_INFO,
+            "{tag}/release cycle {cycle}: footprint {int64(close) / 1048576l} MB at the close\n")
+        return close
+    } else {
+        return 0ul
+    }
+}
+
+//! the release cycles' closes: each later one within
+//! MATRIX_RELEASE_SLACK_BYTES of the first, no Metal object left live
+def private release_within(t : T?; tag : string;
+                           closes : array<uint64>) {   // nolint:LINT012,LINT019
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        for (cycle in range(1, length(closes))) {
+            t |> success(closes[cycle] < closes[0] + MATRIX_RELEASE_SLACK_BYTES,
+                ("{tag}/release cycle " +
+                "{cycle}: the footprint returns within 512 MB of the first close " +
+                "({int64(closes[cycle]) / 1048576l - int64(closes[0]) / 1048576l} MB above it)"))
+        }
+        t |> equal(metal_live_object_count(), 0l,
+            ("{tag}/release: every GPU object the drivers hold releases: " +
+            "{metal_live_object_report()}"))
+    }
+}
+
+[test(description = "A deleted gemma-4-E2B Q8_0 blob twin's device memory leaves the process: three load-serve-delete cycles, each closed at the Metal drivers' teardown, leave the footprint within 512 MB of the first cycle's close and no live Metal object")]
+def test_gpu_resident_gemma4_e2b_release(t : T?) {
+    own_load("reloads the model: three blob-twin load-serve-delete cycles, the drivers torn down")
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
+        let tag = "gemma4e-e2b"
+        return if (!family_on(t, "gemma4e") || !arm_on(t, "fam-gemma4e-release")
+                   || !model_available(t, path))
+        let backend = kernel_backend_seat()
+        pin_kernel_backend("portable")   //! row-major weights: the blob transform's donor contract
+        var closes : array<uint64>
+        closes |> reserve(3)
+        for (cycle in range(3)) {
+            var trg <- blob_twin(t, path, MATRIX_CTX)
+            matrix_release_serve(t, trg, tag, cycle)
+            delete trg
+            closes |> push(release_close(tag, cycle))
+        }
+        restore_kernel_backend(backend)
+        release_within(t, tag, closes)
+    }
+}
+
+//! the Metal E-series row `p` on the Metal form, its CPU side on the
+//! portable CPU form; false on any other form
+def private eseries_cells(t : T?; var m : Model; form : ModelForm; p : MatrixEseriesRow;
+                          var kept : MatrixEseriesKept) : bool {
+    if (form.on_metal) {
+        matrix_eseries_metal(t, m, form, p, kept)
+    } elif (alone_pass_of(form, matrix_cpu_form())) {
+        matrix_eseries_cpu(t, m, form, p, kept)
+    } else {
+        return false
+    }
+    return true
 }
 
 let private PLE_GEMVS = fixed_array("kq_gemv_q40", "kq_gemv_k6", "q5032_gemv")   //! the format GEMVs a per-layer plane can ride
@@ -468,9 +615,11 @@ def private ple_f32_feed_within(t : T?; tag : string; gpu, cpu, f32 : PleFeed; f
 //! columns untiled 1.6 and up)
 let private CUDA_PEEL_TAILS = fixed_array(2l, 9l, 16l)
 
-[test(description = "The gemma-4-E2B Q4_K_M file's per-layer gate and projection planes, F32 on disk, run on the f32 act and the staged or scalar f32 tile against the file's f32 chain; on the CUDA driver short tails of 2, 9 and 16 rows peeled through the token commands land within 16 percent of max logit of the row-at-a-time tail; an fp32 load pins the PLE table to its native k5 plane with no q8 side plane, row 0 dequantized off it within 1e-3 relative RMS of the file; on the q8 CPU form, on every box, the instruct text turn answers and the fused media body holds its logits; on the uncached CPU form the thinking default and the instruct opt-out and the tool wire's turns and heals render; on the K-quant-native portable-pinned CPU form the per-layer token table loads on the k5 plane, not a silent q8 fallback, its first 16 rows within 1e-3 relative L2 of the file dequant; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+[test(description = "The gemma-4-E2B Q4_K_M file's per-layer gate and projection planes, F32 on disk, run on the f32 act and the staged or scalar f32 tile against the file's f32 chain; on the CUDA driver short tails of 2, 9 and 16 rows peeled through the token commands land within 16 percent of max logit of the row-at-a-time tail; an fp32 load pins the PLE table to its native k5 plane with no q8 side plane, row 0 dequantized off it within 1e-3 relative RMS of the file; on the q8 CPU form, on every box, the instruct text turn answers and the fused media body holds its logits; on the uncached CPU form the thinking default and the instruct opt-out and the tool wire's turns and heals render; on the K-quant-native portable-pinned CPU form the per-layer token table loads on the k5 plane, not a silent q8 fallback, its first 16 rows within 1e-3 relative L2 of the file dequant; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; on the Metal home's blob twin, one load on a das_metal build, the E-series row gathers the k5-plane per-layer table over the compacted scale strips and holds the forced steps, the batched step, the depth steps and a continuation within its bar of the portable CPU truth; each form loads once")]
 def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
-    return if (!family_on(t, "gemma4e") || !arm_on(t, "g4e-kq"))
+    let row = matrix_eseries_e2b_kq()
+    return if (!family_on(t, "gemma4e") || !arms_on(t, ["g4e-kq", row.arm]))
+    let own = empty(arm_why("g4e-kq"))
     var ple : PleFeed[3]   //! the CPU form's, the device form's, the f32 form's
     var staged = false
     var peel_f32 = false   //! the CUDA home's peel cell ran: the gate and projection rows ship F32
@@ -478,10 +627,18 @@ def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
     var peels : array<PeelTail>
     var kq : PleKqTable
     var dev_ran = false   //! a device form collected: the CPU forms' feeds are its references
-    var forms <- [device_form(), cpu_cells_form(QuantMode.fp32), cpu_cells_form(), cpu_cells_form(uncached = true),
-        cpu_cells_form(backend = "portable", kq_native = KqNative.on)]
+    var es : MatrixEseriesKept
+    var forms : array<ModelForm>
+    if (own) {
+        forms |> push_from([device_form(), cpu_cells_form(QuantMode.fp32), cpu_cells_form(),
+            cpu_cells_form(uncached = true),
+            cpu_cells_form(backend = "portable", kq_native = KqNative.on)])
+    }
+    metal_row_forms(forms, empty(arm_why(row.arm)), MATRIX_CTX, matrix_cpu_form())
     with_cuda_mmq_winners() {
-        let ran = with_cpu_and_gpu_model(t, "llm", "gemma-4-E2B-it-Q4_K_M.gguf", GEMMA_RIG_CTX, forms, parity = true) $(var m, form) {
+        let ran = with_cpu_and_gpu_model(t, "llm", "gemma-4-E2B-it-Q4_K_M.gguf", GEMMA_RIG_CTX,
+                forms, own, parity = own) $(var m, form) {
+            return if (eseries_cells(t, m, form, row, es))
             if (form.uncached) {
                 chat_gemma4e_cells(t, m)
                 return
@@ -522,25 +679,37 @@ def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
             ple_kq_table_within(t, kq)
         }
     }
+    matrix_eseries_verdict(t, row, es)
     delete ple
     delete peels
     delete forms
 }
 
-[test(description = "The gemma-4-E2B Q4_0 file's per-layer gate and projection planes run on the Q4_0 decode GEMV against the CPU chain, no f32 class dispatched; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+[test(description = "The gemma-4-E2B Q4_0 file's per-layer gate and projection planes run on the Q4_0 decode GEMV against the CPU chain, no f32 class dispatched; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; on the Metal home's blob twin, one load on a das_metal build, the E-series row reads the Q4_0 planes on the q40 forms and holds the forced steps, the batched step, the depth steps and a continuation within its bar of the portable CPU truth; each form loads once")]
 def test_gpu_resident_gemma4_e2b_ple_planes_q40(t : T?) {
-    return if (!family_on(t, "gemma4e") || !arm_on(t, "g4e-kq-q40"))
+    let row = matrix_eseries_e2b_q40()
+    return if (!family_on(t, "gemma4e") || !arms_on(t, ["g4e-kq-q40", row.arm]))
+    let own = empty(arm_why("g4e-kq-q40"))
     var ple : PleFeed[2]
-    let forms <- [device_form()]
-    let ran = with_cpu_and_gpu_model(t, "llm", "gemma-4-E2B-it-Q4_0.gguf", GEMMA_RIG_CTX, forms, parity = true) $(var m, form) {
+    var es : MatrixEseriesKept
+    var forms : array<ModelForm>
+    if (own) {
+        forms |> push(device_form())
+    }
+    metal_row_forms(forms, empty(arm_why(row.arm)), MATRIX_CTX, matrix_cpu_form())
+    let ran = with_cpu_and_gpu_model(t, "llm", "gemma-4-E2B-it-Q4_0.gguf", GEMMA_RIG_CTX,
+            forms, own, parity = own) $(var m, form) {
+        return if (eseries_cells(t, m, form, row, es))
         ple[form.on_gpu ? 1 : 0] <- ple_feed(m, form, "gemma-4-E2B-it-Q4_0.gguf")
     }
-    if (ran) {
+    if (ran && own) {
         with_dasllama_jobque_() {
             ple_feed_within(t, "gemma-4-E2B Q4_0", ple[1], ple[0], "gemma-4-E2B-it-Q4_0.gguf", "kq_gemv_q40")
         }
     }
+    matrix_eseries_verdict(t, row, es)
     delete ple
+    delete forms
 }
 
 //! the staged tile's f16 weights and f16 sums (`ARCHITECTURE_GPU_ASYMMETRIES.md`) read 1.16 on the RTX PRO 4500, the scalar tile 0.88

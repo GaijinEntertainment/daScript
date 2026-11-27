@@ -373,6 +373,8 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `WAYLAND_DISPLAY` | text | unset | Ambient platform variable (the Wayland twin of DISPLAY); read only by the browser examples' smoke tests. |
 | `DASLLAMA_CORPUS_DIR` | path | unset | Directory of audio corpus files for the transcription tests. |
 | `DASLLAMA_SCRATCH_DIR` | path | unset | Directory the test runner's children make their scratch folders under (handed to each child as TMPDIR); unset, they make them under the runner's own. A box whose TMPDIR is a network folder points it at a local disk. |
+| `DASLLAMA_KERNEL_CENSUS_DIR` | path | unset | Directory every test process of a run writes its kernel dispatch census into, one file a home and process (`metal_<n>.json`, `vulkan_<n>.json`), each overwritten after every GPU form a load-once block runs; the census verdict (tests/test_kernel_coverage.das) reads the merged files. Set by tests/run.das to a fresh folder a run; unset, nothing is written. |
+| `DASLLAMA_KERNEL_CENSUS_WHOLE` | flag | off | Whether the run whose census the census verdict reads covered every standing area whole: no narrowing flag or inherited filter, no file reported from an earlier pass, no failed file. The census floors (40 distinct Metal kernels, 24 Vulkan) are asserted only then. Set by tests/run.das on the verdict child alone; unset, the floors are not asserted. |
 | `TMPDIR` | path | /tmp | Scratch directory for test artifacts; set by the OS on macOS. |
 | `TEMP` | path | unset | Windows scratch-directory fallback when TMPDIR is unset (the test runner's log dir). |
 

@@ -6,6 +6,7 @@ module _model_form shared public
 require dastest/testing_boost   // T: a block's gate skips on it
 require dasllama/dasllama_common   // QuantMode, Model
 require dasllama/dasllama_kv_dtype   // KVDtype
+require dasllama/dasllama_kqformat   // KqFmt, kq_dense_b32: the plane census
 require daslib/fio   // base_name
 require math   // min
 
@@ -85,6 +86,12 @@ struct ModelForm {
     //! the NextN head file (its name under the models folder) pinned for the
     //! load (`set_mtp_head_path`), the pin cleared after it: "" none
     mtp_head : string
+    //! the load takes the f32 weight-scale plane (`set_wscale_f16(false)`),
+    //! put back after it: else the engine's default scale
+    wscale_f32 : bool
+    //! DASLLAMA_IQ3S_SERVE pinned for the load (`set_iq3s_serve_pin`), put
+    //! back after it: "" the environment's
+    iq3s_serve : string
     //! a CPU form's kernel backend pinned for its load and its cells
     //! (`with_kernel_backend`), put back after them: "" none
     backend : string
@@ -102,6 +109,17 @@ struct ModelForm {
     //! a Metal form loads and runs under `MetalMode.required`, else
     //! `when_available`; a served image always does
     metal_required : bool
+    //! the dense-FFN want pinned for the load (`set_gpu_want_dense_ffn`,
+    //! read by a per-op load's walk): -1 the environment's, else 0 or 1
+    dense_ffn : int = -1
+    //! the resident routed layers the tier's want asks for the load, the
+    //! prompt streaming every layer below them and the tier re-armed
+    //! around it: 0 the want as found
+    moe_layers : int64
+    //! the Vulkan cooperative-matrix mode pinned for the load and its
+    //! cells (`g_gpu.coopmat_mode`, a `COOPMAT_*` value): -1 the box's;
+    //! no knob off Vulkan
+    coopmat : int = -1
 }
 
 //! a device form on the environment's mirror codec
@@ -112,7 +130,8 @@ def device_form(ring : bool = true; gather : bool = true; regions : int64 = 0l; 
                 perop : bool = false; pool_slots : int64 = 0l; strict_ctx : bool = false;
                 cuda_window_fault : bool = false; mtp_head : string = "";
                 drops_device : bool = false; cuda_head_warm_fault : bool = false;
-                block_rounds : bool = false; cuda_mmq_fault : bool = false) : ModelForm =>
+                block_rounds : bool = false; cuda_mmq_fault : bool = false; dense_ffn : int = -1;
+                moe_layers : int64 = 0l; coopmat : int = -1) : ModelForm =>
     ModelForm(on_gpu = true, kv = KVDtype.f16, kv_asked = false, ring = ring, gather = gather,
         quant = QuantMode.q8, regions = regions, host = host, split_forms = split_forms, ctx = ctx,
         host_layers = host_layers, pf_stream = pf_stream, pf_window_rows = pf_window_rows,
@@ -120,20 +139,78 @@ def device_form(ring : bool = true; gather : bool = true; regions : int64 = 0l; 
         fuse_bisect = fuse_bisect, perop = perop, pool_slots = pool_slots, strict_ctx = strict_ctx,
         cuda_window_fault = cuda_window_fault, mtp_head = mtp_head, drops_device = drops_device,
         cuda_head_warm_fault = cuda_head_warm_fault, block_rounds = block_rounds,
-        cuda_mmq_fault = cuda_mmq_fault)
+        cuda_mmq_fault = cuda_mmq_fault, dense_ffn = dense_ffn, moe_layers = moe_layers,
+        coopmat = coopmat)
 
 //! a form on the Metal home: the file's blob twin (`blob_twin`: the q8 load turned into the blob the Metal drivers serve)
 //! under `MetalMode.when_available` - `required` where asked - or, `image`, its served image (`load_model_cached` under
 //! `MetalMode.required`, the metal-blob `.dlim` minted beside the file where none stands); the context cut to `ctx` (0 the
-//! call's). The mode holds through the form's cells
-def metal_form(image : bool = false; required : bool = false; ctx : int64 = 0l) : ModelForm =>
+//! call's); the NextN head `mtp_head`, the f32 weight scale `wscale_f32` and the IQ3_S serving mode `iq3s_serve` pinned for
+//! the load where asked. The mode holds through the form's cells
+def metal_form(image : bool = false; required : bool = false; ctx : int64 = 0l;
+               mtp_head : string = ""; wscale_f32 : bool = false;
+               iq3s_serve : string = "") : ModelForm =>
     ModelForm(on_gpu = true, on_metal = true, metal_image = image, metal_required = image || required,
         kv = KVDtype.f16, ring = true, gather = true, quant = QuantMode.q8, ctx = ctx,
-        pf_stream = true)
+        pf_stream = true, mtp_head = mtp_head, wscale_f32 = wscale_f32, iq3s_serve = iq3s_serve)
 
 //! the Metal mode a Metal form loads and runs under
 def metal_form_mode(f : ModelForm) : MetalMode =>
     f.metal_required ? MetalMode.required : MetalMode.when_available
+
+//! the Metal form a cell family runs on
+enum MetalWant {
+    blob_twin   //! the blob twin (`metal_form()`)
+    any         //! either Metal form
+    served_image   //! the served image (`metal_form(image = true)`)
+}
+
+//! whether `form` is the Metal form `want` names, else a failure of
+//! `t` naming `file` and the cell family `cells`
+def metal_form_held(t : T?; form : ModelForm; want : MetalWant; file, cells : string) : bool {
+    if (want == MetalWant.blob_twin) {
+        return true if (form.on_metal && !form.metal_image)
+        t |> failure("{file}: the {cells} cells run on the blob twin (`metal_form()`)")
+    } elif (want == MetalWant.any) {
+        return true if (form.on_metal)
+        t |> failure("{file}: the {cells} cells run on a Metal form (`metal_form`)")
+    } else {
+        return true if (form.metal_image)
+        t |> failure(("{file}: the {cells} cells run on the served image form " +
+            "(`metal_form(image = true)`)"))
+    }
+    return false
+}
+
+//! `m`'s weight planes whose tag `pred` takes, one per tag array
+//! element: the dense q/k/v/o and FFN arrays under `dense`, the
+//! routed stacks under `routed`; an empty array counts none
+def sites_count(m : Model; dense, routed : bool; pred : block<(f : KqFmt) : bool>) : int64 {
+    var n = 0l
+    if (dense) {
+        n += (tags_taken(m.wq_fmt, pred) + tags_taken(m.wk_fmt, pred) + tags_taken(m.wv_fmt, pred)
+            + tags_taken(m.wo_fmt, pred) + tags_taken(m.w1_fmt, pred)
+            + tags_taken(m.w2_fmt, pred) + tags_taken(m.w3_fmt, pred))
+    }
+    if (routed) {
+        n += (tags_taken(m.we1_fmt, pred) + tags_taken(m.we2_fmt, pred)
+            + tags_taken(m.we3_fmt, pred))
+    }
+    return n
+}
+
+def private tags_taken(a : array<KqFmt>; pred : block<(f : KqFmt) : bool>) : int64 {
+    var n = 0l
+    for (f in a) {
+        n += invoke(pred, f) ? 1l : 0l
+    }
+    return n
+}
+
+//! `m`'s per-32 planes (`kq_dense_b32`), the dense ones and, under
+//! `routed`, the routed stacks'
+def per32_plane_count(m : Model; routed : bool) : int64 =>
+    sites_count(m, true, routed, $(f : KqFmt) : bool => kq_dense_b32(f))
 
 //! what a block's Metal pass does with an asked form
 enum MetalPass {
@@ -177,22 +254,28 @@ def f32_form() : ModelForm => cpu_quant_form(QuantMode.fp32)
 
 //! a CPU form whose cells assert on its load alone (`alone`): it loads in the mode `quant`, through `load_model_uncached`
 //! where `uncached`, with the NextN head `mtp_head` pinned where named, under the kernel backend `backend` pinned where named
-//! (`g_env_engine.pin_backend` the environment's pin), the K-quant knob `kq_native` set, on every box - on the q8 cached load
+//! (`g_env_engine.pin_backend` the environment's pin), the K-quant knob `kq_native` set, the f32 weight scale `wscale_f32` and
+//! the IQ3_S serving mode `iq3s_serve` pinned where asked, on every box - on the q8 cached load
 //! the CPU form answering the device forms where one ran
 def cpu_cells_form(quant : QuantMode = QuantMode.q8; uncached : bool = false; mtp_head : string = "";
-                   backend : string = ""; kq_native : KqNative = KqNative.kept) : ModelForm {
+                   backend : string = ""; kq_native : KqNative = KqNative.kept;
+                   wscale_f32 : bool = false; iq3s_serve : string = "") : ModelForm {
     var f = cpu_quant_form(quant)
     f.alone = true
     f.uncached = uncached
     f.mtp_head = mtp_head
     f.backend = backend
     f.kq_native = kq_native
+    f.wscale_f32 = wscale_f32
+    f.iq3s_serve = iq3s_serve
     return f
 }
 
-//! whether two CPU forms are one load: the same load mode, loader, head pin, backend pin and K-quant knob
+//! whether two CPU forms are one load: the same load mode, loader, head pin, backend pin, K-quant knob, weight scale and
+//! IQ3_S serving mode
 def same_cpu_load(a, b : ModelForm) : bool => (a.quant == b.quant && a.uncached == b.uncached && a.mtp_head == b.mtp_head
-    && a.backend == b.backend && a.kq_native == b.kq_native)
+    && a.backend == b.backend && a.kq_native == b.kq_native && a.wscale_f32 == b.wscale_f32
+    && a.iq3s_serve == b.iq3s_serve)
 
 //! the pass of the CPU load `load` the body sees on the codec `kv`: the codec set, `alone` kept on the `first` codec's pass
 //! alone - a cell that stands alone runs on one pass a block, however many codecs the device forms armed
@@ -211,7 +294,7 @@ def on_device_home(f : ModelForm) : bool => f.on_gpu && !f.on_metal
 def device_default(f : ModelForm) : bool => (on_device_home(f) && !f.kv_asked && f.ring && f.gather && f.regions == 0l && !f.host && !f.split_forms
     && f.ctx == 0l && f.mtp_depth == 0l && !f.head_off && !f.mmq_off && f.host_ctx == 0l && f.fuse_bisect < 0l
     && !f.perop && f.pool_slots == 0l && !f.strict_ctx && !f.cuda_window_fault && !f.cuda_head_warm_fault && empty(f.mtp_head)
-    && !f.block_rounds && !f.cuda_mmq_fault)
+    && !f.block_rounds && !f.cuda_mmq_fault && f.dense_ffn < 0 && f.moe_layers == 0l && f.coopmat < 0)
 
 //! which side of a block's default pair a form is (`main_side`)
 enum MainSide {
@@ -267,24 +350,35 @@ def form_owed(f : ModelForm; mark : FormMark; device_ran : bool) : FormOwed {
 
 //! a device form that loads off the file's device lane where the
 //! rail is on: every expert on the device (a lane bakes its
-//! host-layers split and its pool), no host planes, and no fault seat
-//! (the seat's load streams the file)
+//! host-layers split, its pool, its resident routed layers, its dense
+//! rail and its coopmat mode), no host planes, and no fault seat (the
+//! seat's load streams the file)
 def is_lane_form(f : ModelForm) : bool => (on_device_home(f) && !f.host && f.host_layers == 0l && !f.perop && f.pool_slots == 0l
-    && !f.cuda_window_fault && empty(f.mtp_head))
+    && !f.cuda_window_fault && empty(f.mtp_head) && f.dense_ffn < 0 && f.moe_layers == 0l && f.coopmat < 0)
 
 //! a CPU form as its messages name it
 def private cpu_form_name(f : ModelForm) : string {
     let uncached = f.uncached ? ", the uncached load" : ""
     let head = empty(f.mtp_head) ? uncached : "{uncached}, the NextN head {base_name(f.mtp_head)}"
     let pinned = empty(f.backend) ? head : "{head}, the {f.backend} backend pinned"
-    let loader = f.kq_native == KqNative.kept ? pinned : "{pinned}, K-quant native {f.kq_native}"
+    let knob = f.kq_native == KqNative.kept ? pinned : "{pinned}, K-quant native {f.kq_native}"
+    let loader = "{knob}{load_pins_note(f)}"
     return "the {f.quant} CPU form{loader}" if (f.quant != QuantMode.q8)
     return "the CPU form ({f.kv} sessions{loader})"
 }
 
+//! the load-time pins of `f` beyond its head, as a form's name words them
+def private load_pins_note(f : ModelForm) : string {
+    let scale = f.wscale_f32 ? ", the f32 weight scale" : ""
+    return empty(f.iq3s_serve) ? scale : "{scale}, IQ3_S served as {f.iq3s_serve}"
+}
+
 //! a Metal form as its messages name it
-def private metal_form_name(f : ModelForm) : string =>
-    "the Metal form (the {f.metal_image ? "served image" : "blob twin"}, {metal_form_mode(f)})"
+def private metal_form_name(f : ModelForm) : string {
+    let flavor = f.metal_image ? "served image" : "blob twin"
+    let head = empty(f.mtp_head) ? "" : ", the NextN head {base_name(f.mtp_head)}"
+    return "the Metal form (the {flavor}, {metal_form_mode(f)}{head}{load_pins_note(f)})"
+}
 
 //! what a form's load does about speculation, as `form_name` words it
 def private speculation_note(f : ModelForm) : string
@@ -294,6 +388,15 @@ def private speculation_note(f : ModelForm) : string
 def form_name(f : ModelForm) : string {
     return cpu_form_name(f) if (!f.on_gpu)
     return f.on_metal ? metal_form_name(f) : device_form_name(f)
+}
+
+//! the load-time asks of `f`'s tier and drivers - the pool's slots, the resident routed layers, the dense rail, the coopmat
+//! mode - as a form's name words them
+def private tier_want_note(f : ModelForm) : string {
+    let heat = f.pool_slots > 0l ? ", {f.pool_slots} pool slots" : ""
+    let routed = f.moe_layers > 0l ? "{heat}, {f.moe_layers} resident routed layers" : heat
+    let dense = f.dense_ffn >= 0 ? "{routed}, the dense FFN rail {f.dense_ffn > 0 ? "on" : "off"}" : routed
+    return f.coopmat >= 0 ? "{dense}, coopmat mode {f.coopmat}" : dense
 }
 
 //! a device form as its messages name it
@@ -309,14 +412,14 @@ def private device_form_name(f : ModelForm) : string {
     let mmq = f.mmq_off ? ", the MMQ route off" : ""
     let host_ctx = f.host_ctx > 0l ? ", {f.host_ctx}-position host sessions" : ""
     let bisect = f.fuse_bisect >= 0l ? ", fuse bisect {f.fuse_bisect}" : ""
-    let heat = f.pool_slots > 0l ? ", {f.pool_slots} pool slots" : ""
+    let heat = tier_want_note(f)
     let whole = f.strict_ctx ? ", the context asked whole" : ""
     let window_fault = f.cuda_window_fault ? ", the window-fault seat" : ""
     let head_fault = f.cuda_head_warm_fault ? "{window_fault}, the head-warm fault seat" : window_fault
     let fault = f.cuda_mmq_fault ? "{head_fault}, the FP4-chain fault seat" : head_fault
     let pinned = empty(f.mtp_head) ? fault : "{fault}, the NextN head {base_name(f.mtp_head)}"
     let shape = "{f.ring ? "rings" : "flat"}, {f.gather ? "device gather" : "host embed"}"
-    return "the per-op form ({f.kv} asked, the whole-model route off)" if (f.perop)
+    return "the per-op form ({f.kv} asked, the whole-model route off{heat})" if (f.perop)
     return "the device form ({f.kv} mirror, {shape}{regions}{planes}{fuse}{experts}{window}{depth}{speculation}{mmq}{host_ctx}{bisect}{heat}{whole}{pinned})"
 }
 
@@ -422,6 +525,19 @@ def served_forms(t : T?; tag : string; forms : array<string>; why : function<(fo
 //! the forms of `forms` this box serves, where one reason `lacks` - "" where the box serves them - stands for every form
 def served_forms(t : T?; tag : string; forms : array<string>; lacks : string) : array<string> =>
     <- served_forms_by(t, tag, forms) $(_form) => lacks
+
+//! `asked` added to a block's form list `forms` where `why` is "",
+//! else each a skipped cell of `file` naming the form and `why`
+def forms_or_skips(t : T?; var forms : array<ModelForm>; file : string;
+                   asked : array<ModelForm>; why : string) {
+    if (empty(why)) {
+        forms |> push_from(asked)
+        return
+    }
+    for (f in asked) {
+        skip_cell(t, "{file}, {form_name(f)}: {why}")
+    }
+}
 
 //! the forms of `asked` the box serves (`served_forms`: each of the others a skipped cell of its own), added to a block's
 //! form list `forms`

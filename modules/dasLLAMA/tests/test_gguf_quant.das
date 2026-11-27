@@ -14,6 +14,7 @@ require strings
 require daslib/enum_trait
 require _gguf_writer   // gguf_header, gguf_tensor_info, gguf_pad_data: the synthetic file's bytes
 require _compares   // mismatch_exact: the exact byte compare
+require _model_form
 
 // Byte-level GGUF quant-format gates on a synthetic in-memory file: the dequant arm must match an
 // independently hand-rolled reference, and the exact-transcode rails must be bit-exact against
@@ -90,6 +91,7 @@ def test_gguf_type_sizes(t : T?) {
 
 //! the panic text of a load of `bytes` written as a file of its own
 def private load_panic(bytes : array<uint8>; name : string) : string {
+    own_load("asserts on the load itself - its refusal: a synthetic GGUF written to scratch")
     let path = path_join(test_temp_dir(), name)
     fopen(path, "wb") $(f) {
         fwrite(f, bytes)

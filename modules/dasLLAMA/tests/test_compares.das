@@ -9,6 +9,9 @@ require daslib/math_bits
 require math
 require daslib/strings_boost   // join: an argv as one line
 require daslib/command_line   // get_das_exe: the binary a spawned compile starts
+require dasllama/dasllama_kv_dtype   // KVDtype, kv_row_bytes: a K/V row's codec and stride
+require dasllama/dasllama_kv_codec   // quantize_q8kv_row, quantize_tq4kv_row: the block codecs' rows
+require daslib/f16_cvt   // f32_to_f16: an f16 K/V row stored
 
 let INF = uint_bits_to_float(0x7f800000u)
 
@@ -226,7 +229,7 @@ def test_check_exact_typed(t : T?) {
     }
 }
 
-[test(description = "The plane, poisoned-copy and span helpers build the exact rows asked, argmax_of picks the first largest within n, and opaque passes floats and words through unchanged")]
+[test(description = "The plane, poisoned-copy and span helpers build the exact rows asked, argmax_of picks the first largest within n, counted from an offset where one is given, and opaque passes floats and words through unchanged")]
 def test_compare_helpers(t : T?) {
     t |> run("planes, copies and spans") @(t : T?) {
         t |> equal(plane_of(3, 2.5), [2.5, 2.5, 2.5], "a plane of the value")
@@ -240,11 +243,81 @@ def test_compare_helpers(t : T?) {
     t |> run("argmax and the taint seam") @(t : T?) {
         t |> equal(argmax_of([1.0, 7.0, 3.0, 7.0], 4l), 1l, "the first largest")
         t |> equal(argmax_of([1.0, 7.0, 3.0, 9.0], 3l), 1l, "within the first n")
+        t |> equal(argmax_of([9.0, 1.0, 7.0, 3.0, 7.0, 8.0], 1l, 4l), 1l,
+            "the first largest of v[1..5), counted from the offset: v[0] and v[5] outside it")
         t |> equal(opaque(2.5), 2.5, "a float through the seam")
         t |> equal(opaque(0x1234u), 0x1234u, "a word through the seam")
         if (jit_enabled()) {
             t |> success(jit_only(t), "the JIT passes the JIT-only gate")
         }
+    }
+}
+
+//! `rows`, each `n` wide, stored back to back in the K/V codec `dt`
+def private kv_bytes(dt : KVDtype; rows : array<array<float>>; n : int64) : array<uint8> {
+    let rb = kv_row_bytes(dt, n)
+    var out : array<uint8>
+    out |> resize(rb * long_length(rows))
+    for (row, r in rows, count()) {
+        unsafe {
+            var p = addr(out[int64(r) * rb])
+            if (dt == KVDtype.f16) {
+                var h = reinterpret<uint16?>(p)
+                for (e in range64(n)) {
+                    h[e] = uint16(f32_to_f16(row[e]))
+                }
+            } elif (dt == KVDtype.q8_0) {
+                quantize_q8kv_row(p, addr(row[0]), n)
+            } elif (dt == KVDtype.tq4) {
+                quantize_tq4kv_row(p, addr(row[0]), n)
+            } else {
+                memcpy(p, addr(row[0]), n * 4l)
+            }
+        }
+    }
+    return <- out
+}
+
+//! two rows as one list, each cloned in
+def private two_rows(r0, r1 : array<float>) : array<array<float>> {
+    var rows : array<array<float>>
+    rows |> push_clone(r0)
+    rows |> push_clone(r1)
+    return <- rows
+}
+
+[test(description = "kv_row_max_diff decodes the K/V row at its byte offset in each codec (f16, q8_0, tq4, f32): two equal rows read 0, a row one element 1.0 off reads that 1.0 - exactly on the scalar codecs, within the block codecs' rounding - and only at the offset of the row that differs; a NaN on either side reads infinite")]
+def test_kv_row_max_diff(t : T?) {
+    let n = 64l
+    var inscope base <- [for (i in range(64)); float((i * 7) % 17 - 8) * 0.25]
+    var inscope moved := base
+    moved[5]++
+    var inscope same_rows <- two_rows(base, base)
+    var inscope off_rows <- two_rows(base, moved)
+    for (dt in [KVDtype.f16, KVDtype.q8_0, KVDtype.tq4, KVDtype.f32]) {
+        let rb = kv_row_bytes(dt, n)
+        var inscope a <- kv_bytes(dt, same_rows, n)
+        var inscope b <- kv_bytes(dt, off_rows, n)
+        t |> equal(kv_row_max_diff(a, a, rb, dt, n), 0.0, "{dt}: equal rows read 0")
+        t |> equal(kv_row_max_diff(a, b, 0l, dt, n), 0.0,
+            "{dt}: the row at offset 0 is the same on both sides - the offset's control")
+        let d = kv_row_max_diff(a, b, rb, dt, n)
+        if (kv_block_codec(dt)) {
+            t |> success(abs(d - 1.0) < 0.1, "{dt}: one element 1.0 off reads it within the block rounding ({d})")
+        } else {
+            t |> equal(d, 1.0, "{dt}: one element 1.0 off reads exactly 1.0")
+        }
+        t |> equal(kv_row_max_diff(b, a, rb, dt, n), d, "{dt}: the diff reads the same either way round")
+    }
+    var inscope poisoned := moved
+    poisoned[9] = NAN_SENTINEL
+    var inscope nan_rows <- two_rows(base, poisoned)
+    for (dt in [KVDtype.f16, KVDtype.f32]) {
+        var inscope a <- kv_bytes(dt, off_rows, n)
+        var inscope b <- kv_bytes(dt, nan_rows, n)
+        let rb = kv_row_bytes(dt, n)
+        t |> equal(kv_row_max_diff(a, b, rb, dt, n), INF, "{dt}: a NaN on the right reads infinite")
+        t |> equal(kv_row_max_diff(b, a, rb, dt, n), INF, "{dt}: a NaN on the left reads infinite")
     }
 }
 

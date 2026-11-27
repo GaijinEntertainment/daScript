@@ -38,6 +38,7 @@ require _image_memory   // read_page_aligned: a host's own copy of an image
 require _model_once   // with_model_once: a carrier's one block in the area; own_load
 require _audio_twin   // poison_fc_blocks / poison_kq_seats: a poisoned form's staging
 require _audio_gigaam_cells   // the device twins' legs and compares, run under this file's blocks
+require _kernel_coverage_cells   // coverage_tower_gigaam_metal: the kernel census's GigaAM encode
 
 // GigaAM v3 against the upstream package's per-stage dumps (benchmarks/asr/gigaam_oracle.py into the model root's
 // `asr_oracle/gigaam/<clip>_<variant>/`, minted by the `mint_gigaam.sh` stocked beside them over the corpus clips the
@@ -1612,6 +1613,11 @@ def private e2e_rnnt_f16_block(t : T?; var kept : GaKept; var e2e : E2eKept) {
         }
         if (seat_on && (served || form == "f16" || form == "q8")) {
             tower_cell(t, "e2e_rnnt: the transducer decode twin, the {form} form's legs", m.ga, dec, @@decode_legs)
+        }
+        if (metal_on && form == "f16@dev") {
+            coverage_tower_gigaam_metal(t,
+                "GigaAM v3 e2e-rnnt: the kernel census's jfk on the Metal f16 image",
+                m.ga)
         }
         if (metal_on && !served) {
             tower_cell(t, "GigaAM v3 e2e-rnnt: the Metal twin, the {form} form's legs", m.ga, kept, @@ga_metal_legs)

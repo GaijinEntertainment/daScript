@@ -93,7 +93,19 @@ let PARITY_BLOCK_ROWS = fixed_array("Qwen2.5-0.5B-Instruct-Q8_0.gguf", "Qwen2.5-
     "gemma-4-E2B-it-Q8_0.gguf", "gemma-4-E2B-it-Q4_K_M.gguf", "gemma-4-E2B-it-Q4_0.gguf", "gemma-4-12B-it-Q8_0.gguf",
     "gemma-4-26B-A4B-it-Q4_K_M.gguf", "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf", "gemma-4-26B_q4_0-it.gguf",
     "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf", "Qwen3.8-27B-Q4_K_M.gguf",
-    "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf")
+    "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf",
+    "Llama-3.2-1B-Instruct-Q5_K_M.gguf", "Llama-3.2-1B-Instruct-IQ2_XXS-local.gguf",
+    "Llama-3.2-1B-Instruct-Q3_K_L.gguf", "Llama-3.2-1B-Instruct-IQ3_M.gguf",
+    "Llama-3.2-1B-Instruct-IQ3_XXS-local.gguf", "Llama-3.2-1B-Instruct-Q2_K-local.gguf",
+    "Llama-3.2-1B-Instruct-IQ2_XS-local.gguf", "Llama-3.2-1B-Instruct.i1-IQ3_XXS.gguf",
+    "Qwen2.5-1.5B-Instruct-Q8_0.gguf", "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+    "Qwen3-4B-Instruct-2507-Q5_K_M.gguf", "Qwen3.6-27B-MTP-Q4_K_M.gguf",
+    "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf", "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
+    "Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf", "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf",
+    "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf", "Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf",
+    "Qwen3-Coder-Next-Q4_K_M.gguf",
+    "gemma-2-2b-it-Q4_K_M.gguf", "gemma-3-12b-it-Q4_K_M.gguf", "gemma-4-12B-it-Q4_K_M.gguf",
+    "gemma-4-26B-A4B-it-UD-IQ4_XS.gguf")
 
 //! the deltanet-plane engage count for one plane kind: a silently-demoted tag would otherwise pass the parity green on the q8
 //! fallback rail

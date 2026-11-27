@@ -41,7 +41,7 @@ struct RunArgs {
     full : bool
 
     @clarg_short = "s"
-    @clarg_doc = "Suite: decode | mtp | prefill | matrix | kernels | gpu-kernels | image | image-vulkan | coverage | model-free | stocked | wasm | all (default all; all excludes image-vulkan, gpu-kernels, model-free, stocked and wasm). gpu-kernels is the Vulkan and CUDA device kernel files: no model, and no test wall - a device's first compile of a kernel is the driver's time, which no test wall admits on a box that never ran it; the stocked suite runs them first"
+    @clarg_doc = "Suite: mtp | kernels | gpu-kernels | image | image-vulkan | model-free | stocked | wasm | all (default all; all excludes image-vulkan, gpu-kernels, model-free, stocked and wasm). The Mac model cells - the decode, prefill, MTP and support-matrix rows and the format census - ride the llm area's blocks: --area llm --arm <token> runs them. gpu-kernels is the Vulkan and CUDA device kernel files: no model, and no test wall - a device's first compile of a kernel is the driver's time, which no test wall admits on a box that never ran it; the stocked suite runs them first"
     suite : string = "all"
 
     @clarg_short = "x"
@@ -51,7 +51,7 @@ struct RunArgs {
     @clarg_doc = "Only — comma-separated substrings; a file of the run whose name contains none is dropped, each kept file named on an ONLY line and the REPORT line carrying the tokens, so a narrowed run cannot read as whole (e.g. --changed --only cuda,regions under DASLLAMA_CUDA=1: the CUDA home's files of the run)"
     only : string
 
-    @clarg_doc = "Area — comma-separated: audio | vision | tts | translate | llm | infra | examples; examples is the browser examples' smoke tests, each spawning its example under a window, and runs only when named here - its files sit in no per-PR suite and no engine change reaches them; a standing area runs every model-free and stocked file of the area plus the image suite's arms of the area (no --suite, no --arm)"
+    @clarg_doc = "Area — comma-separated: audio | vision | tts | translate | llm | infra | examples; examples is the browser examples' smoke tests, each spawning its example under a window, and runs only when named here - its files sit in no per-PR suite and no engine change reaches them; a standing area runs every model-free and stocked file of the area plus the image suite's arms of the area (no --suite); --arm narrows every child of the run, the image file's too, to the named arms"
     area : string
 
     @clarg_doc = "Run what the changed files reach: git diff against --base plus untracked files under modules/dasLLAMA/, each path mapped to its areas (printed), then the areas' tests"
@@ -111,16 +111,9 @@ struct RunArgs {
 
 //! the suite tables. Non-private: test_run_suites.das reads them against the files' own text
 def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat suite table, one file per line
-    if (name == "decode") {
-        return <- [ "modules/dasLLAMA/tests/test_metal_decode_parity.das" ]
-    } elif (name == "mtp") {
-        return <- [ "modules/dasLLAMA/tests/test_metal_mtp_parity.das",
-                    "modules/dasLLAMA/tests/test_mtp_gemma_drafter.das",
+    if (name == "mtp") {
+        return <- [ "modules/dasLLAMA/tests/test_mtp_gemma_drafter.das",
                     "modules/dasLLAMA/tests/test_dflash_drafter.das" ]
-    } elif (name == "prefill") {
-        return <- [ "modules/dasLLAMA/tests/test_metal_prefill_parity.das" ]
-    } elif (name == "matrix") {
-        return <- [ "modules/dasLLAMA/tests/test_metal_support_matrix.das" ]
     } elif (name == "kernels") {
         return <- [ "modules/dasLLAMA/tests/test_metal_prefill_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_decode_kernels.das",
@@ -138,8 +131,6 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
         return <- [ "modules/dasLLAMA/tests/test_model_image.das" ]
     } elif (name == "image-vulkan") {
         return <- [ "modules/dasLLAMA/tests/test_model_image_vulkan.das" ]
-    } elif (name == "coverage") {
-        return <- [ "modules/dasLLAMA/tests/test_kernel_coverage.das" ]
     } elif (name == "model-free") {
         return <- [
                     "modules/dasLLAMA/tests/failed_dasllama_lint_require.das",
@@ -193,6 +184,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_run_suites.das",
                     "modules/dasLLAMA/tests/test_run_summary.das",
                     "modules/dasLLAMA/tests/test_sampling.das",
+                    "modules/dasLLAMA/tests/test_scheduler.das",
                     "modules/dasLLAMA/tests/test_site_records.das",
                     "modules/dasLLAMA/tests/test_sizing_helpers.das",
                     "modules/dasLLAMA/tests/test_think_split.das",
@@ -238,11 +230,11 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_audio_embedder.das",
                     "modules/dasLLAMA/tests/test_batch_decode.das",
                     "modules/dasLLAMA/tests/test_chat.das",
+                    "modules/dasLLAMA/tests/test_cpu_prefill_tripwire.das",
                     "modules/dasLLAMA/tests/test_deltanet.das",
                     "modules/dasLLAMA/tests/test_embeddings.das",
                     "modules/dasLLAMA/tests/test_facade.das",
                     "modules/dasLLAMA/tests/test_forward.das",
-                    "modules/dasLLAMA/tests/test_fused_decode.das",
                     "modules/dasLLAMA/tests/test_gemma3v.das",
                     "modules/dasLLAMA/tests/test_gemma4uv.das",
                     "modules/dasLLAMA/tests/test_gemma4v.das",
@@ -271,7 +263,6 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_kv_codec.das",
                     "modules/dasLLAMA/tests/test_kv_paged.das",
                     "modules/dasLLAMA/tests/test_kv_prefix.das",
-                    "modules/dasLLAMA/tests/test_metal_format_census.das",
                     "modules/dasLLAMA/tests/test_mtp_gemma_drafter.das",
                     "modules/dasLLAMA/tests/test_dflash_drafter.das",
                     "modules/dasLLAMA/tests/test_parity.das",
@@ -279,7 +270,6 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_prefill.das",
                     "modules/dasLLAMA/tests/test_qwen3v.das",
                     "modules/dasLLAMA/tests/test_qwen25v.das",
-                    "modules/dasLLAMA/tests/test_scheduler.das",
                     "modules/dasLLAMA/tests/test_tokenizer.das",
                     "modules/dasLLAMA/tests/test_tts_postag.das",
                     "modules/dasLLAMA/tests/test_tts_g2p.das",
@@ -317,11 +307,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_rnnt.das",
                     "modules/dasLLAMA/tests/test_tts_blocks.das" ]
     } elif (name == "all") {
-        return <- [ "modules/dasLLAMA/tests/test_metal_decode_parity.das",
-                    "modules/dasLLAMA/tests/test_metal_mtp_parity.das",
-                    "modules/dasLLAMA/tests/test_metal_prefill_parity.das",
-                    "modules/dasLLAMA/tests/test_metal_support_matrix.das",
-                    "modules/dasLLAMA/tests/test_metal_prefill_kernels.das",
+        return <- [ "modules/dasLLAMA/tests/test_metal_prefill_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_decode_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_gemv_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_misc_kernels.das",
@@ -348,19 +334,19 @@ def area_tests(area : string) : array<string> {
     if (area == "audio") {
         return <- [ "test_asr_verbs.das", "test_audio.das", "test_audio_embedder.das", "test_cuda_tower_asr.das", "test_cuda_tower_blocks.das",
                     "test_cuda_tower_front.das", "test_cuda_tower_whisper_chain.das", "test_dasllama_lint_contracts.das", "test_gigaam.das",
-                    "test_rnnt.das", "test_tower_asr_kernels.das", "test_tower_helpers.das", "test_vad.das",
+                    "test_model_image.das", "test_rnnt.das", "test_tower_asr_kernels.das", "test_tower_helpers.das", "test_vad.das",
                     "test_vulkan_tower_kernels.das", "test_whisper.das" ]
     } elif (area == "vision") {
-        return <- [ "test_attn_span.das", "test_cuda_tower_blocks.das", "test_gemma3v.das", "test_gemma4uv.das", "test_gemma4v.das", "test_qwen25v.das",
-                    "test_qwen3v.das", "test_tower_helpers.das", "test_vision.das", "test_vision_chat.das",
+        return <- [ "test_attn_span.das", "test_cuda_tower_blocks.das", "test_gemma3v.das", "test_gemma4uv.das", "test_gemma4v.das", "test_model_image.das",
+                    "test_qwen25v.das", "test_qwen3v.das", "test_tower_helpers.das", "test_vision.das", "test_vision_chat.das",
                     "test_vision_embedder.das", "test_vulkan_tower_kernels.das" ]
     } elif (area == "tts") {
-        return <- [ "test_cuda_tts_kernels.das", "test_f32_batch_tile_perms.das", "test_tts_blocks.das", "test_tts_facade.das",
+        return <- [ "test_cuda_tts_kernels.das", "test_f32_batch_tile_perms.das", "test_model_image.das", "test_tts_blocks.das", "test_tts_facade.das",
                     "test_tts_g2p.das", "test_tts_g2p_ru.das", "test_tts_g2p_ru_pack.das", "test_tts_kitten.das", "test_tts_kokoro.das", "test_tts_pocket.das",
                     "test_tts_postag.das", "test_tts_textnorm.das", "test_tts_textnorm_ru.das", "test_tts_voice_prompts.das", "test_vulkan_tts_conv_kernels.das",
                     "test_vulkan_tts_kernels.das", "test_vulkan_tts_pocket_kernels.das", "test_vulkan_tts_source_kernels.das" ]
     } elif (area == "translate") {
-        return <- [ "test_nmt.das" ]
+        return <- [ "test_model_image.das", "test_nmt.das" ]
     } elif (area == "examples") {
         return <- [ "test_interpreter.das", "test_parrot.das", "test_storyteller_restart.das", "test_storywish.das" ]
     } elif (area == "infra") {
@@ -373,13 +359,14 @@ def area_tests(area : string) : array<string> {
                     "uncategorized__dasllama_internal_persistent_heap_stack_524288.das", "uncategorized_persistent_heap_stack_524288.das" ]
     } elif (area == "llm") {
         return <- [ "test_arch_registry.das", "test_batch_decode.das", "test_bench_records_schema.das",
-                    "test_chat.das", "test_deltanet.das", "test_dispatch_shaping.das", "test_driver_knob_getters.das", "test_facade.das",
-                    "test_forward.das", "test_fused_decode.das", "test_gguf_quant.das", "test_gguf_shards.das", "test_mlx_snapshot.das", "test_mlx_qwen4exp.das",
+                    "test_chat.das", "test_cpu_prefill_tripwire.das", "test_deltanet.das", "test_dispatch_shaping.das", "test_driver_knob_getters.das", "test_facade.das",
+                    "test_forward.das", "test_gguf_quant.das", "test_gguf_shards.das", "test_mlx_snapshot.das", "test_mlx_qwen4exp.das",
                     "test_gpu_home.das", "test_gpu_model_swap.das", "test_gpu_resident_gemma2_3.das", "test_gpu_resident_gemma4_dense.das", "test_gpu_resident_gemma4_moe.das", "test_gpu_resident_gemma4_26b_host.das", "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hc.das", "test_gpu_resident_hc_micro.das", "test_gpu_resident_hybrid.das", "test_gpu_resident_llama.das", "test_gpu_resident_qwen_moe.das", "test_gpu_resident_moe_formats.das", "test_gpu_resident_format_census.das", "test_gpu_resident_qwen2.das", "test_gpu_resident_regions_hybrid_formats.das", "test_gpu_resident_qwen3.das", "test_gpu_serving_declines.das", "test_gpu_tier.das", "test_groupn.das",
                     "test_embeddings.das", "test_jobque_tripwire.das", "test_kernel_backend.das", "test_kqformat.das", "test_kquant.das",
-                    "test_kv_codec.das", "test_kv_paged.das", "test_kv_prefix.das", "test_metal_format_census.das", "test_math_activations.das",
+                    "test_kv_codec.das", "test_kv_paged.das", "test_kv_prefix.das", "test_math_activations.das",
                     "test_math_elementwise.das", "test_matmul_batch.das", "test_f32_batch_tile_perms.das",
-                    "test_mtp_gemma_drafter.das", "test_dflash_drafter.das", "test_mtp_sampled_walk.das", "test_mtp_snapshot.das", "test_mtp_accept_walks.das", "test_model_forms.das", "test_mxfp4.das",
+                    "test_mtp_gemma_drafter.das", "test_dflash_drafter.das", "test_mtp_sampled_walk.das", "test_mtp_snapshot.das", "test_mtp_accept_walks.das", "test_model_forms.das",
+                    "test_model_image.das", "test_model_image_vulkan.das", "test_mxfp4.das",
                     "test_par_indexed.das", "test_parity.das", "test_parity_pregate.das",
                     "test_plane.das", "test_ple_check.das", "test_prefill.das", "test_prefill_cpu_kernels.das",
                     "test_q8q8_family.das", "test_quant.das", "test_qwen4exp.das",
@@ -398,14 +385,16 @@ def area_tests(area : string) : array<string> {
 //! the areas whose file lists name the test file `name`, a base name
 def test_file_areas(name : string) : array<string> => [for (a in AREAS); a; where find_index(area_tests(a), name) >= 0]
 
-//! the image suite's arms an area owns (substring tokens, `arm_on` semantics); "" = the area has none
+//! the image suite's arms an area owns (substring tokens, `arm_on`
+//! semantics); "" = the area has none. The image-vulkan file's
+//! `vulkan` arm is the llm area's: it sits among the area's files
 def area_image_arms(area : string) : string {
     if (area == "audio") {
         return "whisper,voxtral,parakeet,gigaam,qwen3a,canary,gemma4a,tower"
     } elif (area == "vision") {
         return "gemma4uv,gemma4v,gemma3v,gemma4e"
     } elif (area == "llm") {
-        return "mechanics,smol,untied,metal,mx4,b32,mlx"
+        return "mechanics,smol,untied,metal,mx4,b32,mlx,gemma4-text"
     } elif (area == "tts") {
         return "kitten,pocket"
     } elif (area == "translate") {
@@ -489,12 +478,24 @@ let LLM_CORE_WITNESSES <- [
     "test_gpu_resident_gemma4_moe.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hybrid.das",
     "test_gpu_resident_llama.das", "test_gpu_resident_qwen_moe.das", "test_gpu_resident_qwen2.das",
     "test_gpu_resident_qwen3.das",
-    "test_kv_codec.das", "test_prefill.das", "test_scheduler.das" ]
+    "test_kv_codec.das", "test_prefill.das" ]
 
 let CUDA_WITNESSES = "test_cuda_kernels.das,test_gpu_resident_llama.das,test_gpu_resident_hybrid.das,test_gpu_resident_qwen3.das,test_gpu_resident_qwen2.das,test_gpu_resident_qwen_moe.das,test_mtp_gemma_drafter.das,test_cuda_mint.das,test_gpu_resident_gptoss.das,test_gpu_resident_gemma4_dense.das,test_gpu_resident_gemma4_moe.das"
 let KV_CODEC_WITNESSES = "test_kv_codec.das,test_vulkan_kv_codec_kernels.das,test_gpu_resident_llama.das,test_gpu_resident_qwen3.das,test_gpu_resident_qwen2.das"
 let TOKENIZER_WITNESSES = "test_tokenizer.das,test_tts_textnorm.das,test_chat.das,test_tok_seed.das"
-let METAL_WITNESSES = "test_gpu_resident_llama.das,test_gpu_resident_hybrid.das,test_gpu_resident_qwen_moe.das,test_gpu_resident_gemma4_e2b.das,test_metal_format_census.das,test_matmul_batch.das,uncategorized_no_aot_persistent_heap.das,uncategorized_persistent_heap_stack_524288.das"
+//! the Metal drivers' witnesses: every llm file that requires a
+//! Metal cells fixture (`_metal_*_cells`, `_mlx_cells`) -
+//! test_run_suites.das derives that set and holds this row to it -
+//! and the kernel units
+let METAL_WITNESSES = ("test_gpu_resident_llama.das,test_gpu_resident_hybrid.das," +
+    "test_gpu_resident_qwen_moe.das,test_gpu_resident_gemma4_e2b.das," +
+    "test_gpu_resident_format_census.das,test_gpu_resident_gemma2_3.das," +
+    "test_gpu_resident_gemma4_dense.das,test_gpu_resident_gemma4_moe.das," +
+    "test_gpu_resident_gptoss.das,test_gpu_resident_qwen2.das,test_gpu_resident_qwen3.das," +
+    "test_gpu_resident_hc.das,test_gpu_resident_moe_formats.das," +
+    "test_gpu_resident_regions_hybrid_formats.das,test_mlx_snapshot.das," +
+    "test_mtp_gemma_drafter.das,test_dflash_drafter.das,test_matmul_batch.das," +
+    "uncategorized_no_aot_persistent_heap.das,uncategorized_persistent_heap_stack_524288.das")
 
 //! engine module stem -> the llm files a change to it reaches (base names, comma-separated) in place of the core
 //! witnesses: a leaf module's own carriers and kernel cells. A module with no row here and an llm reach in
@@ -525,7 +526,8 @@ let MODULE_WITNESSES <- {
     "dasllama_cuda_dflash" => "test_dflash_drafter.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_qwen3.das",
     "dasllama_vulkan_classes_dflash" => "test_vulkan_tower_kernels.das,test_dflash_drafter.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_qwen3.das",
     "dasllama_cuda_classes_dflash" => "test_cuda_tower_asr.das,test_dflash_drafter.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_qwen3.das",
-    "dasllama_metal_decode" => "{METAL_WITNESSES},test_dflash_drafter.das", "dasllama_metal_prefill" => METAL_WITNESSES, "dasllama_metal_mtp_gemma" => METAL_WITNESSES,
+    "dasllama_metal_decode" => METAL_WITNESSES, "dasllama_metal_prefill" => METAL_WITNESSES,
+    "dasllama_metal_mtp_gemma" => METAL_WITNESSES,
     "dasllama_scheduler" => "test_scheduler.das",
     "dasllama_sampling" => "test_sampling.das,test_mtp_sampled_walk.das,test_mtp_accept_walks.das,test_scheduler.das,test_dflash_drafter.das,test_gpu_resident_gemma4_e2b.das",
     "dasllama_batch" => "test_batch_decode.das,test_matmul_batch.das,test_gpu_resident_llama.das",
@@ -901,7 +903,8 @@ def private children_manifest() : string {
 // on an armed hazard oracle PANICS here, so declaration gaps can never ship quietly.
 // cmd.exe has no VAR=val prefix — `set "VAR=val"&&` is the safe form (llvm_tune's tuner_cmd)
 // Non-private: test_run_suites.das pins the K/V start a `--poison-kv` run hands its children
-def child_envs(cfg : RunArgs; win : bool; media : bool = false; scratch : string = "") : string {
+def child_envs(cfg : RunArgs; win : bool; media : bool = false; scratch : string = "";
+               census : string = "") : string {
     var envs = ""
     if (win) {
         envs = ((cfg.full ? "set \"DASLLAMA_PARITY_FULL=1\"&& " : "")
@@ -926,6 +929,10 @@ def child_envs(cfg : RunArgs; win : bool; media : bool = false; scratch : string
     }
     if (!empty(scratch)) {
         envs = win ? "{envs}set \"TEMP={scratch}\"&& set \"TMP={scratch}\"&& " : "TMPDIR=\"{scratch}\" {envs}"
+    }
+    if (!empty(census)) {
+        envs = (win ? "{envs}set \"DASLLAMA_KERNEL_CENSUS_DIR={census}\"&& "
+            : "DASLLAMA_KERNEL_CENSUS_DIR=\"{census}\" {envs}")
     }
     if (cfg.no_tune) {
         envs = (win ? "{envs}set \"DAS_TUNE_POLICY=reference\"&& set \"DASLLAMA_IMAGE=0\"&& "
@@ -993,11 +1000,13 @@ def private changed_paths(base : string) : array<string> {
 }
 
 //! the files an area list runs, as runner paths: every area file (deduplicated, sorted) that the
-//! model-free or stocked census or the examples suite lists; returns the image-suite arm tokens the areas own too
+//! model-free or stocked census, the examples suite or the
+//! image-vulkan suite lists, then the image file where the areas own
+//! image-suite arms; returns those arm tokens too
 def area_plan(areas : array<string>) : tuple<files : array<string>; image_arms : string> {
     let free <- free_files()
     var stocked <- suite_files("stocked")
-    stocked |> push_from(suite_files("examples"))
+    stocked |> push_from(suite_files("examples"), suite_files("image-vulkan"))
     var picked : table<string; void?>
     var arms : array<string>
     for (a in areas) {
@@ -1049,8 +1058,8 @@ def select_areas(cfg : RunArgs) : tuple<status : int; areas : array<string>> {
     if (!cfg.changed && empty(cfg.area)) {
         return <- (status = -1, areas <- none)
     }
-    if (cfg.full || !empty(cfg.arm) || cfg.suite != "all") {
-        to_log(LOG_ERROR, "--area / --changed take neither --arm, --full nor --suite: an area is the whole set - its tests, its arms\n")
+    if (cfg.full || cfg.suite != "all" || (cfg.changed && !empty(cfg.arm))) {
+        to_log(LOG_ERROR, "--area / --changed take neither --full nor --suite, and --changed no --arm: an area is the whole set - its tests, its arms - and --arm narrows an --area run alone\n")
         return <- (status = 2, areas <- none)
     }
     var want : table<string; void?>
@@ -1132,7 +1141,7 @@ let MODEL_FREE_BATCH = 1000   //! the whole suite one program: no file loads a m
 let MODEL_FREE_BATCH_WINDOWS = 16
 let MODEL_BATCH = 10
 //! the suites whose files run as a process of their own kind: their device leak gates count the whole process
-let PROCESS_SUITES <- ["decode", "mtp", "prefill", "matrix", "kernels", "image", "image-vulkan", "coverage"]
+let PROCESS_SUITES <- ["mtp", "kernels", "image", "image-vulkan"]
 let TEST_WALL_SECONDS = 30
 //! the exit code of a child its kill switch ended: a test past `--test-wall` (dastest's `kill_switch.das`)
 //! files a child: `--batch`, else `MODEL_FREE_BATCH` on the model-free suite (`MODEL_FREE_BATCH_WINDOWS` on Windows) and
@@ -1801,9 +1810,12 @@ def media_run(files : array<string>) : bool {
     return !empty(files)
 }
 
-//! `envs` the children's environment (`child_envs` with the scratch folder), `media` whether `files` are a media run alone
+//! `envs` the children's environment (`child_envs` with the scratch
+//! and census folders), `media` whether `files` are a media run
+//! alone, `census` the run's census folder ("" none) and whether the
+//! run covers every area whole
 def private run_files(cfg : RunArgs; files : array<string>; image_arms : string; area_run : bool; envs : string;
-                      media : bool) : RunTally {
+                      media : bool; census : tuple<census : string; whole : bool>) : RunTally {
     let tmp = temp_dir()
     let win = get_platform_name() == "windows"
     let stamp_envs = child_envs(cfg, win, media)   //! the scratch folder is where a child writes, no part of what it proves
@@ -1830,6 +1842,7 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
     var tally : RunTally
     for (rep in range(reps)) {
         let rep_tag = reps > 1 ? " rep {rep + 1}/{reps}" : ""
+        census_rep_open(census.census)
         var inscope chunks <- run_chunks(cfg, files, area_run)
         for (chunk, at in chunks, count()) {
             let n = length(chunk)
@@ -1842,9 +1855,16 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
             let log_path = path_join(tmp, "dasllama_run_{tag}_{rep}_{ref_time_ticks()}.log")
             let file_args = n == 1 ? " --test \"{chunk[0]}\"" : join([for (f in chunk); " --together \"{f}\""], "")
             return <- tally if (stopped_by_marker(cfg, tag, tally) || await_child_models(cfg, models, chunk, seat, tag, at, tally))
-            let run_env = child_run_env(cfg, (area_run && tag == "test_model_image.das") ? image_arms : cfg.arm)
-            let skip = skip_flags(cfg, models, stamp_envs, chunk)
-            let cmd = "{envs}\"{exe}\"{disabled} -jit -module-cache {MODULE_CACHE} dastest/dastest.das --{file_args} --timeout {tmo * n}{wall_flag}{cache_flag}{skip}{run_env} > \"{log_path}\" 2>&1"
+            let image_child = area_run && tag == "test_model_image.das" && empty(cfg.arm)
+            let run_env = child_run_env(cfg, image_child ? image_arms : cfg.arm)
+            let census_child = chunk[0] == CENSUS_VERDICT
+            let ran_whole = census_child && census_ran_whole(census.whole, tally)
+            let census_env = census_child_run_env(ran_whole)
+            if (!empty(census_env)) {
+                to_log(LOG_INFO, "CENSUS whole: the verdict asserts the census floor\n")
+            }
+            let skip = census_child ? "" : skip_flags(cfg, models, stamp_envs, chunk)
+            let cmd = "{envs}\"{exe}\"{disabled} -jit -module-cache {MODULE_CACHE} dastest/dastest.das --{file_args} --timeout {tmo * n}{wall_flag}{cache_flag}{skip}{run_env}{census_env} > \"{log_path}\" 2>&1"
             to_log(LOG_INFO, "START {tag}{rep_tag}: {seat}: {cmd}\n")
             let t0 = ref_time_ticks()
             let rc = unsafe(popen(cmd) $(f) {
@@ -1864,6 +1884,30 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
     }
     return <- tally
 }
+
+//! a repetition's census folder emptied before its first child: the
+//! verdict reads this repetition's processes alone.
+//! Non-private: test_run_suites.das pins it
+def census_rep_open(census : string) {
+    return if (empty(census))
+    var why : string
+    rmdir_rec(census, why)
+    mkdir_rec(census)
+}
+
+//! whether the run reached its verdict child whole: `whole` (every
+//! standing area, nothing narrowing it, `census_whole`), no file of
+//! `tally` reported from an earlier pass and none failed.
+//! Non-private: test_run_suites.das pins it
+def census_ran_whole(whole : bool; tally : RunTally) : bool
+    => whole && tally.cached == 0 && tally.failures == 0
+
+//! the verdict child's `--run-env` pair of
+//! DASLLAMA_KERNEL_CENSUS_WHOLE where the run ran `whole`
+//! (`census_ran_whole`), else none.
+//! Non-private: test_run_suites.das pins it
+def census_child_run_env(whole : bool) : string
+    => whole ? " --run-env \"DASLLAMA_KERNEL_CENSUS_WHOLE=1\"" : ""
 
 let private WASM_RUN_JS = "modules/dasLLAMA/harness/wasm_mint/run.cjs"
 let private WASM_PACKAGE = "wasm_tests"
@@ -2034,8 +2078,11 @@ def private box_runtime_ready(cfg : RunArgs; envs : string) {
     }
 }
 
-//! the run's executor: the wasm suite's one release, else the dastest children
-def private run_plan(cfg : RunArgs; files : array<string>; image_arms : string; area_run : bool) : RunTally {
+//! the run's executor: the wasm suite's one release, else the dastest
+//! children `whole` whether the run covers every area whole
+//! (`census_whole`)
+def private run_plan(cfg : RunArgs; files : array<string>; image_arms : string; area_run : bool;
+                     whole : bool) : RunTally {
     return <- run_wasm(cfg, files) if (cfg.suite == "wasm" && !area_run)
     if (!child_exe_ready(cfg, files)) {
         var tally : RunTally
@@ -2043,10 +2090,29 @@ def private run_plan(cfg : RunArgs; files : array<string>; image_arms : string; 
         tally.failed_tags |> push("the test child's exe")
         return <- tally
     }
-    let media = media_run(files)
-    let envs = child_envs(cfg, get_platform_name() == "windows", media, g_env_test.scratch_dir)
+    var inscope tested <- [for (f in files); f; where f != CENSUS_VERDICT]
+    let media = media_run(tested)   //! the verdict child loads no model: it makes no run less a media run
+    let census = has_value(files, CENSUS_VERDICT) ? census_folder() : ""
+    let win = get_platform_name() == "windows"
+    let envs = child_envs(cfg, win, media, g_env_test.scratch_dir, census)
     box_runtime_ready(cfg, envs)
-    return <- run_files(cfg, files, image_arms, area_run, envs, media)
+    let seat = (census = census, whole = whole)
+    var tally <- run_files(cfg, files, image_arms, area_run, envs, media, seat)
+    if (!empty(census)) {
+        var why : string
+        rmdir_rec(census, why)
+    }
+    return <- tally
+}
+
+//! a fresh folder for the run's census files under the run's scratch
+//! (DASLLAMA_SCRATCH_DIR, else the temp folder)
+def private census_folder() : string {
+    let base = empty(g_env_test.scratch_dir) ? temp_dir() : g_env_test.scratch_dir
+    let folder = path_join(base, "dasllama_census_{ref_time_ticks()}")
+    mkdir_rec(folder)
+    to_log(LOG_INFO, "CENSUS {folder} (DASLLAMA_KERNEL_CENSUS_DIR): the children's kernel census\n")
+    return folder
 }
 
 def operator +=(var a : RunTally; b : RunTally) {
@@ -2108,10 +2174,59 @@ def category_chunks(files : array<string>; per : int) : array<array<string>> {
     return <- chunks
 }
 
-//! the run's children: a category run's by suite, any other run's `batch_files` a child
+//! the run's children: a category run's by suite, any other run's
+//! `batch_files` a child; the census verdict (`CENSUS_VERDICT`) where
+//! the run holds it a child of its own, the last
 def run_chunks(cfg : RunArgs; files : array<string>; area_run : bool) : array<array<string>> {
-    return <- category_chunks(files, batch_files(cfg)) if (!empty(cfg.category))
-    return <- child_chunks(files, batch_files(cfg), area_run)
+    var inscope rest <- [for (f in files); f; where f != CENSUS_VERDICT]
+    var chunks <- (!empty(cfg.category) ? category_chunks(rest, batch_files(cfg))
+        : child_chunks(rest, batch_files(cfg), area_run))
+    if (length(rest) < length(files)) {
+        chunks |> emplace([CENSUS_VERDICT])
+    }
+    return <- chunks
+}
+
+//! the census verdict: every process of the run writes its kernel
+//! census into the run's census folder (DASLLAMA_KERNEL_CENSUS_DIR),
+//! and this file, run last, reads them merged
+let CENSUS_VERDICT = "modules/dasLLAMA/tests/test_kernel_coverage.das"
+
+//! whether the run's children write the census and the run plans its
+//! verdict: every run but a category run's - its categories' files
+//! alone - and the model-free, gpu-kernels and wasm suites', whose
+//! files load no model on a block
+def census_verdict_owed(cfg : RunArgs) : bool
+    => empty(cfg.category) && !has_value(["model-free", "gpu-kernels", "wasm"], cfg.suite)
+
+//! the test filters the runner inherits from its own environment
+//! (DASLLAMA_TEST_FAMILY, _ARMS, _CATEGORIES): a child reads any its
+//! command line does not set
+def private inherited_filters() : string
+    => g_env_test.test_family + g_env_test.test_arms + g_env_test.test_categories
+
+//! whether `exclude` leaves out a file a Metal or Vulkan census
+//! reads: any token past the CUDA-only files' (`CUDA_ONLY_EXCLUDE`),
+//! whose kernels dispatch on the CUDA home alone - a fleet's Vulkan
+//! home excludes exactly those
+def private exclude_narrows(exclude : string) : bool {
+    var inscope cuda_only <- split(CUDA_ONLY_EXCLUDE, ",")
+    var inscope asked <- split(exclude, ",")
+    return !empty([for (tk in asked); tk; where !empty(tk) && !has_value(cuda_only, tk)])
+}
+
+//! whether the run covers every standing area whole (`areas`, an area
+//! run's): no family, arm, category, changed-files, --only or --skip
+//! narrowing it, no --exclude past the CUDA-only files
+//! (`exclude_narrows`), and no filter `inherited` from the runner's
+//! environment - the census floor holds only there.
+//! Non-private:
+//! test_run_suites.das pins it
+def census_whole(cfg : RunArgs; areas : array<string>; inherited : string) : bool {
+    let narrowed = (cfg.changed || !empty(cfg.arm) || !empty(cfg.family) || !empty(cfg.category)
+        || !empty(cfg.only) || exclude_narrows(cfg.exclude) || cfg.skip > 0 || !empty(inherited))
+    var inscope standing <- standing_areas()
+    return !narrowed && empty([for (a in standing); a; where !has_value(areas, a)])
 }
 
 //! what makes the run less than the plain run of its scope: a wall given by hand, the model-free suite's own wall lifted
@@ -2141,11 +2256,11 @@ def private print_report(cfg : RunArgs; areas : array<string>; n_files, n_exclud
     if (cfg.changed) {
         if (core) {
             to_log(LOG_INFO, "NEXT the engine core changed: the whole stocked set before the PR - run.das -- --suite stocked over the fleet, a pod a GPU home (harness/pod_fleet.das)\n")
-            to_log(LOG_INFO, "NEXT the model suites (decode | prefill | matrix) take --arm scoped to the change: run.das -- --arm <arms> --suite <name>\n")
+            to_log(LOG_INFO, "NEXT the llm area's model cells take --arm scoped to the change: run.das -- --area llm --arm <arms>\n")
         }
     } elif (!empty(areas)) {
-        if (find_index(areas, "llm") >= 0) {
-            to_log(LOG_INFO, "NEXT the model suites (decode | prefill | matrix) take --arm scoped to the change: run.das -- --arm <arms> --suite <name>\n")
+        if (find_index(areas, "llm") >= 0 && empty(cfg.arm)) {
+            to_log(LOG_INFO, "NEXT the llm area's model cells take --arm scoped to the change: run.das -- --area llm --arm <arms>\n")
         }
         to_log(LOG_INFO, "NEXT before the PR: run.das -- --suite model-free, then this --changed run on a box with models\n")
     } elif (cfg.suite == "model-free") {
@@ -2225,12 +2340,15 @@ def main() : int {
     let areas <- plan.areas
     let core = plan.core
     if (empty(plan.files)) {
-        to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | mtp | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | stocked | wasm | all)\n")
+        to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (mtp | kernels | gpu-kernels | image | image-vulkan | model-free | stocked | wasm | all; the Mac model cells: --area llm --arm <token>)\n")
         return 2
     }
     if (cfg.no_tune && !empty(plan.image_arms) && (!empty(areas) || cfg.changed)) {   //! an area's image arms ride the image rail --no-tune turns off
         to_log(LOG_ERROR, "--no-tune sets DASLLAMA_IMAGE=0 in every child, and the run owns the image arms {plan.image_arms} - drop --no-tune, or run those arms through --suite image --arm\n")
         return 2
+    }
+    if (census_verdict_owed(cfg) && !has_value(plan.files, CENSUS_VERDICT)) {
+        plan.files |> push(CENSUS_VERDICT)
     }
     var split <- run_exclusion(plan.files, cfg.exclude, child_disabled_modules())
     for (line in split.excluded) {
@@ -2256,7 +2374,9 @@ def main() : int {
         return 0
     }
     log_missing_models(only)
-    let tally <- run_plan(cfg, only, plan.image_arms, !empty(areas) || cfg.changed)
+    let area_run = !empty(areas) || cfg.changed
+    let whole = census_whole(cfg, areas, inherited_filters())
+    let tally <- run_plan(cfg, only, plan.image_arms, area_run, whole)
     print_report(cfg, areas, length(only), length(split.excluded), tally, core)
     return tally.failures
 }

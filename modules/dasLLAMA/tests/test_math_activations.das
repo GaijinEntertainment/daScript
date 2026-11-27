@@ -939,19 +939,19 @@ def test_softmax(t : T?) {
 [test(description = "`parallel_argmax` returns the first maximum on empty, single, ordinary and tied rows, and `hlse` matches the scalar exp(x - mx) sum to 1e-6 across a 4-wide group plus tail, zero on empty")]
 def test_argmax_hlse(t : T?) {
     t |> run("argmax on empty / single / ordinary rows") @(t : T?) {
-        var e : array<float>
+        let e : array<float>
         t |> equal(argmax_of(e), 0l, "empty row answers 0, no index fault")
-        var one <- [ -7.5 ]
+        let one <- [ -7.5 ]
         t |> equal(argmax_of(one), 0l, "the single element is the max")
-        var many <- [ 0.1, -2.0, 0.3, 0.25, -1.0, 0.9, 0.2, 0.15, -0.5, 0.05, 4.25, 0.0, 1.5 ]
+        let many <- [ 0.1, -2.0, 0.3, 0.25, -1.0, 0.9, 0.2, 0.15, -0.5, 0.05, 4.25, 0.0, 1.5 ]
         t |> equal(argmax_of(many), 10l, "the max at index 10")
-        var first <- [ 3.0, 0.0, 1.0, 2.0, 0.5 ]
+        let first <- [ 3.0, 0.0, 1.0, 2.0, 0.5 ]
         t |> equal(argmax_of(first), 0l, "a max at index 0")
     }
     t |> run("argmax on ties takes the FIRST") @(t : T?) {
-        var tied <- [ 1.0, 5.0, 2.0, 5.0, 5.0, 0.0 ]
+        let tied <- [ 1.0, 5.0, 2.0, 5.0, 5.0, 0.0 ]
         t |> equal(argmax_of(tied), 1l, "three equal maxima, the lowest index wins")
-        var tied_group <- [ 5.0, 5.0, 5.0, 5.0 ]
+        let tied_group <- [ 5.0, 5.0, 5.0, 5.0 ]
         t |> equal(argmax_of(tied_group), 0l, "a whole row at the max still answers index 0")
     }
     t |> run("hlse sums exp(x - mx)") @(t : T?) {

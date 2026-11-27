@@ -21,6 +21,7 @@ require _attn_oracle   // nolint:STYLE030,LINT019 — attn_row_scored: the softm
 require _kernel_oracles   // nolint:STYLE030,LINT019 — pos_add_2d_ref, inside the vulkan arms alone
 require dasllama/dasllama_qwen3v   // nolint:STYLE030,LINT019 — q3v_reorder_src, the same
 require _vk_kq_fixtures   // nolint:STYLE030,LINT019 — f16r, inside the vulkan arms alone
+require _kernel_census   // nolint:STYLE030,LINT019 - kernel_census_reset_vulkan, in the vulkan arms
 require _nmt_oracle   // nolint:STYLE030,LINT019 — the Bergamot step cells' fixtures and references, inside the vulkan arm alone
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_math   // nolint:STYLE030,LINT019 - the oracles' device-math twins, used only inside the vulkan static_if arms (a build without the module drops them)
@@ -173,7 +174,7 @@ def test_vkt_fa_bidir(t0 : T?) {
                             continue
                         }
                         t |> equal(vkd_slot_kernel("fa_khr_h{hs}_bidir_cls_spv"), kernel, "the h{hs} bidirectional slot serves its {form.what}")
-                        vk_kernel_coverage_reset()
+                        kernel_census_reset_vulkan()
                         fa_bidir_arm(t, true, hs, ", the {form.what}")
                         let runs = vk_kernel_coverage_of(kernel)
                         t |> success(runs > 0l, "the h{hs} bidirectional slot's {form.what} `{kernel}` took the slot's dispatches ({runs})")

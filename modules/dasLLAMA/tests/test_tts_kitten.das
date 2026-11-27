@@ -18,6 +18,7 @@ require _tts_parity
 require _tts_facade_cells   // the facade's cells on kitten nano's image form
 require _model_once
 require _model_tier
+require _kernel_coverage_cells   // coverage_tower_styletts2: the kernel census's synthesis
 require _gguf_writer   // gguf_retyped_copy / gguf_retyped_refusal: the stored file's refusal carriers
 require dasllama/dasllama_gguf    // the GGML types a carrier is retyped to; f16_to_f32: a stored scale is a half
 require dasllama/dasllama_image   // dlim_wipe, image_path_for, image_family_tag: the images a stored file's load mints beside it
@@ -277,6 +278,11 @@ def test_kitten_nano(t : T?) {
             } else {
                 test_kitten_synthesis_metal(t, m, form, path, rows)
                 test_kitten_oracle(t, m, form, "nano", rows)
+                if (form == "f32@dev") {
+                    coverage_tower_styletts2(t,
+                        "nano: the kernel census's synthesis, the f32 lane's home image",
+                        cov_home_of(TowerFamily.tts), m.model, "kitten-nano.gguf")
+                }
                 if (form == "q8@dev") {
                     tts_device_release_cell(t, m, path, "The home gives its rows back when idle.",
                         "Bella", true, dev_held)
@@ -399,6 +405,7 @@ def private stored_file_absent(t : T?; stored : string) : bool {
 
 // the stored file's refusals, over carriers retyped or poked from the q8 file `test_kitten_stored_file` wrote
 def private stored_file_refusals(t : T?; src : string) {
+        own_load("asserts on the load itself - its refusal: retyped copies of the stored file")
         let stored = stored_tmp("q8")
         return if (stored_file_absent(t, stored))
         let newer = stored_tmp("layout2")
@@ -457,6 +464,7 @@ def private stored_file_refusals(t : T?; src : string) {
 
 // the stored file under a recipe pin: what the writer stores, what the bake tags, where the load goes
 def private stored_file_pins(t : T?; src : string) {
+        own_load("loads a copy of the file the cell itself writes: the recipe pin's stored files")
         let stored = stored_tmp("kq")
         return if (stored_file_absent(t, stored))
         let k5 = stored_tmp("k5")

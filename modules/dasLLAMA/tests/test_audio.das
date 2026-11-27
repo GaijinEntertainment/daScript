@@ -44,6 +44,7 @@ require _image_memory   // read_page_aligned: a host's own copy of an image
 require dasllama/dasllama_image   // with_image_destination: the cold mint's scratch path
 require ?cuda dasllama/dasllama_cuda_tower_fc   // cuda_gigaam_mel: gigaam's standalone device mel on the CUDA home
 require ?cuda dasllama/dasllama_cuda_common   // cud_kernel_census_of: the kq lane's tile census on the CUDA home
+require _kernel_coverage_cells   // coverage_tower_*_metal: the kernel census's tower encodes
 
 // Audio tower tests. The mel/gelu/filterbank tests are self-contained; the encoder tests
 // need the locally-converted Qwen2-Audio mmproj (2.5 GB, gitignored) and skip without it.
@@ -1385,9 +1386,82 @@ def private canary_form_is(t : T?; file, form : string; enc : CanaryEncoder) {
     minted_form_is(t, file, form, f, TowerFamily.canary, enc.q8, enc.n_layer, enc.dev_backend)
 }
 
-//! a gemma4a mmproj's form read off its name (`tower_form_of`): the lanes `f32` (the exact lane) and `q8`; `asr` and
-//! `asrdev` name no lane - `image_asr` and `image_asrdev` are the ASR facade's two-file load of the mmproj
-def private g4a_form_of(form : string) : TowerForm => tower_form_of(form, ["f32", "q8", "asr", "asrdev"], "gemma4a")
+//! jfk's text through a pair's q8 tower and through its f32 one, as
+//! the pair's two forms keep them; `who` the family, `form` the form
+//! whose leg runs, `legs` the forms that ran, `half` jfk with its
+//! second half silenced through the q8 tower
+struct private AsrWordsKept {
+    who : string
+    form : string
+    q8 : string
+    f32 : string
+    half : string
+    legs : int
+}
+
+//! a rail's leg of a pair's transcript A/B: jfk through the pair `m`
+//! in the language `lang`, kept as the rail `q8` names; the q8 rail
+//! also transcribes jfk with its second half silenced
+def private asr_words_leg(t : T?; m : AsrModel; lang : string; q8 : bool; var k : AsrWordsKept) {
+    return if (!jit_only(t))
+    let samples <- asr_samples(t, "jfk.wav")
+    return if (empty(samples))
+    var text = ""
+    with_dasllama_jobque_() {
+        text = segs_text(transcribe_segs(m, samples, lang))
+        if (q8) {
+            var inscope half := samples
+            for (i in range64(long_length(half) / 2l, long_length(half))) {
+                half[i] = 0.0
+            }
+            k.half = segs_text(transcribe_segs(m, half, lang))
+        }
+    }
+    if (q8) {
+        k.q8 = text
+    } else {
+        k.f32 = text
+    }
+    k.legs++
+}
+
+//! the q8 tower's transcript against the f32 rail's as word lists - a
+//! comma rides a near-tie token the two rails' rounding can split -
+//! all three lists logged, the control the q8 tower's transcript of
+//! jfk with its second half silenced
+def private same_words(t : T?; who : string; q8_text, f32_text, half_text : string) {
+    let q8 = join(transcript_words(q8_text), " ")
+    let f32 = join(transcript_words(f32_text), " ")
+    let half = join(transcript_words(half_text), " ")
+    to_log(LOG_INFO, "{who} q8 words : {q8}\n")
+    to_log(LOG_INFO, "{who} f32 words: {f32}\n")
+    to_log(LOG_INFO, "{who} q8 words, the second half silenced: {half}\n")
+    t |> equal(q8, f32, "q8 tower transcript matches the f32 rail, punctuation aside")
+    t |> success(half != f32,
+        "control: the q8 tower fed jfk with its second half silenced reads other words")
+}
+
+// A pair's transcript A/B, after its block: the q8 tower's words are
+// the f32 rail's.
+[cold_path]
+def private test_asr_q8_words(t : T?; k : AsrWordsKept) {
+    return if (!jit_only(t))
+    if (!asr_clip_present("jfk.wav")) {
+        t |> skip("jfk.wav not present")
+        return
+    }
+    t |> equal(k.legs, 2, "{k.who}: the q8 and the f32 towers both transcribed jfk")
+    return if (k.legs != 2)
+    same_words(t, k.who, k.q8, k.f32, k.half)
+}
+
+//! a gemma4a mmproj's form read off its name (`tower_form_of`): the
+//! lanes `f32` (the exact lane) and `q8`; `asr`, `asrdev`, `asrq8`
+//! and `asrf32` name no lane - `image_asr`, `image_asrdev`,
+//! `image_asrq8` and `image_asrf32` are the ASR facade's two-file
+//! load of the mmproj
+def private g4a_form_of(form : string) : TowerForm
+    => tower_form_of(form, ["f32", "q8", "asr", "asrdev", "asrq8", "asrf32"], "gemma4a")
 
 //! the staged read a gemma4a mmproj's form is minted from (`tower_stage_key_of`)
 def private g4a_stage_key(form : string) : string => tower_stage_key_of(g4a_form_of(form))
@@ -1405,16 +1479,26 @@ def private finalize(var h : G4aForm) {
 }
 
 //! whether the form `f` is the ASR facade's two-file load
-def private g4a_form_asr(f : TowerForm) : bool => f.image && (f.lane == "asr" || f.lane == "asrdev")
+def private g4a_form_asr(f : TowerForm) : bool
+    => f.image && (f.lane == "asr" || f.lane == "asrdev" || f.lane == "asrq8" || f.lane == "asrf32")
 
-//! One form of a gemma4a mmproj, its block's form loader behind the file's own (`gemma4a_e2b_form`,
-//! `gemma4a_e4b_form`, which name `decoder`, the mmproj's Q8 decoder under the models directory). `image` is the audio
-//! carrier's own load (`load_audio_embedder`) and `image_asr` the ASR facade's two-file load with `decoder`
-//! (`load_asr_model`, which sniffs the pair's route and bakes each file's image), each with the family's lane pin unset,
-//! as the run's knobs route it, the facade's load keeping the host planes its f32 K/V cells read; `image_asrdev` is the facade's load with gemma4a's serving tower knob on for the load,
-//! which the load's flavor pick reads - the knobs put back however a load leaves. Any other form is minted in memory
-//! (`mint_g4a`) from `stg`, its own copy of the mmproj's staging on the lane it names: `_z<block>` zeroes the GEMM planes
-//! of the poison's blocks from that block on, `@dev` is the image flavor of gemma4a's serving home.
+//! One form of a gemma4a mmproj, its block's form loader behind the
+//! file's own (`gemma4a_e2b_form`, `gemma4a_e4b_form`, which name
+//! `decoder`, the mmproj's Q8 decoder under the models directory).
+//! `image` is the audio carrier's own load (`load_audio_embedder`)
+//! and `image_asr` the ASR facade's two-file load with `decoder`
+//! (`load_asr_model`, which sniffs the pair's route and bakes each
+//! file's image), each with the family's lane pin unset, as the run's
+//! knobs route it, the facade's load keeping the host planes its f32
+//! K/V cells read; `image_asrdev` is the facade's load with gemma4a's
+//! serving tower knob on for the load, which the load's flavor pick
+//! reads; `image_asrq8` and `image_asrf32` the facade's load with the
+//! lane pinned to q8 or to f32 - the knobs and the pin put back
+//! however a load leaves. Any other form is minted in memory
+//! (`mint_g4a`) from `stg`, its own copy of the mmproj's staging on
+//! the lane it names: `_z<block>` zeroes the GEMM planes of the
+//! poison's blocks from that block on, `@dev` is the image flavor of
+//! gemma4a's serving home.
 def private gemma4a_form(path, form, decoder : string; var stg : Gemma4aStaging) : G4aForm {
     let f = g4a_form_of(form)
     var inscope h = G4aForm()
@@ -1429,13 +1513,17 @@ def private gemma4a_form(path, form, decoder : string; var stg : Gemma4aStaging)
     let knobs = gpu_knobs()
     let planes = host_planes_pin()
     reset_gemma4a_q8()
+    if (f.lane == "asrq8" || f.lane == "asrf32") {
+        set_gemma4a_q8(f.lane == "asrq8")
+    }
     if (f.lane == "asrdev") {
         set_serving_gpu_tower(true, TowerFamily.gemma4a)
     }
-    if (f.lane == "asr") {
+    if (f.lane == "asr" || f.lane == "asrq8" || f.lane == "asrf32") {
         set_host_planes(true)   //! its cells ride the f32 K/V CPU rail: a load onto a discrete home keeps no plane on the host
     }
     with_put_back($ {
+        reset_gemma4a_q8()
         set_gpu_knobs(knobs)
         restore_host_planes(planes)
     }) {
@@ -1662,42 +1750,109 @@ def private mint_q3a(var stg : Qwen3aStaging; q8 : bool; zero_block : int64; dev
     return <- tw
 }
 
-//! the Qwen3-ASR mmproj's form read off its name (`tower_form_of`): the lanes `f32` (the exact lane) and `q8`
-def private qwen3a_form_of(form : string) : TowerForm => tower_form_of(form, ["f32", "q8"], "qwen3a")
+//! the Qwen3-ASR mmproj's form read off its name (`tower_form_of`):
+//! the lanes `f32` (the exact lane) and `q8`; `asrq8` and `asrf32`
+//! name no lane - `image_asrq8` and `image_asrf32` are the ASR
+//! facade's two-file load of the mmproj
+def private qwen3a_form_of(form : string) : TowerForm
+    => tower_form_of(form, ["f32", "q8", "asrq8", "asrf32"], "qwen3a")
 
 //! the staged read a Qwen3-ASR mmproj's form is minted from (`tower_stage_key_of`)
 def private qwen3a_stage_key(form : string) : string => tower_stage_key_of(qwen3a_form_of(form))
 
-//! One form of the Qwen3-ASR mmproj, its block's form loader. `image_f32` is the tower's own load (`load_qwen3a_tower`) on
-//! the exact lane's CPU image: the lane pinned and every GPU tower knob off for the load, put back however it leaves. Any
-//! other form is minted in memory (`mint_q3a`) from `stg`, its own copy of the mmproj's staging on the lane it names:
-//! `_z<block>` zeroes the poison's blocks from that block on, `@dev` is the image flavor of qwen3a's serving home.
-def private qwen3a_form(path, form : string; var stg : Qwen3aStaging) : Qwen3aTower {
+//! A Qwen3-ASR mmproj's form as its block holds it: the tower `tw` -
+//! its own load, or a tower minted in memory - or, on the
+//! `image_asrq8` and `image_asrf32` forms, the ASR facade's pair
+//! `asr` of the mmproj and its decoder.
+struct private Q3aForm {
+    tw : Qwen3aTower = Qwen3aTower()
+    asr : AsrModel = AsrModel()
+}
+
+def private finalize(var h : Q3aForm) {
+    delete h.tw
+    delete h.asr
+}
+
+//! whether the form `f` is the ASR facade's two-file load
+def private q3a_form_asr(f : TowerForm) : bool
+    => f.image && (f.lane == "asrq8" || f.lane == "asrf32")
+
+//! One form of the Qwen3-ASR mmproj, its block's form loader.
+//! `image_f32` is the tower's own load (`load_qwen3a_tower`) on the
+//! exact lane's CPU image: the lane pinned and every GPU tower knob
+//! off for the load, put back however it leaves; `image` that load
+//! with no lane pinned and the serving GPU tower on. `image_asrq8`
+//! and
+//! `image_asrf32` are the ASR facade's two-file load with
+//! Qwen3-ASR-0.6B-Q8_0.gguf under the models directory, the tower's
+//! lane pinned to q8 or to f32 for the load and put back. Any other
+//! form is minted in memory (`mint_q3a`) from `stg`, its own copy of
+//! the mmproj's staging on the lane it names: `_z<block>` zeroes the
+//! poison's blocks from that block on, `@dev` is the image flavor of
+//! qwen3a's serving home.
+def private qwen3a_form(path, form : string; var stg : Qwen3aStaging) : Q3aForm {
     let f = qwen3a_form_of(form)
+    var inscope h = Q3aForm()
     if (!f.image) {
-        return <- mint_q3a(stg, f.lane == "q8", f.zero_block, tower_form_dev_of(f, TowerFamily.qwen3a))
+        if (f.lane != "f32" && f.lane != "q8") {
+            panic("the qwen3a tests: '{form}' names no lane to mint")
+        }
+        let dev = tower_form_dev_of(f, TowerFamily.qwen3a)
+        h.tw <- mint_q3a(stg, f.lane == "q8", f.zero_block, dev)
+        return <- h
+    }
+    if (q3a_form_asr(f)) {
+        set_qwen3a_q8(f.lane == "asrq8")
+        with_put_back($ {
+            reset_qwen3a_q8()
+        }) {
+            h.asr <- load_asr_model(path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf"), path)
+        }
+        return <- h
+    }
+    let knobs = gpu_knobs()
+    if (empty(f.lane)) {
+        reset_qwen3a_q8()
+        set_serving_gpu_tower(true, TowerFamily.qwen3a)
+        with_put_back($ {
+            set_gpu_knobs(knobs)
+        }) {
+            h.tw <- load_qwen3a_tower(path)
+        }
+        return <- h
     }
     if (f.lane != "f32") {
         panic("the qwen3a tests: '{form}' names no load of the image rail")
     }
-    let knobs = gpu_knobs()
     set_every_gpu_tower(false)
     set_qwen3a_q8(false)
-    var tw = Qwen3aTower()
     with_put_back($ {
         reset_qwen3a_q8()
         set_gpu_knobs(knobs)
     }) {
-        tw <- load_qwen3a_tower(path)
+        h.tw <- load_qwen3a_tower(path)
     }
-    return <- tw
+    return <- h
 }
 
-//! The form is the lane, poison and image flavor it names: on `tw`, the Qwen3-ASR mmproj loaded as the form `form` of
-//! `file`, the core's lane flag, the poison's block the tower's middle one, and the image flavor.
-def private qwen3a_form_is(t : T?; file, form : string; tw : Qwen3aTower) {
+//! The form is the lane, poison and image flavor it names: on `h`,
+//! the Qwen3-ASR mmproj loaded as the form `form` of `file`, the
+//! facade's qwen3a route on an ASR form, else the core's lane flag,
+//! the poison's block the tower's middle one, and the image flavor.
+def private qwen3a_form_is(t : T?; file, form : string; h : Q3aForm) {
     let f = qwen3a_form_of(form)
-    minted_form_is(t, file, form, f, TowerFamily.qwen3a, tw.core.q8, tw.core.n_layer, twin_facts(tw).dev)
+    if (q3a_form_asr(f)) {
+        t |> success(h.asr.kind == AsrKind.qwen3a,
+            "{file}: the {form} form is the facade's qwen3a pair")
+        return
+    }
+    if (f.image && empty(f.lane)) {   //! the lane and flavor are the run's policy: not read
+        t |> success(h.tw.core.n_layer > 0l, "{file}: the {form} form holds the tower")
+        return
+    }
+    minted_form_is(t, file, form, f, TowerFamily.qwen3a, h.tw.core.q8, h.tw.core.n_layer,
+        twin_facts(h.tw).dev)
 }
 
 //! a qwen3a twin leg's two states over one tower
@@ -1879,30 +2034,148 @@ def private test_qwen3a_vulkan_front(t : T?; var k : Q3aKept) {
     t |> equal(convs, 2l * n_chunks, "{tag} exact lane: the front served every chunk of both device encodes")
 }
 
+//! jfk window 0's rows off the q8 core and off the f32 rail, as the
+//! `q8` and `f32` forms keep them, and the forms that ran
+struct private Q3aRowsKept {
+    form : string
+    q8 : array<float>
+    f32 : array<float>
+    legs : int
+}
+
+// A rail's leg of the q8 core's element-level tripwire, on the `q8`
+// and `f32` forms: jfk window 0 encoded on the CPU image.
+[cold_path]
+def private q3a_q8_rows_leg(t : T?; tw : Qwen3aTower; var k : Q3aRowsKept) {
+    if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a") || !jit_only(t)) return
+    let samples <- asr_samples(t, "jfk.wav")
+    return if (empty(samples))
+    let q8 = k.form == "q8"
+    if (q8) {
+        t |> success(tw.core.q8, "tower core is on the q8 rail")
+    } else {
+        t |> success(!tw.core.q8, "reference tower is on the f32 rail")
+    }
+    var inscope mel <- log_mel_qwen3a(samples, tw.core.n_mel)
+    var inscope enc <- make_encoder_state(tw.core)
+    var inscope cs = Qwen3aConvState()
+    with_dasllama_jobque_() {
+        var inscope win <- qwen3a_mel_window(mel, 0l)
+        qwen3a_encode(tw, enc, cs, win)
+    }
+    if (q8) {
+        k.q8 := enc.out
+    } else {
+        k.f32 := enc.out
+    }
+    k.legs++
+}
+
+// The qwen3a 0.6B tower's q8 core against the f32 rail on jfk window
+// 0, after the block: an element-level tripwire behind the transcript
+// gate.
+[cold_path]
+def private test_qwen3a_q8_rows(t : T?; k : Q3aRowsKept) {
+    return if (!jit_only(t))
+    if (!asr_clip_present("jfk.wav")) {
+        t |> skip("jfk.wav not present")
+        return
+    }
+    t |> equal(k.legs, 2, "qwen3a: the q8 and the f32 cores both encoded jfk window 0")
+    return if (k.legs != 2)
+    let nv = long_length(k.q8)
+    t |> equal(nv, long_length(k.f32), "the q8 and f32 cores encode one window's rows")
+    if (nv == long_length(k.f32)) {
+        let rel = rel_l2(k.q8, k.f32)
+        let maxd = logits_maxdiff(k.q8, k.f32)
+        let peak = logits_maxabs(k.f32)
+        to_log(LOG_INFO, "qwen3a q8-vs-f32 window 0: rel-l2 {rel}, maxdiff {maxd} "
+            + "(signal max {peak}) over {nv} values\n")
+        t |> success(rel < 0.05, "q8 core tracks the f32 rail (element-level bar)")
+    }
+}
+
+// A rail's leg of the qwen3a transcript A/B, on the `image_asrq8` and
+// `image_asrf32` forms: the facade's pair on jfk.
+[cold_path]
+def private q3a_q8_words_leg(t : T?; m : AsrModel; var k : AsrWordsKept) {
+    if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a")) return
+    if (k.form == "image_asrq8") {
+        t |> success(m.q3t.core.q8, "leg A tower core is on the q8 rail")
+    } else {
+        t |> success(!m.q3t.core.q8, "leg B tower core is on the f32 rail")
+    }
+    asr_words_leg(t, m, "auto", k.form == "image_asrq8", k)
+}
+
 // The Qwen3-ASR mmproj's tower, one block: the CPU oracle on its exact lane's image, the discrete twin's forms minted - the
 // device forms first, the first of them keeping jfk's two mels.
-[test(description = "mmproj-Qwen3-ASR-0.6B-bf16.gguf loads its qwen3a tower once a form. On the CPU f32 rail it loads its shape and encodes jfk window 0 to a first token within 5e-3 of llama-mtmd's embeddings on its first four values. On the discrete home it computes the jfk log-mel within 1e-3 of the CPU mel, then serves front, blocks and projector on windows 0 and the tail within the three-way bar, a poison and the exact lane holding theirs")]
+[test(description = "mmproj-Qwen3-ASR-0.6B-bf16.gguf loads its qwen3a tower once a form. On the CPU f32 rail it loads its shape and encodes jfk window 0 to a first token within 5e-3 of llama-mtmd's embeddings on its first four values. On the discrete home it computes the jfk log-mel within 1e-3 of the CPU mel, then serves front, blocks and projector on windows 0 and the tail within the three-way bar, a poison and the exact lane holding theirs. Its q8 core encodes jfk window 0 to the same row count as the f32 rail and within 0.05 rel-l2 of it, and the ASR facade's pair with Qwen3-ASR-0.6B-Q8_0.gguf transcribing jfk through the q8 tower core yields the same word list as through the f32 tower, punctuation aside, while jfk with its second half silenced through the q8 tower reads other words")]
 def test_qwen3a_carrier(t : T?) {
     return if (!family_on(t, "qwen3a"))
     var inscope kept = Q3aKept()
+    var inscope rows = Q3aRowsKept()
+    var inscope words = AsrWordsKept(who = "qwen3a")
     let twin_why = jfk_twin_why(TowerFamily.qwen3a)
     let discrete_on = empty(twin_why)
+    let ab_why = arm_why("qwen3a")
     if (!discrete_on) {
         skip_cell(t, "qwen3a: the discrete home's mel + conv front + blocks vs the CPU q8 chain on jfk windows 0 and the tail - {twin_why}")
     }
     var inscope forms <- ["image_f32"]
-    add_served_forms(t, forms, Q3A, ["q8@dev", "q8_z9@dev", "f32@dev", "f32_z9@dev", "f32", "q8"], twin_why)
-    let ran = with_model_once(t, "audio", "mmproj-Qwen3-ASR-0.6B-bf16.gguf", forms, @@qwen3a_stage_key, @@qwen3a_stage, @@qwen3a_form) $(var tw; form) {
-        qwen3a_form_is(t, Q3A, form, tw)
+    add_served_forms(t, forms, Q3A, ["q8@dev", "q8_z9@dev", "f32@dev", "f32_z9@dev"], twin_why)
+    add_served_forms(t, forms, Q3A, ["f32", "q8"], either_why(twin_why, ab_why))
+    let pair_on = asr_decoder_available(t, "Qwen3-ASR-0.6B-Q8_0.gguf")
+    if (pair_on) {
+        add_served_forms(t, forms, Q3A, ["image_asrq8", "image_asrf32"], ab_why)
+    }
+    if (empty(metal_build_why()) && jit_enabled()) {   //! the kernel census's facade load
+
+        add_served_forms(t, forms, Q3A, ["image"], arm_why("coverage"))
+    }
+    let ran = with_model_once(t, "audio", "mmproj-Qwen3-ASR-0.6B-bf16.gguf", forms,
+            @@qwen3a_stage_key, @@qwen3a_stage, @@qwen3a_form) $(var h; form) {
+        qwen3a_form_is(t, Q3A, form, h)
         kept.form = form
+        rows.form = form
+        words.form = form
         if (form == "image_f32") {
-            tower_cell(t, "qwen3a tower: conv2d frontend + windowed encode matches mtmd on jfk", tw, @@test_qwen3a_tower)
+            tower_cell(t,
+                "qwen3a tower: conv2d frontend + windowed encode matches mtmd on jfk",
+                h.tw, @@test_qwen3a_tower)
             return
         }
-        if (form == "q8@dev") {
-            tower_cell(t, "{Q3A}: jfk's log-mel on the discrete home's mel seat against the CPU's, the {form} form's", tw, kept, @@q3a_mel_leg)
+        if (form == "image") {
+            coverage_tower_qwen3a_metal(t,
+                "qwen3a tower: the kernel census's jfk encode on the facade's Metal load",
+                h.tw)
+            return
         }
-        tower_cell(t, "{Q3A}: the discrete twin, the {form} form's legs", tw, kept, @@q3a_twin_leg)
+        if (form == "image_asrq8" || form == "image_asrf32") {
+            tower_cell(t, "qwen3a transcribe: the {form} form's tower rail on jfk", h.asr, words,
+                @@q3a_q8_words_leg)
+            return
+        }
+        if (form == "q8" || form == "f32") {
+            tower_cell(t, "qwen3a tower: the {form} form's rail on jfk window 0", h.tw, rows,
+                @@q3a_q8_rows_leg)
+        }
+        if (form == "q8@dev") {
+            tower_cell(t, "{Q3A}: jfk's log-mel on the discrete home's mel seat against the CPU's, the {form} form's",
+                h.tw, kept, @@q3a_mel_leg)
+        }
+        if (discrete_on) {
+            tower_cell(t, "{Q3A}: the discrete twin, the {form} form's legs", h.tw, kept,
+                @@q3a_twin_leg)
+        }
+    }
+    if (ran && empty(ab_why)) {
+        kept_cell(t, "qwen3a tower: the q8 core tracks the f32 rail on jfk window 0", rows,
+            @@test_qwen3a_q8_rows)
+    }
+    if (ran && pair_on && empty(ab_why)) {
+        kept_cell(t, "qwen3a transcribe: the q8 tower core vs the f32 rail on jfk, the same words",
+            words, @@test_asr_q8_words)
     }
     if (ran && discrete_on) {
         kept_cell(t, "qwen3a: the discrete home's mel + conv front + blocks vs the CPU q8 chain on jfk windows 0 and the tail", kept, @@test_qwen3a_vulkan_front)
@@ -2015,6 +2288,11 @@ def test_qwen2audio_carrier(t : T?) {
             return
         }
         aud_twin_cells(t, "qwen2audio-mmproj-f32.gguf", form, h.tw, kept, homes)
+        if (homes.metal_on && form == "f32@dev") {
+            coverage_tower_qwen2audio_metal(t,
+                "qwen2audio tower: the kernel census's mel on the Metal exact image",
+                h.tw)
+        }
     }
     if (ran) {
         aud_twin_held(t, kept, homes)
@@ -2244,6 +2522,10 @@ def test_parakeet_carrier_v2(t : T?) {
         if (decode_on && f.zero_block < 0l) {
             tower_cell(t, "parakeet v2: the TDT decode twin, the {form} form's legs", m.pk, kept, @@pk_decode_legs)
         }
+        if (form == "f32@dev" && empty(metal_build_why())) {
+            coverage_tower_parakeet_metal(t,
+                "parakeet v2: the kernel census's jfk on the Metal exact image", m.pk)
+        }
     }
     return if (!ran)
     kept_cell(t, "parakeet-TDT v2: the other weight lane reads jfk to the facade load's token ids", kept.oracle, @@parakeet_lanes_held)
@@ -2406,6 +2688,9 @@ def private canary_encoder_block(t : T?; var dec : Model?) {
         }
         static_if (typeinfo builtin_module_exists(das_metal)) {
             if (form == "f32@dev") {
+                coverage_tower_canary_metal(t,
+                    "canary: the kernel census's jfk encode on the Metal exact image",
+                    enc)
                 tower_cell(t, "canary's served Metal encode leaves no encoder rows on the device: no transducer decodes them", enc, @@test_canary_metal_holds_no_rows)
             }
         }
@@ -2516,8 +2801,21 @@ def private g4a_e2b_q4_decoder(t : T?; var e : AudioEmbedder) {
     }
 }
 
+// A rail's leg of the gemma4a transcript A/B, on the `image_asrq8`
+// and `image_asrf32` forms: the facade's pair on jfk.
+[cold_path]
+def private g4a_q8_words_leg(t : T?; m : AsrModel; var k : AsrWordsKept) {
+    if (!family_on(t, "gemma4a") || !arm_on(t, "gemma4a")) return
+    if (k.form == "image_asrq8") {
+        t |> success(m.g4a.q8, "leg A tower is on the q8 rail")
+    } else {
+        t |> success(!m.g4a.q8, "leg B tower is on the f32 rail")
+    }
+    asr_words_leg(t, m, "", k.form == "image_asrq8", k)
+}
+
 // The gemma-4 E2B mmproj's audio tower, one block; E2B's audio embedder is square on the encoder's 1536.
-[test(description = "mmproj-gemma-4-E2B-it-bf16.gguf loads its audio tower once a form. The carrier's load probes and loads as gemma4a at width 1536 and pads a sub-frame clip to one soft token, and a CURRENT gemma4a .dlim routes on its baked tag - the one the load baked beside the mmproj, and one minted into the scratch directory. The ASR facade's two-file load pairs it with gemma-4-E2B-it-Q8_0.gguf: on the f32 KV rail the pair transcribes gemma4a_test2.wav with the first 40 token ids of llama-mtmd-cli's greedy output, the confident prefix before its own near-tie, with a flat heap across reuse. On a form minted in memory the log-mel of jfk computed twice on one reused state is bit-identical, and under it gemma-4-E2B-it-Q4_K_M.gguf loads once: gemma4a rows on a plain chat append across clips, prefill as head plus rows plus tail and are consumed by the turn, while rows of the wrong length or beside a queued image panic. On the Metal Conformer chain the encoder serves every block on the q8 slab within the three-way bar on jfk, a poison exceeds it, and the exact f16 lane holds its bar. On the discrete home it stays within the three-way bar the CPU q8 chain sets against the exact chain on jfk, across regrown and fresh residencies, a zeroed-blocks poison exceeds it, the exact lane holds its bar, and clips of 320 to 1600 samples serve as one device encode with no decline within SHORT_CLIP_BAR of the CPU image's rows, a noise clip outside it")]
+[test(description = "mmproj-gemma-4-E2B-it-bf16.gguf loads its audio tower once a form. The carrier's load probes and loads as gemma4a at width 1536 and pads a sub-frame clip to one soft token, and a CURRENT gemma4a .dlim routes on its baked tag - the one the load baked beside the mmproj, and one minted into the scratch directory. The ASR facade's two-file load pairs it with gemma-4-E2B-it-Q8_0.gguf: on the f32 KV rail the pair transcribes gemma4a_test2.wav with the first 40 token ids of llama-mtmd-cli's greedy output, the confident prefix before its own near-tie, with a flat heap across reuse. On a form minted in memory the log-mel of jfk computed twice on one reused state is bit-identical, and under it gemma-4-E2B-it-Q4_K_M.gguf loads once: gemma4a rows on a plain chat append across clips, prefill as head plus rows plus tail and are consumed by the turn, while rows of the wrong length or beside a queued image panic. On the Metal Conformer chain the encoder serves every block on the q8 slab within the three-way bar on jfk, a poison exceeds it, and the exact f16 lane holds its bar. On the discrete home it stays within the three-way bar the CPU q8 chain sets against the exact chain on jfk, across regrown and fresh residencies, a zeroed-blocks poison exceeds it, the exact lane holds its bar, and clips of 320 to 1600 samples serve as one device encode with no decline within SHORT_CLIP_BAR of the CPU image's rows, a noise clip outside it. The pair transcribing jfk through the q8 tower yields the same word list as through the f32 tower, punctuation aside, while jfk with its second half silenced through the q8 tower reads other words")]
 def test_gemma4a_carrier_e2b(t : T?) {
     return if (!family_on(t, "gemma4a"))
     var inscope kept = EncTwinKept(want_proj = 1536l)
@@ -2531,9 +2829,13 @@ def test_gemma4a_carrier_e2b(t : T?) {
     g4a_twin_skips(t, "E2B", metal_why, discrete_why)
     reset_gemma4a_q8()
     let policy = gemma4a_serves_q8() ? "q8" : "f32"   //! the lane a mint with no pin takes: the mel cell's and the rows seam's
+    var inscope words = AsrWordsKept(who = "gemma4a")
+    let ab_why = arm_why("gemma4a")
     var inscope forms <- ["image"]
-    if (asr_decoder_available(t, "gemma-4-E2B-it-Q8_0.gguf")) {
+    let pair_on = asr_decoder_available(t, "gemma-4-E2B-it-Q8_0.gguf")
+    if (pair_on) {
         forms |> push("image_asr")
+        add_served_forms(t, forms, G4A_E2B, ["image_asrq8", "image_asrf32"], ab_why)
     }
     forms |> push(policy)
     add_served_forms(t, forms, G4A_E2B, [for (f in G4A_TWIN_FORMS); f; where f != policy], either_why(metal_why, discrete_why))
@@ -2548,14 +2850,29 @@ def test_gemma4a_carrier_e2b(t : T?) {
             tower_cell(t, "Gemma-4 E2B audio greedy is token-for-token with llama-mtmd-cli (confident prefix)", h.asr, @@test_gemma4a_audio_oracle)
             return
         }
+        if (form == "image_asrq8" || form == "image_asrf32") {
+            words.form = form
+            tower_cell(t, "gemma4a transcribe: the {form} form's tower rail on jfk", h.asr, words,
+                @@g4a_q8_words_leg)
+            return
+        }
         if (form == policy) {
             tower_cell(t, "gemma4a log-mel is bit-identical across calls on one reused state", h.e.gemma4a, @@test_mel_state_reuse_deterministic)
             g4a_e2b_q4_decoder(t, h.e)
         }
         g4a_twin_cells(t, G4A_E2B, form, h.e.gemma4a, kept, metal_on, discrete_on, true)
+        if (metal_on && form == "f32@dev") {
+            coverage_tower_gemma4a_metal(t,
+                "gemma4a E2B: the kernel census's jfk on the exact lane's Metal image",
+                h.e.gemma4a)
+        }
     }
     t |> run("an E2B gemma4a image minted for this box into the scratch directory reads CURRENT and maps by the direct route") @(t : T?) {
         embedder_scratch_image(t)
+    }
+    if (ran && pair_on && empty(ab_why)) {
+        kept_cell(t, "gemma4a transcribe: the q8 tower vs the f32 rail on jfk, the same words",
+            words, @@test_asr_q8_words)
     }
     if (ran) {
         g4a_twin_held(t, "E2B", G4A_E2B, kept, metal_on, discrete_on, true)

@@ -1723,6 +1723,19 @@ def with_cuda_mmq_winners(body : block<() : void>) {
     invoke(body)
 }
 
+//! `body` with the CUDA home's far row pinned off (`set_cuda_attn_tile_far_pin`) - a one-row step attends on the row form at
+//! every key count - the pin put back to what `cuda_attn_tile_far_pin` read before; `body` alone in a build with no CUDA module
+def with_cuda_far_row_off(body : block<() : void>) {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        let was = cuda_attn_tile_far_pin()
+        set_cuda_attn_tile_far_pin(0l)
+        invoke(body)
+        set_cuda_attn_tile_far_pin(was)
+    } else {
+        invoke(body)
+    }
+}
+
 //! the CUDA token step's far row on the loaded model: after a 40-id prompt one step on the decode tile form (the far count
 //! pinned to the first key), on the row form (pinned off), and on the tile form over a token one off - the logits each, and the
 //! steps the tile form served; nothing on a build without the CUDA module

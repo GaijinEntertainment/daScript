@@ -25,6 +25,7 @@ require _chat_cells   // the cells per (model, form), CHAT_SYS / CHAT_USR, chat_
 // it — same special-token ids, same text segmentation — so collapsing the 5 REPLs into one changes no
 // tokens. Each case rebuilds the old demo's first-turn prefill against the RAW tokenizer backend and
 // compares it to render_turn(). GGUF models are gitignored, so each case skips cleanly when absent.
+// The Qwen2.5-1.5B ChatML case rides that file's block (`test_gpu_resident_qwen2.das`).
 
 // Load capped to a tiny context: these cases only render prompts, and the session's KV cache is sized
 // to config.seq_len — Phi/Llama-3's native 131072 would allocate ~64GB.
@@ -32,50 +33,6 @@ def private load_capped(path : string) : Model {
     var m <- load_model_uncached(path, QuantMode.q8)
     m.config.seq_len = min(m.config.seq_len, 512l)
     return <- m
-}
-
-[test(description = "The Qwen2.5 prefill equals the hand-built ChatML sequence token for token, and the marked render reports the system turn as the first turn opening and none on a later turn")]
-def test_chat_qwen(t : T?) {
-    t |> run("Qwen2.5 (BPE) renders the ChatML prefill") @(t : T?) {
-        let path = path_join(models_dir(), "Qwen2.5-1.5B-Instruct-Q8_0.gguf")
-        if (!model_available(t, path)) {
-            return
-        }
-        var m <- load_capped(path)
-        var raw <- load_bpe_tokenizer_gguf(path)
-        let ims = special_id(raw, "<|im_start|>")
-        let ime = special_id(raw, "<|im_end|>")
-        // old qwen_chat.das: ims, "system\n{sys}", ime, "\n", ims, "user\n{usr}", ime, "\n", ims, "assistant\n"
-        var want : array<int64>
-        want |> push(ims)
-        want |> push_from(bpe_encode(raw, "system\n{CHAT_SYS}"))
-        want |> push(ime)
-        want |> push_from(bpe_encode(raw, "\n"))
-        want |> push(ims)
-        want |> push_from(bpe_encode(raw, "user\n{CHAT_USR}"))
-        want |> push(ime)
-        want |> push_from(bpe_encode(raw, "\n"))
-        want |> push(ims)
-        want |> push_from(bpe_encode(raw, "assistant\n"))
-        t |> success(ids_equal(chat_engine_prefill(m, CHAT_SYS, CHAT_USR), want), "qwen chatml prefill token-for-token")
-        // the marked render: a first turn's opening is its system turn, a later turn has none
-        var c = create_chat(m, CHAT_SYS)
-        add_user(c, CHAT_USR)
-        var marked <- render_turn_marked(m, c)
-        var inscope sys_toks <- bpe_encode(raw, "system\n{CHAT_SYS}")
-        var inscope nl_toks <- bpe_encode(raw, "\n")
-        t |> equal(marked.opening, 2l + long_length(sys_toks) + long_length(nl_toks), "the opening is the system turn, marker to newline")
-        t |> success(marked.opening > 0l && marked.opening < long_length(marked.toks), "and stops short of the user turn ({marked.opening} of {long_length(marked.toks)})")
-        t |> success(ids_equal(marked.toks, want), "the marked render's tokens are render_turn's")
-        c.first = false
-        var later <- render_turn_marked(m, c)
-        t |> equal(later.opening, 0l, "a later turn has no opening")
-        delete later
-        delete marked
-        delete c
-        delete raw
-        delete m
-    }
 }
 
 [test(description = "A template with parameter blocks sniffs to the Qwen3.6 xml_function tool format, and on Qwen3.5 its first turn, call replay, results, thinking replay and back-to-back user turns render the template exact text")]

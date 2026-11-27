@@ -19,6 +19,13 @@ require _resident_regions   // the regions cells' collections, REGIONS_RIG_CTX
 require _chat_cells   // chat_qwen25_cells: the uncached CPU form's chat cells
 require _facade_cells   // facade_model_cell: the q8 CPU form's facade cell
 require _kv_codec_cpu_cells   // kv_codec_step_down_cell: the uncached CPU form's step-down rule
+require _metal_matrix_cells   // the support matrix's qwen2 rows: the Metal forms' cells
+require _metal_prefill_cells   // the IQ4_NL mint's prefill parity: its Metal form's cells
+require _metal_decode_cells   // the per-32 batched decode, the poison arm's own load
+require _metal_format_census_cells   // the weight-format census rows of the IQ files
+require _kernel_coverage_cells   // the coverage zoo's and the codec census's qwen2 rows
+require _metal_blob_twin   // blob_twin: the own-load test's twins
+require dasllama/dasllama_bpe   // the 1.5B file's raw tokenizer: its ChatML render's truth
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -105,6 +112,8 @@ struct Qwen2Rows {
     codec : Qwen2CodecRows
     regions : Held
     q8_regions : Held
+    mx16 : MatrixFamilyKept   //! the matrix row on the f16-scale twin
+    mx32 : MatrixFamilyKept   //! ... and on the f32-scale twin
 }
 
 //! the 0.5B Q8_0 file's forms: the default (the feeds); one region (the handover), two regions (the rig, the paged and pooled
@@ -119,6 +128,7 @@ def private qwen2_forms(var r : Qwen2Rows) : array<ModelForm> {
     forms |> push_from(regions_rig_forms())
     forms |> push(cpu_cells_form())
     forms |> push(cpu_cells_form(uncached = true))
+    forms |> push_from(qwen2_metal_forms())
     let why = codec_env_why(KVDtype.q8_0)
     if (!empty(why)) {
         r.codec.h |> held_skip("the q8_0 mirror's cells and the tq4 ask: {why}")
@@ -133,14 +143,46 @@ def private qwen2_forms(var r : Qwen2Rows) : array<ModelForm> {
     return <- forms
 }
 
+//! the 0.5B Q8_0 file's Metal forms, each where the arm filter reaches
+//! a cell of it: the blob twin at the coverage zoo's context, the
+//! f32-scale twin, and on a das_metal build the portable CPU forms of
+//! both scales their CPU sides read
+def private qwen2_metal_forms() : array<ModelForm> {
+    var forms : array<ModelForm>
+    if (any_arm_on(["fam-qwen2", "coverage"])) {
+        forms |> push(metal_form(ctx = KERNEL_COVERAGE_CTX))
+    }
+    if (any_arm_on(["fam-qwen2"])) {
+        forms |> push(metal_form(ctx = MATRIX_CTX, wscale_f32 = true))
+        if (empty(metal_build_why())) {
+            forms |> push(matrix_cpu_form())
+            forms |> push(matrix_cpu_form(true))
+        }
+    }
+    return <- forms
+}
+
+//! the 0.5B Q8_0 file's Metal cells: the matrix row on each scale's
+//! twin, the coverage zoo's row on the f16-scale one
+def private qwen2_metal_cells(t : T?; var r : Qwen2Rows; var m : Model; form : ModelForm) {
+    let row = matrix_row_qwen25_0_5b()
+    if (form.wscale_f32) {
+        matrix_family_metal(t, m, form, row, r.mx32)
+        return
+    }
+    matrix_family_metal(t, m, form, row, r.mx16)
+    coverage_zoo_metal(t, m, form, cov_zoo_c8_qwen2())
+}
+
 //! one form's share of the q8_0 mirror's cells; the ask a kv-asked form's load took tells the tq4 ask from the q8_0 one,
 //! since the serving rule arms both at q8_0
-def private qwen2_codec_rows(t : T?; var c : Qwen2CodecRows; m : Model; form : ModelForm) {
+def private qwen2_codec_rows(t : T?; var c : Qwen2CodecRows; var m : Model; form : ModelForm) {
     if (form.on_gpu && gpu_kv_want_pin().value == KVDtype.tq4) {
         c.h |> held_equal(form.kv, KVDtype.q8_0, "the tq4 ask armed the q8_0 mirror by the serving rule")
         c.h |> held_equal(kv_codec_for(m.config, KVDtype.tq4), KVDtype.q8_0, "and a session's codec steps down the same way")
         c.down <- resident_feed_rows(m, form, 40l, CODEC_FED_STEPS)
         c.down_ran = true
+        coverage_vk_codec(t, m, form, cov_vk_codec_qwen2(KVDtype.tq4))
     } elif (form.on_gpu && form.host) {
         codec_up_rows(t, c.sides, m, KVDtype.q8_0)
     } elif (form.on_gpu) {
@@ -150,6 +192,7 @@ def private qwen2_codec_rows(t : T?; var c : Qwen2CodecRows; m : Model; form : M
         }
         codec_stored_device_rows(t, c.sides, m, KVDtype.q8_0)
         c.ran = true
+        coverage_vk_codec(t, m, form, cov_vk_codec_qwen2(KVDtype.q8_0))
     } elif (form.kv == KVDtype.q8_0 && (c.ran || c.sides.up_ran || c.down_ran)) {
         c.cpu |> reserve(length(c.feeds))
         for (n in c.feeds) {
@@ -194,7 +237,12 @@ def private qwen2_codec_within(t : T?; c : Qwen2CodecRows) {
 //! one form's collection of the 0.5B Q8_0 file's cells into `r`; the regions forms' and the per-op forms' own cells run on
 //! their load
 def private qwen2_rows(t : T?; var r : Qwen2Rows; var m : Model; form : ModelForm) {
-    if (form.uncached) {
+    if (form.on_metal) {
+        qwen2_metal_cells(t, r, m, form)
+    } elif (alone_pass_of(form, matrix_cpu_form()) || alone_pass_of(form, matrix_cpu_form(true))) {
+        matrix_family_cpu(t, m, form, matrix_row_qwen25_0_5b(), r.mx16)
+        matrix_family_cpu(t, m, form, matrix_row_qwen25_0_5b(), r.mx32)
+    } elif (form.uncached) {
         chat_qwen25_cells(t, m)
         kv_codec_step_down_cell(t, m)
     } elif (form.perop) {
@@ -225,7 +273,7 @@ def private qwen2_rows(t : T?; var r : Qwen2Rows; var m : Model; form : ModelFor
     }
 }
 
-[test(description = "On Qwen2.5-0.5B Q8_0 with the q/k/v bias folded into the device rope stage the resident chain holds the CPU chain's logits within 6 percent over one and two windows plus eight steps, on the CUDA driver with every position served; a q8_0 K/V mirror holds the CPU chain on q8_0 sessions within 10 percent, its steps over rows a CPU prefill wrote sit within 1.25 times the CPU codec chain's distance from the f16 rows, and its layer 0 stored rows match the CPU cache's within the byte bars; a tq4 ask arms the q8_0 mirror by the serving rule and holds the q8_0 bar; on the default codec and on a q8_0 mirror the regions rig's cells - a region handed over, interleaved, continued, batched, device-home, parked, guarded, reported, scheduled, paged and pooled, the pin and the gap and cap passes - read what each session reads alone, and the route-off load reports never attempted; on the q8 CPU form, on every box, `load_model_` owns the tokenizer and the model facade delegates to it; on the uncached CPU form the Hermes tool block, the call replay and results turn and the vocab-gated think suppress render, and a tq4 ask serves at q8_0 in a session, a pool and a chat while q8_0 asked stays q8_0; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+[test(description = "On Qwen2.5-0.5B Q8_0 with the q/k/v bias folded into the device rope stage the resident chain holds the CPU chain's logits within 6 percent over one and two windows plus eight steps, on the CUDA driver with every position served; a q8_0 K/V mirror holds the CPU chain on q8_0 sessions within 10 percent, its steps over rows a CPU prefill wrote sit within 1.25 times the CPU codec chain's distance from the f16 rows, and its layer 0 stored rows match the CPU cache's within the byte bars; a tq4 ask arms the q8_0 mirror by the serving rule and holds the q8_0 bar; on the default codec and on a q8_0 mirror the regions rig's cells - a region handed over, interleaved, continued, batched, device-home, parked, guarded, reported, scheduled, paged and pooled, the pin and the gap and cap passes - read what each session reads alone, and the route-off load reports never attempted; on the q8 CPU form, on every box, `load_model_` owns the tokenizer and the model facade delegates to it; on the uncached CPU form the Hermes tool block, the call replay and results turn and the vocab-gated think suppress render, and a tq4 ask serves at q8_0 in a session, a pool and a chat while q8_0 asked stays q8_0; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; on the Metal home's blob twin, one load a weight scale on a das_metal build, the support matrix's qwen2 row - the path cells (a q8_0-KV row on the f32 scale), the metal-overrides generate token for token the portable CPU form's - and the coverage zoo's qwen2 row on the f16 scale; on the Vulkan home the codec census's q8_0 and tq4 passes; each form loads once")]
 def test_gpu_resident_qwen2(t : T?) {
     return if (!family_on(t, "qwen2"))
     var r : Qwen2Rows
@@ -238,6 +286,8 @@ def test_gpu_resident_qwen2(t : T?) {
             qwen2_rows(t, r, m, form)
         }
     }
+    matrix_family_verdict(t, matrix_row_qwen25_0_5b(), r.mx16)
+    matrix_family_verdict(t, matrix_row_qwen25_0_5b(), r.mx32)
     if (ran) {
         dense_feeds_within(t, "Qwen2.5-0.5B-Instruct-Q8_0.gguf", r.feeds, QWEN2_LOGIT_BAR_REL)
         held_within(t, r.regions, "Qwen2.5-0.5B Q8_0, regions: ", false)
@@ -250,17 +300,77 @@ def test_gpu_resident_qwen2(t : T?) {
     delete forms
 }
 
+[test(description = "On Qwen2.5-0.5B Q8, forced-feed Metal decode stays within 4.0 of the CPU logits both on a fresh load and after one foreign Metal prefill that registers the shared bias regions plain first")]
+def test_metal_prefill_poison(t : T?) {
+    own_load("reloads the model: fresh loads move the weights epoch, the poison on them")
+    return if (!family_on(t, "qwen2"))
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return if (!arm_on(t, "arm14-poison"))
+        let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
+        return if (!jit_model_available(t, path))
+        let prior_wscale = get_wscale_f16()
+        let prior_backend = kernel_backend_seat()
+        set_wscale_f16(false)
+        pin_kernel_backend("portable")
+        var tr <- load_model_(path, QuantMode.q8)
+        tr.config.seq_len = min(tr.config.seq_len, DECODE_POISON_CTX)
+        var trg <- blob_twin(t, path, DECODE_POISON_CTX)
+        let clean = decode_poison_clean(t, tr, trg)
+        delete tr
+        delete trg
+        if (clean.served) {
+            var tr2 <- load_model_(path, QuantMode.q8)
+            tr2.config.seq_len = min(tr2.config.seq_len, DECODE_POISON_CTX)
+            var trg2 <- blob_twin(t, path, DECODE_POISON_CTX)
+            decode_poison_within(t, tr2, trg2, clean.maxd)
+            delete tr2
+            delete trg2
+        }
+        restore_kernel_backend(prior_backend)
+        set_wscale_f16(prior_wscale)
+    } else {
+        feint("das_metal is not built on this platform; nothing to compare\n")
+    }
+}
+
 let private FEED_CTX = 4096l   //! a feeds-only block's context: its prompts sit under two windows
 
-[test(description = "The Qwen2.5-0.5B IQ4_NL mint serves every dense plane off the per-32 iq4nl32 planes and holds the CPU chain's logits within 8 percent over one and two windows plus eight steps, on the CUDA driver over one window with every position served; each form loads once")]
+//! what the IQ4_NL mint's Metal form keeps for its portable CPU form
+//! and the compares after the block
+struct Iq4nlKept {
+    census : CensusKept
+    prefill : PrefillKept
+}
+
+//! the IQ4_NL mint's Metal cells on its blob twin: the census row, the
+//! per-32 batched decode, then the prefill parity, whose cells shut
+//! the drivers down
+def private iq4nl_metal_cells(t : T?; var m : Model; form : ModelForm; var k : Iq4nlKept) {
+    format_census_metal(t, m, form, format_census_iq4nl32(), k.census)
+    decode_per32_metal(t, m, form, decode_per32_iq4_nl())
+    prefill_parity_metal(t, m, form, prefill_qwen25_iq4nl(), k.prefill)
+}
+
+[test(description = "The Qwen2.5-0.5B IQ4_NL mint serves every dense plane off the per-32 iq4nl32 planes and holds the CPU chain's logits within 8 percent over one and two windows plus eight steps, on the CUDA driver over one window with every position served; on the Metal home's blob twin, one load on a das_metal build: every site read in its own per-32 format, the Metal window and six steps within the census bar of the portable CPU chain's replay, the batched driver at 2 to 12 rows token for token the single-row step, and the Metal prefill parity cells against their portable CPU controls; each form loads once")]
 def test_gpu_resident_qwen2_iq4nl32(t : T?) {
     return if (!family_on(t, "qwen2"))
     var c : DenseFeeds
     dense_feeds(c, gpu_want_cuda() ? [40l] : [40l, TWO_WINDOWS])
+    var k : Iq4nlKept
+    var forms <- [device_form(), metal_form(ctx = PREFILL_QWEN25_IQ4NL_CTX)]
+    if (empty(metal_build_why())) {
+        forms |> push(prefill_cpu_form())
+    }
     var ran = false
     with_cuda_mmq_winners() {
-        ran = with_cpu_and_gpu_model(t, "llm", "Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf", FEED_CTX, [device_form()]) $(m, form) {
-            if (dense_feeds_rows(c, m, form, "qwen2") == MainSide.device) {
+        ran = with_cpu_and_gpu_model(t, "llm", "Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf", FEED_CTX,
+                forms) $(var m, form) {
+            if (form.on_metal) {
+                iq4nl_metal_cells(t, m, form, k)
+            } elif (alone_pass_of(form, prefill_cpu_form())) {
+                format_census_cpu(t, m, form, format_census_iq4nl32(), k.census)
+                prefill_parity_cpu(t, m, form, k.prefill)
+            } elif (dense_feeds_rows(c, m, form, "qwen2") == MainSide.device) {
                 bias_held(c, m)
                 if (!c.cuda) {
                     dense_planes_tagged(t, m, path_join(models_dir(), "Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf"), KqFmt.iq4nl32)
@@ -268,10 +378,13 @@ def test_gpu_resident_qwen2_iq4nl32(t : T?) {
             }
         }
     }
+    format_census_verdict(t, format_census_iq4nl32(), k.census)
+    prefill_parity_verdict(t, k.prefill)
     if (ran) {
         dense_feeds_within(t, "Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf", c, IQ4NL32_BAR_REL)
     }
     delete c
+    delete forms
 }
 
 // The per-op rails under a block-codec session on a grid-format carrier (Qwen2.5-1.5B-Instruct IQ3_XS, `DASLLAMA_GPU=1`, the
@@ -285,7 +398,7 @@ def test_gpu_resident_qwen2_iq4nl32(t : T?) {
 //! the CPU's q8_0 rows
 let private QWEN25_IQ_Q8_BARS = PeropBars(rows = 0.05, dist_rel = 1.0)
 
-[test(description = "On the per-op rails with Qwen2.5-1.5B IQ3_XS, a tq4 ask served at q8_0 by the serving rule and a q8_0 session each keep layer 0's cache bytes within 5 percent of the CPU chain's and the device no further from the f16 chain than the CPU codec chain; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+[test(description = "On the per-op rails with Qwen2.5-1.5B IQ3_XS, a tq4 ask served at q8_0 by the serving rule and a q8_0 session each keep layer 0's cache bytes within 5 percent of the CPU chain's and the device no further from the f16 chain than the CPU codec chain; on the Metal home's blob twin, IQ3_S served as the lut on both loads on a das_metal build, every site read as iq3s4 beside IQ3_XXS, Q4_K and the tied Q6_K, the Metal window and six steps within the census bar of the portable CPU chain's replay; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
 def test_gpu_perop_iq(t : T?) {
     return if (!family_on(t, "qwen2"))
     var run = PeropRun(cells <- [PeropCell(n = 40l, kv = KVDtype.tq4, bars = QWEN25_IQ_Q8_BARS),
@@ -295,9 +408,106 @@ def test_gpu_perop_iq(t : T?) {
     if (!empty(why)) {
         skip_cell(t, "Qwen2.5-1.5B-Instruct-IQ3_XS.gguf: the per-op forms: {why}")
     }
-    with_cpu_and_gpu_model(t, "llm", "Qwen2.5-1.5B-Instruct-IQ3_XS.gguf", FEED_CTX, forms, false, parity = true) $(var m, _form) {
-        perop_next(t, run, m)
+    let row = format_census_iq3s4_dense()
+    forms |> push(metal_form(ctx = CENSUS_CELLS_CTX, iq3s_serve = row.iq3s))
+    if (empty(metal_build_why())) {
+        forms |> push(census_cpu_form(row))
     }
+    var kept : CensusKept
+    with_cpu_and_gpu_model(t, "llm", "Qwen2.5-1.5B-Instruct-IQ3_XS.gguf", FEED_CTX, forms, false,
+            parity = true) $(var m, form) {
+        if (form.on_metal) {
+            format_census_metal(t, m, form, row, kept)
+        } elif (alone_pass_of(form, census_cpu_form(row))) {
+            format_census_cpu(t, m, form, row, kept)
+        } elif (form.on_gpu) {
+            perop_next(t, run, m)
+        }
+    }
+    format_census_verdict(t, row, kept)
     delete run
+    delete forms
+}
+
+//! what the 1.5B Q8_0 file's Metal form keeps for its portable CPU form
+//! and the compare after the block
+struct Qwen25_15bKept {
+    matrix : MatrixFamilyKept
+}
+
+//! the 1.5B Q8_0 file's ChatML render on its uncached CPU form, against
+//! the raw tokenizer backend's hand-built sequence; the marked render's
+//! opening on a first turn and none on a later one
+def private chat_qwen25_15b_cell(t : T?; var m : Model) {
+    let path = path_join(models_dir(), "Qwen2.5-1.5B-Instruct-Q8_0.gguf")
+    unsafe {   //! the cell reads the block's model by reference
+        t |> run("Qwen2.5 (BPE) renders the ChatML prefill") @capture(& m)(t : T ?) {
+            with_ctx_cut(m, CHAT_RENDER_CTX) {
+                var raw <- load_bpe_tokenizer_gguf(path)
+                let ims = special_id(raw, "<|im_start|>")
+                let ime = special_id(raw, "<|im_end|>")
+                var want : array<int64>
+                want |> push(ims)
+                want |> push_from(bpe_encode(raw, "system\n{CHAT_SYS}"))
+                want |> push(ime)
+                want |> push_from(bpe_encode(raw, "\n"))
+                want |> push(ims)
+                want |> push_from(bpe_encode(raw, "user\n{CHAT_USR}"))
+                want |> push(ime)
+                want |> push_from(bpe_encode(raw, "\n"))
+                want |> push(ims)
+                want |> push_from(bpe_encode(raw, "assistant\n"))
+                t |> success(ids_equal(chat_engine_prefill(m, CHAT_SYS, CHAT_USR), want),
+                    "qwen chatml prefill token-for-token")
+                var c = create_chat(m, CHAT_SYS)
+                add_user(c, CHAT_USR)
+                var marked <- render_turn_marked(m, c)
+                var inscope sys_toks <- bpe_encode(raw, "system\n{CHAT_SYS}")
+                var inscope nl_toks <- bpe_encode(raw, "\n")
+                t |> equal(marked.opening, 2l + long_length(sys_toks) + long_length(nl_toks),
+                    "the opening is the system turn, marker to newline")
+                let n = long_length(marked.toks)
+                t |> success(marked.opening > 0l && marked.opening < n,
+                    "and stops short of the user turn ({marked.opening} of {n})")
+                t |> success(ids_equal(marked.toks, want),
+                    "the marked render's tokens are render_turn's")
+                c.first = false
+                var later <- render_turn_marked(m, c)
+                t |> equal(later.opening, 0l, "a later turn has no opening")
+                delete later
+                delete marked
+                delete c
+                delete raw
+                delete want
+            }
+        }
+    }
+}
+
+let private CHAT_RENDER_CTX = 512l   //! the render cell's sessions: prompts only
+
+[test(description = "On Qwen2.5-1.5B Q8_0, on the uncached CPU form on every box, the prefill equals the hand-built ChatML sequence token for token, and the marked render reports the system turn as the first turn opening and none on a later turn; on the Metal home's blob twin, one load on a das_metal build, the support matrix's hs-128 bias row - the path cell, the metal-overrides generate token for token the portable CPU form's; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+def test_gpu_resident_qwen25_15b(t : T?) {
+    return if (!family_on(t, "qwen2"))
+    let row = matrix_row_qwen25_1_5b()
+    var forms <- [cpu_cells_form(uncached = true)]
+    if (any_arm_on(["fam-qwen2"])) {
+        forms |> push(metal_form(ctx = MATRIX_CTX))
+        if (empty(metal_build_why())) {
+            forms |> push(cpu_cells_form(backend = "portable"))
+        }
+    }
+    var k : Qwen25_15bKept
+    with_cpu_and_gpu_model(t, "llm", "Qwen2.5-1.5B-Instruct-Q8_0.gguf", PARITY_ROW_CTX, forms,
+            parity = true) $(var m, form) {
+        if (form.on_metal) {
+            matrix_family_metal(t, m, form, row, k.matrix)
+        } elif (alone_pass_of(form, cpu_cells_form(backend = "portable"))) {
+            matrix_family_cpu(t, m, form, row, k.matrix)
+        } elif (form.uncached) {
+            chat_qwen25_15b_cell(t, m)
+        }
+    }
+    matrix_family_verdict(t, row, k.matrix)
     delete forms
 }

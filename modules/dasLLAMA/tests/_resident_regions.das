@@ -813,14 +813,17 @@ def regions_steps_cells(t : T?; var m : Model; bar : LogitsBar) {
 }
 
 //! the split cell's collection on a two-region load: both prompts run longer than RD_UNSPLIT_POS, so the batched steps take the
-//! N-row command's split attention form - the arrival counters a row apart, the last piece of each row combining
+//! N-row command's split attention form - the arrival counters a row apart, the last piece of each row combining; the CUDA
+//! home's far row, the one-row step's tile form past its key count, is pinned off: its own cell holds it (`cuda_far_row_rows`)
 def regions_split_rows(var h : Held; tr : Model; bar : LogitsBar = LogitsBar.bit_exact) {
     var pa <- resident_prompt(PF_WINDOW_ROWS + 8l)
     var pb <- ramp_ids(PF_WINDOW_ROWS + 25l, 0l, 3000l, 91l, 6000l)
     static_if (typeinfo builtin_module_exists(vulkan)) {
         h |> held_fact(long_length(pa) > RD_UNSPLIT_POS && long_length(pb) > RD_UNSPLIT_POS, "both prompts run past the unsplit position ({RD_UNSPLIT_POS})")
     }
-    batched_steps_body(h, tr, pa, pb, bar)
+    with_cuda_far_row_off() {   //! each session alone on the row form the split command is the N-row form of
+        batched_steps_body(h, tr, pa, pb, bar)
+    }
     delete pa
     delete pb
 }

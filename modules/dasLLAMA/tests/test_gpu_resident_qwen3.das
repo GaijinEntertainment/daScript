@@ -22,6 +22,14 @@ require ?das_metal dasllama/dasllama_metal_prefill   // the prefill mirror's pin
 require dasllama/dasllama_gpu_tier   // reset_gpu_cpu_passes: the passes the by-design cells leave
 require ?vulkan dasllama/dasllama_vulkan_dflash   // nolint:STYLE030,LINT019 - the Vulkan arm registers at init
 require ?cuda dasllama/dasllama_cuda_dflash   // nolint:STYLE030,LINT019 - the CUDA arm registers at init
+require ?vulkan dasllama/dasllama_vulkan_common   // the box's coopmat mode: the sweep's forms
+require dasllama/dasllama_convert   // quantize_q8_k_into_ptr: the layout cell's GEMV
+require _kquant_cells   // dequant_plane_prefix, read_prefix: the K-quant layout cell's file truth
+require _compares   // check, the bars: the K-quant layout cell's compares
+require _metal_matrix_cells   // the support matrix's qwen3 rows: the Metal forms' cells
+require _metal_prefill_cells   // the 4B Q4_K_M file's prefill parity on its Metal form
+require _fused_decode_cells   // the fused decode's K-quant rows on the 4B files' CPU forms
+require _kernel_coverage_cells   // the coverage zoo's qwen3 row, the coopmat mode sweep's
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -128,6 +136,8 @@ struct Qwen3Rows {
     codec : Qwen3CodecRows
     tq4_regions : Held
     perop : PeropRun
+    matrix : MatrixFamilyKept   //! the support matrix's row, its twin's side
+    sweep_legs : int   //! the coopmat sweep's forms the body has seen
 }
 
 //! the per-op cells on Qwen3-0.6B, a form each: a tq4 session above the device prefill's floor and under it, a q8_0 session
@@ -155,6 +165,15 @@ def private qwen3_forms(var r : Qwen3Rows) : array<ModelForm> {
         forms |> push_from(perop_forms(r.perop))
     }
     forms |> push(cpu_cells_form(uncached = true))
+    if (any_arm_on(["fam-qwen3", "coverage"])) {
+        forms |> push(metal_form(ctx = KERNEL_COVERAGE_CTX))
+    }
+    if (any_arm_on(["fam-qwen3"]) && empty(metal_build_why())) {
+        forms |> push(cpu_cells_form(backend = "portable"))
+    }
+    if (!cuda) {
+        sweep_forms(forms, true)
+    }
     let why = codec_env_why(KVDtype.tq4)
     if (!empty(why)) {
         r.codec.h |> held_skip("the tq4 mirror's cells: {why}")
@@ -167,6 +186,35 @@ def private qwen3_forms(var r : Qwen3Rows) : array<ModelForm> {
     forms |> push_from(regions_rig_forms(KVDtype.tq4))
     return <- forms
 }
+
+//! The coverage census's coopmat mode sweep forms of a vehicle, on the
+//! Vulkan home where the arm reaches them and the device opens: one
+//! census form (`vk_census_form`) a mode the driver's prepare reads at
+//! load - the box's, mm and sdot4, then where `twin` the f16 and int8
+//! twin legs
+def private sweep_forms(var forms : array<ModelForm>; twin : bool) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return if (!any_arm_on(["coverage-vk"]) || !vk_moe_init())
+        var inscope modes <- [g_gpu.coopmat_mode, COOPMAT_MM, COOPMAT_SDOT4]
+        if (twin) {
+            modes |> push(COOPMAT_F16)
+            modes |> push(COOPMAT_INT8)
+        }
+        forms |> reserve(length(forms) + length(modes))
+        for (mode in modes) {
+            forms |> push(vk_census_form(mode))
+        }
+    }
+}
+
+//! the sweep vehicle `i`'s row on its next mode form, the first three
+//! legs on the common modes, the rest the twin legs
+def private sweep_cell(t : T?; var legs : int&; var m : Model; form : ModelForm; i : int) {
+    coverage_vk_model(t, m, form, cov_vk_sweep_row(i, legs >= SWEEP_COMMON_LEGS))
+    legs++
+}
+
+let private SWEEP_COMMON_LEGS = 3   //! the box's mode, mm and sdot4
 
 //! one form's share of the tq4 codec cells: the device's rows on the tq4 forms, the CPU form's at tq4 and f16 on its tq4 run
 def private qwen3_codec_rows(t : T?; var c : Qwen3CodecRows; m : Model; form : ModelForm) {
@@ -230,7 +278,14 @@ def private qwen3_codec_within(t : T?; c : Qwen3CodecRows) {
 //! one form's collection of the Qwen3-0.6B file's cells into `r`; the per-op forms', the regions forms' and the fuse bisect's
 //! own cells run on their load
 def private qwen3_rows(t : T?; var r : Qwen3Rows; var m : Model; form : ModelForm) {
-    if (form.uncached) {
+    if (form.on_metal) {
+        matrix_family_metal(t, m, form, matrix_row_qwen3_0_6b(), r.matrix)
+        coverage_zoo_metal(t, m, form, cov_zoo_c7_qwen3())
+    } elif (alone_pass_of(form, cpu_cells_form(backend = "portable"))) {
+        matrix_family_cpu(t, m, form, matrix_row_qwen3_0_6b(), r.matrix)
+    } elif (form.coopmat >= 0) {
+        sweep_cell(t, r.sweep_legs, m, form, 0)
+    } elif (form.uncached) {
         chat_qwen3_cells(t, m)
         kv_codec_keeps_tq4_cell(t, m)
     } elif (form.perop) {
@@ -272,7 +327,7 @@ def private qwen3_rows(t : T?; var r : Qwen3Rows; var m : Model; form : ModelFor
     }
 }
 
-[test(description = "On Qwen3-0.6B Q8_0 over two mirror regions two sessions stepped interleaved, past the wide position on the wide twin, batched first, batched at one window and past the unsplit position each read what that session reads alone, and the window's fused q/k norm, rope and store pass reads within the split bar of the split pair; every DASLLAMA_VK_FUSE_BISECT bit serves one-row logits within the split bar of the unsplit load and the split-pair rows batch bit for bit; a tq4 K/V mirror sits within 1.25 times the CPU tq4 chain's distance from the f16 rows over one and two windows and over rows the CPU prefill wrote, its layer 0 stored rows match the CPU cache's within the byte bars, and the rig's cells - interleaved, continued, batched, device-home, parked, guarded, reported, scheduled, the pin and the gap and cap passes - hold the tq4 bars; on the per-op rails tq4 and q8_0 sessions keep layer 0's cache bytes within 5 percent of the CPU chain's and the device no further from f16 than the CPU codec chain, and the route-off load reports never attempted; on the CUDA driver the fused CuQknRopeKv pass keeps forced-feed logits within 6 percent of the CPU chain over one and two windows; on the uncached CPU form, on every box, the thinking-off generation prompt and the preserve_thinking replays render, and bias-free Qwen3-0.6B keeps a tq4 session at tq4; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+[test(description = "On Qwen3-0.6B Q8_0 over two mirror regions two sessions stepped interleaved, past the wide position on the wide twin, batched first, batched at one window and past the unsplit position each read what that session reads alone, and the window's fused q/k norm, rope and store pass reads within the split bar of the split pair; every DASLLAMA_VK_FUSE_BISECT bit serves one-row logits within the split bar of the unsplit load and the split-pair rows batch bit for bit; a tq4 K/V mirror sits within 1.25 times the CPU tq4 chain's distance from the f16 rows over one and two windows and over rows the CPU prefill wrote, its layer 0 stored rows match the CPU cache's within the byte bars, and the rig's cells - interleaved, continued, batched, device-home, parked, guarded, reported, scheduled, the pin and the gap and cap passes - hold the tq4 bars; on the per-op rails tq4 and q8_0 sessions keep layer 0's cache bytes within 5 percent of the CPU chain's and the device no further from f16 than the CPU codec chain, and the route-off load reports never attempted; on the CUDA driver the fused CuQknRopeKv pass keeps forced-feed logits within 6 percent of the CPU chain over one and two windows; on the uncached CPU form, on every box, the thinking-off generation prompt and the preserve_thinking replays render, and bias-free Qwen3-0.6B keeps a tq4 session at tq4; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; on the Metal home's blob twin, one load on a das_metal build, the support matrix's qwen3 row - the path cells on f16 and tq4 K/V, the metal-overrides generate token for token the portable CPU form's, the continuation within 4.0 - and the coverage zoo's qwen3 row; on the Vulkan home the coverage census's coopmat sweep, a load a mode; each form loads once")]
 def test_gpu_resident_qwen3(t : T?) {
     return if (!family_on(t, "qwen3"))
     var r : Qwen3Rows
@@ -290,6 +345,7 @@ def test_gpu_resident_qwen3(t : T?) {
             qwen3_rows(t, r, m, form)
         }
     }
+    matrix_family_verdict(t, matrix_row_qwen3_0_6b(), r.matrix)
     if (ran) {
         qwen3_cuda_within(t, "Qwen3-0.6B-Q8_0.gguf", r.feeds)
         held_within(t, r.regions, "Qwen3-0.6B Q8_0, two regions: ", false)
@@ -497,4 +553,155 @@ def private qwen3_4b_drafter_cpu_cells(t : T?; var m : Model) {
 def private qwen3_4b_drafter_discrete_cells(t : T?; m : Model) {
     discrete_drafter_cell(t, m, "Qwen3-4B's resident trunk on the serving discrete home, the Q8_0 and Q4_K_M DFlash drafters: each greedy walk on the device arm is the plain walk's on the same device, every pass on the device's top-k, the host's walk and selector drafting the same ids",
         "", [QWEN3_4B_DRAFTER_FILE, QWEN3_4B_DRAFTER_K4_FILE], "Qwen3-4B discrete", false, true, false)
+}
+
+//! what the Qwen3-4B-Instruct-2507 Q4_K_M file's Metal form keeps for
+//! its portable CPU form and the compares after the block
+struct Qwen3KqKept {
+    matrix : MatrixFamilyKept
+    prefill : PrefillKept
+    sweep_legs : int
+}
+
+//! `mm_b_kq` over disk-order planes - the portable batch kernel - bit
+//! for bit the per-position GEMV (`mm_at_kq_pre`): blk.0.attn_q's
+//! first 64 rows over four positions
+def private mm_b_kq_disk_cell(t : T?; tr : Model) {
+    let n = tr.config.dim
+    let d = 64l
+    let npos = 4l
+    let fmt = tr.wq_fmt[0]
+    let woff = tr.wq_offs[0]
+    var inscope x <- [for (k in range64(npos * n)); float((k * 37l) % 255l - 127l) * 0.01]
+    var s <- create_session(tr, mirror_kv_dtype())
+    forward_prefill_alloc(tr, s, npos, 0l)
+    var inscope y <- nan_plane(int(npos * d))
+    mm_b_kq(s, y, tr, fmt, woff, x, n, d, npos)
+    delete s
+    var inscope want <- nan_plane(int(npos * d))
+    var inscope xq : array<int8>
+    var inscope xs : array<float>
+    var inscope xbs : array<int>
+    xq |> resize(n)
+    xs |> resize(n / 256l)
+    xbs |> resize(n / 16l)
+    for (p in range64(npos)) {
+        unsafe {
+            quantize_q8_k_into_ptr(addr<float const?>(x[p * n]), n, addr(xq[0]), addr(xs[0]),
+                addr(xbs[0]), 0l, 0l, 0l)
+        }
+        mm_at_kq_pre(want, tr, fmt, woff, xq, xs, xbs, n, d, p * d)
+    }
+    check(t, "{fmt} attn_q rows through mm_b_kq on disk-order planes against the per-position GEMV",
+        y, want, BAR_EXACT, Shape(row_width = int(d)))
+}
+
+//! The K-quant native load's cursor placement on its portable-pinned
+//! CPU form `tr` (the planes disk-order): plane-dequant prefixes
+//! against the file dequant - a deep k4 plane within f16-pair
+//! rounding, the tied k6 classifier bit for bit - and `mm_b_kq`
+//! against the per-position GEMV
+def private kq_load_layout_cell(t : T?; var tr : Model; path : string) {
+    unsafe {   //! the cell reads the block's model by reference
+        let title = "kquant_native load places tensors at their cursor offsets (Qwen3-4B Q4_K_M)"
+        t |> run(title) @capture(& tr)(t : T ?) {
+            t |> success(!tr.kq_repacked, "portable-pinned load keeps the kq planes disk-order")
+            t |> success(tr.kquant_native, "load detected native K-quant tensors")
+            t |> success(cls_kq(tr), "tied Q6_K classifier takes the kq plane path")
+            t |> success(tr.wq_fmt[0] == KqFmt.k4, "blk.0.attn_q tagged k4")
+            t |> success(tr.wv_fmt[0] == KqFmt.k6, "blk.0.attn_v tagged k6")
+            let n = 262144l
+            var have : array<float>
+            have |> resize(n)
+            let l = tr.config.n_layers - 1l   //! the drift of every earlier tensor
+            dequant_plane_prefix(tr, tr.wq_fmt[l], tr.wq_offs[l], n, have)
+            var gt = 0
+            var fdq <- read_prefix(path, "blk.{l}.attn_q.weight", n, gt)
+            t |> success(rel_l2(have, fdq) < 1.0e-3,
+                "deep-layer k4 plane matches the file dequant (f16-pair rounding only)")
+            delete fdq
+            var fdq6 <- read_prefix(path, "token_embd.weight", n, gt)
+            dequant_plane_prefix(tr, tr.emb_fmt, tr.wcls_off, n, have)
+            check(t, "k6 classifier plane against the file dequant", have, fdq6, BAR_EXACT,
+                FLAT_SHAPE)
+            delete fdq6
+            delete have
+            mm_b_kq_disk_cell(t, tr)
+        }
+    }
+}
+
+let private QWEN3_4B_KQ = "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+
+//! the 4B Q4_K_M file's portable CPU form with the native K-quant
+//! planes on: no kq-capable backend repacks them, so they stay
+//! disk-order
+def private kq_layout_form() : ModelForm
+    => cpu_cells_form(backend = "portable", kq_native = KqNative.on)
+
+//! the 4B files' auto-backend CPU form with the native K-quant planes
+//! on, the kq rows cores' repack the fused rows ask
+def private kq_repack_form() : ModelForm => cpu_cells_form(kq_native = KqNative.on)
+
+//! the 4B Q4_K_M file's forms: on a das_metal build the blob twin and
+//! the portable CPU form its CPU sides read where the arm filter
+//! reaches a Metal cell, the layout cell's and the fused rows' CPU
+//! forms on every box, and on the Vulkan home the coverage sweep's
+def private qwen3_kq_forms() : array<ModelForm> {
+    var forms <- [kq_layout_form(), kq_repack_form()]
+    if (any_arm_on(["fam-qwen3", "kq-tail"])) {
+        forms |> push(metal_form(ctx = PREFILL_QWEN3_4B_CTX))
+        if (empty(metal_build_why())) {
+            forms |> push(prefill_cpu_form())
+        }
+    }
+    if (!gpu_want_cuda()) {
+        sweep_forms(forms, false)
+    }
+    return <- forms
+}
+
+//! one form's cells of the 4B Q4_K_M file: on the twin the matrix row,
+//! then the prefill parity, whose cells shut the drivers down
+def private qwen3_kq_rows(t : T?; var k : Qwen3KqKept; var m : Model; form : ModelForm) {
+    if (form.on_metal) {
+        matrix_family_metal(t, m, form, matrix_row_qwen3_4b_k4(), k.matrix)
+        prefill_parity_metal(t, m, form, prefill_qwen3_4b(), k.prefill)
+    } elif (alone_pass_of(form, prefill_cpu_form())) {
+        matrix_family_cpu(t, m, form, matrix_row_qwen3_4b_k4(), k.matrix)
+        prefill_parity_cpu(t, m, form, k.prefill)
+    } elif (alone_pass_of(form, kq_layout_form())) {
+        kq_load_layout_cell(t, m, path_join(models_dir(), QWEN3_4B_KQ))
+    } elif (alone_pass_of(form, kq_repack_form())) {
+        fused_decode_row_cell(t, m, form, fused_row_qwen3_4b_q4km())
+    } elif (form.coopmat >= 0) {
+        sweep_cell(t, k.sweep_legs, m, form, 2)
+    }
+}
+
+[test(description = "On Qwen3-4B-Instruct-2507 Q4_K_M: on its portable-pinned K-quant native CPU form, on every box, each tagged tensor sits at its cursor offset - a deep k4 plane-dequant prefix within f16-pair rounding of the file dequant, the tied k6 classifier bit for bit - and `mm_b_kq` matches the per-position GEMV; on its auto-backend K-quant native CPU form, repacked for the kq rows cores, the fused decode chains with Q8_K activations match the per-op kq path's greedy ids and final logits bit for bit; on the Metal home's blob twin, one load on a das_metal build, the support matrix's k4/k6 row - the path cell, the metal-overrides generate token for token the portable CPU form's - and the Metal prefill parity cells against their portable CPU controls; on the Vulkan home the coverage census's coopmat sweep, a load a mode; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+def test_gpu_resident_qwen3_4b_q4km(t : T?) {
+    return if (!family_on(t, "qwen3"))
+    var k : Qwen3KqKept
+    var forms <- qwen3_kq_forms()
+    with_cpu_and_gpu_model(t, "llm", "Qwen3-4B-Instruct-2507-Q4_K_M.gguf", PARITY_ROW_CTX, forms,
+            false, parity = true) $(var m, form) {
+        qwen3_kq_rows(t, k, m, form)
+    }
+    matrix_family_verdict(t, matrix_row_qwen3_4b_k4(), k.matrix)
+    prefill_parity_verdict(t, k.prefill)
+    delete forms
+}
+
+[test(description = "On Qwen3-4B-Instruct-2507 Q5_K_M, on its auto-backend K-quant native CPU form repacked for the kq rows cores, the fused decode chains with Q8_K activations over k5 planes and the k6 ffn_down match the per-op kq path's greedy ids and final logits bit for bit; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+def test_gpu_resident_qwen3_4b_q5km(t : T?) {
+    return if (!family_on(t, "qwen3"))
+    var forms <- [kq_repack_form()]
+    with_cpu_and_gpu_model(t, "llm", "Qwen3-4B-Instruct-2507-Q5_K_M.gguf", PARITY_ROW_CTX, forms,
+            false, parity = true) $(var m, form) {
+        if (alone_pass_of(form, kq_repack_form())) {
+            fused_decode_row_cell(t, m, form, fused_row_qwen3_4b_q5km())
+        }
+    }
+    delete forms
 }

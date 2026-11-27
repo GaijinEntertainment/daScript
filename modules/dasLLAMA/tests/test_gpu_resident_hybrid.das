@@ -16,10 +16,14 @@ def private allow_cpu_prefill_intent() {
 
 //! every test pins the window before its first load: the plan and the window chain read it, and
 //! an [init] pin would reach every batch-mate's context too
-def private pin_window_rows() {
+//! the pin it replaced answered
+def private pin_window_rows() : int64 {
+    let was = pf_window_rows_pin()
     set_pf_window_rows_pin(HYBRID_WINDOW)
+    return was
 }
 require daslib/jobque_boost
+require daslib/defer   // defer: each test puts back the window pin it found
 require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_sampling
 require dasllama/dasllama_gpu_tier   // reset_gpu_cpu_passes: the passes the by-design cells leave
@@ -47,6 +51,12 @@ require _batch_decode_cells   // batch_decode_hybrid_cells: the Q8_0 file's port
 require _kquant_cells   // kq_nv4_load_layout_cell: the NVFP4 file's K-quant-native portable form
 require _gpu_tier_armed   // gpu_tier_why: the -MTP- file's plain scheduler cell runs on its device form where the tier arms
 require _metal_batched_cells   // metal_qwen35_cells, metal_qwen35_mtp_cells: the Q8_0 and -MTP- files' Metal forms' cells
+require _metal_matrix_cells   // the support matrix's hybrid row on the Q8_0 file's Metal form
+require _metal_decode_cells   // the mixed sites' batched decode on the q8out file's Metal form
+require _metal_mtp_cells   // the Metal MTP rail's arms on the -MTP- files' served images
+require _kernel_coverage_cells   // the coverage zoo's and the Vulkan census's qwen35 rows
+require _compares   // argmax_of: the parity dump's rows decoded
+require ../harness/_parity_dump.das   // the parity dump round trip on the -MTP- file's forms
 
 // The whole-model resident driver on the deltanet hybrid Qwen3.5-0.8B under DASLLAMA_GPU=1, on the Vulkan home or under
 // DASLLAMA_CUDA=1 on the CUDA home: the resident window chain prefills the prompt (the recurrent layers through the conv +
@@ -188,6 +198,11 @@ struct HybridRows {
 
 //! the feeds a hybrid file runs on the armed home over the file's window: `vulkan` there, `cuda` under DASLLAMA_CUDA=1; a
 //! two-window length past the window the K-quant feeds gate on is held as a skip where the prompt window is not the file's
+//! why a K-quant carrier's f32 form, the device's same-or-better
+//! witness, is left out: the CUDA home is asked; "" where it is not
+def private f32_witness_why() : string
+    => vulkan_home_why("the f32 chain's witness is the Vulkan home's cell")
+
 def private hybrid_feeds(var r : HybridRows; planes : HybridPlanes; vulkan, cuda : array<int64>) {
     r.planes = planes
     r.feeds.cuda = gpu_want_cuda()
@@ -356,6 +371,7 @@ struct HybridQ8Rows {
     chain : Held
     regions : Held
     home_pin : Held
+    matrix : MatrixHybridKept   //! the support matrix's row, its twin's side
 }
 
 //! the segmented window's cells (`recurrent_segments_cell`) on a two-region load on the SEG_WINDOW-row window as their own cell
@@ -370,15 +386,20 @@ def private recurrent_segments_on(t : T?; var m : Model; title : string) {
 //! one form's collection of the Q8_0 file's cells into `r`; the one- and two-region forms' own cells run on their load
 def private hybrid_q8_rows(t : T?; var r : HybridQ8Rows; var m : Model; form : ModelForm) {
     if (form.on_metal) {
+        matrix_hybrid_metal(t, m, form, matrix_hybrid_qwen35_0_8b(), r.matrix)
+        coverage_zoo_metal(t, m, form, cov_zoo_c9_qwen35())
         metal_qwen35_cells(t, m)
     } elif (form.drops_device) {
         device_drop_cell(t, form) {
             scheduler_batching_deltanet_gpu_cell(t, m)
         }
+    } elif (vk_census_form_is(form)) {
+        coverage_vk_model(t, m, form, cov_vk_c56_qwen35())
     } elif (!form.on_gpu && form.backend == "portable") {
         with_ctx_cut(m, HYBRID_BATCH_CTX) {
             batch_decode_hybrid_cells(t, m)
         }
+        matrix_hybrid_cpu(t, m, form, matrix_hybrid_qwen35_0_8b(), r.matrix)
     } elif (form.pf_window_rows == SEG_WINDOW) {
         recurrent_segments_on(t, m, "On the Qwen3.5-0.8B hybrid segmented windows - a tail under the conv taps, tails past one window - hold the split bar of solo windows, and checkpoint stops captured inside one call adopt and continue at their rows")
     } elif (form.on_gpu && form.regions == 1l) {
@@ -435,16 +456,22 @@ def private hybrid_q8_forms(var r : HybridQ8Rows) : array<ModelForm> {
         device_form(regions = 2l, ctx = REGIONS_RIG_CTX, pf_window_rows = SEG_WINDOW),
         device_form(host = true, drops_device = true)]
     codec_forms(forms, r.feed.carrier, [KVDtype.q8_0, KVDtype.tq4], device_form()) $(kv) => "the {kv} mirror under the gated attention"
+    if (vk_census_asked()) {
+        forms |> push(vk_census_form())
+    }
     forms |> push(cpu_cells_form())
     forms |> push(cpu_cells_form(uncached = true))
     forms |> push(cpu_cells_form(backend = "portable"))
-    forms |> push(metal_form(ctx = METAL_DELTANET_CTX))
+    forms |> push(metal_form(ctx = KERNEL_COVERAGE_CTX))   //! the zoo's: the other cells cut down
     return <- forms
 }
 
-[test(description = "On Qwen3.5-0.8B Q8_0 the resident driver holds the CPU chain within the deltanet bar on forced feeds over one window, two, one past the window and a two-token prompt on the Vulkan home and over one window and two with every position served on the CUDA home; under the gated attention a q8_0 K/V mirror holds the CPU q8_0 chain within 6 percent and a tq4 mirror sits no further than 1.15 times the CPU tq4 chain's distance from the f16 rows; at one region the greedy chain's steps reproduce the plain steps bit for bit, a short tail peels within the split bar of one-row steps and a host-cached session losing its region keeps its device-only rows; at two regions two sessions' recurrent state slots step interleaved, batched and batched first as each reads alone, device-home sessions step as a host-cached session alone, a prefill continued past zero starts from the region's live state within the split bar, a recurrent parked claim hands its rows and state over, and the device-mode, paged and pooled schedulers emit the host-cached schedulers' tokens; on the 512-row window segmented windows - a tail under the conv taps, tails past one window - hold the split bar of solo windows, and checkpoint stops captured inside one call adopt and continue at their rows; on the q8 CPU form, on every box, a 150-token chunked deltanet prefill holds 4 percent of the recurrent one over 8 forced-feed steps, on the uncached CPU form the xml_function template's turns render and the Hermes tool markers are single vocab ids, and on the portable-pinned CPU form, on every box, every batched step runs on the CPU stack and matches sequential logits, KV, deltanet state and conv history within 1e-6 under f32 and f16 KV and decoding below the deltanet position panics; with the planes on the host two deltanet streams decoded turn about match their solo generate references token for token, share decode steps, record fused deltanet steps on the device and pass nothing to the CPU rails; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked-prefill arm; on the Metal home's blob twin, one load on a das_metal build: on the deltanet hybrid Qwen3.5-0.8B Q8, the batched row serves four and nine streams through the device driver, with exactly one recurrent scan dispatch per recurrent layer per device call; on Qwen3.5-0.8B Q8, one and two greedy streams of 40 reply tokens on 64-row pages emit the flat sessions' tokens exactly, both sides decoding on Metal, with a one-token reply as the step floor's control; on Qwen3.5-0.8B Q8, two sessions' prompt tails prefilled as one segmented window leave each its own recurrent state: 24 device greedy steps per session equal its single-window run, and the streams differ; on Qwen3.5-0.8B Q8, a deltanet session whose recurrent mirror is evicted mid-stream rebuilds it once from its stash and steps on the device, its 12 greedy tokens those of an unevicted session; on Qwen3.5-0.8B Q8, a released deltanet session's mirror and stash leave the pool, and more than twice the mirror cap's live sessions stepping in turn decode on the device, each emitting its own solo tokens; on Qwen3.5-0.8B Q8, the single-row greedy chain over 24 device steps leaves tokens and every step's logits bit-identical to the plain run, greedy-fed and fed off the pick every third step; on the deltanet hybrid Qwen3.5-0.8B Q8, four greedy streams emit the same tokens with batched steps pre-encoded under the step before as encoded at call, and retiring a parked step leaks no Metal object; each form loads once")]
+[test(description = "On Qwen3.5-0.8B Q8_0 the resident driver holds the CPU chain within the deltanet bar on forced feeds over one window, two, one past the window and a two-token prompt on the Vulkan home and over one window and two with every position served on the CUDA home; under the gated attention a q8_0 K/V mirror holds the CPU q8_0 chain within 6 percent and a tq4 mirror sits no further than 1.15 times the CPU tq4 chain's distance from the f16 rows; at one region the greedy chain's steps reproduce the plain steps bit for bit, a short tail peels within the split bar of one-row steps and a host-cached session losing its region keeps its device-only rows; at two regions two sessions' recurrent state slots step interleaved, batched and batched first as each reads alone, device-home sessions step as a host-cached session alone, a prefill continued past zero starts from the region's live state within the split bar, a recurrent parked claim hands its rows and state over, and the device-mode, paged and pooled schedulers emit the host-cached schedulers' tokens; on the 512-row window segmented windows - a tail under the conv taps, tails past one window - hold the split bar of solo windows, and checkpoint stops captured inside one call adopt and continue at their rows; on the q8 CPU form, on every box, a 150-token chunked deltanet prefill holds 4 percent of the recurrent one over 8 forced-feed steps, on the uncached CPU form the xml_function template's turns render and the Hermes tool markers are single vocab ids, and on the portable-pinned CPU form, on every box, every batched step runs on the CPU stack and matches sequential logits, KV, deltanet state and conv history within 1e-6 under f32 and f16 KV and decoding below the deltanet position panics; with the planes on the host two deltanet streams decoded turn about match their solo generate references token for token, share decode steps, record fused deltanet steps on the device and pass nothing to the CPU rails; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked-prefill arm; on the Metal home's blob twin, one load on a das_metal build: on the deltanet hybrid Qwen3.5-0.8B Q8, the batched row serves four and nine streams through the device driver, with exactly one recurrent scan dispatch per recurrent layer per device call; on Qwen3.5-0.8B Q8, one and two greedy streams of 40 reply tokens on 64-row pages emit the flat sessions' tokens exactly, both sides decoding on Metal, with a one-token reply as the step floor's control; on Qwen3.5-0.8B Q8, two sessions' prompt tails prefilled as one segmented window leave each its own recurrent state: 24 device greedy steps per session equal its single-window run, and the streams differ; on Qwen3.5-0.8B Q8, a deltanet session whose recurrent mirror is evicted mid-stream rebuilds it once from its stash and steps on the device, its 12 greedy tokens those of an unevicted session; on Qwen3.5-0.8B Q8, a released deltanet session's mirror and stash leave the pool, and more than twice the mirror cap's live sessions stepping in turn decode on the device, each emitting its own solo tokens; on Qwen3.5-0.8B Q8, the single-row greedy chain over 24 device steps leaves tokens and every step's logits bit-identical to the plain run, greedy-fed and fed off the pick every third step; on the deltanet hybrid Qwen3.5-0.8B Q8, four greedy streams emit the same tokens with batched steps pre-encoded under the step before as encoded at call, and retiring a parked step leaks no Metal object; on the same twin the support matrix's hybrid row - single-row steps a codec within the batch bar, the paths' engage, the metal-overrides generate on each codec token for token the portable CPU form's, the continuation within 4.0 - and the coverage zoo's qwen35 row; on the Vulkan home's default form the coverage census's DeltaNet row; each form loads once")]
 def test_gpu_resident_hybrid_q8(t : T?) {
-    pin_window_rows()
+    let window_was = pin_window_rows()
+    defer() {
+        set_pf_window_rows_pin(window_was)
+    }
     return if (!family_on(t, "qwen35"))
     var r : HybridQ8Rows
     hybrid_feeds(r.feed, HybridPlanes.q8, [40l, HYBRID_WINDOW + 88l, HYBRID_WINDOW + 1l, 2l], [40l, HYBRID_WINDOW + 88l])
@@ -464,6 +491,7 @@ def test_gpu_resident_hybrid_q8(t : T?) {
         held_within(t, r.regions, "Qwen3.5-0.8B Q8_0, two regions: ", false)
         held_within(t, r.home_pin, "Qwen3.5-0.8B Q8_0, two regions, the planes on the host: ", false)
     }
+    matrix_hybrid_verdict(t, matrix_hybrid_qwen35_0_8b(), r.matrix)
     delete r
     delete forms
 }
@@ -593,14 +621,17 @@ def private long_row_within(t : T?; r : HybridKqRows; l : LongPromptRow; name : 
 
 [test(description = "Qwen3.5-0.8B-Q4_K_M keeps its deltanet planes K-quant and holds the CPU chain within the K-quant bar over one and two windows - on the Vulkan home the f16 feed riding the k4 cm2 tiles, no further from the f32 chain than the CPU; on the CUDA home within 10 percent with every position served; on the Vulkan home a prompt's second half continued in place and from an adopted checkpoint lands within 5 percent of the whole prompt in one window while the prompt one token short lands past it, and a 5000-token prompt lands its last row within 10 percent of the CPU chain's at the wide window equal to DN_WINDOW and at a 5120-row window the recurrent cut bounds; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked-prefill arm and its deltanet planes K-quant native; each form loads once")]
 def test_gpu_resident_hybrid_kq(t : T?) {
-    pin_window_rows()
+    let window_was = pin_window_rows()
+    defer() {
+        set_pf_window_rows_pin(window_was)
+    }
     return if (!family_on(t, "qwen35"))
     var r : HybridKqRows
     var forms : array<ModelForm>
     if (mirror_kv_dtype() == KVDtype.f32) {
         skip_cell(t, "the K-quant bar is calibrated on the f16 mirror the tier arms; the f32 A/B mirror (DASLLAMA_VK_KV32=1) is no gate for it")
     } else {
-        hybrid_kq_forms(forms, r)
+        hybrid_kq_forms(t, forms, r)
     }
     var ran = false
     with_cuda_mmq_winners() {
@@ -621,13 +652,11 @@ def test_gpu_resident_hybrid_kq(t : T?) {
 
 //! the Q4_K_M file's K-quant forms pushed onto `forms`: the default (the feeds), the f32 chain's witness off the CUDA home, the
 //! wide and the past-DN_WINDOW prompt windows where the window cells run (`window_cells_why`, a held skip where they do not)
-def private hybrid_kq_forms(var forms : array<ModelForm>; var r : HybridKqRows) {
+def private hybrid_kq_forms(t : T?; var forms : array<ModelForm>; var r : HybridKqRows) {
     hybrid_feeds(r.feed, HybridPlanes.kq, [40l, HYBRID_WINDOW + 88l], [40l, HYBRID_WINDOW + 88l])
     forms |> push(device_form())
     let why = window_cells_why()
-    if (!r.feed.feeds.cuda) {
-        forms |> push(f32_form())
-    }
+    forms_or_skips(t, forms, "Qwen3.5-0.8B-Q4_K_M.gguf", [f32_form()], f32_witness_why())
     if (empty(why)) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             r.feed.carrier |> held_equal(PF_ROWS_WIDE, DN_WINDOW, "the wide window the driver picks first is one deltanet chunk ({PF_ROWS_WIDE} rows, DN_WINDOW {DN_WINDOW}): the window runs uncut")
@@ -640,9 +669,12 @@ def private hybrid_kq_forms(var forms : array<ModelForm>; var r : HybridKqRows) 
     }
 }
 
-[test(description = "The mixed twin with K-quant deltanet qkv/z and a Q8_0 out plane holds the CPU chain within its bar over one and two windows on the Vulkan home, the qkv/z feed on the k4 tiles, no further from the f32 chain than the CPU, and over one window within 10 percent with every position served on the CUDA home; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked-prefill arm; each form loads once")]
+[test(description = "The mixed twin with K-quant deltanet qkv/z and a Q8_0 out plane holds the CPU chain within its bar over one and two windows on the Vulkan home, the qkv/z feed on the k4 tiles, no further from the f32 chain than the CPU, and over one window within 10 percent with every position served on the CUDA home; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked-prefill arm; on the Metal home's blob twin, one load on a das_metal build, a recurrent layer mixing a Q8_0 out plane with K-quant qkv batched at 3, 9 and 12 rows token for token the single-row step with no decline; each form loads once")]
 def test_gpu_resident_hybrid_kq_q8out(t : T?) {
-    pin_window_rows()
+    let window_was = pin_window_rows()
+    defer() {
+        set_pf_window_rows_pin(window_was)
+    }
     return if (!family_on(t, "qwen35"))
     var r : HybridRows
     var forms : array<ModelForm>
@@ -651,14 +683,17 @@ def test_gpu_resident_hybrid_kq_q8out(t : T?) {
     } else {
         hybrid_feeds(r, HybridPlanes.kq_q8out, [40l, HYBRID_WINDOW + 88l], [40l])
         forms |> push(device_form())
-        if (!r.feeds.cuda) {
-            forms |> push(f32_form())
-        }
+        forms_or_skips(t, forms, "Qwen3.5-0.8B-Q4_K_M-q8out.gguf", [f32_form()], f32_witness_why())
     }
+    forms |> push(metal_form(ctx = DECODE_CTX_QWEN35_08B_Q8OUT))
     var ran = false
     with_cuda_mmq_winners() {
         ran = with_cpu_and_gpu_model(t, "llm", "Qwen3.5-0.8B-Q4_K_M-q8out.gguf", CARRY_RIG_CTX, forms, parity = true) $(var m, form) {
-            hybrid_rows(r, m, form)
+            if (form.on_metal) {
+                decode_mixed_sites_qwen35_08b_metal(t, m, form)
+            } else {
+                hybrid_rows(r, m, form)
+            }
         }
     }
     if (ran) {
@@ -686,6 +721,122 @@ struct HybridMtpRows {
     trunk : FeedRows
     trunk_cpu : FeedRows
     cuda_counters : Held
+    dump : DumpKept
+}
+
+let private DUMP_BAR_REL = 0.20   //! the parity dump's row bar: the regions files'
+
+//! what the parity dump round trip's device form hands its CPU form and
+//! the compares after the block: the device arm's dump read back off
+//! its file, the CPU arm's replayed on its tape and read back, what the
+//! replay saw of the tape, and every row's argmax decoded
+struct DumpKept {
+    dev_ran : bool
+    cpu_ran : bool
+    kv : KVDtype
+    back : ParityDump
+    cpu_back : ParityDump
+    tape_seen : int64
+    tape_miss : int64
+    pieces : table<int64; string>
+}
+
+//! the dump round trip's device half on the whole-model driver: the
+//! device arm's forced-feed run - the prompt, its own six-token greedy
+//! continuation - written to a file and read back as written
+def private dump_device_rows(t : T?; var k : DumpKept; var m : Model) {
+    unsafe {   //! the cell reads the block's model by reference
+        let title = "Qwen3.5-0.8B-MTP: the device arm's parity dump, written and read back"
+        t |> run(title) @capture(& m, & k)(t : T ?) {
+            t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the carrier")
+            let dev_path = path_join(test_temp_dir(), "parity_dev.pd")
+            with_dasllama_jobque_() {
+                var inscope prompt <- resident_prompt(40l)
+                let none : array<int64>
+                var inscope dev <- parity_dump_run(m, MTP_CARRY_FILE, mirror_kv_dtype(), prompt,
+                    none, 6l, none)
+                t |> equal(dev.arm, "device", "the first arm is the device's")
+                t |> equal(length(dev.rows), 7, "the prefill's row and six fed steps")
+                t |> equal(length(dev.feed), 6, "six fed tokens, the run's own greedy continuation")
+                t |> equal(int(moe_pick_tape_mode().mode), int(MoePickTape.off),
+                    "the tape is off after the run")
+                parity_dump_write(dev_path, dev)
+                k.back <- parity_dump_read(dev_path)
+                let header = (k.back.arm == dev.arm && k.back.vocab == dev.vocab
+                    && k.back.picks_per_select == dev.picks_per_select)
+                let ids = (ids_equal(k.back.prompt, dev.prompt) && ids_equal(k.back.feed, dev.feed)
+                    && ids_equal(k.back.tape, dev.tape))
+                t |> success(header && ids, "the dump reads back as written")
+                t |> equal(logits_maxdiff(k.back.rows[3], dev.rows[3]), 0.0,
+                    "... its rows bit for bit")
+            }
+            k.kv = mirror_kv_dtype()
+            k.dev_ran = true
+        }
+    }
+}
+
+//! the dump round trip's CPU half, once, on the q8 CPU form: the CPU
+//! arm replayed on the device dump's prompt, feed and routing tape off
+//! its file, written and read back; every row's argmax decoded
+def private dump_cpu_rows(var k : DumpKept; var m : Model) {
+    return if (!k.dev_ran || k.cpu_ran)
+    k.cpu_ran = true
+    let cpu_path = path_join(test_temp_dir(), "parity_cpu.pd")
+    with_dasllama_jobque_() {
+        var inscope cpu <- parity_dump_run(m, MTP_CARRY_FILE, k.kv, k.back.prompt, k.back.feed,
+            0l, k.back.tape)
+        k.tape_seen = cpu.tape_seen
+        k.tape_miss = cpu.tape_miss
+        parity_dump_write(cpu_path, cpu)
+        k.cpu_back <- parity_dump_read(cpu_path)
+    }
+    row_pieces(k.pieces, k.back.rows, m)
+    row_pieces(k.pieces, k.cpu_back.rows, m)
+}
+
+//! every row's argmax decoded into `pieces`, keyed by its id
+def private row_pieces(var pieces : table<int64; string>; rows : array<array<float>>; m : Model) {
+    for (row in rows) {
+        let id = argmax_of(row)
+        pieces[id] = decode_(m, [id])
+    }
+}
+
+//! the dump round trip's compares after the block: the CPU arm on the
+//! device arm's routing, the two dumps within the bar on every row, a
+//! poisoned row red on its own, a reference with another feed refused
+def private dump_within(t : T?; var k : DumpKept) {
+    if (k.dev_ran && !k.cpu_ran) {
+        t |> failure(("{MTP_CARRY_FILE}: the device arm's parity dump has no CPU replay - the q8 " +
+            "CPU form ran none"))
+    }
+    return if (!k.cpu_ran)
+    t |> equal(k.cpu_back.arm, "cpu", "the second arm is the CPU chain's")
+    //! the carrier is dense: its tape is empty and the replay sees no
+    //! select; a routed carrier's replay counts every select
+    let dense = k.back.picks_per_select == 0l
+    t |> success(dense ? k.tape_seen == 0l && empty(k.back.tape) : k.tape_seen > 0l,
+        ("the CPU arm replayed the device arm's routing ({k.tape_seen} selects, {k.tape_miss} " +
+        "own picks off the tape, {k.back.picks_per_select} picks a select)"))
+    var inscope r <- parity_dump_compare(k.back, k.cpu_back, DUMP_BAR_REL)
+    for (row in r.rows) {
+        let dev_piece = k.pieces?[row.argmax_a] ?? ""
+        let cpu_piece = k.pieces?[row.argmax_b] ?? ""
+        to_log(LOG_INFO, ("parity dump row {row.row}: maxdiff {row.diff} (bar {row.bar}) " +
+            "one-step-off {row.ctrl}, argmax device {row.argmax_a} '{dev_piece}' against cpu " +
+            "{row.argmax_b} '{cpu_piece}'\n"))
+    }
+    t |> success(r.ok && empty(r.why), ("the device dump is within the bar of the CPU dump on " +
+        "every row, every one-step-off control past it ({r.why})"))
+    k.back.rows[2][17] = k.back.rows[2][17] + 3.0 * r.rows[2].bar
+    var inscope poisoned <- parity_dump_compare(k.back, k.cpu_back, DUMP_BAR_REL)
+    t |> success(!poisoned.ok && !poisoned.rows[2].ok && poisoned.rows[3].ok,
+        "a poisoned row (one logit three bars off) reds its compare alone")
+    k.cpu_back.feed[0] = k.cpu_back.feed[0] + 1l
+    var inscope refused <- parity_dump_compare(k.back, k.cpu_back, DUMP_BAR_REL)
+    t |> success(!refused.ok && !empty(refused.why),
+        "a reference with another feed is refused ({refused.why})")
 }
 
 //! the one-region form's cells, in the order a load serves them: every served cell first, then the cells whose calls pass to
@@ -747,10 +898,20 @@ def private mtp_scheduler_cpu_cells(t : T?; var m : Model) {
     scheduler_capture_stops_cell(t, m)
 }
 
+//! the -MTP- file's Metal cells: the MTP rail's arms on the served
+//! image, the batched cells on the blob twin
+def private hybrid_mtp_metal_rows(t : T?; var m : Model; form : ModelForm) {
+    if (form.metal_image) {
+        mtp_parity_metal(t, m, form, mtp_parity_qwen35_0_8b())
+    } else {
+        metal_qwen35_mtp_cells(t, m)
+    }
+}
+
 //! one form's collection of the -MTP- file's cells into `r`
 def private hybrid_mtp_rows(t : T?; var r : HybridMtpRows; var m : Model; form : ModelForm) {
     if (form.on_metal) {
-        metal_qwen35_mtp_cells(t, m)
+        hybrid_mtp_metal_rows(t, m, form)
         return
     }
     if (!form.on_gpu && form.quant == QuantMode.q4_0) {
@@ -777,6 +938,7 @@ def private hybrid_mtp_rows(t : T?; var r : HybridMtpRows; var m : Model; form :
         if (form.alone) {
             mtp_cpu_cells(t, m)
             mtp_scheduler_cpu_cells(t, m)
+            dump_cpu_rows(r.dump, m)
         }
         return
     }
@@ -785,6 +947,7 @@ def private hybrid_mtp_rows(t : T?; var r : HybridMtpRows; var m : Model; form :
         mtp_head_warm_declined_cell(t, m)
     } elif (form.regions == 0l) {
         scheduler_mtp_cell(t, m)
+        dump_device_rows(t, r.dump, m)
     } elif (form.ctx == MTP_SCHED_CTX) {
         test_scheduler_mtp_resident_picks(t, m)
         test_scheduler_mtp_device_home(t, m)
@@ -852,12 +1015,16 @@ def private hybrid_mtp_forms(t : T?; var r : HybridMtpRows) : array<ModelForm> {
     forms |> push(cpu_cells_form())
     forms |> push(cpu_cells_form(QuantMode.q4_0))
     forms |> push(metal_form(ctx = METAL_NEXTN_CTX))
+    forms |> push(metal_form(image = true, ctx = METAL_MTP_CELLS_CTX))
     return <- forms
 }
 
-[test(description = "On Qwen3.5-0.8B-MTP the resident prefill and every step land the post-norm hidden as the speculative carry at its row's watermark within the deltanet bar of the CPU chain's, one row at a time and through the N-row command, and with speculation off no carry lands; a NextN draft through the resident head matches the CPU forward_mtp, uploads past the device's rows, pins a suppressed pick, and is bit-identical despite NaN-poisoned host residual rows; the round's verify rows sit within twice the deltanet bar of one-row steps, a forced reject rolls back on the device, the head's warmed K rows sit within an eighth of the row's max of the CPU warm's over one and two windows, and six rounds match the CPU rounds up to near-ties; the depth-8 knob prepares nine verify rows (depth 1 two) and its walk emits the plain decode, a seeded sampled stream at depth 2 decodes the rows-landed stream; a NaN carry panics the draft by row, the pass arms hand the round to the CPU rails by name, a rewind is refused, a head kept off the device passes the verify as verify_rows; the head holds its bars over q8_0 and tq4 mirrors; the peel with speculation off; pooled openings carry the draft head's rows; on the CUDA home the trunk's forced feed holds 4 percent of the CPU chain with every position served; at two regions segmented windows hold the split bar of solo windows, and checkpoint stops captured inside one call adopt and continue at their rows; on the q8 CPU form, on every box, the NextN extras load and the spec-off trunk continues the plain file's fixture, self-speculative greedy decode emits plain decode's tokens on the counting and prose prompts, the k-deep round at depths 2, 3 and 4 decodes the plain stream with depth 4 accepting more than depth 1, a poisoned verify and a forced-reject round roll back to plain decode, the continuation prefill's seam row is written exactly where no seat serves it, and a prefill driver serving the verify window panics the round naming it; on the q4_0 CPU form self-speculative decode emits plain decode's counting tokens; on the Metal home's blob twin, one load on a das_metal build: on Qwen3.5-0.8B-MTP Q8 with speculation off, the batched row serves through the device driver, and after plain batched steps each stream's NextN carry trails its position by at most one; on Qwen3.5-0.8B-MTP Q8 with self-speculation on, the batched row refuses by name (each stream's round runs alone), reads no rate, and counts no device or CPU batched step; on Qwen3.5-0.8B-MTP Q8, a depth-2 greedy MTP walk emits the depth-1 walk's tokens over 24 reply tokens while drafting more than it and accepting some drafts; on Qwen3.5-0.8B-MTP Q8, a greedy scheduler stream lands its device pick at most once a token and emits what `generate` emits off the host argmax, while a non-argmax sampler lands no pick; on Qwen3.5-0.8B-MTP Q8, three self-speculative streams admitted together emit each solo stream's tokens, every tick stepping each through its own round, with draft and accept counts equal to the solo sums; on Qwen3.5-0.8B-MTP Q8, three speculating streams, the last on a prompt past 200 tokens across 64-row chunk boundaries, emit each solo stream's tokens with every tick stepping their own rounds; on Qwen3.5-0.8B-MTP Q8, a self-speculative stream of 150 reply tokens on 64-row pages, spanning three pages, emits the flat stream's tokens with drafts accepted on both sides; on Qwen3.5-0.8B-MTP Q8, a third prompt on a shared opening attaches the checkpoint the second left and replies as an uncached run at the same cut, and a marked stop inside a later window is captured; on Qwen3.5-0.8B-MTP Q8, a request marked with its stable opening leaves that checkpoint at once, which the next prompt attaches and replies with as uncached, while an unmarked request leaves none there; on Qwen3.5-0.8B-MTP Q8, a session attached at an off-boundary checkpoint lands the donor's logits bit for bit after the same tail, while the checkpoint with its recurrent state zeroed lands 5% of the largest logit away or more; on Qwen3.5-0.8B-MTP Q8, a checkpoint captured at a marked stop inside one prefill window, attached and fed the tail, lands within 0.2% of an uncached prefill's largest logit, and zeroing its recurrent state misses by 5% or more; on Qwen3.5-0.8B-MTP Q8, a conversation's next turn attaches the finished turn's checkpoint, prompt plus 40 tokens, and continues the count token for token against an uncached 80-token stream; each form loads once")]
+[test(description = "On Qwen3.5-0.8B-MTP the resident prefill and every step land the post-norm hidden as the speculative carry at its row's watermark within the deltanet bar of the CPU chain's, one row at a time and through the N-row command, and with speculation off no carry lands; a NextN draft through the resident head matches the CPU forward_mtp, uploads past the device's rows, pins a suppressed pick, and is bit-identical despite NaN-poisoned host residual rows; the round's verify rows sit within twice the deltanet bar of one-row steps, a forced reject rolls back on the device, the head's warmed K rows sit within an eighth of the row's max of the CPU warm's over one and two windows, and six rounds match the CPU rounds up to near-ties; the depth-8 knob prepares nine verify rows (depth 1 two) and its walk emits the plain decode, a seeded sampled stream at depth 2 decodes the rows-landed stream; a NaN carry panics the draft by row, the pass arms hand the round to the CPU rails by name, a rewind is refused, a head kept off the device passes the verify as verify_rows; the head holds its bars over q8_0 and tq4 mirrors; the peel with speculation off; pooled openings carry the draft head's rows; on the CUDA home the trunk's forced feed holds 4 percent of the CPU chain with every position served; at two regions segmented windows hold the split bar of solo windows, and checkpoint stops captured inside one call adopt and continue at their rows; on the q8 CPU form, on every box, the NextN extras load and the spec-off trunk continues the plain file's fixture, self-speculative greedy decode emits plain decode's tokens on the counting and prose prompts, the k-deep round at depths 2, 3 and 4 decodes the plain stream with depth 4 accepting more than depth 1, a poisoned verify and a forced-reject round roll back to plain decode, the continuation prefill's seam row is written exactly where no seat serves it, and a prefill driver serving the verify window panics the round naming it; on the q4_0 CPU form self-speculative decode emits plain decode's counting tokens; on the Metal home's blob twin, one load on a das_metal build: on Qwen3.5-0.8B-MTP Q8 with speculation off, the batched row serves through the device driver, and after plain batched steps each stream's NextN carry trails its position by at most one; on Qwen3.5-0.8B-MTP Q8 with self-speculation on, the batched row refuses by name (each stream's round runs alone), reads no rate, and counts no device or CPU batched step; on Qwen3.5-0.8B-MTP Q8, a depth-2 greedy MTP walk emits the depth-1 walk's tokens over 24 reply tokens while drafting more than it and accepting some drafts; on Qwen3.5-0.8B-MTP Q8, a greedy scheduler stream lands its device pick at most once a token and emits what `generate` emits off the host argmax, while a non-argmax sampler lands no pick; on Qwen3.5-0.8B-MTP Q8, three self-speculative streams admitted together emit each solo stream's tokens, every tick stepping each through its own round, with draft and accept counts equal to the solo sums; on Qwen3.5-0.8B-MTP Q8, three speculating streams, the last on a prompt past 200 tokens across 64-row chunk boundaries, emit each solo stream's tokens with every tick stepping their own rounds; on Qwen3.5-0.8B-MTP Q8, a self-speculative stream of 150 reply tokens on 64-row pages, spanning three pages, emits the flat stream's tokens with drafts accepted on both sides; on Qwen3.5-0.8B-MTP Q8, a third prompt on a shared opening attaches the checkpoint the second left and replies as an uncached run at the same cut, and a marked stop inside a later window is captured; on Qwen3.5-0.8B-MTP Q8, a request marked with its stable opening leaves that checkpoint at once, which the next prompt attaches and replies with as uncached, while an unmarked request leaves none there; on Qwen3.5-0.8B-MTP Q8, a session attached at an off-boundary checkpoint lands the donor's logits bit for bit after the same tail, while the checkpoint with its recurrent state zeroed lands 5% of the largest logit away or more; on Qwen3.5-0.8B-MTP Q8, a checkpoint captured at a marked stop inside one prefill window, attached and fed the tail, lands within 0.2% of an uncached prefill's largest logit, and zeroing its recurrent state misses by 5% or more; on Qwen3.5-0.8B-MTP Q8, a conversation's next turn attaches the finished turn's checkpoint, prompt plus 40 tokens, and continues the count token for token against an uncached 80-token stream; on the Metal home's served image, one load on a das_metal build, the Metal MTP rail's verify rows within 0.5 of the plain GPU step on forced feed with a one-step-off control, and speculative free-run emitting the plain run's tokens exactly; on the driver's own regions the device arm's parity dump reads back bit-exact, the CPU arm replayed on its prompt, feed and tape off the q8 CPU form matches every row within the 0.20 relative bar, a one-row poison reds only that row, and a changed feed is refused; each form loads once")]
 def test_gpu_resident_hybrid_mtp(t : T?) {
-    pin_window_rows()
+    let window_was = pin_window_rows()
+    defer() {
+        set_pf_window_rows_pin(window_was)
+    }
     return if (!family_on(t, "qwen35"))
     var r = HybridMtpRows(cuda = gpu_want_cuda())
     var forms <- hybrid_mtp_forms(t, r)
@@ -882,7 +1049,21 @@ def test_gpu_resident_hybrid_mtp(t : T?) {
             }
         }
     }
+    with_dasllama_jobque_() {   //! the compares reduce rows on the engine's queue
+        dump_within(t, r.dump)
+    }
     delete r
+    delete forms
+}
+
+[test(description = "On Qwen3.5-4B-MTP Q8_0, on the Metal home's served image, one load on a das_metal build, the Metal MTP rail's verify rows stay within 0.5 of the plain GPU step on forced feed at depths 1, 2 and 4, and speculative free-run emits the plain run's tokens exactly; the form loads once")]
+def test_gpu_resident_hybrid_4b_mtp(t : T?) {
+    return if (!family_on(t, "qwen35"))
+    var forms <- [metal_form(image = true, ctx = METAL_MTP_CELLS_CTX)]
+    with_cpu_and_gpu_model(t, "llm", "Qwen3.5-4B-MTP-Q8_0.gguf", METAL_MTP_CELLS_CTX,
+            forms) $(var m, form) {
+        mtp_parity_metal(t, m, form, mtp_parity_qwen35_4b())
+    }
     delete forms
 }
 
@@ -959,7 +1140,10 @@ let private NV4_FILE = "Qwen3.5-0.8B-NVFP4-MTP.gguf"
 
 [test(description = "On the CUDA driver the NVFP4 Qwen3.5-0.8B twin's deltanet sites on the FP4 tensor leaf keep forced-feed logits within 20 percent of max logit of the CPU chain over one and two windows, and pinned off MMQ the cm2 tiles hold the 10 percent bar; on its K-quant-native portable-pinned CPU form, on every box, the load keeps the nv4 planes disk-order, tags blk.0.ffn_down nv4, lands every NVFP4 plane's per-tensor scale on the site table at the file's value, places the down plane bit for bit the file dequant, and the site scale reaches the CPU matmul's epilogue; each form loads once")]
 def test_gpu_resident_hybrid_nv4(t : T?) {
-    pin_window_rows()
+    let window_was = pin_window_rows()
+    defer() {
+        set_pf_window_rows_pin(window_was)
+    }
     return if (!family_on(t, "qwen35"))
     var r : CudaOnlyRows
     var forms : array<ModelForm>
@@ -988,7 +1172,10 @@ def test_gpu_resident_hybrid_nv4(t : T?) {
 
 [test(description = "On the CUDA driver the deltanet hybrid Qwen3.5-4B Q8_0 keeps one-window prefill and eight fed-step logits within 4 percent of max logit of the CPU chain; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked-prefill arm; each form loads once")]
 def test_gpu_resident_hybrid_4b(t : T?) {
-    pin_window_rows()
+    let window_was = pin_window_rows()
+    defer() {
+        set_pf_window_rows_pin(window_was)
+    }
     return if (!family_on(t, "qwen35"))
     var r : CudaOnlyRows
     var forms : array<ModelForm>
@@ -1021,7 +1208,10 @@ def test_gpu_resident_hybrid_4b(t : T?) {
 
 [test(description = "The Vulkan kernel census panics on a name no kernel seeded, so a misspelt key cannot read as a zero count, while a seeded class kernel answers by its SPIR-V name")]
 def test_kernel_census_by_name(t : T?) {
-    pin_window_rows()
+    let window_was = pin_window_rows()
+    defer() {
+        set_pf_window_rows_pin(window_was)
+    }
     t |> run("the kernel census refuses a name no kernel seeded") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             var tripped = false
@@ -1040,7 +1230,10 @@ def test_kernel_census_by_name(t : T?) {
 
 [test(description = "row_bar scales with the finite elements of the reference row, so a NaN in the reference reads past the bar instead of widening it to infinity, the NaN-scaled bar the control")]
 def test_row_bar_nan_reference(t : T?) {
-    pin_window_rows()
+    let window_was = pin_window_rows()
+    defer() {
+        set_pf_window_rows_pin(window_was)
+    }
     let rel = 0.04
     let cpu <- [1.0, -4.0, 2.0, 0.5]
     var gpu := cpu
@@ -1072,7 +1265,10 @@ def private tq4_bar_fails(g, c, off : array<float>) : int {
 //! `rows_within_control` and `tq4_within`, the clean rows hold both (the control)
 [test(description = "On synthetic rows rows_within_control and tq4_within red a NaN in the device or reference row, also with no control row, while clean rows hold; the tq4 bound passes 0.9 and reds 1.1 of the row one off's distance")]
 def test_row_bars_red_a_nan(t : T?) {
-    pin_window_rows()
+    let window_was = pin_window_rows()
+    defer() {
+        set_pf_window_rows_pin(window_was)
+    }
     let cpu <- [1.0, -4.0, 2.0, 0.5]
     let off <- [3.0, -1.0, -2.0, 4.5]
     var gpu := cpu

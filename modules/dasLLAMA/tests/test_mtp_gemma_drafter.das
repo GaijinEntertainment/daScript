@@ -34,6 +34,8 @@ require dasllama/dasllama_dflash   // attach_dflash_drafter: the prompt-capture 
 require ?das_metal dasllama/dasllama_metal_dflash   // nolint:STYLE030,LINT019 - the drafter's device arm registers at init
 require _compares   // mismatch_rel: the prompt-capture cell's sums
 require dasllama/dasllama_env   // g_env_test: the arm filter a block with no cell left names
+require _metal_mtp_cells   // mtp_verify_metal: the 26B trunk's served image's same-slab verify
+require _model_once   // with_model_once: the drafter sidecar's block
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -233,34 +235,28 @@ def private g26_drafter(c : Config) : GemmaDrafter {
     return <- dr
 }
 
-[test(description = "The Metal drafter attach refuses a metal-blob trunk shell of the drafter's geometry whose token table the device gathers no row of, naming the table, and the shell cannot speculate")]
-def test_gemma_drafter_gather_refusal(t : T?) {
-    if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-refuse")) {
-        return
-    }
-    t |> run("the Metal attach refuses a metal-blob trunk whose token table the device gathers no row of") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            let side = path_join(models_dir(), "mtp-gemma-4-26B-A4B-it-Q8_0.gguf")
-            return if (!model_available(t, side))
-            var dr <- load_gemma_drafter(side)
-            t |> success(dr.ok, "the sidecar loads (why='{dr.why}')")
-            var shell = Model(metal_blob = true, emb_q8 = false, tok_emb_off = -1l)
-            shell.config = g26_config()
-            t |> success(!emb_kq(shell), "the shell carries no K-quant token table")
-            t |> equal(gemma_drafter_target_why(shell, dr), "", "the shell carries the drafter's trunk geometry: the target check passes")
-            let why = attach_mtp_drafter_(shell, side)
-            t |> success(find(why, "metal: the device gathers no row of the trunk's token table") >= 0, "the Metal attach names the table it cannot gather: '{why}'")
-            t |> success(!mtp_capable(shell), "and the shell cannot speculate")
-            delete shell
-            delete dr
-        } else {
-            t |> skip("no das_metal module on this build")
-        }
+//! the Metal attach's gather refusal on the unbound sidecar `dr`
+//! (`side` its path): a metal-blob trunk shell of the drafter's
+//! geometry whose token table the device gathers no row of
+def private gather_refusal_cell(t : T?; dr : GemmaDrafter; side : string) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        t |> success(dr.ok, "the sidecar loads (why='{dr.why}')")
+        var shell = Model(metal_blob = true, emb_q8 = false, tok_emb_off = -1l)
+        shell.config = g26_config()
+        t |> success(!emb_kq(shell), "the shell carries no K-quant token table")
+        t |> equal(gemma_drafter_target_why(shell, dr), "", "the shell carries the drafter's trunk geometry: the target check passes")
+        let why = attach_mtp_drafter_(shell, side)
+        t |> success(find(why, "metal: the device gathers no row of the trunk's token table") >= 0, "the Metal attach names the table it cannot gather: '{why}'")
+        t |> success(!mtp_capable(shell), "and the shell cannot speculate")
+        delete shell
+    } else {
+        t |> skip("no das_metal module on this build")
     }
 }
 
 [test(description = "Loading the Q4_0 gemma-4 drafter head fails with a reason naming the tensor's Q4_0 type and the expected Q8_0")]
 def test_gemma_drafter_q40_head(t : T?) {
+    own_load("asserts on the load itself - its refusal: the Q4_0 head declines")
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-refuse")) {
         return
     }
@@ -276,79 +272,123 @@ def test_gemma_drafter_q40_head(t : T?) {
 
 // ===== loader shape (the drafter sidecar alone — no target) =====
 
-[test(description = "The gemma-4-26B Q8_0 drafter sidecar loads with the contract's dims, per-layer head sizes, kv heads, sliding flags, capture layers 28,28,28,29 and layer scales, its blob the exact padded Q8_0 byte sum with every tensor 32-byte aligned")]
-def test_gemma_drafter_load(t : T?) {
-    if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-load")) {
+//! the sidecar resolver beside the 26B trunk prefers the Q8_0 head
+def private sidecar_resolver_cell(t : T?) {
+    let side = gemma_drafter_sidecar(path_join(models_dir(), TARGET_FILE))
+    if (empty(side)) {
+        t |> skip("no mtp-* drafter sidecar beside {TARGET_FILE}")
         return
     }
-    t |> run("the gemma-4 drafter sidecar loads with the shape the encoder contract names") @(t : T?) {
-        let target = path_join(models_dir(), TARGET_FILE)
-        let side = gemma_drafter_sidecar(target)
-        if (empty(side)) {
-            t |> skip("no mtp-* drafter sidecar beside {TARGET_FILE}")
-            return
-        }
-        t |> equal(base_name(side), "mtp-gemma-4-26B-A4B-it-Q8_0.gguf", "the sidecar prefers the Q8_0 head")
-        if (!model_available(t, side)) return
-        var dr <- load_gemma_drafter(side, TARGET_LAYERS)
-        t |> success(dr.ok, "load ok (why='{dr.why}')")
-        if (!dr.ok) {
-            delete dr
-            return
-        }
-        t |> equal(dr.dim, 1024l, "dim")
-        t |> equal(dr.tdim, 2816l, "tdim (the target's hidden width)")
-        t |> equal(dr.hidden, 8192l, "hidden")
-        t |> equal(dr.vocab, 262144l, "vocab")
-        t |> equal(dr.n_layers, 4l, "n_layers")
-        t |> equal(dr.n_heads, 16l, "n_heads")
-        t |> equal(dr.sliding_window, 1024l, "sliding_window")
-        t |> success(abs(dr.eps - 1.0e-6) < 1.0e-10, "eps is 1e-6 (got {dr.eps})")
-        t |> success(dr.rope_theta == 1.0e6 && dr.rope_theta_swa == 1.0e4,
-            "rope theta {dr.rope_theta} full / {dr.rope_theta_swa} sliding")
-        t |> success(length(dr.hs) == 4 && dr.hs[0] == 256l && dr.hs[1] == 256l && dr.hs[2] == 256l && dr.hs[3] == 512l,
-            "hs = 256,256,256,512 (got {dr.hs})")
-        t |> success(length(dr.kvh) == 4 && dr.kvh[0] == 8l && dr.kvh[1] == 8l && dr.kvh[2] == 8l && dr.kvh[3] == 2l,
-            "kvh = 8,8,8,2 (got {dr.kvh})")
-        t |> success(dr.sliding[0] && dr.sliding[1] && dr.sliding[2] && !dr.sliding[3],
-            "sliding = T,T,T,F (got {dr.sliding})")
-        t |> success(dr.kv_bound, "kv_layer is bound by the load's target_n_layers")
-        t |> success(dr.kv_layer[0] == 28l && dr.kv_layer[1] == 28l && dr.kv_layer[2] == 28l && dr.kv_layer[3] == 29l,
-            "kv_layer = 28,28,28,29 (got {dr.kv_layer})")
-        t |> success(abs(dr.layer_scale[0] - 0.29101562) < 1.0e-6 && abs(dr.layer_scale[1] - 0.50390625) < 1.0e-6
-            && abs(dr.layer_scale[2] - 0.52734375) < 1.0e-6 && abs(dr.layer_scale[3] - 0.41210938) < 1.0e-6,
-            "layer_output_scale = {dr.layer_scale}")
-        // the blob is every Q8_0 weight, each tensor padded to a 32-byte start
-        var want_blob = q8_bytes(2l * dr.tdim * dr.dim) + q8_bytes(dr.dim * dr.tdim) + q8_bytes(dr.dim * dr.vocab)
-        var want_fblob = dr.dim + dr.rope_freqs_n
-        for (l in range64(dr.n_layers)) {
-            let qd = dr.n_heads * dr.hs[l]
-            want_blob += q8_bytes(dr.dim * qd) + q8_bytes(qd * dr.dim) + 3l * q8_bytes(dr.dim * dr.hidden)
-            want_fblob += 4l * dr.dim + dr.hs[l]
-        }
-        t |> equal(long_length(dr.blob), want_blob, "blob bytes = the Q8_0 tensor sum")
-        t |> equal(long_length(dr.fblob), want_fblob, "fblob floats = the F32 norm/table sum")
-        t |> equal(dr.rope_freqs_n, 256l, "rope_freqs is 256 wide (the full class's half-dim)")
-        // p-RoPE: 64 rotating dims followed by the pass-through tail
-        t |> success(dr.fblob[dr.rope_freqs_off] == 1.0 && dr.fblob[dr.rope_freqs_off + 63l] == 1.0
-            && dr.fblob[dr.rope_freqs_off + 64l] > 1.0e29,
-            "rope_freqs = 64 x 1.0 then the 1e30 tail")
-        var aligned = true
-        var offs <- [dr.pre_proj_off, dr.post_proj_off, dr.tok_emb_off]
-        offs |> reserve(3l + 5l * dr.n_layers)
-        for (l in range64(dr.n_layers)) {
-            offs |> push(dr.wq_offs[l])
-            offs |> push(dr.wo_offs[l])
-            offs |> push(dr.w1_offs[l])
-            offs |> push(dr.w3_offs[l])
-            offs |> push(dr.w2_offs[l])
-        }
-        for (o in offs) {
-            aligned = aligned && o >= 0l && o % 32l == 0l && o < long_length(dr.blob)
-        }
-        t |> success(aligned, "every blob tensor starts 32-byte aligned and inside the blob ({offs})")
-        delete dr
+    t |> equal(base_name(side), "mtp-gemma-4-26B-A4B-it-Q8_0.gguf",
+        "the sidecar prefers the Q8_0 head")
+}
+
+//! the sidecar `dr`, its capture layers bound to the 26B trunk's at
+//! the load: the encoder contract's dims, head sizes, kv heads,
+//! sliding flags, capture layers and layer scales, and its blob the
+//! padded Q8_0 byte sum with every tensor 32-byte aligned
+def private load_shape_cell(t : T?; dr : GemmaDrafter) {
+    t |> success(dr.ok, "load ok (why='{dr.why}')")
+    return if (!dr.ok)
+    t |> equal(dr.dim, 1024l, "dim")
+    t |> equal(dr.tdim, 2816l, "tdim (the target's hidden width)")
+    t |> equal(dr.hidden, 8192l, "hidden")
+    t |> equal(dr.vocab, 262144l, "vocab")
+    t |> equal(dr.n_layers, 4l, "n_layers")
+    t |> equal(dr.n_heads, 16l, "n_heads")
+    t |> equal(dr.sliding_window, 1024l, "sliding_window")
+    t |> success(abs(dr.eps - 1.0e-6) < 1.0e-10, "eps is 1e-6 (got {dr.eps})")
+    t |> success(dr.rope_theta == 1.0e6 && dr.rope_theta_swa == 1.0e4,
+        "rope theta {dr.rope_theta} full / {dr.rope_theta_swa} sliding")
+    t |> success(length(dr.hs) == 4 && dr.hs[0] == 256l && dr.hs[1] == 256l && dr.hs[2] == 256l && dr.hs[3] == 512l,
+        "hs = 256,256,256,512 (got {dr.hs})")
+    t |> success(length(dr.kvh) == 4 && dr.kvh[0] == 8l && dr.kvh[1] == 8l && dr.kvh[2] == 8l && dr.kvh[3] == 2l,
+        "kvh = 8,8,8,2 (got {dr.kvh})")
+    t |> success(dr.sliding[0] && dr.sliding[1] && dr.sliding[2] && !dr.sliding[3],
+        "sliding = T,T,T,F (got {dr.sliding})")
+    t |> success(dr.kv_bound, "kv_layer is bound by the load's target_n_layers")
+    t |> success(dr.kv_layer[0] == 28l && dr.kv_layer[1] == 28l && dr.kv_layer[2] == 28l && dr.kv_layer[3] == 29l,
+        "kv_layer = 28,28,28,29 (got {dr.kv_layer})")
+    t |> success(abs(dr.layer_scale[0] - 0.29101562) < 1.0e-6 && abs(dr.layer_scale[1] - 0.50390625) < 1.0e-6
+        && abs(dr.layer_scale[2] - 0.52734375) < 1.0e-6 && abs(dr.layer_scale[3] - 0.41210938) < 1.0e-6,
+        "layer_output_scale = {dr.layer_scale}")
+    load_blob_within(t, dr)
+}
+
+//! the sidecar's blob: every Q8_0 weight, each tensor padded to a
+//! 32-byte start; the F32 norms and table; the p-RoPE frequencies
+def private load_blob_within(t : T?; dr : GemmaDrafter) {
+    var want_blob = q8_bytes(2l * dr.tdim * dr.dim) + q8_bytes(dr.dim * dr.tdim) + q8_bytes(dr.dim * dr.vocab)
+    var want_fblob = dr.dim + dr.rope_freqs_n
+    for (l in range64(dr.n_layers)) {
+        let qd = dr.n_heads * dr.hs[l]
+        want_blob += q8_bytes(dr.dim * qd) + q8_bytes(qd * dr.dim) + 3l * q8_bytes(dr.dim * dr.hidden)
+        want_fblob += 4l * dr.dim + dr.hs[l]
     }
+    t |> equal(long_length(dr.blob), want_blob, "blob bytes = the Q8_0 tensor sum")
+    t |> equal(long_length(dr.fblob), want_fblob, "fblob floats = the F32 norm/table sum")
+    t |> equal(dr.rope_freqs_n, 256l, "rope_freqs is 256 wide (the full class's half-dim)")
+    // p-RoPE: 64 rotating dims followed by the pass-through tail
+    t |> success(dr.fblob[dr.rope_freqs_off] == 1.0 && dr.fblob[dr.rope_freqs_off + 63l] == 1.0
+        && dr.fblob[dr.rope_freqs_off + 64l] > 1.0e29,
+        "rope_freqs = 64 x 1.0 then the 1e30 tail")
+    var aligned = true
+    var offs <- [dr.pre_proj_off, dr.post_proj_off, dr.tok_emb_off]
+    offs |> reserve(3l + 5l * dr.n_layers)
+    for (l in range64(dr.n_layers)) {
+        offs |> push(dr.wq_offs[l])
+        offs |> push(dr.wo_offs[l])
+        offs |> push(dr.w1_offs[l])
+        offs |> push(dr.w3_offs[l])
+        offs |> push(dr.w2_offs[l])
+    }
+    for (o in offs) {
+        aligned = aligned && o >= 0l && o % 32l == 0l && o < long_length(dr.blob)
+    }
+    t |> success(aligned, "every blob tensor starts 32-byte aligned and inside the blob ({offs})")
+    delete offs
+}
+
+//! a form of the sidecar's block: `unbound` its capture layers left
+//! to the attach, `bound` bound to the 26B trunk's layers at the load
+def private sidecar_form(path : string; form : string) : GemmaDrafter =>
+    <- load_gemma_drafter(path, form == "bound" ? TARGET_LAYERS : 0l)
+
+[test(description = "The Metal drafter attach refuses a metal-blob trunk shell of the drafter's geometry whose token table the device gathers no row of, naming the table, and the shell cannot speculate; the gemma-4-26B Q8_0 drafter sidecar, the resolver's pick beside the trunk, loads bound with the contract's dims, per-layer head sizes, kv heads, sliding flags, capture layers 28,28,28,29 and layer scales, its blob the exact padded Q8_0 byte sum with every tensor 32-byte aligned; each form loads once")]
+def test_gemma_drafter_sidecar(t : T?) {
+    return if (!family_on(t, "gemma4moe") || !arms_on(t, ["mtp-gdraft-refuse", "mtp-gdraft-load"]))
+    var forms : array<string>
+    if (empty(arm_why("mtp-gdraft-refuse"))) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            forms |> push("unbound")
+        } else {
+            skip_cell(t, "the Metal attach's gather refusal: no das_metal module on this build")
+        }
+    }
+    if (empty(arm_why("mtp-gdraft-load"))) {
+        forms |> push("bound")
+    }
+    let side = path_join(models_dir(), "mtp-gemma-4-26B-A4B-it-Q8_0.gguf")
+    with_model_once(t, "llm", "mtp-gemma-4-26B-A4B-it-Q8_0.gguf", forms,
+            @@sidecar_form) $(var dr; form) {
+        unsafe {   //! the cells read the block's sidecar by reference
+            if (form == "unbound") {
+                let refusal = ("the Metal attach refuses a metal-blob trunk whose token table " +
+                    "the device gathers no row of")
+                t |> run(refusal) @capture(& dr)(t : T ?) {
+                    gather_refusal_cell(t, dr, side)
+                }
+            } else {
+                let shape = ("the gemma-4 drafter sidecar loads with the shape the encoder " +
+                    "contract names")
+                t |> run(shape) @capture(& dr)(t : T ?) {
+                    sidecar_resolver_cell(t)
+                    load_shape_cell(t, dr)
+                }
+            }
+        }
+    }
+    delete forms
 }
 
 // ===== the CPU oracle against a live target session =====
@@ -627,10 +667,10 @@ def private dev_drafter_last_logits(var lg : array<float>) {
 
 //! the device step over `s`'s host rows brought up again - another session's device prefill takes the one region first - with
 //! layer `l`'s K and V rows at `row` held at `v` for the step and put back after (`row` < 0 touches none): the step's logits
-def private vk_reuploaded_draft(t : T?; trg : Model; var s : Session; prompt : array<int64>; seed, anchor : int64; h : array<float>;
-                                l, row : int64; v : float) : array<float> {
+def private dev_reuploaded_draft(t : T?; trg : Model; var s : Session; prompt : array<int64>; seed, anchor : int64; h : array<float>;
+                                 l, row : int64; v : float) : array<float> {
     var lg : array<float>
-    static_if (typeinfo builtin_module_exists(vulkan)) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         let c = trg.config
         let kvd = layer_kv_dim(c, l)
         let prow = row >= 0l ? kv_phys_row(s, row) : 0l
@@ -675,10 +715,10 @@ def private vk_reuploaded_draft(t : T?; trg : Model; var s : Session; prompt : a
     return <- lg
 }
 
-//! the Vulkan window witness by the rows: the same host rows brought up read as the device's own, the sliding capture layer's key one
+//! a discrete home's window witness by the rows: the same host rows brought up read as the device's own, the sliding capture layer's key one
 //! past the window poisoned moves nothing, and its window's first key poisoned moves the draft (the control)
-def private vk_window_witness(t : T?; trg : Model; dr : GemmaDrafter; var s : Session; prompt : array<int64>; seed, anchor : int64;
-                              h, lg : array<float>; tag : string) {
+def private dev_window_witness(t : T?; trg : Model; dr : GemmaDrafter; var s : Session; prompt : array<int64>; seed, anchor : int64;
+                               h, lg : array<float>; tag : string) {
     var ls = -1l
     for (l in range64(dr.n_layers)) {
         if (ls < 0l && dr.sliding[l]) {
@@ -686,12 +726,12 @@ def private vk_window_witness(t : T?; trg : Model; dr : GemmaDrafter; var s : Se
         }
     }
     let ro = anchor - dr.sliding_window
-    var base <- vk_reuploaded_draft(t, trg, s, prompt, seed, anchor, h, ls, -1l, 0.0)
+    var base <- dev_reuploaded_draft(t, trg, s, prompt, seed, anchor, h, ls, -1l, 0.0)
     let dbase = logits_maxdiff(base, lg)
     log_logits_pair(trg, "gdraft gpu {tag}: the brought-up rows' draft against the device's own", base, lg, dbase)
     t |> equal(dbase, 0.0, "{tag}: the host rows brought up read as the device's own, bit for bit")
-    var po <- vk_reuploaded_draft(t, trg, s, prompt, seed, anchor, h, ls, ro, 4.0)
-    var pi <- vk_reuploaded_draft(t, trg, s, prompt, seed, anchor, h, ls, ro + 1l, 4.0)
+    var po <- dev_reuploaded_draft(t, trg, s, prompt, seed, anchor, h, ls, ro, 4.0)
+    var pi <- dev_reuploaded_draft(t, trg, s, prompt, seed, anchor, h, ls, ro + 1l, 4.0)
     let dpo = logits_maxdiff(po, base)
     let dpi = logits_maxdiff(pi, base)
     log_logits_pair(trg, "gdraft gpu {tag}: key {ro} past the window poisoned, against the clean draft", po, base, dpo)
@@ -707,6 +747,7 @@ def private vk_window_witness(t : T?; trg : Model; dr : GemmaDrafter; var s : Se
     eval_(trg, s3, p40)
     t |> equal(gpu_resident_prefills_(), pf0, "{tag}: a prompt read on the CPU rails under the prefill pin counts no device prefill - the re-upload's control")
     set_resident_prefill_allowed(pin)
+    reset_gpu_cpu_passes()   //! the control's pass is by design: the form's served witness reads the calls after it
     delete p40
     delete s3
     delete pi
@@ -770,7 +811,7 @@ def private gpu_step_vs_oracle(t : T?; trg : Model; var dr : GemmaDrafter; promp
         delete other
     }
     if (window_control && q8) {
-        vk_window_witness(t, trg, dr, s, prompt, seed, anchor, h, lg, tag)
+        dev_window_witness(t, trg, dr, s, prompt, seed, anchor, h, lg, tag)
     } elif (window_control) {   //! the control: the oracle's sliding layers one key wider - a device pass over the whole window reads as it does
         dr.sliding_window++
         var wide : GemmaDraftOut
@@ -1368,6 +1409,8 @@ def private g26_capture_on(t : T?) : bool {
         && model_available(t, path_join(_model_tier::models_dir(), G26_DRAFTER_FILE)))
 }
 let private G26_METAL_CTX = 8192l   //! the Metal form's context: the ring cell's prompt past the ring; the other cells cut theirs
+//! the batch rail's same-slab verify row on the served image
+let private G26_VERIFY = mtp_verify_gemma4_26b()
 
 //! the served cells' arms on the Metal form
 let private G26_METAL_ARMS = fixed_array("mtp-gdraft-gpu", "mtp-gdraft-sched", "mtp-gdraft-vdecl",
@@ -1492,6 +1535,7 @@ def private g26_trunk_rows(t : T?; var r : G26TrunkRows; var m : Model; form : M
                 g26_metal_cells(t, m)
             }
         }
+        mtp_verify_metal(t, m, form, G26_VERIFY)   //! last: its vffc arm shuts the drivers down
         return
     }
     if (form.host_layers > 0l) {
@@ -1559,7 +1603,9 @@ def private g26_trunk_forms(t : T?; var r : G26TrunkRows;
         }
     }
     r.served = sidecar && any_arm_on(G26_METAL_ARMS)
-    if (r.served || empty(arm_why("dflash-26b-metal")) || empty(arm_why(G26_CAPTURE_ARM))) {
+    var inscope verify_arms <- mtp_verify_arms(G26_VERIFY.tag)
+    if (r.served || empty(arm_why("dflash-26b-metal")) || empty(arm_why(G26_CAPTURE_ARM))
+        || any_arm_on(verify_arms)) {
         forms |> push(metal_form(image = true, ctx = G26_METAL_CTX))
     }
     static_if (typeinfo module_exists(dasllama_vulkan_dflash) || typeinfo module_exists(dasllama_cuda_dflash)) {
@@ -1594,7 +1640,7 @@ def private capture_within(t : T?; r : CaptureRows) {
         "a prompt one token short reads other rows (the bar's control)")
 }
 
-[test(description = "On the whole-model driver gemma-4-26B Q4_K_M with q51 down experts scores teacher-forced perplexity within 2x of the CPU chain over 150 positions and 2.5x over two windows, hits within 16; on the CUDA driver at the full rig context, the first routed layers' experts moved to the host, its 150-position perplexity within 2x through the split command and cut window chain, hits within 12; on the discrete homes' served trunk the GPU drafter step agrees with the CPU oracle within the Q8_0 feed's bars at a short anchor and past the sliding window, a scheduler speculating at depth 1 through the attached drafter emits the plain scheduler's counting tokens, a device-home stream drafting and accepting as the host-cached one, and stands down detached, drafter depths 3 and 1 draft k tokens a round across a page boundary with a reasoning budget's forced close in place, three streams ride one joint verify a tick, q8_0 and tq4 mirrors' rounds run on the device (the speculating stream the plain one's - on a home whose commands round apart, to a parting that is a near-tie on the plain chain's row), and past a sliding capture layer's KV ring the drafter drafts the flat mirror's tokens, the logits bit for bit (within the split bar with the same pick on a home whose commands round apart), with the ringed stream within 10 percent of the flat one's acceptance; the Q8_0 and Q4_K_M DFlash drafters' greedy walks on the device arm are the plain walk's; on the CPU one drafter step over the target's live K/V yields a finite token and hidden, and the DFlash drafter's greedy speculative walk over a chat turn emits the plain walk's ids; on the parity row's CPU form, on every box, the file's frozen greedy ids to the half-span prefix bar, with its flipped-id control and its per-expert-prefill arm; on the Metal home's served image, one load on a das_metal build: the GPU drafter step on the served 26B agrees with the CPU oracle's draft token and sits within the home's logits and h_next bars (0.25 and 0.05 on Metal, 1.0 on a Q8_0 feed) at a short anchor and past the sliding window, an off-by-one seed landing outside; a scheduler speculating at depth 1 through the attached gemma-4 drafter emits the plain scheduler's counting tokens exactly, every draft counted by the device drafter, and with the drafter detached it stands down, drafts nothing, and still matches; on Metal a joint drafter verify over two streams on two KV codecs carries no stream and counts no round, each stream's step equal bit for bit to a plain decode step, while one codec across both carries both streams; at drafter depths 3 and 1 the speculating scheduler drafts k tokens a round and emits the plain scheduler's counting tokens exactly across a page boundary, and a reasoning budget lands its forced close at the budget with the plain stream's tokens; three speculating streams at depths 1 and 2 ride one joint verify a tick, each emitting the plain scheduler's counting tokens exactly, while a lone stream counts no joint verify (the counter's control); on q8_0 and tq4 KV mirrors the drafter's rounds run on the device, accept drafts, and the speculating scheduler emits the same codec's plain scheduler tokens exactly; past a sliding capture layer's KV ring the drafter at the same anchor drafts the flat mirror's tokens - logits bit for bit off Metal, the same pick on Metal - and the ringed stream matches the flat one with acceptance within 10 percent; the Metal form's prefill window hands the regular DFlash drafter the prompt's layer rows, every captured layer's sum over the prompt's last row within 5% of the CPU form's route, the CPU route's row for a prompt one token short outside it; each form loads once")]
+[test(description = "On the whole-model driver gemma-4-26B Q4_K_M with q51 down experts scores teacher-forced perplexity within 2x of the CPU chain over 150 positions and 2.5x over two windows, hits within 16; on the CUDA driver at the full rig context, the first routed layers' experts moved to the host, its 150-position perplexity within 2x through the split command and cut window chain, hits within 12; on the discrete homes' served trunk the GPU drafter step agrees with the CPU oracle within the Q8_0 feed's bars at a short anchor and past the sliding window, a scheduler speculating at depth 1 through the attached drafter emits the plain scheduler's counting tokens, a device-home stream drafting and accepting as the host-cached one, and stands down detached, drafter depths 3 and 1 draft k tokens a round across a page boundary with a reasoning budget's forced close in place, three streams ride one joint verify a tick, q8_0 and tq4 mirrors' rounds run on the device (the speculating stream the plain one's - on a home whose commands round apart, to a parting that is a near-tie on the plain chain's row), and past a sliding capture layer's KV ring the drafter drafts the flat mirror's tokens, the logits bit for bit (within the split bar with the same pick on a home whose commands round apart), with the ringed stream within 10 percent of the flat one's acceptance; the Q8_0 and Q4_K_M DFlash drafters' greedy walks on the device arm are the plain walk's; on the CPU one drafter step over the target's live K/V yields a finite token and hidden, and the DFlash drafter's greedy speculative walk over a chat turn emits the plain walk's ids; on the parity row's CPU form, on every box, the file's frozen greedy ids to the half-span prefix bar, with its flipped-id control and its per-expert-prefill arm; on the Metal home's served image, one load on a das_metal build: the GPU drafter step on the served 26B agrees with the CPU oracle's draft token and sits within the home's logits and h_next bars (0.25 and 0.05 on Metal, 1.0 on a Q8_0 feed) at a short anchor and past the sliding window, an off-by-one seed landing outside; a scheduler speculating at depth 1 through the attached gemma-4 drafter emits the plain scheduler's counting tokens exactly, every draft counted by the device drafter, and with the drafter detached it stands down, drafts nothing, and still matches; on Metal a joint drafter verify over two streams on two KV codecs carries no stream and counts no round, each stream's step equal bit for bit to a plain decode step, while one codec across both carries both streams; at drafter depths 3 and 1 the speculating scheduler drafts k tokens a round and emits the plain scheduler's counting tokens exactly across a page boundary, and a reasoning budget lands its forced close at the budget with the plain stream's tokens; three speculating streams at depths 1 and 2 ride one joint verify a tick, each emitting the plain scheduler's counting tokens exactly, while a lone stream counts no joint verify (the counter's control); on q8_0 and tq4 KV mirrors the drafter's rounds run on the device, accept drafts, and the speculating scheduler emits the same codec's plain scheduler tokens exactly; past a sliding capture layer's KV ring the drafter at the same anchor drafts the flat mirror's tokens - logits bit for bit off Metal, the same pick on Metal - and the ringed stream matches the flat one with acceptance within 10 percent; the Metal form's prefill window hands the regular DFlash drafter the prompt's layer rows, every captured layer's sum over the prompt's last row within 5% of the CPU form's route, the CPU route's row for a prompt one token short outside it; on the same served image the batch rail's same-slab verify rows read within 24 of the single steps', with the drafter sidecar attached live and detached after; each form loads once")]
 def test_gemma_drafter_26b_trunk(t : T?) {
     return if (!family_on(t, "gemma4moe"))
     let host_walk = empty(cuda_home_why()) && empty(arm_why(G26_HOST_CUDA_ARM))

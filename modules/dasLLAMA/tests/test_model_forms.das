@@ -8,6 +8,8 @@ require daslib/fio   // stat, fwrite: the stub file a block's loop reads
 require _model_form   // ModelForm and its pure parts: the load-once forms' knobs, names and pairing; served_forms
 require dasllama/dasllama_common   // MetalMode: a Metal form's mode
 require daslib/strings_boost   // join: a block's loads and forms as one line
+require _compares   // probe_fails: a guard's failures counted
+require dasllama/dasllama_kqformat   // KqFmt, kq_dense_b32: the plane tags counted
 
 // The load-once forms and blocks (`_model_form.das`): a form's knobs, name and pairing, a block's account of its
 // forms, and the block loops over fake loaders - no model file is read.
@@ -108,6 +110,89 @@ def test_model_form_account(t : T?) {
     t |> success(!alone_pass_of(metal_alone, plain), "a Metal pass is no CPU load's: the CPU pass and the parity row pass it by")
 }
 
+//! what `metal_form_held` answers for `form` and `want`, and the failures it raised on a probe
+def private held_on_probe(form : ModelForm; want : MetalWant) : tuple<held : bool; fails : int> {
+    var held = false
+    let fails = probe_fails() $(p) {
+        held = metal_form_held(p, form, want, "f.gguf", "probe")
+    }
+    return (held = held, fails = fails)
+}
+
+[test(description = "A cell family's form guard (`metal_form_held`) holds the blob twin, either Metal form or the served image as asked, and on any other form answers false with one failure; a model's plane census (`sites_count`, `per32_plane_count`) counts the tag-array elements its predicate takes - the dense q/k/v/o and FFN arrays and the routed stacks each only where asked - and an empty array counts none")]
+def test_metal_form_guard_and_plane_census(t : T?) {
+    let twin = metal_form()
+    let image = metal_form(image = true)
+    let cpu = cpu_cells_form()
+    for (want, held in fixed_array(MetalWant.blob_twin, MetalWant.any, MetalWant.served_image), fixed_array(twin, twin, image)) {
+        let got = held_on_probe(held, want)
+        t |> success(got.held && got.fails == 0, "{want}: the form it names is held, no failure ({got.fails})")
+        let off = held_on_probe(cpu, want)
+        t |> success(!off.held && off.fails == 1, "{want}: a CPU form is not held, one failure ({off.fails})")
+    }
+    t |> success(held_on_probe(image, MetalWant.any).held, "either Metal form holds `any`: the served image too")
+    t |> success(!held_on_probe(image, MetalWant.blob_twin).held, "the control: the served image is no blob twin")
+    t |> success(!held_on_probe(twin, MetalWant.served_image).held, "the control: the blob twin is no served image")
+    var m = Model()
+    m.wq_fmt <- [KqFmt.q51, KqFmt.q8]
+    m.w2_fmt <- [KqFmt.mlx4b]
+    m.we1_fmt <- [KqFmt.q4032, KqFmt.q4032]
+    t |> equal(per32_plane_count(m, false), 2l, "the dense per-32 planes: q51 and mlx4b")
+    t |> equal(per32_plane_count(m, true), 4l, "with the routed stacks: two q4032 more")
+    t |> equal(sites_count(m, false, true, $(f : KqFmt) : bool => kq_dense_b32(f)), 2l, "the routed stacks alone")
+    t |> equal(sites_count(m, true, true, $(f : KqFmt) : bool => f == KqFmt.q8), 1l, "one q8 plane, counted once")
+    m.wk_fmt <- [KqFmt.k4]
+    m.wv_fmt <- [KqFmt.k4]
+    m.wo_fmt <- [KqFmt.k4]
+    m.w1_fmt <- [KqFmt.k4]
+    m.w3_fmt <- [KqFmt.k4]
+    m.we2_fmt <- [KqFmt.k4]
+    m.we3_fmt <- [KqFmt.k4]
+    t |> equal(sites_count(m, true, false, $(f : KqFmt) : bool => f == KqFmt.k4), 5l,
+        "one k4 plane in each of wk, wv, wo, w1 and w3")
+    t |> equal(sites_count(m, false, true, $(f : KqFmt) : bool => f == KqFmt.k4), 2l,
+        "one k4 plane in each of we2 and we3")
+    t |> equal(sites_count(m, false, false, $(_f : KqFmt) : bool => true), 0l, "no arrays asked: none counted")
+    t |> equal(sites_count(Model(), true, true, $(_f : KqFmt) : bool => true), 0l, "empty tag arrays count none")
+}
+
+[test(description = "A form's load pins: the f32 weight scale and the IQ3_S serving mode each make a CPU load of its own; the dense-FFN want, the resident routed layers and the coopmat mode each make a device form no default form and load off no lane; each pin's words in the form's name, a CPU, Metal, device and per-op form's")]
+def test_model_form_pins(t : T?) {
+    let plain = cpu_cells_form()
+    let scale = cpu_cells_form(wscale_f32 = true)
+    let iq3s = cpu_cells_form(iq3s_serve = "iq3s4")
+    t |> success(!same_cpu_load(plain, scale), "the f32 weight scale makes a load of its own")
+    t |> success(!same_cpu_load(plain, iq3s), "the IQ3_S serving mode makes a load of its own")
+    t |> success(same_cpu_load(iq3s, cpu_cells_form(iq3s_serve = "iq3s4")),
+        "the control: one mode, one load")
+    let knobs = fixed_array(device_form(dense_ffn = 0), device_form(moe_layers = 2l),
+        device_form(coopmat = 0))
+    let names = fixed_array("the dense-FFN want", "resident routed layers", "the coopmat mode")
+    for (f, what in knobs, names) {
+        t |> success(!device_default(f), "{what}: a load knob, no default form")
+        t |> success(!is_lane_form(f), "{what}: baked into a lane, so its form loads off none")
+    }
+    t |> equal(form_name(scale), "the CPU form (f16 sessions, the f32 weight scale)",
+        "the scale pin's words")
+    t |> equal(form_name(iq3s), "the CPU form (f16 sessions, IQ3_S served as iq3s4)",
+        "the IQ3_S pin's words")
+    let metal = metal_form(mtp_head = "heads/h.gguf", wscale_f32 = true, iq3s_serve = "iq3s4")
+    t |> equal(form_name(metal), ("the Metal form (the blob twin, when_available, " +
+        "the NextN head h.gguf, the f32 weight scale, IQ3_S served as iq3s4)"),
+        "a Metal form names its head and both pins")
+    let tier = device_form(pool_slots = 4l, dense_ffn = 1, moe_layers = 2l, coopmat = 0)
+    t |> equal(form_name(tier), ("the device form (f16 mirror, rings, device gather, " +
+        "4 pool slots, " +
+        "2 resident routed layers, the dense FFN rail on, coopmat mode 0)"),
+        "a device form names the tier's and drivers' asks")
+    t |> equal(form_name(device_form(dense_ffn = 0)),
+        "the device form (f16 mirror, rings, device gather, the dense FFN rail off)",
+        "the dense rail asked off")
+    t |> equal(form_name(device_form(perop = true, moe_layers = 3l)),
+        "the per-op form (f16 asked, the whole-model route off, 3 resident routed layers)",
+        "a per-op form names the tier's asks")
+}
+
 var private g_once_live = 0   //! the fake models a load made that no drop has taken back
 var private g_once_loads : array<string>   //! each load's `<path>|<form>`, in order
 
@@ -190,7 +275,7 @@ def test_staged_once_block(t : T?) {
     delete alive
 }
 
-[test(description = "A load-once block's loop (`model_once_at`, which `with_model_once_at` wires to the models' gate): behind a gate that finds no file it skips on the handle, loads nothing, runs no cell and answers false; over a present file and three forms it loads once a form, in the list's order, from the file's path, hands the cells each form's own model, holds exactly one model alive inside every cells call and none after the call, and answers true. A block's form list through `served_forms`: a form the family's account gives a reason for is one skipped cell of its own, named the tag, the form and the reason, and is left out of the list, the others kept in order; a list the box serves whole comes back whole with no cell")]
+[test(description = "A load-once block's loop (`model_once_at`, which `with_model_once_at` wires to the models' gate): behind a gate that finds no file it skips on the handle, loads nothing, runs no cell and answers false; over a present file and three forms it loads once a form, in the list's order, from the file's path, hands the cells each form's own model, holds exactly one model alive inside every cells call and none after the call, and answers true. A block's form list through `served_forms`: a form the family's account gives a reason for is one skipped cell of its own, named the tag, the form and the reason, and is left out of the list, the others kept in order; a list the box serves whole comes back whole with no cell; `forms_or_skips` adds the asked forms where no reason stands, else adds none and makes each a skipped cell named the file, the form and the reason")]
 def test_model_once_block(t : T?) {
     let root = test_temp_dir()
     t |> run("an absent file: the gate's skip, no load, no cell, false") @(t : T?) {
@@ -234,32 +319,49 @@ def test_model_once_block(t : T?) {
         delete seen
         delete alive
     }
-    t |> run("a form the box cannot serve: a skipped cell of its own, left out of the list") @(t : T?) {
-        var cells : array<string>
-        var skips = 0
-        var p = new T("probe", ref_time_ticks(), false)
-        unsafe {
-            p.onRun <- @capture(& cells, & skips)(name : string; cell : RunT) {
-                cells |> push(name)
-                var sub = new T(name, ref_time_ticks(), false)
-                sub.onSkipNow <- @capture(& skips)() {
-                    skips++
-                }
-                invoke(cell as lmd1, sub)
-                delete sub
+    t |> run("a form the box cannot serve: a skipped cell of its own, left out of the list",
+        @@served_forms_cell)
+}
+
+//! a block's form list through `served_forms` and `forms_or_skips`
+//! on a probe handle that records each cell it runs and counts its
+//! skips
+def private served_forms_cell(t : T?) {
+    var cells : array<string>
+    var skips = 0
+    var p = new T("probe", ref_time_ticks(), false)
+    unsafe {
+        p.onRun <- @capture(& cells, & skips)(name : string; cell : RunT) {
+            cells |> push(name)
+            var sub = new T(name, ref_time_ticks(), false)
+            sub.onSkipNow <- @capture(& skips)() {
+                skips++
             }
+            invoke(cell as lmd1, sub)
+            delete sub
         }
-        var inscope served <- served_forms(p, "once.model", ["a", "gone", "b"], @@once_form_why)
-        t |> equal(join(served, " "), "a b", "the forms the box serves, in the list's order")
-        t |> equal(join(cells, " | "), "once.model, the gone form: no device for it", "the form it cannot serve is one cell, named the tag, the form and the reason")
-        t |> equal(skips, 1, "and that cell skipped")
-        cells |> clear()
-        var inscope whole <- served_forms(p, "once.model", ["a", "b"], @@once_form_why)
-        t |> equal(join(whole, " "), "a b", "the control: a list the box serves whole comes back whole")
-        t |> equal(length(cells) + skips, 1, "with no cell and no further skip")
-        unsafe {
-            delete p
-        }
-        delete cells
     }
+    var inscope served <- served_forms(p, "once.model", ["a", "gone", "b"], @@once_form_why)
+    t |> equal(join(served, " "), "a b", "the forms the box serves, in the list's order")
+    t |> equal(join(cells, " | "), "once.model, the gone form: no device for it", "the form it cannot serve is one cell, named the tag, the form and the reason")
+    t |> equal(skips, 1, "and that cell skipped")
+    cells |> clear()
+    var inscope whole <- served_forms(p, "once.model", ["a", "b"], @@once_form_why)
+    t |> equal(join(whole, " "), "a b", "the control: a list the box serves whole comes back whole")
+    t |> equal(length(cells) + skips, 1, "with no cell and no further skip")
+    var forms <- [device_form()]
+    forms_or_skips(p, forms, "once.model", [metal_form(), f32_form()], "")
+    t |> equal(length(forms), 3, "forms_or_skips with no reason adds every asked form")
+    t |> equal(length(cells) + skips, 1, "and runs no cell")
+    forms_or_skips(p, forms, "once.model", [metal_form(), f32_form()], "no home")
+    t |> equal(length(forms), 3, "with a reason it adds none")
+    t |> equal(join(cells, " | "), ("once.model, the Metal form (the blob twin, " +
+        "when_available): no home | once.model, the fp32 CPU form: no home"),
+        "each asked form one cell, named the file, the form and the reason")
+    t |> equal(skips, 3, "and each of those cells skipped")
+    delete forms
+    unsafe {
+        delete p
+    }
+    delete cells
 }

@@ -35,8 +35,17 @@ require _parity_cells   // SmolLM2's tied rows (tied_cls_rows, tied_cls_q8_rows_
 require _sampling_cells   // constrained_sampler_cell
 require _embedding_cells   // the tinyllama embedding cells
 require _ffn_slice_cells   // last_layer_slice_cell: the 1B's default form
-require _mlx_cells   // mlx_llama_1b_8bit_cell: the 1B MLX snapshot on the uncached form
+require _mlx_cells   // the 1B MLX 8-bit snapshot's block beside its GGUF twin's
 require _metal_batched_cells   // metal_llama_1b_cells: the 1B Q8_0 file's Metal form's cells
+require _metal_matrix_cells   // the support matrix's llama, tensor-twin, dim and phi3 rows
+require _metal_prefill_cells   // the Metal prefill parity rows
+require _metal_decode_cells   // the Metal decode parity rows
+require _metal_mtp_cells   // mtp_verify_metal: the 1B's same-slab verify control
+require _metal_format_census_cells   // the format census's q51 and NVFP4 rows
+require _kernel_coverage_cells   // the coverage census's zoo, Vulkan and sweep rows
+require _perop_ffn_cells   // the per-op dense FFN rail's rows
+require _metal_blob_twin   // blob_twin: the own-load test's twins
+require ?vulkan dasllama/dasllama_vulkan_common   // nolint:STYLE030,LINT019 - COOPMAT_*
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -77,7 +86,10 @@ def private allow_cpu_prefill_intent() {
 //   on the host, the `SEG_WINDOW`-row prompt window - their by-design passes reset after them.
 // - Llama-3.2-1B IQ4_XS on the Vulkan home: the q8_0 mirror's forced feed and the tq4 mirror's distance form at 40 tokens.
 // - Llama-3.2-1B Q8_0's default form also runs the last layer's FFN slice (`_ffn_slice_cells.das`), and its q8 uncached CPU form,
-//   on every box, the chat cells (`_chat_cells.das`) and the 1B MLX 8-bit snapshot against the file (`_mlx_cells.das`).
+//   on every box, the chat cells (`_chat_cells.das`) and the GGUF
+//   twin's side of the 1B MLX 8-bit snapshot's compare, the
+//   snapshot's own block following the file's in the same test
+//   (`_mlx_cells.das`).
 // - On every box, the parity row of each 1B file model_specs pins one for - Q8_0, the Q4_0 and IQ4_NL mints, Q4_K_M, IQ4_XS
 //   and the NVFP4 mint - on its CPU form (the row's load mode and K-quant knob under DASLLAMA_PIN_BACKEND's pin): the row's
 //   frozen greedy ids (`parity_spec_cell`); the form skips where the box cannot take the pin.
@@ -89,6 +101,18 @@ def private allow_cpu_prefill_intent() {
 // - Llama-3.2-1B Q8_0's Metal form (`metal_form`, the blob twin) carries the Metal batched driver's cells
 //   (`_metal_batched_cells.das`): the batched row, the batched gather, the pre-encode rail, the landing across a move and a
 //   release, and the per-row tick. The form is one skipped cell on a build without das_metal.
+// - The Metal suites' cells ride the files' Metal forms - the blob
+//   twin, an f32-scale twin where a file's rows read both weight
+//   scales, the served image for the same-slab verify - their CPU
+//   controls on the portable-pinned CPU forms, their compares after
+//   each block: the support matrix (`_metal_matrix_cells.das`), the
+//   prefill and decode parity (`_metal_prefill_cells.das`,
+//   `_metal_decode_cells.das`), the MTP verify
+//   (`_metal_mtp_cells.das`), the format census
+//   (`_metal_format_census_cells.das`), the kernel coverage census
+//   (`_kernel_coverage_cells.das`: its Vulkan rows and coopmat mode
+//   sweep on device forms); the per-op dense FFN rail's cells
+//   (`_perop_ffn_cells.das`) on per-op forms.
 // Every test skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, without its file under models_dir(),
 // or where a form's plan does not fit the card; a codec form is a held skip where DASLLAMA_VK_KV32=1 arms an f32 mirror,
 // a two-window feed where the prompt window is not PF_WINDOW_ROWS rows. Under DASLLAMA_CUDA=1 the Vulkan home's cells -
@@ -100,6 +124,7 @@ let private FILE_1B = "Llama-3.2-1B-Instruct-Q8_0.gguf"
 let private FILE_1B_K = "Llama-3.2-1B-Instruct-Q4_K_M.gguf"   //! the K-quant planes (q4_K, q6_K): the kq GEMV leaves, the Q8_K feeds, the kq cm2 tiles
 let private FILE_1B_Q51 = "Llama-3.2-1B-Instruct-Q5_1-local.gguf"   //! every dense plane q51 (the mint's recipe row in `../performance/model_specs.das`): the per-32 GEMV leaves, the s tile, the q51 table gather
 let private FILE_1B_Q40 = "Llama-3.2-1B-Instruct-Q4_0-local.gguf"   //! the q40 planes: the window chain's kq batch arm off the f16 feed and the cm2 tiles on it
+let private FILE_1B_IQ4NL = "Llama-3.2-1B-Instruct-IQ4_NL-local.gguf"   //! iq4nl planes
 let private FILE_1B_NV4 = "Llama-3.2-1B-Instruct-NVFP4-local.gguf"   //! the nv4 planes: the window on the FP4 tensor rung (W4A4), the steps on the nv4 GEMV leaves
 
 //! of the step's max |logit|: the codec carriers' q8_0 mirror bar - both chains quantize each query, each its own, so two
@@ -320,6 +345,95 @@ def private segments_on(t : T?; var m : Model; title : string) {
 //! the segment form: two regions, the planes on the host (the declines' CPU prefill reads them), the segment window
 def private segment_form() : ModelForm => device_form(regions = 2l, host = true, pf_window_rows = SEG_WINDOW)
 
+//! `cpus` added to `forms` where the build serves the Metal home: the
+//! CPU forms a block's Metal cells read their controls on
+def private metal_cpu_forms(var forms : array<ModelForm>; cpus : array<ModelForm>) {
+    if (empty(metal_build_why())) {
+        forms |> push_from(cpus)
+    }
+}
+
+//! the per-op FFN rail's forms (`_perop_ffn_cells.das`) of `file`,
+//! the dense FFN rail pinned off then on, where the arm filter
+//! reaches `vk-perop-ffn`: on the Vulkan home, skipped cells on the
+//! CUDA home
+def private perop_ffn_forms(t : T?; file : string; var forms : array<ModelForm>) {
+    return if (!empty(arm_why("vk-perop-ffn")))
+    forms_or_skips(t, forms, file,
+        [device_form(perop = true, dense_ffn = 0), device_form(perop = true, dense_ffn = 1)],
+        vulkan_home_why("the per-op FFN rail is the Vulkan home's cell"))
+}
+
+//! a per-op form pinning the dense FFN rail
+def private perop_ffn_form(f : ModelForm) : bool => f.perop && f.dense_ffn >= 0
+
+//! the CPU form answering the device forms: the q8 cached load
+def private main_cpu_pass(f : ModelForm) : bool
+    => !f.on_gpu && same_cpu_load(f, cpu_quant_form(QuantMode.q8))
+
+//! the sweep's vehicle carrying `file` (`cov_vk_sweep_row`), -1 none
+def private sweep_of(file : string) : int {
+    for (i in range(COV_VK_SWEEP_ROWS)) {
+        var inscope row <- cov_vk_sweep_row(i, false)
+        return i if (row.file == file)
+    }
+    return -1
+}
+
+//! the sweep's forms of the vehicle `file` where its arm runs, each a
+//! census form (`vk_census_form`): the box's mode, the KHR and sdot4
+//! modes, and on a vehicle with twins the f16 and int8 modes; skipped
+//! cells on the CUDA home and on a build with no Vulkan
+def private sweep_forms(t : T?; var forms : array<ModelForm>; file : string) {
+    return if (!empty(arm_why("coverage-vk")))
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        var inscope legs <- [vk_census_form(), vk_census_form(COOPMAT_MM),
+            vk_census_form(COOPMAT_SDOT4)]
+        if (cov_vk_sweep_twin(sweep_of(file))) {
+            legs |> push(vk_census_form(COOPMAT_F16))
+            legs |> push(vk_census_form(COOPMAT_INT8))
+        }
+        forms_or_skips(t, forms, file, legs,
+            vulkan_home_why("the coopmat mode sweep is the Vulkan home's cell"))
+    } else {
+        skip_cell(t, ("{file}, the coopmat mode sweep's device forms: no Vulkan home in this " +
+            "build"))
+    }
+}
+
+//! whether `form` is a leg of the sweep (`sweep_forms`)
+def private sweep_leg(f : ModelForm) : bool => vk_census_asked() && vk_census_form_is(f)
+
+//! a sweep form forcing the f16 or int8 mode: the twin leg
+[unused_argument(f)]
+def private sweep_twin_leg(f : ModelForm) : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return f.coopmat == COOPMAT_F16 || f.coopmat == COOPMAT_INT8
+    } else {
+        return false
+    }
+}
+
+//! the sweep's row of the vehicle `file` on its leg `form`, where the
+//! form is one
+def private sweep_cell(t : T?; var m : Model; form : ModelForm; file : string) {
+    return if (!sweep_leg(form))
+    coverage_vk_model(t, m, form, cov_vk_sweep_row(sweep_of(file), sweep_twin_leg(form)))
+}
+
+//! a tensor-twin row's carrier absent on a das_metal build under the
+//! `tensor` arm: red, never a skip - the carriers are provisioned
+//! (`fetch_models.das`), and a box that skips ships every tensor twin
+//! unexercised
+def private tensor_carrier_held(t : T?; file : string) {
+    return if (!empty(metal_build_why()) || !empty(arm_why("tensor")))
+    let path = path_join(models_dir(), file)
+    if (!stat(path).is_valid) {
+        t |> failure(("tensor twin carrier missing: {path} - bin/daslang " +
+            "modules/dasLLAMA/performance/fetch_models.das -- --fetch"))
+    }
+}
+
 //! the launch counts of three stamp lists, one after another
 def private stamp_counts(col_stamps, any_stamps, no_stamps : array<string>) : array<int> {
     var n : array<int>
@@ -450,30 +564,144 @@ def private cuda_batch_q8_cells(t : T?; var m : Model; rows : int64) {
     }
 }
 
+//! what the Q8_0 file's Metal forms, its per-op FFN forms and their
+//! CPU forms keep for the compares after the block: the support
+//! matrix's window and tensor-twin rows, the prefill cells', the
+//! decode legs' on each weight scale, the per-op FFN rail's, and the
+//! GGUF twin's side of the 8-bit MLX snapshot's compare
+struct Llama1bKept {
+    matrix : MatrixLlama1bKept
+    tensor : MatrixTensorKept
+    prefill : PrefillKept
+    decode : DecodeKept
+    decode_s32 : DecodeKept
+    perop : PeropFfnKept
+    twin : MlxPairSide
+}
+
 //! what the Q8_0 file's forms collect: the default form's feeds and the q8_0 mirror's feeds
 struct Llama1bRows {
     feeds : DenseFeeds
     codec : LlamaCodec
     far_row : Held   //! the CUDA token step's far row on the default form
+    kept : Llama1bKept
+}
+
+//! the Q8_0 file's blob twins' context: the largest its cells cut
+//! from, the decode legs' depth
+let private LLAMA_1B_METAL_CTX = DECODE_CTX_LLAMA_1B_Q8
+
+//! the Q8_0 file's Metal forms past its default twin: the f32-scale
+//! twin, the served image where the arm filter reaches a verify arm,
+//! and the CPU forms their controls run on
+def private llama_1b_metal_forms(t : T?; var forms : array<ModelForm>) {
+    forms |> push(metal_form(ctx = LLAMA_1B_METAL_CTX, wscale_f32 = true))
+    var inscope verify <- mtp_verify_arms("l1b")
+    if (any_arm_on(verify)) {
+        forms |> push(metal_form(image = true, ctx = METAL_MTP_CELLS_CTX))
+    } else {
+        skip_cell(t, "{FILE_1B}: the served image's verify cells: the arm filter reaches none")
+    }
+    metal_cpu_forms(forms, [prefill_cpu_form(), decode_cpu_form(true)])
+}
+
+//! the Q8_0 file's Metal forms' cells: on the served image the
+//! same-slab verify control; on the f32-scale twin the support
+//! matrix's f32 rows, the C1 zoo row and the decode legs; on the
+//! default twin the support matrix's f16 rows, the decode legs (their
+//! refusal arm reads a form no step has refused on yet, so they run
+//! ahead of the batched driver's cells), the batched driver's cells,
+//! the C2 zoo row, then the tensor twins and the prefill cells
+def private llama_1b_metal_rows(t : T?; var k : Llama1bKept; var m : Model; form : ModelForm) {
+    if (form.metal_image) {
+        mtp_verify_metal(t, m, form, mtp_verify_llama_1b())
+        return
+    }
+    matrix_llama_1b_metal(t, m, form, k.matrix)
+    if (form.wscale_f32) {
+        coverage_zoo_metal(t, m, form, cov_zoo_c1_llama_q8())
+        decode_parity_llama_1b_q8_metal(t, m, form, k.decode_s32)
+        return
+    }
+    decode_parity_llama_1b_q8_metal(t, m, form, k.decode)
+    metal_llama_1b_cells(t, m)
+    coverage_zoo_metal(t, m, form, cov_zoo_c2_llama_q8_s16())
+    matrix_tensor_metal(t, m, form, matrix_tensor_q8(), k.tensor)
+    prefill_parity_metal(t, m, form, prefill_llama_1b_q8(), k.prefill)
+}
+
+//! the Q8_0 file's Metal cells' CPU sides, each acting on its CPU
+//! form's pass: the default scale's portable form, the f32 twin's
+//! decode controls on the f32 scale's
+def private llama_1b_metal_cpu(t : T?; var k : Llama1bKept; var m : Model; form : ModelForm) {
+    matrix_llama_1b_cpu(t, m, form, k.matrix)
+    matrix_tensor_cpu(t, m, form, matrix_tensor_q8(), k.tensor)
+    decode_parity_cpu(t, m, form, k.decode)
+    decode_parity_cpu(t, m, form, k.decode_s32)
+    prefill_parity_cpu(t, m, form, k.prefill)
+}
+
+//! the compares after the Q8_0 file's block of what its Metal, per-op
+//! FFN and CPU forms kept
+def private llama_1b_kept_within(t : T?; var k : Llama1bKept) {
+    matrix_llama_1b_verdict(t, k.matrix)
+    matrix_tensor_verdict(t, matrix_tensor_q8(), k.tensor)
+    prefill_parity_verdict(t, k.prefill)
+    decode_parity_verdict(t, k.decode)
+    decode_parity_verdict(t, k.decode_s32)
+    perop_ffn_verdict(t, perop_ffn_llama_1b_q8(), k.perop)
+}
+
+//! The Llama-3.2-1B MLX 8-bit snapshot's block, after its GGUF twin's
+//! (`twin`, its uncached form's side): on its CPU form the snapshot's
+//! side of the pair, compared after the block; on its Metal form the
+//! served, per-32 and prefill cells, their CPU rails on `mlx_cpu_form`
+def private llama_1b_mlx8_block(t : T?; twin : MlxPairSide) {
+    let repo = "mlx-community/Llama-3.2-1B-Instruct-8bit"
+    var forms <- [cpu_cells_form()]
+    var inscope arms <- ["metal-mlx8", "metal-prefill-mlx8", "batch-per32"]
+    var inscope metal <- mlx_metal_forms(t, repo, arms)
+    forms |> push_from(metal)
+    var k : MlxLlamaMetalKept
+    var inscope snap : MlxPairSide
+    with_cpu_and_gpu_snapshot(t, "llm", "mlx-community/Llama-3.2-1B-Instruct-8bit", MLX_SNAPSHOT_CTX, forms) $(var m, form) {
+        if (form.on_metal) {
+            mlx_llama_metal_cells(t, m, form, KqFmt.mlx8, "metal-mlx8", "metal-prefill-mlx8",
+                decode_per32_mlx_1b_8bit(), k)
+        } elif (alone_pass_of(form, cpu_cells_form())) {
+            delete snap
+            snap <- mlx_llama_1b_8bit_side(t, m)
+        } else {
+            mlx_llama_metal_cpu(m, form, k)
+        }
+    }
+    mlx_llama_1b_8bit_within(t, twin, snap)
+    mlx_llama_metal_verdict(t, k)
+    delete forms
 }
 
 //! the Q8_0 file's forms: the default (the feeds), one region (the greedy chain, the peel), two regions (the bench row on the
 //! Vulkan home, the N-row command's two rows on the CUDA home), the segment form; on the CUDA home the window-fault form at one region ahead of
 //! the one-region form, twelve regions (the N-row command's twelve rows), the per-op form (the route off) and the q8_0 mirror
 //! (a codec the environment keeps off held as a skip); on every box the q8 uncached CPU form whose chat cells stand alone
-def private llama_1b_forms(var r : Llama1bRows) : array<ModelForm> {
+def private llama_1b_forms(t : T?; var r : Llama1bRows) : array<ModelForm> {
     if (!r.feeds.cuda) {
-        return <- [device_form(), device_form(regions = 1l), device_form(regions = 2l, ctx = BATCH_RIG_CTX), segment_form(),
-            cpu_cells_form(uncached = true), metal_form(ctx = METAL_ROW_CTX)]
+        var vk <- [device_form(), device_form(regions = 1l), device_form(regions = 2l, ctx = BATCH_RIG_CTX), segment_form(),
+            cpu_cells_form(uncached = true), metal_form(ctx = LLAMA_1B_METAL_CTX)]
+        perop_ffn_forms(t, FILE_1B, vk)
+        llama_1b_metal_forms(t, vk)
+        return <- vk
     }
     var forms <- [device_form(), device_form(regions = 1l, cuda_window_fault = true), device_form(regions = 1l),
         device_form(regions = 2l, ctx = BATCH_RIG_CTX), segment_form()]
     forms |> push(device_form(regions = 12l, ctx = BATCH_RIG_CTX))
     forms |> push(device_form(perop = true))
+    perop_ffn_forms(t, FILE_1B, forms)
     r.codec.prompts <- [40l, TWO_WINDOWS]
     codec_forms(forms, r.codec.h, [KVDtype.q8_0], device_form()) $(kv) => "{FILE_1B}: the {kv} mirror's feeds on the CUDA driver"
     forms |> push(cpu_cells_form(uncached = true))
-    forms |> push(metal_form(ctx = METAL_ROW_CTX))
+    forms |> push(metal_form(ctx = LLAMA_1B_METAL_CTX))
+    llama_1b_metal_forms(t, forms)
     return <- forms
 }
 
@@ -492,10 +720,14 @@ def private kernel_skip_on(t : T?; var m : Model) {
 //! form's own cells run on their load, and the default form's kernel skip after its feeds
 def private llama_1b_rows(t : T?; var r : Llama1bRows; var m : Model; form : ModelForm) {
     if (form.on_metal) {
-        metal_llama_1b_cells(t, m)
+        llama_1b_metal_rows(t, r.kept, m, form)
     } elif (!form.on_gpu && form.uncached) {
         chat_llama32_cells(t, m)
-        mlx_llama_1b_8bit_cell(t, m)
+        r.kept.twin <- mlx_llama_1b_twin_side(m)
+    } elif (!form.on_gpu && !main_cpu_pass(form)) {
+        llama_1b_metal_cpu(t, r.kept, m, form)
+    } elif (perop_ffn_form(form)) {
+        perop_ffn_device_cell(t, m, form, perop_ffn_llama_1b_q8(), r.kept.perop)
     } elif (form.perop) {
         declined_runs_on_cpu_cell(t, m)
     } elif (form.pf_window_rows == SEG_WINDOW) {
@@ -521,6 +753,7 @@ def private llama_1b_rows(t : T?; var r : Llama1bRows; var m : Model; form : Mod
         llama_feed_rows(r.feeds, m, form)
         if (!form.on_gpu) {
             llama_codec_rows(t, r.codec, m, form)
+            perop_ffn_cpu(t, m, form, perop_ffn_llama_1b_q8(), r.kept.perop)
         } elif (device_default(form)) {
             if (r.feeds.cuda) {
                 cuda_far_row_rows(r.far_row, m)
@@ -531,17 +764,18 @@ def private llama_1b_rows(t : T?; var r : Llama1bRows; var m : Model; form : Mod
     }
 }
 
-[test(description = "On Llama-3.2-1B Q8_0 the resident chain holds the CPU chain's logits within 6 percent of the max over one and two windows plus eight steps, on the Vulkan home with the GPU spin window in force while armed, on the CUDA driver with every position served and the captured graph replayed, and a step with the far count pinned to the first key attending on the decode tile form at head 64 within the split bar of the row form; at one region a short tail of 1, 2, 5 and 8 rows peels within the split bar of the row-at-a-time tail, one row more or the lever off taking the window chain, and the greedy chain's steps reproduce the plain steps bit for bit; on the Vulkan home bench_tg_batched_rep refuses by name past the homed streams and serves a row it homes; on the CUDA home two and twelve sessions batched through the N-row command land every row within the split bar of each alone, on the rows tensor leaf and with its knee off, a q8_0 K/V mirror holds the CPU chain on q8_0 sessions within 10 percent over one and two windows, and with the whole-model route off no layer sits on the device and the CPU rails run the window and eight steps, and under the window-fault seat the driver arms without its window chain's planes and a prompt window refuses by name while the next load, the seat lifted, holds the planes before any prompt and serves the window and its steps; on the segment form two sessions' tails as one segmented window, within and across windows, hold the split bar of their solo windows, ownership binds owners first and the decline arms fall back unsegmented; on the default form the home's kernel-skip setter (`set_vulkan_kernel_skip`, under the CUDA ask `set_cuda_kernel_skip`) drops the recorded step: under a skip naming the decode attention the next step dispatches none of it and the q8 GEMV anew, and cleared the attention dispatches again, the unskipped step counting both alike, and a 512-token prefill with the last layer's FFN sliced yields the whole window's logits bit for bit, split-k pinned off for both arms; on the q8 uncached CPU form, on every box, the Llama-3 header prefill and the template's dated system header with and without a tool render, and the Llama-3.2-1B MLX 8-bit snapshot loads NEOX-roped with the file's config and mlx8 planes everywhere, its teacher-forced logits within 8 percent of the file's range and within 0.4 of the snapshot runtime's top-1 logits; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; on the Metal home's blob twin, one load on a das_metal build: on Llama-3.2-1B Q8 with no whole-model driver homing a stream, the batched bench row serves four host-cached streams at a rate, every timed step a Metal batched-driver device step, none on the CPU stack; on Llama-3.2-1B Q8, the Metal batched step gathers every row of three sessions off its token id on the device, its logits bit for bit those with the gather off, where the host embeds every row; on Llama-3.2-1B Q8, four greedy streams emit the same tokens with batched steps pre-encoded under the step before (16 or more taken) as encoded at call, and retiring a parked step leaks no Metal object; on Llama-3.2-1B Q8, two streams stepped through the Metal batched driver emit the same tokens with the pre-encode rail on and with the pipelined landing on as with each step built at its call, across a move of both sessions (the step encoded ahead commits through the sessions' new addresses) and the release of one (which leaves no landing naming a session, and lands the step in flight); on Llama-3.2-1B Q8, two sampled streams through two-row ticks the batched driver declines step one row at a time, landing every selection, and emit what each samples right after its own forward; each form loads once")]
+[test(description = "On Llama-3.2-1B Q8_0 the resident chain holds the CPU chain's logits within 6 percent of the max over one and two windows plus eight steps, on the Vulkan home with the GPU spin window in force while armed, on the CUDA driver with every position served and the captured graph replayed, and a step with the far count pinned to the first key attending on the decode tile form at head 64 within the split bar of the row form; at one region a short tail of 1, 2, 5 and 8 rows peels within the split bar of the row-at-a-time tail, one row more or the lever off taking the window chain, and the greedy chain's steps reproduce the plain steps bit for bit; on the Vulkan home bench_tg_batched_rep refuses by name past the homed streams and serves a row it homes; on the CUDA home two and twelve sessions batched through the N-row command land every row within the split bar of each alone, on the rows tensor leaf and with its knee off, a q8_0 K/V mirror holds the CPU chain on q8_0 sessions within 10 percent over one and two windows, and with the whole-model route off no layer sits on the device and the CPU rails run the window and eight steps, and under the window-fault seat the driver arms without its window chain's planes and a prompt window refuses by name while the next load, the seat lifted, holds the planes before any prompt and serves the window and its steps; on the segment form two sessions' tails as one segmented window, within and across windows, hold the split bar of their solo windows, ownership binds owners first and the decline arms fall back unsegmented; on the default form the home's kernel-skip setter (`set_vulkan_kernel_skip`, under the CUDA ask `set_cuda_kernel_skip`) drops the recorded step: under a skip naming the decode attention the next step dispatches none of it and the q8 GEMV anew, and cleared the attention dispatches again, the unskipped step counting both alike, and a 512-token prefill with the last layer's FFN sliced yields the whole window's logits bit for bit, split-k pinned off for both arms; on the q8 uncached CPU form, on every box, the Llama-3 header prefill and the template's dated system header with and without a tool render, and the Llama-3.2-1B MLX 8-bit snapshot loads NEOX-roped with the file's config and mlx8 planes everywhere, its teacher-forced logits within 8 percent of the file's range and within 0.4 of the snapshot runtime's top-1 logits; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; on the Metal home's blob twin, one load on a das_metal build: on Llama-3.2-1B Q8 with no whole-model driver homing a stream, the batched bench row serves four host-cached streams at a rate, every timed step a Metal batched-driver device step, none on the CPU stack; on Llama-3.2-1B Q8, the Metal batched step gathers every row of three sessions off its token id on the device, its logits bit for bit those with the gather off, where the host embeds every row; on Llama-3.2-1B Q8, four greedy streams emit the same tokens with batched steps pre-encoded under the step before (16 or more taken) as encoded at call, and retiring a parked step leaks no Metal object; on Llama-3.2-1B Q8, two streams stepped through the Metal batched driver emit the same tokens with the pre-encode rail on and with the pipelined landing on as with each step built at its call, across a move of both sessions (the step encoded ahead commits through the sessions' new addresses) and the release of one (which leaves no landing naming a session, and lands the step in flight); on Llama-3.2-1B Q8, two sampled streams through two-row ticks the batched driver declines step one row at a time, landing every selection, and emit what each samples right after its own forward; on the Metal home, a das_metal build, on blob twins of the f16 and f32 weight scales the support matrix's weights x KV-dtype cells engage the Metal prefill, decode and batch paths, the npos window is planar-only and the MetalMode knob behaves, the coverage census's zoo rows dispatch their stamps, the batched and resident decode legs emit the portable CPU controls' tokens and their one-step gates hold, and on the f16 twin the forced tensor crowns serve a tmm2d twin whose generate matches the CPU truth token for token and the prefill parity cells hold the CPU controls; on the served image the same-slab verify rows hold the dff and vff control carrier within 0.5; with the whole-model route off on the Vulkan home the per-op dense FFN rail runs every layer's FFN row on the device within 6 percent of the CPU chain, the rail off its control; then the Llama-3.2-1B MLX 8-bit snapshot's own block: on the Metal home its window and 16 greedy steps ride the affine GEMV and embed stamps and emit the CPU rails' ids, two to twelve per-32 streams batch token for token the single-row step's, and its prefill window, uncrowned and with the kq_mulmm twins crowned, lands within 4.0 of the CPU rails' while the one-token-short control lands outside; each form loads once")]
 def test_gpu_resident_llama_1b(t : T?) {
     return if (!family_on(t, "llama"))
     var r : Llama1bRows
     dense_feeds(r.feeds, [40l, TWO_WINDOWS])
-    var forms <- llama_1b_forms(r)
+    var forms <- llama_1b_forms(t, r)
     if (r.feeds.cuda) {
         skip_cell(t, "{FILE_1B}: bench_tg_batched_rep's refusal and served rep: {vulkan_home_why("the batched bench row is the Vulkan home's cell")}")
     } else {
         skip_cell(t, "{FILE_1B}: the N-row command's batched rows, the q8_0 mirror's feeds and the route-off load: {cuda_home_why()}")
     }
+    tensor_carrier_held(t, FILE_1B)
     let ran = with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-Q8_0.gguf", REGIONS_RIG_CTX, forms, parity = true) $(var m, form) {
         llama_1b_rows(t, r, m, form)
     }
@@ -550,26 +784,116 @@ def test_gpu_resident_llama_1b(t : T?) {
         held_within(t, r.far_row, "{FILE_1B}, the far row: ", false)
         llama_codec_within(t, FILE_1B, "", r.codec)
     }
+    llama_1b_kept_within(t, r.kept)
+    llama_1b_mlx8_block(t, r.kept.twin)
     delete r
     delete forms
 }
 
-[test(description = "The Llama-3.2-1B Q4_0 requant's q40 planes on the resident chain hold the CPU chain's logits within 6 percent over one and two windows plus eight steps, on the CUDA driver over one window with every position served; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+[test(description = "On the Metal home's blob twin, a das_metal build: Llama-3.2-1B Q8_0 loaded a second time beside the first continues 40 tokens token for token the CPU control's - the weights-epoch guard over the reload")]
+def test_metal_llama_1b_reload(t : T?) {
+    own_load("reloads the model: a second load beside the first, the weights-epoch guard")
+    return if (!family_on(t, "llama"))
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return if (!arm_on(t, "arm9-reload"))
+        let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
+        return if (!jit_model_available(t, path))
+        let prior_wscale = get_wscale_f16()
+        let prior_backend = kernel_backend_seat()
+        set_wscale_f16(false)
+        pin_kernel_backend("portable")
+        var tr <- load_model_(path, QuantMode.q8)
+        tr.config.seq_len = min(tr.config.seq_len, DECODE_RELOAD_CTX)
+        var trg <- blob_twin(t, path, DECODE_RELOAD_CTX)
+        if (decode_reload_warmed(tr, trg)) {
+            var trr <- load_model_(path, QuantMode.q8)
+            trr.config.seq_len = min(trr.config.seq_len, DECODE_RELOAD_CTX)
+            var trrg <- blob_twin(t, path, DECODE_RELOAD_CTX)
+            decode_reload_within(t, trr, trrg)
+            delete trr
+            delete trrg
+        }
+        delete tr
+        delete trg
+        restore_kernel_backend(prior_backend)
+        set_wscale_f16(prior_wscale)
+    } else {
+        feint("das_metal is not built on this platform; nothing to compare\n")
+    }
+}
+
+[test(description = "The Llama-3.2-1B Q4_0 requant's q40 planes on the resident chain hold the CPU chain's logits within 6 percent over one and two windows plus eight steps, on the CUDA driver over one window with every position served; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; on the Vulkan home the kernel coverage census's coopmat mode sweep runs the q40 planes under the box's, KHR, sdot4, f16 and int8 modes; each form loads once")]
 def test_gpu_resident_llama_1b_q40(t : T?) {
     return if (!family_on(t, "llama"))
     var c : DenseFeeds
     dense_feeds(c, gpu_want_cuda() ? [40l] : [40l, TWO_WINDOWS])
-    let forms <- [device_form()]
+    var forms <- [device_form()]
+    sweep_forms(t, forms, FILE_1B_Q40)
     let ran = with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-Q4_0-local.gguf", REGIONS_RIG_CTX, forms, parity = true) $(var m, form) {
-        llama_feed_rows(c, m, form)
+        if (sweep_leg(form)) {
+            sweep_cell(t, m, form, FILE_1B_Q40)
+        } else {
+            llama_feed_rows(c, m, form)
+        }
     }
     if (ran) {
         dense_feeds_within(t, FILE_1B_Q40, c, LOGIT_BAR_REL)
     }
     delete c
+    delete forms
 }
 
-[test(description = "The Llama-3.2-1B Q5_1 requant keeps the q51 tag on every dense plane on the Vulkan home, the resident chain holds the CPU chain's logits within 6 percent over one and two windows plus eight steps on both homes, and short tails peel through the per-32 planes' N-column leaves within the split bar of the row-at-a-time tail, the longer tail and lever-off arm taking the chain; each form loads once")]
+//! what the Q5_1 file's Metal, per-op FFN and CPU forms keep for the
+//! compares after its block
+struct LlamaQ51Kept {
+    census : CensusKept
+    prefill : PrefillKept
+    perop : PeropFfnKept
+}
+
+//! one form's cells of the Q5_1 file: on the Metal twin the format
+//! census's q51 row, the per-32 carrier's batched streams and the
+//! prefill cells (last: they shut the drivers down), their controls on
+//! the portable CPU form; the per-op FFN rail; on the one-region form
+//! the peel; else the forced feeds, on the Vulkan home with the q51
+//! tags, and the per-op rail's CPU side on the CPU form
+def private llama_q51_rows(t : T?; var c : DenseFeeds; var k : LlamaQ51Kept; var m : Model;
+                           form : ModelForm) {
+    if (form.on_metal) {
+        format_census_metal(t, m, form, format_census_q51(), k.census)
+        decode_per32_metal(t, m, form, decode_per32_q5_1())
+        prefill_parity_metal(t, m, form, prefill_llama_1b_q51(), k.prefill)
+        return
+    }
+    if (!form.on_gpu && !main_cpu_pass(form)) {
+        format_census_cpu(t, m, form, format_census_q51(), k.census)
+        prefill_parity_cpu(t, m, form, k.prefill)
+        return
+    }
+    if (perop_ffn_form(form)) {
+        perop_ffn_device_cell(t, m, form, perop_ffn_llama_1b_q51(), k.perop)
+        return
+    }
+    if (form.on_gpu && form.regions == 1l) {
+        let title = (c.cuda ? "{FILE_1B_Q51}: the same on the per-32 planes' N-column leaves"
+            : "Llama-3.2-1B Q5_1: the same on the per-32 planes' N-column leaves")
+        peel_on(t, m, FILE_1B_Q51, title)
+        return
+    }
+    if (device_default(form) && !c.cuda) {
+        unsafe {
+            t |> run("{FILE_1B_Q51}: every dense plane keeps the q51 tag") @capture(& m)(t : T ?) {
+                dense_planes_tagged(t, m, path_join(models_dir(), FILE_1B_Q51), KqFmt.q51)
+            }
+        }
+    }
+    llama_feed_rows(c, m, form)
+    if (!form.on_gpu) {
+        perop_ffn_cpu(t, m, form, perop_ffn_llama_1b_q51(), k.perop)
+    }
+}
+
+[test(description = "The Llama-3.2-1B Q5_1 requant keeps the q51 tag on every dense plane on the Vulkan home, the resident chain holds the CPU chain's logits within 6 percent over one and two windows plus eight steps on both homes, and short tails peel through the per-32 planes' N-column leaves within the split bar of the row-at-a-time tail, the longer tail and lever-off arm taking the chain; on the Vulkan home with the whole-model route off the per-op dense FFN rail runs every layer's FFN row on the per-32 planes within 6 percent of the CPU chain, the rail off its control; on the Metal home, a das_metal build, every site loads native and the Metal window and six steps ride the per-32 stamps and GEMVs within 4.0 of the portable CPU chain, two to twelve per-32 streams batch token for token the single-row step's, and the prefill parity cells - the short window's kq tail and the scratch panels - hold the CPU controls; each form loads once")]
 def test_gpu_resident_llama_1b_q51(t : T?) {
     return if (!family_on(t, "llama"))
     var c : DenseFeeds
@@ -577,30 +901,62 @@ def test_gpu_resident_llama_1b_q51(t : T?) {
     if (c.cuda) {
         skip_cell(t, "{FILE_1B_Q51}: every dense plane keeps the q51 tag: {vulkan_home_why("the plane tags are the Vulkan home's cell")}")
     }
-    let ran = with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-Q5_1-local.gguf", REGIONS_RIG_CTX, [device_form(), device_form(regions = 1l)]) $(m, form) {
-        if (form.on_gpu && form.regions == 1l) {
-            peel_on(t, m, FILE_1B_Q51, c.cuda ? "{FILE_1B_Q51}: the same on the per-32 planes' N-column leaves" : "Llama-3.2-1B Q5_1: the same on the per-32 planes' N-column leaves")
-            return
-        }
-        if (device_default(form) && !c.cuda) {
-            unsafe {
-                t |> run("{FILE_1B_Q51}: every dense plane keeps the q51 tag") @capture(& m)(t : T ?) {
-                    dense_planes_tagged(t, m, path_join(models_dir(), FILE_1B_Q51), KqFmt.q51)
-                }
-            }
-        }
-        llama_feed_rows(c, m, form)
+    var forms <- [device_form(), device_form(regions = 1l)]
+    perop_ffn_forms(t, FILE_1B_Q51, forms)
+    forms |> push(metal_form(ctx = PREFILL_LLAMA_1B_Q51_CTX))
+    metal_cpu_forms(forms, [prefill_cpu_form()])
+    var k : LlamaQ51Kept
+    let ran = with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-Q5_1-local.gguf", REGIONS_RIG_CTX, forms) $(var m, form) {
+        llama_q51_rows(t, c, k, m, form)
     }
     if (ran) {
         dense_feeds_within(t, FILE_1B_Q51, c, LOGIT_BAR_REL)
     }
+    format_census_verdict(t, format_census_q51(), k.census)
+    prefill_parity_verdict(t, k.prefill)
+    perop_ffn_verdict(t, perop_ffn_llama_1b_q51(), k.perop)
     delete c
+    delete forms
+}
+
+//! what the Q4_K_M file's Metal, per-op FFN and CPU forms keep for
+//! the compares after its block
+struct LlamaKKept {
+    matrix : MatrixLlamaKqKept
+    prefill : PrefillKept
+    decode : DecodeKept
+    perop : PeropFfnKept
 }
 
 //! what the Q4_K_M file's forms collect: the CUDA home's feeds and the codec cells
 struct LlamaKRows {
     feeds : DenseFeeds
     codec : LlamaCodec
+    kept : LlamaKKept
+}
+
+//! the Q4_K_M file's Metal twin's cells - the support matrix's K-quant
+//! row, then the decode legs and the prefill cells, which shut the
+//! drivers down - and their controls on the portable CPU form
+def private llama_k_metal_rows(t : T?; var k : LlamaKKept; var m : Model; form : ModelForm) {
+    if (form.on_metal) {
+        matrix_llama_1b_kq_metal(t, m, form, k.matrix)
+        decode_parity_llama_1b_q4km_metal(t, m, form, k.decode)
+        prefill_parity_metal(t, m, form, prefill_llama_1b_q4km(), k.prefill)
+    } elif (alone_pass_of(form, prefill_cpu_form())) {
+        matrix_llama_1b_kq_cpu(t, m, form, k.matrix)
+        decode_parity_cpu(t, m, form, k.decode)
+        prefill_parity_cpu(t, m, form, k.prefill)
+    }
+}
+
+//! the compares after the Q4_K_M file's block of what its Metal,
+//! per-op FFN and CPU forms kept
+def private llama_k_kept_within(t : T?; var k : LlamaKKept) {
+    matrix_llama_1b_kq_verdict(t, k.matrix)
+    decode_parity_verdict(t, k.decode)
+    prefill_parity_verdict(t, k.prefill)
+    perop_ffn_verdict(t, perop_ffn_llama_1b_q4km(), k.perop)
 }
 
 //! the regions rig's groups cell on a load of `rows` regions - its GEMVs in column tiles with the CUDA home's rows leaf off,
@@ -624,7 +980,7 @@ def private regions_groups_cells(t : T?; var m : Model; rows : int64) {
 
 //! the Q4_K_M file's forms: one region (the peel), two, twelve and twenty regions (the rig's batched steps), the segment form, on the CUDA home
 //! the default (the feeds), and the q8_0 and tq4 mirrors (a codec the environment keeps off held as a skip)
-def private llama_k_forms(var r : LlamaKRows) : array<ModelForm> {
+def private llama_k_forms(t : T?; var r : LlamaKRows) : array<ModelForm> {
     var forms <- [device_form(regions = 1l), device_form(regions = 2l), device_form(regions = 12l), device_form(regions = 20l),
         segment_form()]
     if (r.feeds.cuda) {
@@ -632,13 +988,20 @@ def private llama_k_forms(var r : LlamaKRows) : array<ModelForm> {
     }
     r.codec.prompts <- [40l]
     codec_forms(forms, r.codec.h, [KVDtype.q8_0, KVDtype.tq4], device_form()) $(kv) => "{FILE_1B_K}: the {kv} mirror's cells"
+    perop_ffn_forms(t, FILE_1B_K, forms)
+    forms |> push(metal_form(ctx = PREFILL_LLAMA_1B_Q4KM_CTX))
+    metal_cpu_forms(forms, [prefill_cpu_form()])
     return <- forms
 }
 
 //! one form's collection of the Q4_K_M file's cells into `r`; the regions forms' own cells run on their load
 def private llama_k_rows(t : T?; var r : LlamaKRows; var m : Model; form : ModelForm) {
     let cuda = r.feeds.cuda
-    if (form.pf_window_rows == SEG_WINDOW) {
+    if (form.on_metal || (!form.on_gpu && !main_cpu_pass(form))) {
+        llama_k_metal_rows(t, r.kept, m, form)
+    } elif (perop_ffn_form(form)) {
+        perop_ffn_device_cell(t, m, form, perop_ffn_llama_1b_q4km(), r.kept.perop)
+    } elif (form.pf_window_rows == SEG_WINDOW) {
         segments_on(t, m, "Llama-3.2-1B Q4_K_M: two sessions' tails as one segmented window, within and across windows, hold the split bar of their solo windows; ownership binds owners first and the decline arms fall back unsegmented")
     } elif (form.on_gpu && form.regions == 1l) {
         peel_on(t, m, FILE_1B_K, (cuda ? "{FILE_1B_K}: the same on the K-quant planes' N-column leaves and the rows' split Q8_K step"
@@ -663,18 +1026,19 @@ def private llama_k_rows(t : T?; var r : LlamaKRows; var m : Model; form : Model
         llama_feed_rows(r.feeds, m, form)
         if (!form.on_gpu) {
             llama_codec_rows(t, r.codec, m, form)
+            perop_ffn_cpu(t, m, form, perop_ffn_llama_1b_q4km(), r.kept.perop)
         }
     }
 }
 
-[test(description = "On Llama-3.2-1B Q4_K_M short tails peel through the K-quant planes' N-column leaves within the split bar of the row-at-a-time tail, the longer tail and lever-off arm taking the chain; a q8_0 K/V mirror holds the CPU chain on q8_0 sessions within 10 percent and over a tq4 mirror the device sits within 1.15x the CPU tq4 chain's distance from the f16 chain and within 1.4x of it from the CPU tq4 chain; the N-row command's K-quant GEMV leaves and split Q8_K sites batch two sessions within the split bar of each alone at one window and past the unsplit position, twelve in eight- and four-column tiles and on the CUDA home's rows tensor leaf, and twenty as two commands of ten; on the segment form two sessions' tails as one segmented window, within and across windows, hold the split bar of their solo windows, ownership binds owners first and the decline arms fall back unsegmented; on the CUDA driver the forced feed holds 6 percent over one and two windows and two sessions batch through the N-row command within the split bar; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+[test(description = "On Llama-3.2-1B Q4_K_M short tails peel through the K-quant planes' N-column leaves within the split bar of the row-at-a-time tail, the longer tail and lever-off arm taking the chain; a q8_0 K/V mirror holds the CPU chain on q8_0 sessions within 10 percent and over a tq4 mirror the device sits within 1.15x the CPU tq4 chain's distance from the f16 chain and within 1.4x of it from the CPU tq4 chain; the N-row command's K-quant GEMV leaves and split Q8_K sites batch two sessions within the split bar of each alone at one window and past the unsplit position, twelve in eight- and four-column tiles and on the CUDA home's rows tensor leaf, and twenty as two commands of ten; on the segment form two sessions' tails as one segmented window, within and across windows, hold the split bar of their solo windows, ownership binds owners first and the decline arms fall back unsegmented; on the CUDA driver the forced feed holds 6 percent over one and two windows and two sessions batch through the N-row command within the split bar; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; on the Vulkan home with the whole-model route off the per-op dense FFN rail on the Q8_K feed runs every layer's FFN row on the device within 6 percent of the CPU chain, the rail off its control; on the Metal home, a das_metal build, the support matrix's K-quant row emits the CPU tokens exactly, the kq batched decode streams, the half-x leg and the 40-token K-quant continuation match the portable CPU controls, and the prefill parity cells hold them; each form loads once")]
 def test_gpu_resident_llama_1b_k(t : T?) {
     return if (!family_on(t, "llama"))
     var r : LlamaKRows
     if (gpu_want_cuda()) {
         dense_feeds(r.feeds, [40l, TWO_WINDOWS])
     }
-    var forms <- llama_k_forms(r)
+    var forms <- llama_k_forms(t, r)
     if (!r.feeds.cuda) {
         skip_cell(t, "{FILE_1B_K}: the forced feed and the N-row command's two rows on the CUDA driver: {cuda_home_why()}")
     }
@@ -687,6 +1051,7 @@ def test_gpu_resident_llama_1b_k(t : T?) {
             : "Llama-3.2-1B Q4_K_M: the tq4 K/V mirror - resident prefill + decode against the CPU chain's tq4 and f16 rows")
         llama_codec_within(t, FILE_1B_K, tq4_title, r.codec)
     }
+    llama_k_kept_within(t, r.kept)
     delete r
     delete forms
 }
@@ -702,7 +1067,7 @@ def test_gpu_resident_llama_1b_q50(t : T?) {
     delete c
 }
 
-[test(description = "On Llama-3.2-1B IQ4_XS the whole-model driver's prefill and decode over a q8_0 K/V mirror keep forced-feed logits within 10 percent of max logit of the CPU chain on q8_0 sessions and over a tq4 mirror the device sits within 1.15x the CPU tq4 chain's distance from the f16 chain and within 1.4x of it from the CPU tq4 chain, on the Vulkan home; on the CUDA driver, decoding its codebook through the home's permute, one-window prefill and eight fed-step logits within 6 percent of the CPU chain; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+[test(description = "On Llama-3.2-1B IQ4_XS the whole-model driver's prefill and decode over a q8_0 K/V mirror keep forced-feed logits within 10 percent of max logit of the CPU chain on q8_0 sessions and over a tq4 mirror the device sits within 1.15x the CPU tq4 chain's distance from the f16 chain and within 1.4x of it from the CPU tq4 chain, on the Vulkan home; on the CUDA driver, decoding its codebook through the home's permute, one-window prefill and eight fed-step logits within 6 percent of the CPU chain; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; on the Vulkan home the kernel coverage census's coopmat mode sweep runs the file under the box's, KHR and sdot4 modes; on the Metal home, a das_metal build, the prefill parity cells - the main arms, the short window's kq tail and the scratch panels - hold the portable CPU controls; each form loads once")]
 def test_gpu_resident_llama_1b_iq4xs(t : T?) {
     return if (!family_on(t, "llama"))
     let file = "Llama-3.2-1B-Instruct-IQ4_XS.gguf"
@@ -717,7 +1082,23 @@ def test_gpu_resident_llama_1b_iq4xs(t : T?) {
         codec.prompts <- [40l]
         codec_forms(forms, codec.h, [KVDtype.q8_0, KVDtype.tq4], device_form()) $(kv) => "{file}: the {kv} mirror's cells"
     }
+    sweep_forms(t, forms, file)
+    forms |> push(metal_form(ctx = PREFILL_LLAMA_1B_IQ4XS_CTX))
+    metal_cpu_forms(forms, [prefill_cpu_form()])
+    var prefill : PrefillKept
     let ran = with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-IQ4_XS.gguf", REGIONS_RIG_CTX, forms, parity = true) $(var m, form) {
+        if (form.on_metal) {
+            prefill_parity_metal(t, m, form, prefill_llama_1b_iq4xs(), prefill)
+            return
+        }
+        if (!form.on_gpu && !main_cpu_pass(form)) {
+            prefill_parity_cpu(t, m, form, prefill)
+            return
+        }
+        if (sweep_leg(form)) {
+            sweep_cell(t, m, form, file)
+            return
+        }
         if (form.kv_asked || !form.on_gpu) {
             llama_codec_rows(t, codec, m, form)
         }
@@ -725,6 +1106,7 @@ def test_gpu_resident_llama_1b_iq4xs(t : T?) {
             llama_feed_rows(c, m, form)
         }
     }
+    prefill_parity_verdict(t, prefill)
     if (ran) {
         dense_feeds_within(t, file, c, LOGIT_BAR_REL)
         llama_codec_within(t, file, "Llama-3.2-1B IQ4_XS: the tq4 K/V mirror - resident prefill + decode against the CPU chain's tq4 and f16 rows", codec)
@@ -736,7 +1118,7 @@ def test_gpu_resident_llama_1b_iq4xs(t : T?) {
     delete forms
 }
 
-[test(description = "On the CUDA driver an IQ4_NL Llama-3.2-1B on its superblock planes keeps one-window prefill and eight fed-step logits within 6 percent of max logit of the CPU chain, every position served; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+[test(description = "On the CUDA driver an IQ4_NL Llama-3.2-1B on its superblock planes keeps one-window prefill and eight fed-step logits within 6 percent of max logit of the CPU chain, every position served; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; on the Vulkan home the kernel coverage census's coopmat mode sweep runs the file under the box's, KHR and sdot4 modes; each form loads once")]
 def test_gpu_resident_llama_1b_iq4nl(t : T?) {
     return if (!family_on(t, "llama"))
     var c : DenseFeeds
@@ -748,11 +1130,16 @@ def test_gpu_resident_llama_1b_iq4nl(t : T?) {
     } else {
         skip_cell(t, "Llama-3.2-1B-Instruct-IQ4_NL-local.gguf: the CUDA forced feed: {why}")
     }
-    let ran = with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-IQ4_NL-local.gguf", REGIONS_RIG_CTX, forms, parity = true) $(var m, form) {
+    sweep_forms(t, forms, FILE_1B_IQ4NL)
+    let ran = with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-IQ4_NL-local.gguf", REGIONS_RIG_CTX, forms, empty(why), parity = true) $(var m, form) {
+        if (sweep_leg(form)) {
+            sweep_cell(t, m, form, FILE_1B_IQ4NL)
+            return
+        }
         llama_feed_rows(c, m, form)
     }
     if (ran) {
-        dense_feeds_within(t, "Llama-3.2-1B-Instruct-IQ4_NL-local.gguf", c, LOGIT_BAR_REL)
+        dense_feeds_within(t, FILE_1B_IQ4NL, c, LOGIT_BAR_REL)
     }
     delete c
     delete forms
@@ -778,7 +1165,7 @@ def private nv4_within(t : T?; r : DenseFeeds) {
     }
 }
 
-[test(description = "On the CUDA driver an NVFP4 Llama-3.2-1B with windows on the W4A4 FP4 tensor leaf sits within 4x the CPU chain's distance from the f32 chain over one and two windows, and pinned off MMQ the cm2 tiles hold the dense 6 percent bar; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+[test(description = "On the CUDA driver an NVFP4 Llama-3.2-1B with windows on the W4A4 FP4 tensor leaf sits within 4x the CPU chain's distance from the f32 chain over one and two windows, and pinned off MMQ the cm2 tiles hold the dense 6 percent bar; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; on the Metal home, a das_metal build, every site loads native and the Metal window and six steps ride the nv4 stamps and GEMVs within 4.0 of the portable CPU chain, and the kernel coverage census's NVFP4 zoo row dispatches the nv4 GEMV, its small-batch forms and its dense mul_mm; each form loads once")]
 def test_gpu_resident_llama_1b_nv4(t : T?) {
     return if (!family_on(t, "llama"))
     var r : DenseFeeds
@@ -789,30 +1176,242 @@ def test_gpu_resident_llama_1b_nv4(t : T?) {
     } else {
         skip_cell(t, "{FILE_1B_NV4}: the FP4 leaf's feeds and the MMQ-off control: {why}")
     }
+    forms |> push(metal_form(ctx = KERNEL_COVERAGE_CTX))
+    metal_cpu_forms(forms, [prefill_cpu_form()])
+    var census : CensusKept
     let ran = with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-NVFP4-local.gguf", REGIONS_RIG_CTX, forms, parity = true) $(var m, form) {
-        llama_feed_rows(r, m, form)
+        if (form.on_metal) {
+            format_census_metal(t, m, form, format_census_nv4(), census)
+            coverage_zoo_metal(t, m, form, cov_zoo_c4_llama_nvfp4())
+        } elif (!form.on_gpu && !main_cpu_pass(form) && form.quant == QuantMode.q8) {
+            format_census_cpu(t, m, form, format_census_nv4(), census)
+        } else {
+            llama_feed_rows(r, m, form)
+        }
     }
     if (ran) {
         nv4_within(t, r)
     }
+    format_census_verdict(t, format_census_nv4(), census)
     delete r
     delete forms
 }
 
-[test(description = "On Llama-3.2-3B Q8_0, head size 128 (on the CUDA home the h128 flash tile), the resident chain holds the CPU chain's logits within 6 percent over one and two windows plus eight steps, every call served on the device, and on the CUDA home a step with the far count pinned to the first key attends on the decode tile form at head 128 within the split bar of the row form; each form loads once")]
+[test(description = "On the Metal home's blob twin, a das_metal build, on the Llama-3.2-1B NVFP4 mint with its nv4 token table every site loads native and the Metal window and six steps ride the nv4 stamps and GEMVs, the table gathered on the device, within 4.0 of the portable CPU chain fed the same ids; each form loads once")]
+def test_gpu_resident_llama_1b_emb_nv4(t : T?) {
+    return if (!family_on(t, "llama"))
+    var forms <- [metal_form(ctx = CENSUS_CELLS_CTX)]
+    metal_cpu_forms(forms, [prefill_cpu_form()])
+    var census : CensusKept
+    with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-emb-NVFP4-local.gguf", CENSUS_CELLS_CTX, forms) $(var m, form) {
+        if (form.on_metal) {
+            format_census_metal(t, m, form, format_census_nv4_table(), census)
+        } else {
+            format_census_cpu(t, m, form, format_census_nv4_table(), census)
+        }
+    }
+    format_census_verdict(t, format_census_nv4_table(), census)
+    delete forms
+}
+
+[test(description = "On Llama-3.2-3B Q8_0, head size 128 (on the CUDA home the h128 flash tile), the resident chain holds the CPU chain's logits within 6 percent over one and two windows plus eight steps, every call served on the device, and on the CUDA home a step with the far count pinned to the first key attends on the decode tile form at head 128 within the split bar of the row form; on the Metal home, a das_metal build, the hs=128 partD batched streams and the 40 tokens across depth 2048 equal the portable CPU controls, and the prefill parity cells - at contexts to 131072 - hold the CPU controls; each form loads once")]
 def test_gpu_resident_llama_3b(t : T?) {
     return if (!family_on(t, "llama"))
     var c : DenseFeeds
     var inscope far : Held
     dense_feeds(c, [40l, TWO_WINDOWS])
-    dense_feeds_block(t, "Llama-3.2-3B-Instruct-Q8_0.gguf", REGIONS_RIG_CTX, c, LOGIT_BAR_REL) $(m, form) {
-        llama_feed_rows(c, m, form)
-        if (c.cuda && form.on_gpu) {
-            cuda_far_row_rows(far, m)
+    var forms <- [device_form(), metal_form(ctx = PREFILL_LLAMA_3B_CTX)]
+    metal_cpu_forms(forms, [prefill_cpu_form()])
+    var prefill : PrefillKept
+    var decode : DecodeKept
+    let ran = with_cpu_and_gpu_model(t, "llm", "Llama-3.2-3B-Instruct-Q8_0.gguf", REGIONS_RIG_CTX, forms) $(var m, form) {
+        if (form.on_metal) {
+            decode_parity_llama_3b_q8_metal(t, m, form, decode)
+            prefill_parity_metal(t, m, form, prefill_llama_3b(), prefill)
+        } elif (!form.on_gpu && !main_cpu_pass(form)) {
+            decode_parity_cpu(t, m, form, decode)
+            prefill_parity_cpu(t, m, form, prefill)
+        } else {
+            llama_feed_rows(c, m, form)
+            if (c.cuda && form.on_gpu) {
+                cuda_far_row_rows(far, m)
+            }
         }
     }
+    if (ran) {
+        dense_feeds_within(t, "Llama-3.2-3B-Instruct-Q8_0.gguf", c, LOGIT_BAR_REL)
+    }
     held_within(t, far, "Llama-3.2-3B Q8_0, the far row: ", false)
+    decode_parity_verdict(t, decode)
+    prefill_parity_verdict(t, prefill)
     delete c
+    delete forms
+}
+
+//! the 8B's twin context: its cells' largest, the dim ladder's
+let private LLAMA31_8B_CTX = PREFILL_LLAMA31_8B_CTX
+
+[test(description = "On the Metal home's blob twin, a das_metal build, Meta-Llama-3.1-8B Q8_0 (the llama31-8b category, dim 4096): the support matrix's 8B matrix cell engages the Metal prefill, decode and batch paths and the q8 GEMM tier batches past B=4; a B=8 batched decode step's logits and K/V rows sit within tolerance of the CPU step's; the prefill parity cells hold the portable CPU chain, the 40-token dim-4096 continuation token for token; each form loads once")]
+def test_metal_llama31_8b(t : T?) {
+    return if (!family_on(t, "llama"))
+    var forms <- [metal_form(ctx = LLAMA31_8B_CTX)]
+    metal_cpu_forms(forms, [prefill_cpu_form()])
+    var prefill : PrefillKept
+    var decode : DecodeKept
+    with_cpu_and_gpu_model(t, "llm", "Meta-Llama-3.1-8B-Instruct-Q8_0.gguf", LLAMA31_8B_CTX, forms) $(var m, form) {
+        if (form.on_metal) {
+            matrix_dim_metal(t, m, form, matrix_dim_8b())
+            decode_parity_llama31_8b_q8_metal(t, m, form, decode)
+            prefill_parity_metal(t, m, form, prefill_llama31_8b(), prefill)
+        } else {
+            decode_parity_cpu(t, m, form, decode)
+            prefill_parity_cpu(t, m, form, prefill)
+        }
+    }
+    decode_parity_verdict(t, decode)
+    prefill_parity_verdict(t, prefill)
+    delete forms
+}
+
+[test(description = "On the Metal home's blob twin, a das_metal build, Llama-3.3-70B Q4_K_M (the llama33-70b category, dim 8192): the support matrix's 70B K-quant matrix cell engages the Metal prefill, decode and batch paths and its batched dim ladder rides the kq mul_mm twin; each form loads once")]
+def test_metal_llama33_70b(t : T?) {
+    return if (!family_on(t, "llama"))
+    var forms : array<ModelForm>
+    if (empty(arm_why("dim70b"))) {
+        forms |> push(metal_form(ctx = MATRIX_LLAMA_70B_CTX))
+    } else {
+        skip_cell(t, ("Llama-3.3-70B-Instruct-Q4_K_M.gguf: the dim ladder's 70B row: the arm " +
+            "filter leaves dim70b out"))
+    }
+    with_cpu_and_gpu_model(t, "llm", "Llama-3.3-70B-Instruct-Q4_K_M.gguf", MATRIX_LLAMA_70B_CTX, forms, false) $(var m, form) {
+        matrix_dim_metal(t, m, form, matrix_dim_70b())
+    }
+    delete forms
+}
+
+//! what the Q5_K_M file's Metal and CPU forms keep for the compares
+//! after its block
+struct LlamaK5Kept {
+    tensor : MatrixTensorKept
+    decode : DecodeKept
+}
+
+[test(description = "On the Metal home's blob twin, a das_metal build, Llama-3.2-1B Q5_K_M: the k5 batched decode streams equal the portable CPU control at B=3 and B=2, the kernel coverage census's q5_K zoo row dispatches the k5 GEMV, mul_mm and batch tiles, and with the tensor crowns forced a crowned tmm2d twin serves and the generate matches the CPU truth token for token; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+def test_gpu_resident_llama_1b_k5(t : T?) {
+    return if (!family_on(t, "llama"))
+    let file = "Llama-3.2-1B-Instruct-Q5_K_M.gguf"
+    var forms <- [metal_form(ctx = KERNEL_COVERAGE_CTX)]
+    metal_cpu_forms(forms, [prefill_cpu_form()])
+    var k : LlamaK5Kept
+    tensor_carrier_held(t, file)
+    with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-Q5_K_M.gguf", KERNEL_COVERAGE_CTX, forms, parity = true) $(var m, form) {
+        if (form.on_metal) {
+            coverage_zoo_metal(t, m, form, cov_zoo_c3_llama_q5km())
+            decode_parity_llama_1b_q5km_metal(t, m, form, k.decode)
+            matrix_tensor_metal(t, m, form, matrix_tensor_k5(), k.tensor)
+        } elif (alone_pass_of(form, prefill_cpu_form())) {
+            decode_parity_cpu(t, m, form, k.decode)
+            matrix_tensor_cpu(t, m, form, matrix_tensor_k5(), k.tensor)
+        }
+    }
+    decode_parity_verdict(t, k.decode)
+    matrix_tensor_verdict(t, matrix_tensor_k5(), k.tensor)
+    delete forms
+}
+
+[test(description = "On the Metal home's blob twin, a das_metal build, the Llama-3.2-1B IQ2_XXS local requant (the iquant crown witness, a skip where it is not minted): with the tensor crowns forced a crowned tmm2d twin serves and the generate matches the portable CPU truth token for token; on the Vulkan home the coverage census's coopmat mode sweep runs the vehicle's prefill, steps and continuation under the box's, KHR and sdot4 modes; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+def test_gpu_resident_llama_1b_iq2xxs(t : T?) {
+    return if (!family_on(t, "llama"))
+    let file = "Llama-3.2-1B-Instruct-IQ2_XXS-local.gguf"
+    var forms <- [metal_form(ctx = MATRIX_CTX)]
+    metal_cpu_forms(forms, [prefill_cpu_form()])
+    sweep_forms(t, forms, file)
+    var tensor : MatrixTensorKept
+    with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-IQ2_XXS-local.gguf", MATRIX_CTX, forms, false, parity = true) $(var m, form) {
+        if (form.on_metal) {
+            matrix_tensor_metal(t, m, form, matrix_tensor_iq2xxs(), tensor)
+        } elif (alone_pass_of(form, prefill_cpu_form())) {
+            matrix_tensor_cpu(t, m, form, matrix_tensor_iq2xxs(), tensor)
+        } else {
+            sweep_cell(t, m, form, file)
+        }
+    }
+    matrix_tensor_verdict(t, matrix_tensor_iq2xxs(), tensor)
+    delete forms
+}
+
+//! one sweep vehicle's block body (`sweep_cell`), its device forms the
+//! sweep's legs alone
+def private sweep_vehicle_forms(t : T?; file : string) : array<ModelForm> {
+    var forms : array<ModelForm>
+    sweep_forms(t, forms, file)
+    return <- forms
+}
+
+[test(description = "On the Vulkan home the kernel coverage census's coopmat mode sweep runs Llama-3.2-1B Q3_K_L's k3 and k5 planes through a prefill, two greedy steps and a continuation on f32 and f16 sessions under the box's, KHR and sdot4 modes; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+def test_gpu_resident_llama_1b_q3kl(t : T?) {
+    return if (!family_on(t, "llama"))
+    let file = "Llama-3.2-1B-Instruct-Q3_K_L.gguf"
+    var forms <- sweep_vehicle_forms(t, file)
+    with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-Q3_K_L.gguf", VK_KERNEL_COVERAGE_CTX, forms, false, parity = true) $(var m, form) {
+        sweep_cell(t, m, form, file)
+    }
+    delete forms
+}
+
+[test(description = "On the Vulkan home the kernel coverage census's coopmat mode sweep runs Llama-3.2-1B IQ3_M's iq3s planes through a prefill, two greedy steps and a continuation on f32 and f16 sessions under the box's, KHR and sdot4 modes; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+def test_gpu_resident_llama_1b_iq3m(t : T?) {
+    return if (!family_on(t, "llama"))
+    let file = "Llama-3.2-1B-Instruct-IQ3_M.gguf"
+    var forms <- sweep_vehicle_forms(t, file)
+    with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-IQ3_M.gguf", VK_KERNEL_COVERAGE_CTX, forms, false, parity = true) $(var m, form) {
+        sweep_cell(t, m, form, file)
+    }
+    delete forms
+}
+
+[test(description = "On the Vulkan home the kernel coverage census's coopmat mode sweep runs the Llama-3.2-1B IQ3_XXS local requant's iq3xxs planes through a prefill, two greedy steps and a continuation on f32 and f16 sessions under the box's, KHR and sdot4 modes; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+def test_gpu_resident_llama_1b_iq3xxs(t : T?) {
+    return if (!family_on(t, "llama"))
+    let file = "Llama-3.2-1B-Instruct-IQ3_XXS-local.gguf"
+    var forms <- sweep_vehicle_forms(t, file)
+    with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-IQ3_XXS-local.gguf", VK_KERNEL_COVERAGE_CTX, forms, false, parity = true) $(var m, form) {
+        sweep_cell(t, m, form, file)
+    }
+    delete forms
+}
+
+[test(description = "On the Vulkan home the kernel coverage census's coopmat mode sweep runs the Llama-3.2-1B Q2_K local requant's q2_K planes through a prefill, two greedy steps and a continuation on f32 and f16 sessions under the box's, KHR and sdot4 modes; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+def test_gpu_resident_llama_1b_q2k(t : T?) {
+    return if (!family_on(t, "llama"))
+    let file = "Llama-3.2-1B-Instruct-Q2_K-local.gguf"
+    var forms <- sweep_vehicle_forms(t, file)
+    with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-Q2_K-local.gguf", VK_KERNEL_COVERAGE_CTX, forms, false, parity = true) $(var m, form) {
+        sweep_cell(t, m, form, file)
+    }
+    delete forms
+}
+
+[test(description = "On the Vulkan home the kernel coverage census's coopmat mode sweep runs the Llama-3.2-1B IQ2_XS local requant's iq2xs planes through a prefill, two greedy steps and a continuation on f32 and f16 sessions under the box's, KHR and sdot4 modes; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+def test_gpu_resident_llama_1b_iq2xs(t : T?) {
+    return if (!family_on(t, "llama"))
+    let file = "Llama-3.2-1B-Instruct-IQ2_XS-local.gguf"
+    var forms <- sweep_vehicle_forms(t, file)
+    with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-IQ2_XS-local.gguf", VK_KERNEL_COVERAGE_CTX, forms, false, parity = true) $(var m, form) {
+        sweep_cell(t, m, form, file)
+    }
+    delete forms
+}
+
+[test(description = "On the Vulkan home the kernel coverage census's coopmat mode sweep runs the Llama-3.2-1B i1-IQ3_XXS file's iq3xxs planes and iq2s attention planes through a prefill, two greedy steps and a continuation on f32 and f16 sessions under the box's, KHR and sdot4 modes; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+def test_gpu_resident_llama_1b_i1_iq3xxs(t : T?) {
+    return if (!family_on(t, "llama"))
+    let file = "Llama-3.2-1B-Instruct.i1-IQ3_XXS.gguf"
+    var forms <- sweep_vehicle_forms(t, file)
+    with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct.i1-IQ3_XXS.gguf", VK_KERNEL_COVERAGE_CTX, forms, false, parity = true) $(var m, form) {
+        sweep_cell(t, m, form, file)
+    }
+    delete forms
 }
 
 [test(description = "On Llama-3.1-8B Q4_K_M the resident chain's mixed Q8_0 and K-quant planes hold the CPU chain's logits within 6 percent over one and two windows plus eight steps, on the Vulkan home; each form loads once")]
@@ -917,16 +1516,31 @@ def test_gpu_resident_smollm2(t : T?) {
 
 let private TINYLLAMA_CTX = 2048l   //! tinyllama's own context: its cells read at it, the past-the-context cell cutting it
 
-[test(description = "tinyllama Q8_0 on its q8 uncached CPU form, on every box: a text running past the context embeds to a finite unit vector at cosine above 0.9999 to its leading seq_len tokens alone, the chat model file naming no pooling defaults to mean pooling, the chat engine's first-turn prefill equals the hand-built Zephyr sequence, and under a TokenConstraint the sampler emits only admitted tokens, walks the whole row, flags a dead end and a scheduler stream finishes constraint; each form loads once")]
+[test(description = "tinyllama Q8_0 on its q8 uncached CPU form, on every box: a text running past the context embeds to a finite unit vector at cosine above 0.9999 to its leading seq_len tokens alone, the chat model file naming no pooling defaults to mean pooling, the chat engine's first-turn prefill equals the hand-built Zephyr sequence, and under a TokenConstraint the sampler emits only admitted tokens, walks the whole row, flags a dead end and a scheduler stream finishes constraint; on the Vulkan home the kernel coverage census runs the resident dense ladder and the per-op rails' batched steps at 2, 4 and 8 sessions, and under a tq4 mirror a prefill and two steps on tq4's four-head slab; each form loads once")]
 def test_gpu_resident_tinyllama(t : T?) {
     return if (!family_on(t, "llama"))
-    with_cpu_and_gpu_model(t, "llm", "tinyllama-1.1b-chat-v1.0.Q8_0.gguf", TINYLLAMA_CTX, [cpu_cells_form(uncached = true)]) $(m, form) {
+    var forms <- [cpu_cells_form(uncached = true)]
+    if (empty(arm_why("coverage-vk"))) {
+        forms_or_skips(t, forms, "tinyllama-1.1b-chat-v1.0.Q8_0.gguf",
+            [vk_census_form(), device_form() |> asking(KVDtype.tq4)],
+            vulkan_home_why("the kernel coverage census rows are the Vulkan home's cell"))
+    }
+    with_cpu_and_gpu_model(t, "llm", "tinyllama-1.1b-chat-v1.0.Q8_0.gguf", TINYLLAMA_CTX, forms, false) $(var m, form) {
+        if (on_device_home(form) && form.kv_asked) {
+            coverage_vk_codec(t, m, form, cov_vk_c43_codec_tinyllama())
+            return
+        }
+        if (on_device_home(form)) {
+            coverage_vk_model(t, m, form, cov_vk_c36_tinyllama())
+            return
+        }
         return if (!form.alone)
         embeddings_past_the_context_cell(t, m)
         embeddings_chat_model_default_mean_cell(t, m)
         chat_tinyllama_cells(t, m)
         constrained_sampler_cell(t, m)
     }
+    delete forms
 }
 
 //! the last row's logits of an eight-row tail (the N-row command, the rows leaf's feed) after a 40-row opening on a fresh load of
@@ -946,6 +1560,7 @@ def private tail_after_load(path : string; tail : array<int64>) : array<float> {
 
 [test(description = "On the CUDA driver a Llama-3.2-1B Q8_0 load after a dropped one reads an eight-row tail's logits bit for bit as the first load did, the rows leaf's feed record cleared by the drop; a tail one token off is the control")]
 def test_gpu_resident_cuda_llama_drop_reload(t : T?) {
+    own_load("reloads the model: a second load reads the first's tail bit for bit")
     return if (!family_on(t, "llama"))
     t |> run("{FILE_1B}: load, tail, drop; load again, the same tail") @(t : T?) {
         let path = cuda_model_path(t, FILE_1B)
@@ -974,6 +1589,7 @@ def test_gpu_resident_cuda_llama_drop_reload(t : T?) {
 //! the last cell of the file - keep it last: it takes the device down, and the next file's context brings its own up
 [test(description = "With Llama-3.2-1B Q8_0 served on the CUDA driver and its Model deleted with no drop, the tier's shutdown frees the driver's device state too: no CUDA object or allocation is left live")]
 def test_gpu_resident_cuda_shutdown_drops_the_model(t : T?) {
+    own_load("shuts down the model: the tier's shutdown drops the installed model's device state")
     return if (!family_on(t, "llama"))
     t |> run("{FILE_1B}: load, tail, delete the model; the shutdown leaves nothing live") @(t : T?) {
         let path = cuda_model_path(t, FILE_1B)
@@ -1016,7 +1632,7 @@ def test_gpu_resident_cuda_shutdown_drops_the_model(t : T?) {
 let private FILE_35 = "Phi-3.5-mini-instruct-Q4_K_M.gguf"   //! head 96: the h96 flash tile, the K-quant planes
 
 //! the K-quant file runs the two-window prompt alone: after a 40-token prompt its steps at 41 and 44 read 7.7 and 6.6% of the max logit off the CPU's (the Q8_0 file's within 0.73 of a 1.9 bar) while the one-step-off rows sit 6.5% apart, so no one bar holds both arms
-[test(description = "On Phi-3.5-mini Q4_K_M with fused qkv and gate-up planes and long-rope factors, a batched step over two sessions holds the split bar of each alone, at one window and past the unsplit position, the one-token-off control past it; on the CUDA whole-model driver, head 96 on the h96 flash tile, two-window forced-feed logits within 6 percent of max logit of the CPU chain; on the uncached CPU form, on every box, the first-turn prefill equals the hand-built Phi-3 sequence of system, user, end and assistant special ids around the encoded text token for token; on the K-quant-native portable-pinned CPU form the fused attn_qkv splits into k5 q and k slices within 1e-3 relative L2 of the file dequant, the k slice at its dim x qd source offset, and the model, its context past the original 4096, carries the file's 48 long rope factors bit for bit, apart from the short set; each form loads once")]
+[test(description = "On Phi-3.5-mini Q4_K_M with fused qkv and gate-up planes and long-rope factors, a batched step over two sessions holds the split bar of each alone, at one window and past the unsplit position, the one-token-off control past it; on the CUDA whole-model driver, head 96 on the h96 flash tile, two-window forced-feed logits within 6 percent of max logit of the CPU chain; on the uncached CPU form, on every box, the first-turn prefill equals the hand-built Phi-3 sequence of system, user, end and assistant special ids around the encoded text token for token; on the K-quant-native portable-pinned CPU form the fused attn_qkv splits into k5 q and k slices within 1e-3 relative L2 of the file dequant, the k slice at its dim x qd source offset, and the model, its context past the original 4096, carries the file's 48 long rope factors bit for bit, apart from the short set; on the Vulkan home the kernel coverage census runs the head-96 window's flash tiles; on the Metal home, a das_metal build, the support matrix's phi3 K-quant row derives the NEOX need, engages the three Metal paths on f16 and q8_0 K/V and its metal-overrides generate emits the portable CPU's ids, the single row past the ceiling on the narrow fused stamp within its bar, and the coverage census's phi3 zoo row dispatches its stamps; each form loads once")]
 def test_gpu_resident_phi35_mini(t : T?) {
     return if (!family_on(t, "phi3"))
     var c : DenseFeeds
@@ -1027,17 +1643,30 @@ def test_gpu_resident_phi35_mini(t : T?) {
         forms |> push(device_form())
     } else {
         skip_cell(t, "{FILE_35}: the forced feed on the CUDA driver: {cuda_home_why()}")
+        if (vk_census_asked()) {
+            forms |> push(vk_census_form())
+        }
     }
+    forms |> push(metal_form(ctx = KERNEL_COVERAGE_CTX))
+    metal_cpu_forms(forms, [prefill_cpu_form()])
+    var family : MatrixFamilyKept
     var ran = false
     with_cuda_mmq_winners() {
-        ran = with_cpu_and_gpu_model(t, "llm", "Phi-3.5-mini-instruct-Q4_K_M.gguf", REGIONS_RIG_CTX, forms, c.cuda) $(m, form) {
-            if (form.uncached) {
+        ran = with_cpu_and_gpu_model(t, "llm", "Phi-3.5-mini-instruct-Q4_K_M.gguf", REGIONS_RIG_CTX, forms, c.cuda) $(var m, form) {
+            if (form.on_metal) {
+                matrix_family_metal(t, m, form, matrix_row_phi35_k4(), family)
+                coverage_zoo_metal(t, m, form, cov_zoo_c6_phi3())
+            } elif (alone_pass_of(form, prefill_cpu_form())) {
+                matrix_family_cpu(t, m, form, matrix_row_phi35_k4(), family)
+            } elif (form.uncached) {
                 chat_phi_cells(t, m)
             } elif (form.kq_native == KqNative.on) {
                 kq_fused_qkv_slices_cell(t, m)
                 kq_phi3_longrope_factors_cell(t, m)
             } elif (form.on_gpu && form.regions == 2l) {
                 regions_steps_cells(t, m, LogitsBar.split_bar)
+            } elif (vk_census_form_is(form)) {
+                coverage_vk_model(t, m, form, cov_vk_c38_phi3())
             } else {
                 dense_feeds_rows(c, m, form, "phi3")
             }
@@ -1046,19 +1675,43 @@ def test_gpu_resident_phi35_mini(t : T?) {
     if (ran) {
         dense_feeds_within(t, FILE_35, c, LOGIT_BAR_REL)
     }
+    matrix_family_verdict(t, matrix_row_phi35_k4(), family)
     delete c
     delete forms
 }
 
-[test(description = "On the CUDA whole-model driver Phi-3.5-mini Q8_0 keeps prefill and eight fed-step logits within 6 percent of max logit of the CPU chain over one and two windows; each form loads once")]
+[test(description = "On the CUDA whole-model driver Phi-3.5-mini Q8_0 keeps prefill and eight fed-step logits within 6 percent of max logit of the CPU chain over one and two windows; on the Metal home, a das_metal build, the support matrix's phi3 Q8_0 row on the f16 weight scale engages the three Metal paths through the fused qkv_rs NEOX mapping and its metal-overrides generate emits the portable CPU's ids, the single row past the ceiling on the narrow fused stamp within its bar; each form loads once")]
 def test_gpu_resident_cuda_phi35_mini_q8(t : T?) {
-    return if (!family_on(t, "phi3") || !cuda_home_asked(t))
+    return if (!family_on(t, "phi3"))
+    let file = "Phi-3.5-mini-instruct-Q8_0.gguf"
     var c : DenseFeeds
-    dense_feeds(c, [40l, TWO_WINDOWS])
+    var forms : array<ModelForm>
+    let why = cuda_home_why()
+    if (empty(why)) {
+        dense_feeds(c, [40l, TWO_WINDOWS])
+        forms |> push(device_form())
+    } else {
+        skip_cell(t, "{file}: the forced feed on the CUDA driver: {why}")
+    }
+    forms |> push(metal_form(ctx = MATRIX_CTX))
+    metal_cpu_forms(forms, [prefill_cpu_form()])
+    var family : MatrixFamilyKept
+    var ran = false
     with_cuda_mmq_winners() {
-        dense_feeds_block(t, "Phi-3.5-mini-instruct-Q8_0.gguf", REGIONS_RIG_CTX, c, LOGIT_BAR_REL) $(m, form) {
-            dense_feeds_rows(c, m, form, "phi3")
+        ran = with_cpu_and_gpu_model(t, "llm", "Phi-3.5-mini-instruct-Q8_0.gguf", REGIONS_RIG_CTX, forms, c.cuda) $(var m, form) {
+            if (form.on_metal) {
+                matrix_family_metal(t, m, form, matrix_row_phi35_q8(), family)
+            } elif (alone_pass_of(form, prefill_cpu_form())) {
+                matrix_family_cpu(t, m, form, matrix_row_phi35_q8(), family)
+            } else {
+                dense_feeds_rows(c, m, form, "phi3")
+            }
         }
     }
+    if (ran) {
+        dense_feeds_within(t, file, c, LOGIT_BAR_REL)
+    }
+    matrix_family_verdict(t, matrix_row_phi35_q8(), family)
     delete c
+    delete forms
 }

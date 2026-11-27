@@ -4,14 +4,13 @@ options persistent_heap   // + explicit deletes in the cells: the model and sess
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require _moe_resident   // MoeFixture, moe_prompt_feeds, moe_perop_heat_cell
+require _moe_resident   // MoeFixture, moe_prompt_feeds, the heat cell's halves
 require _cpu_gpu_model   // with_cpu_and_gpu_model, the forms, FeedRows
 require _resident_regions   // the regions cells' collections, REGIONS_RIG_CTX, LogitsBar
 require _model_tier   // models_dir
-require dasllama/dasllama   // load_model_, create_session, moe_gpu_drop_model
-require daslib/fio   // path_join
+require dasllama/dasllama   // create_session
 require dasllama/dasllama_math   // with_dasllama_jobque_
-require dasllama/dasllama_gpu_tier   // set_gpu_resident_route, moe_gpu_layer_on_gpu: the per-op cell's route lever and marks
+require dasllama/dasllama_gpu_tier   // moe_gpu_layer_on_gpu: the per-op cell's marks
 require dasllama/dasllama_gpu_resident   // tier_expert_decline, gpu_resident_host_layers
 require ?vulkan dasllama/dasllama_vulkan_prefill   // vk_xf_biased_acts: the Vulkan chain's biased acts, the stream twin's witness on that home
 require ?cuda dasllama/dasllama_cuda_stream   // cud_stream_stats().biased: the same on the CUDA home
@@ -22,6 +21,9 @@ require _chat_cells   // chat_gptoss_cells: the uncached CPU form's chat cells
 require _fused_decode_cells   // fused_decode_moe_chain_cell: the q8 CPU form's fused expert chain
 require _parity_cells   // parity_gptoss_cut_cell: the pinned CPU form's parity stream
 require dasllama/dasllama_env   // g_env_engine.pin_backend: the parity form's environment pin
+require _metal_matrix_cells   // the Metal family matrix's gpt-oss row on the Metal form
+require _metal_prefill_cells   // prefill_gptoss_4l: the Metal prefill's routed short window
+require _kernel_coverage_cells   // cov_zoo_c13_gptoss: the kernel census's zoo row
 
 // gpt-oss-4L, the 20b's first four blocks (the native-MXFP4
 // routed stacks on the mx4 expert rail, the biased router's
@@ -69,54 +71,134 @@ let private GPTOSS = MoeFixture(file = "gpt-oss-4L-mxfp4-local.gguf", shexp = fa
 let private GPTOSS_HEAT = MoeFixture(file = "gpt-oss-4L-mxfp4-local.gguf", shexp = false, bar_rel = MOE_LOGIT_BAR_REL, window = 128l)
 let private MX4 = int(KqFmt.mx4)   //! the fixture's expert format, as the chain's admission reads it
 
-[test(description = "With the whole-model route off, the per-op tier places every gpt-oss-4L routed layer's mx4 stacks on the device, and a 40-token window plus six fed steps sit within the 5% logits bar of the CPU chain")]
-def test_gpu_perop_gptoss(t : T?) {
-    t |> run("gpt-oss-4L with the whole-model route off: the per-op expert chain takes every routed layer's mx4 stacks under the biased clamped swiglu, the window and steps against the CPU chain") @(t : T?) {
-        if (!family_on(t, "gptoss") || !vulkan_home_asked(t, "the per-op tier is the Vulkan home's")) return
-        let path = path_join(models_dir(), GPTOSS.file)
-        if (!resident_ready(t, path)) return
-        let route = gpu_resident_route_lever()
-        set_gpu_resident_route(false)
-        var tr <- load_model_(path, QuantMode.q8)
-        set_gpu_resident_route(route)
-        t |> success(!moe_gpu_resident_active(), "the whole-model route is off: the per-op rails serve")
-        var placed = 0l
-        var routed = 0l
-        for (l in range64(tr.config.n_layers)) {
-            continue if (!layer_is_moe(tr, l))
-            routed++
-            t |> equal(tier_expert_decline(tr, l), "", "layer {l}'s mx4 stacks are the expert chain's")
-            placed += moe_gpu_layer_on_gpu(l) ? 1l : 0l
-        }
-        t |> equal(placed, routed, "the per-op expert walk placed every routed layer ({placed} of {routed}) - none left on the CPU")
-        with_dasllama_jobque_() {
-            var prompt <- resident_prompt(40l)
-            var toks <- resident_feed(6l)
-            var sg <- create_session(tr, mirror_kv_dtype())
-            var gpu <- feed_logits(tr, sg, prompt, toks)
-            delete sg
-            moe_gpu_drop_model()
-            var cpu <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
-            feed_steps_within(t, tr, "gpt-oss per-op ", 40l, gpu, cpu, toks, GPTOSS.bar_rel, "per-op")
-            delete gpu
-            delete cpu
-            delete prompt
-            delete toks
-        }
-        delete tr
-    }
+//! what the per-op form's cell hands its CPU side: the window's and
+//! fed steps' rows, the codec they ran on
+struct PeropKept {
+    gpu : array<array<float>>
+    kv : KVDtype
+    ran : bool       //! the device side fed its steps
+    cpu_ran : bool   //! the CPU side fed and compared them
 }
 
-[test(description = "On the per-op tier with two gpt-oss-4L routed layers placed and the rest streamed under an eight-slot heat pool, the window and fed steps hold the routed bar of the CPU chain and the pool serves picks")]
-def test_gpu_perop_gptoss_heat(t : T?) {
-    t |> run("gpt-oss-4L on the per-op tier: two routed layers placed, two streamed under the heat pool's mx4 slots with the biased clamped swiglu, against the CPU chain") @(t : T?) {
-        if (!family_on(t, "gptoss")) return
-        let placement = moe_perop_heat_cell(t, GPTOSS_HEAT, 2l, 8l)
-        if (placement.routed > 0l) {
-            t |> equal(placement.placed, 2l,
-                "the walk placed two of gpt-oss-4L's {placement.routed} routed layers")
-            t |> equal(placement.routed - placement.placed, 2l, "... and streamed the other two")
+let private PEROP_PROMPT = 40l
+let private PEROP_STEPS = 6l
+
+//! the per-op form's cell on `m`, the whole-model route off: every
+//! routed layer's mx4 stacks the expert chain's and placed on the
+//! device, a 40-token window and six fed steps kept for the CPU side
+def private perop_rows(t : T?; m : Model; form : ModelForm; var k : PeropKept) {
+    return if (!vulkan_home_asked(t, "the per-op tier is the Vulkan home's"))
+    t |> success(!moe_gpu_resident_active(), "the whole-model route is off: the per-op rails serve")
+    var placed = 0l
+    var routed = 0l
+    for (l in range64(m.config.n_layers)) {
+        continue if (!layer_is_moe(m, l))
+        routed++
+        t |> equal(tier_expert_decline(m, l), "", "layer {l}'s mx4 stacks are the expert chain's")
+        placed += moe_gpu_layer_on_gpu(l) ? 1l : 0l
+    }
+    t |> equal(placed, routed,
+        ("the per-op expert walk placed every routed layer ({placed} of {routed}) - none left " +
+        "on the CPU"))
+    k.kv = form.kv   //! no mirror arms on a per-op load: the form names the codec
+    with_dasllama_jobque_() {
+        var inscope prompt <- resident_prompt(PEROP_PROMPT)
+        var inscope toks <- resident_feed(PEROP_STEPS)
+        var inscope sg <- create_session(m, k.kv)
+        delete k.gpu
+        k.gpu <- feed_logits(m, sg, prompt, toks)
+    }
+    k.ran = true
+}
+
+//! the per-op cell's CPU side on the CPU form `m`, once: the same
+//! window and steps on the CPU chain against the device's rows at the
+//! fixture's bar, the rows freed after
+def private perop_cpu(t : T?; m : Model; var k : PeropKept) {
+    return if (!k.ran || k.cpu_ran)
+    with_dasllama_jobque_() {
+        var inscope prompt <- resident_prompt(PEROP_PROMPT)
+        var inscope toks <- resident_feed(PEROP_STEPS)
+        var inscope cpu <- feed_alone(m, k.kv, prompt, toks)
+        feed_steps_within(t, m, "gpt-oss per-op ", PEROP_PROMPT, k.gpu, cpu, toks, GPTOSS.bar_rel,
+            "per-op")
+    }
+    delete k.gpu
+    k.cpu_ran = true
+}
+
+//! what the Metal form, the per-op forms and their CPU sides keep for
+//! the compares after the block
+struct GptossOtherKept {
+    matrix : MatrixGptossKept
+    prefill : PrefillKept
+    perop : PeropKept
+    heat : HeatKept
+}
+
+let private GPTOSS_METAL_ARMS = fixed_array("fam-gptoss", "moe-gemv", "coverage")
+
+//! the forms past the block's own: the Metal form of
+//! KERNEL_COVERAGE_CTX positions and, on a das_metal build, the
+//! portable CPU form its rows' CPU sides read, where the arm filter
+//! reaches their arms; on the Vulkan home the per-op form and the
+//! heat pool's per-op form (two routed layers resident, eight slots)
+def private gptoss_other_forms(t : T?; var forms : array<ModelForm>) {
+    if (any_arm_on(GPTOSS_METAL_ARMS)) {
+        forms |> push(metal_form(ctx = KERNEL_COVERAGE_CTX))
+        if (empty(metal_build_why())) {
+            forms |> push(prefill_cpu_form())
         }
+    }
+    let vk_why = vulkan_home_why("the per-op tier and its heat pool are the Vulkan home's")
+    if (!empty(vk_why)) {
+        skip_cell(t, "gpt-oss-4L, the per-op forms: {vk_why}")
+        return
+    }
+    forms |> push(device_form(perop = true))
+    forms |> push(device_form(perop = true, pool_slots = 8l, moe_layers = 2l))
+}
+
+//! the cells of the forms past the block's own, each on its form, the
+//! prefill cells last on the Metal form; false where the form is the
+//! block's own
+def private gptoss_other_cells(t : T?; var k : GptossOtherKept; var m : Model;
+                               form : ModelForm) : bool {
+    if (form.on_metal) {
+        matrix_gptoss_metal(t, m, form, k.matrix)
+        coverage_zoo_metal(t, m, form, cov_zoo_c13_gptoss())
+        prefill_parity_metal(t, m, form, prefill_gptoss_4l(), k.prefill)
+    } elif (form.perop && form.pool_slots > 0l) {
+        moe_perop_heat_rows(t, m, form, GPTOSS_HEAT, k.heat)
+    } elif (form.perop) {
+        perop_rows(t, m, form, k.perop)
+    } elif (alone_pass_of(form, prefill_cpu_form())) {
+        matrix_gptoss_cpu(t, m, form, k.matrix)
+        prefill_parity_cpu(t, m, form, k.prefill)
+    } else {
+        if (alone_pass_of(form, cpu_cells_form())) {
+            perop_cpu(t, m, k.perop)
+            moe_perop_heat_cpu(t, m, form, GPTOSS_HEAT, k.heat)
+        }
+        return false
+    }
+    return true
+}
+
+//! the compares after the block of the forms past its own: the Metal
+//! rows, the per-op cell, the heat pool's placement - two of the four
+//! routed layers placed, two streamed
+def private gptoss_other_within(t : T?; var k : GptossOtherKept) {
+    matrix_gptoss_verdict(t, k.matrix)
+    prefill_parity_verdict(t, k.prefill)
+    if (k.perop.ran && !k.perop.cpu_ran) {
+        t |> failure("gpt-oss-4L: the per-op form's steps lost their CPU side")
+    }
+    let placement = moe_perop_heat_verdict(t, GPTOSS_HEAT, k.heat)
+    if (placement.routed > 0l) {
+        t |> equal(placement.placed, 2l,
+            "the walk placed two of gpt-oss-4L's {placement.routed} routed layers")
+        t |> equal(placement.routed - placement.placed, 2l, "... and streamed the other two")
     }
 }
 
@@ -425,7 +507,7 @@ def private gptoss_forms(var r : GptossRows) : array<ModelForm> {
     return <- forms
 }
 
-[test(description = "The resident gpt-oss-4L driver - mx4 MoE window, biased router, sinked token command - holds the CPU chain's logits within the bar on one window and across two with the sliding layers masking, the one-step-off control past it, on the CUDA home a step's full layers on the decode tile form under the sink combine hold the row form's logits, the routed block's census once per routed layer per window; the q8_0 and f32 K/V mirrors' sink stamps hold a 40-token window and eight fed steps within the routed bar of the CPU chain at the same codec; with two routed layers' experts on the host the streamed window and eight steps sit within the stream twin's bar of the stream-off load and the stream chain's acts take the picks' bias rows where the home's expert chain admits mx4 and none where it does not; over two mirror regions batched steps over two sessions - at one window, past the unsplit position, and before any one-row step - and over three a batched step over two rows, a one-row step, then batched steps over three keep every row within the routed bar of its session alone; on a CUDA card with the FP4 rung the CUDA driver's forced feeds over one and two windows and the host-layers feed hold 20 percent of max logit of the CPU chain with every position served, the meet splitting the experts, and the ringed K/V mirrors match a flat every-row mirror bit for bit over 1300 prose ids in 512-row windows on f16 and q8_0; on the q8 CPU form, on every box, with an mx4 rows core the fused MoE expert chain matches the three-dispatch groupn path's greedy ids and final logits bit for bit; on the uncached CPU form harmony's reasoning budget opens on the channel mark, analysis and message mark, leaves on the end mark, forces a close into the final channel and ends the turn on a later channel mark; on the parity-pinned CPU form, fed the 20b's reference greedy stream, every reference id keeps within 2% of its row's top logit on the short prompt and on the 449-token one that engages the sliding window, the stream one step late outside; each form loads once")]
+[test(description = "The resident gpt-oss-4L driver - mx4 MoE window, biased router, sinked token command - holds the CPU chain's logits within the bar on one window and across two with the sliding layers masking, the one-step-off control past it, on the CUDA home a step's full layers on the decode tile form under the sink combine hold the row form's logits, the routed block's census once per routed layer per window; the q8_0 and f32 K/V mirrors' sink stamps hold a 40-token window and eight fed steps within the routed bar of the CPU chain at the same codec; with two routed layers' experts on the host the streamed window and eight steps sit within the stream twin's bar of the stream-off load and the stream chain's acts take the picks' bias rows where the home's expert chain admits mx4 and none where it does not; over two mirror regions batched steps over two sessions - at one window, past the unsplit position, and before any one-row step - and over three a batched step over two rows, a one-row step, then batched steps over three keep every row within the routed bar of its session alone; on a CUDA card with the FP4 rung the CUDA driver's forced feeds over one and two windows and the host-layers feed hold 20 percent of max logit of the CPU chain with every position served, the meet splitting the experts, and the ringed K/V mirrors match a flat every-row mirror bit for bit over 1300 prose ids in 512-row windows on f16 and q8_0; on the q8 CPU form, on every box, with an mx4 rows core the fused MoE expert chain matches the three-dispatch groupn path's greedy ids and final logits bit for bit; on the uncached CPU form harmony's reasoning budget opens on the channel mark, analysis and message mark, leaves on the end mark, forces a close into the final channel and ends the turn on a later channel mark; on the parity-pinned CPU form, fed the 20b's reference greedy stream, every reference id keeps within 2% of its row's top logit on the short prompt and on the 449-token one that engages the sliding window, the stream one step late outside; with the whole-model route off the per-op tier places every routed layer's mx4 stacks on the device and a 40-token window plus six fed steps sit within the 5% logits bar of the CPU chain; on the per-op tier with two routed layers placed and the rest streamed under an eight-slot heat pool, the window and 80 fed steps hold the routed bar of the CPU chain and the pool serves picks; on the Metal home's blob twin, one load on a das_metal build, the row's geometry and needs hold, its paths engage, the post-prefill row within 2.0 and the forced step within 4.0 of the portable CPU truth's, a prompt and a continuation feed the kernel census, and the routed short window holds the CPU's logits within 0.12; each form loads once")]
 def test_gpu_resident_gptoss(t : T?) {
     return if (!family_on(t, "gptoss"))
     var r : GptossRows
@@ -441,13 +523,16 @@ def test_gpu_resident_gptoss(t : T?) {
         r.carrier |> held_skip("the CUDA home's own cells: {cuda_why}")
     }
     var forms <- gptoss_forms(r)
+    var k : GptossOtherKept
+    gptoss_other_forms(t, forms)
     //! the device claims first: a 32-expert layer at a host-first of
     //! eight hands the host every region
     let pins = pin_stream(0l)
     var ran = false
     with_cuda_mmq_winners() {
         ran = with_cpu_and_gpu_model(t, "llm", "gpt-oss-4L-mxfp4-local.gguf",
-                GPTOSS_CTX, forms) $(m, form) {
+                GPTOSS_CTX, forms) $(var m, form) {
+            return if (gptoss_other_cells(t, k, m, form))
             if (form.uncached) {
                 chat_gptoss_cells(t, m)
                 return
@@ -468,6 +553,8 @@ def test_gpu_resident_gptoss(t : T?) {
     if (ran) {
         gptoss_rows_within(t, r)
     }
+    gptoss_other_within(t, k)
     delete r
+    delete k
     delete forms
 }

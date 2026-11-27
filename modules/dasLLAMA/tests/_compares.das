@@ -17,6 +17,8 @@ require daslib/rtti   // LineInfo: the probe handle's log hook
 require dasllama/dasllama_math   // parallel_argmax
 require dasllama/dasllama_common   // Session: logits_of copies its row
 require dasllama/dasllama_convert   // cvt_f32_to_f16_sat_array: check_halves' expectation
+require dasllama/dasllama_kv_codec   // cvt_q8kv_to_f32, cvt_tq4kv_to_f32: a K/V row decoded
+require daslib/f16_cvt   // f16_to_f32: an f16 K/V row decoded
 require daslib/fio
 require daslib/command_line
 require dasllama/dasllama_env   // parity_full_mode: the full suite's flag
@@ -211,6 +213,47 @@ def logits_maxdiff(a, b : array<float>) : float {
     return span_maxdiff(a, b, 0, 0, length(a)).diff
 }
 
+//! max |d| between the `kv_dim`-wide K/V rows of `a` and `b` at
+//! byte `off`, decoded per the f16 / q8_0 / tq4 / f32 codec `dt`
+//! (tq4 in the rotated basis both share); a NaN reads infinite
+def kv_row_max_diff(a, b : array<uint8>; off : int64; dt : KVDtype; kv_dim : int64) : float {
+    var maxd = 0.0
+    unsafe {
+        let pa = addr<uint8 const?>(a[0]) + off
+        let pb = addr<uint8 const?>(b[0]) + off
+        if (dt == KVDtype.f16) {
+            let ha = reinterpret<uint16 const?>(pa)
+            let hb = reinterpret<uint16 const?>(pb)
+            for (e in range64(kv_dim)) {
+                maxd = max(maxd, nan_wide_diff(f16_to_f32(uint(ha[e])), f16_to_f32(uint(hb[e]))))
+            }
+        } elif (dt == KVDtype.q8_0 || dt == KVDtype.tq4) {
+            var da, db : array<float>
+            da |> resize(kv_dim)
+            db |> resize(kv_dim)
+            if (dt == KVDtype.q8_0) {
+                cvt_q8kv_to_f32(addr(da[0]), pa, kv_dim)
+                cvt_q8kv_to_f32(addr(db[0]), pb, kv_dim)
+            } else {
+                cvt_tq4kv_to_f32(addr(da[0]), pa, kv_dim)
+                cvt_tq4kv_to_f32(addr(db[0]), pb, kv_dim)
+            }
+            for (e in range64(kv_dim)) {
+                maxd = max(maxd, nan_wide_diff(da[e], db[e]))
+            }
+            delete da
+            delete db
+        } else {
+            let fa = reinterpret<float const?>(pa)
+            let fb = reinterpret<float const?>(pb)
+            for (e in range64(kv_dim)) {
+                maxd = max(maxd, nan_wide_diff(fa[e], fb[e]))
+            }
+        }
+    }
+    return maxd
+}
+
 //! Max |a[i]| - the scale a relative logits bar multiplies; infinite where an element is a NaN.
 def logits_maxabs(a : array<float>) : float {
     var m = 0.0
@@ -389,13 +432,17 @@ def private max_magnitude(want : array<auto(WT)>) : WT {
     return scale
 }
 
-//! the asserts `blk` makes on a probe handle that fail, counted instead of failing the cell
-def probe_fails(blk : block<(p : T?) : void>) : int {
+//! the failed asserts (`x`) and the skips (`y`) `blk` makes on a probe handle, counted instead of failing or skipping the cell
+def probe_counts(blk : block<(p : T?) : void>) : int2 {
     var fails = 0
+    var skips = 0
     var p = new T("probe", ref_time_ticks(), false)
     unsafe {
         p.onFail <- @ capture(& fails)(now : bool) {
             fails++
+        }
+        p.onSkipNow <- @ capture(& skips)() {
+            skips++
         }
     }
     p.onLog <- @(msg : string; at : LineInfo) {}
@@ -403,8 +450,11 @@ def probe_fails(blk : block<(p : T?) : void>) : int {
     unsafe {
         delete p
     }
-    return fails
+    return int2(fails, skips)
 }
+
+//! the asserts `blk` makes on a probe handle that fail, counted instead of failing the cell
+def probe_fails(blk : block<(p : T?) : void>) : int => probe_counts(blk).x
 
 //! `check`'s count alone, with no assert and no log: the elements of `got` outside `bar` of `want` (a NaN on either side, and
 //! every element past the shorter one's end, is off) - what a control that poisons the kernel's INPUT asserts above 0
@@ -595,14 +645,23 @@ def bf16_bits_truncated(x : float) : uint16 => uint16(float_bits_to_uint(x) >> 1
 //! `src` as bf16 words, each truncated (`bf16_bits_truncated`; `bf16_value` reads them back)
 def pack_bf16(src : array<float>) : array<uint16> => <- [for (v in src); bf16_bits_truncated(v)]
 
-//! the index of the first largest of `v`'s first `n` elements - the engine's `parallel_argmax`
-def argmax_of(v : array<float>; n : int64) : int64 => parallel_argmax(v, n)
+//! the index of the first largest of `v`'s first `n` elements
+def argmax_of(v : array<float>; n : int64) : int64 => argmax_of(v, 0l, n)
 
 //! the index of the first largest element of `v`
-def argmax_of(v : array<float>) : int64 => parallel_argmax(v, long_length(v))
+def argmax_of(v : array<float>) : int64 => argmax_of(v, 0l, long_length(v))
 
-//! the index, counted from `off`, of the first largest of `v[off .. off + n)`
-def argmax_of(v : array<float>; off, n : int64) : int64 => parallel_argmax(unsafe(addr(v[off])), n)
+//! the index, counted from `off`, of the first largest of `v[off .. off + n)`: a serial scan, what the engine's
+//! `parallel_argmax` answers for any split, so a compare outside the job queue reads it too
+def argmax_of(v : array<float>; off, n : int64) : int64 {
+    var best = 0l
+    for (i in range64(1l, n)) {
+        if (v[off + i] > v[off + best]) {
+            best = i
+        }
+    }
+    return best
+}
 
 //! the largest of `a`'s first `n` elements less the second largest: the tie distance an argmax flip crossed
 def top2_margin(a : array<float>; n : int64) : float {

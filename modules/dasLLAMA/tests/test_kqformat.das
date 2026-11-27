@@ -711,3 +711,28 @@ def test_metal_kq_scale_form_bytes(t : T?) {
     t |> equal(metal_kq_scale_form_bytes(KqFmt.k6, 0l), 0l, "an empty plane stays empty")
     t |> equal(metal_kq_scale_form_bytes(KqFmt.q8, 640l), 640l, "a format off the superblock lattice has no scale plane to move")
 }
+
+[test(description = "On Model shells, a tied fp32 table gives the device no classifier plane until a q8 copy is kept, a Q8_0 or K-quant table serves as its own classifier plane, and a tied table's plane offset is the classifier's")]
+def test_metal_tied_classifier_reads(t : T?) {
+    t |> run("a tied table with no plane of its own reads fp32 alone until the load keeps a q8 copy for the device classifier") @(t : T?) {
+        var inscope m <- Model()
+        m.config.shared_weights = true
+        t |> success(cls_tied_f32(m), "a tied fp32 table: the device has no classifier plane")
+        m.cls_q8_copy = true
+        t |> success(!cls_tied_f32(m), "its q8 copy: the device classifier reads it")
+        t |> equal(cls_fmt_of(m), KqFmt.q8, "and reads it as q8")
+        m.cls_q8_copy = false
+        m.cls_q8 = true
+        t |> success(!cls_tied_f32(m), "a Q8_0 table: the classifier's own q8 plane")
+        m.cls_q8 = false
+        m.kquant_native = true
+        m.emb_fmt = KqFmt.k6
+        t |> success(!cls_tied_f32(m) && emb_kq(m), "a K-quant table: the classifier is the table's own plane")
+        m.config.shared_weights = false
+        m.wcls_off = 64l
+        m.emb_kq_off = 4096l
+        t |> equal(emb_kq_plane_off(m), 4096l, "untied, the table keeps a plane of its own")
+        m.config.shared_weights = true
+        t |> equal(emb_kq_plane_off(m), 64l, "tied, the table is the classifier's plane")
+    }
+}

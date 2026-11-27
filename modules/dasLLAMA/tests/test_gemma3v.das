@@ -21,6 +21,7 @@ require _tower_twin   // set_every_gpu_tower, the Vulkan twin's seat and instrum
 require _vision_forms   // the towers' forms, the twin's kept canvases, a block's cell
 require _cpu_gpu_model   // with_cpu_and_gpu_model: a chat decoder's one block in the area
 require _vision_chat_cells   // the image chat turn's cells, run under the tower's image form
+require _kernel_coverage_cells   // coverage_tower_gemma3v_*_metal: the kernel census's 896 canvas
 
 // Tier-1 gemma3v (SigLIP) tower parity vs llama-mtmd-debug -p encode.
 // Reference arm: the f32-widened gemma-3-4b mmproj, CPU, --no-mmproj-offload, -fa off.
@@ -248,6 +249,25 @@ def private gpu_twin_route(tt : T?; twt : Gemma3vTower) {
     }
 }
 
+// The kernel census's f16-route row, on the `f32@seat` form - the
+// exact lane's image holds the halfword twin: the tower's half knob
+// on and the crowns `mulmm_q8` set around the encode, the prefill
+// driver shut down on each side so its half GEMMs arm under them.
+[cold_path, unused_argument(tt, what, twt)]
+def private twin_w_census_leg(tt : T?; what : string; var twt : Gemma3vTower) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let f16_found = get_metal_tower_f16()
+        let crowns_found = get_metal_tensor_crowns()
+        set_metal_tower_f16(true)
+        set_metal_tensor_crowns("mulmm_q8")
+        metal_prefill_shutdown()
+        coverage_tower_gemma3v_twin_w_metal(tt, what, twt)
+        set_metal_tower_f16(f16_found)
+        set_metal_tensor_crowns(crowns_found)
+        metal_prefill_shutdown()
+    }
+}
+
 //! what the device tail's two forms keep: the CPU chain's soft tokens of the cb canvas, the device chain's, and the device
 //! chain's of another canvas
 struct private TailKept {
@@ -449,6 +469,12 @@ def test_gemma3v_tower(t : T?) {
             tower_cell(t, "the device tail: the CPU chain on the exact lane's image", e.gemma3v, tail, @@tail_cpu_leg)
         } elif (form == "f32@seat") {
             tower_cell(t, "the device tail: the Metal chain on the exact lane's image", e.gemma3v, tail, @@tail_dev_leg)
+            coverage_tower_gemma3v_metal(t,
+                "gemma3v: the kernel census's 896 canvas, both attention routes",
+                e.gemma3v)
+            twin_w_census_leg(t,
+                "gemma3v: the kernel census's 896 canvas on the halfword twin's route",
+                e.gemma3v)
         }
     }
     if (ran && metal_on) {

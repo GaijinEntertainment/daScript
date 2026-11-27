@@ -20,6 +20,11 @@ require _resident_regions   // adopted_row: the continuation cell's adopted chec
 require _cpu_gpu_model   // with_cpu_and_gpu_model, the forms: the trunk's block
 require _parity_cells   // the parity cells the block's parity knob reaches (`_::`): the trunk's model_specs parity row on its block
 require _mtp_cpu_cells   // mtp_flashnext_invariance_cell: the head-pinned CPU form's invariance pair
+require _metal_matrix_cells   // the support matrix's qwen4exp row on the served image
+require _metal_mtp_cells   // the Metal MTP rail's arms on the served image
+require _metal_blob_twin   // metal_overrides_seat: the capture cell's overrides put back
+require _scheduler_cells   // capture_stops_leg, counting_prompt: the n-gram capture cell
+require _compares   // mismatch_exact, logits_maxdiff: the capture cell's compares
 
 // The whole-model resident driver on the hyper-connection carrier (Qwen3.8-Flash-Next UD-IQ4_XS, three shards, the large tier,
 // DASLLAMA_GPU=1): the wide residual's mixer seams, the n-gram side input and the deltanet sigmoid out-gate on the device, the
@@ -31,7 +36,9 @@ require _mtp_cpu_cells   // mtp_flashnext_invariance_cell: the head-pinned CPU f
 // The NextN cells (the draft, the speculative round) also need the split head shard beside the trunk
 // (Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf) and skip without it. The NextN draft and the two-token
 // prompt ride one block (`test_gpu_resident_hc_forms`), with the self-speculative decode's invariance pair on its head-pinned
-// CPU form (`_mtp_cpu_cells.das`, on every box under DASLLAMA_PARITY_FULL=1); the cells that
+// CPU form (`_mtp_cpu_cells.das`, on every box under DASLLAMA_PARITY_FULL=1), and on the Metal
+// home's head-pinned served image the support matrix's qwen4exp row, the scheduler's n-gram
+// capture and the Metal MTP rail's arms; the cells that
 // drop the device mid-cell to read the CPU chain on the same load - the verify round, the forced feed, the continuation - hold
 // their own loads.
 
@@ -146,7 +153,7 @@ def private lane_steps(tr : Model; var s : Session; tok0, tok1, k : int64; carry
 //! against the split command's one-row steps and the CPU's on the round's pick lanes, the other row as each row's control
 [test(description = "On Qwen3.8-Flash-Next with its NextN head, one device speculative round accepts exactly where row 0's argmax is the draft, and its two verify rows and wide carry rows sit within bar of the split command's and the CPU's one-row steps on the same pick lanes")]
 def test_gpu_resident_hc_mtp_verify(t : T?) {
-    own_load("the cell drops the device model mid-cell and replays the device arm's taped expert picks on the CPU chain over the same load: the tape holds one load's picks")
+    own_load("drops the model before its last step: the device model dropped mid-cell, the device arm's taped expert picks replayed on the CPU chain over the same load - the tape holds one load's picks")
     t |> run("Qwen3.8-Flash-Next + its split head: one speculative round with the draft and the two-row verify on the device against the CPU chain over the same tokens") @(t : T?) {
         if (!hc_ready(t)) return
         set_mtp_head_path(path_join(models_dir(), FN_HEAD))
@@ -255,7 +262,7 @@ def private hc_mtp_draft_cell(t : T?; tr : Model) {
 
 [test(description = "On the Qwen3.8-Flash-Next hyper-connection MoE the window chain and split token command, with the CPU replaying the device's taped expert picks, hold every row within the routed bar of the CPU chain, the hot pool splitting picks between device and host")]
 def test_gpu_resident_hc(t : T?) {
-    own_load("the cell drops the device model mid-cell and replays the device arm's taped expert picks on the CPU chain over the same load: the tape holds one load's picks")
+    own_load("drops the model before its last step: the device model dropped mid-cell, the device arm's taped expert picks replayed on the CPU chain over the same load - the tape holds one load's picks")
     t |> run("Qwen3.8-Flash-Next: the window chain and the split token command (the mixers, the side input and the sigmoid out-gate on device, the routed experts on the host) vs the CPU chain") @(t : T?) {
         let path = path_join(models_dir(), FN_TRUNK)
         if (!hc_ready(t, false)) return
@@ -311,8 +318,98 @@ def private hc_short_window_cell(t : T?; tr : Model) {
 
 //! the trunk's context: the sessions' and the mirror's
 let private HC_CTX = 2048l
+//! the served image's context: the n-gram capture cell's one window
+let private HC_METAL_CTX = 1024l
 
-[test(description = "On Qwen3.8-Flash-Next with its split head, one NextN draft through the resident head on the hyper-connection chain matches the CPU forward_mtp on the same token, carry and replayed pick within the logits and carry bars, its device pick the argmax, the draft one row back the control; on the hyper-connection chain a two-token prompt runs through the resident window chain, because the token command's short-tail peel declines the wide residual; on the head-pinned CPU form, on every box, the draft head's own head mixer loads and self-speculative decode of the counting prompt emits plain decode's tokens exactly, forced rejects included; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked and reference prefill arms; each form loads once")]
+//! On the head-pinned served image, speculation off: four stops in one
+//! window attach and continue as a fresh prefill, and the side input
+//! captured at a stop is the one a window ending there leaves; the
+//! overrides and the speculation knob put back as found
+def private hc_capture_stops_cell(t : T?; var m : Model) {
+    unsafe {   //! the cell reads the block's model by reference
+        let title = ("Metal prefill: the four stops ride ONE window on the n-gram side-input " +
+            "carrier, each attaches and continues as a fresh prefill does (needs " +
+            "Qwen3.8-Flash-Next, --category flash-next)")
+        t |> run(title) @capture(& m)(t : T ?) {
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                return if (!jit_only(t) || !family_on(t, "qwen4exp") || !arm_on(t, "fam-qwen4exp"))
+                let spec0 = get_mtp_spec()
+                set_mtp_spec(false)
+                with_ctx_cut(m, HC_METAL_CTX) {
+                    hc_capture_stops_legs(t, m)
+                }
+                set_mtp_spec(spec0)
+            }
+        }
+    }
+}
+
+//! the capture cell's legs under the Metal overrides, the seat put
+//! back after them
+def private hc_capture_stops_legs(t : T?; m : Model) {   // nolint:LINT012,LINT019 - das_metal half
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        t |> success(m.metal_blob && m.config.hyper_conn && has_ple_ngram(m.config),
+            ("the served image is the metal-blob hyper-connection carrier with the n-gram " +
+            "side input"))
+        let seat = metal_overrides_seat()
+        with_dasllama_jobque() {
+            t |> success(select_prefill_override("metal"), "the Metal prefill override registered")
+            t |> success(select_decode_override("metal"), "the Metal decode override registered")
+            var inscope prompt <- counting_prompt(m, 60)
+            let np = long_length(prompt)
+            t |> success(np > 220l,
+                "the prompt holds every stop with room past the last ({np} tokens)")
+            let stops <- [48l, 96l, 160l, np - 1l]
+            var inscope cap <- capture_stops_leg(t, m, prompt, stops, HC_METAL_CTX,
+                "ngram, one window")
+            var inscope live <- capture_stops_leg(t, m, prompt, stops, stops[1],
+                "ngram, a window ending on stop {stops[1]}")
+            //! the n-gram side input at the second stop - the last
+            //! tokens and the conv history the pre-step reads - captured
+            //! inside the window against what a window ending there
+            //! leaves: the tokens bit for bit; the history rows are the
+            //! gated projections of rows the trunk's stream gates, and the
+            //! Metal window's tiles and scan groups round a 240-row window
+            //! apart from a 96-row one (the recurrent state reads 0.9
+            //! apart on a magnitude of 6, logged below), so the history
+            //! within a hundredth of its largest magnitude (reads 5e-3 on a
+            //! magnitude of 12), the first stop's history outside that bar
+            //! the control (reads 3.5). The CPU legs of
+            //! `test_scheduler_capture_stops` hold the state bit for bit.
+            let at = stops[1]
+            t |> success(!empty(live[1].ple_prev) && !empty(live[1].ple_hist),
+                "ngram: stop {at} carries the side input")
+            t |> equal(mismatch_exact(cap[1].ple_prev, live[1].ple_prev), 0,
+                ("ngram: the last tokens captured at stop {at} are the ones a window ending " +
+                "there leaves ({cap[1].ple_prev} against {live[1].ple_prev})"))
+            let bar = 1e-2 * logits_maxabs(live[1].ple_hist)
+            let hd = logits_maxdiff(cap[1].ple_hist, live[1].ple_hist)
+            let hc = logits_maxdiff(cap[0].ple_hist, live[1].ple_hist)
+            t |> success(hd <= bar, ("ngram: the side input's conv history captured at stop " +
+                "{at} is the one a window ending there leaves ({hd} against a bar of {bar})"))
+            t |> success(hc > bar,
+                ("ngram: control - stop {stops[0]}'s side-input history lands outside the " +
+                "bar ({hc})"))
+            let state_d = logits_maxdiff(cap[1].state, live[1].state)
+            let state_c = logits_maxdiff(cap[0].state, live[1].state)
+            to_log(LOG_INFO, ("ngram: stop {at}'s history, captured against a window's end: " +
+                "{hd} (stop {stops[0]}'s: {hc}, the bar {bar}); its state: {state_d} (stop " +
+                "{stops[0]}'s: {state_c}, magnitude {logits_maxabs(live[1].state)})\n"))
+        }
+        restore_metal_overrides(seat)
+    }
+}
+
+//! the head-pinned served image's cells: the support matrix's row and
+//! the n-gram capture, then the MTP rail's arms, whose half-crown cell
+//! shuts the drivers down
+def private hc_metal_cells(t : T?; var m : Model; form : ModelForm) {
+    matrix_qwen4exp_metal(t, m, form)
+    hc_capture_stops_cell(t, m)
+    mtp_parity_metal(t, m, form, mtp_parity_qwen38_flash_next())
+}
+
+[test(description = "On Qwen3.8-Flash-Next with its split head, one NextN draft through the resident head on the hyper-connection chain matches the CPU forward_mtp on the same token, carry and replayed pick within the logits and carry bars, its device pick the argmax, the draft one row back the control; on the hyper-connection chain a two-token prompt runs through the resident window chain, because the token command's short-tail peel declines the wide residual; on the head-pinned CPU form, on every box, the draft head's own head mixer loads and self-speculative decode of the counting prompt emits plain decode's tokens exactly, forced rejects included; on the Metal home's head-pinned served image, one load on a das_metal build, with speculation off the Metal prefill and decode continue the counting prompt token for token the frozen fixture, every step encoded ahead, no decline, the walk encoded ahead the walk with nothing ahead; four stops in one window attach and continue as a fresh prefill and the captured side input holds exact last tokens and history within 1 percent of max; the MTP verify rows and the batch rail's distinct-session steps hold the GPU single step within 2.0, and speculative free-run matches plain; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked and reference prefill arms; each form loads once")]
 def test_gpu_resident_hc_forms(t : T?) {
     return if (!family_on(t, "qwen35"))
     let head = model_available(t, path_join(models_dir(), FN_HEAD))
@@ -320,10 +417,13 @@ def test_gpu_resident_hc_forms(t : T?) {
     if (head) {
         forms |> push(device_form(host = true, mtp_head = FN_HEAD))
         forms |> push(cpu_cells_form(mtp_head = FN_HEAD))
+        forms |> push(metal_form(image = true, ctx = HC_METAL_CTX, mtp_head = FN_HEAD))
     }
     with_cpu_and_gpu_model(t, "llm", "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf", HC_CTX, forms, false, parity = true) $(var m, form) {
         unsafe {   //! the cells capture the loaded model by reference
-            if (!form.on_gpu) {
+            if (form.on_metal) {
+                hc_metal_cells(t, m, form)
+            } elif (!form.on_gpu) {
                 mtp_flashnext_invariance_cell(t, m)
             } elif (g_env_vulkan.vk_kv32 != 0l) {
                 skip_cell(t, "Qwen3.8-Flash-Next, {form_name(form)}: DASLLAMA_VK_KV32=1: the f32 mirror passes every f16 session as codec")
@@ -354,7 +454,7 @@ let private HALF = 48l                  //! past the hot pool's 32-row window fl
 
 [test(description = "On Qwen3.8-Flash-Next under the whole-model driver, continuations in place and from an adopted checkpoint stay within the wide routed bar of the whole prompt, every prefill on the device, and the n-gram conv ring matches the CPU chain's within 2 percent while a zeroed ring misses")]
 def test_gpu_resident_continuation_hc(t : T?) {
-    own_load("the cell drops the device model mid-cell to run the CPU ring chain on the same load's host planes, the device's ring snapshot its other half")
+    own_load("drops the model before its last step: the device model dropped mid-cell to run the CPU ring chain on the same load's host planes, the device's ring snapshot its other half")
     t |> run("Qwen3.8-Flash-Next: a prompt continued from its position on the device, and from an adopted checkpoint, against one window; the n-gram ring against the CPU chain's") @(t : T?) {
         return if (!family_on(t, "qwen35"))
         let path = path_join(models_dir(), FN_TRUNK)

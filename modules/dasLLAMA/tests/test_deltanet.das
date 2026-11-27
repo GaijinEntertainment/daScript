@@ -81,7 +81,7 @@ def private step_logits(tr : Model; tabled : bool) : array<float> {
 
 [test(description = "On Qwen3.5-0.8B the rope-scaling override refuses unknown kinds and factor-less yarn, folds linear and none exactly, and YaRN x4 lands the divisors and mscale in the decode rope row against an fp64 fold, with table and direct paths agreeing and the fold moving the logits")]
 def test_deltanet_yarn_override(t : T?) {
-    own_load("each load takes its own rope-scaling override at the config stage, a load-time config past restoring, and the cell compares the loads' rope rows and logits")
+    own_load("changes the loaded model's config in a way it cannot restore: each load's own rope-scaling override at the config stage, the loads' rope rows and logits compared")
     t |> run("the YaRN override on the partial-rotary 0.8B: the fold lands in the rope row, both rope paths take it, the plain load stays llama.cpp's") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
         return if (!jit_model_available(t, path))

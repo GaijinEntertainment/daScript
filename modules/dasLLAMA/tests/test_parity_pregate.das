@@ -22,7 +22,7 @@ require _model_form                   // own_load: each cell declares the load i
 
 [test(description = "The board pregate `parity_check` passes Qwen3-0.6B's pinned-ids fixture, fails it with the last id flipped, and refuses a spec with no evidence")]
 def test_parity_pregate_ids_form(t : T?) {
-    own_load("the cell loads the model inside lcpp_bench's `parity_check` (the board pregate): a bench the model's block file must not compile")
+    own_load("loads it through a bench or tool: lcpp_bench's `parity_check`, the board pregate, a bench the model's block file must not compile")
     t |> run("the pinned-ids fixture passes; one flipped id fails; no evidence refuses") @(t : T?) {
         return if (!jit_only(t))
         var inscope spec <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
@@ -40,7 +40,7 @@ def test_parity_pregate_ids_form(t : T?) {
 
 [test(description = "The timed run's `fixture_gate_check` passes the table's fixture on a loaded Qwen3-0.6B, refuses an opening with every id shifted, and passes a row with no evidence")]
 def test_fixture_gate(t : T?) {
-    own_load("the cell's fixture module requires lcpp_bench (`fixture_gate_check`): a bench the model's block file must not compile")
+    own_load("loads it through a bench or tool: the cell's fixture module requires lcpp_bench (`fixture_gate_check`), a bench the model's block file must not compile")
     return if (!jit_only(t))
     var inscope spec <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
     let path = path_join(models_dir(), spec.file)
@@ -55,7 +55,7 @@ def test_fixture_gate(t : T?) {
 // and the strict form reds the same flipped tail - the flag is what admits it.
 [test(description = "With prefix_bar set, a Llama-3.2-1B fixture whose tail half is flipped still passes `parity_check` while a flip inside the first half fails, and the strict form fails the same flipped tail")]
 def test_parity_pregate_prefix_bar(t : T?) {
-    own_load("the cell loads the model inside lcpp_bench's `parity_check` (the board pregate): a bench the model's block file must not compile")
+    own_load("loads it through a bench or tool: lcpp_bench's `parity_check`, the board pregate, a bench the model's block file must not compile")
     t |> run("a prefix_bar fixture holds on a flipped tail half, reds on a flip inside the first half and under the strict form") @(t : T?) {
         return if (!jit_only(t))
         var inscope spec <- spec_by_file("Llama-3.2-1B-Instruct-Q4_K_M.gguf")
@@ -83,7 +83,7 @@ def test_parity_pregate_prefix_bar(t : T?) {
 
 [test(description = "The gemma-4-E2B text-form fixture, encoded through the model's tokenizer, reproduces its pinned continuation under `parity_check`")]
 def test_parity_pregate_text_form(t : T?) {
-    own_load("the cell loads the model inside lcpp_bench's `parity_check` (the board pregate): a bench the model's block file must not compile")
+    own_load("loads it through a bench or tool: lcpp_bench's `parity_check`, the board pregate, a bench the model's block file must not compile")
     t |> run("a text-form fixture encodes through the model's tokenizer") @(t : T?) {
         return if (!jit_only(t))
         var inscope spec <- spec_by_file("gemma-4-E2B-it-Q8_0.gguf")
@@ -96,7 +96,7 @@ def test_parity_pregate_text_form(t : T?) {
 
 [test(description = "The Qwen3-4B Q4_K_M row's kq-native load reproduces its pinned continuation under `parity_check`, and the pregate restores the kquant-native mode it flipped")]
 def test_parity_pregate_kq_native(t : T?) {
-    own_load("the cell loads the model inside lcpp_bench's `parity_check` (the board pregate): a bench the model's block file must not compile")
+    own_load("loads it through a bench or tool: lcpp_bench's `parity_check`, the board pregate, a bench the model's block file must not compile")
     t |> run("a kq_native fixture loads native K-quant planes and reproduces") @(t : T?) {
         return if (!jit_only(t))
         var inscope spec <- spec_by_file("Qwen3-4B-Instruct-2507-Q4_K_M.gguf")

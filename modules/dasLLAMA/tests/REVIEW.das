@@ -218,36 +218,58 @@ let private ENGINE_LOADERS = fixed_array("load_model_", "load_model", "load_gguf
     "stage_audio_tower", "stage_gemma4a_encoder", "stage_qwen3a_tower", "stage_gemma3v_tower", "stage_gemma4v_tower",
     "stage_gemma4uv_embedder", "stage_qwen3v_tower", "stage_qwen25v_tower", "stage_styletts2", "stage_styletts2_served", "stage_pocket",
     "stage_pocket_served", "stage_nmt_model")
-let private LOADERS = fixed_array("aud_form", "aud_stage", "blob_twin", "canary_form", "canary_stage", "cuda_feed_rig", "cuda_forced_feed", "dense_feeds_block",
-    "family_lane_cell", "g2p_pack_form", "g4a_stage", "gemma3v_12b_form", "gemma3v_form", "gemma3v_stage", "gemma4a_e2b_form", "gemma4a_e4b_form", "gemma4a_form", "gemma4uv_form", "gemma4uv_stage",
-    "gemma4v_form", "gemma4v_stage", "gemma_format_cell", "gemma_model", "gigaam_form", "gigaam_minted", "greedy_turn", "image_file_transcript", "image_tower_form", "kq_clone_over_roster",
-    "kq_native_load", "kquant_cell", "kv_codecs_cell", "lanes_cell", "live_cell", "load_and_drop", "load_capped",
-    "load_kq_native", "load_metal_trunk", "load_model_and_drop", "load_outcome", "load_perop", "load_refusal", "load_resident_lane",
-    "load_trunk", "metal_lossless_cell", "metal_prefill_cell", "metal_routed_cell",
-    "metal_served_cell", "moe_forced_feed", "moe_forced_feed_pinned", "parakeet_form", "parakeet_stage", "parity_row_load", "parity_spec_arms",
-    "pk_image_file_rows", "pocket_form", "pocket_minted", "pocket_tts_minted", "ppl_compare", "q3omni_form", "qwen25v_form", "qwen25v_stage",
-    "qwen3a_form", "qwen3a_stage", "qwen3v_form", "qwen3v_stage",
-    "ru_pack_form", "ru_stress_form", "sampled_metal_cell", "slot_swap_cycle", "speak_line_of",
-    "stage_panic", "staged_tokens_at", "staged_tower_form", "staged_twin_tower", "stored_file_pins",
-    "stories15m_form", "stream_twin_within", "styletts2_form", "tagger_pack_form", "tail_after_load",
-    "translator_form", "translator_stage", "tts_unbuilt_seats_take_cpu_image", "vad_form", "whisper_form", "whisper_stage", "with_cold_lane", "with_gemma_rig", "with_metal_trunk")
+let private LOADERS = fixed_array("aud_form", "aud_stage", "blob_twin", "canary_form",
+    "canary_stage", "cuda_feed_rig", "cuda_forced_feed", "dense_feeds_block", "family_lane_cell",
+    "g2p_pack_form", "g4a_stage", "gemma3v_12b_form", "gemma3v_form", "gemma3v_stage",
+    "gemma4a_e2b_form", "gemma4a_e4b_form", "gemma4a_form", "gemma4uv_form", "gemma4uv_stage",
+    "gemma4v_form", "gemma4v_stage", "gemma_format_cell", "gemma_model", "gigaam_form",
+    "gigaam_minted", "greedy_turn", "image_file_transcript", "image_tower_form",
+    "kq_clone_over_roster", "kquant_cell", "kv_codecs_cell", "lanes_cell", "live_cell",
+    "load_and_drop", "load_capped", "load_model_and_drop", "load_outcome", "load_refusal",
+    "load_resident_lane", "moe_forced_feed", "moe_forced_feed_pinned", "parakeet_form",
+    "parakeet_stage", "parity_row_load", "parity_spec_arms", "pk_image_file_rows", "pocket_form",
+    "pocket_minted", "pocket_tts_minted", "ppl_compare", "q3omni_form", "qwen25v_form",
+    "qwen25v_stage", "qwen3a_form", "qwen3a_stage", "qwen3v_form", "qwen3v_stage", "ru_pack_form",
+    "ru_stress_form", "slot_swap_cycle", "speak_line_of", "stage_panic", "staged_tokens_at",
+    "staged_tower_form", "staged_twin_tower", "stored_file_pins", "stories15m_form",
+    "stream_twin_within", "styletts2_form", "tagger_pack_form", "tail_after_load",
+    "translator_form", "translator_stage", "tts_unbuilt_seats_take_cpu_image", "vad_form",
+    "whisper_form", "whisper_stage", "with_cold_lane", "with_gemma_rig")
+
+//! the parity spec walk's loader (`test_parity.das`): a call of it
+//! loads each spec-table row with a parity fixture that no table of
+//! `SPEC_WALK_SKIPS` names (`spec_walk_files`)
+let private SPEC_WALK = "parity_spec_arms"
+
+//! the spec table the walk reads
+let private SPEC_TABLE = "modules/dasLLAMA/performance/model_specs.das"
+
+//! the tables of the rows the walk leaves to another load: the rows
+//! the files' blocks run (`_parity_cells.das`), the rows a test of
+//! the walk's file loads for itself (`test_parity.das`)
+let private SPEC_WALK_SKIPS = fixed_array("PARITY_BLOCK_ROWS", "PARITY_OWN_ROWS")
 
 //! the file whose loads are the block's own body: no helper of it is listed
 let private LOADER_HOMES = fixed_array("_cpu_gpu_model.das")
 
 let private MODELS_LEAD = "\{models_dir()\}/"
 
-//! the calls that are an area's one load of a model file: the chat models' block, and the block of every other model - under
-//! the models directory, or under a root the call names
-let private BLOCKS = fixed_array("with_cpu_and_gpu_model", "with_model_once", "with_model_once_at")
+//! the calls that are an area's one load of a model file: the chat
+//! models' block - over a file, or over a snapshot its repo names -
+//! and the block of every other model - under the models directory,
+//! or under a root the call names
+let private BLOCKS = fixed_array("with_cpu_and_gpu_model", "with_cpu_and_gpu_snapshot",
+    "with_model_once", "with_model_once_at")
 
-//! one load of a model file: the file and line, the call, whether the function holding it declares its own load
+//! one load of a model file: the file and line, the call, whether
+//! the function holding it declares its own load, that function
 struct private LoadSite {
     model : string
     file : string
     line : int
     call : string
     own : bool
+    fn : string
 }
 
 //! one function of a source: its name, its parameters' names, the bytes it spans, its own-load marker
@@ -272,20 +294,33 @@ def private line_at(text : string; at : int) : int {
     return line
 }
 
-//! the model file names `args` holds as string literals: a `.gguf` name, its `{models_dir()}/` lead cut; a literal holding
-//! any other interpolation names no file
+//! the model file a literal `seg` names - a `.gguf` or `.bin`
+//! name, its `{models_dir()}/` lead cut - or ""
+def private model_name(seg : string) : string {
+    let name = seg |> starts_with(MODELS_LEAD) ? slice(seg, length(MODELS_LEAD)) : seg
+    let model = name |> ends_with(".gguf") || name |> ends_with(".bin")
+    return model && find(name, "\{") < 0 ? name : ""
+}
+
+//! the model files `args` holds as string literals: `model_name`'s,
+//! and the repo of each `hf_snapshot_dir("<repo>")`, a snapshot
 def private gguf_names(args : string) : array<string> {
     var out : array<string>
     for (seg in quoted_segments(args)) {
-        let name = seg |> starts_with(MODELS_LEAD) ? slice(seg, length(MODELS_LEAD)) : seg
-        if ((name |> ends_with(".gguf") || name |> ends_with(".bin")) && find(name, "\{") < 0) {
+        let name = model_name(seg)
+        if (!empty(name)) {
             out |> push(name)
+        }
+    }
+    for (r in literal_roots(args, "hf_snapshot_dir")) {
+        if (find(r.root, "\{") < 0) {
+            out |> push(r.root)
         }
     }
     return <- out
 }
 
-//! the identifiers of `args`, in order
+//! the identifiers of `args`, in order, a field after a `.` none
 def private idents_of(args : string) : array<string> {
     var out : array<string>
     peek_data(args) $(d) {
@@ -295,12 +330,170 @@ def private idents_of(args : string) : array<string> {
             if (is_ident_byte(b)) {
                 start = start < 0 ? i : start
             } elif (start >= 0) {
-                if (!is_number(int(d[start]))) {
+                let field = start > 0 && int(d[start - 1]) == '.'
+                if (!is_number(int(d[start])) && !field) {
                     out |> push(slice(d, start, i))
                 }
                 start = -1
             }
         }
+    }
+    return <- out
+}
+
+//! the field `text` reads off `id` (`<id>.<field>`), or ""
+def private field_after(text, id : string) : string {
+    var from = 0
+    while (true) {
+        let at = find(text, "{id}.", from)
+        return "" if (at < 0)
+        from = at + 1
+        continue if (is_ident_byte(byte_at(text, at - 1)))
+        var stop = at + length(id) + 1
+        while (is_ident_byte(byte_at(text, stop))) {
+            stop++
+        }
+        return slice(text, at + length(id) + 1, stop)
+    }
+    return ""
+}
+
+//! the literal each `<field> = "..."` of `text` holds
+def private field_literals(text, field : string) : array<string> {
+    var out : array<string>
+    let lead = "{field} = \""
+    peek_data(text) $(d) {
+        var from = 0
+        while (true) {
+            let at = find(text, lead, from)
+            break if (at < 0)
+            from = at + 1
+            continue if (is_ident_byte(byte_at(text, at - 1)))
+            let open = at + length(lead)
+            let close = find(text, "\"", open)
+            if (close > open) {
+                out |> push(slice(d, open, close))
+            }
+        }
+    }
+    return <- out
+}
+
+//! the model files a binding's right-hand side `rhs` names: its
+//! `field` literals where it spells some, else its literals; under
+//! `snap` (an `hf_snapshot_dir` argument) any literal is a repo
+def private names_of(rhs, field : string; snap : bool) : array<string> {
+    var inscope lits <- empty(field) ? array<string>() : field_literals(rhs, field)
+    if (empty(lits)) {
+        var direct <- gguf_names(rhs)
+        return <- direct if (!empty(direct) || !snap)
+        delete lits
+        lits <- quoted_segments(rhs)
+    }
+    var out : array<string>
+    out |> reserve(length(lits))
+    for (l in lits) {
+        let name = snap ? l : model_name(l)
+        if (!empty(name) && find(name, "\{") < 0) {
+            out |> push(name)
+        }
+    }
+    return <- out
+}
+
+//! the text a `let` / `var` line `l` binds - its name first - or ""
+def private let_rest(l : string) : string {
+    var rest = ""
+    for (lead in fixed_array("let private ", "let ", "var ")) {
+        if (l |> starts_with(lead)) {
+            rest = strip(slice(l, length(lead)))
+            break
+        }
+    }
+    return rest |> starts_with("inscope ") ? slice(rest, 8) : rest
+}
+
+//! what the `for` header opening line `i` (0-based) of `lines`
+//! binds `id` to: its loop expression, or ""
+def private loop_binding(lines : array<string>; i : int; id : string) : string {
+    let text = build_string() $(w) {
+        for (k in range(i, min(i + 40, length(lines)))) {
+            w |> write(lines[k])
+            w |> write("\n")
+        }
+    }
+    let header = call_args(text, find(text, "("))
+    let inside = find(header, " in ")
+    return "" if (inside < 0)
+    var inscope vars <- split(slice(header, 0, inside), ",")
+    var inscope exprs <- top_args(slice(header, inside + 4))
+    for (v, k in vars, count()) {
+        return exprs[k] if (strip(v) == id && k < length(exprs))
+    }
+    return ""
+}
+
+//! the right-hand side of the last `let` / `var` / `for` of `lines`
+//! before line `before` (0: every line) binding `id`, and its line
+//! (0: none)
+def private binding_of(lines : array<string>; id : string;
+                       before : int) : tuple<rhs : string; at : int> {
+    var rhs = ""
+    var at = 0
+    for (ln, i in lines, count(1)) {
+        break if (before > 0 && i >= before)
+        let l = strip(ln)
+        if (l |> starts_with("for (")) {
+            let loop_rhs = loop_binding(lines, i - 1, id)
+            if (!empty(loop_rhs)) {
+                rhs = loop_rhs
+                at = i
+            }
+            continue
+        }
+        let named = let_rest(l)
+        let whole = length(named) > length(id) && !is_ident_byte(byte_at(named, length(id)))
+        continue if (!(named |> starts_with(id)) || !whole)
+        rhs = slice(named, length(id))
+        at = i
+    }
+    return (rhs = rhs, at = at)
+}
+
+//! where a load site's identifiers bind: the holding function's
+//! lines from its start, the file's top-level `let` statements,
+//! the fixtures' globals by name
+struct private NameScope {
+    lines : array<string>
+    top : array<string>
+    globals : table<string; string>
+}
+
+//! the model files `id` (its `field` read where set) names: bound
+//! in `sc.lines` before line `before`, else at the file's top level,
+//! else by a fixture global; a binding naming none hops `depth` more
+//! through its right-hand side's identifiers
+def private resolve_names(sc : NameScope; id, field : string; before, depth : int;
+                          snap : bool; at_top : bool = false) : array<string> {
+    var b = at_top ? binding_of(sc.top, id, 0) : binding_of(sc.lines, id, before)
+    var top = at_top
+    if (b.at == 0 && !at_top) {
+        b = binding_of(sc.top, id, 0)
+        top = true
+    }
+    if (b.at == 0) {
+        b = (rhs = sc.globals?[id] ?? "", at = 1)
+    }
+    var out <- names_of(b.rhs, field, snap)
+    return <- out if (!empty(out) || depth <= 0 || empty(b.rhs))
+    let snap_next = snap || find(b.rhs, "hf_snapshot_dir(") >= 0
+    for (next in idents_of(b.rhs)) {
+        continue if (next == id)
+        let next_field = field_after(b.rhs, next)
+        delete out
+        out <- resolve_names(sc, next, empty(next_field) ? field : next_field, b.at, depth - 1,
+            snap_next, top)
+        return <- out if (!empty(out))
     }
     return <- out
 }
@@ -319,53 +512,30 @@ def private byte_at(text : string; at : int) : int {
 //! the text between the paren that opens at `open` and the one that closes it (`bracket_body`)
 def private call_args(text : string; open : int) : string => bracket_body(text, open, '(', ')')
 
-//! the names the last `let` / `var` line of `lines` before line `before` (0: every line) binding `id` holds; where it holds
-//! none, `depth` hops more through the identifiers of its right-hand side, bound in `lines` before it
-def private bound_names(lines : array<string>; id : string; before : int; depth : int = 1) : array<string> {
-    var bound = ""
-    var at = 0
-    for (ln, i in lines, count(1)) {
-        break if (before > 0 && i >= before)
-        var l = strip(ln)
-        l = l |> starts_with("let private ") ? "let {slice(l, 12)}" : l
-        continue if (!(l |> starts_with("let ") || l |> starts_with("var ")))
-        let rest = strip(slice(l, 4))
-        let inscope_rest = rest |> starts_with("inscope ") ? slice(rest, 8) : rest
-        continue if (!(inscope_rest |> starts_with(id)) || length(inscope_rest) == length(id) || is_ident_byte(byte_at(inscope_rest, length(id))))
-        bound = inscope_rest
-        at = i
-    }
-    var out <- gguf_names(bound)
-    return <- out if (!empty(out) || depth <= 0 || empty(bound))
-    for (next in idents_of(slice(bound, length(id)))) {
-        delete out
-        out <- bound_names(lines, next, at, depth - 1)
-        return <- out if (!empty(out))
-    }
-    return <- out
-}
-
-//! the `let` lines of `text` outside every brace: a file's top level, judged by depth, not by column
+//! the `let` statements of `text` outside every brace, each whole
+//! across its lines: a file's top level, judged by depth, not column
 def private top_level_lets(text : string) : array<string> {
     var out : array<string>
     peek_data(text) $(d) {
         var depth = 0
         var quote = 0
-        var start = 0
+        var stmt = starts_with(text, "let ") ? 0 : -1
         for (i in range(length(d) + 1)) {
             let b = i < length(d) ? int(d[i]) : '\n'
             if (b == '\n') {
-                if (depth == 0 && quote == 0 && slice(d, start, i) |> starts_with("let ")) {
-                    out |> push(slice(d, start, i))
+                if (quote == 0 && depth == 0) {
+                    if (stmt >= 0) {
+                        out |> push(slice(d, stmt, i))
+                    }
+                    stmt = slice(d, i + 1, min(i + 5, length(d))) == "let " ? i + 1 : -1
                 }
-                start = i + 1
             } elif (quote != 0) {
                 quote = (b == quote && int(d[i - 1]) != '\\') ? 0 : quote
             } elif (b == '"' || b == '\'') {
                 quote = b
-            } elif (b == '{') {
+            } elif (b == '{' || b == '(' || b == '[') {
                 depth++
-            } elif (b == '}') {
+            } elif (b == '}' || b == ')' || b == ']') {
                 depth--
             }
         }
@@ -373,18 +543,16 @@ def private top_level_lets(text : string) : array<string> {
     return <- out
 }
 
-//! the top-level `let` names of `.gguf` literals across `files`: an identifier a call passes resolves here last
-def private global_names(files : array<string>) : table<string; array<string>> {
-    var out : table<string; array<string>>
+//! the top-level `let` statements holding a literal across `files`,
+//! each name to its right-hand side: a name resolves here last
+def private global_names(files : array<string>) : table<string; string> {
+    var out : table<string; string>
     for (f in files) {
         for (ln in top_level_lets(strip_line_comments(fread(f)))) {
-            let l = ln |> starts_with("let private ") ? slice(ln, 12) : slice(ln, 4)
+            let l = let_rest(ln)
             var inscope ids <- idents_of(l)
-            continue if (empty(ids))
-            var names <- gguf_names(l)
-            if (!empty(names)) {
-                out[ids[0]] <- names
-            }
+            continue if (empty(ids) || find(l, "\"") < 0)
+            out[ids[0]] = slice(l, length(ids[0]))
         }
     }
     return <- out
@@ -448,39 +616,104 @@ def private fn_at(fns : array<SourceFn>; at : int) : int {
     return -1
 }
 
-//! every call of a loader of `loaders` in `file` whose model file the gate reads: a literal in the call's arguments, else an
-//! identifier bound to one in the holding function, the file or `globals`. A call that passes the holding function's own
-//! parameter makes that function a loader - a finding where `loaders` does not list it
-def private load_sites(file : string; loaders : array<string>; globals : table<string; array<string>>;
-                       var sites : array<LoadSite>) {
-    let text = strip_line_comments(fread(file))
-    var inscope top <- top_level_lets(text)
-    var inscope fns <- source_fns(file, text)
-    for (f in fns) {
-        g_defined |> insert(f.name)
-    }
-    for (call in loaders) {
+//! what the load-once check reads a site by: the loader names, the
+//! name scope, each fixture function's own loads by its name
+struct private LoadReading {
+    loaders : array<string>
+    scope : NameScope
+    held : table<string; array<LoadSite>>
+    walk : array<string>   //! the model files a call of `SPEC_WALK` loads
+}
+
+//! the byte of each call of `call` in `text`: not a longer name's
+//! tail, a method, nor the `def` of `call`
+def private call_sites(text, call : string) : array<int> {
+    var out : array<int>
+    peek_data(text) $(d) {
         var from = 0
         while (true) {
             let at = find(text, "{call}(", from)
             break if (at < 0)
             from = at + 1
             continue if (is_ident_byte(byte_at(text, at - 1)) || byte_at(text, at - 1) == '.')
-            let line = line_at(text, at)
+            let lead = slice(d, max(at - 12, 0), at)
+            continue if (lead |> ends_with("def ") || lead |> ends_with("def private "))
+            out |> push(at)
+        }
+    }
+    return <- out
+}
+
+//! every call of a loader of `rd.loaders` in `file` whose model file
+//! the gate reads (`site_names`), and every call of a fixture
+//! function `rd.held` names, a load of each file it loads
+def private load_sites(file : string; var rd : LoadReading; var sites : array<LoadSite>) {
+    let text = strip_line_comments(fread(file))
+    rd.scope.top <- top_level_lets(text)
+    var inscope fns <- source_fns(file, text)
+    for (f in fns) {
+        g_defined |> insert(f.name)
+    }
+    for (call in rd.loaders) {
+        for (at in call_sites(text, call)) {
+            loader_site(file, text, at, call, fns, rd, sites)
+        }
+    }
+    for (name, held in keys(rd.held), values(rd.held)) {
+        for (at in call_sites(text, name)) {
             let fi = fn_at(fns, at)
-            let args = call_args(text, at + length(call))
-            var inscope names <- site_names(args, top, line, fi >= 0 ? fns[fi].start : 0, text, globals)
-            if (empty(names) && !(fi >= 0 && passed_param(file, line, fns[fi], call, args, loaders))) {
-                g_unread++
-                to_log(LOG_INFO, "UNREAD {file}:{line}: `{call}` names its model file through a value the load-once check cannot read\n")
-            }
-            sites |> reserve(length(sites) + length(names))
-            for (n in names) {
-                sites |> push(LoadSite(model = n, file = file, line = line, call = call, own = fi >= 0 && fns[fi].own))
-                to_log(LOG_INFO, "SITE {file}:{line}: `{call}` loads {n}{fi >= 0 && fns[fi].own ? " (its own load)" : ""}\n")
+            let line = line_at(text, at)
+            sites |> reserve(length(sites) + length(held))
+            for (h in held) {
+                let own = h.own || (fi >= 0 && fns[fi].own)
+                sites |> push(LoadSite(model = h.model, file = file, line = line, call = name,
+                    own = own))
+                to_log(LOG_INFO,
+                    "SITE {file}:{line}: `{name}` loads {h.model} at {h.file}:{h.line}\n")
             }
         }
     }
+}
+
+//! the load site of `call` at byte `at` of `file`'s `text`: its
+//! model files, else - where the holding function of `fns` owns no
+//! load - a parameter it passes (`passed_param`), else an unread site
+def private loader_site(file, text : string; at : int; call : string; fns : array<SourceFn>;
+                        var rd : LoadReading; var sites : array<LoadSite>) {
+    let line = line_at(text, at)
+    let fi = fn_at(fns, at)
+    let fn_start = fi >= 0 ? fns[fi].start : 0
+    rd.scope.lines <- split(slice(text, fn_start, length(text)), "\n")
+    let before = line - line_at(text, fn_start) + 1
+    let args = call_args(text, at + length(call))
+    var inscope names <- site_names(args, rd.scope, before)
+    if (empty(names) && call == SPEC_WALK) {
+        names |> push_from(rd.walk)
+    }
+    let own = fi >= 0 && fns[fi].own
+    let fn_name = fi >= 0 ? fns[fi].name : ""
+    let passes = (fi >= 0 && empty(names) && !own
+        && passed_param(file, line, fns[fi], call, args, rd, before))
+    if (empty(names) && !own && !passes) {
+        unread_site(file, line, call)
+    }
+    sites |> reserve(length(sites) + length(names))
+    for (n in names) {
+        sites |> push(LoadSite(model = n, file = file, line = line, call = call, own = own,
+            fn = fn_name))
+        to_log(LOG_INFO, "SITE {file}:{line}: `{call}` loads {n}{own ? " (its own load)" : ""}\n")
+    }
+}
+
+let private UNREAD_LOAD = ("a load names its model file where this gate reads it - a literal, "
+    + "or a name a `let`, a `for` over literals or a table, a top-level `let` or a fixture "
+    + "global binds to one, or `hf_snapshot_dir(\"<repo>\")` - or the function holding it "
+    + "declares `own_load(\"<why>\")` (ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once)")
+
+//! a load site whose model file the check cannot read: a finding
+def private unread_site(file : string; line : int; call : string) {
+    let why = "`{call}` names it through a value the check cannot read"
+    gate_finding(file, line, "{UNREAD_LOAD} - {why}")
 }
 
 //! the arguments of a call's argument text `args`, split at its top-level commas, string literals read whole
@@ -518,11 +751,11 @@ def private no_file_arg(a : string) : bool {
 
 //! the model files of the first argument in `args` that names some (`no_file_arg` passed over; a loader takes its model file
 //! ahead of a drafter or a companion): its literals, else the first of its identifiers bound to some in the function holding the
-//! call (from `fn_start`, before `line`), in `top` (the file's top-level `let` lines) or in `globals`; an argument that calls a function and names none ends the search
-def private site_names(args : string; top : array<string>; line, fn_start : int; text : string;
-                       globals : table<string; array<string>>) : array<string> {
-    var inscope fn_lines <- split(slice(text, fn_start, length(text)), "\n")
-    let fn_line = line_at(text, fn_start)
+//! call, before its line `before` of `sc.lines`, at the file's top
+//! level or in a fixture global (`resolve_names`), each loop's every
+//! value; an argument that calls a function and names none ends the
+//! search
+def private site_names(args : string; sc : NameScope; before : int) : array<string> {
     var out : array<string>
     for (raw in top_args(args)) {
         let arg = strip(raw)
@@ -530,29 +763,43 @@ def private site_names(args : string; top : array<string>; line, fn_start : int;
         delete out
         out <- gguf_names(arg)
         return <- out if (!empty(out))
+        let snap = find(arg, "hf_snapshot_dir(") >= 0
         for (id in idents_of(arg)) {
             delete out
-            out <- bound_names(fn_lines, id, line - fn_line + 1)
+            out <- resolve_names(sc, id, field_after(arg, id), before, LOAD_HOPS, snap)
             return <- out if (!empty(out))
-            delete out
-            out <- bound_names(top, id, 0)
-            return <- out if (!empty(out))
-            if (key_exists(globals, id)) {
-                out := globals?[id] ?? array<string>()
-                return <- out
-            }
         }
         return <- out if (find(arg, "(") >= 0)   //! a value a call computes: the file it names is the run's
     }
     return <- out
 }
 
-//! whether `f` passes a parameter of its own to `call` - a finding where `loaders` does not list `f`
-def private passed_param(file : string; line : int; f : SourceFn; call, args : string; loaders : array<string>) : bool {
-    var inscope ids <- idents_of(args)
+//! the hops `resolve_names` takes past a site's own argument
+let private LOAD_HOPS = 4
+
+//! the identifiers of `args` and, `depth` hops deep, those of the
+//! local bindings before line `before` of `lines` they name
+def private reached_ids(lines : array<string>; args : string; before, depth : int) : array<string> {
+    var out <- idents_of(args)
+    return <- out if (depth <= 0)
+    var inscope direct <- idents_of(args)
+    for (id in direct) {
+        let b = binding_of(lines, id, before)
+        continue if (b.at == 0)
+        var inscope more <- reached_ids(lines, b.rhs, b.at, depth - 1)
+        out |> push_from(more)
+    }
+    return <- out
+}
+
+//! whether `f` passes a parameter of its own to `call`, directly
+//! or through its locals - a finding where `rd.loaders` lacks `f`
+def private passed_param(file : string; line : int; f : SourceFn; call, args : string;
+                         rd : LoadReading; before : int) : bool {
+    var inscope ids <- reached_ids(rd.scope.lines, args, before, LOAD_HOPS)
     for (p in f.params) {
         continue if (!has_value(ids, p))
-        if (!has_value(loaders, f.name) && !has_value(LOADER_HOMES, base_name(file))) {
+        if (!has_value(rd.loaders, f.name) && !has_value(LOADER_HOMES, base_name(file))) {
             gate_finding(file, line, "{UNLISTED_LOADER} - `{f.name}` passes `{p}` to `{call}`")
         }
         return true
@@ -560,25 +807,27 @@ def private passed_param(file : string; line : int; f : SourceFn; call, args : s
     return false
 }
 
-var private g_unread = 0   //! the load sites whose model file the check could not read
 var private g_defined : table<string>   //! the functions the scanned files define: a listed helper is one of them
+
+//! the string literals of the `<key_var> == "<key>"` arm of the
+//! runner function `def_head` in the runner's text `run`, up to its
+//! next arm; none where the function or the arm is absent
+def private runner_arm(run, def_head, key_var, key : string) : array<string> {
+    var none : array<string>
+    let body_at = find(run, def_head)
+    let at = body_at < 0 ? -1 : find(run, "{key_var} == \"{key}\")", body_at)
+    return <- none if (at < 0)
+    var stop = find(run, "\} elif ({key_var} ==", at)
+    stop = stop < 0 ? find(run, "var none", at) : stop
+    return <- quoted_segments(slice(run, at, stop < 0 ? length(run) : stop))
+}
 
 //! the test files the runner `run_path`'s `area_tests` lists for `area`, as paths beside it; a finding where it lists none
 def private area_files(run_path, area : string) : array<string> {
-    let run = fread(run_path)
     let dir = dir_name(run_path)
-    let body_at = find(run, "def area_tests(")
-    let at = find(run, "area == \"{area}\")", body_at)
-    var out : array<string>
-    if (body_at >= 0 && at >= 0) {
-        var stop = find(run, "\} elif (area ==", at)
-        stop = stop < 0 ? find(run, "var none", at) : stop
-        for (seg in quoted_segments(slice(run, at, stop))) {
-            if (seg |> starts_with("test_") && seg |> ends_with(".das") && fexist("{dir}/{seg}")) {
-                out |> push("{dir}/{seg}")
-            }
-        }
-    }
+    var inscope segs <- runner_arm(fread(run_path), "def area_tests(", "area", area)
+    var out <- [for (seg in segs); "{dir}/{seg}";
+        where seg |> starts_with("test_") && seg |> ends_with(".das") && fexist("{dir}/{seg}")]
     if (empty(out)) {
         gate_finding(run_path, "the load-once check read no test file of the area {area} off `area_tests`: it held nothing ({LOAD_ONCE_AT})")
     }
@@ -612,12 +861,13 @@ def private block_calls(f : string) : array<tuple<key : string; line : int; call
 
 //! the load-once check over `files` for `area`: the area's blocks (`blocks`, keyed `area, file`) each the one load of its model
 //! file; every other load site of a model a block loads, and every load site of a model loaded at two sites and by no block,
-//! is a finding unless its function declares its own load, a load a call of `loaders` names
-def private load_once_area(area : string; files : array<string>; blocks : table<string; string>; globals : table<string; array<string>>;
-                           loaders : array<string>) {
+//! is a finding unless its function declares its own load, a load
+//! a call `rd` reads names
+def private load_once_area(area : string; files : array<string>; blocks : table<string; string>;
+                           var rd : LoadReading) {
     var inscope sites : array<LoadSite>
     for (f in files) {
-        load_sites(f, loaders, globals, sites)
+        load_sites(f, rd, sites)
     }
     if (has_value(GGUF_ONLY_AREAS, area)) {
         sites |> erase_if() $(s) => s.model |> ends_with(".bin")
@@ -681,6 +931,55 @@ def private table_rows(text, name : string) : array<array<string>> {
         break
     }
     return <- rows
+}
+
+//! the string literals of the top-level list `name` of `text`: a
+//! table literal's rows (`table_rows`), or a `let [private] <name> =
+//! fixed_array(...)`
+def private literal_list(text, name : string) : array<string> {
+    var out : array<string>
+    var inscope rows <- table_rows(text, name)
+    for (row in rows) {
+        out |> push_from(row)
+    }
+    let lines = "\n{text}"
+    let lists = fixed_array("\nlet private {name} = fixed_array(", "\nlet {name} = fixed_array(")
+    for (head in lists) {
+        let at = find(lines, head)
+        continue if (at < 0)
+        var inscope lits <- quoted_segments(call_args(lines, at + length(head) - 1))
+        out |> push_from(lits)
+        break
+    }
+    return <- out
+}
+
+//! the model files the spec walk loads: the file of each
+//! `ModelSpec(...)` row of the spec table's text `spec_text` carrying
+//! a parity fixture, but a file a `SPEC_WALK_SKIPS` table of `files`
+//! names
+def private spec_walk_files(spec_text : string; files : array<string>) : array<string> {
+    var skips : table<string>
+    for (f in files) {
+        let text = strip_line_comments(fread(f))
+        for (name in SPEC_WALK_SKIPS) {
+            var inscope rows <- literal_list(text, name)
+            for (row in rows) {
+                skips |> insert(row)
+            }
+        }
+    }
+    var out : array<string>
+    let specs = strip_line_comments(spec_text)
+    for (at in call_sites(specs, "ModelSpec")) {
+        let args = call_args(specs, at + length("ModelSpec"))
+        var inscope file <- field_literals(args, "file")
+        let parity = find(args, "parity <-") >= 0 || find(args, "parity =") >= 0
+        if (!empty(file) && parity && !key_exists(skips, file[0])) {
+            out |> push(file[0])
+        }
+    }
+    return <- out
 }
 
 //! each `<name>[<n>]` of `body`, a literal row of a table
@@ -808,23 +1107,40 @@ def private check_models_load_once() {
     var inscope fixtures <- [for (f in tracked_files(["modules/dasLLAMA/tests/_*.das"], "the fixture modules")); f;
         where !(base_name(f) |> starts_with("_child_")) && !(base_name(f) |> ends_with("_root.das"))]
     var inscope blocks <- load_once_blocks(files)
-    var inscope globals <- global_names(fixtures)
-    var inscope none : array<LoadSite>
     var inscope listed <- [for (l in LOADERS); l]
-    var inscope loaders <- all_loaders(listed)
-    for (f in fixtures) {
-        load_sites(f, loaders, globals, none)
-    }
+    var inscope scanned <- [for (f in files); f]
+    scanned |> push_from(fixtures)
+    var inscope walk <- spec_walk_files(fread(SPEC_TABLE), scanned)
+    var inscope rd <- fixture_reading(fixtures, fixtures, listed, walk)
     for (area in LOAD_ONCE_AREAS) {
         var inscope area_set <- area_files("{TESTS}/run.das", area)
-        load_once_area(area, area_set, blocks, globals, loaders)
+        load_once_area(area, area_set, blocks, rd)
     }
     check_block_rows(files)
     check_family_tags(files, blocks)
-    stale_loaders(listed)
-    if (g_unread > 0) {
-        to_log(LOG_WARNING, "REVIEW.das load-once: {g_unread} load site(s) name their model file through a value the check cannot read - DAS_LOG_LEVEL=info prints them\n")
+    var inscope defined <- defined_in(tracked_files(["modules/dasLLAMA/tests/*.das",
+        "modules/dasLLAMA/dasllama/*.das"], "the loaders' definitions"))
+    var inscope engine <- [for (l in ENGINE_LOADERS); l]
+    check_stale_loaders(listed, engine, defined)
+}
+
+//! the names of the functions `files` define
+def private defined_in(files : array<string>) : table<string> {
+    var out : table<string>
+    for (f in files) {
+        var inscope fns <- source_fns(f, strip_line_comments(fread(f)), mark_own = false)
+        for (fn in fns) {
+            out |> insert(fn.name)
+        }
     }
+    return <- out
+}
+
+//! the folder run's stale-list check: a finding for each name of
+//! `listed` (LOADERS) and `engine` (ENGINE_LOADERS) `defined` lacks
+def private check_stale_loaders(listed, engine : array<string>; defined : table<string>) {
+    stale_loaders("LOADERS", listed, defined, "under tests/ or the engine")
+    stale_loaders("ENGINE_LOADERS", engine, defined, "under tests/ or the engine")
 }
 
 //! the blocks of `files` keyed `area, file` to their `file:line`, in the files' order; a second block of one key is a finding
@@ -849,29 +1165,119 @@ def private all_loaders(listed : array<string>) : array<string> {
     return <- out
 }
 
-//! a finding for each helper of `listed` that no scanned file defines
-def private stale_loaders(listed : array<string>) {
-    for (l in listed) {
-        if (!key_exists(g_defined, l)) {
-            gate_finding("{TESTS}/REVIEW.das", "LOADERS lists `{l}`, which no file the load-once check reads defines: drop it from the list ({LOAD_ONCE_AT})")
+//! the reading of load sites by the loaders `listed` and the globals
+//! of `named`, each function of `fixtures` that loads a file it
+//! names held: a call of it is a load of that file at the caller;
+//! a call of the spec walk loads each file of `walk`
+def private fixture_reading(named, fixtures, listed, walk : array<string>) : LoadReading {
+    var rd <- LoadReading(loaders <- all_loaders(listed), walk := walk)
+    rd.scope.globals <- global_names(named)
+    var inscope loads : array<LoadSite>
+    for (f in fixtures) {
+        load_sites(f, rd, loads)
+    }
+    for (s in loads) {
+        if (!empty(s.fn) && !has_value(rd.loaders, s.fn) && !has_value(BLOCKS, s.fn)) {
+            rd.held[s.fn] |> push(s)
+        }
+    }
+    return <- rd
+}
+
+//! a finding for each name of `names` - the list `list` of this file
+//! - that `defined` holds no function of, `where_` saying which files
+//! the names were read in
+def private stale_loaders(list : string; names : array<string>; defined : table<string>;
+                          where_ : string) {
+    for (l in names) {
+        if (!key_exists(defined, l)) {
+            gate_finding("{TESTS}/REVIEW.das", ("{list} lists `{l}`, which no file {where_} "
+                + "defines: drop it from the list ({LOAD_ONCE_AT})"))
         }
     }
 }
 
-//! the load-once check over the named files alone, as the areas `areas` - an area's files the ones the runner `area_run`
-//! lists for it where named, else the named files: its fixture rail. Its helper loaders are `listed` where it names some, each
-//! one a named file must define, else LOADERS
-def private check_load_once_files(files, listed, areas : array<string>; area_run : string) {
+//! the scope of the load-once check's fixture rail: the helper
+//! loaders `listed` (LOADERS where none), the engine loader names
+//! `engine` a named file must define, the areas, the runner whose
+//! area lists it reads ("" = the named files) and the spec table its
+//! walk reads
+struct private LoadOnceRail {
+    listed : array<string>
+    engine : array<string>
+    areas : array<string>
+    area_run : string
+    spec_table : string
+}
+
+//! the load-once check over the named files alone, as the areas of
+//! `rail` - an area's files the ones its runner lists for it where
+//! named, else the named files. Each listed helper loader and each
+//! engine name a named file must define. A named `_*.das` file is a
+//! fixture: a caller of its functions' loads holds them
+def private check_load_once_files(files : array<string>; rail : LoadOnceRail) {
     var inscope blocks <- load_once_blocks(files)
-    var inscope globals <- global_names(files)
-    var inscope loaders <- all_loaders(empty(listed) ? [for (l in LOADERS); l] : listed)
-    for (area in areas) {
-        var inscope area_set <- empty(area_run) ? [for (f in files); f] : area_files(area_run, area)
-        load_once_area(area, area_set, blocks, globals, loaders)
+    var inscope fixtures <- [for (f in files); f; where base_name(f) |> starts_with("_")]
+    var inscope tests <- [for (f in files); f; where !(base_name(f) |> starts_with("_"))]
+    var inscope loaders <- (empty(rail.listed) ? [for (l in LOADERS); l]
+        : [for (l in rail.listed); l])
+    var inscope walk <- spec_walk_files(fread(rail.spec_table), files)
+    var inscope rd <- fixture_reading(files, fixtures, loaders, walk)
+    for (area in rail.areas) {
+        var inscope area_set <- (empty(rail.area_run) ? [for (f in tests); f]
+            : area_files(rail.area_run, area))
+        load_once_area(area, area_set, blocks, rd)
     }
     check_block_rows(files)
-    if (!empty(listed)) {
-        stale_loaders(listed)
+    stale_loaders("LOADERS", rail.listed, g_defined, "the load-once check reads")
+    stale_loaders("ENGINE_LOADERS", rail.engine, g_defined, "the load-once check reads")
+}
+
+//! the run lists of the runner that place a test file: the model-free
+//! and kernel suites of `suite_files`, beside every area of
+//! `area_tests` and the census verdict
+let private PLACED_SUITES = fixed_array("model-free", "gpu-kernels", "kernels")
+
+let private UNPLACED = ("a test file under tests/ sits in an area of `area_tests` or in a "
+    + "model-free or kernel suite of `suite_files` (tests/run.das), or is the runner's "
+    + "`CENSUS_VERDICT`: a file in none runs in no area's run, so no change reaches it - add it "
+    + "to the area its model or its subject belongs to "
+    + "(ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once)")
+
+//! a finding for each test file of `files` that the runner `run_path`
+//! places in no run list (`UNPLACED`)
+def private check_tests_placed(run_path : string; files : array<string>) {
+    let run = fread(run_path)
+    var placed : table<string>
+    var inscope areas <- literal_list(run, "AREAS")
+    for (area in areas) {
+        var inscope segs <- runner_arm(run, "def area_tests(", "area", area)
+        for (seg in segs) {
+            placed |> insert(base_name(seg))
+        }
+    }
+    for (suite in PLACED_SUITES) {
+        var inscope segs <- runner_arm(run, "def suite_files(", "name", suite)
+        for (seg in segs) {
+            placed |> insert(base_name(seg))
+        }
+    }
+    let verdict = find(run, "\nlet CENSUS_VERDICT = ")
+    if (verdict >= 0) {
+        var inscope segs <- quoted_segments(slice(run, verdict, find(run, "\n", verdict + 1)))
+        for (seg in segs) {
+            placed |> insert(base_name(seg))
+        }
+    }
+    if (empty(placed)) {
+        gate_finding(run_path, "the placement check read no run list off the runner: it held "
+            + "nothing")
+        return
+    }
+    for (f in files) {
+        if (!key_exists(placed, base_name(f))) {
+            gate_finding(f, UNPLACED)
+        }
     }
 }
 
@@ -888,12 +1294,7 @@ def private check_cell_pins_in(files : array<string>) {
     for (f in files) {
         let text = strip_line_comments(fread(f))
         for (call in CELL_PINS) {
-            var from = 0
-            while (true) {
-                let at = find(text, "{call}(", from)
-                break if (at < 0)
-                from = at + 1
-                continue if (is_ident_byte(byte_at(text, at - 1)) || byte_at(text, at - 1) == '.')
+            for (at in call_sites(text, call)) {
                 gate_finding(f, line_at(text, at), "{CELL_PIN} - `{call}`")
             }
         }
@@ -905,6 +1306,33 @@ def private check_cell_pins_in(files : array<string>) {
 def private check_cell_pins() {
     var inscope files <- tracked_files(["modules/dasLLAMA/tests/_*_cells.das"], "the fixture cell modules")
     check_cell_pins_in(files)
+}
+
+//! the engine's census resets, each called by `_kernel_census.das` alone
+let private CENSUS_RESETS = fixed_array("metal_kernel_coverage_reset", "vk_kernel_coverage_reset")
+
+let private CENSUS_RESET = ("a file under tests/ never resets the engine's kernel census directly: call `kernel_census_reset_metal()` "
+    + "or `kernel_census_reset_vulkan()` (`_kernel_census.das`) - they fold the dispatches so far into the process's running "
+    + "sum before the reset, where a direct reset loses them from the run's census "
+    + "(ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once)")
+
+//! no call of a CENSUS_RESETS name in `files` but `_kernel_census.das`, comments aside
+def private check_census_resets_in(files : array<string>) {
+    for (f in files) {
+        continue if (base_name(f) == "_kernel_census.das")
+        let text = strip_line_comments(fread(f))
+        for (call in CENSUS_RESETS) {
+            for (at in call_sites(text, call)) {
+                gate_finding(f, line_at(text, at), "{CENSUS_RESET} - `{call}`")
+            }
+        }
+    }
+}
+
+//! the folder's census resets go through `_kernel_census.das`
+def private check_census_resets() {
+    var inscope files <- tracked_files(["modules/dasLLAMA/tests/*.das"], "the census resets")
+    check_census_resets_in(files)
 }
 
 //! a test file that calls a block (`BLOCKS`): its one `[test]` runs the block's cells
@@ -922,22 +1350,45 @@ def private check_folder_shape(root : string) {
     check_test_shape_floorless(root, 100, true) $(path : string) => holds_block(path)
 }
 
-//! the gate; `-- --load-once <file>... --loaders <name>... --area-run <run.das> --area <name>...` runs
-//! the load-once check over the named files alone as the named areas, `llm` where none is named (`check_load_once_files`),
-//! `-- --floor <folder>` the file-shape check over that folder, `-- --cell-pins <file>...` the cell-pin check and
-//! `-- --family-tags <file>...` the family-tag check over the named files' blocks - its fixture rails
+//! the gate; `-- --load-once <file>... --loaders <name>... --engine
+//! <name>... --area-run <run.das> --area <name>... --spec-table
+//! <file>` runs the load-once check over the named files alone as the
+//! named areas, `llm` where none is named (`check_load_once_files`),
+//! `-- --floor <folder>` the file-shape check over that folder, `--
+//! --cell-pins <file>...` the cell-pin check, `-- --family-tags
+//! <file>...` the family-tag check over the named files' blocks, `--
+//! --census-resets <file>...` the census-reset check over the named
+//! files, `-- --placed <run.das> <file>...` the placement check of
+//! the named test files against that runner and `-- --stale-loaders
+//! <file>... --loaders <name>... --engine <name>...` the folder run's
+//! stale-list check over the named files' definitions - its fixture
+//! rails
 [export]
 def main() : int {
     let fixtures <- gate_flag_args("--load-once")
     if (!empty(fixtures)) {
         let area_run <- gate_flag_args("--area-run")
-        var inscope areas <- gate_flag_args("--area")
-        if (empty(areas)) {
-            areas |> push("llm")
+        let spec <- gate_flag_args("--spec-table")
+        var rail <- LoadOnceRail(listed <- gate_flag_args("--loaders"),
+            engine <- gate_flag_args("--engine"),
+            areas <- gate_flag_args("--area"), area_run = empty(area_run) ? "" : area_run[0],
+            spec_table = empty(spec) ? SPEC_TABLE : spec[0])
+        if (empty(rail.areas)) {
+            rail.areas |> push("llm")
         }
-        let run_at = empty(area_run) ? "" : area_run[0]
-        check_load_once_files(fixtures, gate_flag_args("--loaders"), areas, run_at)
+        check_load_once_files(fixtures, rail)
         return gate_verdict("modules/dasLLAMA/tests --load-once")
+    }
+    let stale <- gate_flag_args("--stale-loaders")
+    if (!empty(stale)) {
+        var inscope defined <- defined_in(stale)
+        check_stale_loaders(gate_flag_args("--loaders"), gate_flag_args("--engine"), defined)
+        return gate_verdict("modules/dasLLAMA/tests --stale-loaders")
+    }
+    let placing <- gate_flag_args("--placed")
+    if (!empty(placing)) {
+        check_tests_placed(placing[0], [for (f, i in placing, count()); f; where i > 0])
+        return gate_verdict("modules/dasLLAMA/tests --placed")
     }
     let floors <- gate_flag_args("--floor")
     if (!empty(floors)) {
@@ -955,12 +1406,22 @@ def main() : int {
         check_cell_pins_in(pinned)
         return gate_verdict("modules/dasLLAMA/tests --cell-pins")
     }
+    let resets <- gate_flag_args("--census-resets")
+    if (!empty(resets)) {
+        check_census_resets_in(resets)
+        return gate_verdict("modules/dasLLAMA/tests --census-resets")
+    }
     check_folder_shape(TESTS)
     check_one_test_child()
     check_roots_unnamed("modules/dasLLAMA/tests")
     check_child_binary_flags()
     check_test_categories()
     check_models_load_once()
+    let globs = ["modules/dasLLAMA/tests/test_*.das"]
+    var inscope tests <- [for (f in tracked_files(globs, "the placed test files")); f;
+        where fexist(f)]
+    check_tests_placed("{TESTS}/run.das", tests)
     check_cell_pins()
+    check_census_resets()
     return gate_verdict("modules/dasLLAMA/tests")
 }
