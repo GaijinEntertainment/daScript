@@ -75,6 +75,11 @@ extern "C" void das_arm64_call ( void * fn, const uint64_t * gpr, const uint64_t
 
 namespace das {
 
+    struct DasBindSettings {
+        das_hash_map<string, string> libraries;
+        vector<string> searchPaths;
+    };
+
 #if DAS_BIND_EXTERNAL
 
 #ifdef _WIN32
@@ -325,21 +330,16 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         return paths;
     }
 
-    static void * searchDynamicLibrary ( const string & library ) {
+    static void * searchDynamicLibrary ( const string & library, const DasBindSettings * settings ) {
         void * libhandle = getLibraryHandle(library.c_str());
         if ( !libhandle ) {
             libhandle = loadDynamicLibrary(library.c_str());
             if (!libhandle) {
-                if ( *daScriptEnvironment::bound && (*daScriptEnvironment::bound)->g_Program ) {
-                    for ( auto & root : (*daScriptEnvironment::bound)->g_Program->policies.dll_search_paths ) {
+                if ( settings ) {
+                    for ( auto & root : settings->searchPaths ) {
                         libhandle = loadDynamicLibrary((root + "/" + library).c_str());
                         if ( libhandle ) break;
                     }
-                    /* // we figure this out later
-                    if ( !libhandle ) {
-                        libhandle = loadDynamicLibrary(((*daScriptEnvironment::bound)->g_Program->policies.jit_path_to_shared_lib + "/" + library).c_str());
-                    }
-                    */
                 }
                 if ( !libhandle ) {
                     for ( auto & root : dasDllSearchPathsFromEnv() ) {
@@ -355,28 +355,36 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         return libhandle;
     }
 
-    static void * searchDynamicLibraryWithExtension ( const string & library ) {
-        void * libhandle = searchDynamicLibrary(library);
+    static void * searchDynamicLibraryWithExtension ( const string & library, const DasBindSettings * settings ) {
+        void * libhandle = searchDynamicLibrary(library, settings);
         if ( !libhandle ) {
             // an [extern] may name its library without one, so every platform can spell the
             // same binding: add this one's extension and walk the same search again
             string ext = DAS_SHARED_LIBRARY_EXTENSION;
             if ( library.length()<ext.length() ||
                  library.compare(library.length()-ext.length(), ext.length(), ext)!=0 ) {
-                libhandle = searchDynamicLibrary(library + ext);
+                libhandle = searchDynamicLibrary(library + ext, settings);
             }
         }
         return libhandle;
     }
 
-    static vector<string> libraryCandidates ( const string & library ) {
+    static vector<string> libraryCandidates ( const string & library, const DasBindSettings * settings ) {
         string list = library;
         auto eq = library.find('=');
         if ( eq!=string::npos ) {
             string envName = "DAS_EXTERN_LIB_";
             for ( size_t i=0; i!=eq; ++i ) envName += char(toupper(uint8_t(library[i])));
             auto envValue = das_getenv(envName.c_str());
-            list = envValue && *envValue ? string(envValue) : library.substr(eq + 1);
+            if ( envValue && *envValue ) {
+                list = envValue;
+            } else {
+                list = library.substr(eq + 1);
+                if ( settings ) {
+                    auto it = settings->libraries.find(library.substr(0, eq));
+                    if ( it!=settings->libraries.end() && !it->second.empty() ) list = it->second;
+                }
+            }
         }
         vector<string> candidates;
         size_t pos = 0;
@@ -389,7 +397,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         return candidates;
     }
 
-    static void * bindDynamicLibrary ( const string & library ) {
+    static void * bindDynamicLibrary ( const string & library, const DasBindSettings * settings ) {
         lock_guard<mutex> guard(g_dasBindLibMutex);
         // LLVM.dll pulls in libz3, whose static initializer leaks 40 bytes nothing here can free.
         AllocTrackerInternalGuard atg;
@@ -398,8 +406,8 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             return it->second;
         } else {
             void * libhandle = nullptr;
-            for ( auto & candidate : libraryCandidates(library) ) {
-                libhandle = searchDynamicLibraryWithExtension(candidate);
+            for ( auto & candidate : libraryCandidates(library, settings) ) {
+                libhandle = searchDynamicLibraryWithExtension(candidate, settings);
                 if ( libhandle ) break;
             }
             g_dasBindLib[library] = libhandle;
@@ -407,13 +415,13 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         }
     }
 
-    static void* getDllAddress(const string &lib, const string &func, bool is_opengl, string &err) {
+    static void* getDllAddress(const string &lib, const string &func, bool is_opengl, string &err, const DasBindSettings * settings) {
         void *fnptr;
         if (is_opengl) {
             fnptr = openGlGetFunctionAddress(func.c_str());
             if ( !fnptr ) err = "failed to bind " + func;
         } else {
-            void * libhandle = bindDynamicLibrary(lib);
+            void * libhandle = bindDynamicLibrary(lib, settings);
             if ( !libhandle ) {
                 auto dlErr = getDynamicLibraryError();
                 err = "can't load library " + lib + (dlErr.empty() ? string() : (" (" + dlErr + ")"));
@@ -427,15 +435,15 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
 
     struct SimNode_DasBindCall : SimNode_ExtFuncCallBase {
         SimNode_DasBindCall ( const LineInfo & a, const char * fnName, uint64_t hc, FastCallWrapper wrp, void * fun, ApiType api_,
-                              const Arm64Layout * layout_ )
-            : SimNode_ExtFuncCallBase(a, fnName), code(hc), wrapper(wrp), fnptr(fun), api(api_), layout(layout_) {
+                              const Arm64Layout * layout_, const DasBindSettings * settings_ )
+            : SimNode_ExtFuncCallBase(a, fnName), code(hc), wrapper(wrp), fnptr(fun), api(api_), layout(layout_), settings(settings_) {
         }
         void bind ( Context & context ) {
             string crash_and_burn;
             withBind(code,[&](BoundFunction * bf){
                 if ( bf ) {
                     if ( !bf->fun ) {
-                        bf->fun = getDllAddress(bf->library, bf->name, api == ApiType::api_opengl, crash_and_burn);
+                        bf->fun = getDllAddress(bf->library, bf->name, api == ApiType::api_opengl, crash_and_burn, settings);
                     }
                     fnptr = bf->fun;
                 } else {
@@ -466,6 +474,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         void * fnptr = nullptr;
         ApiType api = ApiType::api_unknown;
         const Arm64Layout * layout = nullptr;
+        const DasBindSettings * settings = nullptr;
     };
 
     FastCallWrapper getWrapper ( Function * fun, int nReg ) {
@@ -487,10 +496,11 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         bool isLate;
         ApiType api;
         uint64_t hc;
+        const DasBindSettings * settings;
         DasBindFunction ( const string & dasName, uint64_t _hc, void * addr, ExternBindArgs params, FastCallWrapper wrp,
-                          const Arm64Layout * layout_ )
+                          const Arm64Layout * layout_, const DasBindSettings * settings_ )
             : BuiltInFunction(dasName.c_str(), dasName.c_str())
-            , dllAddress(addr), wrapper(wrp), layout(layout_) {
+            , dllAddress(addr), wrapper(wrp), layout(layout_), settings(settings_) {
             callBased = true;
             isLate = params.late;
             api = params.api;
@@ -501,7 +511,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         }
         SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
             const char * fnName = context.code->allocateName(this->name);
-            return context.code->makeNode<SimNode_DasBindCall>(at, fnName, hc, wrapper, dllAddress, api, layout);
+            return context.code->makeNode<SimNode_DasBindCall>(at, fnName, hc, wrapper, dllAddress, api, layout, settings);
         }
     };
 
@@ -617,7 +627,8 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
 #endif
 
     struct ExternFunctionAnnotation : FunctionAnnotation {
-        ExternFunctionAnnotation() : FunctionAnnotation("extern") { }
+        const DasBindSettings * settings;
+        ExternFunctionAnnotation ( const DasBindSettings * settings_ ) : FunctionAnnotation("extern"), settings(settings_) { }
         virtual bool apply(ExprBlock *, ModuleGroup &, AnnotationArgumentList &, string & err) override {
             err = "not supported for block";
             return false;
@@ -722,12 +733,12 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             void * funptr = nullptr;
             string bindName = mangleFunction(ba.fn_name, ba.library, ba.api);
             if ( !ba.late && ba.api!=ApiType::api_opengl ) {
-                funptr = getDllAddress(ba.library, ba.fn_name, ba.api == ApiType::api_opengl, err);
+                funptr = getDllAddress(ba.library, ba.fn_name, ba.api == ApiType::api_opengl, err, settings);
                 if ( !funptr ) return string();
             }
             auto wrp = computeWrapper(fun);
             uint64_t code = lateBind(ba.fn_name, ba.library, funptr);
-            auto bif = new DasBindFunction(bindName, code, funptr, ba, wrp, computeArm64Layout(fun));
+            auto bif = new DasBindFunction(bindName, code, funptr, ba, wrp, computeArm64Layout(fun), settings);
             const LineInfo bindAt = cppBindingLineInfo(target, bindName.c_str());
             bif->at = bindAt;
             bif->result = proxyType(fun->result, bindAt);
@@ -867,12 +878,16 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
 
     // Resolver for JIT exe mode: parses __dasbind__<symbol>@@<library> from mangled name,
     // loads DLL and returns function address.
+#if DAS_BIND_EXTERNAL
+    static const DasBindSettings * boundSettings ();
+#endif
+
     void * dasbind_resolve ( const char * mangledName ) {
 #if DAS_BIND_EXTERNAL
         auto dm = demangleFunction(mangledName);
         if ( dm.symbol.empty() ) return nullptr;
         string err;
-        return getDllAddress(dm.library, dm.symbol, dm.api == ApiType::api_opengl, err);
+        return getDllAddress(dm.library, dm.symbol, dm.api == ApiType::api_opengl, err, boundSettings());
 #else
         (void)mangledName;
         return nullptr;
@@ -880,7 +895,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
     }
 
     // The library handle dasbind's own extern machinery resolves (already-loaded check +
-    // dll_search_paths + dasroot/lib fallbacks) — so das code needing raw entry points from a
+    // dasbind search paths + dasroot/lib fallbacks) — so das code needing raw entry points from a
     // bound library (the --jit-split-modules parallel emit) shares ONE resolution truth.
     // A bare alias (lib=llvm) names the library its [extern] bindings already loaded.
     void * dasbind_get_library ( const char * library ) {
@@ -893,7 +908,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                 if ( kv.second && kv.first.compare(0, prefix.size(), prefix)==0 ) return kv.second;
             }
         }
-        return bindDynamicLibrary(library);
+        return bindDynamicLibrary(library, boundSettings());
 #else
         (void)library;
         return nullptr;
@@ -903,11 +918,12 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
     class Module_DASBIND : public Module {
         uint64_t cppHash = 0;
     public:
+        DasBindSettings settings;
         Module_DASBIND() : Module("dasbind") {
             DAS_PROFILE_SECTION("Module_DASBIND");
             ModuleLibrary lib(this);
             lib.addBuiltInModule();
-            addAnnotation(new ExternFunctionAnnotation());
+            addAnnotation(new ExternFunctionAnnotation(&settings));
             addExtern<DAS_BIND_FUN(safe_pass_string)>(*this, lib, "safe_pass_string",
                 SideEffects::accessExternal, "safe_pass_string")
                     ->args({"string"});
@@ -927,6 +943,30 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             return ModuleAotType::cpp;
         }
     };
+
+    static Module_DASBIND * asDasbind ( Module * mod ) {
+        return mod && mod->name=="dasbind" ? static_cast<Module_DASBIND *>(mod) : nullptr;
+    }
+
+#if DAS_BIND_EXTERNAL
+    static const DasBindSettings * boundSettings () {
+        auto mod = asDasbind(Module::require("dasbind"));
+        return mod ? &mod->settings : nullptr;
+    }
+#endif
+
+    void dasbind_set_library ( Module * dasbind, const char * alias, const char * libraries ) {
+        auto mod = asDasbind(dasbind);
+        if ( !mod || !alias || !*alias ) return;
+        mod->settings.libraries[alias] = libraries ? libraries : "";
+    }
+
+    void dasbind_set_search_paths ( Module * dasbind, const vector<string> & paths ) {
+        auto mod = asDasbind(dasbind);
+        if ( !mod ) return;
+        mod->settings.searchPaths = paths;
+    }
+
 }
 
 REGISTER_MODULE_IN_NAMESPACE(Module_DASBIND,das);
