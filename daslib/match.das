@@ -2,6 +2,7 @@ options gen2
 options indenting = 4
 options strict_smart_pointers = true
 options stack = 65536
+options no_global_variables = false
 
 module match shared private
 

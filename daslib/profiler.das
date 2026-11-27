@@ -3,6 +3,7 @@ options indenting = 4
 options unsafe_table_lookup = false
 options strict_smart_pointers = true
 options threadlock_context
+options no_global_variables = false
 
 module profiler shared private
 

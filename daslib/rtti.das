@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options remove_unused_symbols = false
+options no_global_variables = false
 
 module rtti shared public
 

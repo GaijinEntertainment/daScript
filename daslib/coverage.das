@@ -8,6 +8,7 @@
  * `genhtml cov.lcov -o coverage-report  --synthesize-missing --ignore-errors source`
  */
 options gen2
+options no_global_variables = false
 // `inscope` is necessary, so all modules will include it.
 module coverage shared !inscope
 

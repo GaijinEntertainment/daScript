@@ -3,6 +3,7 @@ options indenting = 4
 options _comment_hygiene = true
 options _cyclomatic_complexity = 58
 options _function_length = 558
+options no_global_variables = false
 
 module linq_fold_common shared public
 

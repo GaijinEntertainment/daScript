@@ -25,6 +25,7 @@ options unsafe_table_lookup = false
 // the driver's options there; it carries a matching twin bump. Pathological depths
 // still overflow and are caught fail-closed (see fail_on_aot_emit_error).
 options stack = 1_048_576
+options no_global_variables = false
 
 def aotFieldName(name : string) : string {
     var result = replace(name, "`", "__");

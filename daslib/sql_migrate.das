@@ -8,6 +8,7 @@ module sql_migrate shared public
 
 // Intentionally opt in for user-facing docs: keep comments concise and actionable.
 options _comment_hygiene = true
+options no_global_variables = false
 
 require strings public
 require daslib/strings_boost

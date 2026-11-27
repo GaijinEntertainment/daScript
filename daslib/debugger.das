@@ -2,6 +2,7 @@ options gen2
 options indenting = 4
 options remove_unused_symbols = false
 options no_aot = true
+options no_global_variables = false
 options strict_smart_pointers = true
 
 module debugger shared public

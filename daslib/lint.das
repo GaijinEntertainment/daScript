@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options strict_smart_pointers = true
+options no_global_variables = false
 
 module lint shared private
 
