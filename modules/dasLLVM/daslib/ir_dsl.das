@@ -157,7 +157,8 @@ def ir_loop(count : Ir; body : block<(i : Ir) : void>) {
 //! passes on
 def ir_at(b : LLVMBuilderRef; ctx, at : LLVMOpaqueValue?; body : block<void>) {
     let saved = g_ir
-    g_ir = IrHelper(fn = LLVMGetBasicBlockParent(LLVMGetInsertBlock(b)), b = b, ctx = ctx, at = at)
+    let fresh = IrHelper(fn = LLVMGetBasicBlockParent(LLVMGetInsertBlock(b)), b = b, ctx = ctx, at = at)
+    g_ir = fresh
     invoke(body)
     g_ir = saved
 }

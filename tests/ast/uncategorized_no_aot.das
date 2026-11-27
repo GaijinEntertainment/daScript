@@ -295,8 +295,6 @@ def test_set_policy(t : T?) {
             "policy 'max_heap_allocated' expects an unsigned integer, got '1.5'")
         t |> equal(set_policy(cop, "force_inscope_pod=maybe"),
             "policy 'force_inscope_pod' expects true or false, got 'maybe'")
-        t |> equal(set_policy(cop, "dll_search_paths=x"),
-            "policy 'dll_search_paths' can't be set from text")
         t |> equal(cop.stack, 65536u, "a refused value leaves the field as it was")
         t |> equal(set_policy(cop, "max_heap_allocated=12x"),
             "policy 'max_heap_allocated' expects an unsigned integer, got '12x'")

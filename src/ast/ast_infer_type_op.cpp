@@ -840,6 +840,7 @@ namespace das {
             pCall->arguments.push_back(new ExprConstUInt(expr->at, expr->left->type->getSizeOf()));
             auto pMove = new ExprMove(expr->at, new ExprVar(expr->at, pVar->name), expr->right->clone(), expr->no_promotion);
             pMove->podDelete = true;
+            pMove->allowConstantLValue = expr->allowConstantLValue;
             pBlock->list.push_back(pLet);
             pBlock->list.push_back(pCall);
             pBlock->list.push_back(pMove);

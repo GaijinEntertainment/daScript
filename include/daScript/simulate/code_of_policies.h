@@ -168,8 +168,6 @@ namespace das {
         int32_t jit_size_level = 0u;             // Opt level for LLVM for binary size
         string jit_path_to_shared_lib;           // Path to libDaScript. Optional, we'll try to find it in _das_root_/lib/ if not provided.
         string jit_path_to_linker;               // Path to linker. Optional, we'll use lld-link from LLVM on Windows (MSVC), clang on mingw, c++ otherwise.
-    // dll loading
-        vector<string> dll_search_paths;          // additional search paths for dll loading
     // one-liners
         /*option*/ bool temp_table_lint_warning = false;
         bool module_cache = false;               // a script's compile_file runs under the default module cache

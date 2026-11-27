@@ -480,11 +480,11 @@ namespace das {
     protected:
         virtual void preVisit ( ExprCopy * expr ) override {
             Visitor::preVisit(expr);
-            cmresDest[expr->right] = expr->left;
+            if ( !expr->allowConstantLValue ) cmresDest[expr->right] = expr->left;
         }
         virtual void preVisit ( ExprMove * expr ) override {
             Visitor::preVisit(expr);
-            cmresDest[expr->right] = expr->left;
+            if ( !expr->allowConstantLValue ) cmresDest[expr->right] = expr->left;
         }
         virtual void preVisit ( ExprFor * expr ) override {
             Visitor::preVisit(expr);

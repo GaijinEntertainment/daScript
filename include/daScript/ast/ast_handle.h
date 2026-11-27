@@ -222,12 +222,12 @@ namespace das
     struct CallPropertyStubbed<callT, RetT(*)(ArgT)> {
         using RetType = RetT;
         enum { ref = callT::ref, isConst = callT::isConst, };
-        static RetT static_call ( ArgT this_ ) {
-            if constexpr ( DAS_SHOULD_USE_STUBS ) {
-                return jit_stubbed_call<RetT>();
-            } else {
-                return callT::static_call(this_);
-            }
+        static RetT static_call ( [[maybe_unused]] ArgT this_ ) {
+#if DAS_SHOULD_USE_STUBS
+            return jit_stubbed_call<RetT>();
+#else
+            return callT::static_call(this_);
+#endif
         }
     };
 

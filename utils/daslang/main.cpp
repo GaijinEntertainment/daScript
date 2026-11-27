@@ -12,6 +12,7 @@
 #include "daScript/misc/dep_recorder.h"
 #include "daScript/misc/job_que.h"
 #include "daScript/simulate/aot_builtin_jobque.h"
+#include "daScript/simulate/aot_builtin_dasbind.h"
 #include "daScript/misc/performance_time.h"
 #ifndef DAS_MAIN_LIBRARY
 #include "asan_options.h"
@@ -142,7 +143,7 @@ static bool set_project_and_command_line_policies ( CodeOfPolicies & policies, c
 
 static CodeOfPolicies getPolicies() {
     CodeOfPolicies policies;
-    policies.dll_search_paths = dllSearchPaths;
+    dasbind_set_search_paths(Module::require("dasbind"), dllSearchPaths);
     policies.aot = false;
     policies.aot_module = true;
     policies.tune_frozen = true;    // -aot output is a cross-box artifact — no per-box [tune] stamps
@@ -512,7 +513,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     ModuleFileCache moduleCache;
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
-    policies.dll_search_paths = dllSearchPaths;
+    dasbind_set_search_paths(Module::require("dasbind"), dllSearchPaths);
     if ( debuggerRequired ) {
         policies.debugger = true;
         access->addExtraModule("debug", getDasRoot() + "/daslib/debug.das");
@@ -537,7 +538,9 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         if ( jitFile.empty() || !access->getFileInfo(jitFile) ) jitFile = getDasRoot() + "/daslib/just_in_time.das";
         access->addExtraModule("just_in_time", jitFile);
         policies.jit_output_path = jitOutPath;
-        policies.dll_search_paths.emplace_back(getDasRoot() + "/lib");
+        auto jitSearchPaths = dllSearchPaths;
+        jitSearchPaths.emplace_back(getDasRoot() + "/lib");
+        dasbind_set_search_paths(Module::require("dasbind"), jitSearchPaths);
     }
     if ( astVerifyRequired ) {
         // force-include the AST verifier the same way -jit/-debugger pull in their
