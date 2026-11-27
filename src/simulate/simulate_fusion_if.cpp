@@ -148,6 +148,21 @@ namespace das {
 
     IMPLEMENT_OP1_WORKHORSE_FUSION_POINT(IfNotZeroThen);
 
+    struct FusionPoint_IfCmp final : FusionPoint {
+        virtual SimNode * fuse ( const SimNodeInfoLookup & info, SimNode * node,
+                                 Context * context ) const override {
+            auto ifNode = static_cast<SimNode_IfTheElseAny *>(node);
+            for ( auto op : { "Equ", "NotEqu", "LessEqu", "GtEqu", "Gt", "Less" } ) {
+                if ( isFusedOp2(info, ifNode->cond, op) ) {
+                    auto compare = static_cast<SimNode_Op2Fusion *>(ifNode->cond);
+                    auto result = compare->fuseIf(context, ifNode);
+                    return result ? result : node;
+                }
+            }
+            return node;
+        }
+    };
+
 #include "simulate_fusion_op1_reg.h"
 
     static constexpr FusionEntry fusionEntries_if[] = {
@@ -156,6 +171,9 @@ namespace das {
 
         REGISTER_OP1_WORKHORSE_FUSION_POINT(IfZeroThen)
         REGISTER_OP1_WORKHORSE_FUSION_POINT(IfNotZeroThen)
+
+        FUSION_ENTRY("IfThenElse","",FusionPoint_IfCmp)
+        FUSION_ENTRY("IfThen","",FusionPoint_IfCmp)
     };
 
     FUSION_TABLE(fusionTable_if, fusionEntries_if)

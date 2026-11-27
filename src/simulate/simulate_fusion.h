@@ -73,6 +73,7 @@ namespace das {
         static bool is2 ( const SimNodeInfoLookup & info, SimNode * lnode, SimNode * rnode, const char * lname, const char * rname );
         static bool is ( const SimNodeInfoLookup & info, SimNode * node, const char * name, const char * typeName );
         static bool isFusedOp2 ( const SimNodeInfoLookup & info, SimNode * node, const char * op, const char * typeName );
+        static bool isFusedOp2 ( const SimNodeInfoLookup & info, SimNode * node, const char * op );
     protected:
         ~FusionPoint() = default;
     };
@@ -100,6 +101,8 @@ namespace das {
             debugInfo = at;
         }
         virtual SimNode * visit(SimVisitor & vis) override;
+        virtual SimNode * fuseIf ( Context *, SimNode_IfTheElseAny * ) { return nullptr; }
+        SimNode * visitIf ( SimVisitor & vis, SimNode * & if_true, SimNode * & if_false );
         const char *    op = nullptr;
         Type            baseType;
         SimSource       l, r;
