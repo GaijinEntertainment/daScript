@@ -208,6 +208,7 @@ namespace das {
 
     static void crash_terminate_handler() {
         const char * what = "unknown";
+#if defined(__cpp_exceptions) || defined(_CPPUNWIND)
         // The exception is still in flight here; rethrow to read its message.
         if ( auto ex = std::current_exception() ) {
             try {
@@ -218,6 +219,7 @@ namespace das {
                 what = "non-std exception";
             }
         }
+#endif
         fprintf(stderr, "\nCRASH: std::terminate - uncaught exception: %s\n", what);
         print_current_stack_trace();
         fflush(stderr);

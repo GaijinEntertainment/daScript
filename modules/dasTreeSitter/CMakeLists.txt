@@ -85,6 +85,9 @@ IF ((NOT DAS_TREE_SITTER_INCLUDED) AND (NOT DAS_TREE_SITTER_DISABLED))
     SET(DAS_TREE_SITTER_MODULE_SRC
         ${DAS_TREE_SITTER_DIR}/src/aot_builtin_tree_sitter.h
         ${DAS_TREE_SITTER_DIR}/src/dasTreeSitter.cpp)
+    IF(NOT MSVC)
+        SET_SOURCE_FILES_PROPERTIES(${DAS_TREE_SITTER_DIR}/src/dasTreeSitter.cpp PROPERTIES COMPILE_OPTIONS "-fexceptions")
+    ENDIF()
 
     ADD_MODULE_CPP(TreeSitter)
     ADD_MODULE_DAS_FROM_DESCRIPTOR(tree_sitter daslib)

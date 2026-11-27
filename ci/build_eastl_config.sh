@@ -23,9 +23,9 @@ DAS_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 BUILD_DIR=${BUILD_DIR:-$DAS_ROOT/build_eastl_$VARIANT}
 # _TARGET_PC is per-variant, set below.
 GCC_FLAGS=${GCC_FLAGS:--O3 -std=c++20 -m64 -msse4 -mno-recip -minline-all-stringops -pipe \
- -ffast-math -ffinite-math-only -fexceptions -fno-rtti -fno-omit-frame-pointer -fconserve-space \
+ -ffast-math -ffinite-math-only -fno-exceptions -fno-rtti -fno-omit-frame-pointer -fconserve-space \
  -fdata-sections -ffunction-sections -fstack-protector -fvisibility-inlines-hidden \
- -DDAGOR_DBGLEVEL=1 -DDAGOR_EXCEPTIONS_ENABLED -DDAS_ENABLE_KEEPALIVE=0 -DFMT_UNICODE=0 \
+ -DDAGOR_DBGLEVEL=1 -DDAS_ENABLE_KEEPALIVE=0 -DFMT_UNICODE=0 \
  -D_TARGET_64BIT -D_TARGET_ARCH_X86_64 -D_TARGET_SIMD_SSE=4 -D_TARGET_STATIC_LIB \
  -D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -D__STDC_CONSTANT_MACROS -D__LINUX__=64}
 
