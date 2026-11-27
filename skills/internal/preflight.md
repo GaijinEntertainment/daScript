@@ -606,7 +606,15 @@ stages daslang.io into `_site` and dasllama.io into `_site_dasllama`; "Version t
 scripts and styles" appends to each local script and stylesheet reference on every page a `?v=`
 of the file's content hash; "Deploy to daslang.io origin (VPS)" (master only) rsyncs both trees, then
 POSTs every record store to the ladder service's `/admin/import-official` and
-`modules/dasLLAMA/performance/records/annotations.json` to its `/admin/import-annotations`.
+`modules/dasLLAMA/performance/records/annotations.json` to its `/admin/import-annotations`;
+"List the placeholders this deploy shipped" hands the next job every page a staging step
+replaced with a placeholder. A browser example whose image the tree's converter did not mint
+fails the staging step, and nothing deploys.
+
+`placeholders` (ubuntu-latest, a `master` run of the upstream repository only - the runs that
+deploy) runs when that list is not empty and fails: the site is deployed and the build job's
+caches are saved, and the run is red, so GitHub mails it to whoever pushed. It has no local
+mirror.
 
 | CI step | Local mirror |
 |---|---|

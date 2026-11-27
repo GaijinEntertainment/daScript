@@ -136,7 +136,7 @@ class MintTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             fx = Fixture(tmp, image_version=33)
             code, out, err = run_main(fx.argv("--expect-image-version", "35", "--stamp-page", str(fx.page)))
-            self.assertEqual(code, 3)
+            self.assertEqual(code, mint_models.EXIT_TREE_DEFECT)
             self.assertIn("IMAGE_VERSION 33, the tree says 35", err)
             self.assertFalse((fx.out / "manifest.json").exists(), "no manifest for a set the page would refuse")
             self.assertIn("/* @image-version */ 0", fx.page.read_text(), "the page keeps its unstamped slot")
@@ -165,14 +165,16 @@ class MintTest(unittest.TestCase):
             self.assertIn("pack.bin: sha256", code)
             self.assertFalse((fx.out / "manifest.json").exists())
 
-    def test_a_converter_that_fails_is_reported_with_its_exit(self):
+    def test_a_converter_that_fails_exits_3_with_its_code_and_output_and_writes_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:
             fx = Fixture(tmp)
             fx.converter.write_text("#!/usr/bin/env python3\nimport sys\nprint('boom')\nsys.exit(7)\n")
-            code, out, err = run_main(fx.argv())
-            self.assertIsInstance(code, str)
-            self.assertIn("mint of story.gguf failed (exit 7)", code)
+            code, out, err = run_main(fx.argv("--stamp-page", str(fx.page)))
+            self.assertEqual(code, mint_models.EXIT_TREE_DEFECT)
+            self.assertIn("mint of story.gguf failed (exit 7)", err)
             self.assertIn("boom", err)
+            self.assertFalse((fx.out / "manifest.json").exists(), "no manifest for a set with an image missing")
+            self.assertIn("/* @image-version */ 0", fx.page.read_text(), "the page keeps its unstamped slot")
 
 
 class ServedAsIsTest(unittest.TestCase):

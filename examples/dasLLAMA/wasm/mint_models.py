@@ -15,9 +15,9 @@ An entry's `rev` pins the repo commit its file is fetched at, so a file replaced
 does not reach a deploy before its models.json does; an entry without one reads main. The GGUFs are
 cached by sha256 (a download is verified before it is used, and never trusted from
 the cache without its hash in the name); the images are minted on every run - it takes
-milliseconds, and a mint for THIS build is the whole point. --expect-image-version is the deploy
-gate: the version read from each minted image's header must be the tree's, or the run exits 3 (any
-other failure exits 1, so a deploy can tell the correctness gate from a transient).
+milliseconds, and a mint for THIS build is the whole point. Exit 3 is the deploy gate, the tree's
+own defect: the converter failed or wrote no image, or a minted image's header carries a version
+other than --expect-image-version. Any other failure exits 1, and the deploy stages a placeholder for it.
 --stamp-page writes that version into the shell's `/* @image-version */ 0` slot, so the page can
 refuse a set minted for another version before it fetches one.
 
@@ -27,6 +27,7 @@ import argparse, hashlib, json, os, shutil, struct, subprocess, sys, urllib.requ
 
 HF = "https://huggingface.co"
 IMAGE_MAGIC = 0x314d4c44   # 'DLM1' little-endian, dasllama_image.das
+EXIT_TREE_DEFECT = 3
 
 
 def sha256_of(path):
@@ -101,7 +102,8 @@ def main():
         r = subprocess.run(cmd, env=env, capture_output=True, text=True)
         if r.returncode != 0 or not os.path.exists(dlim):
             sys.stderr.write(r.stdout[-4000:] + r.stderr[-4000:])
-            raise SystemExit(f"mint of {entry['file']} failed (exit {r.returncode})")
+            sys.stderr.write(f"mint of {entry['file']} failed (exit {r.returncode})\n")
+            sys.exit(EXIT_TREE_DEFECT)
         version = image_version_of(dlim)
         versions.add(version)
         files.append({"name": entry["dlim"], "bytes": os.path.getsize(dlim), "sha256": sha256_of(dlim), "source": f"{entry['repo']}/{entry['file']}"})
@@ -129,7 +131,7 @@ def main():
     version = versions.pop() if versions else a.expect_image_version
     if a.expect_image_version and version != a.expect_image_version:
         sys.stderr.write(f"minted images carry IMAGE_VERSION {version}, the tree says {a.expect_image_version} - the converter that minted them is not this tree's\n")
-        sys.exit(3)   # the deploy tells this exit apart: a version mismatch reds the run, every other failure stages a placeholder
+        sys.exit(EXIT_TREE_DEFECT)
 
     manifest = {"image_version": version, "files": files}
     with open(os.path.join(a.out, "manifest.json"), "w") as f:
