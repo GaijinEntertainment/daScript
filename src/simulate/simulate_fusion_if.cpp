@@ -39,7 +39,7 @@ namespace das {
 #undef IMPLEMENT_ANY_OP1_NODE
 #define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1If { \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto res =  *(CTYPE *)(subexpr.compute##COMPUTE(context)); \
             if ( res == 0 ) { \
@@ -80,7 +80,7 @@ namespace das {
 #undef IMPLEMENT_ANY_OP1_NODE
 #define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1If { \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto res =  *(CTYPE *)(subexpr.compute##COMPUTE(context)); \
             if ( res ) { \
@@ -111,7 +111,7 @@ namespace das {
 #undef IMPLEMENT_ANY_OP1_NODE
 #define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1If { \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto res =  *(CTYPE *)(subexpr.compute##COMPUTE(context)); \
             if ( res == 0 ) { \
@@ -132,7 +132,7 @@ namespace das {
 #undef IMPLEMENT_ANY_OP1_NODE
 #define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1If { \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto res =  *(CTYPE *)(subexpr.compute##COMPUTE(context)); \
             if ( res ) { \

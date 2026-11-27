@@ -327,7 +327,7 @@ namespace das
     struct SimNode_ExtFuncCallDirect<LeafT, CTYPE> : SimNode_ExtFuncCallRet<CTYPE> { \
         SimNode_ExtFuncCallDirect(const LineInfo & at, const char * fnName) \
             : SimNode_ExtFuncCallRet<CTYPE>(at,fnName) { } \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
             return cast<CTYPE>::from(static_cast<LeafT *>(this)->computeDirect(context)); \
         } \
@@ -343,7 +343,7 @@ namespace das
     struct SimNode_ExtFuncCallDirect<LeafT, vec4f> : SimNode_ExtFuncCallRet<vec4f> {
         SimNode_ExtFuncCallDirect(const LineInfo & at, const char * fnName)
             : SimNode_ExtFuncCallRet<vec4f>(at,fnName) { }
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             return static_cast<LeafT *>(this)->computeDirect(context);
         }
@@ -353,7 +353,7 @@ namespace das
     struct SimNode_ExtFuncCallDirect<LeafT, vec4f_boxed> : SimNode_ExtFuncCallRet<vec4f_boxed> {
         SimNode_ExtFuncCallDirect(const LineInfo & at, const char * fnName)
             : SimNode_ExtFuncCallRet<vec4f_boxed>(at,fnName) { }
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             return static_cast<LeafT *>(this)->computeDirect(context);
         }
@@ -363,7 +363,7 @@ namespace das
     struct SimNode_ExtFuncCallDirect<LeafT, void> : SimNode_ExtFuncCallRet<void> {
         SimNode_ExtFuncCallDirect(const LineInfo & at, const char * fnName)
             : SimNode_ExtFuncCallRet<void>(at,fnName) { }
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             static_cast<LeafT *>(this)->computeDirect(context);
             return v_zero();
@@ -431,7 +431,7 @@ namespace das
         FuncT fn;
         SimNode_ExtFuncCallAndCopyOrMove ( const LineInfo & at, const char * fnName, FuncT fnp )
             : SimNode_ExtFuncCallBase(at,fnName), fn(fnp) { }
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             void * cmres = cmresEval->evalPtr(context);
             ImplCallStaticFunctionAndCopy<FuncT>::call(fn, context, cmres, arguments);
@@ -457,7 +457,7 @@ namespace das
             if constexpr (das::is_stub_type<CType>::value) { DAS_ASSERTF(false, "STUB!"); }
             else new (cmres) CType(cast_arg<Args>::to(ctx,args[I])...);
         }
-        DAS_EVAL_ABI virtual vec4f eval(Context & context) override {
+        virtual vec4f DAS_EVAL_ABI eval(Context & context) override {
             auto cmres = cmresEval->evalPtr(context);
             CallPlacementNew(cmres,context,arguments,make_index_sequence<sizeof...(Args)>());
             return cast<void *>::from(cmres);
@@ -485,7 +485,7 @@ namespace das
               DAS_ASSERTF(false, "STUB!");
             }
         }
-        DAS_EVAL_ABI virtual vec4f eval(Context & context) override {
+        virtual vec4f DAS_EVAL_ABI eval(Context & context) override {
             DAS_ASSERT(nArguments == (sizeof...(Args) + 1) );
             auto pblock = cast_arg<const Block *>::to(context,arguments[nArguments-1]);
             CallUsing(*pblock,context,arguments,make_index_sequence<sizeof...(Args)>());
@@ -526,7 +526,7 @@ namespace das
     struct SimNode_InteropFuncCall : SimNode_ExtFuncCallBase {
         SimNode_InteropFuncCall ( const LineInfo & at, const char * fnName )
             : SimNode_ExtFuncCallBase(at,fnName) { }
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f * args = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
             evalArgs(context, args);

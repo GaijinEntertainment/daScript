@@ -77,7 +77,7 @@ namespace das {
             argValues[1] = fusionLoadArgument(r.compute##COMPUTEL(context), rightLoadSize); \
             return context.call(fnPtr, argValues, &debugInfo); \
         } \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             return compute(context); \
         } \
         DAS_EVAL_NODE \
@@ -94,7 +94,7 @@ namespace das {
             argValues[1] = r.subexpr->eval(context); \
             return context.call(fnPtr, argValues, &debugInfo); \
         } \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             return compute(context); \
         } \
         DAS_EVAL_NODE \
@@ -111,7 +111,7 @@ namespace das {
             argValues[1] = fusionLoadArgument(r.compute##COMPUTER(context), rightLoadSize); \
             return context.call(fnPtr, argValues, &debugInfo); \
         } \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             return compute(context); \
         } \
         DAS_EVAL_NODE \
@@ -220,7 +220,7 @@ IMPLEMENT_ANY_OP2(__forceinline, CallAndCopyOrMove, Ptr, StringPtr)
             context.abiArg = aa; \
             return res; \
         } \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             return compute(context); \
         } \
         DAS_EVAL_NODE \
@@ -242,7 +242,7 @@ IMPLEMENT_ANY_OP2(__forceinline, CallAndCopyOrMove, Ptr, StringPtr)
             context.abiArg = aa; \
             return res; \
         } \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             return compute(context); \
         } \
         DAS_EVAL_NODE \
@@ -264,7 +264,7 @@ IMPLEMENT_ANY_OP2(__forceinline, CallAndCopyOrMove, Ptr, StringPtr)
             context.abiArg = aa; \
             return res; \
         } \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             return compute(context); \
         } \
         DAS_EVAL_NODE \
@@ -294,7 +294,7 @@ IMPLEMENT_ANY_OP2(__forceinline, FastCall, Ptr, StringPtr)
             context.fastCallDepth --; \
             return res; \
         } \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             return compute(context); \
         } \
         DAS_EVAL_NODE \
@@ -318,7 +318,7 @@ IMPLEMENT_ANY_OP2(__forceinline, FastCall, Ptr, StringPtr)
             context.fastCallDepth --; \
             return res; \
         } \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             return compute(context); \
         } \
         DAS_EVAL_NODE \
@@ -342,7 +342,7 @@ IMPLEMENT_ANY_OP2(__forceinline, FastCall, Ptr, StringPtr)
             context.fastCallDepth --; \
             return res; \
         } \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             return compute(context); \
         } \
         DAS_EVAL_NODE \
@@ -369,7 +369,7 @@ IMPLEMENT_ANY_OP2(__forceinline, FastCallChecked, Ptr, StringPtr)
             context.framedCallDepth --; \
             return res; \
         } \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             return compute(context); \
         } \
         DAS_EVAL_NODE \
@@ -390,7 +390,7 @@ IMPLEMENT_ANY_OP2(__forceinline, FastCallChecked, Ptr, StringPtr)
             context.framedCallDepth --; \
             return res; \
         } \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             return compute(context); \
         } \
         DAS_EVAL_NODE \
@@ -412,7 +412,7 @@ IMPLEMENT_ANY_OP2(__forceinline, FastCallChecked, Ptr, StringPtr)
             context.framedCallDepth --; \
             return res; \
         } \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             return compute(context); \
         } \
         DAS_EVAL_NODE \

@@ -1974,7 +1974,7 @@ namespace das
     };
 
     // src/ast/ARCHITECTURE_MODULE_SCAN.md#shared-module-vintage
-    #define DAS_ABI_VERSION 4
+    #define DAS_ABI_VERSION 5
     constexpr DAS_ABI_LOCAL uint64_t das_abi_vintage () {
         constexpr uint64_t sizes[] = {
             uint64_t(DAS_BUILD_ID), uint64_t(DAS_ABI_VERSION),

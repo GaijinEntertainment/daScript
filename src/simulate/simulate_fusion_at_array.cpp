@@ -91,7 +91,7 @@ namespace das {
 #undef IMPLEMENT_OP2_SET_NODE_ANY
 #define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
     struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2ArrayAt { \
-         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+         virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto pl = (Array *) l.compute##COMPUTEL(context); \
             int32_t rr = r.subexpr->evalInt(context); \
@@ -105,7 +105,7 @@ namespace das {
 #undef IMPLEMENT_OP2_SET_NODE
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2ArrayAt { \
-         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+         virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto pl = (Array *) l.compute##COMPUTEL(context); \
             int32_t rr = *((int32_t *)r.compute##COMPUTER(context)); \
@@ -222,7 +222,7 @@ namespace das {
 #undef IMPLEMENT_OP2_SET_NODE_ANY
 #define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
     struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2ArrayAt_I64 { \
-         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+         virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto pl = (Array *) l.compute##COMPUTEL(context); \
             int64_t rr = r.subexpr->evalInt64(context); \
@@ -236,7 +236,7 @@ namespace das {
 #undef IMPLEMENT_OP2_SET_NODE
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2ArrayAt_I64 { \
-         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+         virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto pl = (Array *) l.compute##COMPUTEL(context); \
             int64_t rr = *((int64_t *)r.compute##COMPUTER(context)); \
@@ -343,7 +343,7 @@ namespace das {
 #undef IMPLEMENT_OP2_SET_NODE_ANY
 #define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
     struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2ArrayAt_U64 { \
-         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+         virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto pl = (Array *) l.compute##COMPUTEL(context); \
             uint64_t rr = r.subexpr->evalUInt64(context); \
@@ -357,7 +357,7 @@ namespace das {
 #undef IMPLEMENT_OP2_SET_NODE
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2ArrayAt_U64 { \
-         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+         virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto pl = (Array *) l.compute##COMPUTEL(context); \
             uint64_t rr = *((uint64_t *)r.compute##COMPUTER(context)); \

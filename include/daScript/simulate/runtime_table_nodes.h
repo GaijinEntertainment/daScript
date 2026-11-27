@@ -19,7 +19,7 @@ namespace das
             V_END();
         }
         SimNode * keyExpr;
-        DAS_EVAL_ABI  virtual vec4f eval ( Context & context ) override { return keyExpr->eval(context); }
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override { return keyExpr->eval(context); }
         virtual char *      evalPtr ( Context & context )    override { return cast<char *>::to(keyExpr->eval(context)); }
         virtual bool        evalBool ( Context & context )   override { return cast<bool>::to(keyExpr->eval(context)); }
         virtual float       evalFloat ( Context & context )  override { return cast<float>::to(keyExpr->eval(context)); }
@@ -128,7 +128,7 @@ namespace das
         virtual SimNode * visit ( SimVisitor & vis ) override {
             return visitTable(vis,"TableSetInsert");
         }
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             Table * tab = (Table *) tabExpr->evalPtr(context);
             if ( tab->isLocked() ) context.throw_error_at(debugInfo, "can't insert to a locked table");
@@ -295,7 +295,7 @@ namespace das
         SimNode_DeleteTable ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t va, const char * em )
             : SimNode_Delete(a,s,t,em), vts_add_kts(va) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         uint32_t vts_add_kts;
     };
 }

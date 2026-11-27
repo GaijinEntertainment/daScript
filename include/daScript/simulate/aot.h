@@ -2373,7 +2373,7 @@ namespace das {
             aotFunction = fn;
             wrapAotFunction = wrappedFn;
         }
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f * aa = context.abiArg;
             vec4f stub[1];
@@ -2391,7 +2391,7 @@ namespace das {
             aotFunction = fn;
             wrapAotFunction = wrappedFn;
         }
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f * aa = context.abiArg;
             vec4f stub[1];
@@ -2412,7 +2412,7 @@ namespace das {
 
     struct SimNode_AotInteropBase : SimNode_CallBase {
         DAS_API SimNode_AotInteropBase();
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             return v_zero();
         };
@@ -2509,7 +2509,7 @@ namespace das {
         __forceinline resType callBlockFunction(vec4f * args, index_sequence<I...>) {
             return blockFunction((cast<argType>::to(args[I]))...);
         }
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f ** arguments = (vec4f **)(context.stack.bottom() + argumentsOffset);
             using Indices = make_index_sequence<sizeof...(argType)>;
@@ -2533,7 +2533,7 @@ namespace das {
                 : das_make_block_base(context,argStackTop,ann,fi), blockFunction(func) {
             aotFunction = &blockFunction;
         };
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             return cast<resType>::from(blockFunction());
         }
@@ -2548,7 +2548,7 @@ namespace das {
                 : das_make_block_base(context,argStackTop,ann,fi), blockFunction(func) {
             aotFunction = &blockFunction;
         };
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             blockFunction ( );
             return v_zero();
@@ -2574,7 +2574,7 @@ namespace das {
         __forceinline void callBlockFunction(vec4f * args, index_sequence<I...>) {
             blockFunction((cast<argType>::to(args[I]))...);
         }
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f ** arguments = (vec4f **)(context.stack.bottom() + argumentsOffset);
             using Indices = make_index_sequence<sizeof...(argType)>;
@@ -2596,7 +2596,7 @@ namespace das {
         __forceinline resType callBlockFunction(vec4f * args, index_sequence<I...>) {
             return blockFunction((cast<argType>::to(args[I]))...);
         }
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto ba = (BlockArguments *) ( context.stack.bottom() + argumentsOffset );
             using ResultType = typename remove_const<resType>::type;
@@ -2616,7 +2616,7 @@ namespace das {
                 : das_make_block_base(context,argStackTop,ann,fi), blockFunction(func) {
             aotFunction = &blockFunction;
         };
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto ba = (BlockArguments *) ( context.stack.bottom() + argumentsOffset );
             using ResultType = typename remove_const<resType>::type;

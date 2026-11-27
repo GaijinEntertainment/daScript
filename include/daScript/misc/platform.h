@@ -99,9 +99,9 @@
 #include <daScript/misc/hash.h>
 #include <daScript/misc/macro.h>
 
-#if _TARGET_PC_MACOSX && __SSE__
-   #define DAS_EVAL_ABI [[clang::vectorcall]]
-#elif _TARGET_PC_WIN && (defined(_MSC_VER) || defined(__clang__)) && __SSE__ && !defined __HAIKU__
+// include/daScript/simulate/ARCHITECTURE_CODEGEN.md#eval-calling-convention
+#if defined(_WIN32) && defined(_M_X64) && !defined(_M_ARM64EC) \
+    && (defined(_MSC_VER) || defined(__clang__))
     #define DAS_EVAL_ABI __vectorcall
 #else
     #define DAS_EVAL_ABI
@@ -264,7 +264,7 @@ __forceinline uint64_t rotr64_c(uint64_t a, uint64_t b) {
     // __declspec(dll*) works on every Windows toolchain: MSVC, clang-cl,
     // clang-mingw, and gcc-mingw (gcc accepts the MSVC keyword on Windows
     // targets). ELF visibility on Windows is a no-op, so the old _MSC_VER
-    // gate left clang-mingw with untagged symbols — lld then defaulted to
+    // gate left clang-mingw with untagged symbols â€” lld then defaulted to
     // exporting every global and overflowed the 16-bit PE ordinal table at
     // ~65535 symbols.
     #define DAS_EXPORT_DLL __declspec(dllexport)
@@ -419,7 +419,7 @@ namespace das {
     // captures that match the landmark's RSP short-circuit with a memcpy. Place
     // one on the stack high in the call tree (e.g. top of compile_and_run) to
     // cut per-allocation unwind cost from ~N frames to ~depth-above-landmark.
-    // Win64 only — other platforms treat it as a no-op.
+    // Win64 only â€” other platforms treat it as a no-op.
     #if defined(_MSC_VER) && defined(_M_X64)
         DAS_API void das_fast_stack_landmark_enter() noexcept;
         DAS_API void das_fast_stack_landmark_exit() noexcept;
@@ -456,13 +456,13 @@ namespace das { DAS_API bool hugepage_hint () noexcept; }
 
 #ifndef DAS_ALIGNED_ALLOC
 #define DAS_ALIGNED_ALLOC 1
-// Size-tiered alignment: blocks ≥2KB get cache-line (64B) alignment — SIMD/AMX tile
+// Size-tiered alignment: blocks â‰¥2KB get cache-line (64B) alignment â€” SIMD/AMX tile
 // kernels (tileloadd row loads, 512-bit vector loads) pay a line-split on every access
 // to a 16-but-not-64-aligned panel (measured ~260M split-loads/s on SPR AMX GEMM; Intel
-// SDM ch.20 mandates 64B for tile data). Blocks ≥2MB get 2MB alignment + MADV_HUGEPAGE
+// SDM ch.20 mandates 64B for tile data). Blocks â‰¥2MB get 2MB alignment + MADV_HUGEPAGE
 // on Linux (DAS_NO_HUGEPAGE_HINT turns the hint off, the alignment stays): the
 // hugepage hint only collapses 2M-aligned VA subranges, so without the
-// alignment the hint misses the panel head. Windows stays uniform 64B — _aligned_msize
+// alignment the hint misses the panel head. Windows stays uniform 64B â€” _aligned_msize
 // must be called with the exact alignment passed at alloc time, so it cannot be
 // size-tiered there. The name keeps its historical "16" (the minimum caller contract).
 #define DAS_ALLOC_ALIGNMENT_WIN 64
@@ -542,7 +542,7 @@ inline size_t das_aligned_memsize(void * ptr){
 #endif
 
 // when enabled, Context heap memory can track where the allocation came from
-// via mark_location and mark_comment. This is now a compile-time kill switch —
+// via mark_location and mark_comment. This is now a compile-time kill switch â€”
 // the actual tracking is controlled at runtime via CodeOfPolicies::track_allocations
 // and defaults to off. Setting DAS_TRACK_ALLOCATIONS=0 dead-code-eliminates the
 // tracking infrastructure for shipping builds.

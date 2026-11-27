@@ -368,7 +368,7 @@ namespace das {
         bool            demandFoldConstInit = false;    // evaluate an initializer the policy left unfolded, where a constant is demanded of it
         bool            recordConstAccess = true;       // a recorded fold silences the unused-variable and dead-store lints on that global, so asking what a const is worth must not record one
     protected:
-        DAS_EVAL_ABI vec4f eval ( Expression * expr, bool & failed );
+        vec4f DAS_EVAL_ABI eval ( Expression * expr, bool & failed );
         ExpressionPtr evalAndFold ( Expression * expr );
         ExpressionPtr evalAndFoldString ( Expression * expr );
         ExpressionPtr evalAndFoldStringBuilder ( ExprStringBuilder * expr );

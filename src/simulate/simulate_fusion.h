@@ -23,7 +23,7 @@
 
 // src/simulate/ARCHITECTURE.md#fused-small-int-reads
 #define DAS_FUSION_WIDE_NODE \
-    DAS_EVAL_ABI virtual vec4f eval ( das::Context & context ) override { \
+    virtual vec4f DAS_EVAL_ABI eval ( das::Context & context ) override { \
         return das::cast<int32_t>::from(compute(context)); \
     } \
     virtual int32_t evalInt ( das::Context & context ) override { \
