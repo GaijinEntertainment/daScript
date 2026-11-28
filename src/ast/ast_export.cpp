@@ -362,13 +362,14 @@ namespace das {
     }
 
     void Program::markModuleSymbolUse(TextWriter * logs) {
-        // this module public, this module export, this module init\shutdown
+        // this module public, this module export, this module init\shutdown; a root: every module's export, init\shutdown
         clearSymbolUse();
         MarkSymbolUse vis(this, false);
         vis.tw = logs;
         visit(vis);
         vis.markModuleUsedFunctions(library, thisModule.get());
         vis.markModuleVarsUsed(library, thisModule.get());
+        if ( !isDependency ) vis.markUsedFunctions(library, false, false, nullptr);
     }
 
     void Program::markMacroSymbolUse(TextWriter * logs) {

@@ -95,12 +95,6 @@ def test_file_census(tt : T?) {  // nolint:STYLE038 - one arm per census fact
                                 "options gen2 = false\n[test]\ndef test_a(t : T?)\n    pass\n")
         t |> equal(fence_signature(gen1), "gen2=false")
         t |> equal(length(c.unparsedAnnotationLines), 0)
-        t |> equal(c.moduleLine, 0)
-        let named <- census_text("x.das", "options gen2\n// module in_a_comment\nmodule x " +
-            "shared\n[test]\ndef test_a(t : T?) \{\}\n")
-        t |> equal(named.moduleLine, 3)
-        let pastTheHeader <- census_text("x.das", "[test]\ndef test_a(t : T?) \{\}\nmodule late\n")
-        t |> equal(pastTheHeader.moduleLine, 0)
     }
 
     tt |> run("an expect directive or a failed_ name makes a fixture; no test and no " +

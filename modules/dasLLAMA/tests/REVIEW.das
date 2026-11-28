@@ -6,7 +6,6 @@ require daslib/fio
 require strings
 require math
 require daslib/strings_boost
-require dastest/file_census
 require _model_categories
 require ../../../utils/common/text_lines.das   // split_trimmed: a table cell's comma list
 
@@ -123,17 +122,6 @@ def private check_one_test_child() {
         if (find(text, "child_cmd_root(") >= 0 && !has_value(ROOT_CMD_CALLERS, base_name(f))) {
             gate_finding(f, find_line(text, "child_cmd_root("), ONE_CHILD)
         }
-    }
-}
-
-def private check_roots_unnamed(root : string) {
-    var files : array<TestFileCensus>
-    census_tree(root, files)
-    for (c in files) {
-        continue if (c.cls != TestFileClass.suite || c.moduleLine == 0)
-        gate_finding("{root}/{c.path}", c.moduleLine, "a test file declares no `module` name: " +
-            "dastest runs a named root with no required module's `[init]`, so every table an " +
-            "`[init]` seeds reads empty in its cells; drop the line")
     }
 }
 
@@ -1413,7 +1401,6 @@ def main() : int {
     }
     check_folder_shape(TESTS)
     check_one_test_child()
-    check_roots_unnamed("modules/dasLLAMA/tests")
     check_child_binary_flags()
     check_test_categories()
     check_models_load_once()

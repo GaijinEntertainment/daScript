@@ -44,8 +44,6 @@ struct TestFileCensus {
     noAot : bool
     header : string         // the file's first `//!` line, comment marker stripped; "" when none
     unparsedAnnotationLines : array<int>    // a `[test(` that does not close on its line
-    moduleLine : int        // the line of the file's `module` declaration;
-                            // 0 when it declares none
 }
 
 //! a fence option changes what program a file compiles into;
@@ -245,8 +243,6 @@ def census_text(path : string; text : string) : TestFileCensus {
         }
         if (line |> starts_with("options ")) {
             record_options(c, strip(slice(line, length("options "))))
-        } elif (inHeader && c.moduleLine == 0 && line |> starts_with("module ")) {
-            c.moduleLine = lineNo
         } elif (line |> starts_with("expect ")) {
             sawExpect = true
         } elif (line |> starts_with("[") && is_test_annotation(line)) {
