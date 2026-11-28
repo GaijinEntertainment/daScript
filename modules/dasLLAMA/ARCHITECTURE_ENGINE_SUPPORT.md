@@ -106,13 +106,14 @@ process decides - a knob the engine reads at context init, a line only a process
 exit a panic decides. It dispatches a verb to a function of a `_child_<verb>.das` module, and it
 starts no thread of its own: a thread is a second context, whose init would say every
 once-a-process line again, so the spawning test's timer is the verb's wall (`run_verb_child`).
-`tests/_child_run.das` owns its key, its build and its spawn. The runner (`tests/run.das`) builds
-it once a run as a standalone exe, split by module, beside the module-cache record of the entry
+`tests/_child_run.das` owns its key, its build and its spawn. The runner (`tests/run.das`) builds it
+once a run as a standalone exe, split by module, beside the module-cache record of the entry
 program's compile - a record serves the root file it was written from, by path - under one key of
-the runtime libraries, the build environment and the sources the build reads. A spawn then costs
-a process start, where a root of its own costs an engine compile inside its test. A standalone exe
-keeps its sidecar beside it, so the per-box file's hook stands down in the test child
-(`ARCHITECTURE_MEASUREMENT_FAT_START.md#box-runtime-file`).
+the runtime libraries, the build environment and the sources the build reads. A test computes that
+key from the environment it inherits, so the runner first sets on itself each tune variable it hands
+its children (`tune_vars_of`). A spawn then costs a process start, where a root of its own costs an
+engine compile inside its test. A standalone exe keeps its sidecar beside it, so the per-box file's
+hook stands down in the test child (`ARCHITECTURE_MEASUREMENT_FAT_START.md#box-runtime-file`).
 
 `tests/REVIEW.das`'s `check_one_test_child` reds a `_*_root.das` file, a `child_cmd` or
 `child_cmd_at` call naming a root, and a `child_cmd_root` caller outside its licensed sets.

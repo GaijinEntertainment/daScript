@@ -845,6 +845,64 @@ def test_category_run(t : T?) {
         "a filter value a child's command line cannot carry stops the run:\n{out}")
 }
 
+[test(description = "The tune variables a run names for its children: the box's file as the manifest where the caller named none, the forced file, and under --no-tune the reference policy alone, with the image rail off")]
+def test_tune_vars(t : T?) {
+    let boxed <- tune_vars_of(false, "", "/box.json", "/box.json")
+    t |> equal(length(boxed), 2, "a box with a tune file and a caller that names none: the manifest and the forced file")
+    t |> success(boxed[0].name == "DAS_TUNE_MANIFEST" && boxed[0].value == "/box.json", "the box's file is the manifest")
+    t |> success(boxed[1].name == "DAS_TUNE_FORCE" && boxed[1].value == "/box.json", "and the forced file")
+    let named <- tune_vars_of(false, "/caller.json", "/box.json", "/caller.json")
+    t |> success(length(named) == 1 && named[0].name == "DAS_TUNE_FORCE", "a manifest the caller named inherits: it is not named again")
+    let bare <- tune_vars_of(false, "", "", "")
+    t |> equal(length(bare), 0, "a box with no tune file names nothing")
+    let reference <- tune_vars_of(true, "", "/box.json", "")
+    t |> success(length(reference) == 1 && reference[0].name == "DAS_TUNE_POLICY" && reference[0].value == "reference",
+        "--no-tune names the reference policy and no manifest")
+    var cfg = RunArgs()
+    t |> success(find(child_envs(cfg, false), "DAS_TUNE_POLICY") < 0 && find(child_envs(cfg, false), "DASLLAMA_IMAGE") < 0,
+        "the control: a tuned run's children carry neither: {child_envs(cfg, false)}")
+    cfg.no_tune = true
+    let posix = child_envs(cfg, false)
+    t |> success(find(posix, "DAS_TUNE_POLICY='reference' ") >= 0 && find(posix, "DASLLAMA_IMAGE='0' ") >= 0,
+        "a --no-tune run's children: the reference policy, the image rail off: {posix}")
+    let cmd = child_envs(cfg, true)
+    t |> success(find(cmd, "set \"DAS_TUNE_POLICY=reference\"&& ") >= 0 && find(cmd, "set \"DASLLAMA_IMAGE=0\"&& ") >= 0,
+        "cmd.exe's form: {cmd}")
+}
+
+//! the test child's exe key a dry run of `args` builds under: its `CHILD key` line, "" where it prints none
+def private runner_child_key(t : T?; args : string) : string {
+    var out : string
+    t |> equal(run_runner("--suite model-free --only test_par_indexed --das /usr/bin/true {args}", out, "DAS_LOG_LEVEL=info "), 0,
+        "the dry run exits clean:\n{out}")
+    for (line in split(out, "\n")) {
+        let at = find(line, "CHILD key ")
+        return slice(line, at + length("CHILD key ")) if (at >= 0)
+    }
+    return ""
+}
+
+[test(description = "The runner builds the test child under the key a test computes: it sets on itself each tune variable it names for its children, so its own key under --no-tune is a child's under the reference policy, and no other run's")]
+def test_runner_builds_under_a_childs_key(t : T?) {
+    if (get_platform_name() == "windows") {
+        t |> skip("the dry run stands in a POSIX no-op binary for the child")
+        return
+    }
+    let reference = runner_child_key(t, "--no-tune")
+    var out = ""
+    let envs = [(name = "DAS_TUNE_POLICY", value = "reference")]
+    let rc = run_verb_child(child_verb_cmd("disable-flags", envs), out)
+    t |> success(rc == 0 && find(out, "ROOT_DONE") >= 0, "the child reports its key under the reference policy:\n{out}")
+    var child = ""
+    for (line in split(out, "\n")) {
+        if (line |> starts_with("KEY ")) {
+            child = slice(line, length("KEY "))
+        }
+    }
+    t |> success(!empty(reference) && reference == child, "the runner's key ({reference}) is the child's ({child})")
+    t |> success(reference != runner_child_key(t, ""), "the control: a tuned run builds under another key")
+}
+
 [test(description = "A run forces its children onto the tune file in effect, whatever the file's age: the caller's manifest where it exists, nothing under --no-tune, for an absent file, or where the caller forced a file already", timeout = 1200)]
 def test_forced_tune_file(t : T?) {
     let box = path_join(test_temp_dir(), "forced_box_{get_time_usec(0l)}.tune.json")
@@ -854,9 +912,8 @@ def test_forced_tune_file(t : T?) {
     t |> equal(forced_tune_file_of(true, "", "", box), "", "--no-tune forces nothing")
     t |> equal(forced_tune_file_of(false, "theirs.json", "", box), "", "a file the caller forced stands")
     remove(box)
-    t |> equal(forced_env("A=1 ", "x.json", false), "DAS_TUNE_FORCE='x.json' A=1 ", "the POSIX prefix names the forced file")
-    t |> equal(forced_env("set \"A=1\"&& ", "x.json", true), "set \"A=1\"&& set \"DAS_TUNE_FORCE=x.json\"&& ", "cmd.exe's form sets it")
-    t |> equal(forced_env("A=1 ", "", false), "A=1 ", "no forced file, no variable")
+    t |> equal(env_ahead("A=1 ", "DAS_TUNE_FORCE", "x.json", false), "DAS_TUNE_FORCE='x.json' A=1 ", "the POSIX prefix names the forced file")
+    t |> equal(env_ahead("set \"A=1\"&& ", "DAS_TUNE_FORCE", "x.json", true), "set \"A=1\"&& set \"DAS_TUNE_FORCE=x.json\"&& ", "cmd.exe's form sets it")
     if (get_platform_name() == "windows") {
         t |> skip("the dry run stands in a POSIX no-op binary for the child")
         return
