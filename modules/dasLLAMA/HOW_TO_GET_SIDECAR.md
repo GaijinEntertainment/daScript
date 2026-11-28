@@ -205,7 +205,7 @@ bin/daslang -jit modules/dasLLAMA/harness/export_tune_profile.das -- --sidecar m
 git status --short modules/dasLLAMA/performance/defaults/
 ```
 
-It writes `performance/defaults/<class>.tune-defaults.json` for this box's `tune_native_target().klass`
+It writes `performance/defaults/<class>.tune-defaults.json` for the class the process is pinned to, else this box's (`tune_mint_target`)
 (`--class <name>` overrides, `--out <dir>` relocates) with the box, engine sha and timing rows
 stripped - a profile is kernel winners plus the provenance the adopt path checks.
 

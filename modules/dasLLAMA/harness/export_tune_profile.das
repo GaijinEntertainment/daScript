@@ -11,9 +11,11 @@ struct ExportArgs {
     sidecar : string
 
     @clarg_doc = "Output directory (default: modules/dasLLAMA/performance/defaults beside this script)"
+    @clarg_name = "out"
     out_dir : string
 
-    @clarg_doc = "CPU class name to export as (default: this box's tune class)"
+    @clarg_doc = "CPU class name to export as (default: the class the process is pinned to, else this box's)"
+    @clarg_name = "class"
     klass : string
 }
 
@@ -31,7 +33,7 @@ def main : int {
     if (!empty(cfg.sidecar)) {
         set_tune_manifest_runtime_path(cfg.sidecar)
     }
-    let klass = empty(cfg.klass) ? tune_native_target().klass : cpu_class_of(cfg.klass)
+    let klass = empty(cfg.klass) ? tune_mint_target().klass : cpu_class_of(cfg.klass)
     if (cpu_class_generic(klass)) {
         to_log(LOG_ERROR, "export_tune_profile: '{cfg.klass}' names no CPU class - the classes are {jit_cpu_class_names()}\n")
         return 1

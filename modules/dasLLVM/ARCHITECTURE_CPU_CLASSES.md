@@ -50,6 +50,8 @@ cpuid), the sidecar's picks and the profiles read for that target down the targe
 ladder - built once per macro entry by `tune_view` and passed down, so no helper below an entry
 reads a file, a flag or cpuid. A running program has no view: its kernels are stamped already, and
 what it writes - a sidecar, an adopted profile - is this box's, so it reads `tune_native_target()`.
+A mint is the exception: under a baseline it raced the class's rows, so the feature set its sidecar is
+stamped with and the class its profile exports as are the class's (`tune_mint_target`).
 Beside `--jit-target` the class is the cross build's: the triple names the arch, the class its
 features. A cross target's default machine is the target's own - its triple, the class's cpu (none without
 a class), its feature string (`create_default_target_machine`) - so the optimizer runs on the target's cost model and
