@@ -7,7 +7,7 @@ namespace das {
 
     // bump when CodeOfPolicies changes layout or meaning without changing size — a field
     // reorder/repurpose, or an insert that lands in a padding pocket (sizeof can't see those)
-    #define DAS_POLICIES_VERSION    6
+    #define DAS_POLICIES_VERSION    7
 
     // per-binary linkage for the ABI-stamp functions: at -O0 gcc/clang emit them as weak
     // default-visibility symbols, and the dynamic linker would bind every binary to the FIRST
@@ -168,8 +168,6 @@ namespace das {
         int32_t jit_size_level = 0u;             // Opt level for LLVM for binary size
         string jit_path_to_shared_lib;           // Path to libDaScript. Optional, we'll try to find it in _das_root_/lib/ if not provided.
         string jit_path_to_linker;               // Path to linker. Optional, we'll use lld-link from LLVM on Windows (MSVC), clang on mingw, c++ otherwise.
-    // dll loading
-        vector<string> dll_search_paths;          // additional search paths for dll loading
     // one-liners
         /*option*/ bool temp_table_lint_warning = false;
         bool module_cache = false;               // a script's compile_file runs under the default module cache
@@ -179,6 +177,10 @@ namespace das {
         /*option*/ uint32_t max_framed_call_depth = 0;  // interpreter only; 0 = unchecked.
         /*option*/ bool promote_folded_int_constants = true;
         int32_t compile_threads = 1;             // src/ast/ARCHITECTURE_COMPILE_MODULES.md#compile-dag
+        /*option*/ int32_t loop_unroll_cost = 8;  // a loop of known passes unrolls when passes times body statements fits this; 0 = never
+        /*option*/ bool disable_forward = false;  // keep a pure local that is read once in the next statement
+    // dll loading
+        vector<string> dll_search_paths;          // additional search paths for dll loading
 
         // the abi_stamp truth (a member so the NSDMI above can call it - complete-class context).
         // Low byte 0 keeps a pre-stamp libDaScript reading this word seeing aot == false -

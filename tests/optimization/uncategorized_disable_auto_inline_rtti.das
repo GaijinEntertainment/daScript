@@ -445,3 +445,24 @@ def test_dead_stores_behavior(t : T?) {
         t |> equal(s.pos.x, 80)
     }
 }
+
+var g_loop_seed = 1
+
+[export]
+def target_loop_without_auto_inline() : int {
+    var s = g_loop_seed
+    for (i in range(4)) {
+        s += i
+    }
+    return s
+}
+
+[test(description = "a loop of known passes stays a loop under options disable_auto_inline")]
+def test_loop_stays_without_auto_inline(t : T?) {
+    ast_gc_guard() {
+        let b = body_of(t, "target_loop_without_auto_inline")
+        t |> success(has(b, "for ("), "kept: {b}")
+    }
+    g_loop_seed = 1
+    t |> equal(target_loop_without_auto_inline(), 7)
+}

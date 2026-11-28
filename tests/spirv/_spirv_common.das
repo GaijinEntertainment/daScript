@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options loop_unroll_cost = 0    // this fixture pins emitted loop shape; unrolling would rewrite it
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 

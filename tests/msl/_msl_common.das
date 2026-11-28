@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options loop_unroll_cost = 0    // this fixture pins emitted loop text; unrolling would rewrite it
 
 // Shared fixture for the dasMetal MSL test suite (mirrors tests/spirv/_spirv_common.das): the
 // [metal_kernel] fixture classes whose emitted text the shape, golden, and census tests read,

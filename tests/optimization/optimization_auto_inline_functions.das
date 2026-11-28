@@ -831,3 +831,18 @@ def test_auto_inline_writable_ref_args_behavior(t : T?) {
         delete o
     }
 }
+
+var g_loop_seed = 1
+
+[export]
+def target_foreign_generic_loop() : int => gloop_sum(g_loop_seed)
+
+[test(description = "a loop of known passes in an instance of another module's generic stays a loop")]
+def test_foreign_generic_instance_keeps_its_loop(t : T?) {
+    ast_gc_guard() {
+        let b = instance_body_of(t, "gloop_sum")
+        t |> success(has(b, "for ("), "kept: {b}")
+    }
+    g_loop_seed = 1
+    t |> equal(target_foreign_generic_loop(), 7)
+}

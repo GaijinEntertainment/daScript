@@ -1,6 +1,7 @@
 options gen2
 options rtti
 options no_coverage
+options disable_forward    // this file pins inliner shapes; forwarding would rewrite them
 
 require daslib/ast
 require daslib/rtti
@@ -12,8 +13,9 @@ require _optimized_body_helper
 require _inline_counter_helper
 require _never_inline_module
 require _inline_scope_helper
-require _inline_unoptimized_scope_helper // nolint:STYLE030 call inlined
+require _inline_unoptimized_scope_helper
 require _inline_unsafe_helper
+require _loop_unroll_off_helper
 
 // structural FIRED proof + behavioral safety net for [inline] splicing
 // (src/ast/ast_inline.cpp): every direct call to an [inline] function is replaced
@@ -561,19 +563,6 @@ def target_canon() : int {
     }
 }
 
-// a generic instance carries a mangled name (origin`name`hash) the exact-name
-// for_each_function lookup misses - match by substring instead
-def instance_body_of(t : T?; nm : string) : string {
-    var body = ""
-    compiling_module() |> for_each_function("") $(func) {
-        if (empty(body) && find("{func.name}", nm) >= 0) {
-            body = "{describe(func.body)}"
-        }
-    }
-    t |> success(!empty(body), "instance not found")
-    let clean <- [for (ln in split(body, "\n")); ln; where !(ln |> has("coverage("))]
-    return join(clean, "\n")
-}
 
 [test(description = "calls into a never_inline module stay calls in every inline tier while the pass stays live elsewhere, and the module's neverInline flag is rtti-visible")]
 def test_never_inline_module(t : T?) {
@@ -598,12 +587,7 @@ def test_never_inline_module(t : T?) {
             t |> success(!has(b, "nvm_step("), "[inline] splice fired: {b}")
         }
         t |> run("the pass skips the module's own bodies") @(t : T?) {
-            var body = ""
-            find_module(this_program(), "_never_inline_module") |> for_each_function("nvm_chain") $(func) {
-                if (empty(body)) {
-                    body = "{describe(func.body)}"
-                }
-            }
+            let body = body_of_module(t, "_never_inline_module", "nvm_chain")
             t |> success(has(body, "nvm_add("), "internal [inline] call survives: {body}")
         }
         t |> run("flagged-origin instance skips return canonicalization") @(t : T?) {
@@ -1317,4 +1301,576 @@ def test_inline_global_read_argument(t : T?) {
     g_scale = 3
     t |> equal(target_global_read_for_writing_callee(), 6, "read before the callee wrote it")
     t |> equal(g_scale, 100)
+}
+
+var g_unroll = 1
+
+def unroll_bump() : int {
+    g_unroll ++
+    return g_unroll
+}
+
+[export]
+def target_unroll_range() : int {
+    var s = g_unroll
+    for (i in range(4)) {
+        s += i
+    }
+    return s
+}
+
+[export]
+def target_unroll_literal() : int {
+    var s = g_unroll
+    for (x in [10, 20, 30, 40]) {
+        s += x
+    }
+    return s
+}
+
+[export]
+def target_unroll_fixed_array(a : int[4]) : int {
+    var s = g_unroll
+    for (x in a) {
+        s += x
+    }
+    return s
+}
+
+[export]
+def target_unroll_writes_fixed_array(var a : int[3]) {
+    for (x in a) {
+        x += g_unroll
+    }
+}
+
+[export]
+def target_unroll_no_pass() : int {
+    var s = g_unroll
+    for (i in range(0)) {
+        s += i
+    }
+    return s
+}
+
+[export]
+def target_unroll_one_pass() : int {
+    var s = g_unroll
+    for (i in range(1)) {
+        s += i
+        s *= 3
+        s--
+        s += g_unroll
+        s *= 5
+        s -= 2
+        s += g_unroll
+        s *= 7
+        s -= 3
+    }
+    return s
+}
+
+[export]
+def target_unroll_two_statements() : int {
+    var s = g_unroll
+    for (i in range(4)) {
+        s += i
+        s *= 2
+    }
+    return s
+}
+
+[export]
+def target_unroll_nested() : int {
+    var s = g_unroll
+    for (i in range(2)) {
+        for (j in range(2)) {
+            s += i * 10 + j
+        }
+    }
+    return s
+}
+
+[export]
+def target_unroll_urange() : int {
+    var s = g_unroll
+    for (i in urange(0u, 4u)) {
+        s += int(i)
+    }
+    return s
+}
+
+[export]
+def target_unroll_range64() : int {
+    var s = g_unroll
+    for (i in range64(0l, 4l)) {
+        s += int(i)
+    }
+    return s
+}
+
+[export]
+def target_unroll_urange64() : int {
+    var s = g_unroll
+    for (i in urange64(0ul, 4ul)) {
+        s += int(i)
+    }
+    return s
+}
+
+[export]
+def target_unroll_annotation() : int {
+    var s = g_unroll
+    for [unroll] (i in range(9)) {
+        s += i
+    }
+    return s
+}
+
+[export]
+def target_unroll_keep_over_budget() : int {
+    var s = g_unroll
+    for (i in range(5)) {
+        s += i
+        s *= 2
+    }
+    return s
+}
+
+[export]
+def target_unroll_keep_one_statement_over_budget() : int {
+    var s = g_unroll
+    for (i in range(9)) {
+        s += i
+    }
+    return s
+}
+
+[export]
+def target_unroll_keep_disabled() : int {
+    var s = g_unroll
+    for [unroll_disable] (i in range(4)) {
+        s += i
+    }
+    return s
+}
+
+[export]
+def target_unroll_keep_break() : int {
+    var s = g_unroll
+    for (i in range(2)) {
+        break if (s > 100)
+        s += i
+    }
+    return s
+}
+
+[export]
+def target_unroll_keep_unknown_count(n : int) : int {
+    var s = g_unroll
+    for (i in range(n)) {
+        s += i
+    }
+    return s
+}
+
+[export]
+def target_unroll_keep_finally() : int {
+    var s = g_unroll
+    for (i in range(3)) {
+        s += i
+    } finally {
+        s *= 2
+    }
+    return s
+}
+
+[export, never_inline]
+def reference_loop_with_finally() : int {
+    var s = g_unroll
+    for (i in range(3)) {
+        s += i
+    } finally {
+        s *= 2
+    }
+    return s
+}
+
+[export]
+def target_unroll_keep_two_sources() : int {
+    var s = g_unroll
+    for (i, x in range(3), [10, 20, 30]) {
+        s += i * x
+    }
+    return s
+}
+
+[export]
+def target_unroll_keep_written_variable() : int {
+    var s = g_unroll
+    for (x in [1, 2, 3]) {
+        x *= 2
+        s += x
+    }
+    return s
+}
+
+[never_inline]
+def unroll_peek(a : int&) : int => a + g_unroll
+
+[export]
+def target_unroll_keep_reference_argument() : int {
+    var s = g_unroll
+    for (x in [1, 2, 3]) {
+        s += unroll_peek(x)
+    }
+    return s
+}
+
+[export, never_inline]
+def target_unroll_keep_annotated() : int {
+    var s = g_unroll
+    for (i in range(4)) {
+        s += i
+    }
+    return s
+}
+
+[inline]
+def sum_all(a : array<int>) : int {
+    var s = 0
+    for (x in a) {
+        s += x
+    }
+    return s
+}
+
+[inline]
+def sum_and_length(a : array<int>) : int {
+    var s = length(a)
+    for (x in a) {
+        s += x
+    }
+    return s
+}
+
+[inline]
+def sum_twice(a : array<int>; n : int) : int {
+    var s = 0
+    for (_ in range(n)) {
+        for (x in a) {
+            s += x
+        }
+    }
+    return s
+}
+
+[inline]
+def write_then_sum(var n : int&; a : array<int>) : int {
+    n = 100
+    var s = 0
+    for (x in a) {
+        s += x
+    }
+    return s
+}
+
+[inline]
+def first_plus_one(a : array<int>) : int => a[0] + 1
+
+[export]
+def target_literal_source_keep_callee_write() : int {
+    var k = g_unroll
+    return write_then_sum(k, [k, 2])
+}
+
+[export]
+def target_literal_argument_indexed() : int {
+    return first_plus_one([g_unroll, 2])
+}
+
+[export]
+def target_literal_source() : int {
+    return sum_all([g_unroll, 2, 3, 4])
+}
+
+[export]
+def target_literal_source_constants() : int {
+    return sum_all([1, 2, 3, 4]) + g_unroll
+}
+
+[export]
+def target_literal_source_keep_two_reads() : int {
+    return sum_and_length([g_unroll, 2, 3, 4])
+}
+
+[export]
+def target_literal_source_keep_under_loop(n : int) : int {
+    return sum_twice([g_unroll, 2, 3, 4], n)
+}
+
+[export]
+def target_literal_source_keep_effect() : int {
+    return sum_all([unroll_bump(), 2, 3, 4])
+}
+
+[inline]
+def scaled_sum(a, b : int) : int {
+    var s = a * 2
+    s += b
+    return s + g_unroll
+}
+
+[inline]
+def scaled_sum_early(a, b : int) : int {
+    if (a < 0) return 0
+    var s = a * 2
+    s += b
+    return s + g_unroll
+}
+
+[inline]
+def scaled_sum_unsafe(a, b : int) : int {
+    var s = a * 2
+    var p = unsafe(addr(s))
+    *p += b
+    return s + g_unroll
+}
+
+[export]
+def target_trailing_return(x : int) : int {
+    return scaled_sum(x, 3) * 5
+}
+
+[export]
+def target_trailing_return_keep_early(x : int) : int {
+    return scaled_sum_early(x, 3) * 5
+}
+
+[export]
+def target_trailing_return_keep_unsafe(x : int) : int {
+    return scaled_sum_unsafe(x, 3) * 5
+}
+
+def has_loop(body : string) : bool => has(body, "for (") || has(body, "for [")
+
+[test(description = "a for loop over a constant range, an array literal of constants or a fixed array becomes one copy of its body a pass while passes times body statements fits loop_unroll_cost; a loop of one pass or under [unroll] always does, and a loop of no passes goes away")]
+def test_loop_unroll_fired(t : T?) {
+    ast_gc_guard() {
+        t |> run("four passes of one statement over a constant range") @(t : T?) {
+            let b = body_of(t, "target_unroll_range")
+            t |> success(!has_loop(b), "unrolled: {b}")
+            t |> equal(count_of(b, "s +="), 4, "one copy a pass: {b}")
+        }
+        t |> run("an array literal of constants") @(t : T?) {
+            let b = body_of(t, "target_unroll_literal")
+            t |> success(!has_loop(b), "unrolled: {b}")
+            t |> success(has(b, "40"), "the last element is its own pass: {b}")
+        }
+        t |> run("a fixed array reads its elements by index") @(t : T?) {
+            let b = body_of(t, "target_unroll_fixed_array")
+            t |> success(!has_loop(b) && has(b, "a[3]"), "unrolled: {b}")
+        }
+        t |> run("a body that writes the elements of a fixed array") @(t : T?) {
+            let b = body_of(t, "target_unroll_writes_fixed_array")
+            t |> success(!has_loop(b) && has(b, "a[2]"), "unrolled: {b}")
+        }
+        t |> run("a loop of no passes goes away") @(t : T?) {
+            let b = body_of(t, "target_unroll_no_pass")
+            t |> success(!has_loop(b) && !has(b, "s +="), "no loop and no body: {b}")
+        }
+        t |> run("a loop of one pass unrolls whatever its body costs") @(t : T?) {
+            let b = body_of(t, "target_unroll_one_pass")
+            t |> success(!has_loop(b), "unrolled: {b}")
+        }
+        t |> run("four passes of two statements is the budget of 8") @(t : T?) {
+            let b = body_of(t, "target_unroll_two_statements")
+            t |> success(!has_loop(b), "unrolled: {b}")
+            t |> equal(count_of(b, "s *="), 4, "one copy a pass: {b}")
+        }
+        t |> run("an inner loop unrolls first, then the loop that holds it") @(t : T?) {
+            let b = body_of(t, "target_unroll_nested")
+            t |> success(!has_loop(b), "both unrolled: {b}")
+            t |> equal(count_of(b, "s +="), 4, "two by two passes: {b}")
+        }
+        t |> run("urange, range64 and urange64 sources") @(t : T?) {
+            for (name in ["target_unroll_urange", "target_unroll_range64",
+                    "target_unroll_urange64"]) {
+                let b = body_of(t, name)
+                t |> success(!has_loop(b), "{name} unrolled: {b}")
+                t |> equal(count_of(b, "s +="), 4, "{name}, one copy a pass: {b}")
+            }
+        }
+        t |> run("[unroll] lifts the budget") @(t : T?) {
+            let b = body_of(t, "target_unroll_annotation")
+            t |> success(!has_loop(b), "unrolled: {b}")
+            t |> equal(count_of(b, "s +="), 9, "one copy a pass: {b}")
+        }
+    }
+}
+
+[test(description = "a loop stays a loop when passes times statements is over the budget, under [unroll_disable], with a break or a finally in its body, with two sources, with a pass count not known at compile time, when the body writes a constant value or passes it by reference, in a function that carries an annotation, in a module with loop_unroll_cost = 0, and in a module compiled with optimize = false")]
+def test_loop_unroll_keeps(t : T?) {
+    ast_gc_guard() {
+        t |> run("five passes of two statements is over the budget") @(t : T?) {
+            let b = body_of(t, "target_unroll_keep_over_budget")
+            t |> success(has_loop(b), "kept: {b}")
+        }
+        t |> run("nine passes of one statement is over the budget") @(t : T?) {
+            let b = body_of(t, "target_unroll_keep_one_statement_over_budget")
+            t |> success(has_loop(b), "kept: {b}")
+        }
+        t |> run("[unroll_disable] keeps the loop") @(t : T?) {
+            let b = body_of(t, "target_unroll_keep_disabled")
+            t |> success(has_loop(b), "kept: {b}")
+        }
+        t |> run("a body with a break") @(t : T?) {
+            let b = body_of(t, "target_unroll_keep_break")
+            t |> success(has_loop(b), "kept: {b}")
+        }
+        t |> run("a pass count the compiler does not know") @(t : T?) {
+            let b = body_of(t, "target_unroll_keep_unknown_count")
+            t |> success(has_loop(b), "kept: {b}")
+        }
+        t |> run("a body with a finally") @(t : T?) {
+            let b = body_of(t, "target_unroll_keep_finally")
+            t |> success(has_loop(b), "kept: {b}")
+        }
+        t |> run("two sources") @(t : T?) {
+            let b = body_of(t, "target_unroll_keep_two_sources")
+            t |> success(has_loop(b), "kept: {b}")
+        }
+        t |> run("a body that writes the loop variable of a literal") @(t : T?) {
+            let b = body_of(t, "target_unroll_keep_written_variable")
+            t |> success(has_loop(b), "kept: {b}")
+        }
+        t |> run("a body that passes the loop variable of a literal by reference") @(t : T?) {
+            let b = body_of(t, "target_unroll_keep_reference_argument")
+            t |> success(has_loop(b), "kept: {b}")
+        }
+        t |> run("a function that carries an annotation") @(t : T?) {
+            let b = body_of(t, "target_unroll_keep_annotated")
+            t |> success(has_loop(b), "kept: {b}")
+        }
+        t |> run("a module with loop_unroll_cost = 0") @(t : T?) {
+            let b = body_of_module(t, "_loop_unroll_off_helper", "unroll_off_sum")
+            t |> success(has_loop(b), "kept: {b}")
+        }
+        t |> run("a module compiled with optimize = false") @(t : T?) {
+            let b = body_of_module(t, "_inline_unoptimized_scope_helper", "unoptimized_loop_sum")
+            t |> success(has_loop(b), "kept: {b}")
+        }
+    }
+}
+
+[test(description = "unrolled loops and the loops that stayed compute what the loops computed, and an unrolled loop over a fixed array writes its elements")]
+def test_loop_unroll_behavior(t : T?) {
+    g_unroll = 1
+    t |> equal(target_unroll_range(), 7)
+    t |> equal(target_unroll_literal(), 101)
+    t |> equal(target_unroll_fixed_array(fixed_array(1, 2, 3, 4)), 11)
+    var cells = fixed_array(10, 20, 30)
+    target_unroll_writes_fixed_array(cells)
+    t |> equal(cells[0] + cells[1] + cells[2], 63)
+    t |> equal(target_unroll_no_pass(), 1)
+    t |> equal(target_unroll_one_pass(), 95)
+    t |> equal(target_unroll_two_statements(), 38)
+    t |> equal(target_unroll_nested(), 23)
+    t |> equal(target_unroll_annotation(), 37)
+    t |> equal(target_unroll_urange(), 7)
+    t |> equal(target_unroll_range64(), 7)
+    t |> equal(target_unroll_urange64(), 7)
+    t |> equal(target_unroll_keep_finally(), reference_loop_with_finally(),
+        "the finally still runs")
+    t |> equal(target_unroll_keep_two_sources(), 81)
+    t |> equal(target_unroll_keep_written_variable(), 13)
+    t |> equal(target_unroll_keep_over_budget(), 84)
+    t |> equal(target_unroll_keep_one_statement_over_budget(), 37)
+    t |> equal(target_unroll_keep_disabled(), 7)
+    t |> equal(target_unroll_keep_break(), 2)
+    t |> equal(target_unroll_keep_unknown_count(5), 11)
+    t |> equal(target_unroll_keep_reference_argument(), 10)
+    t |> equal(target_unroll_keep_annotated(), 7)
+    t |> equal(unroll_off_sum(), 7)
+    t |> equal(unoptimized_loop_sum(), 7)
+}
+
+[test(description = "an array literal given to a parameter the body reads once, as a loop source, becomes that loop's source with no array local, and unrolls when its elements are constants; a parameter read twice or under another loop, an element with an effect, and an element the callee writes first bind the array")]
+def test_inline_literal_loop_source(t : T?) {
+    ast_gc_guard() {
+        t |> run("the literal is the loop source") @(t : T?) {
+            let b = body_of(t, "target_literal_source")
+            t |> success(!has(b, "_arg_a") && has_loop(b), "no array local: {b}")
+        }
+        t |> run("a literal of constants unrolls") @(t : T?) {
+            let b = body_of(t, "target_literal_source_constants")
+            t |> success(!has(b, "_arg_a") && !has_loop(b), "no array local and no loop: {b}")
+        }
+        t |> run("a parameter read twice binds the array") @(t : T?) {
+            let b = body_of(t, "target_literal_source_keep_two_reads")
+            t |> success(has(b, "_arg_a"), "array local: {b}")
+        }
+        t |> run("a loop source under another loop binds the array") @(t : T?) {
+            let b = body_of(t, "target_literal_source_keep_under_loop")
+            t |> success(has(b, "_arg_a"), "array local: {b}")
+        }
+        t |> run("an element with an effect binds the array") @(t : T?) {
+            let b = body_of(t, "target_literal_source_keep_effect")
+            t |> success(has(b, "_arg_a"), "array local: {b}")
+        }
+        t |> run("an element the callee writes before the loop binds the array") @(t : T?) {
+            let b = body_of(t, "target_literal_source_keep_callee_write")
+            t |> success(has(b, "_arg_a"), "array local: {b}")
+        }
+    }
+    g_unroll = 1
+    t |> equal(target_literal_source_keep_callee_write(), 3,
+        "the literal read k before the callee wrote it")
+    t |> equal(target_literal_argument_indexed(), 2,
+        "a parameter read once by index keeps its array")
+    t |> equal(target_literal_source(), 10)
+    t |> equal(target_literal_source_constants(), 11)
+    t |> equal(target_literal_source_keep_two_reads(), 14)
+    t |> equal(target_literal_source_keep_under_loop(2), 20)
+    t |> equal(target_literal_source_keep_effect(), 11)
+    t |> equal(g_unroll, 2, "the element's effect ran once")
+}
+
+[test(description = "a callee body of several statements that ends in its one return splices with no result local: its statements go in front and the returned expression replaces the call; a body with an early return or an unsafe block keeps its result local")]
+def test_inline_trailing_return(t : T?) {
+    ast_gc_guard() {
+        t |> run("the returned expression replaces the call") @(t : T?) {
+            let b = body_of(t, "target_trailing_return")
+            t |> success(!has(b, "scaled_sum(") && !has(b, "_res:"), "no result local: {b}")
+        }
+        t |> run("an early return keeps the result local") @(t : T?) {
+            let b = body_of(t, "target_trailing_return_keep_early")
+            t |> success(!has(b, "scaled_sum_early(") && has(b, "_res:"), "result local: {b}")
+        }
+        t |> run("an unsafe body keeps the result local") @(t : T?) {
+            let b = body_of(t, "target_trailing_return_keep_unsafe")
+            t |> success(!has(b, "scaled_sum_unsafe(") && has(b, "_res:"), "result local: {b}")
+        }
+    }
+    g_unroll = 1
+    t |> equal(target_trailing_return(4), 60)
+    t |> equal(target_trailing_return_keep_early(4), 60)
+    t |> equal(target_trailing_return_keep_early(-4), 0)
+    t |> equal(target_trailing_return_keep_unsafe(4), 60)
+}
+
+[export]
+def target_forward_off_keeps_local(a : int) : int {
+    let tripled = a * 3 + g_unroll
+    return tripled + 1
+}
+
+[test(description = "under options disable_forward a pure local read once in the next statement stays a local")]
+def test_disable_forward_keeps_a_read_once_local(t : T?) {
+    ast_gc_guard() {
+        let b = body_of(t, "target_forward_off_keeps_local")
+        t |> success(has(b, "tripled"), "kept: {b}")
+    }
+    g_unroll = 1
+    t |> equal(target_forward_off_keeps_local(2), 8)
 }

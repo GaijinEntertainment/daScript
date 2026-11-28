@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options loop_unroll_cost = 0    // this fixture pins emitted loop text; unrolling would rewrite it
 
 // Shared fixture for the dasCUDA emitter suite (the tests/msl/_msl_common shape): the
 // [cuda_kernel] classes whose emitted text the shape, compile-gate, census and oracle tests

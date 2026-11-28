@@ -376,6 +376,7 @@ SET(AOT_OPTIMIZATION_MODULE_FILES
     tests/optimization/_inline_scope_helper.das
     tests/optimization/_inline_unoptimized_scope_helper.das
     tests/optimization/_inline_unsafe_helper.das
+    tests/optimization/_loop_unroll_off_helper.das
     tests/optimization/_never_inline_module.das
     tests/optimization/_optimized_body_helper.das
 )

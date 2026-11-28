@@ -4,7 +4,9 @@
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_const_visitor.h"
 #include "daScript/ast/ast_expressions.h"
+#include "ast_effects.h"
 #include "ast_generate_typed.h"
+#include "ast_inscope_pod.h"
 
 namespace das {
 
@@ -165,6 +167,7 @@ namespace das {
             das_hash_set<Variable *>        readAsRefArg;   // handed onward to a REF parameter - needs real storage, not a value
             das_hash_set<Variable *>        readAsPlace;
             das_hash_set<Variable *>        readAsValue;
+            das_hash_set<Variable *>        readAsLoopSource;
         };
 
         class ParamReadScan : public ConstVisitor {
@@ -177,8 +180,9 @@ namespace das {
             ParamReadStats & stats;
             int loopDepth = 0;
             virtual bool canVisitQuoteSubexpression ( const ExprQuote * ) override { return false; }
-            virtual void preVisit ( const ExprFor * expr ) override { ConstVisitor::preVisit(expr); loopDepth ++; }
-            virtual void visit ( const ExprFor * expr ) override { loopDepth --; ConstVisitor::visit(expr); }
+            // src/ast/ARCHITECTURE_INLINE.md#inline-loop-source-argument
+            virtual void preVisitForBody ( const ExprFor * expr, const Expression * body ) override { ConstVisitor::preVisitForBody(expr, body); loopDepth ++; }
+            virtual void visit ( const ExprFor * expr ) override { if ( expr->body ) loopDepth --; ConstVisitor::visit(expr); }
             virtual void preVisit ( const ExprWhile * expr ) override { ConstVisitor::preVisit(expr); loopDepth ++; }
             virtual void visit ( const ExprWhile * expr ) override { loopDepth --; ConstVisitor::visit(expr); }
             // a block literal's body may run any number of times - reads inside count as under-loop
@@ -203,6 +207,7 @@ namespace das {
                 if ( expr->variable && params.find(expr->variable)!=params.end() ) {
                     stats.readCount[expr->variable] ++;
                     if ( loopDepth ) stats.readUnderLoop.insert(expr->variable);
+                    if ( expr->isForLoopSource ) stats.readAsLoopSource.insert(expr->variable);
                     if ( expr->r2v || underR2V.find(expr)!=underR2V.end() || derefBase.find(expr)!=derefBase.end() ) {
                         stats.readAsValue.insert(expr->variable);
                     } else if ( !expr->type || !expr->type->isRefType() ) {
@@ -620,8 +625,15 @@ namespace das {
                     if ( rit != rename.end() ) var->name = rit->second;
                 }
             }
+            // src/ast/ARCHITECTURE_INLINE.md#inline-loop-source-argument
             virtual ExpressionPtr visit ( ExprFor * expr ) override {
                 popDeclFrame();
+                for ( size_t i=0, is=das::min(expr->iteratorVariables.size(), expr->sources.size()); i!=is; ++i ) {
+                    auto & var = expr->iteratorVariables[i];
+                    auto & source = expr->sources[i];
+                    var->loop_source = source;
+                    if ( source->rtti_isMakeArray() && source->type && var->type ) var->type->constant = source->type->constant;
+                }
                 return Visitor::visit(expr);
             }
             virtual void preVisit ( ExprBlock * block ) override {
@@ -684,20 +696,6 @@ namespace das {
             }
         };
 
-        // replace one specific node (by identity) inside a statement
-        class ReplaceNode : public Visitor {
-        public:
-            ReplaceNode ( Expression * w, const ExpressionPtr & r ) : what(w), with(r) {}
-            Expression * what = nullptr;
-            ExpressionPtr with = nullptr;
-            bool done = false;
-        protected:
-            virtual ExpressionPtr visitExpression ( Expression * expr ) override {
-                if ( expr==what ) { done = true; return with; }
-                return Visitor::visitExpression(expr);
-            }
-        };
-
         // ----- statement anchors (same scheme as the CSE prescan) -----
 
         // where a splice inserts its manufactured statements (arg/result temps, the body)
@@ -723,14 +721,9 @@ namespace das {
         // annotations other than inert markers may carry call-site semantics (verifyCall,
         // transform, per-call codegen) that splicing the call away would bypass
         bool isAnnotated ( Function * fn, string & why ) {
-            for ( auto & ann : fn->annotations ) {
-                if ( !ann->annotation ) continue;
-                auto & nm = ann->annotation->name;
-                if ( nm=="export" || nm=="unused_argument" ) continue;
-                why = "annotated function [" + nm + "]";
-                return true;
-            }
-            return false;
+            auto annotation = macroAnnotation(fn);
+            if ( annotation ) why = "annotated function [" + annotation->name + "]";
+            return annotation!=nullptr;
         }
 
         // ----- auto-inline budget (heuristic plain-call candidacy) -----
@@ -739,6 +732,7 @@ namespace das {
             int     nodes = 0;
             bool    hasLoop = false;
             int64_t stackBytes = 0;     // sum of local let sizes - the frame the body owns
+            int     statements = 0;
         };
 
         BodyCost bodyCost ( Expression * body ) {
@@ -746,6 +740,7 @@ namespace das {
             lookupExpressions(body, [&](const Expression * e) {
                 bc.nodes ++;
                 if ( e->rtti_isFor() || e->rtti_isWhile() ) bc.hasLoop = true;
+                if ( e->rtti_isBlock() ) bc.statements += int(static_cast<const ExprBlock *>(e)->list.size());
                 if ( e->rtti_isLet() ) {
                     auto let = static_cast<const ExprLet *>(e);
                     for ( auto & v : let->variables ) {
@@ -767,6 +762,7 @@ namespace das {
             bool blockLiterals = false;     // block-literal call sites + invoke-block sites
             bool functions = false;         // heuristic tier over plain calls (auto_inline_functions)
             int  budget = 32;               // heuristic node budget (auto_inline_cost)
+            int  unrollBudget = 0;
             Module * thisModule = nullptr;  // heuristic tier is same-module-only
             das_hash_map<Function *, bool> * budgetCache = nullptr;
             das_hash_set<Function *> * budgetExempt = nullptr;  // private, referenced exactly once: moves, not duplicates
@@ -817,11 +813,77 @@ namespace das {
             return nullptr;
         }
 
+        struct PlannedLoop {
+            ExprFor *   loop = nullptr;
+            ExprBlock * block = nullptr;
+        };
+
+        constexpr uint64_t UNROLL_ANNOTATION_MAX_PASSES = 256;
+
+        template <typename RangeT, typename ValueT>
+        bool rangePassValues ( const LineInfo & at, vec4f bounds, Type valueType, uint64_t maxPasses, vector<ExpressionPtr> & values ) {
+            auto r = cast<RangeT>::to(bounds);
+            if ( r.from >= r.to ) return true;
+            uint64_t count = uint64_t(r.to) - uint64_t(r.from);
+            if ( count > maxPasses ) return false;
+            for ( uint64_t i=0; i!=count; ++i ) {
+                auto type = new TypeDecl(valueType, at);
+                type->constant = true;
+                values.push_back(makeTypedConst(at, type, cast<ValueT>::from(ValueT(uint64_t(r.from) + i))));
+            }
+            return true;
+        }
+
+        // src/ast/ARCHITECTURE_INLINE.md#loop-unroll
+        bool loopPassValues ( ExprFor * loop, uint64_t maxPasses, vector<ExpressionPtr> & values, bool & constantValues ) {
+            if ( loop->sources.size()!=1 || loop->iteratorVariables.size()!=1 ) return false;
+            Expression * src = loop->sources[0];
+            Variable * var = loop->iteratorVariables[0];
+            if ( !src->type || !var->type ) return false;
+            constantValues = true;
+            if ( src->rtti_isConstant() ) {
+                vec4f bounds = static_cast<ExprConst *>(src)->value;
+                switch ( src->type->baseType ) {
+                case Type::tRange:      return rangePassValues<range,int32_t>(src->at, bounds, Type::tInt, maxPasses, values);
+                case Type::tURange:     return rangePassValues<urange,uint32_t>(src->at, bounds, Type::tUInt, maxPasses, values);
+                case Type::tRange64:    return rangePassValues<range64,int64_t>(src->at, bounds, Type::tInt64, maxPasses, values);
+                case Type::tURange64:   return rangePassValues<urange64,uint64_t>(src->at, bounds, Type::tUInt64, maxPasses, values);
+                default:                return false;
+                }
+            }
+            if ( !src->type->isFixedArray() || src->type->fixedDim<0 || uint64_t(src->type->fixedDim)>maxPasses ) return false;
+            if ( src->rtti_isMakeArray() && !src->rtti_isMakeTuple() ) {
+                auto literal = static_cast<ExprMakeArray *>(src);
+                if ( literal->makeArrayOnHeap ) return false;
+                for ( auto & value : literal->values ) {
+                    if ( !value->rtti_isConstant() ) return false;
+                }
+                values.assign(literal->values.begin(), literal->values.end());
+                return true;
+            }
+            if ( src->rtti_isVar() ) {
+                constantValues = false;
+                for ( int32_t i=0, is=src->type->fixedDim; i!=is; ++i ) {
+                    auto indexType = new TypeDecl(Type::tInt, src->at);
+                    indexType->constant = true;
+                    auto array = cloneTyped(src);
+                    array->isForLoopSource = false;
+                    auto element = new ExprAt(src->at, array, makeTypedConst(src->at, indexType, cast<int32_t>::from(i)));
+                    element->type = new TypeDecl(*var->type);
+                    element->type->ref = true;
+                    values.push_back(element);
+                }
+                return true;
+            }
+            return false;
+        }
+
         // collects splice sites, each tagged with its (block, index) statement anchor
         class InlineCollect : public Visitor {
         public:
             InlineCollect ( const AutoInlineCfg & cfg, TextWriter * log = nullptr ) : cfg(cfg), logs(log) {}
             vector<PlannedSite> sites;      // in visit order: within a block, increasing index
+            vector<PlannedLoop> loops;
         protected:
             const AutoInlineCfg & cfg;
             TextWriter * logs = nullptr;    // log_optimization sink; a degraded [inline] contract must be visible
@@ -847,6 +909,11 @@ namespace das {
             virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) override {
                 Visitor::preVisitBlockExpression(block, expr);
                 if ( !blockStack.empty() && blockStack.back().block==block ) blockStack.back().index++;
+            }
+            // src/ast/ARCHITECTURE_INLINE.md#loop-unroll
+            virtual ExpressionPtr visit ( ExprFor * expr ) override {
+                if ( cfg.unrollBudget>0 && !blockStack.empty() ) loops.push_back(PlannedLoop{expr, blockStack.back().block});
+                return Visitor::visit(expr);
             }
             void plan ( Expression * expr, SiteKind kind ) {
                 if ( auto callee = callLikeFunc(expr) ) {
@@ -1193,6 +1260,31 @@ namespace das {
                 return true;
             }
             return false;
+        }
+
+        // src/ast/ARCHITECTURE_INLINE.md#inline-loop-source-argument
+        ExprMakeArray * stackLiteralForLoopSource ( Expression * arg, Variable * param, const ParamReadStats & stats,
+                const SiteArgs & sa, bool stableGlobals ) {
+            auto literal = stackLoopLiteral(arg);
+            bool onHeap = literal!=nullptr;
+            if ( !literal && arg->rtti_isMakeArray() && !arg->rtti_isMakeTuple() ) literal = static_cast<ExprMakeArray *>(arg);
+            if ( !literal || !literal->makeType || (!onHeap && literal->makeArrayOnHeap) ) return nullptr;
+            auto reads = stats.readCount.find(param);
+            if ( reads==stats.readCount.end() || reads->second!=1 ) return nullptr;
+            if ( !stats.readAsLoopSource.count(param) || stats.readUnderLoop.count(param) ) return nullptr;
+            for ( auto & value : literal->values ) {
+                if ( value->rtti_isConstant() ) continue;
+                if ( !isReorderSafe(value, stableGlobals) ) return nullptr;
+                if ( !stableGlobals && !argReadsOnlyPrivateLocals(value, sa) ) return nullptr;
+            }
+            auto stack = static_cast<ExprMakeArray *>(cloneTyped(literal));
+            stack->isCallArgument = false;
+            stack->isForLoopSource = true;
+            if ( onHeap ) {
+                stack->makeArrayOnHeap = false;
+                stack->type = makeFixedArrayTypeDecl(int32_t(stack->values.size()), new TypeDecl(*stack->makeType));
+            }
+            return stack;
         }
 
         bool exprContains ( Expression * root, Expression * what ) {
@@ -1703,6 +1795,18 @@ namespace das {
             }
         };
 
+        // src/ast/ARCHITECTURE_INLINE.md#inline-trailing-return
+        ExprReturn * trailingReturn ( ExprBlock * body ) {
+            auto & list = body->list;
+            if ( list.size()<2 || !body->finalList.empty() || !list.back()->rtti_isReturn() ) return nullptr;
+            auto ret = static_cast<ExprReturn *>(list.back());
+            if ( !ret->subexpr || ret->moveSemantics ) return nullptr;
+            for ( size_t i=0, is=list.size()-1; i!=is; ++i ) {
+                if ( list[i]->rtti_isLabel() || ReturnStoreRewrite::stmtHasReturn(list[i]) ) return nullptr;
+            }
+            return ret;
+        }
+
     } // anonymous namespace
 
     // ----- the [inline] shape contract -----
@@ -1931,6 +2035,7 @@ namespace das {
             int inlinedAuto = 0;    // auto block-literal call sites
             int invokeBlocks = 0;   // invoke-of-literal sites
             int declined = 0;       // best-effort sites the pass passed on
+            int unrolled = 0;
             das_hash_map<ExprBlock *, ParamReadStats> statsCache;
             das_hash_map<Function *, bool> shapeCache;
             das_hash_map<Function *, pair<bool,string>> autoOkCache;
@@ -2124,28 +2229,78 @@ namespace das {
             bool tryLowerCallPosition ( const PlannedSite & site, const SpliceSubject & subj,
                 CallerSpliceState & state, int anchorIndex );
             void spliceStatements ( Function * caller, const PlannedSite & site, const SpliceSubject & subj,
-                const SpliceInputs & in, ArgPlan & plan, CallerSpliceState & state, int anchorIndex, bool exprBody );
+                const SpliceInputs & in, ArgPlan & plan, CallerSpliceState & state, int anchorIndex, bool exprBody, bool flatBody );
             bool classifyArguments ( Function * caller, const PlannedSite & site, const SpliceSubject & subj, const SpliceInputs & in, ArgPlan & plan );
             void processSite ( Function * caller, const PlannedSite & site, CallerSpliceState & state );
+            void unrollLoop ( const PlannedLoop & site, int unrollBudget );
             void processFunction ( Function * caller );
             void reportUnsplicedCalls ( Function * caller );
         };
 
+        // src/ast/ARCHITECTURE_EFFECTS.md#macro-owned-shape
         AutoInlineCfg InlinePatch::callerAutoCfg ( Function * caller ) {
             AutoInlineCfg callerCfg = moduleAutoCfg;
-            if ( !callerCfg.functions ) return callerCfg;
+            if ( !callerCfg.functions && !callerCfg.unrollBudget ) return callerCfg;
             string why;
-            if ( isAnnotated(caller, why) ) {           // like [template] or [some_fancy_macro]
+            bool foreignInstance = caller->fromGeneric && originOf(caller)->module
+                && originOf(caller)->module != program->thisModule.get();
+            if ( hasMacroOwnedShape(caller) ) callerCfg.unrollBudget = 0;
+            if ( isAnnotated(caller, why) || foreignInstance ) {    // like [template] or [some_fancy_macro]
                 callerCfg.functions = false;
-            } else if ( caller->fromGeneric && originOf(caller)->module
-                && originOf(caller)->module != program->thisModule.get() ) {
-                callerCfg.functions = false;
-            } else if ( bodyCost(caller->body).stackBytes > AUTO_INLINE_CALLER_FRAME_BYTES ) {
-                callerCfg.functions = false;
-            } else if ( callerOnCallCycle(caller) ) {       // recursive or recursive-ish
+                callerCfg.unrollBudget = 0;
+            } else if ( callerCfg.functions && (bodyCost(caller->body).stackBytes > AUTO_INLINE_CALLER_FRAME_BYTES
+                    || callerOnCallCycle(caller)) ) {               // recursive or recursive-ish
                 callerCfg.functions = false;
             }
             return callerCfg;
+        }
+
+        // src/ast/ARCHITECTURE_INLINE.md#loop-unroll
+        void InlinePatch::unrollLoop ( const PlannedLoop & site, int unrollBudget ) {
+            auto loop = site.loop;
+            auto & list = site.block->list;
+            auto slot = find(list.begin(), list.end(), loop);
+            if ( slot==list.end() ||!loop->body || !loop->body->rtti_isBlock() ) return;
+            auto body = static_cast<ExprBlock *>(loop->body);
+            if ( !body->finalList.empty() || !body->annotations.empty() ) return;
+            if ( loop->annotations.getBoolOption("unroll_disable", false) ) return;
+            uint64_t maxPasses = UNROLL_ANNOTATION_MAX_PASSES;
+            if ( !loop->annotations.getBoolOption("unroll", false) ) {
+                maxPasses = das::max(uint64_t(unrollBudget) / uint64_t(das::max(bodyCost(body).statements, 1)), uint64_t(1));
+            }
+            vector<ExpressionPtr> values;
+            bool constantValues;
+            if ( !loopPassValues(loop, maxPasses, values, constantValues) ) return;
+            CanInlineScan shape(true);
+            body->visit(shape);
+            if ( shape.bad ) return;
+            Variable * var = loop->iteratorVariables[0];
+            if ( constantValues ) {
+                ParamReadStats stats;
+                ParamReadScan scan(loop->iteratorVariables, stats);
+                body->visit(scan);
+                if ( stats.readAsPlace.count(var) || stats.readAsRefArg.count(var) ) return;
+            }
+            auto & inlineId = program->thisModule->inlineTempIndex;
+            vector<ExpressionPtr> unrolledStatements;
+            for ( auto & value : values ) {
+                das_hash_map<string, string> rename;
+                das_hash_set<string> canShadowArgs;
+                LocalNameCollect names(rename, canShadowArgs, INLINE_TEMP_PREFIX + to_string(inlineId) + "_l_");
+                body->visit(names);
+                if ( !canShadowArgs.empty() ) return;
+                das_hash_map<Variable *, ArgSub> paramSub;
+                paramSub[var].substitute = value;
+                InlineBodyRewriter rewriter(paramSub, rename, loop->at, false);
+                auto pass = static_cast<ExprBlock *>(cloneTyped(body)->visit(rewriter));
+                unrolledStatements.insert(unrolledStatements.end(), pass->list.begin(), pass->list.end());
+                inlineId ++;
+            }
+            if ( logOpt && logs ) *logs << "UNROLL " << values.size() << " pass(es) at " << loop->at.describe() << "\n";
+            slot = list.erase(slot);
+            list.insert(slot, unrolledStatements.begin(), unrolledStatements.end());
+            unrolled ++;
+            changed = true;
         }
 
         void InlinePatch::processFunction ( Function * caller ) {
@@ -2153,27 +2308,32 @@ namespace das {
             AutoInlineCfg callerCfg = callerAutoCfg(caller);
             InlineCollect collect(callerCfg, logOpt ? logs : nullptr);
             caller->body->visit(collect);
-            if ( collect.sites.empty() ) return;
-            CallerSpliceState state;
-            if ( moduleAutoCfg.blockLiterals ) {
-                BlockBindingScan bscan;
-                caller->body->visit(bscan);
-                for ( auto & kv : bscan.binding ) {
-                    if ( bscan.disq.find(kv.first)==bscan.disq.end() ) state.bindings[kv.first] = kv.second;
-                }
-            }
-            {
-                DeclNameCollect dnc(state.callerDeclNames);
-                caller->body->visit(dnc);
-                for ( auto & arg : caller->arguments ) {
-                    state.callerDeclNames.insert(arg->name);
-                    if ( !arg->aka.empty() ) state.callerDeclNames.insert(arg->aka);
-                }
-            }
+            if ( collect.sites.empty() && collect.loops.empty() ) return;
             bool changedBefore = changed;
             changed = false;
-            for ( auto & site : collect.sites ) {
-                processSite(caller, site, state);
+            if ( !collect.sites.empty() ) {
+                CallerSpliceState state;
+                if ( moduleAutoCfg.blockLiterals ) {
+                    BlockBindingScan bscan;
+                    caller->body->visit(bscan);
+                    for ( auto & kv : bscan.binding ) {
+                        if ( bscan.disq.find(kv.first)==bscan.disq.end() ) state.bindings[kv.first] = kv.second;
+                    }
+                }
+                {
+                    DeclNameCollect dnc(state.callerDeclNames);
+                    caller->body->visit(dnc);
+                    for ( auto & arg : caller->arguments ) {
+                        state.callerDeclNames.insert(arg->name);
+                        if ( !arg->aka.empty() ) state.callerDeclNames.insert(arg->aka);
+                    }
+                }
+                for ( auto & site : collect.sites ) {
+                    processSite(caller, site, state);
+                }
+            }
+            for ( auto & site : collect.loops ) {
+                unrollLoop(site, callerCfg.unrollBudget);
             }
             if ( changed ) splicedCallers.insert(caller);
             changed |= changedBefore;
@@ -2440,6 +2600,13 @@ namespace das {
                             return false;
                         } else {
                             if ( !makeArgTemp(cloneTyped(arg), false, false, true) ) return false;
+                        }
+                    } else if ( auto stack = needScope ? nullptr : stackLiteralForLoopSource(argLeaf, param, stats, sa,
+                            writeFree && !effectsAfter[ai]) ) {
+                        sub.substitute = stack;
+                        if ( logOpt && logs ) {
+                            *logs << "LOOP-SOURCE-LITERAL " << subjName << " argument " << param->name
+                                  << " at " << callLike->at.describe() << "\n";
                         }
                     } else if ( arg->type && (arg->type->ref || rootsInVar(argLeaf)) ) {  // lvalue chain: bind a reference once, like the call did
                         auto init = cloneTyped(arg);
@@ -2780,7 +2947,7 @@ namespace das {
         // every declinable check runs BEFORE the prefix hoist mutates the statement - a
         // later decline would orphan the _pre reads (30838, or a segfault in access flags)
         void InlinePatch::spliceStatements ( Function * caller, const PlannedSite & site, const SpliceSubject & subj,
-                const SpliceInputs & in, ArgPlan & plan, CallerSpliceState & state, int anchorIndex, bool exprBody ) {
+                const SpliceInputs & in, ArgPlan & plan, CallerSpliceState & state, int anchorIndex, bool exprBody, bool flatBody ) {
             auto callLike = site.callLike;
             Function * calleeFn = subj.fn;              // null for InvokeBlock
             const string & subjName = subj.name;
@@ -2888,6 +3055,14 @@ namespace das {
                     callReplacement = underCalleeUnsafe(calleeFn, cloned->visit(rewriter), callLike->at);
                 }
                 for ( auto & t : temps ) splice.push_back(t);
+            } else if ( flatBody ) {
+                for ( auto & t : temps ) splice.push_back(t);
+                auto bodyClone = static_cast<ExprBlock *>(cloneTyped(in.body, &plan.boundParams));
+                bodyClone->visit(stamp);
+                auto flat = static_cast<ExprBlock *>(bodyClone->visit(rewriter));
+                callReplacement = static_cast<ExprReturn *>(flat->list.back())->subexpr;
+                splice.insert(splice.end(), flat->list.begin(), flat->list.end()-1);
+                if ( logOpt && logs ) *logs << "FLAT-RETURN " << subjName << " at " << callLike->at.describe() << "\n";
             } else {
                 auto bodyClone = static_cast<ExprBlock *>(cloneTyped(in.body, &plan.boundParams));
                 if ( calleeFn ) bodyClone->visit(stamp);
@@ -3023,7 +3198,9 @@ namespace das {
                 return;
             }
             if ( tryLowerCallPosition(site, subj, state, anchorIndex) ) return;
-            spliceStatements(caller, site, subj, in, plan, state, anchorIndex, exprBody);
+            bool flatBody = !exprBody && !storesInPlace && !in.needScope
+                && calleeFn && !calleeFn->hasUnsafe && trailingReturn(in.body);
+            spliceStatements(caller, site, subj, in, plan, state, anchorIndex, exprBody, flatBody);
         }
 
         // DFS postorder over the splice graph inside this module, [inline] functions
@@ -3299,6 +3476,7 @@ namespace das {
         autoCfg.blockLiterals = autoEnabled;
         autoCfg.functions = autoFns;
         autoCfg.budget = options.getIntOption("auto_inline_cost", policies.auto_inline_cost);
+        autoCfg.unrollBudget = autoEnabled ? options.getIntOption("loop_unroll_cost", policies.loop_unroll_cost) : 0;
         autoCfg.thisModule = thisModule.get();
         autoCfg.budgetCache = &budgetCache;
         autoCfg.budgetExempt = &budgetExempt;
@@ -3398,6 +3576,9 @@ namespace das {
             *patch.logs << "INLINE: " << patch.inlined << " must + " << patch.inlinedAuto
                         << " auto + " << patch.invokeBlocks << " invoke-block site(s), "
                         << patch.declined << " declined in module " << thisModule->name << "\n";
+        }
+        if ( patch.logOpt && patch.logs && patch.unrolled ) {
+            *patch.logs << "UNROLL: " << patch.unrolled << " loop(s) in module " << thisModule->name << "\n";
         }
         return patch.changed;
     }

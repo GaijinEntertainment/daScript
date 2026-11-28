@@ -5474,14 +5474,6 @@ namespace das {
         that->isForLoopSource = true;
         markNoDiscard(that);
     }
-    // src/ast/ARCHITECTURE_LOOP_SOURCE.md#stack-loop-literal
-    static ExprMakeArray *stackLoopLiteral(Expression *source) {
-        const uint64_t maxStackLiteralBytes = 1024;
-        auto mka = heapArrayLiteral(source);
-        if (!mka || literalElementsOwnHeap(mka)) return nullptr;
-        auto bytes = uint64_t(mka->values.size()) * mka->recordType->getSizeOf64();
-        return bytes <= maxStackLiteralBytes ? mka : nullptr;
-    }
     ExpressionPtr InferTypes::visitForSource(ExprFor *expr, Expression *that, bool last) {
         if (auto mka = stackLoopLiteral(that)) {
             mka->makeArrayOnHeap = false;

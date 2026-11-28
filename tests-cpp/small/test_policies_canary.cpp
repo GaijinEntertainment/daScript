@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 #include "daScript/daScript.h"
+#include "daScript/daScriptC.h"
 
 using namespace das;
 
@@ -25,4 +26,16 @@ TEST_CASE("CodeOfPolicies ABI canary") {
     CHECK_FALSE(checkCodeOfPoliciesStamp(bad));
     bad.abi_stamp = good.abi_stamp ^ (4u << 8);   // sizeof drift (one field added/removed)
     CHECK_FALSE(checkCodeOfPoliciesStamp(bad));
+}
+
+TEST_CASE("the loop unroll and forward policies reach CodeOfPolicies through the C API") {
+    das_policies * pol = das_policies_make();
+    auto policies = (CodeOfPolicies *) pol;
+    CHECK_EQ(policies->loop_unroll_cost, 8);
+    REQUIRE(das_policies_set_int(pol, DAS_POLICY_LOOP_UNROLL_COST, 0) == 1);
+    CHECK_EQ(policies->loop_unroll_cost, 0);
+    CHECK_FALSE(policies->disable_forward);
+    REQUIRE(das_policies_set_bool(pol, DAS_POLICY_DISABLE_FORWARD, 1) == 1);
+    CHECK(policies->disable_forward);
+    das_policies_release(pol);
 }

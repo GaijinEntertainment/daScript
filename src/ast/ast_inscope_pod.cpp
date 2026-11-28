@@ -49,6 +49,15 @@ namespace das {
         return !elemT || !( elemT->isPointer() || elemT->isNoHeapType() );
     }
 
+    // src/ast/ARCHITECTURE_LOOP_SOURCE.md#stack-loop-literal
+    ExprMakeArray * stackLoopLiteral ( Expression * source ) {
+        const uint64_t maxStackLiteralBytes = 1024;
+        auto mka = heapArrayLiteral(source);
+        if ( !mka || literalElementsOwnHeap(mka) ) return nullptr;
+        auto bytes = uint64_t(mka->values.size()) * mka->recordType->getSizeOf64();
+        return bytes <= maxStackLiteralBytes ? mka : nullptr;
+    }
+
     static bool canHoldArray ( const TypeDeclPtr & type ) {
         if ( type->ref || type->isPointer() || type->isGoodIteratorType() || type->isGoodLambdaType() || type->isGoodBlockType() ) return true;
         if ( type->isGoodArrayType() || type->isGoodTableType() ) {

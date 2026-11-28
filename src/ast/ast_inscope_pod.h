@@ -10,5 +10,6 @@ namespace das {
     string inScopePodSite ( const Function * func );
     ExprMakeArray * heapArrayLiteral ( Expression * expr );
     bool literalElementsOwnHeap ( const ExprMakeArray * literal );
+    ExprMakeArray * stackLoopLiteral ( Expression * source );
 
 }

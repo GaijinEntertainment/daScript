@@ -939,6 +939,7 @@ int das_policies_set_bool ( das_policies * policies, das_bool_policy flag, int v
         case DAS_POLICY_FAST_MATH:              p->fast_math = v; break;
         case DAS_POLICY_DISABLE_DSE:            p->disable_dse = v; break;
         case DAS_POLICY_DISABLE_SINK:           p->disable_sink = v; break;
+        case DAS_POLICY_DISABLE_FORWARD:        p->disable_forward = v; break;
         case DAS_POLICY_DISABLE_CSE:            p->disable_cse = v; break;
         case DAS_POLICY_DISABLE_INLINE:         p->disable_inline = v; break;
         case DAS_POLICY_DISABLE_AUTO_INLINE:    p->disable_auto_inline = v; break;
@@ -971,6 +972,7 @@ int das_policies_set_int ( das_policies * policies, das_int_policy field, int64_
         case DAS_POLICY_MAX_UNRESERVED_SIZE:
             if ( value < 0 ) DAS_FATAL_ERROR("DAS_POLICY_MAX_UNRESERVED_SIZE must not be negative (%lld)\n", (long long)value);
             p->max_unreserved_size = uint64_t(value); break;
+        case DAS_POLICY_LOOP_UNROLL_COST:           p->loop_unroll_cost = checked_i32(value, "DAS_POLICY_LOOP_UNROLL_COST"); break;
         default: return 0;
     }
     return 1;

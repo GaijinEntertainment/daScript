@@ -100,3 +100,48 @@ condition, the other arm or after the `if`. A local lives in its own block, so b
 every use of it has been counted. It runs no side-effect walk of its own: it
 reads the flags that walk left at the start of dead-store elimination, the pass right before it.
 A node built since then is never `droppable`, so a stale flag can only keep a let in place.
+
+## Forwarding a pure local read once {#forward-read-once-let}
+
+The sink visitor also replaces the single read of a local with the local's initializer and drops
+the `let`, when the read is in the statement right after it: `let t = a * 3; g += t` becomes
+`g += a * 3`. The store into the local and its stack slot are gone. A spliced body leaves many
+such locals: an argument bound to a local, a result read once.
+
+`forwardableLet` asks what the sink asks of the `let` - one variable, no reference, no cleanup,
+a `droppable` initializer - and also that the initializer is neither a move nor a clone and is a
+value of the local's own type. The variable is read once in the whole function, as a value.
+
+The initializer moves from in front of the statement to the place of the read, so nothing with
+an effect may run between the two. `evaluatesAfterPureSiblings` checks each step of the path
+from the statement down to the read. The step passes under these parents, and under no other:
+
+- a `return`, the condition of an `if`, the sources of a `for`, the initializer of a
+  one-variable `let`;
+- a read of a reference, a cast, a pointer dereference, a field, a one-operand operator;
+- a two-operand operator other than `&&` and `||`, an index, a call's arguments, the elements
+  of a string builder - when every other operand of that parent is `droppable`.
+
+Every other operand, not only the ones in front: the order a call evaluates its arguments in is
+not defined. `&&`, `||`, `??` and a safe index evaluate an operand on some paths only, and
+moving an evaluation onto one path is the sink's rewrite, with the conditions that section
+gives.
+
+The pass reads the flags the sink reads and builds none. A function whose shape a macro owns
+keeps its locals (`ARCHITECTURE_EFFECTS.md#macro-owned-shape`). `options disable_forward` turns
+the forward off and leaves the sink on; `options disable_sink` turns the whole pass off.
+
+## A function whose shape a macro owns {#macro-owned-shape}
+
+`hasMacroOwnedShape` is true of a function that carries an annotation other than `export` and
+`unused_argument`, and of a generated function that is neither a lambda nor a local function. A
+macro may read such a body after the optimizer ran: a shader backend lowers an entry point,
+`[flatten]` matches the `let`s of the twin it generated. Forwarding a local and unrolling a loop
+(`ARCHITECTURE_INLINE.md#loop-unroll`) keep the values and change the statements, which is what
+such a macro reads, so both leave these functions as written.
+
+The test is per function. A function a macro reaches only through a call - a helper a kernel
+calls, a method beside the annotated one - carries no mark. A file of such functions opts out
+by option: the GPU kernel sources of dasLLAMA set `options loop_unroll_cost = 0` and
+`options disable_forward`, and the shader emitter fixtures under `tests` set the first. They
+keep the sink on: it shaped those kernels before either rewrite existed.

@@ -28,4 +28,20 @@ namespace das {
     bool droppable ( Expression * expr ) {
         return expr && expr->noSideEffects && !expr->mayRaise;
     }
+
+    const Annotation * macroAnnotation ( const Function * fn ) {
+        for ( auto & ann : fn->annotations ) {
+            if ( !ann->annotation ) continue;
+            auto & name = ann->annotation->name;
+            if ( name=="export" || name=="unused_argument" ) continue;
+            return &*ann->annotation;
+        }
+        return nullptr;
+    }
+
+    // src/ast/ARCHITECTURE_EFFECTS.md#macro-owned-shape
+    bool hasMacroOwnedShape ( const Function * fn ) {
+        if ( fn->generated && !fn->lambda && !fn->localFunction ) return true;
+        return macroAnnotation(fn)!=nullptr;
+    }
 }
