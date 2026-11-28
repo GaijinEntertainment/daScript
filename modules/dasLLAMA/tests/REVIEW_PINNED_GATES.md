@@ -25,16 +25,19 @@ measured on. This file's part of the pinned set, one entry a bullet, each with w
   `--together`, `--batch 1` one `--test` child a file), the test wall (`wall_seconds_in`, `log_wall_line`, a run's
   `LOST` stop at a batch without every verdict, wall or none, no file of it run alone, the `--skip` resume), the reach
   plan behind `--changed` (which test files each kind of changed path runs, an on-demand area's file for its own change
-  alone), the children's module-cache folder, the model files a run names that its models directory lacks (the
-  `MISSING` lines, the bare `.gguf` suffix no file's name), the image reap behind `--reap-images` and its gate, the K/V
-  start `--poison-kv` hands the children, the `options persistent_heap` line of the `stocked` files, the model
-  categories and families, the `--category` run, a child's `--run-env` filters, the forced tune file, the skip of what
-  passed (`pass_stamp`'s inputs, the environment among them; the flag and stamp every run's children carry but a
-  `--rerun`'s, the full suite's keyed apart; the `REPORT` count of files not run), a media run's heap setting, the
-  children's scratch folder, the `--disable-module` flags each child of a `DASLLAMA_DISABLE_MODULES` run carries and the
-  pass stamp they key apart, the crown race's gate (`box_race_possible`, `box_runtime_owed`, `box_manifest_pick`, the
-  `BOXRACE` lines), every stocked model past the large tier a category's, and the fleet's Vulkan-free slice of the
-  model-free suite (`VULKAN_FREE_ONLY`) and the CUDA-only files a run drops with dasCUDA left out (`CUDA_ONLY_EXCLUDE`).
+  alone), the children's module-cache folder, the model files a run names that its models directory lacks (the `MISSING`
+  lines, the bare `.gguf` suffix no file's name), the image reap behind `--reap-images` and its gate, the K/V start
+  `--poison-kv` hands the children, the `options persistent_heap` line of the `stocked` files, the model categories and
+  families, the `--category` run, a child's `--run-env` filters, the forced tune file, the tune variables a run names
+  for its children (`tune_vars_of`: the box's file as the manifest where the caller named none, the forced file, the
+  reference policy alone under `--no-tune`), the key a run builds the test child under being a child's own (the run's
+  `CHILD key` line), the skip of what passed (`pass_stamp`'s inputs, the environment among them; the flag and stamp
+  every run's children carry but a `--rerun`'s, the full suite's keyed apart; the `REPORT` count of files not run), a
+  media run's heap setting, the children's scratch folder, the `--disable-module` flags each child of a
+  `DASLLAMA_DISABLE_MODULES` run carries and the pass stamp they key apart, the crown race's gate (`box_race_possible`,
+  `box_runtime_owed`, `box_manifest_pick`, the `BOXRACE` lines), every stocked model past the large tier a category's,
+  and the fleet's Vulkan-free slice of the model-free suite (`VULKAN_FREE_ONLY`) and the CUDA-only files a run drops
+  with dasCUDA left out (`CUDA_ONLY_EXCLUDE`).
 - `test_run_suites.das`'s `test_child_chunks` cell must hold the `--batch` chunking (`child_chunks`: `per` files a
   child in order; an area run's image file, a `cant_` / `failed_` / `invalid_` file and a tier contract file alone, the
   files around it in one batch).

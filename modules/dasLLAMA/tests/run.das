@@ -898,13 +898,53 @@ def private children_manifest() : string {
     return box_manifest_pick(g_env_core.tune_manifest, box, stat(box).is_valid)
 }
 
+//! `envs` with `name` set to `value` ahead of a child, in cmd.exe's form under `win`. Non-private: test_run_suites.das
+//! pins both forms
+def env_ahead(envs, name, value : string; win : bool) : string
+    => win ? "{envs}set \"{name}={value}\"&& " : "{name}='{value}' {envs}"
+
+//! `forced_tune_file` on what the run read: `caller_forced` a file the caller forced, `manifest` the caller's
+//! `DAS_TUNE_MANIFEST`, `box_manifest` the box's own. Non-private: test_run_suites.das pins each answer
+def forced_tune_file_of(no_tune : bool; caller_forced, manifest, box_manifest : string) : string {
+    return "" if (no_tune || !empty(caller_forced))
+    let file = box_manifest_pick(manifest, box_manifest, stat(box_manifest).is_valid)
+    return stat(file).is_valid ? file : ""
+}
+
+//! The tune file a run's children are forced onto (`DAS_TUNE_FORCE`), "" for none: the manifest in effect - the caller's
+//! `DAS_TUNE_MANIFEST`, else the box's - so its kernels stamp whatever the file's age against the binary; a test run reads
+//! the box's winners, and a rebuild does not drop every kernel to its fallback. None under `--no-tune`, where the file
+//! is absent, or where the caller forced a file already
+def forced_tune_file(cfg : RunArgs) : string
+    => forced_tune_file_of(cfg.no_tune, g_env_tune.tune_force, g_env_core.tune_manifest, box_tune_manifest(g_env_prof.box))
+
+//! The tune variables a run names for its children, name and value: the reference policy under `no_tune`, else the box's
+//! tune file as the manifest (`box_manifest`, "" where the box has none) where the caller named none - one tune a box, so a
+//! child's image identities agree with the perf rig's - and the forced file (`forced`, "" for none). The runner sets
+//! them on itself as well (`run_plan`). Non-private: test_run_suites.das pins it
+def tune_vars_of(no_tune : bool; caller_manifest, box_manifest, forced : string) : array<tuple<name : string; value : string>> {
+    var vars : array<tuple<name : string; value : string>>
+    if (no_tune) {
+        vars |> push((name = "DAS_TUNE_POLICY", value = "reference"))
+    } elif (empty(caller_manifest) && !empty(box_manifest)) {
+        vars |> push((name = "DAS_TUNE_MANIFEST", value = box_manifest))
+    }
+    if (!empty(forced)) {
+        vars |> push((name = "DAS_TUNE_FORCE", value = forced))
+    }
+    return <- vars
+}
+
+def private tune_vars(cfg : RunArgs) : array<tuple<name : string; value : string>>
+    => <- tune_vars_of(cfg.no_tune, g_env_core.tune_manifest, children_manifest(), forced_tune_file(cfg))
+
 // CPU_PREFILL: the suites' CPU truth halves and parity controls prefill on the CPU by intent.
 // HAZARD_STRICT: the scheduling-unification ratchet's runtime half — an undeclared dispatch
 // on an armed hazard oracle PANICS here, so declaration gaps can never ship quietly.
 // cmd.exe has no VAR=val prefix — `set "VAR=val"&&` is the safe form (llvm_tune's tuner_cmd)
-// Non-private: test_run_suites.das pins the K/V start a `--poison-kv` run hands its children
-def child_envs(cfg : RunArgs; win : bool; media : bool = false; scratch : string = "";
-               census : string = "") : string {
+//! `child_envs` over the run's tune variables `tune` (`tune_vars`), read once a run
+def private child_envs_of(cfg : RunArgs; win : bool; tune : array<tuple<name : string; value : string>>;
+                          media : bool = false; scratch : string = ""; census : string = "") : string {
     var envs = ""
     if (win) {
         envs = ((cfg.full ? "set \"DASLLAMA_PARITY_FULL=1\"&& " : "")
@@ -935,8 +975,7 @@ def child_envs(cfg : RunArgs; win : bool; media : bool = false; scratch : string
             : "DASLLAMA_KERNEL_CENSUS_DIR=\"{census}\" {envs}")
     }
     if (cfg.no_tune) {
-        envs = (win ? "{envs}set \"DAS_TUNE_POLICY=reference\"&& set \"DASLLAMA_IMAGE=0\"&& "
-            : "DAS_TUNE_POLICY=reference DASLLAMA_IMAGE=0 {envs}")
+        envs = env_ahead(envs, "DASLLAMA_IMAGE", "0", win)
     }
     if (cfg.suite == "image-vulkan") {
         // the offline-bake suite: arm the tier so the probed config carries a vulkan section —
@@ -944,42 +983,16 @@ def child_envs(cfg : RunArgs; win : bool; media : bool = false; scratch : string
         envs = (win ? "{envs}set \"DASLLAMA_GPU=1\"&& set \"DASLLAMA_GPU_VRAM_MB=2000\"&& "
             : "DASLLAMA_GPU=1 DASLLAMA_GPU_VRAM_MB=2000 {envs}")
     }
-    // ONE tune per box (rig_tune_manifest's contract, inlined — profile_common pulls the whole
-    // engine): pin the children to the box manifest so their .dlim image identities agree with
-    // the perf rig's. Without this every child auto-mints its own sidecar tune, computes a
-    // FOREIGN image identity, and its save GC-purges the rig's images as dead siblings
-    // (observed 2026-07-30: fam-gemma4 freed 34 GB of bench flavors). A caller-set
-    // DAS_TUNE_MANIFEST inherits; a box without a minted manifest keeps sidecar behavior. The
-    // --no-tune arm pins nothing: an explicit manifest disables the policy rail it runs on.
-    let manifest = children_manifest()
-    if (empty(g_env_core.tune_manifest) && !cfg.no_tune && !empty(manifest)) {
-        envs = (win ? "{envs}set \"DAS_TUNE_MANIFEST={manifest}\"&& "
-            : "DAS_TUNE_MANIFEST='{manifest}' {envs}")
+    for (e in tune) {
+        envs = env_ahead(envs, e.name, e.value, win)
     }
-    return forced_env(envs, forced_tune_file(cfg), win)
+    return envs
 }
 
-//! `envs` with the tune file `forced` named ahead of a child (`DAS_TUNE_FORCE`), in cmd.exe's form under `win`; `envs`
-//! where no file is forced. Non-private: test_run_suites.das pins both forms
-def forced_env(envs, forced : string; win : bool) : string {
-    return envs if (empty(forced))
-    return win ? "{envs}set \"DAS_TUNE_FORCE={forced}\"&& " : "DAS_TUNE_FORCE='{forced}' {envs}"
-}
-
-//! The tune file a run's children are forced onto (`DAS_TUNE_FORCE`), "" for none: the manifest in effect - the caller's
-//! `DAS_TUNE_MANIFEST`, else the box's - so its kernels stamp whatever the file's age against the binary; a test run reads
-//! the box's winners, and a rebuild does not drop every kernel to its fallback. None under `--no-tune`, where the file
-//! is absent, or where the caller forced a file already
-def forced_tune_file(cfg : RunArgs) : string
-    => forced_tune_file_of(cfg.no_tune, g_env_tune.tune_force, g_env_core.tune_manifest, box_tune_manifest(g_env_prof.box))
-
-//! `forced_tune_file` on what the run read: `caller_forced` a file the caller forced, `manifest` the caller's
-//! `DAS_TUNE_MANIFEST`, `box_manifest` the box's own. Non-private: test_run_suites.das pins each answer
-def forced_tune_file_of(no_tune : bool; caller_forced, manifest, box_manifest : string) : string {
-    return "" if (no_tune || !empty(caller_forced))
-    let file = box_manifest_pick(manifest, box_manifest, stat(box_manifest).is_valid)
-    return stat(file).is_valid ? file : ""
-}
+// Non-private: test_run_suites.das pins the K/V start a `--poison-kv` run hands its children
+def child_envs(cfg : RunArgs; win : bool; media : bool = false; scratch : string = "";
+               census : string = "") : string
+    => child_envs_of(cfg, win, tune_vars(cfg), media, scratch, census)
 
 //! stdout of a git command, "" when git is absent or the command fails
 def private git_lines(args : string) : array<string> {
@@ -1738,13 +1751,14 @@ def private stop_run(cfg : RunArgs; tag, kind, why : string; at : int; var tally
 //! here, on the run's own binary, where a file takes either (`child_verb_cmd`, `child_compile_cache`) and none current
 //! stands; false, said, where a build failed
 def private child_exe_ready(cfg : RunArgs; files : array<string>) : bool {
-    return true if (!empty(cfg.das))   //! a dry run on another binary runs no test of this tree: nothing to build
     var spawns = false
     for (name in keys(reached_names(files))) {   //! a test spawns the child through a fixture's cell as well as by its own call
         let text = fread("{TESTS_DIR}/{name}")
         spawns ||= name != "_child_run.das" && (find(text, "child_verb_cmd(") >= 0 || find(text, "child_compile_cache(") >= 0)
     }
     return true if (!spawns)
+    to_log(LOG_INFO, "CHILD key {child_exe_key()}\n")
+    return true if (!empty(cfg.das))   //! a dry run on another binary runs no test of this tree: nothing to build
     let t0 = ref_time_ticks()
     let why = child_exe_ensure()
     let secs = double(get_time_nsec(t0)) / 1000000000.0lf
@@ -1815,10 +1829,11 @@ def media_run(files : array<string>) : bool {
 //! alone, `census` the run's census folder ("" none) and whether the
 //! run covers every area whole
 def private run_files(cfg : RunArgs; files : array<string>; image_arms : string; area_run : bool; envs : string;
-                      media : bool; census : tuple<census : string; whole : bool>) : RunTally {
+                      media : bool; census : tuple<census : string; whole : bool>;
+                      tune : array<tuple<name : string; value : string>>) : RunTally {
     let tmp = temp_dir()
     let win = get_platform_name() == "windows"
-    let stamp_envs = child_envs(cfg, win, media)   //! the scratch folder is where a child writes, no part of what it proves
+    let stamp_envs = child_envs_of(cfg, win, tune, media)   //! the scratch folder is where a child writes, no part of what it proves
     if (!empty(g_env_test.scratch_dir)) {
         mkdir_rec(g_env_test.scratch_dir)
         to_log(LOG_WARNING, "SCRATCH {g_env_test.scratch_dir} (DASLLAMA_SCRATCH_DIR): the children write their temp files there\n")
@@ -2083,6 +2098,10 @@ def private box_runtime_ready(cfg : RunArgs; envs : string) {
 //! (`census_whole`)
 def private run_plan(cfg : RunArgs; files : array<string>; image_arms : string; area_run : bool;
                      whole : bool) : RunTally {
+    var inscope tune <- tune_vars(cfg)
+    for (e in tune) {   //! the test child's build reads the runner's own environment
+        set_env_variable(e.name, e.value)
+    }
     return <- run_wasm(cfg, files) if (cfg.suite == "wasm" && !area_run)
     if (!child_exe_ready(cfg, files)) {
         var tally : RunTally
@@ -2094,10 +2113,10 @@ def private run_plan(cfg : RunArgs; files : array<string>; image_arms : string; 
     let media = media_run(tested)   //! the verdict child loads no model: it makes no run less a media run
     let census = has_value(files, CENSUS_VERDICT) ? census_folder() : ""
     let win = get_platform_name() == "windows"
-    let envs = child_envs(cfg, win, media, g_env_test.scratch_dir, census)
+    let envs = child_envs_of(cfg, win, tune, media, g_env_test.scratch_dir, census)
     box_runtime_ready(cfg, envs)
     let seat = (census = census, whole = whole)
-    var tally <- run_files(cfg, files, image_arms, area_run, envs, media, seat)
+    var tally <- run_files(cfg, files, image_arms, area_run, envs, media, seat, tune)
     if (!empty(census)) {
         var why : string
         rmdir_rec(census, why)
@@ -2332,10 +2351,6 @@ def main() : int {
     var plan <- run_scope(cfg)
     if (plan.status >= 0) {
         return plan.status
-    }
-    let forced = forced_tune_file(cfg)
-    if (!empty(forced)) {   //! the test child's build reads the runner's own environment
-        set_env_variable("DAS_TUNE_FORCE", forced)
     }
     let areas <- plan.areas
     let core = plan.core
