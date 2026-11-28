@@ -98,3 +98,7 @@ not make one.
 
 Both arms of the `ThenElse` twin carry `DAS_NO_MERGE`: without it clang merges the two calls
 into one indirect jump, and the node loses the conditional branch it was made to keep.
+
+Under the debugger the `if` keeps its own node (`SimNodeDebug_IfThenElse`, `SimNodeDebug_IfThen`),
+which reports a step at the condition and at the arm it takes. A twin reports neither, so the
+fusion point makes none for a context with `debugger` set.

@@ -148,9 +148,11 @@ namespace das {
 
     IMPLEMENT_OP1_WORKHORSE_FUSION_POINT(IfNotZeroThen);
 
+    // src/simulate/ARCHITECTURE.md#if-over-compare
     struct FusionPoint_IfCmp final : FusionPoint {
         virtual SimNode * fuse ( const SimNodeInfoLookup & info, SimNode * node,
                                  Context * context ) const override {
+            if ( context->debugger ) return node;
             auto ifNode = static_cast<SimNode_IfTheElseAny *>(node);
             for ( auto op : { "Equ", "NotEqu", "LessEqu", "GtEqu", "Gt", "Less" } ) {
                 if ( isFusedOp2(info, ifNode->cond, op) ) {
