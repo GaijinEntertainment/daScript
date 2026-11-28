@@ -58,7 +58,7 @@ measured on. This file's part of the pinned set, one entry a bullet, each with w
   `CLAUDE.md`'s entry states), the board fetch (`board_provenance`) holding every file the board sweeps read and no
   off-board row and no on-box parity oracle (`tts_oracle*`), and the companion contract: a companion two rows pin
   (each row's cell consumes it) carries one provenance - url, bytes, sha256 - on both, and the provenance view holds
-  it once; every sha-pinned provenance url at a revision, never `resolve/main` (`UNPINNED_MAIN` the entries owed one);
+  it once; every sha-pinned provenance url at a revision, never `resolve/main`;
   and every provenance entry past `MODEL_TIER_CEILING_BYTES` a category's (`test_large_rows_have_a_category`).
 - `uncategorized_persistent_heap_stack_524288.das`'s `test_float_a_gate` cell must hold the MSL emitter's refusal of a
   float A operand (the activation input) to `tmm2d_q8u_f32` in a kernel that lacks `[metal_kernel(float_a_ok=true)]`,

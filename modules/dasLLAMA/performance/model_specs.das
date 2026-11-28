@@ -163,7 +163,7 @@ struct ModelSpec {
     companions : array<ProvEntry>   // artifacts fetched/verified with this model (mmproj, image fixture)
     parity : ParityEvidence
     // serving-catalog membership (dasllama-server's /catalog view): a non-empty serve_name
-    // puts the row on the page. Serving rows carry COMMIT-PINNED urls - resolve/main floats.
+    // puts the row on the page.
     serve_name : string             // stable kebab id ("" = not in the serving catalog)
     serve_display : string
     serve_note : string             // one-line what-it-is on the card
@@ -544,7 +544,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // the batched row's --npl-mtp arm and the scheduler's self-speculative cells drive; the
         // local name carries the MTP tag the release's file name does not
         ModelSpec(file = "Qwen3.5-0.8B-MTP-Q8_0.gguf",
-            url = "{HF}/unsloth/Qwen3.5-0.8B-MTP-GGUF/resolve/main/Qwen3.5-0.8B-Q8_0.gguf",
+            url = "{HF}/unsloth/Qwen3.5-0.8B-MTP-GGUF/resolve/cf8a611f6ed2c2060046219a19f12cd3d5ecd67c/Qwen3.5-0.8B-Q8_0.gguf",
             bytes = 833592736l, sha256 = "c54f8b67069c70085b98440de696b44da8250250ac69a961b41133def876e262"),
         // the NVFP4 hybrid, the nv4 rail's carrier (tests/test_kquant.das): ModelOpt's two-level FP4 (nv4 planes, each with its `.scale` tensor) on the FFN, attention and deltanet projections, Q4_K / Q5_K / BF16 beside them
         ModelSpec(file = "Qwen3.5-0.8B-NVFP4-MTP.gguf",
@@ -615,19 +615,19 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // the 4B hybrid with its in-file MTP block - the mid-size dense carrier of the MTP series'
         // Metal rail parity (tests/_metal_mtp_cells.das); the local name carries the MTP tag
         ModelSpec(file = "Qwen3.5-4B-MTP-Q8_0.gguf",
-            url = "{HF}/unsloth/Qwen3.5-4B-MTP-GGUF/resolve/main/Qwen3.5-4B-Q8_0.gguf",
+            url = "{HF}/unsloth/Qwen3.5-4B-MTP-GGUF/resolve/86835bf9949e4d14d6860f7910b1340ad4f271a9/Qwen3.5-4B-Q8_0.gguf",
             bytes = 4610580800l, sha256 = "4f40ff26e3b6e23888e520e9c33d9a309d919b940cd1375b421710c6cb6cc8dd"),
         // the 9B hybrid with its in-file MTP block, the whole-model driver's parity carrier
         // (head 256 gated attention, partial rope, Q5_K/Q6_K deltanet planes) and the vulkan
         // serving census's head-256 row; the local name carries the MTP tag the release's does not
         ModelSpec(file = "Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf",
-            url = "{HF}/unsloth/Qwen3.5-9B-MTP-GGUF/resolve/main/Qwen3.5-9B-UD-Q5_K_XL.gguf",
+            url = "{HF}/unsloth/Qwen3.5-9B-MTP-GGUF/resolve/9716a636ee4bddc3fed678220b7a33dd2a4160ae/Qwen3.5-9B-UD-Q5_K_XL.gguf",
             bytes = 6874345824l, sha256 = "bb0aa4bf2acf4b6d97eca051a7af91200729e9e97449ce98785af9e70f6d703c"),
         // the tensor-arm twin carriers (tests/_metal_matrix_cells.das, arm `tensor`): small
         // on purpose - q8 drives the mulmm/attn twins, the K-quant one the kq mulmm twins. The
         // arm FAILS (not skips) when they are absent, so every box gets them provisioned here
         ModelSpec(file = "Llama-3.2-1B-Instruct-Q5_K_M.gguf",
-            url = "{HF}/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q5_K_M.gguf",
+            url = "{HF}/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/067b946cf014b7c697f3654f621d577a3e3afd1c/Llama-3.2-1B-Instruct-Q5_K_M.gguf",
             bytes = 911503488l, sha256 = "4f22f95fb1679ef8e2fd6f1659d23f06cd1dbedb79ff291db7413a7ae509e2a9",
             parity <- ev_llama_count([kq_native = true])),
         ModelSpec(file = "tinyllama-1.1b-v0.3-f16.gguf",   // parity-only carrier (F16 -> fp32 load)
@@ -640,7 +640,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             url = "{HF}/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/52e7645ba7c309695bec7ac98f4f005b139cf465/tinyllama-1.1b-chat-v1.0.Q8_0.gguf",
             bytes = 1170781568l, sha256 = "a4c9bb1dbaa372f6381a035fa5c02ef087aaa1ff1f843a56a22328114f03fc59"),
         ModelSpec(file = "Llama-3.2-1B-Instruct-Q8_0.gguf", display = "Llama-3.2-1B",
-            url = "{HF}/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q8_0.gguf",
+            url = "{HF}/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/067b946cf014b7c697f3654f621d577a3e3afd1c/Llama-3.2-1B-Instruct-Q8_0.gguf",
             bytes = 1321083008l, sha256 = "432f310a77f4650a88d0fd59ecdd7cebed8d684bafea53cbff0473542964f0c3",
             parity <- ev_llama32_1b()),
         ModelSpec(file = "Qwen2.5-1.5B-Instruct-Q8_0.gguf", display = "Qwen2.5-1.5B",
@@ -652,13 +652,13 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             bytes = 1820414944l, sha256 = "0c6e8955788b1253f418c354a4bdc4cf507b8cfe49c48bb10c7c58ae713cfa2a",
             parity <- ev_smollm2()),
         ModelSpec(file = "Phi-3.5-mini-instruct-Q4_K_M.gguf",   // the coverage census's phi3 carrier
-            url = "{HF}/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf",
+            url = "{HF}/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/6d70da17e749a471ccb62ade694486011a75cda3/Phi-3.5-mini-instruct-Q4_K_M.gguf",
             bytes = 2393232672l, sha256 = "e4165e3a71af97f1b4820da61079826d8752a2088e313af0c7d346796c38eff5"),
         ModelSpec(file = "Phi-3.5-mini-instruct-Q8_0.gguf",   // the phi3 carrier on the q8 decode chain, beside the K-quant one
-            url = "{HF}/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q8_0.gguf",
+            url = "{HF}/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/6d70da17e749a471ccb62ade694486011a75cda3/Phi-3.5-mini-instruct-Q8_0.gguf",
             bytes = 4061222688l, sha256 = "76fbf02f6fe92af57dbd818409bc8a0240026f1f3609bb405c3be94c973fb823"),
         ModelSpec(file = "microsoft_Phi-4-mini-instruct-Q8_0.gguf",   // the phi3 family at head 128 (24 heads over 3072, the partial rope): the flash tiles' second Phi width
-            url = "{HF}/bartowski/microsoft_Phi-4-mini-instruct-GGUF/resolve/main/microsoft_Phi-4-mini-instruct-Q8_0.gguf",
+            url = "{HF}/bartowski/microsoft_Phi-4-mini-instruct-GGUF/resolve/7ff82c2aaa4dde30121698a973765f39be5288c0/microsoft_Phi-4-mini-instruct-Q8_0.gguf",
             bytes = 4084611456l, sha256 = "a12f242c4ee379b9da91673e5d78b30bfacfe4fd86a0b2259d2ecad5d93cb6c7"),
         ModelSpec(file = "gemma-2-2b-it-Q8_0.gguf", display = "gemma-2-2B",
             url = "{HF}/bartowski/gemma-2-2b-it-GGUF/resolve/855f67caed130e1befc571b52bd181be2e858883/gemma-2-2b-it-Q8_0.gguf",
@@ -709,7 +709,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // load it beside this decoder (the tower itself is size-invariant; 4B is the tested pair)
             companions <- [
                 ProvEntry(name = "mmproj-gemma-3-4b-it-F16.gguf", root = "llm",
-                    url = "{HF}/ggml-org/gemma-3-4b-it-GGUF/resolve/main/mmproj-model-f16.gguf",
+                    url = "{HF}/ggml-org/gemma-3-4b-it-GGUF/resolve/d0976223747697cb51e056d85c532013931fe52e/mmproj-model-f16.gguf",
                     bytes = 851251104l, sha256 = "8c0fb064b019a6972856aaae2c7e4792858af3ca4561be2dbf649123ba6c40cb")],
             parity <- ev_gemma3_4b()),
         ModelSpec(file = "Qwen3-4B-Instruct-2507-Q8_0.gguf", display = "Qwen3-4B",
@@ -753,7 +753,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "Qwen3.5-4B-Q6_K.gguf",
             parity <- ev_qwen_count([kq_native = true, dn_chunked = true, require_dn_kq = true])),
         ModelSpec(file = "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",
-            url = "{HF}/bartowski/Mistral-7B-Instruct-v0.3-GGUF/resolve/main/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",
+            url = "{HF}/bartowski/Mistral-7B-Instruct-v0.3-GGUF/resolve/61fd4167fff3ab01ee1cfe0da183fa27a944db48/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",
             bytes = 4372812000l, sha256 = "1270d22c0fbb3d092fb725d4d96c457b7b687a5f5a715abe1e818da303e562b6"),
         ModelSpec(file = "Mistral-7B-Instruct-v0.3-Q8_0.gguf", display = "Mistral-7B",
             parity <- ev_mistral7b()),
@@ -761,7 +761,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // Q4_K_M row consumes the same tower by name via serve_vision); asr_catalog keeps
         // only the pairing
         ModelSpec(file = "gemma-4-E2B-it-Q8_0.gguf", display = "gemma-4-E2B", official = false,
-            url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q8_0.gguf",
+            url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/6938c58e698502037401a5f19f6905f2fb2f7dee/gemma-4-E2B-it-Q8_0.gguf",
             bytes = 4967497152l, sha256 = "996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a",
             companions <- [
                 ProvEntry(name = "mmproj-gemma-4-E2B-it-bf16.gguf", root = "llm",
@@ -785,13 +785,13 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // MatFormer sub-model); dense, so the full 40 hold
             parity <- ev_gemma4_dense()),
         // the resident gates' large-tier carriers (tests/test_gpu_resident_gemma4_dense / _moe): provenance rows,
-        // not board rows; their resolve/main urls float, the bytes and sha256 refuse a moved file (UNPINNED_MAIN)
+        // not board rows
         ModelSpec(file = "gemma-4-12B-it-Q8_0.gguf",
-            url = "{HF}/ggml-org/gemma-4-12B-it-GGUF/resolve/main/gemma-4-12B-it-Q8_0.gguf",
+            url = "{HF}/ggml-org/gemma-4-12B-it-GGUF/resolve/202658970530b31541cd0b645a9c198bed2a615e/gemma-4-12B-it-Q8_0.gguf",
             bytes = 12669646976l, sha256 = "abfc3044b93795f6a446fc1a04468ac2d5fc5e9c92e237f09a5b3384c5a433e4",
             parity <- ev_gemma_count()),
         ModelSpec(file = "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf",
-            url = "{HF}/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf",
+            url = "{HF}/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/c099eb48e663fd284577b04978a94ffccb261841/gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf",
             bytes = 11416548832l, sha256 = "3b7aec683e176e1d957d007e0fb590611d82aec4db358d99b7f9714b6bc7bfc2",
             parity <- ev_gemma_count([kq_native = true])),
         // the native-MXFP4 gemma-4 expert carriers (the fused gate_up and the down stacks MXFP4, every other plane the source's):
@@ -802,7 +802,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "gemma-4-26B-A4B-it-MXFP4_MOE-q4km-local.gguf",
             recipe = "llama-quantize --allow-requantize gemma-4-26B-A4B-it-Q4_K_M.gguf gemma-4-26B-A4B-it-MXFP4_MOE-q4km-local.gguf MXFP4_MOE"),
         ModelSpec(file = "gemma-4-31B-it-Q4_K_M.gguf",
-            url = "{HF}/lmstudio-community/gemma-4-31B-it-GGUF/resolve/main/gemma-4-31B-it-Q4_K_M.gguf",
+            url = "{HF}/lmstudio-community/gemma-4-31B-it-GGUF/resolve/67a72ce462184ca84e9531dfe657ee73b4ecc89d/gemma-4-31B-it-Q4_K_M.gguf",
             bytes = 18687063904l, sha256 = "8f3479643461601703f717931e399cc440dbd5ada598c025d6296c8165d94be9"),
         ModelSpec(file = "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf",   // parity-only carrier
             url = "{HF}/RichardErkhov/Qwen_-_Qwen1.5-MoE-A2.7B-Chat-gguf/resolve/947580e7b3904cd4081810d0efec4520a75609c7/Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf",
@@ -865,11 +865,11 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
                     url = "{HF}/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/1cd86afb9a95c410a6038ab3b40d8b578c892266/mmproj-Qwen3VL-4B-Instruct-F16.gguf",
                     bytes = 836180256l, sha256 = "256f3a43bd4205ffef48d6b92715e1e70b5b0e9aef06522584967513a9985331")]),
         ModelSpec(file = "Qwen3VL-8B-Instruct-Q8_0.gguf", display = "Qwen3-VL-8B",
-            url = "{HF}/Qwen/Qwen3-VL-8B-Instruct-GGUF/resolve/main/Qwen3VL-8B-Instruct-Q8_0.gguf",
+            url = "{HF}/Qwen/Qwen3-VL-8B-Instruct-GGUF/resolve/f982a07559d4a2f6c8744d840bf6fccab30eea96/Qwen3VL-8B-Instruct-Q8_0.gguf",
             bytes = 8709519456l, sha256 = "0d264b3941185d00a74f75c4245521dae088ff1efc90ab8d1754e83f5844adb0",
             companions <- [
                 ProvEntry(name = "mmproj-Qwen3VL-8B-Instruct-F16.gguf", root = "llm",
-                    url = "{HF}/Qwen/Qwen3-VL-8B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-8B-Instruct-F16.gguf",
+                    url = "{HF}/Qwen/Qwen3-VL-8B-Instruct-GGUF/resolve/f982a07559d4a2f6c8744d840bf6fccab30eea96/mmproj-Qwen3VL-8B-Instruct-F16.gguf",
                     bytes = 1159029824l, sha256 = "ca524100ebf825c9a870db1c580d03879e0da0ab2541697e2458e64891cf9d38")]),
         ModelSpec(file = "Qwen2.5-Omni-3B-Q8_0.gguf", display = "Qwen2.5-Omni-3B", official = true,
             url = "{HF}/ggml-org/Qwen2.5-Omni-3B-GGUF/resolve/75f1b73b657a50f5092502799457ccb4a4a1f9df/Qwen2.5-Omni-3B-Q8_0.gguf",
@@ -918,15 +918,15 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // parity-less provenance carrier: the gemma3 vision 12B pair (the same SigLIP tower at
         // projection 3840; test_vision_chat's gemma3-12b category leg is its coverage)
         ModelSpec(file = "gemma-3-12b-it-Q4_K_M.gguf",
-            url = "{HF}/ggml-org/gemma-3-12b-it-GGUF/resolve/main/gemma-3-12b-it-Q4_K_M.gguf",
+            url = "{HF}/ggml-org/gemma-3-12b-it-GGUF/resolve/ec0cbabd8dbff316f659876a50202295c3c4a314/gemma-3-12b-it-Q4_K_M.gguf",
             bytes = 7300574976l, sha256 = "7bb69bff3f48a7b642355d64a90e481182a7794707b3133890646b1efa778ff5",
             companions <- [
                 ProvEntry(name = "mmproj-gemma-3-12b-it-F16.gguf", root = "llm",
-                    url = "{HF}/ggml-org/gemma-3-12b-it-GGUF/resolve/main/mmproj-model-f16.gguf",
+                    url = "{HF}/ggml-org/gemma-3-12b-it-GGUF/resolve/ec0cbabd8dbff316f659876a50202295c3c4a314/mmproj-model-f16.gguf",
                     bytes = 854200224l, sha256 = "30c02d056410848227001830866e0a269fcc28aaf8ca971bded494003de9f5a5")],
             parity <- ev_gemma_count([kq_native = true])),
         ModelSpec(file = "gemma-4-12B-it-Q4_K_M.gguf", official = false,
-            url = "{HF}/lmstudio-community/gemma-4-12B-it-GGUF/resolve/main/gemma-4-12B-it-Q4_K_M.gguf",
+            url = "{HF}/lmstudio-community/gemma-4-12B-it-GGUF/resolve/40b870babe39398ce917bbf4b4ff9b5a1f12710e/gemma-4-12B-it-Q4_K_M.gguf",
             bytes = 7381382944l, sha256 = "95d83ba36642b1f385fb906b5962a71763361be3bac930a709945f72d97473f8",
             // this file's own oracle (2026-08-18) continues the dense fixture byte-identically
             parity <- ev_gemma4_dense(),
@@ -936,7 +936,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
                     bytes = 175115616l, sha256 = "9b1edfa05b634728ca4bfd60b4e6b278e95166c078fa54ae4fa83e680112fd1d")]),
         ModelSpec(file = "gemma-4-E4B-it-Q8_0.gguf", display = "gemma-4-E4B", official = true,
             mlx_repo = "mlx-community/gemma-4-e4b-it-8bit", mlx_fmt = "8bit",
-            url = "{HF}/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q8_0.gguf",
+            url = "{HF}/ggml-org/gemma-4-E4B-it-GGUF/resolve/a69f018d7678a2b9f5e705f8903d6fb29b9b25dc/gemma-4-E4B-it-Q8_0.gguf",
             bytes = 8031242688l, sha256 = "34be82b17b4942d389b9b527170c4b058027abdd32531fda063d3d97dd8ce80a",
             companions <- [
                 ProvEntry(name = "mmproj-gemma-4-E4B-it-BF16.gguf", root = "llm",
@@ -1046,7 +1046,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             "UD-Q3_K_XL", 8, false, 3184544960l,
             "290c71c0d78c0cc683576dbc27fc5670b20913f32360647a47e9554b72180355"),
         ModelSpec(file = "Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf", official = false,
-            url = "{HF}/unsloth/Mistral-Small-3.1-24B-Instruct-2503-GGUF/resolve/main/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf",
+            url = "{HF}/unsloth/Mistral-Small-3.1-24B-Instruct-2503-GGUF/resolve/d63ca9416f5db4f54a78145fb9a025317a57289f/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf",
             bytes = 14333910592l, sha256 = "6d670773c3908584349d41a5048d1472226b593c881fd394e8ac196c802e81e2",
             parity <- ev_mistral_small()),
         ModelSpec(file = "gemma-4-26B-A4B-it-Q8_0.gguf", display = "gemma-4-26B-A4B",
@@ -1055,7 +1055,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             parity <- ev_gemma4_26b()),
         ModelSpec(file = "gemma-4-26B-A4B-it-Q4_K_M.gguf", display = "gemma-4-26B-A4B-q4k", quant_label = "q4_k_m", official = true,
             mlx_repo = "mlx-community/gemma-4-26b-a4b-it-4bit", mlx_fmt = "4bit",
-            url = "{HF}/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
+            url = "{HF}/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/c099eb48e663fd284577b04978a94ffccb261841/gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
             bytes = 16947541728l, sha256 = "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f",
             // the assistant drafter rides as a companion: the mtp suite and the ruler attach it beside this target; its Q4_0
             // twin is the drafter file's type-decline fixture (the drafter serves a Q8_0 sidecar alone)
@@ -1084,13 +1084,13 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "gemma-4-26B_q4_0-it.gguf", display = "gemma-4-26B-A4B-q40", quant_label = "q4_0",
             parity <- ev_gemma_count([kq_native = true])),
         ModelSpec(file = "Qwen3.6-27B-MTP-Q4_K_M.gguf", official = false,
-            url = "{HF}/unsloth/Qwen3.6-27B-MTP-GGUF/resolve/main/Qwen3.6-27B-Q4_K_M.gguf",
+            url = "{HF}/unsloth/Qwen3.6-27B-MTP-GGUF/resolve/5cb35eb3dcbf52dbce5f87dbc64df6aaffadcace/Qwen3.6-27B-Q4_K_M.gguf",
             bytes = 17106773120l, sha256 = "a7cbd3ecc0e3f9b333edee61ae66bc87ed713c5d49587a8355814722ed329e0f",
             // plain evidence only (verified per-file 40/40, 2026-08-18): the qwen35-dense arm
             // coverage (chunked deltanet) lives on the 0.8B/4B/27B carriers
             parity <- ev_qwen_count()),
         ModelSpec(file = "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf", display = "Qwen3-30B-A3B", quant_label = "q4_k_m", official = false,
-            url = "{HF}/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/resolve/main/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf",
+            url = "{HF}/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/resolve/eea7b2be5805a5f151f8847ede8e5f9a9284bf77/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf",
             bytes = 18556686752l, sha256 = "6c997b8af17debdfb01d890214400ccbab00db6acc0ba8da5de1cc906c4774d0",
             // the MoE arm of the native-kq gate: the grouped prefill gathers per-expert token
             // batches off the K-form batch image (the seam the dense arms never touch)
@@ -1117,13 +1117,13 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
                     url = "{HF}/ggml-org/Qwen3.8-27B-GGUF/resolve/0669b98607d47046c7c2b3f801011d54a08cfccf/mtp-Qwen3.8-27B-Q8_0.gguf",
                     bytes = 3164006688l, sha256 = "cbf60a0c48b431bb61f1d49b8948dc88ac29c398d6dbdbbb2e6e89ef77eacc9a"),
                 ProvEntry(name = "drafters/Qwen3.8-27B-DFlash2-GGUF/Qwen3.8-27B-DFlash2-Q8_0.gguf", root = "llm",
-                    url = "{HF}/incoai/Qwen3.8-27B-DFlash2-GGUF/resolve/main/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+                    url = "{HF}/incoai/Qwen3.8-27B-DFlash2-GGUF/resolve/144eb06583b4fb0b6e54bc814b16a206a240f4d2/Qwen3.8-27B-DFlash2-Q8_0.gguf",
                     bytes = 2056414816l, sha256 = "651a1b2930c9825080480f79cf38057e681c9b175d580a357c14f67cf77ccf49"),
                 ProvEntry(name = "drafters/Qwen3.8-27B-DFlash2-GGUF/Qwen3.8-27B-DFlash2-Q4_K_M.gguf", root = "llm",
-                    url = "{HF}/incoai/Qwen3.8-27B-DFlash2-GGUF/resolve/main/Qwen3.8-27B-DFlash2-Q4_K_M.gguf",
+                    url = "{HF}/incoai/Qwen3.8-27B-DFlash2-GGUF/resolve/144eb06583b4fb0b6e54bc814b16a206a240f4d2/Qwen3.8-27B-DFlash2-Q4_K_M.gguf",
                     bytes = 1143006816l, sha256 = "d169ad335929adc0d77e10e2523f968f3e75f547637ad739b0a137ccde111b5f"),
                 ProvEntry(name = "drafters/Qwen3.8-27B-DFlash2-NVFP4-GGUF/Qwen3.8-27B-DFlash2-NVFP4.gguf", root = "llm",
-                    url = "{HF}/costanzopadovano/Qwen3.8-27B-DFlash2-NVFP4-GGUF/resolve/main/Qwen3.8-27B-DFlash2-NVFP4.gguf",
+                    url = "{HF}/costanzopadovano/Qwen3.8-27B-DFlash2-NVFP4-GGUF/resolve/7a2989df9e858ec3d7839a3ffab8dc5e55c3d8ef/Qwen3.8-27B-DFlash2-NVFP4.gguf",
                     bytes = 1094346016l, sha256 = "9bd8926d7d5701cee1f673dbab9e6359a739cbbfc348cb78966e8a01df8e9863")],
             // the qwen35 hybrid dense at scale, native K-quant planes
             parity <- ev_qwen_count([dn_chunked = true])),
@@ -1177,7 +1177,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // the split NextN head (`shared`: its own Q8_0 routed experts inside) rides as a companion: the hc cells pin it as the trunk's head
             companions <- [
                 ProvEntry(name = "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf", root = "llm",
-                    url = "{HF}/unsloth/Qwen3.8-Flash-Next-GGUF/resolve/main/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf",
+                    url = "{HF}/unsloth/Qwen3.8-Flash-Next-GGUF/resolve/f5d175de2cf7f720d45d6064019a81fcf056e986/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf",
                     bytes = 2786568256l, sha256 = "5ff54097406a905cf3a724c709124ceb0e3e10235ee862298969e91c96fa96e6")],
             parity <- ev_qwen_count([dn_chunked = true, moe_reference = true])),
         // the UD file's single-format twin, 4.1 GB a token against 5.7 - the bandwidth-bound decode floor; the pack cell opens it beside the split NextN head
@@ -1186,7 +1186,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             serve_drafter = "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf",
             companions <- [
                 ProvEntry(name = "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf", root = "llm",
-                    url = "{HF}/unsloth/Qwen3.8-Flash-Next-GGUF/resolve/main/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf",
+                    url = "{HF}/unsloth/Qwen3.8-Flash-Next-GGUF/resolve/f5d175de2cf7f720d45d6064019a81fcf056e986/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf",
                     bytes = 2786568256l, sha256 = "5ff54097406a905cf3a724c709124ceb0e3e10235ee862298969e91c96fa96e6")],
             recipe = "llama-quantize --pure --tensor-type 'hc_(attn|ffn)_(down|up)=q8_0' --tensor-type 'output_hc_(down|up)=q8_0' --tensor-type 'ple_(key|value)=q8_0' --tensor-type 'indexer\\.(k|q)_proj=bf16' --tensor-type 'ssm_(alpha|beta)=f32' Qwen3.8-Flash-Next-GGUF/BF16/Qwen3.8-Flash-Next-BF16-00001-of-00008.gguf Qwen3.8-Flash-Next-GGUF/IQ4_XS-pure/Qwen3.8-Flash-Next-IQ4_XS-pure.gguf IQ4_XS",
             bytes = 97515364448l, sha256 = "266607cefd0e10717ae4132c1ba069f39b82458b95ec476d8b2999d8af4e7086",
@@ -1196,11 +1196,11 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // companion, and the `-hcmixer` twin the cells load - the head mixer copied off the shard's own output_hc_* -
         // is minted off it by the recipe. No board row: random weights say nothing about text
         ModelSpec(file = "micro-qwen4exp/micro-qwen4exp-realqsa.gguf",
-            url = "{HF}/Lynxpda/micro-qwen4exp/resolve/main/micro-qwen4exp-realqsa.gguf",
+            url = "{HF}/Lynxpda/micro-qwen4exp/resolve/c24f66cdfe20713c3a0fa6c98ba89e8fb13a1be4/micro-qwen4exp-realqsa.gguf",
             bytes = 416452160l, sha256 = "b5ea5c6df7b079095bd1d375d477f476a1913df9c87412ed7e9800a8cc3909d7",
             companions <- [
                 ProvEntry(name = "micro-qwen4exp/micro-qwen4exp-realqsa-mtp.gguf", root = "llm",
-                    url = "{HF}/Lynxpda/micro-qwen4exp/resolve/main/micro-qwen4exp-realqsa-mtp.gguf",
+                    url = "{HF}/Lynxpda/micro-qwen4exp/resolve/c24f66cdfe20713c3a0fa6c98ba89e8fb13a1be4/micro-qwen4exp-realqsa-mtp.gguf",
                     bytes = 148810048l, sha256 = "4b4373fb211fce86a6c4bd0ea02a6e46762512cd4470177f497b4e32baaed924"),
                 ProvEntry(name = "micro-qwen4exp/micro-qwen4exp-realqsa-mtp-hcmixer.gguf", root = "llm",
                     recipe = "python modules/dasLLAMA/harness/micro_qwen4exp_hcmixer.py micro-qwen4exp-realqsa-mtp.gguf micro-qwen4exp-realqsa-mtp-hcmixer.gguf",
@@ -1357,15 +1357,15 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "gemma-4-12b-it-Q6_K.gguf", display = "gemma-4-12B-q6k", quant_label = "q6_k",
             parity <- ev_gemma_count([kq_native = true])),
         ModelSpec(file = "gemma-4-E2B-it-Q4_0.gguf", display = "gemma-4-E2B-q40", quant_label = "q4_0",
-            url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_0.gguf",
+            url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/2a8538c2e2d4687953a86c422c7c623cfd022880/gemma-4-E2B-it-Q4_0.gguf",
             bytes = 2841481184l, sha256 = "8e30dff3ac4c8434c49a7036fa15564bdbb6044e42bf04550bf1a096ad7e6a52",
             parity <- ev_gemma_count([kq_native = true])),
         ModelSpec(file = "gemma-4-26B-A4B-it-Q4_0.gguf", display = "gemma-4-26B-A4B-q40-ggml", quant_label = "q4_0",
-            url = "{HF}/ggml-org/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-Q4_0.gguf",
+            url = "{HF}/ggml-org/gemma-4-26B-A4B-it-GGUF/resolve/1ca99aae748b4b01f609fa51eb23682ee5f00b85/gemma-4-26B-A4B-it-Q4_0.gguf",
             bytes = 14618145824l, sha256 = "d208665ab1cd3a69f7a9a4bc59430e8448c8093d9b06334f566ac59d6d504a03",
             parity <- ev_gemma_count([kq_native = true])),
         ModelSpec(file = "gemma-4-26B-A4B-it-UD-IQ4_XS.gguf", display = "gemma-4-26B-A4B-iq4xs", quant_label = "iq4_xs",
-            url = "{HF}/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf",
+            url = "{HF}/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/c099eb48e663fd284577b04978a94ffccb261841/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf",
             bytes = 13597177568l, sha256 = "babd1e389d386352f71600765d37390f7dc993fbfad6725caccf996ffe34aecf",
             parity <- ev_gemma_count([kq_native = true])),
         // the text-to-speech carriers: local conversions with no board row (followup_general.md
