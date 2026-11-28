@@ -104,14 +104,6 @@ def k2_quad(q : uint4; sh : uint) : uint4 {
     return uint4((q.x >> sh) & m2, (q.y >> sh) & m2, (q.z >> sh) & m2, (q.w >> sh) & m2)
 }
 
-[arch(at="../ARCHITECTURE_ENGINE_FORMATS_TQ2.md#tq1-device-row")]
-def tq1_word(w, n : uint) : uint {
-    let p3 = uint(tq1_pow3(n))
-    let e = ((w & 0x00FF00FFu) * p3) & 0x00FF00FFu
-    let o = (((w >> 8u) & 0x00FF00FFu) * p3) & 0x00FF00FFu
-    return (((e * 3u) >> 8u) & 0x00030003u) | ((((o * 3u) >> 8u) & 0x00030003u) << 8u)
-}
-
 //! the sign nibbles of two sign bytes, low nibble first
 def sgn4(sg0, sg1 : uint) : uint4 => uint4(sg0 & 15u, sg0 >> 4u, sg1 & 15u, sg1 >> 4u)
 
@@ -216,9 +208,6 @@ def iq4xs_sc(w0, w1, blk : uint) : int {
 [arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#kq-dev-scale-row")]
 def grid_sc(w1, blk : uint) : int => 1 + 2 * int((w1 >> (4u * blk)) & 15u)
 
-//! the 1-bit grid's entry `idx` off the word `w` holding it (two entries a word): its eight 2-bit codes, weight 0 lowest
-def grid1_entry(w, idx : uint) : uint => (w >> ((idx & 1u) * 16u)) & 0xFFFFu
-
 //! four 2-bit codes (`c4`, weight 0 lowest) a byte each
 def grid1_codes(c4 : uint) : uint => (c4 | (c4 << 6u) | (c4 << 12u) | (c4 << 18u)) & 0x03030303u
 
@@ -233,19 +222,6 @@ def grid1_quad(e0, n0, e1, n1 : uint) : uint4 => uint4(grid1_word(e0 & 255u, n0)
 
 //! a grid entry's eight codes a nibble each: weights 0-3 the word's low nibbles (byte k), 4-7 its high ones (byte k - 4)
 def grid1_nibbles(e : uint) : uint => grid1_codes(e & 255u) | (grid1_codes(e >> 8u) << 4u)
-
-//! a 1-bit weight: `dl` x (code - 1 + `dlt`), the delta `dlt` +-1/8
-def grid1_val(code : uint; dl, dlt : float) : float => dl * (float(int(code) - 1) + dlt)
-
-//! four consecutive 1-bit weights off four 2-bit codes (`c4`, weight 0 lowest) under one scale and delta (`grid1_val`)
-def grid1_f4(c4 : uint; dl, dlt : float) : float4 =>
-    float4(grid1_val(c4 & 3u, dl, dlt), grid1_val((c4 >> 2u) & 3u, dl, dlt), grid1_val((c4 >> 4u) & 3u, dl, dlt), grid1_val((c4 >> 6u) & 3u, dl, dlt))
-
-//! IQ1_M: the f16 d off the superblock's two scale-plane words (`iq1m_d_bits` over their four halves)
-def iq1m_d(w0, w1 : uint) : float => unpackHalf2x16(iq1m_d_bits(w0 & 0xFFFFu, w0 >> 16u, w1 & 0xFFFFu, w1 >> 16u)).x
-
-//! IQ1_M: half-block `hb`'s (0 .. 15) scale 2s + 1 off the same two words (`iq1m_half_scale` of the scale half holding it)
-def iq1m_sc(w0, w1, hb : uint) : float => float(2 * iq1m_half_scale(((hb & 8u) != 0u ? w1 : w0) >> (((hb >> 2u) & 1u) * 16u), int(hb)) + 1)
 
 //! the DOUBLED e2m1 magnitudes {0, 1, 2, 3, 4, 6, 8, 12} of four nibble codes, one per byte of `nib`, built without a table
 def mx4_mag2x4(nib : uint) : uint {

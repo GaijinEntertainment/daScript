@@ -67,16 +67,18 @@ group share; `s` subtracts one in the lanes and takes the signed path - the sign
 `sdot` direct on NEON. A block pair of the one-row form starts on an even block, so its two blocks
 read the group's one f16 d (`emit_soff`).
 
-### q10's sign bits reach the dot two ways {#q10-sign-tests}
+### q10's sign bits reach the dot three ways {#q10-sign-tests}
 
 A q10 block's sign word holds element j at bit j % 8 of byte j / 8, bit j of the little-endian
-word. `rm_b32_gen`'s q10 arm turns the words into a lane mask by one of two tests, the `spread` knob
+word. `rm_b32_gen`'s q10 arm turns the words into a lane mask by one of three tests, the `spread` knob
 of the `q10q8_rm_gemv_gen` grid (`q10_signs`):
 
 - `mask` - the words' halfwords picked into lane order and read as an `i1` vector: a mask-register
   move a vector, AVX-512 BW only, and VL at width 256.
 - `shuf` - a byte shuffle replicates each sign byte over its eight lanes and a per-lane bit test
   sets the lane: the reference's AVX2 and NEON form, in generic IR.
+- `plane` - NEON's GEMV: one bit of the span's sixteen sign bytes a plane, no shuffle
+  (`rm_q10_plane_span`, `#plane-gemv`). The four-token tile keeps `shuf`.
 
 The levels are the second knob, `lev`. `u` dots the bits as 0/1 on the unsigned side of
 `vpdpbusd` / `maddubs`, doubles the dot and subtracts the block's activation sum; `s` is the sign
@@ -84,19 +86,30 @@ flip on x64 - the activation negated where a bit is clear, dotted against ones -
 weights +-1 into `sdot` on NEON. Each is the exact integer sum `dot_q10q8_scalar` folds once a
 block under the group's d. A block pair of the one-row form shares its group's one f16 d, as q20's.
 
-### The low-bit CPU rows run the row-major kernels in place {#q20-device-layout-walk}
+### NEON's low-bit GEMV reorders the activation, not the codes {#plane-gemv}
+
+A q20 or q10 byte packs the codes of 4 or 8 consecutive weights, so the block walk spreads sixteen
+bytes over their weights' lanes before every dot. The `plane` spread of the two GEMV grids moves
+that cost to the activation, once a call: `rm_emit_xplanes` rewrites the row into the kernel's
+frame a span of sixteen code bytes at a time, plane k the activation bytes of each byte's code k,
+with the span's four quarter sums. A row then dots plane k against code k of the bytes in place -
+a shift and mask for q20, a bit test for q10 - and folds the sums once a span.
+
+### The low-bit CPU rows decode a row group into the q8 tile's plane {#q20-device-layout-walk}
 
 The CPU planes of q20 and q10 are their device planes and their disk order - interleave 1, no
 repack - so neither has a grp<mr> tile family. Their `B32Slots` rows in the generated tier
 (`gen_b32_slots`) run the per-32 walks (`b32g_batch`, `b32g_groupn`, `b32g_batch_groupn`) with a
-walk group of `LOWBIT_WALK_ROWS` disk-order rows where a grp family's interleave would be, one body
-over the member's tag. A group's GEMV is the member's stamped row-major GEMV (`rm_gemv_gen`) over its
-rows. Its four-token tile is the stamped tile (`rm_tile4_gen`) over the group's rows into a
-group-sized scratch, scattered to the token-major output, because the tile's row count is also its
-output stride. Rows past the last whole group take the scalar dot (`dot_lowbit_q8_scalar`). The rows
-set no repack and no layout, so the portable identity and interleave 1 stand: the dense and expert
-CPU sites, the one-copy rail's device arm (`rm_dev_serves`, q20's) and the `.dlim` read the same
-bytes through the same kernel.
+walk group of the stamped q8 tile's rows (`q8q8_layout_gen`) where a grp family's interleave would
+be, one body over the member's tag. A group's GEMV is the member's stamped row-major GEMV
+(`rm_gemv_gen`) over its rows. Its token blocks ride the q8 tile: `b32g_panel` expands the group's
+rows to levels in a per-dispatch-slot panel (`walk_panels`) laid out as the stamp's q8 plane - its
+k-group and weight bias (`q8q8_kgroup_gen`, `q8q8_wbias_gen`), a block's binary16 scale a row - and
+the stamped s16 tile (`q8q8_tile_s16_gen`, `q8q8_tile4_s16_gen` at a wider token step) reads it, the
+decode paid once a group for every token of the block. Rows past the last whole group take the
+scalar dot (`dot_lowbit_q8_scalar`). The rows set no repack and no layout, so the portable identity
+and interleave 1 stand: the dense and expert CPU sites, the one-copy rail's device arm
+(`rm_dev_serves`, q20's) and the `.dlim` read the same bytes.
 
 ### A CPU tier selects on the TARGET, not the host {#cpu-tier-target-select}
 

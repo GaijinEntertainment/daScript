@@ -13,7 +13,8 @@ options _dasllama_internal = true
 // runs the same two cells on Qwen3.6-35B-A3B's own NVFP4 file (the qwen35moe-35b category: no cut of it). Each file is ONE
 // block (`with_cpu_and_gpu_model`): the four-layer form feeds the format cells and the rail arms, the share's pinned pool is a
 // form of its own, and each pool cell whose witness is a cold pool's fills opens a twenty-layer form of its own; the CPU
-// form's feeds answer every cell. Skips: a file not
+// form's feeds answer every cell. Skips: a low-bit carrier's Metal form on a build without das_metal, its crowned window
+// where the box compiles no Metal-4 tensor twin, a file not
 // minted (the 35B NVFP4 not stocked - it is downloaded, not minted), DASLLAMA_PARITY_FULL unset for the large tier, no armed
 // Vulkan tier, the knob cells where the plan found no room for the pool, the expert-cache cell under
 // DASLLAMA_IMAGE=0 (it reads the lane), the NVFP4 cut's FP4-chain fault cell (the CUDA home's alone) where the card sits
@@ -33,6 +34,7 @@ require dasllama/dasllama_common   // Model
 require _cpu_gpu_model   // with_cpu_and_gpu_model, the forms, FeedRows
 require _format_census   // census_cell: the cut's every site in its own format
 require _kquant_cells   // kq_expert_sites_cell: the 1-bit carriers' K-quant native CPU form
+require _metal_format_census_cells   // format_census_*: the low-bit carriers' Metal census row
 require _kv_codec_cells   // codec_env_why: the block's f16 mirror ask
 require daslib/strings_boost   // split: a fixture's census sites
 require dasllama/dasllama   // create_session: the fault form's refused window
@@ -728,17 +730,30 @@ def test_moe_formats_Q5_1(t : T?) {
 //! a 1-bit carrier's K-quant native CPU form: its cell reads layer 3's routed gate and up stacks off their own bytes
 def private lowbit_sites_form() : ModelForm => cpu_cells_form(kq_native = KqNative.on_q40)
 
-//! the matrix's forms of a 1-bit carrier and its K-quant native CPU form (`lowbit_sites_form`)
-def private lowbit_sites_forms(forms : array<ModelForm>) : array<ModelForm> {
+//! the matrix's forms of a low-bit carrier, under `sites` its K-quant native CPU form (`lowbit_sites_form`), and where the
+//! arm filter reaches the Metal census row `cs` the blob twin and, on a das_metal build, the row's CPU form
+def private lowbit_carrier_forms(forms : array<ModelForm>; cs : CensusRow; sites : bool) : array<ModelForm> {
     var all := forms
-    all |> push(lowbit_sites_form())
+    if (sites) {
+        all |> push(lowbit_sites_form())
+    }
+    if (any_arm_on([cs.arm])) {
+        all |> push(metal_form(ctx = CENSUS_CELLS_CTX))
+        if (empty(metal_build_why())) {
+            all |> push(census_cpu_form(cs))
+        }
+    }
     return <- all
 }
 
 //! one form's rows of a low-bit member's routed carrier (member `f` on the gate and up stacks of three layers), under the member's
 //! census: the device form ran its stamps, a CPU form none; on the K-quant native CPU form (`lowbit_sites_form`) layer 3's routed
-//! gate and up stacks serve their own bytes (`kq_expert_sites_cell`)
-def private lowbit_matrix_rows(t : T?; var r : MatrixRows; var m : Model; form : ModelForm; f : KqFmt) {
+//! gate and up stacks serve their own bytes (`kq_expert_sites_cell`); on the blob twin the Metal census row `cs`, its controls
+//! on the row's CPU form
+def private lowbit_matrix_rows(t : T?; var r : MatrixRows; var m : Model; form : ModelForm; cs : CensusRow;
+                               var kept : CensusKept) {
+    return if (format_census_pass(t, m, form, cs, kept))
+    let f = cs.f
     lowbit_census_ran(t, f, form, "the {f} gate and up stacks") {
         if (!alone_pass_of(form, lowbit_sites_form())) {
             matrix_form_rows(t, r, m, form)
@@ -753,42 +768,56 @@ def private lowbit_matrix_rows(t : T?; var r : MatrixRows; var m : Model; form :
     }
 }
 
-[test(description = "TQ2_0 routed gate and up experts on layers 3, 11 and 19 (their down stacks the file's Q4_0, the 1408-wide rows off the 256 lattice; every other routed stack Q8_0) under four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows, the device form counting the tq2 stamps and a CPU form none of them; the form loads once")]
+[test(description = "TQ2_0 routed gate and up experts on layers 3, 11 and 19 (their down stacks the file's Q4_0, the 1408-wide rows off the 256 lattice; every other routed stack Q8_0) under four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows, the device form counting the tq2 stamps and a CPU form none of them; on the Metal blob twin (arm `census-moe-tq2`) the window and its decode steps hold the CPU chain's reading those stacks off their own bytes, the tq2 stacks on their routed GEMVs and, under the family's crown, their tensor twins; each form loads once")]
 def test_moe_formats_TQ2_0(t : T?) {
+    let cs = format_census_moe_lowbit("moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-TQ2_0.gguf", KqFmt.tq2, 6l)
+    var kept : CensusKept
     with_matrix(t, "TQ2_0", carrier("TQ2_0", "exps3"), MatrixCells.formats) $(var r, forms) {
-        return with_cpu_and_gpu_model(t, "llm", "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-TQ2_0.gguf", MATRIX_CTX, forms) $(var m, form) {
-            lowbit_matrix_rows(t, r, m, form, KqFmt.tq2)
+        var inscope all <- lowbit_carrier_forms(forms, cs, false)
+        return with_cpu_and_gpu_model(t, "llm", "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-TQ2_0.gguf", MATRIX_CTX, all) $(var m, form) {
+            lowbit_matrix_rows(t, r, m, form, cs, kept)
         }
     }
+    format_census_verdict(t, cs, kept)
 }
 
-[test(description = "TQ1_0 routed gate and up experts on layers 3, 11 and 19 (their down stacks the file's Q4_0, the 1408-wide rows off the 256 lattice; every other routed stack Q8_0) under four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows, the device form counting the tq1 stamps and a CPU form none of them; the form loads once")]
+[test(description = "TQ1_0 routed gate and up experts on layers 3, 11 and 19 (their down stacks the file's Q4_0, the 1408-wide rows off the 256 lattice; every other routed stack Q8_0) under four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows, the device form counting the tq1 stamps and a CPU form none of them; on the Metal blob twin (arm `census-moe-tq1`) the window and its decode steps hold the CPU chain's reading those stacks off their own bytes, the tq1 stacks on their routed GEMVs and, under the family's crown, their tensor twins; each form loads once")]
 def test_moe_formats_TQ1_0(t : T?) {
+    let cs = format_census_moe_lowbit("moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-TQ1_0.gguf", KqFmt.tq1, 6l)
+    var kept : CensusKept
     with_matrix(t, "TQ1_0", carrier("TQ1_0", "exps3"), MatrixCells.formats) $(var r, forms) {
-        return with_cpu_and_gpu_model(t, "llm", "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-TQ1_0.gguf", MATRIX_CTX, forms) $(var m, form) {
-            lowbit_matrix_rows(t, r, m, form, KqFmt.tq1)
+        var inscope all <- lowbit_carrier_forms(forms, cs, false)
+        return with_cpu_and_gpu_model(t, "llm", "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-TQ1_0.gguf", MATRIX_CTX, all) $(var m, form) {
+            lowbit_matrix_rows(t, r, m, form, cs, kept)
         }
     }
+    format_census_verdict(t, cs, kept)
 }
 
-[test(description = "IQ1_S routed gate and up experts on layers 3, 11 and 19 (their down stacks the file's IQ4_NL, the 1408-wide rows off the 256 lattice; every other routed stack Q8_0) under four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows, the device form counting the iq1s stamps and a CPU form none of them; on the K-quant native CPU form, on every box, the routed sites load native - layer 3's gate and up stacks as iq1s - and their expert 0 rows match the file rows' dot within f32 reassociation; each form loads once")]
+[test(description = "IQ1_S routed gate and up experts on layers 3, 11 and 19 (their down stacks the file's IQ4_NL, the 1408-wide rows off the 256 lattice; every other routed stack Q8_0) under four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows, the device form counting the iq1s stamps and a CPU form none of them; on the K-quant native CPU form, on every box, the routed sites load native - layer 3's gate and up stacks as iq1s - and their expert 0 rows match the file rows' dot within f32 reassociation; on the Metal blob twin (arm `census-moe-iq1s`) the window and its decode steps hold the CPU chain's reading those stacks off their own bytes, the iq1s stacks on their routed GEMVs and, under the family's crown, their tensor twins; each form loads once")]
 def test_moe_formats_IQ1_S(t : T?) {
+    let cs = format_census_moe_lowbit("moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-IQ1_S.gguf", KqFmt.iq1s, 6l)
+    var kept : CensusKept
     with_matrix(t, "IQ1_S", carrier("IQ1_S", "exps3"), MatrixCells.formats) $(var r, forms) {
-        var inscope all <- lowbit_sites_forms(forms)
+        var inscope all <- lowbit_carrier_forms(forms, cs, true)
         return with_cpu_and_gpu_model(t, "llm", "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-IQ1_S.gguf", MATRIX_CTX, all) $(var m, form) {
-            lowbit_matrix_rows(t, r, m, form, KqFmt.iq1s)
+            lowbit_matrix_rows(t, r, m, form, cs, kept)
         }
     }
+    format_census_verdict(t, cs, kept)
 }
 
-[test(description = "IQ1_M routed gate and up experts on layers 3, 11 and 19 (their down stacks the file's IQ4_NL; every other routed stack Q8_0) under four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows, the device form counting the iq1m stamps and a CPU form none of them; on the K-quant native CPU form, on every box, the routed sites load native - layer 3's gate and up stacks as iq1m - and their expert 0 rows match the file rows' dot within f32 reassociation; each form loads once")]
+[test(description = "IQ1_M routed gate and up experts on layers 3, 11 and 19 (their down stacks the file's IQ4_NL; every other routed stack Q8_0) under four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows, the device form counting the iq1m stamps and a CPU form none of them; on the K-quant native CPU form, on every box, the routed sites load native - layer 3's gate and up stacks as iq1m - and their expert 0 rows match the file rows' dot within f32 reassociation; on the Metal blob twin (arm `census-moe-iq1m`) the window and its decode steps hold the CPU chain's reading those stacks off their own bytes, the iq1m stacks on their routed GEMVs and, under the family's crown, their tensor twins; each form loads once")]
 def test_moe_formats_IQ1_M(t : T?) {
+    let cs = format_census_moe_lowbit("moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-IQ1_M.gguf", KqFmt.iq1m, 6l)
+    var kept : CensusKept
     with_matrix(t, "IQ1_M", carrier("IQ1_M", "exps3"), MatrixCells.formats) $(var r, forms) {
-        var inscope all <- lowbit_sites_forms(forms)
+        var inscope all <- lowbit_carrier_forms(forms, cs, true)
         return with_cpu_and_gpu_model(t, "llm", "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-IQ1_M.gguf", MATRIX_CTX, all) $(var m, form) {
-            lowbit_matrix_rows(t, r, m, form, KqFmt.iq1m)
+            lowbit_matrix_rows(t, r, m, form, cs, kept)
         }
     }
+    format_census_verdict(t, cs, kept)
 }
 
 [test(description = "MXFP4 routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows; the form loads once")]

@@ -40,9 +40,10 @@ let PACK_VERSION = 3
 def private metal_blob_off_ok(off : int64; fmt : KqFmt) : bool {
     if (off < 0l) return true
     if (fmt == KqFmt.q8) return off % 256l == 0l
-    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s4 || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) return off % 512l == 0l
+    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s4 || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs || kq_sb(fmt) && metal_kq_scale_row(fmt) < METAL_KQ_SCALE_ROW) return off % (2l * KQ_SB_ELEMS) == 0l   // a kept 2B d row is 4B-aligned, a kept 8B row 16B-aligned, at an even superblock
     if (fmt == KqFmt.q51) return off % 128l == 0l   // (off/32)*20 and (off/32)*4 both 16B-aligned
     if (fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032 || kq_mlx_affine(fmt)) return off % 256l == 0l   // (off/32)*16, *20 or *32, and (off/32)*2, all 16B-aligned
+    if (fmt == KqFmt.q20 || fmt == KqFmt.q10) return off % kq_group_align_elems(fmt, KQ_METAL_BIND_ALIGN) == 0l   // the quant blocks and the 2B d a group, both 16B-aligned
     return true
 }
 
@@ -211,8 +212,10 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     return true
 }
 
-//! whether a superblock format's Metal scale form differs from its engine plane: all but q40, iq4nl, nv4 and the in-place members
-def metal_kq_scale_moves(f : KqFmt) : bool => f != KqFmt.q40 && f != KqFmt.iq4nl && f != KqFmt.nv4 && !kq_dev_is_plane(f)
+//! whether a superblock format's Metal scale form differs from its engine plane: all but q40, iq4nl, nv4, the ternary pair
+//! (a bare f16 d a superblock, with no strip to split from it) and the in-place members
+def metal_kq_scale_moves(f : KqFmt) : bool =>
+    f != KqFmt.q40 && f != KqFmt.iq4nl && f != KqFmt.nv4 && f != KqFmt.tq2 && f != KqFmt.tq1 && !kq_dev_is_plane(f)
 
 //! the Metal device form of a K-quant scale plane: left as the engine holds it, the strip a superblock, or scale and d rows
 enum KqScaleForm {
@@ -253,12 +256,17 @@ def metal_kq_scale_form(f : KqFmt; var ks : array<uint8>) {
     }
 }
 
-let METAL_KQ_SCALE_ROW = 16l   //! a superblock's scale row in a K-quant scale plane's Metal form, the d tails behind every row
+let METAL_KQ_SCALE_ROW = 16l   //! a superblock's scale row in a K-quant scale plane's strip and split Metal forms, the d tails behind every row
+
+//! a superblock's scale row in `f`'s Metal form: the engine's own row where the plane is kept (2 bytes on tq2, tq1 and iq1s, 8
+//! on iq1m, 16 on q40, iq4nl and nv4), the 16-byte strip in the strip and split forms
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_TQ2.md#tq-metal-row")]
+def metal_kq_scale_row(f : KqFmt) : int64 => kq_sb(f) && !metal_kq_scale_moves(f) ? kq_ssb(f) : METAL_KQ_SCALE_ROW
 
 def kq_scale_d_tail(fmt : KqFmt) : int64 {
-    //! A superblock's packed d-tail bytes in a kq format's split scale plane: 0 for the compact formats (k4/k5/q40/iq4nl/nv4 -
-    //! one 16B block, no tail), 4 for k2 (d and dmin), 2 for every other format.
-    let compact = fmt == KqFmt.k4 || fmt == KqFmt.k5 || fmt == KqFmt.q40 || fmt == KqFmt.iq4nl || fmt == KqFmt.nv4
+    //! A superblock's packed d-tail bytes in a kq format's split scale plane: 0 for the compact formats (k4/k5 and every kept
+    //! plane - one row a superblock, no tail), 4 for k2 (d and dmin), 2 for every other format.
+    let compact = fmt == KqFmt.k4 || fmt == KqFmt.k5 || (kq_sb(fmt) && !metal_kq_scale_moves(fmt))
     return compact ? 0l : (fmt == KqFmt.k2 ? 4l : 2l)
 }
 
@@ -284,9 +292,9 @@ def kq_region_to_metal_planes(f : KqFmt; qp, sp : uint8 const?; live, sb : int64
 [arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def kq_bind_offs(fmt : KqFmt; plane_sb, off : int64) : tuple<qoff : uint64; soff : uint64; doff : uint64> {
     //! A kq tensor's bind offsets at element offset `off` of a plane pair of `plane_sb` superblocks in the device form: its quants,
-    //! its scale strips, and its packed d row (0 for the compact formats) - the binds `kq_quants_of` / `kq_scales_of` hand back
+    //! its scale rows, and its packed d row (0 for the compact formats) - the binds `kq_quants_of` / `kq_scales_of` hand back
     let sb0 = off / KQ_SB_ELEMS
-    return (qoff = uint64(sb0 * kq_qsb(fmt)), soff = uint64(sb0 * METAL_KQ_SCALE_ROW), doff = uint64(kq_scale_doff(fmt, plane_sb, sb0)))
+    return (qoff = uint64(sb0 * kq_qsb(fmt)), soff = uint64(sb0 * metal_kq_scale_row(fmt)), doff = uint64(kq_scale_doff(fmt, plane_sb, sb0)))
 }
 
 //! Commit `t` to the metal blob flavor WITHOUT building the big plane: the kq scale strips take

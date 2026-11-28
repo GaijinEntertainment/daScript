@@ -182,7 +182,7 @@ def record_needs(var tab : table<string; int64>; missing : MetalNeed) {
 def kq_fmt_gpu_supported(f : KqFmt) : bool =>
     (f == KqFmt.q8 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs
         || f == KqFmt.iq4nl || f == KqFmt.q40 || f == KqFmt.nv4 || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs || f == KqFmt.iq3s4
-        || (kq_dense_b32(f) && f != KqFmt.q20 && f != KqFmt.q10))
+        || f == KqFmt.tq2 || f == KqFmt.tq1 || f == KqFmt.iq1s || f == KqFmt.iq1m || kq_dense_b32(f))
 
 //! the first mixer or n-gram projection plane no Metal form reads, named by site and member; "" where every one has its form: a
 //! q8 plane the mixers' own fused forms, any other the staged chain's dense sites - the tag's one-row GEMV over the plane's K, and
@@ -215,9 +215,9 @@ def metal_ple_pre_unserved(t : Model) : string {
     return "the {site}'s planes are trimmed" if (t.planes_trimmed)
     return "the {site} plane is {t.ple_emb_fmt}, a format the gather family does not read" if (!emb_table_gather_fmt(t.ple_emb_fmt))
     let all = t.config.n_layers * t.config.n_embd_per_layer
-    let unit = kq_unit(t.ple_emb_fmt)
+    let unit = t.ple_emb_fmt == KqFmt.q8 ? kq_unit(t.ple_emb_fmt) : kq_group_elems(t.ple_emb_fmt)
     if (t.ple_emb_fmt != KqFmt.q8 && (all % unit != 0l || t.ple_emb_off % unit != 0l)) {
-        return "the {site} plane ({t.ple_emb_fmt}) binds off its {unit}-element blocks: {all} elements a row at offset {t.ple_emb_off}"
+        return "the {site} plane ({t.ple_emb_fmt}) binds off its {unit}-element scale groups: {all} elements a row at offset {t.ple_emb_off}"
     }
     return ""
 }
@@ -239,10 +239,10 @@ def metal_ple_dev_said(kind : string; t : Model) : bool {
 }
 
 //! a plane format with a one-row GEMV on this home: q8's, a superblock format's row-batched decode form at one row, or a per-32
-//! plane's GEMV, whose K (`kdim`) is whole blocks of the format's unit and whose format the Metal kernels serve
+//! plane's GEMV, whose K (`kdim`) is whole scale groups of the format and whose format the Metal kernels serve
 def kq_fmt_one_row_gemv(f : KqFmt; kdim : int64) : bool =>
     (f == KqFmt.q8 || ((kq_sb(int(f)) || kq_dense_b32(f)) && kq_fmt_gpu_supported(f)
-        && kdim % kq_unit(f) == 0l))
+        && kdim % kq_group_elems(f) == 0l))
 
 //! the first layer of `a` whose plane format no Metal kernel reads, named by layer, site and `KqFmt` member; "" when every one has a kernel
 //! one dense site's planes by layer: the first whose format no Metal kernel reads, or whose weights ride a per-tensor `.scale`,
@@ -383,7 +383,8 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
     if (fmt == KqFmt.k4 || fmt == KqFmt.k5 || fmt == KqFmt.q40 || fmt == KqFmt.iq4nl || fmt == KqFmt.nv4 || fmt == KqFmt.k2) {   // compact 16B scale rows, or k2's 4B d tail: every bind is aligned at a whole superblock
         return off >= 0l && (off % 256l) == 0l && (ege % 256l) == 0l
     }
-    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s4 || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) {
+    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s4 || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs
+        || fmt == KqFmt.tq2 || fmt == KqFmt.tq1 || fmt == KqFmt.iq1s || fmt == KqFmt.iq1m) {   // a 2B d tail, or a kept row (2B on the ternary pair and iq1s, 8B on iq1m): 4B-aligned at an even superblock
         return off >= 0l && (off % 512l) == 0l && (ege % 256l) == 0l
     }
     if (fmt == KqFmt.q51) {   // per-32 planes: off % 128 keeps the 20B/4B binds 16B-aligned
@@ -395,6 +396,9 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
     if (kq_mlx_affine(fmt) && fmt != KqFmt.mlx6b) {   // the affine members: off % 256 keeps the 16B / 32B quant and the 2B scale binds 16B-aligned, an expert whole 64-groups
         return off >= 0l && (off % 256l) == 0l && (ege % 64l) == 0l
     }
+    if (fmt == KqFmt.q20 || fmt == KqFmt.q10) {   // the quant blocks and the 2B d a group: eight groups keep both binds 16B-aligned, an expert whole groups
+        return off >= 0l && (off % kq_group_align_elems(fmt, KQ_METAL_BIND_ALIGN)) == 0l && (ege % kq_group_elems(fmt)) == 0l
+    }
     return false
 }
 
@@ -403,7 +407,8 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
 def moe_fmt_metal_served(f : KqFmt) : bool {
     return (f == KqFmt.q8 || f == KqFmt.q51 || f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q5032 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3 || f == KqFmt.q40
         || f == KqFmt.nv4 || f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
-        || f == KqFmt.k2 || f == KqFmt.iq4nl || f == KqFmt.iq3s4 || (kq_mlx_affine(f) && f != KqFmt.mlx6b))
+        || f == KqFmt.k2 || f == KqFmt.tq2 || f == KqFmt.tq1 || f == KqFmt.iq4nl || f == KqFmt.iq3s4 || (kq_mlx_affine(f) && f != KqFmt.mlx6b)
+        || f == KqFmt.q20 || f == KqFmt.q10 || f == KqFmt.iq1s || f == KqFmt.iq1m)
 }
 
 //! layer `l`'s first routed stack (gate `f1`, up `f3`, down `f2`) whose format the Metal routed block has no kernel for, named by
@@ -580,7 +585,10 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
                 (sb2 && (nfe % 256l) != 0l) ||
                 ((kq_dense_b32(f1) || kq_dense_b32(f3))
                     && ((c.dim % 32l) != 0l || (nfe % 64l) != 0l)) ||
-                (kq_dense_b32(f2) && ((nfe % 32l) != 0l || (c.dim % 64l) != 0l))) {
+                (kq_dense_b32(f2) && ((nfe % 32l) != 0l || (c.dim % 64l) != 0l)) ||
+                (kq_dense_b32(f1) && (c.dim % kq_group_elems(f1)) != 0l) ||
+                (kq_dense_b32(f3) && (c.dim % kq_group_elems(f3)) != 0l) ||
+                (kq_dense_b32(f2) && (nfe % kq_group_elems(f2)) != 0l)) {
             return false
         }
     }

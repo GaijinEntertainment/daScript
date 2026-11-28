@@ -1,4 +1,5 @@
 options gen2
+options _dasllama_internal = true
 options loop_unroll_cost = 0    // kernel source: the emitter gets loops and locals as written
 options disable_forward
 //! The GPU kernel helpers both kernel homes splice into their shader bodies: pure ALU, no table, no backend
@@ -8,6 +9,7 @@ require dasllama/dasllama_lint public
 require math
 require daslib/math_bits
 require daslib/shader_lingua_franca   // unpackHalf2x16: a stored block's scale half
+require dasllama/dasllama_kqformat   // tq1_pow3, iq1m_d_bits, iq1m_half_scale: the host's own decode of the same bytes
 
 //! the bindings a Vulkan class set's hazard record tracks (`SetBits`): the `[vk_dispatch]` lens holds a class's binding numbers under it
 let VKD_SET_BINDINGS = 16
@@ -784,3 +786,28 @@ def gk_w8_pick(lo, hi : uint4; part : uint) : uint2 {
 
 //! word `part` (0 .. 3) of a decoded sub-block's quad: four of its sixteen quants
 def gk_quad_word(q : uint4; part : uint) : uint => part < 2u ? (part == 0u ? q.x : q.y) : (part == 2u ? q.z : q.w)
+
+//! trit `n` of each of quant word `w`'s four bytes, a 2-bit code a byte lane: the even and the odd bytes as 16-bit lanes
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_TQ2.md#tq1-device-row")]
+def tq1_word(w, n : uint) : uint {
+    let p3 = uint(tq1_pow3(n))
+    let e = ((w & 0x00FF00FFu) * p3) & 0x00FF00FFu
+    let o = (((w >> 8u) & 0x00FF00FFu) * p3) & 0x00FF00FFu
+    return (((e * 3u) >> 8u) & 0x00030003u) | ((((o * 3u) >> 8u) & 0x00030003u) << 8u)
+}
+
+//! the 1-bit grid's entry `idx` off the word `w` holding it (two entries a word): its eight 2-bit codes, weight 0 lowest
+def grid1_entry(w, idx : uint) : uint => (w >> ((idx & 1u) * 16u)) & 0xFFFFu
+
+//! a 1-bit weight: `dl` x (code - 1 + `dlt`), the delta `dlt` +-1/8
+def grid1_val(code : uint; dl, dlt : float) : float => dl * (float(int(code) - 1) + dlt)
+
+//! four consecutive 1-bit weights off four 2-bit codes (`c4`, weight 0 lowest) under one scale and delta (`grid1_val`)
+def grid1_f4(c4 : uint; dl, dlt : float) : float4 =>
+    float4(grid1_val(c4 & 3u, dl, dlt), grid1_val((c4 >> 2u) & 3u, dl, dlt), grid1_val((c4 >> 4u) & 3u, dl, dlt), grid1_val((c4 >> 6u) & 3u, dl, dlt))
+
+//! IQ1_M: the f16 d off the superblock's two scale-plane words (`iq1m_d_bits` over their four halves)
+def iq1m_d(w0, w1 : uint) : float => unpackHalf2x16(iq1m_d_bits(w0 & 0xFFFFu, w0 >> 16u, w1 & 0xFFFFu, w1 >> 16u)).x
+
+//! IQ1_M: half-block `hb`'s (0 .. 15) scale 2s + 1 off the same two words (`iq1m_half_scale` of the scale half holding it)
+def iq1m_sc(w0, w1, hb : uint) : float => float(2 * iq1m_half_scale(((hb & 8u) != 0u ? w1 : w0) >> (((hb >> 2u) & 1u) * 16u), int(hb)) + 1)

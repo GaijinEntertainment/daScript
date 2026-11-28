@@ -474,8 +474,8 @@ def test_discrete_unstamped_routed_planes(t : T?) {
 [test(description = "`moe_metal_ok` admits exactly the expert formats with Metal kernels, declining mx4 tags, mlx6b, repacked mx4 and NextN head stacks out of set, and a whole-`KqFmt` walk pins the kernel roster equal to `moe_site_ok`")]
 def test_moe_metal_expert_formats(t : T?) {
     t |> run("the Metal routed block admits exactly the expert plane formats it has kernels for; every other format declines") @(t : T?) {
-        for (f in [KqFmt.q8, KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.nv4, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3s4,
-                   KqFmt.mlx4, KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b]) {
+        for (f in [KqFmt.q8, KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.tq2, KqFmt.tq1, KqFmt.iq1s, KqFmt.iq1m, KqFmt.q40, KqFmt.nv4, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3s4,
+                   KqFmt.mlx4, KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b, KqFmt.q20, KqFmt.q10]) {
             var m <- moe_shell(f)
             t |> success(moe_metal_ok(m), "{f} expert planes are served")
             delete m
@@ -486,6 +486,9 @@ def test_moe_metal_expert_formats(t : T?) {
         var m6 <- moe_shell(KqFmt.mlx6b)
         t |> success(!moe_metal_ok(m6), "an mlx6b expert stack declines the routed block: the 6-bit member stamps no routed form")
         t |> success(!moe_site_ok(KqFmt.mlx6b, 0l, 64l), "... and moe_site_ok agrees")
+        t |> success(moe_site_ok(KqFmt.q20, 512l, 64l) && !moe_site_ok(KqFmt.q20, 256l, 64l), "a q20 stack binds at a 512-element offset, not at 256")
+        t |> success(moe_site_ok(KqFmt.q10, 1024l, 128l) && !moe_site_ok(KqFmt.q10, 512l, 128l) && !moe_site_ok(KqFmt.q10, 1024l, 64l),
+            "a q10 stack binds at a 1024-element offset over whole 128-groups, not at 512 nor over a 64-element expert")
         delete m6
         var mixed <- moe_shell(KqFmt.k4)
         mixed.we2_fmt[1] = KqFmt.mx4

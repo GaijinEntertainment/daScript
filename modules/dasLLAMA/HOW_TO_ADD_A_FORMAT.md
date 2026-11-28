@@ -257,7 +257,8 @@ the format by hand:
 - `dasllama_layout.das`: the grouped-row branch of `kq_gather_rows_dev` (reached by the MoE stack
   gather and the Vulkan tower's kq bake) - a format whose repack is not the uniform four-byte-column
   form needs its verbatim arm there; and `metal_kq_scale_moves`, where a format whose scale row
-  already IS the Metal device form (q40, iq4nl, nv4) is excluded by name - the blob flavor's planes
+  already IS the Metal device form (q40, iq4nl, nv4, the ternary pair, and every member whose planes are its
+  device planes) is excluded by name - the blob flavor's planes
   and the Metal tower's kq slab both read it. Bump `PACK_VERSION` with any pack edit: it folds into every image
   identity, so the next load re-bakes instead of mapping a stale `.dlim`.
 - `dasllama_image.das`: bump `IMAGE_VERSION` when the plane table's shape or the meta order
@@ -422,7 +423,8 @@ one-line overloads, never a kernel shape:
   inverse-map cells in `tests/test_repack.das`.
 - **The gen-tier family** is q51's shape twice over. In `dasllama_math_gen.das`: the layout
   companion, the grp scalar walk (`<fmt>_grp_row_dot`), the `[tune_perm]` tile with its GEMV and
-  layout companions, the format's `B32Slots` row in `gen_b32_slots` and its
+  layout companions, the format's `B32Slots` row in `gen_b32_slots` - its `rows` core among the slots, the one a
+  fused decode chain reads (`chain_servable`; a row without it leaves the chains to the per-op dispatches) - and its
   `set_bake_b32_repack` line, and the groupn / batch / batch-groupn slots - the slots are ONE body
   over the tag (`b32g_*`: layout, the tile and GEMV stamps, the scalar tail dot, and whether the
   fold reads the per-32 activation sums), so a per-32 format writes its leaves and those one-line
@@ -448,10 +450,10 @@ one-line overloads, never a kernel shape:
   the `metal` home in its skip words and keeps the arm), and the GPU upload and the whole-model driver
   decline the model naming the site and member (`discrete_unstamped_plane`).
 - **A per-32 member whose planes are its device planes** (q20, q10) has no grp<mr> family either, yet its gen
-  tier serves: its `B32Slots` row in `gen_b32_slots` names the three walks over its tag and nothing else
-  (the portable identity repack and interleave 1 stand), and its `b32g_*` overloads hand a walk group of
-  disk-order rows to the stamped row-major kernels - the GEMV direct, the tile through a group-sized scratch
-  (`ARCHITECTURE_CPU_KERNELS.md#q20-device-layout-walk`). A superblock member whose planes are its device
+  tier serves: its `B32Slots` row in `gen_b32_slots` names the three walks, the row-major witness (`live`) and the
+  rows core over its tag (the portable identity repack and interleave 1 stand), and its `b32g_*` overloads hand a
+  walk group of disk-order rows to the stamped row-major kernels - the GEMV direct, the tile over the group's rows
+  decoded into the q8 tile's plane (`ARCHITECTURE_CPU_KERNELS.md#q20-device-layout-walk`). A superblock member whose planes are its device
   planes (iq1s, iq1m, `kq_dev_is_plane`) keeps them in disk order at every interleave and still carries a
   grp tile family: its tile reads a panel decoded off a group's rows, its GEMV slots are the stamped
   row-major GEMVs (`ARCHITECTURE_ENGINE_FORMATS_IQ1.md#iq1-grp-cpu`). A per-32
@@ -877,6 +879,12 @@ member template over `MetalMoeMulMmB32SplitT` setting the same constants (four t
 `MetalMoeMulMmKqT` under them, its `pf_moe_b32_row` row (the routed pick and the twin knee read that one table, so a member
 missing from it panics by name at the first routed window) and its `race_moe_mulmm_formats` row. Steps:
 `ARCHITECTURE_ENGINE_FORMATS_MLX.md#mlx-metal-forms`.
+
+A superblock member whose scale row is already what its kernels read keeps it: `metal_kq_scale_moves` excludes it,
+`metal_kq_scale_row` answers the engine's own row width, the blob rebake takes no arm and every bind strides by that
+row. A member with a race entry names its fixture's scale form - its `race_scale_form` arm, and a `KqRaceScaleForm`
+value with its `race_kq_planes` arm where none fits (`dasllama_metal_common.das`). A member a token table can carry
+takes its `enc_embed_kq_rows` arm (`dasllama_metal_kernels.das`): the gather ladder the window and the steps share.
 
 These forms, races and the pass are the format's row of the form matrix (step 0, question 4). A
 GEMV stamp that declares `fastmath=false` (the per-32 GEMV and its K-split twin do: fast math sums

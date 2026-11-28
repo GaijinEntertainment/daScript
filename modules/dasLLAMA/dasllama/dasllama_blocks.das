@@ -36,13 +36,13 @@ let FLASH_DECODE_MAX_SLICES = 32l   // 4 chunks/lane at 16L: Qwen2.5-1.5B d4k at
 // attn-norm -> QKV(+bias) -> RoPE -> KV-store -> GQA attention -> out-proj(+post-norm) -> residual.
 // Can layer l's attention run as the fused chain? Std shape only: Q8 weights, group3 layout, table
 // rope, team mode + a backend row core. pre_post_norm defers the residual add to a serial tail.
-def private fused_attn_ok(t : Model; l : int64) : bool {
+def fused_attn_ok(t : Model; l : int64) : bool {
     let c = t.config
     let fq = fmt_at(t.wq_fmt, l)
     let fk = fmt_at(t.wk_fmt, l)
     let fv = fmt_at(t.wv_fmt, l)
     let fo = fmt_at(t.wo_fmt, l)
-    let any_kq = fq != KqFmt.q8 || fk != KqFmt.q8 || fv != KqFmt.q8 || fo != KqFmt.q8
+    let any_sb = kq_sb(fq) || kq_sb(fk) || kq_sb(fv) || kq_sb(fo)
     let head_size = layer_head_size(c, l)
     let qd = layer_qd(c, l)
     // head_size % 32: the wo-input requant needs whole 32-quant groups per head (stories15M's 48 falls back)
@@ -50,10 +50,10 @@ def private fused_attn_ok(t : Model; l : int64) : bool {
         && t.wv_offs[l] >= 0l && head_size % 32l == 0l
         // partial rotary (glm4moe): fall back to attention_std_decode, which has the rot-aware leaves
         && (c.rope_dim == 0l || c.rope_dim == head_size)
-        && kq_servable(t, fq) && kq_servable(t, fk) && kq_servable(t, fv) && kq_servable(t, fo)
+        && chain_servable(t, fq) && chain_servable(t, fk) && chain_servable(t, fv) && chain_servable(t, fo)
         // kq v2 regrain: Q8_K quantizes whole 256-superblocks, so qd and the head grouping must divide out
-        && (!any_kq || c.dim % 256l == 0l)
-        && (fo == KqFmt.q8 || (qd % 256l == 0l && (head_size >= 256l ? head_size % 256l == 0l : 256l % head_size == 0l)))
+        && (!any_sb || c.dim % KQ_SB_ELEMS == 0l)
+        && (!kq_sb(fo) || (qd % KQ_SB_ELEMS == 0l && (head_size >= KQ_SB_ELEMS ? head_size % KQ_SB_ELEMS == 0l : KQ_SB_ELEMS % head_size == 0l)))
         && get_jobque_team_mode() && kernel_backend_has_rows()
         && (!t.wscale_f16 || kernel_backend_has_rows16())
         && lanes_for_work(c.dim * (qd + 2l * layer_kv_dim(c, l)), g_gemv_lane_cap) > 1)
@@ -82,14 +82,14 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
     let fk = fmt_at(t.wk_fmt, l)
     let fv = fmt_at(t.wv_fmt, l)
     let fo = fmt_at(t.wo_fmt, l)
-    let any_kq = fq != KqFmt.q8 || fk != KqFmt.q8 || fv != KqFmt.q8 || fo != KqFmt.q8
-    // attention rmsnorm + input quantize: one image per consumed form — q8 reads Q8_0, kq reads Q8_K (kq v2)
+    let any_sb = kq_sb(fq) || kq_sb(fk) || kq_sb(fv) || kq_sb(fo)
+    // attention rmsnorm + input quantize: one image per consumed form — q8 and the per-32 formats read Q8_0, superblock kq reads Q8_K (kq v2)
     let ts_norm0 = prof_ticks()
     rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
-    if (fq == KqFmt.q8 || fk == KqFmt.q8 || fv == KqFmt.q8) {
+    if (!kq_sb(fq) || !kq_sb(fk) || !kq_sb(fv)) {
         quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
     }
-    if (fq != KqFmt.q8 || fk != KqFmt.q8 || fv != KqFmt.q8) {
+    if (kq_sb(fq) || kq_sb(fk) || kq_sb(fv)) {
         quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
     }
     prof_add("norm", ts_norm0)
@@ -103,7 +103,7 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
     let ngrp = int(dim / 32l)
     let n2 = chain_stage_chunks(ngrp, int(dim), qd * dim)
     // attn-stage unit: a kq wo requants the output per HEAD GROUP spanning whole 256-superblocks
-    let hpu = (fo != KqFmt.q8 && head_size < 256l) ? 256l / head_size : 1l
+    let hpu = (kq_sb(fo) && head_size < KQ_SB_ELEMS) ? KQ_SB_ELEMS / head_size : 1l
     let nhu = int(n_heads / hpu)
     // flash-decode slicing engages once cnt crosses FLASH_DECODE_SLICE (ctx-derived, deterministic); nsl == 1 keeps the exact single-pass body
     let nsl = cnt <= FLASH_DECODE_SLICE ? 1 : int(min(FLASH_DECODE_MAX_SLICES, (cnt + FLASH_DECODE_SLICE_LEN - 1l) / FLASH_DECODE_SLICE_LEN))
@@ -194,9 +194,14 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
         let wpv = wqb + t.wv_offs[l]
         let wpo = wqb + t.wo_offs[l]
         // kq-tagged weights: plane bases + stamped rows core per format + the Q8_K activation image (kq v2)
-        var kxqp : int8? = any_kq ? addr(s.kxq[0]) : null
-        var kxsp : float? = any_kq ? addr(s.kxs[0]) : null
-        var kxbsp : int? = any_kq ? addr(s.kxbs[0]) : null
+        var kxqp : int8? = any_sb ? addr(s.kxq[0]) : null
+        var kxsp : float? = any_sb ? addr(s.kxs[0]) : null
+        var kxbsp : int? = any_sb ? addr(s.kxbs[0]) : null
+        let aq = chain_acts(fq, kxqp, kxsp, kxbsp, xqp, xsp)
+        let ak = chain_acts(fk, kxqp, kxsp, kxbsp, xqp, xsp)
+        let av = chain_acts(fv, kxqp, kxsp, kxbsp, xqp, xsp)
+        let ao = chain_acts(fo, kxqp, kxsp, kxbsp, xqp, xsp)
+        let sbo = kq_sb(fo)
         let kqpq = kq_plane_q(t, fq, t.wq_offs[l])
         let kspq = kq_plane_s(t, fq, t.wq_offs[l])
         let rowsq = kq_rows_for(fq)
@@ -243,7 +248,7 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
                         if (r < qd) {
                             let r1 = min(rend, qd)
                             if (fq != KqFmt.q8) {
-                                invoke(rowsq, qp, kqpq, kspq, kxqp, kxsp, kxbsp, dim, r, r1)
+                                invoke(rowsq, qp, kqpq, kspq, aq.xq, aq.xs, aq.xbs, dim, r, r1)
                                 if (scq != 1.0) {
                                     scale_inplace(qp + r, scq, r1 - r)
                                 }
@@ -260,7 +265,7 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
                             let r0 = r - qd
                             let r1 = min(rend, qd + kv_dim) - qd
                             if (fk != KqFmt.q8) {
-                                invoke(rowsk, kp, kqpk, kspk, kxqp, kxsp, kxbsp, dim, r0, r1)
+                                invoke(rowsk, kp, kqpk, kspk, ak.xq, ak.xs, ak.xbs, dim, r0, r1)
                                 if (sck != 1.0) {
                                     scale_inplace(kp + r0, sck, r1 - r0)
                                 }
@@ -277,7 +282,7 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
                             let r0 = r - qd - kv_dim
                             let r1 = min(rend, qd + 2l * kv_dim) - qd - kv_dim
                             if (fv != KqFmt.q8) {
-                                invoke(rowsv, vp, kqpv, kspv, kxqp, kxsp, kxbsp, dim, r0, r1)
+                                invoke(rowsv, vp, kqpv, kspv, av.xq, av.xs, av.xbs, dim, r0, r1)
                                 if (scv != 1.0) {
                                     scale_inplace(vp + r0, scv, r1 - r0)
                                 }
@@ -355,7 +360,7 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
                             }
                         }
                         let u0 = int64(u) * hpu * head_size
-                        if (fo != KqFmt.q8) {   // kq wo: Q8_K over the unit's whole-superblock span
+                        if (sbo) {   // superblock kq wo: Q8_K over the unit's whole-superblock span
                             quantize_q8_k_into_ptr(xbp + u0, hpu * head_size, kxqp, kxsp, kxbsp, u0, u0 / 256l, u0 / 16l)
                         } else {
                             quantize_q8_0_into_ptr(xbp + u0, hpu * head_size, xqp, xsp, u0, u0 / 32l)
@@ -468,7 +473,7 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
                             }
                         }
                         let u0 = int64(u) * hpu * head_size
-                        if (fo != KqFmt.q8) {   // kq wo: Q8_K over the unit's whole-superblock span
+                        if (sbo) {   // superblock kq wo: Q8_K over the unit's whole-superblock span
                             quantize_q8_k_into_ptr(xbp + u0, hpu * head_size, kxqp, kxsp, kxbsp, u0, u0 / 256l, u0 / 16l)
                         } else {
                             quantize_q8_0_into_ptr(xbp + u0, hpu * head_size, xqp, xsp, u0, u0 / 32l)
@@ -481,7 +486,7 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
                     let r0 = int64(jb) * 32l
                     let r1 = int64(je) * 32l
                     if (fo != KqFmt.q8) {
-                        invoke(rowso, xb2p, kqpo, kspo, kxqp, kxsp, kxbsp, qd, r0, r1)
+                        invoke(rowso, xb2p, kqpo, kspo, ao.xq, ao.xs, ao.xbs, qd, r0, r1)
                         if (sco != 1.0) {
                             scale_inplace(xb2p + r0, sco, r1 - r0)
                         }
@@ -3960,14 +3965,15 @@ def ffn_chain_decode(t : Model; var s : Session; l : int64) { // nolint:STYLE038
     let f1 = fmt_at(t.w1_fmt, l)
     let f2 = fmt_at(t.w2_fmt, l)
     let f3 = fmt_at(t.w3_fmt, l)
-    let any_kq = f1 != KqFmt.q8 || f2 != KqFmt.q8 || f3 != KqFmt.q8
+    let any_sb = kq_sb(f1) || kq_sb(f2) || kq_sb(f3)
+    let sb2 = kq_sb(f2)
     let ts_norm1 = prof_ticks()
     rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
-    // one input quantize per consumed form: q8 gate/up read Q8_0, kq gate/up read Q8_K (kq v2)
-    if (f1 == KqFmt.q8 || f3 == KqFmt.q8) {
+    // one input quantize per consumed form: q8 and per-32 gate/up read Q8_0, superblock kq gate/up read Q8_K (kq v2)
+    if (!kq_sb(f1) || !kq_sb(f3)) {
         quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
     }
-    if (f1 != KqFmt.q8 || f3 != KqFmt.q8) {
+    if (kq_sb(f1) || kq_sb(f3)) {
         quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
     }
     prof_add("norm", ts_norm1)
@@ -3981,8 +3987,8 @@ def ffn_chain_decode(t : Model; var s : Session; l : int64) { // nolint:STYLE038
     let post_norm = c.pre_post_norm
     let out_scale_here = c.layer_out_scale && !has_ple(c)
     let defer_add = post_norm || out_scale_here
-    // stage-0 grain: 32 rows for a q8 down-proj; 256 for a kq one (Q8_K quantizes whole superblocks)
-    let grain0 = f2 != KqFmt.q8 ? 256l : 32l
+    // stage-0 grain: 32 rows for a q8 or per-32 down-proj; 256 for a superblock kq one (Q8_K quantizes whole superblocks)
+    let grain0 = sb2 ? KQ_SB_ELEMS : KQ_B32_ELEMS
     let ngrp0 = int(hidden / grain0)
     let ngrp1 = int(dim / 32l)
     let n0 = chain_stage_chunks(ngrp0, int(hidden), 2l * dim * hidden)
@@ -4028,10 +4034,12 @@ def ffn_chain_decode(t : Model; var s : Session; l : int64) { // nolint:STYLE038
         let wp3 = wqb + w3o
         let wp2 = wqb + w2o
         // kq-tagged weights: plane bases + rows cores + the Q8_K activation image (kq v2); q8 rows cores keep Q8_0
-        var kxqp : int8? = any_kq ? addr(s.kxq[0]) : null
-        var kxsp : float? = any_kq ? addr(s.kxs[0]) : null
-        var kxbsp : int? = any_kq ? addr(s.kxbs[0]) : null
-        var xbs2w : int? = f2 != KqFmt.q8 ? addr(s.xbs2[0]) : null
+        let kxqp : int8? = any_sb ? addr(s.kxq[0]) : null
+        let kxsp : float? = any_sb ? addr(s.kxs[0]) : null
+        let kxbsp : int? = any_sb ? addr(s.kxbs[0]) : null
+        let a1 = chain_acts(f1, kxqp, kxsp, kxbsp, xqp, xsp)
+        let a3 = chain_acts(f3, kxqp, kxsp, kxbsp, xqp, xsp)
+        var xbs2w : int? = sb2 ? addr(s.xbs2[0]) : null
         let kqp1 = kq_plane_q(t, f1, w1o)
         let ksp1 = kq_plane_s(t, f1, w1o)
         let rows1 = kq_rows_for(f1)
@@ -4052,7 +4060,7 @@ def ffn_chain_decode(t : Model; var s : Session; l : int64) { // nolint:STYLE038
                 if (stage == 0) {
                     // paired gate/up rows, then act + requant on exactly these rows
                     if (f1 != KqFmt.q8) {
-                        invoke(rows1, gup, kqp1, ksp1, kxqp, kxsp, kxbsp, dim, r0, r1)
+                        invoke(rows1, gup, kqp1, ksp1, a1.xq, a1.xs, a1.xbs, dim, r0, r1)
                         if (sc1 != 1.0) {
                             scale_inplace(gup + r0, sc1, r1 - r0)
                         }
@@ -4062,7 +4070,7 @@ def ffn_chain_decode(t : Model; var s : Session; l : int64) { // nolint:STYLE038
                         invoke(mmrows, gup, wp1, ws1, xqp, xsp, dim, r0, r1)
                     }
                     if (f3 != KqFmt.q8) {
-                        invoke(rows3, gup + hidden, kqp3, ksp3, kxqp, kxsp, kxbsp, dim, r0, r1)
+                        invoke(rows3, gup + hidden, kqp3, ksp3, a3.xq, a3.xs, a3.xbs, dim, r0, r1)
                         if (sc3 != 1.0) {
                             scale_inplace(gup + hidden + r0, sc3, r1 - r0)
                         }
@@ -4088,7 +4096,7 @@ def ffn_chain_decode(t : Model; var s : Session; l : int64) { // nolint:STYLE038
                             swiglu(gup + r0, gup + hidden + r0, r1 - r0)
                         }
                     }
-                    if (f2 != KqFmt.q8) {   // kq down-proj: Q8_K requant, whole superblocks (grain 256)
+                    if (sb2) {   // superblock kq down-proj: Q8_K requant, whole superblocks (grain 256)
                         quantize_q8_k_into_ptr(gup + r0, r1 - r0, xq2p, xs2p, xbs2w, r0, r0 / 256l, r0 / 16l)
                     } else {
                         quantize_q8_0_into_ptr(gup + r0, r1 - r0, xq2p, xs2p, r0, r0 / 32l)

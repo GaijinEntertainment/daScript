@@ -72,7 +72,7 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   `REVIEW.das`'s `check_fastmath_default` licensed set names each kernel that opts out of fastmath
   against the test that reds under it: the StyleTTS2 harmonic-source stamps of the Metal rail, a resample law each
   (`tts_src_{low,cumsum,sines}_{torch,onnx}_cls_msl`, gated by `test_mtl_source`), and the per-32
-  GEMV with its small-batch form (`metal_kq_gemv_<fmt>_msl` for q51, iq4nl32, q4032, q5032 and the affine members, their
+  GEMV with its small-batch form (`metal_kq_gemv_<fmt>_msl` for q51, iq4nl32, q4032, q5032, q20, q10 and the affine members, their
   `_ks_msl` K-split stamps, `metal_b32_mvb` by its method - gated by `b32_mvb_gate`, whose
   bit-for-bit compare fast math breaks), and the classifier tail's selection (`metal_cls_select_msl`,
   gated by `cls_select_gate`: fast math lets a NaN lane through the ordered compare that floors it), and the DFlash2

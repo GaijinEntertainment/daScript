@@ -873,7 +873,7 @@ def dequant_k6_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<u
 
 //! One superblock of a kq plane pair dequantized into `dst[doff..]`, reading the scale plane in
 //! whichever form the carrier holds: the CPU row form, or on a Metal-blob model the split GPU
-//! form (16B strips first, d tails after; k4/k5 strips compacted, q40/iq4nl/nv4 unsplit). `sb` = superblock index.
+//! form (the kept planes - `metal_kq_scale_moves` - as the CPU reads them). `sb` = superblock index.
 [arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def dequant_kq_plane_sb(fmt : KqFmt; kq : array<uint8> | #; ks : array<uint8> | #; sb : int64; metal_blob : bool; var dst : array<float> | #; doff : int64) { // nolint:STYLE037 — one arm per format, two carrier forms
     if (fmt == KqFmt.k4) {
@@ -890,6 +890,10 @@ def dequant_kq_plane_sb(fmt : KqFmt; kq : array<uint8> | #; ks : array<uint8> | 
         dequant_iq1s_plane_superblock(kq, sb * IQ1S_QSB, ks, sb * IQ1S_SSB, dst, doff)
     } elif (fmt == KqFmt.iq1m) {
         dequant_iq1m_plane_superblock(kq, sb * IQ1M_QSB, ks, sb * IQ1M_SSB, dst, doff)
+    } elif (fmt == KqFmt.tq2) {
+        dequant_tq2_plane_superblock(kq, sb * TQ2_QSB, ks, sb * TQ2_SSB, dst, doff)
+    } elif (fmt == KqFmt.tq1) {
+        dequant_tq1_plane_superblock(kq, sb * TQ1_QSB, ks, sb * TQ1_SSB, dst, doff)
     } elif (!metal_blob) {
         if (fmt == KqFmt.k6) {
             dequant_k6_plane_superblock(kq, sb * K6_QSB, ks, sb * K6_SSB, dst, doff)
@@ -905,10 +909,6 @@ def dequant_kq_plane_sb(fmt : KqFmt; kq : array<uint8> | #; ks : array<uint8> | 
             dequant_iq3xxs_plane_superblock(kq, sb * IQ3XXS_QSB, ks, sb * IQ3XXS_SSB, dst, doff)
         } elif (fmt == KqFmt.k2) {
             dequant_k2_plane_superblock(kq, sb * K2_QSB, ks, sb * K2_SSB, dst, doff)
-        } elif (fmt == KqFmt.tq2) {
-            dequant_tq2_plane_superblock(kq, sb * TQ2_QSB, ks, sb * TQ2_SSB, dst, doff)
-        } elif (fmt == KqFmt.tq1) {
-            dequant_tq1_plane_superblock(kq, sb * TQ1_QSB, ks, sb * TQ1_SSB, dst, doff)
         } elif (fmt == KqFmt.iq2s) {
             dequant_iq2s_plane_superblock(kq, sb * IQ2S_QSB, ks, sb * IQ2S_SSB, dst, doff)
         } elif (fmt == KqFmt.iq2xs) {

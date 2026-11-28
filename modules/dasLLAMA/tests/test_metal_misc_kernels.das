@@ -738,14 +738,15 @@ def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead :
         let nb = dim / int(KQ_B32_ELEMS)
         let nblk = lead + vocab * nb
         let qb = int(kq_qsb(f))
-        let sb = int(kq_ssb(f))
+        let sg = int(kq_sgroup(f))   //! the blocks a scale unit serves: `lead` and a row are whole units
+        let sb = int(kq_sbytes(f, int64(sg)))
         var inscope kq, ks : array<uint8>
         kq |> resize(nblk * qb)
-        ks |> resize(nblk * sb)
+        ks |> resize((nblk / sg) * sb)
         for (i in range(nblk * qb)) {
             kq[i] = uint8((i * 37 + 11) & 255)
         }
-        for (b in range(nblk)) {
+        for (b in range(nblk / sg)) {
             let d = half_bits(0.0625 * float(1 + (b * 7) % 13), kq_mlx_bf16(f))   //! an affine table's even block holds its group's scale, the odd one its bias
             ks[b * sb] = uint8(d & 255u)
             ks[b * sb + 1] = uint8(d >> 8u)
@@ -777,7 +778,7 @@ def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead :
         let bind = b32_table_bind(int64(lead) * KQ_B32_ELEMS, f)   //! the engine's own bind (`enc_embed_table`'s)
         t |> equal(int(bind.b0), want_b0, "{tag}: the table sits {want_b0} blocks past its bind")
         var ka = EmbedB32Args(dim = uint(dim), escale = escale, b0 = uint(bind.b0))
-        let soff = uint64(bind.off / KQ_B32_ELEMS * int64(sb))
+        let soff = uint64(kq_soff(f, bind.off / KQ_B32_ELEMS))
         let qoff = uint64(bind.off / KQ_B32_ELEMS * int64(qb))
         t |> success(soff % 16ul == 0ul && qoff % 16ul == 0ul, "{tag}: the binds sit on the 16-byte grid (scale {soff}, quant {qoff})")
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
@@ -3397,6 +3398,12 @@ def test_metal_misc_kernels(t : T?) {
                     embed_b32_gate(t, dev, queue, f, 192, 5, 6, 6)                //! three groups a row, six blocks past the bind
                     embed_b32_gate(t, dev, queue, f, 320, 4, 7 * 64 + 14, 6)      //! five groups a row past a bind every eight blocks
                 }
+                for (f in [KqFmt.q20, KqFmt.q10]) {   //! the low-bit tables: whole scale groups, a bind every 16 blocks (q20) or 32 (q10)
+                    embed_b32_gate(t, dev, queue, f, 128, 5, 0)
+                    embed_b32_gate(t, dev, queue, f, 2048, 7, 7 * 64)
+                    embed_b32_gate(t, dev, queue, f, 256, 5, 12, 12)                              //! two groups a row (four on q20), twelve blocks past the bind
+                    embed_b32_gate(t, dev, queue, f, 384, 4, 7 * 64 + 20, f == KqFmt.q20 ? 4 : 20)   //! three groups a row past a table at block 468
+                }
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_k4), 4, 512, 5)
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_k5), 5, 512, 5)
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_k6), 6, 512, 5)
@@ -3407,6 +3414,10 @@ def test_metal_misc_kernels(t : T?) {
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_nv4), 49, 512, 5)
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_k3), 3, 512, 5)
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_k2), 2, 512, 5)
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_tq2), 22, 512, 5)
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_iq1s), 13, 512, 5)
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_iq1m), 16, 512, 5)
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_tq1), 21, 512, 5)
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_iq3s), 33, 512, 5)
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_iq3xxs), 34, 512, 5)
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_iq2s), 23, 512, 5)

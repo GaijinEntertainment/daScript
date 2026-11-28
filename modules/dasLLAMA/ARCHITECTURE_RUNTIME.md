@@ -112,6 +112,17 @@ Three consequences the code is shaped around:
   delta-rule scan writes. So the two feeds are decided apart, and a Q8_0 out plane decides the out
   feed alone: it leaves the qkv and z planes on the tiles.
 
+### A fused decode chain reads the activation form its weight's format takes {#chain-activation-forms}
+
+The CPU decode chains (attention, FFN, the soft-capped classifier) run one rows core a weight over
+`team_parallel_stages`, the format picking the core and the activation image it reads
+(`chain_acts`): a superblock format the backend's kq rows core over the Q8_K image, q8 and the
+per-32 formats the Q8_0 image - q8 through `mm_q8q8_rows_fn`, a per-32 format through its
+`B32Slots.rows` (`b32_rows_fn`: the member's GEMV over its own plane layout, whole row groups). A
+chain's requant between stages follows the consumer the same way, so its grain is 256 rows only
+under a superblock consumer. `chain_servable` is the gate: what `kq_servable` serves, and a per-32
+format whose backend row has a rows core - the portable tier has none and decodes per-op.
+
 ### Every program root declares its stack budget and its prefill intent
 
 `options stack` is main-module-only: it does not unify up from required modules, so no library in

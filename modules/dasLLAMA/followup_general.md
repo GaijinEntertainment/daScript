@@ -2943,11 +2943,10 @@
     `wasm-simd128` (that box, the wasm64 tuner under node), and a seat raced as the class on the Ryzen
     (`DAS_JIT_BASELINE=<class>`, `HOW_TO_GET_SIDECAR.md` section 10) in `x86-avx2` and `x86-avx`. `x86-amx` carries the
     `x86-vnni512` entry and `arm-sve` the `arm-neon` entry - a lower class's each, `arm-i8mm` sitting between the
-    second pair: no box of either class is at hand. `arm-neon` carries the `arm-i8mm` winner until its race as the
-    class on the M5 lands, and `arm-sve` holds that same entry beside it. The family lands the same bits on every seat
-    (`ARCHITECTURE_CPU_KERNELS_TILES.md#f32-gemm-tile-family`), so a borrowed or pinned seat costs speed alone. Each
-    profile changed by that one row; the other seats stay as shipped. Done = the `arm-neon` pinned race seated, `arm-sve`
-    carrying its winner, and the release re-mint races the family on a box of each class and exports each profile whole.
+    second pair: no box of either class is at hand. `arm-neon` carries a seat raced as the class on the M5 Max
+    (`DAS_JIT_BASELINE=arm-neon`), and `arm-sve` holds that same entry beside it. The family lands the same bits on
+    every seat (`ARCHITECTURE_CPU_KERNELS_TILES.md#f32-gemm-tile-family`), so a borrowed or pinned seat costs speed
+    alone. Done = the release re-mint races the family on a box of each class and exports each profile whole.
 318. **The Pocket text table is gathered on the host under every GPU home.** A chunk's prompt rows are the host's embedding
     gather (`pocket_prompt_embed`) uploaded to the prompt seat, so a GPU image carries the text table in its CPU form
     beside the device block - the one Pocket weight a device image still holds for the host
@@ -2992,16 +2991,14 @@
     `PERF_LEDGER.md` entry on the tile attention race and the served bench's behind pass
     (`ARCHITECTURE_MEASUREMENT_SERVED.md#model-bench`). Done = the release re-mint adds a spawned Metal cell behind a
     base of 32768 tokens or deeper to `performance/gen_bench_records.das` and mints its rows on every board box.
-325. **The six low-bit members' CPU families are untuned on most classes.** The `x86-vnni512` profile carries rizen's
-    mint of every family of the six members - `q20q8_rm_gemv_gen`, `q10q8_rm_gemv_gen`, and the `gemv`, `rm_gemv` and
-    `tile` families of `iq1sq8`, `iq1mq8`, `tq2q8` and `tq1q8` - and `x86-avx2` the reference box's mint of all six
-    members' families; every other entry of theirs names the reference body
-    (`performance/defaults/<class>.tune-defaults.json`), so those classes serve the members on the portable body. Owed:
-    `arm-neon`, `arm-sve` and `arm-i8mm` for all six members' families (the M5 Max holds `arm-i8mm` and races `arm-neon` as the class; no box
-    of the author's holds `arm-sve`); `x86-amx` for all six, a class no box of the author's holds. Done = each of those
-    entries names the winner the tuner timed on a box the `performance/REVIEW.md` profile rule admits, the tuner line
-    quoted in the PR body that lands it.
-326. **No board cell serves a low-bit member.** The CPU, Vulkan and CUDA tiers serve `q20`, `q10`, `iq1s`, `iq1m`, `tq2`
+325. **The six low-bit members' CPU families are untuned on two classes.** The `arm-sve` and `x86-amx` profiles
+    (`performance/defaults/<class>.tune-defaults.json`) name the reference body for every family of the six members -
+    `q20q8_rm_gemv_gen`, `q10q8_rm_gemv_gen`, and the `gemv`, `rm_gemv` and `tile` families of `iq1sq8`, `iq1mq8`,
+    `tq2q8` and `tq1q8` - so those classes serve the members on the portable body; every other profile that carries
+    these families names a timed winner. No box of the author's holds either class, and no box above one is at hand to race it under a pin.
+    Done = each of those entries names the winner the tuner timed on a box the `performance/REVIEW.md` profile rule
+    admits, the tuner line quoted in the PR body that lands it.
+326. **No board cell serves a low-bit member.** The CPU, Metal, Vulkan and CUDA tiers serve `q20`, `q10`, `iq1s`, `iq1m`, `tq2`
     and `tq1`, and `performance/gen_bench_records.das` spawns no cell on a file any of them stores, so no board row times
     their served turns; their readings are the arc's dated `PERF_LEDGER.md` entries. Done = a spawned cell on one of the
     catalogued low-bit files (`performance/model_specs.das`: the Bonsai, Ternary-Bonsai and TriLM files among them) and

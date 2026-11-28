@@ -3,8 +3,8 @@
 Companion to `ARCHITECTURE_ENGINE_FORMATS.md`; a section is cited by its anchor. This document carries the
 `iq1s` and `iq1m` superblock members - llama.cpp's IQ1_S and IQ1_M: how their planes hold the disk bytes
 (`#iq1-planes`), the one grid table both read (`#iq1-grid`), how the grid's constant offset folds into
-the dot (`#iq1-delta-fold`), how the CPU serves their rows (`#iq1-grp-cpu`), and how the discrete GPU homes read
-them (`#iq1-device-row`).
+the dot (`#iq1-delta-fold`), how the CPU serves their rows (`#iq1-grp-cpu`), how the discrete GPU homes read
+them (`#iq1-device-row`), and how Metal does (`#iq1-metal-row`).
 
 ### The iq1s and iq1m planes are the disk bytes in two pieces {#iq1-planes}
 
@@ -28,8 +28,7 @@ and decodes nothing. The planes are the device planes too (`kq_dev_is_plane`): t
 at every interleave - `repack_grp` moves no byte - the device gather copies them verbatim and Metal's
 scale form keeps them as they are. Their kernel and stream ids are 13 and 16 - an
 i-quant's bit width times ten plus a variant digit, S taking 3 as IQ2_S and IQ3_S do, M a digit of its
-own. The Vulkan and CUDA homes read the planes in place (`#iq1-device-row`); Metal's format gate (`kq_fmt_gpu_supported`)
-names neither, so its loads leave the planes to the CPU.
+own. The Vulkan and CUDA homes read the planes in place (`#iq1-device-row`), and so does Metal (`#iq1-metal-row`).
 
 ### Both members read one packed grid table {#iq1-grid}
 
@@ -119,3 +118,25 @@ leaf (`CUD_ROWS_MMA_SKIP`), no fused gate-up or summed-down GEMV (`GEMV_SHELL_SK
 The one-copy rare rail reads a streamed layer's experts off the same device rows on the CPU through the row-major family
 (`#iq1-grp-cpu`, admitted by `rm_dev_serves`), and the host twin stamps `Iq1GemvT` as `HostKqGemvIq1s` and
 `HostKqGemvIq1m`, its workgroup grid filled from `IQ1S_GRID`.
+
+### Metal reads the planes in place, through one decode on the grid shells {#iq1-metal-row}
+
+Metal serves iq1s and iq1m off the planes the CPU reads. The scale plane's Metal form is the plane itself
+(`metal_kq_scale_row` answers its 2 or 8 bytes, `kq_scale_d_tail` 0), so the row binds at the scale offset and a
+dequant pass strides it by the plane's bytes a superblock. A slice binds where its first superblock is even
+(`metal_blob_off_ok`; a routed expert site also takes whole superblocks an expert, `moe_site_ok`). The quant plane is
+twelve words a superblock: block `b`'s qs word is word `b`, its 16 qh bits half `b % 2` of word `8 + b / 2`.
+
+One decode serves both members and every form: `iq1_octet_f4` answers four weights of an octet off the block's qs word
+and qh bits - the grid entry out of the program-scope table `iq1s_gw`, `grid1_f4` the weights under the half-block's
+scale and the octet's delta. The helpers it stands on (`grid1_entry`, `grid1_f4`, `iq1m_d`, `iq1m_sc`) are the discrete
+homes' own, in `dasllama_kqformat.das`. The stamps sit on the grid family's shells: the decode GEMV and its routed
+gathered form (`MetalKqGemvIq1T`), the 2, 4 and 8 row batch forms and their half-activation twins (`MetalKqMvIq1T`,
+`MetalKqMvB8Iq1T`), the token-table gather (`MetalEmbedIq1T`), the base tile's `IQ1` arm (`iq1_decode`), and the tensor
+family - the twins, the split-K forms, the dev-W dequant pass and the routed twins (`MetalKqMulMmIq1TensorT`).
+
+The members differ by one constant. An iq1s stamp binds the d row at the strip slot again as a half view (`KQ_SD`) and
+takes a half-block's scale from its block's qh bits; an iq1m stamp (`IQ1M`) binds the scale words there as a word view,
+two a superblock, and takes the f16 d from their top nibbles and a half-block's scale from its three-bit field. Either
+way a builder keeps the family's signature, so no ladder forks on the argument list. The tensor races give iq1s the
+pure-d plane and iq1m four scale words a superblock with a valid d (`KqRaceScaleForm.iq1m_words`).

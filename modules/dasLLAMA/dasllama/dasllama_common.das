@@ -5610,25 +5610,50 @@ def mm_b_kq_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq :
     prof_add("mm_gemm", ts_gemm)
 }
 
+//! the quant plane of the weight at `woff`: a superblock format's, or a per-32 format's where the backend has its rows core
 def kq_plane_q(t : Model; fmt : KqFmt; woff : int64) : uint8 const? {
-    if (!kq_sb(fmt)) {
-        return null
+    return unsafe(addr<uint8 const?>(t.kq[int(fmt)].q[(woff / KQ_SB_ELEMS) * kq_qsb(fmt)])) if (kq_sb(fmt))
+    var p : uint8 const?
+    if (kernel_backend_has_b32_rows(fmt)) {
+        kq_plane_pair(t, fmt) $(q, _s) {
+            p = unsafe(addr<uint8 const?>(q[(woff / KQ_B32_ELEMS) * kq_qsb(fmt)]))
+        }
     }
-    return unsafe(addr<uint8 const?>(t.kq[int(fmt)].q[(woff / 256l) * kq_qsb(fmt)]))
+    return p
 }
 
+//! its scale plane
 def kq_plane_s(t : Model; fmt : KqFmt; woff : int64) : uint8 const? {
-    if (!kq_sb(fmt)) {
-        return null
+    return unsafe(addr<uint8 const?>(t.kq[int(fmt)].s[(woff / KQ_SB_ELEMS) * kq_ssb(fmt)])) if (kq_sb(fmt))
+    var p : uint8 const?
+    if (kernel_backend_has_b32_rows(fmt)) {
+        kq_plane_pair(t, fmt) $(_q, s) {
+            p = unsafe(addr<uint8 const?>(s[kq_soff(fmt, woff / KQ_B32_ELEMS)]))
+        }
     }
-    return unsafe(addr<uint8 const?>(t.kq[int(fmt)].s[(woff / 256l) * kq_ssb(fmt)]))
+    return p
 }
 
-def kq_rows_for(fmt : KqFmt) : MatmulKqRowsFn => kq_rows_fn(kq_fi(fmt))
+def kq_rows_for(fmt : KqFmt) : MatmulKqRowsFn => kq_sb(fmt) ? kq_rows_fn(kq_fi(fmt)) : b32_rows_fn(fmt)
 
-// Can the fused chains serve a weight of this format? q8 always; superblock kq only off a
-// repacked load (the backend rows cores read the grp layout). q51 NEVER — no chain/rows arms.
+// Can a GPU tier or a fused chain serve a weight of this format off its superblock planes? q8 always;
+// superblock kq only off a repacked load (the backend rows cores read the grp layout).
 def kq_servable(t : Model; fmt : KqFmt) : bool => fmt == KqFmt.q8 || (kq_sb(fmt) && t.kq_repacked)
+
+//! can the fused decode chains serve a weight of this format? What `kq_servable` serves, and a per-32 format the backend has a rows core for
+[arch(at = "../ARCHITECTURE_RUNTIME.md#chain-activation-forms")]
+def chain_servable(t : Model; fmt : KqFmt) : bool => kq_servable(t, fmt) || (!kq_sb(fmt) && kernel_backend_has_b32_rows(fmt))
+
+//! the activation image a chain's rows core reads under one weight format
+struct ChainActs {
+    xq : int8 const?
+    xs : float const?
+    xbs : int const?
+}
+
+//! a superblock format reads the Q8_K form (`kxq`, its scales, its block sums); a per-32 format the Q8_0 form q8 reads
+def chain_acts(fmt : KqFmt; kxq : int8 const?; kxs : float const?; kxbs : int const?; xq : int8 const?; xs : float const?) : ChainActs =>
+    kq_sb(fmt) ? ChainActs(xq = kxq, xs = kxs, xbs = kxbs) : ChainActs(xq = xq, xs = xs)
 
 // Do the gate/up stacks read the Q8_K-form scratch? Superblock formats only — q8 AND q51 read
 // the Q8_0-form image. The pair shares ONE gathered activation plane, so both stacks must
@@ -6208,7 +6233,7 @@ def private fused_cls_ok(t : Model) : bool {
     let c = t.config
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     return (g_fused_decode && t.quant == QuantMode.q8
-        && kq_servable(t, cls_fmt)
+        && chain_servable(t, cls_fmt)
         && get_jobque_team_mode() && kernel_backend_has_rows()
         && (!t.wscale_f16 || kernel_backend_has_rows16())
         && c.vocab_size % 32l == 0l
@@ -6224,7 +6249,8 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
     let vocab = c.vocab_size
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     let is_kq = cls_fmt != KqFmt.q8
-    if (is_kq) {
+    let is_sb = kq_sb(cls_fmt)
+    if (is_sb) {
         quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)   // kq v2: the rows cores read Q8_K form
     } else {
         quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
@@ -6237,8 +6263,8 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
     count_parallel_dispatch(min(n0, ngrp))
     unsafe {
         var lp = addr(s.logits[0])
-        var xqp = is_kq ? addr(s.kxq[0]) : addr(s.xq[0])
-        var xsp = is_kq ? addr(s.kxs[0]) : addr(s.xs[0])
+        var xqp = is_sb ? addr(s.kxq[0]) : addr(s.xq[0])
+        var xsp = is_sb ? addr(s.kxs[0]) : addr(s.xs[0])
         let f16w = t.wscale_f16
         let mmrows16 = mm_q8q8_rows16_fn()
         let wp = cls_fmt == KqFmt.q8 ? addr < int8 const? >(t.qblob[0]) + t.wcls_off : null
@@ -6251,7 +6277,7 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
                 ws = addr < float const? >(t.qscales[0]) + t.wcls_off / 32l
             }
         }
-        var xbsw : int? = is_kq ? addr(s.kxbs[0]) : null
+        var xbsw : int? = is_sb ? addr(s.kxbs[0]) : null
         let kqpc = kq_plane_q(t, cls_fmt, t.wcls_off)
         let kspc = kq_plane_s(t, cls_fmt, t.wcls_off)
         let rowsc = kq_rows_for(cls_fmt)
@@ -8159,12 +8185,12 @@ def fused_ffn_ok(t : Model; l : int64) : bool {
     let f1 = fmt_at(t.w1_fmt, l)
     let f2 = fmt_at(t.w2_fmt, l)
     let f3 = fmt_at(t.w3_fmt, l)
-    let any_kq = f1 != KqFmt.q8 || f2 != KqFmt.q8 || f3 != KqFmt.q8
+    let any_sb = kq_sb(f1) || kq_sb(f2) || kq_sb(f3)
     return (g_fused_decode && t.quant == QuantMode.q8
-        && kq_servable(t, f1) && kq_servable(t, f2) && kq_servable(t, f3)
+        && chain_servable(t, f1) && chain_servable(t, f2) && chain_servable(t, f3)
         // kq v2 regrain: Q8_K quantizes whole 256-superblocks, so dim/hidden must divide out cleanly
-        && (!any_kq || c.dim % 256l == 0l)
-        && (f2 == KqFmt.q8 || layer_hidden(t, l) % 256l == 0l)
+        && (!any_sb || c.dim % KQ_SB_ELEMS == 0l)
+        && (!kq_sb(f2) || layer_hidden(t, l) % KQ_SB_ELEMS == 0l)
         && get_jobque_team_mode() && kernel_backend_has_rows()
         && (!t.wscale_f16 || kernel_backend_has_rows16())
         && lanes_for_work(c.dim * layer_hidden(t, l), g_gemv_lane_cap) > 1)

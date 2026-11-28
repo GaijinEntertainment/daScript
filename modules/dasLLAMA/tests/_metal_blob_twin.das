@@ -263,7 +263,7 @@ def metal_batch_decline_count(why : string) : int64 {
 
 //! the per-32 dense formats, `kq_dense_b32`'s members
 let PER32_FMTS = fixed_array(KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.mlx4,
-    KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b, KqFmt.mlx6b)
+    KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b, KqFmt.mlx6b, KqFmt.q20, KqFmt.q10)
 
 //! the class stem a format's Metal stamps carry (`Q51`, `Mlx4b`)
 def kq_stem(f : KqFmt) : string => capitalize("{f}")
@@ -310,12 +310,14 @@ def kq_twin_dispatches(f : KqFmt; compiled : bool) : int64 {
 
 //! every per-32 dispatch a window of `f` takes since the census
 //! reset: the base GEMM, its split stamp (0 uncompiled), the twins
-//! and dequant (a panic uncompiled), the small-batch forms, the GEMV
+//! and dequant (a panic uncompiled where the box profile crowns the member's
+//! tensor form, 0 where it does not - the twins compile under the crown),
+//! the small-batch forms, the GEMV
 def kq_window_dispatches(f : KqFmt) : int64 {
     let s = kq_stem(f)
     return (metal_kernel_count("MetalKqMulMm{s}_metal_kq_mulmm")
         + metal_kernel_count_compiled("MetalKqMulMm{s}Sk_metal_kq_mulmm")
-        + kq_twin_dispatches(f, false) + kq_mvb_dispatches(f) + kq_gemv_dispatches(f))
+        + kq_twin_dispatches(f, !metal_tensor_crowned("kq_mulmm_{f}")) + kq_mvb_dispatches(f) + kq_gemv_dispatches(f))
 }
 
 //! `f`'s routed tensor twins (`T`, `TH`, `TH128`, `THR`) on the

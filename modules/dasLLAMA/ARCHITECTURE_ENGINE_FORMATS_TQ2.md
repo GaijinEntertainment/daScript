@@ -2,7 +2,8 @@
 
 Companion to `ARCHITECTURE_ENGINE_FORMATS.md`; a section is cited by its anchor. This document carries
 the two ternary superblock members: how tq2's planes hold TQ2_0's disk bytes and the k2 bodies serve them,
-and how tq1's planes hold TQ1_0's and ride tq2's walk, fold and device row.
+how tq1's planes hold TQ1_0's and ride tq2's walk, fold and device row, and how Metal reads both in place
+(`#tq-metal-row`).
 
 ### The tq2 planes are TQ2_0's disk bytes, read by k2's bodies under constants {#tq2-k2-lattice}
 
@@ -29,8 +30,6 @@ superblock, d x d8 x (sum(q x) - sum(x)), the activation sum taken off the Q8_K 
 The generated tier's block body is k2's in `emit_block_kqv2` under the same constants: the sub-scale and
 min splats fold the multiplies away, the d row is the one f16 row, and the superblock fold is k6's at
 offset `TQ2_ZERO`. The `tq2q8_tile_gen` family carries k2's grid and class-profile rows.
-
-Metal's `kq_fmt_gpu_supported` refuses tq2: its loads leave the planes to the CPU.
 
 ### The discrete homes read the plane bytes, through k2's templates {#tq2-device-row}
 
@@ -90,8 +89,6 @@ superblock (32 pair sums of at most 512 a chain) and reads the activation sums o
 per-16 sums added, where tq2 folds per block. The `tq1q8_tile_gen` family carries tq2's grid, the trit rows and
 class-profile rows.
 
-Metal's `kq_fmt_gpu_supported` refuses tq1: its loads leave the planes to the CPU.
-
 ### The discrete homes read tq1's plane bytes, the trits taken in the kernel {#tq1-device-row}
 
 The Vulkan and CUDA homes serve tq1 off the bytes the CPU reads. The device quant row is the 52 quant bytes, thirteen words
@@ -118,3 +115,22 @@ The one-copy rare rail reads a streamed layer's experts off the same device layo
 `tq1q8_rm_gemv_gen` (tq2's arm of `rm_kq_gen` with each 32-block's codes the trits of its dwords' bytes, `rm_tq1_block`, its
 reference `rm_kq_dev_row`) is admitted by `rm_dev_serves`, and the host twin stamps `K2GemvT` under `TQ2` and `TQ1` as
 `HostKqGemvTq1`.
+
+### Metal reads the ternary planes in place, through k2's templates {#tq-metal-row}
+
+Metal serves tq2 and tq1 off the planes the CPU reads. The scale plane's Metal form is the plane itself: the f16 d a
+superblock, with no strip and no tail (`metal_kq_scale_row` answers the plane's 2 bytes, `kq_scale_d_tail` 0, and
+`metal_kq_scale_moves` is false), so the d binds at the scale offset and a dequant pass strides it by 2 bytes a
+superblock. A slice binds where its first superblock is even, the d row then on a 4-byte boundary (`metal_blob_off_ok`:
+an offset a multiple of 512 elements; a routed expert site also takes whole superblock pairs an expert, `moe_site_ok`).
+The quant plane is the 64 qs bytes, or tq1's thirteen column words.
+
+Every stamp is a k2 template under the `TQ2` constant, tq1's under `TQ1` beside it: the decode GEMV and its routed
+gathered form (`MetalKqGemvK2T`), the 2, 4 and 8 row batch forms and their half-activation twins (`MetalKqMvK2T`,
+`MetalKqMvB8K2T`), the token-table gather (`MetalEmbedK2T`), the base tile's k2 decode arm, and the tensor family -
+the twins, the split-K forms, the dev-W dequant pass and the routed twins (`MetalKqMulMmK2TensorT`). The `TQ2` arm reads
+the d as both d and dmin and takes no sub-scale, which folds k2's weight `q x dl - ml` to `d x (q - 1)`; the `TQ1` arm
+takes a weight dword's four codes from its column word (`tq1_dword_trit`, `tq1_word`), the discrete homes' read. A k2
+kernel binds its strip at one slot; a ternary stamp binds the d row there again as a half view (`KQ_SD`), so every
+builder keeps the family's signature and no ladder forks on the argument list. The tensor races give the members' planes
+the pure-d form.

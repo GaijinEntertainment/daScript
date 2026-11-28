@@ -122,6 +122,8 @@ def private allow_cpu_prefill_intent() {
 //   (`_kernel_coverage_cells.das`: its Vulkan rows and coopmat mode
 //   sweep on device forms); the per-op dense FFN rail's cells
 //   (`_perop_ffn_cells.das`) on per-op forms.
+// The TriLM and IQ1 mints' Metal forms are one skipped cell each on a build without das_metal, their crowned window a
+// skipped cell where the box compiles no Metal-4 tensor twin.
 // Every test skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, without its file under models_dir(),
 // or where a form's plan does not fit the card; a codec form is a held skip where DASLLAMA_VK_KV32=1 arms an f32 mirror,
 // a two-window feed where the prompt window is not PF_WINDOW_ROWS rows. Under DASLLAMA_CUDA=1 the Vulkan home's cells -
@@ -1593,6 +1595,19 @@ def private lowbit_within(t : T?; r : DenseFeeds; file : string) {
 def private lowbit_1b_forms() : array<ModelForm> =>
     <- [cpu_cells_form(backend = "portable", kq_native = KqNative.on), cpu_cells_form(kq_native = KqNative.on), device_form(), f32_form()]
 
+//! the 1-bit grid mints' forms: the Metal home's blob twin, whose census the portable form replays, ahead of the low-bit 1B ones
+def private iq1_1b_forms() : array<ModelForm> =>
+    <- [metal_form(ctx = CENSUS_CELLS_CTX), cpu_cells_form(backend = "portable", kq_native = KqNative.on),
+        cpu_cells_form(kq_native = KqNative.on), device_form(), f32_form()]
+
+//! one form's share of a 1-bit grid mint (`file`, member `f`): the blob twin's Metal census, the portable CPU form's replay of
+//! it, and the low-bit 1B rows of every form off Metal
+def private iq1_1b_rows(t : T?; var c : DenseFeeds; var kept : CensusKept; var m : Model; form : ModelForm; f : KqFmt; file : string) {
+    format_census_pass(t, m, form, format_census_iq1(file, f), kept)
+    return if (form.on_metal)
+    lowbit_1b_rows(t, c, m, form, f, file)
+}
+
 //! a low-bit 1B mint's plane tags: every dense plane the ternary member's, `IQ1_1B_PLANES` the 1-bit grid member's
 def private lowbit_1b_tags(t : T?; m : Model; path : string; f : KqFmt) {
     if (f == KqFmt.tq2 || f == KqFmt.tq1) {
@@ -1623,9 +1638,19 @@ def private lowbit_1b_rows(t : T?; var c : DenseFeeds; m : Model; form : ModelFo
     }
 }
 
-//! the TriLM files' forms: the portable-pinned and the box's own K-quant-native CPU loads, the device
+//! the TriLM files' forms: the Metal home's blob twin, the portable-pinned and the box's own K-quant-native CPU loads, the device
 def private trilm_forms() : array<ModelForm> =>
-    <- [cpu_cells_form(backend = "portable", kq_native = KqNative.on), cpu_cells_form(kq_native = KqNative.on), device_form()]
+    <- [metal_form(ctx = CENSUS_CELLS_CTX), cpu_cells_form(backend = "portable", kq_native = KqNative.on),
+        cpu_cells_form(kq_native = KqNative.on), device_form()]
+
+//! one form's share of a TriLM file's Metal census (`row`): the blob twin's census, window and steps and its greedy
+//! continuation of the story prompt, logged; the portable CPU form's replay
+def private trilm_census_rows(t : T?; var kept : CensusKept; var m : Model; form : ModelForm; row : CensusRow) {
+    format_census_pass(t, m, form, row, kept)
+    return if (!form.on_metal || !kept.metal_ran)
+    var inscope ids <- trilm_greedy(m, KVDtype.f16)
+    to_log(LOG_INFO, "{row.file} Metal greedy continuation: {eyeball_text(m, ids)}\n")
+}
 
 //! what TriLM's forms collect for the compare after the block: the story feed - `TRILM_PROMPT` with llama.cpp's opening fed after
 //! it - on the device and on the box backend's CPU form, and the device's greedy continuation
@@ -1745,7 +1770,7 @@ def private trilm_story_within(t : T?; s : TrilmStory; f : KqFmt; file : string)
     }
 }
 
-[test(description = "The Llama-3.2-1B TQ2_0 mint and TriLM 1.1B TQ2_0: on their K-quant-native CPU forms, on every box, every layer's seven dense planes are TQ2_0 on disk and tagged tq2, the last layer's attn_q rows through the served matmul dot the file dequant's rows on an exact Q8_K row within 1e-5, and on the portable pin the planes stay disk-order and dequant to the file's bit for bit; on the box's own backend TriLM's feed of its story prompt reads each token of llama.cpp's opening ' lived in a house with a big tree.' as its argmax or within the dense tie bar, llama.cpp's next token outside it; on the device form of either home the whole-model driver serves the tq2 planes - the tags, the tq2 stamps counted on the home's census and none on a CPU form, the 1B's resident chain no further from the f32 chain than the CPU q8 chain over one and two windows plus eight steps, every call served, and TriLM's story feed within 6 percent of the box backend's; on the Vulkan home the kernel coverage census's coopmat mode sweep runs the mint under the box's, KHR and sdot4 modes; each form loads once")]
+[test(description = "The Llama-3.2-1B TQ2_0 mint and TriLM 1.1B TQ2_0: on their K-quant-native CPU forms, on every box, every layer's seven dense planes are TQ2_0 on disk and tagged tq2, the last layer's attn_q rows through the served matmul dot the file dequant's rows on an exact Q8_K row within 1e-5, and on the portable pin the planes stay disk-order and dequant to the file's bit for bit; on the box's own backend TriLM's feed of its story prompt reads each token of llama.cpp's opening ' lived in a house with a big tree.' as its argmax or within the dense tie bar, llama.cpp's next token outside it; on the device form of either home the whole-model driver serves the tq2 planes - the tags, the tq2 stamps counted on the home's census and none on a CPU form, the 1B's resident chain no further from the f32 chain than the CPU q8 chain over one and two windows plus eight steps, every call served, and TriLM's story feed within 6 percent of the box backend's; on the Metal home's blob twin TriLM's planes load as tq2, its window and six steps ride the tq2 stamps and GEMV and sit within the dense K-quant bar of the portable CPU chain's, the one-step-off rows outside it; on the Vulkan home the kernel coverage census's coopmat mode sweep runs the mint under the box's, KHR and sdot4 modes; each form loads once")]
 def test_llama_tq2(t : T?) {
     return if (!family_on(t, "llama"))
     var forms <- lowbit_1b_forms()
@@ -1766,15 +1791,20 @@ def test_llama_tq2(t : T?) {
     delete forms
     var story : TrilmStory
     var trilm <- trilm_forms()
+    var census : CensusKept
     with_cpu_and_gpu_model(t, "llm", "TriLM_1.1B_Unpacked-tq2_0.gguf", TRILM_STORY_CTX, trilm, false) $(var m, form) {
-        trilm_story_rows(t, story, m, form, KqFmt.tq2, FILE_TRILM_TQ2)
+        trilm_census_rows(t, census, m, form, format_census_ternary(FILE_TRILM_TQ2, KqFmt.tq2))
+        if (!form.on_metal) {
+            trilm_story_rows(t, story, m, form, KqFmt.tq2, FILE_TRILM_TQ2)
+        }
     }
     trilm_story_within(t, story, KqFmt.tq2, FILE_TRILM_TQ2)
+    format_census_verdict(t, format_census_ternary(FILE_TRILM_TQ2, KqFmt.tq2), census)
     delete story
     delete trilm
 }
 
-[test(description = "The Llama-3.2-1B TQ1_0 mint and TriLM 1.1B TQ1_0: on their K-quant-native CPU forms, on every box, every layer's seven dense planes are TQ1_0 on disk and tagged tq1, the last layer's attn_q rows through the served matmul dot the file dequant's rows on an exact Q8_K row within 1e-5, and on the portable pin the planes stay disk-order and dequant to the file's bit for bit; on the box's own backend TriLM's feed of its story prompt reads each token of llama.cpp's opening ' lived in a house with a big tree.' as its argmax or within the dense tie bar, llama.cpp's next token outside it; on the device form of either home the whole-model driver serves the tq1 planes - the tags, the tq1 stamps counted on the home's census and none on a CPU form, the 1B's resident chain no further from the f32 chain than the CPU q8 chain over one and two windows plus eight steps, every call served, and TriLM's story feed within 6 percent of the box backend's; on the Vulkan home the kernel coverage census's coopmat mode sweep runs the mint under the box's, KHR and sdot4 modes; each form loads once")]
+[test(description = "The Llama-3.2-1B TQ1_0 mint and TriLM 1.1B TQ1_0: on their K-quant-native CPU forms, on every box, every layer's seven dense planes are TQ1_0 on disk and tagged tq1, the last layer's attn_q rows through the served matmul dot the file dequant's rows on an exact Q8_K row within 1e-5, and on the portable pin the planes stay disk-order and dequant to the file's bit for bit; on the box's own backend TriLM's feed of its story prompt reads each token of llama.cpp's opening ' lived in a house with a big tree.' as its argmax or within the dense tie bar, llama.cpp's next token outside it; on the device form of either home the whole-model driver serves the tq1 planes - the tags, the tq1 stamps counted on the home's census and none on a CPU form, the 1B's resident chain no further from the f32 chain than the CPU q8 chain over one and two windows plus eight steps, every call served, and TriLM's story feed within 6 percent of the box backend's; on the Metal home's blob twin TriLM's planes load as tq1, its window and six steps ride the tq1 stamps and GEMV and sit within the dense K-quant bar of the portable CPU chain's, the one-step-off rows outside it; on the Vulkan home the kernel coverage census's coopmat mode sweep runs the mint under the box's, KHR and sdot4 modes; each form loads once")]
 def test_llama_tq1(t : T?) {
     return if (!family_on(t, "llama"))
     var forms <- lowbit_1b_forms()
@@ -1795,52 +1825,61 @@ def test_llama_tq1(t : T?) {
     delete forms
     var story : TrilmStory
     var trilm <- trilm_forms()
+    var census : CensusKept
     with_cpu_and_gpu_model(t, "llm", "TriLM_1.1B_Unpacked-tq1_0.gguf", TRILM_STORY_CTX, trilm, false) $(var m, form) {
-        trilm_story_rows(t, story, m, form, KqFmt.tq1, FILE_TRILM_TQ1)
+        trilm_census_rows(t, census, m, form, format_census_ternary(FILE_TRILM_TQ1, KqFmt.tq1))
+        if (!form.on_metal) {
+            trilm_story_rows(t, story, m, form, KqFmt.tq1, FILE_TRILM_TQ1)
+        }
     }
     trilm_story_within(t, story, KqFmt.tq1, FILE_TRILM_TQ1)
+    format_census_verdict(t, format_census_ternary(FILE_TRILM_TQ1, KqFmt.tq1), census)
     delete story
     delete trilm
 }
 
-[test(description = "The Llama-3.2-1B IQ1_S mint: on its K-quant-native CPU forms, on every box, its 78 IQ1_S planes (attn_q, attn_k, ffn_gate and ffn_up, ffn_down past layer 1) and every other dense plane tagged by its disk type, the last layer's attn_q rows through the served matmul dotting the file dequant's rows on an exact Q8_K row within 1e-5 - on the box's own backend layer 0's attention q and layer 2's FFN down rows too, against the file rows' dot within f32 reassociation - and on the portable pin the planes disk-order and dequantizing to the file's bit for bit; on the device form of either home the whole-model driver serves the iq1s planes - the tags, the iq1s stamps counted on the home's census and none on a CPU form, the resident chain no further from the f32 chain than the CPU q8 chain over one and two windows plus eight steps, every call served; on the Vulkan home the kernel coverage census's coopmat mode sweep runs the mint under the box's, KHR and sdot4 modes; each form loads once")]
+[test(description = "The Llama-3.2-1B IQ1_S mint: on its K-quant-native CPU forms, on every box, its 78 IQ1_S planes (attn_q, attn_k, ffn_gate and ffn_up, ffn_down past layer 1) and every other dense plane tagged by its disk type, the last layer's attn_q rows through the served matmul dotting the file dequant's rows on an exact Q8_K row within 1e-5 - on the box's own backend layer 0's attention q and layer 2's FFN down rows too, against the file rows' dot within f32 reassociation - and on the portable pin the planes disk-order and dequantizing to the file's bit for bit; on the device form of either home the whole-model driver serves the iq1s planes - the tags, the iq1s stamps counted on the home's census and none on a CPU form, the resident chain no further from the f32 chain than the CPU q8 chain over one and two windows plus eight steps, every call served; on the Vulkan home the kernel coverage census's coopmat mode sweep runs the mint under the box's, KHR and sdot4 modes; on the Metal blob twin every site reads its own format, the window and each step ride the iq1s stamps and the tied Q5_K table's device gather, and their rows sit within the dense bar of the portable CPU chain's; each form loads once")]
 def test_llama_iq1s(t : T?) {
     return if (!family_on(t, "llama"))
-    var forms <- lowbit_1b_forms()
+    var forms <- iq1_1b_forms()
     sweep_forms(t, forms, FILE_1B_IQ1S)
     var c : DenseFeeds
+    var census : CensusKept
     dense_feeds(c, gpu_want_cuda() ? [40l] : [40l, TWO_WINDOWS])
     let ran = with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-IQ1_S-local.gguf", REGIONS_RIG_CTX, forms) $(var m, form) {
         if (sweep_leg(form)) {
             sweep_cell(t, m, form, FILE_1B_IQ1S)
         } else {
-            lowbit_1b_rows(t, c, m, form, KqFmt.iq1s, FILE_1B_IQ1S)
+            iq1_1b_rows(t, c, census, m, form, KqFmt.iq1s, FILE_1B_IQ1S)
         }
     }
     if (ran) {
         lowbit_within(t, c, FILE_1B_IQ1S)
     }
+    format_census_verdict(t, format_census_iq1(FILE_1B_IQ1S, KqFmt.iq1s), census)
     delete c
     delete forms
 }
 
-[test(description = "The Llama-3.2-1B IQ1_M mint: on its K-quant-native CPU forms, on every box, its 78 IQ1_M planes (attn_q, attn_k, ffn_gate and ffn_up, ffn_down past layer 1) and every other dense plane tagged by its disk type, the last layer's attn_q rows through the served matmul dotting the file dequant's rows on an exact Q8_K row within 1e-5 - on the box's own backend layer 0's attention q and layer 2's FFN down rows too, against the file rows' dot within f32 reassociation - and on the portable pin the planes disk-order and dequantizing to the file's bit for bit; on the device form of either home the whole-model driver serves the iq1m planes - the tags, the iq1m stamps counted on the home's census and none on a CPU form, the resident chain no further from the f32 chain than the CPU q8 chain over one and two windows plus eight steps, every call served; on the Vulkan home the kernel coverage census's coopmat mode sweep runs the mint under the box's, KHR and sdot4 modes; each form loads once")]
+[test(description = "The Llama-3.2-1B IQ1_M mint: on its K-quant-native CPU forms, on every box, its 78 IQ1_M planes (attn_q, attn_k, ffn_gate and ffn_up, ffn_down past layer 1) and every other dense plane tagged by its disk type, the last layer's attn_q rows through the served matmul dotting the file dequant's rows on an exact Q8_K row within 1e-5 - on the box's own backend layer 0's attention q and layer 2's FFN down rows too, against the file rows' dot within f32 reassociation - and on the portable pin the planes disk-order and dequantizing to the file's bit for bit; on the device form of either home the whole-model driver serves the iq1m planes - the tags, the iq1m stamps counted on the home's census and none on a CPU form, the resident chain no further from the f32 chain than the CPU q8 chain over one and two windows plus eight steps, every call served; on the Vulkan home the kernel coverage census's coopmat mode sweep runs the mint under the box's, KHR and sdot4 modes; on the Metal blob twin every site reads its own format, the window and each step ride the iq1m stamps and the tied Q5_K table's device gather, and their rows sit within the dense bar of the portable CPU chain's; each form loads once")]
 def test_llama_iq1m(t : T?) {
     return if (!family_on(t, "llama"))
-    var forms <- lowbit_1b_forms()
+    var forms <- iq1_1b_forms()
     sweep_forms(t, forms, FILE_1B_IQ1M)
     var c : DenseFeeds
+    var census : CensusKept
     dense_feeds(c, gpu_want_cuda() ? [40l] : [40l, TWO_WINDOWS])
     let ran = with_cpu_and_gpu_model(t, "llm", "Llama-3.2-1B-Instruct-IQ1_M-local.gguf", REGIONS_RIG_CTX, forms) $(var m, form) {
         if (sweep_leg(form)) {
             sweep_cell(t, m, form, FILE_1B_IQ1M)
         } else {
-            lowbit_1b_rows(t, c, m, form, KqFmt.iq1m, FILE_1B_IQ1M)
+            iq1_1b_rows(t, c, census, m, form, KqFmt.iq1m, FILE_1B_IQ1M)
         }
     }
     if (ran) {
         lowbit_within(t, c, FILE_1B_IQ1M)
     }
+    format_census_verdict(t, format_census_iq1(FILE_1B_IQ1M, KqFmt.iq1m), census)
     delete c
     delete forms
 }

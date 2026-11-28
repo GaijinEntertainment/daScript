@@ -333,6 +333,10 @@ var private FASTMATH_OFF_EXEMPT <- {
     "metal_kq_gemv_q5032_ks_msl" => "b32_mvb_gate",
     "metal_kq_gemv_mlx4_msl" => "b32_mvb_gate",
     "metal_kq_gemv_mlx4_ks_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_q20_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_q20_ks_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_q10_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_q10_ks_msl" => "b32_mvb_gate",
     "metal_kq_gemv_mlx8_msl" => "b32_mvb_gate",
     "metal_kq_gemv_mlx8_ks_msl" => "b32_mvb_gate",
     "metal_kq_gemv_mlx4b_msl" => "b32_mvb_gate",
@@ -1445,7 +1449,7 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 70
-let private IMAGE_LAYOUT_STAMP_HASH = 0x529d4bcc5c0fcc0eul
+let private IMAGE_LAYOUT_STAMP_HASH = 0x5b96d7e2ba070c91ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
@@ -1465,7 +1469,7 @@ var private LAYOUT_HELPERS <- {
     "kq_gather_rows_dev", "nv4_dev_unit", "kq_dev_qsb", "kq_dev_ssb", "pack_iq_dev_row", "wd_gather", "tower_fc_gather_kq_member", "tower_gather_q8_regions",
     "fc_kq_records", "tower_kq_seat_take", "parakeet_fc_record_seats", "tw_fc_kq_attach",
     "q8_gather_rows", "q8_gather_slice", "rnnt_dev_slab", "rnnt_dev_layout", "rnnt_bake", "rnnt_pred_rows", "rnnt_joint_cols",
-    "ts_gather_member", "ts_gather_member_metal", "tsw_store", "tts_slab_build_stored", "kq_scale_doff", "kq_scale_d_tail", "image_config_for", "kq_region_to_metal_planes", "kq_bind_offs",
+    "ts_gather_member", "ts_gather_member_metal", "tsw_store", "tts_slab_build_stored", "kq_scale_doff", "kq_scale_d_tail", "metal_kq_scale_moves", "metal_kq_scale_row", "metal_kq_scale_form_of", "metal_kq_scale_form_bytes", "image_config_for", "kq_region_to_metal_planes", "kq_bind_offs",
     "fc_q8_regions", "fc_gemm_records", "fc_front_records", "tower_fc_kq_plan", "tower_aud_regions", "ln_block_regions",
     "tower_ct_regions", "tower_q3a_regions", "gemma4a_all_regions", "gemma4a_block_regions",
     "tower_aud_stem16", "tower_aud_stem_kdp", "tower_g4a_front16", "tower_q3a_front16", "tower_q3a_stages", "tower_conv_stage",
@@ -2752,7 +2756,7 @@ let private GEMM_GEN_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_gemm_gen_f32.das",
     "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das"
 ]
-let private GEMM_GEN_STAMP_HASH = 0xb3f204ac2bb47f85ul
+let private GEMM_GEN_STAMP_HASH = 0x97ab9e8efa5caefbul
 
 [arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
 def private check_gemm_gen_stamp {

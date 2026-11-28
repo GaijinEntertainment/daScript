@@ -67,7 +67,8 @@ require _kernel_coverage_cells   // coverage_zoo_metal, coverage_vk_routed: the 
 // (512 experts) holds the device select past 256 experts beside the host-layer split. Those whole-file fixtures are their categories'
 // (qwen3moe-30b, qwen35moe-35b, qwen3coder-next), run under `--category`. The Qwen1.5 Q8_0 cut's Metal form (`metal_form`, the blob twin) carries the
 // Metal batched driver's shared-expert cells (`_metal_batched_cells.das`: the batched row and the one-row same-slab verify), one
-// skipped cell on a build without das_metal. The file is -jit only, and skips without the file or the armed tier; a codec form skips where
+// skipped cell on a build without das_metal, as is each q20 and q10 carrier's Metal form (its crowned window where the box
+// compiles no Metal-4 tensor twin). The file is -jit only, and skips without the file or the armed tier; a codec form skips where
 // DASLLAMA_VK_KV32=1 arms the f32 mirror over its codec; the two-window feeds where the prompt window is not PF_WINDOW_ROWS
 // rows; the CUDA home's own cells off DASLLAMA_CUDA=1, the pool cells where DASLLAMA_GPU_HEAT shadows their slot ask or the
 // plan seats no pool; the per-op heat cells skip under DASLLAMA_CUDA=1 (the per-op tier and its heat pool are the Vulkan
@@ -838,19 +839,37 @@ def private lowbit_moe_rows(t : T?; var r : Per32Rows; var m : Model; form : Mod
     }
 }
 
+//! a low-bit expert carrier's Metal census row (arm `census-moe-<fmt>`) and the CPU form its controls run on
+def private lowbit_carrier_metal(fx : MoeFixture; fmt : KqFmt) : MetalRows {
+    let cs = format_census_moe_lowbit(fx.file, fmt, 9l)
+    return MetalRows(cpu = census_cpu_form(cs), census = true, cs = cs)
+}
+
 //! the q20 expert carrier (recipe in ../performance/model_specs.das): the whole Qwen1.5-MoE, not a cut, so the cut's block claim stays off it
 let private PER32_Q20 = MoeFixture(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-Q2_0.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, census = true, host_layers_ask = 4l)
 
-[test(description = "Qwen1.5-MoE with the routed gate, up and down stacks of three layers Q2_0 reads every site in its own format on the device, those stacks on the q20 GEMVs and tiles, and holds the CPU chain's logits within the routed bar over one window and its fed steps, no call taking a CPU pass; each form loads once")]
+[test(description = "Qwen1.5-MoE with the routed gate, up and down stacks of three layers Q2_0 reads every site in its own format on the device, those stacks on the q20 GEMVs and tiles, and holds the CPU chain's logits within the routed bar over one window and its fed steps, no call taking a CPU pass; on the Metal blob twin (arm `census-moe-q20`) the window and its decode steps hold the CPU chain's reading those stacks off their own bytes, the q20 stacks on their routed GEMVs and, under the family's crown, their tensor twins; each form loads once")]
 def test_gpu_resident_moe_q20(t : T?) {
-    return if (!family_on(t, "qwen2moe") || !arm_on(t, "vk-per32-moe-q20"))
+    return if (!family_on(t, "qwen2moe"))
     var r : Per32Rows
-    if (with_cpu_and_gpu_model(t, "llm", "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-Q2_0.gguf", MOE_CUT_CTX, [device_form(host_layers = PER32_Q20.host_layers_ask)]) $(m, form) {
+    let mr = lowbit_carrier_metal(PER32_Q20, KqFmt.q20)
+    var mk = MetalKept()
+    var forms : array<ModelForm>
+    forms_or_skips(t, forms, PER32_Q20.file, [device_form(host_layers = PER32_Q20.host_layers_ask)], arm_why("vk-per32-moe-q20"))
+    metal_rows_forms(forms, mr, CENSUS_CELLS_CTX, [mr.cs.arm], [mr.cs.arm])
+    if (empty(forms)) {   //! the arm filter left every form of the block out
+        delete forms
+        return
+    }
+    if (with_cpu_and_gpu_model(t, "llm", "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-Q2_0.gguf", MOE_CUT_CTX, forms) $(var m, form) {
+                return if (metal_rows_pass(t, m, form, mr, mk))
                 lowbit_moe_rows(t, r, m, form, KqFmt.q20, PER32_Q20)
             }) {
         per32_rows_within(t, PER32_Q20, r)
     }
+    metal_rows_verdict(t, mr, mk)
     delete r
+    delete forms
 }
 
 //! the q10 expert carrier: the q20 carrier's recipe with the three layers' routed stacks Q1_0 (../performance/model_specs.das)
@@ -867,14 +886,18 @@ def private lowbit_moe_sites_cell(t : T?; var m : Model; fx : MoeFixture; fmt : 
     }
 }
 
-[test(description = "Qwen1.5-MoE with the routed gate, up and down stacks of three layers Q1_0 reads every site in its own format on the device, those stacks on the q10 GEMVs and tiles, and holds the CPU chain's logits within the routed bar over one window and its fed steps, no call taking a CPU pass; on the K-quant native CPU form, on every box, the routed sites load native - those stacks as q10 - and layer 3's expert gate, up and down rows match the file rows' dot within f32 reassociation; each form loads once")]
+[test(description = "Qwen1.5-MoE with the routed gate, up and down stacks of three layers Q1_0 reads every site in its own format on the device, those stacks on the q10 GEMVs and tiles, and holds the CPU chain's logits within the routed bar over one window and its fed steps, no call taking a CPU pass; on the K-quant native CPU form, on every box, the routed sites load native - those stacks as q10 - and layer 3's expert gate, up and down rows match the file rows' dot within f32 reassociation; on the Metal blob twin (arm `census-moe-q10`) the window and its decode steps hold the CPU chain's reading those stacks off their own bytes, the q10 stacks on their routed GEMVs and, under the family's crown, their tensor twins; each form loads once")]
 def test_gpu_resident_moe_q10(t : T?) {
     return if (!family_on(t, "qwen2moe"))
     var r : Per32Rows
+    let mr = lowbit_carrier_metal(PER32_Q10, KqFmt.q10)
+    var mk = MetalKept()
     var forms : array<ModelForm>
     forms_or_skips(t, forms, PER32_Q10.file, [device_form(host_layers = PER32_Q10.host_layers_ask)], arm_why("vk-per32-moe-q10"))
     forms |> push(cpu_cells_form(kq_native = KqNative.on_q40))
+    metal_rows_forms(forms, mr, CENSUS_CELLS_CTX, [mr.cs.arm], [mr.cs.arm])
     if (with_cpu_and_gpu_model(t, "llm", "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-Q1_0.gguf", MOE_CUT_CTX, forms) $(var m, form) {
+                return if (metal_rows_pass(t, m, form, mr, mk))
                 if (form.alone) {
                     lowbit_moe_sites_cell(t, m, PER32_Q10, KqFmt.q10)
                 } else {
@@ -883,6 +906,7 @@ def test_gpu_resident_moe_q10(t : T?) {
             }) {
         per32_rows_within(t, PER32_Q10, r)
     }
+    metal_rows_verdict(t, mr, mk)
     delete r
     delete forms
 }

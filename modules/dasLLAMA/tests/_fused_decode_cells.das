@@ -23,12 +23,14 @@ let FUSED_STEPS = 24   //! the greedy compare's decode steps
 let FUSED_CTX = 64l   //! the GGUF sessions' context: FUSED_STEPS positions and room; a CPU f32 K/V at a file's whole context runs to tens of GB (77 on the 262144-position Qwen3-4B)
 
 //! fused and per-op decode over FUSED_STEPS greedy steps on `tr`, each on a fresh f32 session: the greedy ids and the final
-//! logits bit for bit
+//! logits bit for bit - both sides read one backend rows core and keep one per-element order, so their logits are the
+//! same bits and no tie can split the ids; both sides' texts and final picks logged, the fused knob put back
 [cold_path]
 def fused_vs_std_bit_exact(t : T?; tr : Model) {
     let c = tr.config
     var ids_std, ids_fused : array<int64>
     var lg_std, lg_fused : array<float>
+    let fused0 = get_fused_decode()
     set_fused_decode(false)
     var s1 <- make_run_state(c)
     greedy_ids(tr, s1, FUSED_STEPS, ids_std, lg_std)
@@ -37,6 +39,11 @@ def fused_vs_std_bit_exact(t : T?; tr : Model) {
     var s2 <- make_run_state(c)
     greedy_ids(tr, s2, FUSED_STEPS, ids_fused, lg_fused)
     delete s2
+    set_fused_decode(fused0)
+    to_log(LOG_INFO, "fused decode, per-op text: {eyeball_text(tr, ids_std)}\n")
+    to_log(LOG_INFO, "fused decode, fused text: {eyeball_text(tr, ids_fused)}\n")
+    to_log(LOG_INFO, ("fused decode, final logits: per-op next {pick_text(tr, lg_std)} vs fused next {pick_text(tr, lg_fused)} " +
+        "(maxd {logits_maxdiff(lg_std, lg_fused)})\n"))
     var id_bad = 0
     for (i in range(FUSED_STEPS)) {
         if (ids_std[i] != ids_fused[i]) {
@@ -55,6 +62,26 @@ def fused_vs_std_bit_exact(t : T?; tr : Model) {
     delete ids_fused
     delete lg_std
     delete lg_fused
+}
+
+//! a per-32 carrier's decode on the fused chains: layer 0's attention chain takes the `fmt` planes where the backend has the
+//! format's rows core - its FFN chain too under `ffn`, else it declines (a superblock down plane at a width off the 256
+//! grain) - and the chains' greedy ids and logits are the per-op dispatches', bit for bit
+def fused_per32_cell(t : T?; var m : Model; file : string; fmt : KqFmt; ffn : bool) {
+    if (!kernel_backend_has_b32_rows(fmt)) {
+        skip_cell(t, "{file}, the fused decode chains: the backend has no {fmt} rows core")
+        return
+    }
+    unsafe {   //! the cell reads the block's model by reference
+        t |> run("{file}: the fused decode chains serve the {fmt} planes, bit for bit the per-op dispatches") @capture(& m)(t : T ?) {
+            with_threaded_jobque() {
+                t |> success(fused_attn_ok(m, 0l), "layer 0's attention chain takes the {fmt} planes")
+                t |> equal(fused_ffn_ok(m, 0l), ffn, (ffn ? "layer 0's FFN chain takes the {fmt} planes"
+                    : "layer 0's FFN chain declines: a superblock down plane at a width off the 256 grain"))
+                fused_vs_std_bit_exact(t, m)
+            }
+        }
+    }
 }
 
 //! the run `title` of `fused_vs_std_bit_exact` on `tr` with dispatch forced threaded: SmolLM2-135M's head size 64 takes the
