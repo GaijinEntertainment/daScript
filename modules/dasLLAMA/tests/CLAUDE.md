@@ -4484,8 +4484,7 @@ parity-evidence shape - a `prefix_bar` carrier holds at least two ids, so its ha
 token or more), the fixture compare the gates read (`prefix_match_len` / `fixture_ok` on hand rows:
 the strict form reds a flipped last id where the half-span form holds it, a flip inside the first
 half reds both, the bar sits exactly at half the span), the derived provenance view's invariants (unique names, sha-or-recipe,
-https urls, and a sha256-pinned entry's source at a revision, not `resolve/main` - `UNPINNED_MAIN` lists the entries
-still owed one and reds an entry that no longer floats), the quantize-minted rows (`test_quantize_rows`: each names a fetched source row, pins bytes and sha256 where it is also published, carries the recipe
+https urls, and a sha256-pinned entry's source at a revision, not `resolve/main`), the quantize-minted rows (`test_quantize_rows`: each names a fetched source row, pins bytes and sha256 where it is also published, carries the recipe
 `quantize_commands` spells, and reaches the provenance view with its `quantize`; `fetch_models --convert`'s route
 `convert_route` - a quantize row to the mint even under a canary name, a canary row to its conversion, any other to the
 no-recipe warning, Windows refused - and the mint's `mint_steps` - no source refused, an absent importance matrix built
