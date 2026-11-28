@@ -451,7 +451,7 @@ let CANARY_ENC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggm
 let CANARY_DEC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv), then llama-quantize Q8_0 (a Q8_0 disk embedding lets the tied classifier serve cls_q8 on the Metal rail); bytes are per-arch (fp16 LoRA merge) - gate via asr_bench --text over jfk/jfk3/gb1 vs benchmarks/asr/canary_transcripts.expected"
 let CANARY_DEC_F16_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv) --decoder-outtype f16 - the decoder the Q8_0 quantize reads (fetch_models --convert writes it on the way)"
 let TTS_HF = "{HF}/borisbat/dasllama-tts/resolve/a62130a44d6f8fef8a5113825c5f15b01e1c8f80"   //! the published set, commit-pinned
-let FORMATS_HF = "{HF}/borisbat/dasllama-formats/resolve/49d44cd688b8f0aea4b075c1923ebb713e549e52"   //! the format matrix, commit-pinned
+let FORMATS_HF = "{HF}/borisbat/dasllama-formats/resolve/a05544621abe7e9be8ac0503f82cc95050cb3d8b"   //! the format matrix, commit-pinned
 //! the borisbat/dasllama-tts commit that publishes the Pocket parity rail's reference files
 let TTS_HF_REFS_REVISION = "f0cc0de73e5ce856e1604a83114d2fe01315f3b3"
 
@@ -831,23 +831,30 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             sha256 = "700d2386a8ef18bdb1e5f65df612a3014d10723e6e50f74af19251b87e4b8224",
             recipe = "llama-quantize --allow-requantize --pure --token-embedding-type q5_0 --output-tensor-type q5_0 Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf Qwen1.5-MoE-A2.7B-Chat-Q5_0-pure-local.gguf Q5_0"),
         // the q20 expert census file: the three routed stacks of every layer Q2_0, every other plane Q8_0
-        ModelSpec(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps-Q2_0.gguf", bytes = 5493914336l, sha256 = "8b4edc2aaebc25e01305bdc495ff6656db0ae32f75a9c7c4b5942945243f6e1b",
+        ModelSpec(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps-Q2_0.gguf",
+            url = "{FORMATS_HF}/Qwen1.5-MoE-A2.7B-Chat/Qwen1.5-MoE-A2.7B-Chat-exps-Q2_0.gguf", bytes = 5493914336l, sha256 = "8b4edc2aaebc25e01305bdc495ff6656db0ae32f75a9c7c4b5942945243f6e1b",
             recipe = "llama-quantize --allow-requantize --tensor-type ffn_gate_exps=Q2_0 --tensor-type ffn_up_exps=Q2_0 --tensor-type ffn_down_exps=Q2_0 Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf Qwen1.5-MoE-A2.7B-Chat-exps-Q2_0.gguf Q8_0"),
         // the q20 expert carrier: the three routed stacks of layers 3, 11 and 19 Q2_0, every other plane Q8_0
-        ModelSpec(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-Q2_0.gguf", bytes = 14009498336l, sha256 = "d5277791efb8e149aa9e9e321ff937335f09c544687b29a7c01aba334f595677",
+        ModelSpec(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-Q2_0.gguf",
+            url = "{FORMATS_HF}/Qwen1.5-MoE-A2.7B-Chat/Qwen1.5-MoE-A2.7B-Chat-exps3-Q2_0.gguf", bytes = 14009498336l, sha256 = "d5277791efb8e149aa9e9e321ff937335f09c544687b29a7c01aba334f595677",
             recipe = "llama-quantize --allow-requantize --tensor-type '^blk\\.(3|11|19)\\.ffn_(gate|up|down)_exps\\.weight$=Q2_0' Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf Qwen1.5-MoE-A2.7B-Chat-exps3-Q2_0.gguf Q8_0"),
         // the q10 expert carrier: the three routed stacks of layers 3, 11 and 19 Q1_0, every other plane Q8_0
-        ModelSpec(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-Q1_0.gguf", bytes = 13790526176l, sha256 = "9f2371dbab2e3b90d332aea2edf1c841015542638f1347e4fa7a186ec97667b7",
+        ModelSpec(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-Q1_0.gguf",
+            url = "{FORMATS_HF}/Qwen1.5-MoE-A2.7B-Chat/Qwen1.5-MoE-A2.7B-Chat-exps3-Q1_0.gguf", bytes = 13790526176l, sha256 = "9f2371dbab2e3b90d332aea2edf1c841015542638f1347e4fa7a186ec97667b7",
             recipe = "llama-quantize --allow-requantize --tensor-type '^blk\\.(3|11|19)\\.ffn_(gate|up|down)_exps\\.weight$=Q1_0' Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf Qwen1.5-MoE-A2.7B-Chat-exps3-Q1_0.gguf Q8_0"),
-        ModelSpec(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-IQ1_S.gguf", bytes = 14066269248l, sha256 = "c7b4d38691950a895e8ab4c8da563b6ab99881af4fbe323e55d6fe49b8e744c9",
+        ModelSpec(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-IQ1_S.gguf",
+            url = "{FORMATS_HF}/Qwen1.5-MoE-A2.7B-Chat/Qwen1.5-MoE-A2.7B-Chat-exps3-IQ1_S.gguf", bytes = 14066269248l, sha256 = "c7b4d38691950a895e8ab4c8da563b6ab99881af4fbe323e55d6fe49b8e744c9",
             recipe = "llama-quantize --allow-requantize --imatrix Qwen1.5-MoE-A2.7B-Chat.imatrix --tensor-type '^blk\\.(3|11|19)\\.ffn_(gate|up|down)_exps\\.weight$=IQ1_S' Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf Qwen1.5-MoE-A2.7B-Chat-exps3-IQ1_S.gguf Q8_0"),
-        ModelSpec(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-IQ1_M.gguf", bytes = 14090599488l, sha256 = "3adbff8ed9077cbb48babc3fd0b3ed996a08c13cb4a2807bcf2a3e7fa55ea0c3",
+        ModelSpec(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-IQ1_M.gguf",
+            url = "{FORMATS_HF}/Qwen1.5-MoE-A2.7B-Chat/Qwen1.5-MoE-A2.7B-Chat-exps3-IQ1_M.gguf", bytes = 14090599488l, sha256 = "3adbff8ed9077cbb48babc3fd0b3ed996a08c13cb4a2807bcf2a3e7fa55ea0c3",
             recipe = "llama-quantize --allow-requantize --imatrix Qwen1.5-MoE-A2.7B-Chat.imatrix --tensor-type '^blk\\.(3|11|19)\\.ffn_(gate|up|down)_exps\\.weight$=IQ1_M' Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf Qwen1.5-MoE-A2.7B-Chat-exps3-IQ1_M.gguf Q8_0"),
         // the tq2 expert carrier: the gate and up stacks of layers 3, 11 and 19 TQ2_0, their down stacks Q4_0 (the quantizer's fallback: a 1408-column row is no multiple of 256), every other plane Q8_0
-        ModelSpec(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-TQ2_0.gguf", bytes = 14131149536l, sha256 = "3497e542de3f26149411e8839d1a528f67cbf0f3618829e28248b39c91cd9b91",
+        ModelSpec(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-TQ2_0.gguf",
+            url = "{FORMATS_HF}/Qwen1.5-MoE-A2.7B-Chat/Qwen1.5-MoE-A2.7B-Chat-exps3-TQ2_0.gguf", bytes = 14131149536l, sha256 = "3497e542de3f26149411e8839d1a528f67cbf0f3618829e28248b39c91cd9b91",
             recipe = "llama-quantize --allow-requantize --tensor-type '^blk\\.(3|11|19)\\.ffn_(gate|up|down)_exps\\.weight$=TQ2_0' Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf Qwen1.5-MoE-A2.7B-Chat-exps3-TQ2_0.gguf Q8_0"),
         // the tq1 expert carrier: the tq2 carrier's layout with TQ1_0 on the gate and up stacks, the down stacks Q4_0 by the same fallback
-        ModelSpec(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-TQ1_0.gguf", bytes = 14082489056l, sha256 = "ca97acabfaba2cb04c6a12733b4b6e8e1043af27d66dad24baf569707d889bb1",
+        ModelSpec(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps3-TQ1_0.gguf",
+            url = "{FORMATS_HF}/Qwen1.5-MoE-A2.7B-Chat/Qwen1.5-MoE-A2.7B-Chat-exps3-TQ1_0.gguf", bytes = 14082489056l, sha256 = "ca97acabfaba2cb04c6a12733b4b6e8e1043af27d66dad24baf569707d889bb1",
             recipe = "llama-quantize --allow-requantize --tensor-type '^blk\\.(3|11|19)\\.ffn_(gate|up|down)_exps\\.weight$=TQ1_0' Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf Qwen1.5-MoE-A2.7B-Chat-exps3-TQ1_0.gguf Q8_0"),
         // the qwen vision pairs (the qwen3vl arc): parity-less provenance carriers —
         // the deepstack and qwen25o chat cells (test_qwen3v / test_qwen25v) and the qwen tier-1 suites are their coverage
@@ -1277,15 +1284,17 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-Q2_K-local.gguf Q2_K",
             parity <- ev_llama_count([kq_native = true])),
         // the tq2 carrier, a load and kernel vehicle: TQ2_0 rounds a full-precision model to noise, so its text is garbage on every engine
-        ModelSpec(file = "Llama-3.2-1B-Instruct-TQ2_0-local.gguf", bytes = 474443904l, sha256 = "efe70dc43eed147b0e35559f3bd94daec1a7ac750fc8f783bbf98784a7d616b8",
+        ModelSpec(file = "Llama-3.2-1B-Instruct-TQ2_0-local.gguf",
+            url = "{FORMATS_HF}/Llama-3.2-1B-Instruct/Llama-3.2-1B-Instruct-TQ2_0-local.gguf", bytes = 474443904l, sha256 = "efe70dc43eed147b0e35559f3bd94daec1a7ac750fc8f783bbf98784a7d616b8",
             recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-TQ2_0-local.gguf TQ2_0"),
         // the trained-ternary tq2 carrier (arch llama, no chat template): every dense plane TQ2_0, a Q4_K table, a Q6_K classifier
-        ModelSpec(file = "TriLM_1.1B_Unpacked-tq2_0.gguf", bytes = 376897440l, sha256 = "7815bbc75fc121c7719825cdf2f22b28931d32b4306ca0c99a6bc751d6c2a5c8",
-            recipe = "the tq2_0 file of a TriLM_1.1B_Unpacked-GGUF Hugging Face repository at commit c385941d3f17b26be83916a587ebda13e2b1a19e, as published"),
-        ModelSpec(file = "Llama-3.2-1B-Instruct-TQ1_0-local.gguf", bytes = 428830848l, sha256 = "be02b20a64e985e2495e184a8f7a35f30492929ad51b2872cd74f7be92245ece",
+        ModelSpec(file = "TriLM_1.1B_Unpacked-tq2_0.gguf",
+            url = "{HF}/Mungert/TriLM_1.1B_Unpacked-GGUF/resolve/c385941d3f17b26be83916a587ebda13e2b1a19e/TriLM_1.1B_Unpacked-tq2_0.gguf", bytes = 376897440l, sha256 = "7815bbc75fc121c7719825cdf2f22b28931d32b4306ca0c99a6bc751d6c2a5c8"),
+        ModelSpec(file = "Llama-3.2-1B-Instruct-TQ1_0-local.gguf",
+            url = "{FORMATS_HF}/Llama-3.2-1B-Instruct/Llama-3.2-1B-Instruct-TQ1_0-local.gguf", bytes = 428830848l, sha256 = "be02b20a64e985e2495e184a8f7a35f30492929ad51b2872cd74f7be92245ece",
             recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-TQ1_0-local.gguf TQ1_0"),
-        ModelSpec(file = "TriLM_1.1B_Unpacked-tq1_0.gguf", bytes = 331480992l, sha256 = "33e968bc4a632547694798eb2fb3a68c645d5e9969f26531d91a7b9628dc7ec8",
-            recipe = "the tq1_0 file of a TriLM_1.1B_Unpacked-GGUF Hugging Face repository at commit c385941d3f17b26be83916a587ebda13e2b1a19e, as published"),
+        ModelSpec(file = "TriLM_1.1B_Unpacked-tq1_0.gguf",
+            url = "{HF}/Mungert/TriLM_1.1B_Unpacked-GGUF/resolve/c385941d3f17b26be83916a587ebda13e2b1a19e/TriLM_1.1B_Unpacked-tq1_0.gguf", bytes = 331480992l, sha256 = "33e968bc4a632547694798eb2fb3a68c645d5e9969f26531d91a7b9628dc7ec8"),
         ModelSpec(file = "Llama-3.2-1B-Instruct-Q4_0-local.gguf",
             url = "{FORMATS_HF}/Llama-3.2-1B-Instruct/Llama-3.2-1B-Instruct-Q4_0-local.gguf", bytes = 770928768l, sha256 = "7fc343ff2f052fe10802d39f38cf36c101735e6b38050fb93b71c28a917089ce", display = "Llama-3.2-1B-q40", quant_label = "q4_0",
             recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-Q4_0-local.gguf Q4_0",
@@ -1315,20 +1324,24 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             sha256 = "ed604779a9a327f51e25093e0685cc6685cc21f129af37358a337388d50e5755",
             recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-Q5_0-local.gguf Q5_0"),
         // the dense q20 carrier: every matrix of every layer Q2_0, the token table Q6_K; its text is garbage in the reference build too
-        ModelSpec(file = "Llama-3.2-1B-Instruct-Q2_0-local.gguf", bytes = 497250432l, sha256 = "59fe05897d11a6d318b9a098c4d85736c4bf8688e586c116088137923f6ade29",
+        ModelSpec(file = "Llama-3.2-1B-Instruct-Q2_0-local.gguf",
+            url = "{FORMATS_HF}/Llama-3.2-1B-Instruct/Llama-3.2-1B-Instruct-Q2_0-local.gguf", bytes = 497250432l, sha256 = "59fe05897d11a6d318b9a098c4d85736c4bf8688e586c116088137923f6ade29",
             recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-Q2_0-local.gguf Q2_0"),
         // the trained ternary q20 carrier: Q2_0 on every matrix, the tied token table among them
-        ModelSpec(file = "Ternary-Bonsai-1.7B-Q2_0_g64.gguf", bytes = 490163968l, sha256 = "6d0ecb3d9055969b5cde332b6fdb60e67ed3599e9f73e56b977731e1467e5c91",
-            recipe = "the prism-ml/Ternary-Bonsai-1.7B-gguf repository's Ternary-Bonsai-1.7B-Q2_0_g64.gguf"),
+        ModelSpec(file = "Ternary-Bonsai-1.7B-Q2_0_g64.gguf",
+            url = "{HF}/prism-ml/Ternary-Bonsai-1.7B-gguf/resolve/40e40ecfe50bdfab51628042b1f8f4e97f08acd0/Ternary-Bonsai-1.7B-Q2_0_g64.gguf", bytes = 490163968l, sha256 = "6d0ecb3d9055969b5cde332b6fdb60e67ed3599e9f73e56b977731e1467e5c91"),
         // the dense q10 carrier: every matrix of every layer Q1_0; its text is garbage in the reference build too
-        ModelSpec(file = "Llama-3.2-1B-Instruct-Q1_0-local.gguf", bytes = 360411264l, sha256 = "6a03a3eae667d770762524f9073c753109ca632cc4b74ccfedc0d10d073bf2f3",
+        ModelSpec(file = "Llama-3.2-1B-Instruct-Q1_0-local.gguf",
+            url = "{FORMATS_HF}/Llama-3.2-1B-Instruct/Llama-3.2-1B-Instruct-Q1_0-local.gguf", bytes = 360411264l, sha256 = "6a03a3eae667d770762524f9073c753109ca632cc4b74ccfedc0d10d073bf2f3",
             recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-Q1_0-local.gguf Q1_0"),
         // the trained 1-bit q10 carrier: Q1_0 on every matrix, the tied token table among them
-        ModelSpec(file = "Bonsai-1.7B-Q1_0.gguf", bytes = 248302272l, sha256 = "3d7c6c90dd98717a203adb22d5eacd2581850e40aa5327e144b97766cae5f7e3",
-            recipe = "the prism-ml/Bonsai-1.7B-gguf repository's Bonsai-1.7B-Q1_0.gguf"),
-        ModelSpec(file = "Llama-3.2-1B-Instruct-IQ1_S-local.gguf", bytes = 393551936l, sha256 = "f7ec3deb72ab95f945b01459cfd45a8e5691eaeb750c52ec8a5efd20ccdf78c8",
+        ModelSpec(file = "Bonsai-1.7B-Q1_0.gguf",
+            url = "{HF}/prism-ml/Bonsai-1.7B-gguf/resolve/210a9e99f79cb184909d49595906526eb2b3dd9a/Bonsai-1.7B-Q1_0.gguf", bytes = 248302272l, sha256 = "3d7c6c90dd98717a203adb22d5eacd2581850e40aa5327e144b97766cae5f7e3"),
+        ModelSpec(file = "Llama-3.2-1B-Instruct-IQ1_S-local.gguf",
+            url = "{FORMATS_HF}/Llama-3.2-1B-Instruct/Llama-3.2-1B-Instruct-IQ1_S-local.gguf", bytes = 393551936l, sha256 = "f7ec3deb72ab95f945b01459cfd45a8e5691eaeb750c52ec8a5efd20ccdf78c8",
             recipe = "llama-quantize --allow-requantize --imatrix llama32_1b.imatrix Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-IQ1_S-local.gguf IQ1_S"),
-        ModelSpec(file = "Llama-3.2-1B-Instruct-IQ1_M-local.gguf", bytes = 413605952l, sha256 = "e090adcf207cbfe9d826cca105cdf7f65ee8bd6bc6848daf01657edddf4563e4",
+        ModelSpec(file = "Llama-3.2-1B-Instruct-IQ1_M-local.gguf",
+            url = "{FORMATS_HF}/Llama-3.2-1B-Instruct/Llama-3.2-1B-Instruct-IQ1_M-local.gguf", bytes = 413605952l, sha256 = "e090adcf207cbfe9d826cca105cdf7f65ee8bd6bc6848daf01657edddf4563e4",
             recipe = "llama-quantize --allow-requantize --imatrix llama32_1b.imatrix Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-IQ1_M-local.gguf IQ1_M"),
         ModelSpec(file = "Llama-3.2-1B-Instruct-IQ3_M.gguf",
             url = "{FORMATS_HF}/Llama-3.2-1B-Instruct/Llama-3.2-1B-Instruct-IQ3_M.gguf", bytes = 657289344l, sha256 = "c80cc062a721c267ec50fee83fe6b55d36fc7abe708392dbe22e16fbd42687e8", display = "Llama-3.2-1B-iq3m", quant_label = "iq3_m",
