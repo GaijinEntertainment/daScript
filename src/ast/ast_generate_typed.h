@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_expressions.h"
+#include "daScript/ast/ast_visitor.h"
 
 namespace das {
 
@@ -25,4 +26,18 @@ namespace das {
     ExprIfThenElse * makeIf ( const LineInfo & at, Expression * cond, Expression * ifTrue, Expression * ifFalse );
     ExprCopy * makeCopy ( const LineInfo & at, Expression * left, Expression * right );
     ExprMove * makeMove ( const LineInfo & at, Expression * left, Expression * right );
+
+    // replace one specific node (by identity) inside a statement
+    class ReplaceNode : public Visitor {
+    public:
+        ReplaceNode ( Expression * w, const ExpressionPtr & r ) : what(w), with(r) {}
+        Expression * what = nullptr;
+        ExpressionPtr with = nullptr;
+        bool done = false;
+    protected:
+        virtual ExpressionPtr visitExpression ( Expression * expr ) override {
+            if ( expr==what ) { done = true; return with; }
+            return Visitor::visitExpression(expr);
+        }
+    };
 }

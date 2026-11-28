@@ -822,7 +822,8 @@ typedef enum das_bool_policy {
     DAS_POLICY_DISABLE_TEMP_STRING_RECLAIM,      // Disable the temp-string reclaim pass (fresh-string call results riding the 1-slot dispose queue)
     DAS_POLICY_JIT_ENABLED,                      // Enable JIT compilation of [jit] functions. The flag alone is not enough: the host must also register the "just_in_time" extra module (see das_fileaccess_add_extra_module) so the LLVM JIT backend is compiled in
     DAS_POLICY_JIT_DLL_MODE,                     // With JIT: cache generated code as per-script DLLs under .cache/daslang/ in the working directory (default: on). Off = codegen in-memory every run, no cache writes. The cache path needs a DLL build of daslang; a static-linked host always codegens in-memory regardless of this flag
-    DAS_POLICY_DISABLE_SINK                      // Disable the pass that sinks a pure local into the one `if` arm reading it
+    DAS_POLICY_DISABLE_SINK,                     // Disable the pass that sinks a pure local into the one `if` arm reading it
+    DAS_POLICY_DISABLE_FORWARD                   // Keep a pure local that is read once in the next statement
 } das_bool_policy;
 
 // Integer policy fields (stack size, heap limits).
@@ -833,7 +834,8 @@ typedef enum das_int_policy {
     DAS_POLICY_HEAP_SIZE_HINT,                   // Initial heap size hint in bytes (uint32)
     DAS_POLICY_STRING_HEAP_SIZE_HINT,            // Initial string heap size hint in bytes (uint32)
     DAS_POLICY_AUTO_INLINE_COST,                 // auto_inline_functions node budget (int32, default 32)
-    DAS_POLICY_MAX_UNRESERVED_SIZE               // a growing array resize past this byte size without a prior reserve panics (uint64, default 64 MB)
+    DAS_POLICY_MAX_UNRESERVED_SIZE,              // a growing array resize past this byte size without a prior reserve panics (uint64, default 64 MB)
+    DAS_POLICY_LOOP_UNROLL_COST                  // a loop of known passes unrolls when passes times body statements fits this (int32, default 8, 0 = never)
 } das_int_policy;
 
 // Create a new policies object with default values.

@@ -47,6 +47,8 @@ def private compile_check_single_json(file : string; project : string = "") : Co
             cop.threadlock_context = true
             cop.ignore_shared_modules = true
             cop.auto_inline_functions = false   // diagnostics describe the SOURCE (matches tools/common.das)
+            cop.loop_unroll_cost = 0
+            cop.disable_forward = true
             compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 if (!ok) {
                     result.errors = string(issues)

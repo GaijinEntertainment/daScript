@@ -183,9 +183,7 @@ def compile_and_simulate_ctx(file : string; project : string = ""; blk : block<(
     var had_error = false
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
-            cop.threadlock_context = true
-            cop.ignore_shared_modules = true
-            cop.auto_inline_functions = false   // introspection describes the SOURCE - splices rewrite bodies/references
+            setup_introspection_policies(cop, false, false)
             cop.keep_symbol_tables = true       // blk reads is_used / function_index
             compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 if (!ok) {
@@ -239,12 +237,15 @@ def compile_program(file : string; _export_all : bool; _no_opt : bool; project :
     return make_tool_result(result, had_error)
 }
 
-// policies every introspection compile shares. auto_inline_functions stays off because these
-// tools describe the SOURCE and splices rewrite bodies and references.
+// policies every introspection compile shares. auto_inline_functions,
+// the loop unroll and the local forward stay off: these tools
+// describe the SOURCE, and all three rewrite it.
 def private setup_introspection_policies(var cop : CodeOfPolicies; _export_all, _no_opt : bool) : void {
     cop.threadlock_context = true
     cop.ignore_shared_modules = true
     cop.auto_inline_functions = false
+    cop.loop_unroll_cost = 0
+    cop.disable_forward = true
     if (_export_all) {
         cop.export_all = true
     }

@@ -54,13 +54,14 @@ call and not its arguments.
 ## An array literal as a loop source (`ast_infer_type.cpp`) {#stack-loop-literal}
 
 `for (x in [a, b, c])` iterates a fixed array on the stack. A gen2 array literal is
-`to_array_move` over a make-array node built on the heap; where one is a loop source, inference
-(`stackLoopLiteral`) drops the call and leaves the node, which then builds `T[N]` as
-`fixed_array(a, b, c)` does. No policy asks for it: the literal is a temporary nothing else names,
-so it cannot outlive the loop. It stays a heap array when its elements own heap, which a stack
+`to_array_move` over a make-array node built on the heap; where one is a loop source that
+`stackLoopLiteral` accepts, inference (`visitForSource`) drops the call and leaves the node,
+which then builds `T[N]` as `fixed_array(a, b, c)` does. No policy asks for it: the literal is
+a temporary nothing else names, so it cannot outlive the loop. It stays a heap array when its elements own heap, which a stack
 array has no collect to free, and past 1024 bytes, which would otherwise come out of the
 function's stack. A generator takes the same rewrite, and the lowering of a loop that yields
-keeps the fixed array in the generator's frame.
+keeps the fixed array in the generator's frame. The test lives in `ast_inscope_pod.cpp`; the
+inliner asks it of a literal argument too (`ARCHITECTURE_INLINE.md#inline-loop-source-argument`).
 
 ## A stack array literal under a call argument (`ast_inscope_pod.cpp`, `ast_allocate_stack.cpp`) {#stack-array-argument}
 

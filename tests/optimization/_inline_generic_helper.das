@@ -41,3 +41,11 @@ def with_auto_inline_visibility_private_mid(
         invoke(blk, value)
     }
 }
+
+def public gloop_sum(a : auto(TT)) : TT {
+    var s = a
+    for (i in range(4)) {
+        s += TT(i)
+    }
+    return s
+}

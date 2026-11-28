@@ -101,6 +101,17 @@ Two more ways a structural anchor vanishes or hides, neither stopped by `[never_
   `for_each_function("")`, and drop the `(` from body-text checks on calls to it - the
   call site spells the mangled name too.
 
+**A probe of the loop unroll or the local forward sits on an anchor whose only annotation is
+`[export]`.** `[export]` keeps the anchor in the module in place of `[never_inline]`; any other
+annotation - `[never_inline]` and `[test]` among them - turns both rewrites off in that function
+(`src/ast/ARCHITECTURE_EFFECTS.md#macro-owned-shape`). The unroll copies the body once per pass of
+a `for` over a constant range, an array literal of constants or a fixed array, when passes times
+body statements is at most `loop_unroll_cost` (8 by default). The forward takes a `let` whose
+initializer has no side effect and whose one read sits in the next statement, puts the initializer
+in place of the read, and drops the `let`. A loop a test needs kept is written
+`for [unroll_disable]`; a `let` a test needs kept sits in a file with `options disable_forward`,
+with a comment on that line saying which test needs it.
+
 ## Shared fixtures and the hyphen trap
 
 Shared test helpers go in `_common.das` module files (e.g. `tests/linq/_common.das`). A

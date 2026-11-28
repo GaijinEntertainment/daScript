@@ -1,4 +1,5 @@
 options gen2
+options disable_forward    // the debug-info test names every local of `hot`
 
 // child fixture of llvm_jit_debug_info.das: one function covering every DWARF shape the rail
 // describes - scalars, a struct argument, an enum, a string, a vector local, a nested block,
@@ -22,9 +23,7 @@ enum Mode {
 
 var g_calls = 0
 
-def private invoke_block(blk : block<(a : int) : int>) {
-    return invoke(blk, 3)
-}
+def private invoke_block(blk : block<(a : int) : int>) => invoke(blk, 3)
 
 [export]
 def hot(n : int; scale : float; p : Point; m : Mode; tag : string) : int {

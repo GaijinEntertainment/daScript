@@ -13,3 +13,13 @@ def scoped_unoptimized_value() : int {
     }
     return value
 }
+
+var public g_unoptimized_seed = 1
+
+def public unoptimized_loop_sum() : int {
+    var s = g_unoptimized_seed
+    for (i in range(4)) {
+        s += i
+    }
+    return s
+}

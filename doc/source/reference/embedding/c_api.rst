@@ -352,6 +352,14 @@ Compilation policies
      - Initial heap size hint
    * - ``DAS_POLICY_STRING_HEAP_SIZE_HINT``
      - Initial string heap size hint
+   * - ``DAS_POLICY_AUTO_INLINE_COST``
+     - Node budget of a callee body the automatic inliner splices (default 32)
+   * - ``DAS_POLICY_MAX_UNRESERVED_SIZE``
+     - A growing array resize past this byte size with no prior reserve panics
+       (default 64 MB)
+   * - ``DAS_POLICY_LOOP_UNROLL_COST``
+     - A ``for`` loop of known passes unrolls when passes times body statements fits
+       this (default 8, 0 = never)
 
 See :ref:`tutorial_integration_c_sandbox`.
 

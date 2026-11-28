@@ -201,6 +201,19 @@ Optimization
      - false
      - Disables the sink pass, which moves a local with a pure initializer into the one ``if`` arm
        that reads it, so an inlined check builds its message only when the check fails.
+   * - ``disable_forward``
+     - bool
+     - false
+     - Keeps a local with a pure initializer that is read once, in the statement right after it.
+       Otherwise the read takes the initializer and the local goes away.
+   * - ``loop_unroll_cost``
+     - int
+     - 8
+     - Budget for unrolling a ``for`` loop whose passes are known at compile time (a constant
+       range, an array literal of constants, a fixed array): the loop unrolls when passes times
+       body statements fits the budget. 0 turns it off. ``for [unroll]`` lifts the limit for one
+       loop and ``for [unroll_disable]`` keeps one loop. It runs where automatic inlining runs:
+       an optimized build with no debugger and ``disable_auto_inline`` off.
    * - ``max_fast_call_depth``
      - int
      - 0
