@@ -1,5 +1,7 @@
 options gen2
 options _dasllama_internal = true
+options loop_unroll_cost = 0    // kernel source: the emitter gets loops and locals as written
+options disable_forward
 //! The kernels both GPU homes run, written once: a `class template` here carries a kernel's buffers, its
 //! argument struct and its body, and each home stamps it under its own dispatch name.
 module dasllama_gpu_kernels_common shared public

@@ -1,6 +1,8 @@
 options gen2
 options indenting = 4
 options _dasllama_internal = true
+options loop_unroll_cost = 0    // kernel source: the emitter gets loops and locals as written
+options disable_forward
 
 //! The kernel bodies the discrete GPU homes share - Vulkan and CUDA, not Metal: the decode GEMV family over every
 //! `KqFmt` with its decode helpers, the token step's row families, the decode attention, the K/V mirror stores and

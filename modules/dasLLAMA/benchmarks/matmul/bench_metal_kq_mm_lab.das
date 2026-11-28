@@ -4,6 +4,8 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options _function_length = 0        // one MSL kernel body per lab twin — barrier/register coupled, no seam
 options _cyclomatic_complexity = 0  // the lab runner is a flat shape/arm ladder
 options _dasllama_internal = true
+options loop_unroll_cost = 0    // kernel source: the emitter gets loops and locals as written
+options disable_forward
 
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost

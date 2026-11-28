@@ -1,6 +1,8 @@
 options gen2
 options indenting = 4
 options _dasllama_internal = true
+options loop_unroll_cost = 0    // kernel source: the emitter gets loops and locals as written
+options disable_forward
 
 module dasllama_cuda_classes_asr shared public
 

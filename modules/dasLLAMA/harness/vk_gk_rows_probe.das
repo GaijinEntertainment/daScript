@@ -1,6 +1,8 @@
 options gen2
 options stack = 524288
 options _dasllama_internal = true
+options loop_unroll_cost = 0    // kernel source: the emitter gets loops and locals as written
+options disable_forward
 
 //! The row-kernel ruler for the Vulkan stamps of the templates both homes stamp (`dasllama_gpu_kernels_common.das`): each
 //! class timed alone at a qwen35moe / qwen4exp decode shape (and the deltanet out-norm at a 512-row window) on the device

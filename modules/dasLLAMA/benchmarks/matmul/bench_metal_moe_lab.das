@@ -4,6 +4,8 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options _function_length = 0        // one MSL kernel body + its hand-bound dispatch per lab — barrier/register coupled, no seam
 options _cyclomatic_complexity = 0  // same — the lab runners are flat knockout ladders
 options _dasllama_internal = true
+options loop_unroll_cost = 0    // kernel source: the emitter gets loops and locals as written
+options disable_forward
 
 require ?das_metal metal/das_metal_boost  // GPU driver half, Apple builds only
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
