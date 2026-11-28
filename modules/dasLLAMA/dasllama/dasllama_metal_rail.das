@@ -1,6 +1,8 @@
 options gen2
 options indenting = 4
 options _dasllama_internal = true
+options loop_unroll_cost = 0    // kernel source: the emitter gets loops and locals as written
+options disable_forward
 
 //! The Metal home's tower rail: the encoder a shared chain body records on, the planes by role, and the class state a
 //! `[metal_rail_dispatch]` stamp's generated `ensure_<stamp>` / `enc_<stamp>(rail, roles, pc, ...)` runs over.

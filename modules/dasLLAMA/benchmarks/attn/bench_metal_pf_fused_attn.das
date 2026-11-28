@@ -1,5 +1,7 @@
 options gen2
 options _dasllama_internal = true
+options loop_unroll_cost = 0    // kernel source: the emitter gets loops and locals as written
+options disable_forward
 
 // Fused prefill attention lab (M5 NAX arc phase 1): ONE kernel per (32-query block, head)
 // walking K/V in 32-position tiles — scores live in threadgroup scratch (never DRAM),

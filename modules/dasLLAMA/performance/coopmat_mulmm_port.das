@@ -1,5 +1,7 @@
 options gen2
 options indenting = 4
+options loop_unroll_cost = 0    // kernel source: the emitter gets loops and locals as written
+options disable_forward
 
 // scratch probe: OUR dasSpirv kernel at the matmul_q8_0_f32_f16acc_aligned_l config vs the
 // compiled reference spv, same device buffers, one shape (the 24-TF headline: m=9728 k=2560 n=512).

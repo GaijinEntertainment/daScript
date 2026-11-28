@@ -1,6 +1,8 @@
 options gen2
 options stack = 524288
 options _dasllama_internal = true
+options loop_unroll_cost = 0    // kernel source: the emitter gets loops and locals as written
+options disable_forward
 
 // ATTRIBUTION SWEEP - isolated per-shape rates of the prefill GEMM tiles (cm2:, cm2d:, k4|k6, the shape pins).
 // ATTRIBUTION SWEEP cm2w: - the l stamp's rate by wave count, the workgroups the device fills.

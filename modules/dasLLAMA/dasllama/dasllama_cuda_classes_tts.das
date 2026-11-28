@@ -1,6 +1,8 @@
 options gen2
 options indenting = 4
 options _dasllama_internal = true
+options loop_unroll_cost = 0    // kernel source: the emitter gets loops and locals as written
+options disable_forward
 
 //! The CUDA home's TTS stamps: the kernels the discrete TTS driver (`dasllama_tower_tts`) dispatches, each on the template
 //! the Vulkan home stamps under the same dispatch name (`dasllama_gpu_kernels_common`, `dasllama_gpu_kernels_discrete`).

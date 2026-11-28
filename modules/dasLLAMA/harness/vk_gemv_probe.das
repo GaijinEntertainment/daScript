@@ -1,6 +1,8 @@
 options gen2
 options stack = 524288
 options _dasllama_internal = true
+options loop_unroll_cost = 0    // kernel source: the emitter gets loops and locals as written
+options disable_forward
 
 // ATTRIBUTION SWEEP - isolated per-format rates of the decode GEMV classes at one served shape:
 // synthetic planes per kq format at [n x d], the shipped kq_gemv class dispatched over enough

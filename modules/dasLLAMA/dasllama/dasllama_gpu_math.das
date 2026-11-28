@@ -1,4 +1,6 @@
 options gen2
+options loop_unroll_cost = 0    // kernel source: the emitter gets loops and locals as written
+options disable_forward
 //! The GPU kernel helpers both kernel homes splice into their shader bodies: pure ALU, no table, no backend
 //! lowering - the Metal and the Vulkan emitters each carry a call into its shader as a function of that shader.
 module dasllama_gpu_math shared public
