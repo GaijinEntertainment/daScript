@@ -39,6 +39,8 @@ def test_msl_functions(t : T?) {  // nolint:STYLE038 - one arm per function shap
     t |> run("user functions lower 1:1 - signatures, address spaces, hidden builtins") <| @(t : T?) {
         // free function with a value return, called nested
         has(t, "float ufx_sky(float d)")
+        // a module `let` the helper reads folds to its constant
+        has(t, "return ((d * 0.5f) + 0.5f);")
         has(t, "float ufx_shade(float d, int bounce)")
         // hidden builtin threaded as a trailing by-value parameter, at decl
         // and call

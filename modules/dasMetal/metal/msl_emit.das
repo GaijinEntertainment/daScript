@@ -936,8 +936,16 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
             note(ctx, "expr.builtin.{bi.attr}")
             return name
         }
+        let gv = ev.variable
+        if (gv != null && gv._type != null && gv._type.flags.constant && gv.init != null) {
+            let ce = get_const_expr(compiling_program(), gv.init)
+            if (ce != null) {
+                note(ctx, "expr.global_const")
+                return emit_value(ctx, ce)
+            }
+        }
         shader_error(ctx, ev.at, "global `{name}` is not a supported builtin - kernels reach " +
-            "data only through @ssbo members and builtin IDs")
+            "data only through @ssbo members, builtin IDs and module `let` constants")
         return "/*{name}*/"
     } elif (e is ExprField) {
         let ef = e as ExprField
