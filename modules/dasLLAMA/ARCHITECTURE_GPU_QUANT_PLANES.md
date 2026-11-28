@@ -156,6 +156,11 @@ stamps take `RS` 1 and `WQ` 8; both stay template constants. The whole Qwen3.8-2
 row) reads 27.69 ms on the wide form against 30.55 on the K-split one. `DASLLAMA_METAL_B32_WIDE=0`
 pins the two-row and K-split forms; `metal_b32_wide_count` counts the wide dispatches.
 
+The low-bit members' stamps (`MetalKqGemvQ20W`, `MetalKqGemvQ10W`) take three rows a simdgroup (`RS`
+3, a template constant): a block is 8 or 4 bytes against x's 128, so one row a simdgroup reloads x for
+every block it reads, and the rows share the load instead. A 1-bit lane sums the x its set bits select
+(`bits4_sum`) - no code conversion, no prescale; a 2-bit lane keeps the masked codes.
+
 A routed stack's expert-indexed GEMV takes the same body on the gathered site (`MetalMoeGemv<Fmt>W` on
 `MetalMoeGemvB32WideT`, `enc_moe_gemv_b32`): one expert row a simdgroup, the slot and the stream on the grid,
 on an expert of 512 rows or more in a `B32_MOE_WIDE_FMTS` member. Raced on the one-row step against the

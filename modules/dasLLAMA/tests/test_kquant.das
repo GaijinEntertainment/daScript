@@ -1046,7 +1046,51 @@ def test_q10_kernels(t : T?) {
     lowbit_cells(t, KqTag_q10(), 13l)
 }
 
-//! a low-bit member's gen-tier batch over one 16-row walk group, bit for bit its row-major tile and GEMV stamps called direct: the slots hand them each group
+//! rows [0, d) of a low-bit plane pair through the stamped q8 tile at tokens 0..3, built the long way: every row's levels
+//! (`expand_lowbit_row`) under the q8 repack at the stamp's mr, k-group and bias, a block's binary16 scale bits a row, the
+//! biased stamp's activation sums
+def private lowbit_q8_tile_rows(var want : array<float>; kq, ks : array<uint8>; xq : array<int8>; xs : array<float>; n, d : int64; f : auto(TT)) {
+    let nb = n / 32l
+    let mr = int64(q8q8_layout_gen())
+    let wbias = int64(q8q8_wbias_gen())
+    var inscope lv : array<int8>
+    lv |> resize(d * n)
+    var inscope unused : array<float>
+    unused |> resize(d * nb)
+    var inscope s16 : array<uint16>
+    s16 |> resize(d * nb)
+    var inscope sums : array<int>
+    sums |> resize(4l * nb)
+    for (i in range64(4l * nb)) {
+        var acc = 0
+        for (j in range64(32l)) {
+            acc += int(xq[i * 32l + j])
+        }
+        sums[i] = -128 * acc
+    }
+    unsafe {
+        for (r in range64(d)) {
+            expand_lowbit_row(addr<uint8 const?>(kq[r * nb * b32_qb(f)]), addr(lv[r * n]), nb, f)
+            for (bi in range64(nb)) {
+                s16[(r / mr * nb + bi) * mr + r % mr] = uint16(u16_le(addr<uint8 const?>(ks[r * b32_sbytes(nb, f)]), b32_soff(bi, f)))
+            }
+        }
+        repack_q8q8_grp(addr(lv[0]), addr(unused[0]), n, d, mr, wbias, int64(q8q8_kgroup_gen()))
+        let xbsp = wbias != 0l ? addr<int const?>(sums[0]) : null
+        for (g in range64(d / mr)) {
+            let wg = addr<int8 const?>(lv[g * mr * n])
+            let sg = addr<uint16 const?>(s16[g * mr * nb])
+            if (q8q8_tokstep_gen() != 4) {
+                q8q8_tile4_s16_gen(addr(want[0]), wg, sg, addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), xbsp, n, d, g, 0l)
+            } else {
+                q8q8_tile_s16_gen(addr(want[0]), wg, sg, addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), xbsp, n, d, g, 0l)
+            }
+        }
+    }
+}
+
+//! a low-bit member's gen-tier batch over 16 rows, bit for bit the stamps called direct: four tokens the q8 tile over the
+//! rows' levels, one token the row-major GEMV
 def private lowbit_gen_stamp_gate(t : T?; f : auto(TT)) {
     let kf = p32_fmt(f)
     let n = p32_n(f)
@@ -1058,22 +1102,25 @@ def private lowbit_gen_stamp_gate(t : T?; f : auto(TT)) {
     q51_fill_acts(xq, xs, 4l, n)
     var inscope want4 <- nan_plane(int(4l * d))
     var inscope want1 <- nan_plane(int(d))
+    lowbit_q8_tile_rows(want4, kq, ks, xq, xs, n, d, f)
     unsafe {
-        rm_tile4_gen(addr(want4[0]), addr<uint8 const?>(kq[0]), addr<uint8 const?>(ks[0]), addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), null, n, d, f)
         rm_gemv_gen(addr(want1[0]), addr<uint8 const?>(kq[0]), addr<uint8 const?>(ks[0]), addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), null, n, 0l, d, f)
     }
     var inscope y4 <- nan_plane(int(4l * d))
     p32_batch(y4, kq, ks, 0l, xq, xs, n, d, 4l, f)
-    check(t, "the {kf} gen batch over four tokens against the stamped row-major tile", y4, want4, BAR_EXACT, Shape(row_width = int(d)))
+    check(t, "the {kf} gen batch over four tokens against the stamped q8 tile over the rows' levels", y4, want4, BAR_EXACT, Shape(row_width = int(d)))
+    var inscope dots4 <- p32_row_dots(kq, ks, xq, xs, n, 4l * d, $(i) => i % d, $(i) => i / d, f)
+    check(t, "the {kf} gen batch over four tokens against the scalar row dots", y4, dots4, BAR_ROW_MAJOR, Shape(row_width = int(d)))
     var inscope y1 <- nan_plane(int(d))
     p32_batch(y1, kq, ks, 0l, xq, xs, n, d, 1l, f)
     check(t, "the {kf} gen batch over one token against the stamped row-major GEMV", y1, want1, BAR_EXACT, Shape(row_width = int(d)))
     var inscope next <- [for (i in range64(d)); want4[d + i]]
     check_exceeds(t, "control: the {kf} one-token batch against the tile's second token, its activation row one off", y1, next, BAR_EXACT)
-    if (p32_rm_live(f)) {
-        var inscope scalar <- p32_row_dots(kq, ks, xq, xs, n, 4l * d, $(i) => i % d, $(i) => i / d, f)
-        check_exceeds(t, "control: the stamped tile folds in vector order, so the portable batch's scalar order would miss it", want4, scalar, BAR_EXACT)
-    }
+    var inscope flipped : array<uint8> := kq
+    flipped[0] = uint8(uint(flipped[0]) ^ 1u)
+    var inscope y4f <- nan_plane(int(4l * d))
+    p32_batch(y4f, flipped, ks, 0l, xq, xs, n, d, 4l, f)
+    check_exceeds(t, "control: one code bit of row 0 flipped moves the {kf} four-token batch off the tile", y4f, want4, BAR_EXACT)
 }
 
 //! true where the box carries a gen backend - the JIT, on arm64 or on an x64 CPU with AVX2 (`dasllama_math_gen`'s registration);
@@ -1085,28 +1132,68 @@ def private gen_backend_box(t : T?; what : string) : bool {
     return false
 }
 
-//! a low-bit member's gen slots on the box's gen backend: every slot shape over two walk groups and a tail, one walk group against the stamps
+//! a low-bit member's gen slots on the box's gen backend: every slot shape over 44 rows - whole walk groups and a tail under an 8- or 16-row q8 stamp - and 16 rows against the stamps
 def private lowbit_gen_slots(t : T?; f : auto(TT)) {
     let kf = p32_fmt(f)
     return if (!gen_backend_box(t, "the {kf} gen slots"))
     let gen = get_architecture_name() == "arm64" ? "arm64-gen" : "x64-gen"
     let ran = with_kernel_backend(gen) $ {
         let bar = BAR_ROW_MAJOR
-        p32_groupn_gate(t, f, bar, 40l)
-        p32_batch_gate(t, f, bar, 40l)
+        p32_groupn_gate(t, f, bar, 44l)
+        p32_batch_gate(t, f, bar, 44l)
         lowbit_gen_stamp_gate(t, f)
     }
     t |> success(ran, "the {gen} backend took the pin on a box that registers it")
 }
 
-[test(description = "On the gen backend, q20's batch, groupn and batch-groupn slots run the stamped row-major kernels over the disk-order planes: a one-group batch equals the stamped tile and GEMV bit for bit and its one-token row misses the tile's next token, and every slot shape over two walk groups and a tail lands within the row-major bar of the scalar row dots")]
+[test(description = "On the gen backend, q20's batch, groupn and batch-groupn slots read the disk-order planes: a four-token batch equals the stamped q8 tile over the rows' expanded levels bit for bit and moves off it under one flipped code bit, a one-token batch equals the stamped row-major GEMV and misses the tile's next token, and every slot shape over walk groups and a tail lands within the row-major bar of the scalar row dots")]
 def test_q20_gen_slots(t : T?) {
     lowbit_gen_slots(t, KqTag_q20())
 }
 
-[test(description = "On the gen backend, q10's batch, groupn and batch-groupn slots run the stamped row-major kernels over the disk-order planes: a one-group batch equals the stamped tile and GEMV bit for bit and its one-token row misses the tile's next token, and every slot shape over two walk groups and a tail lands within the row-major bar of the scalar row dots")]
+[test(description = "On the gen backend, q10's batch, groupn and batch-groupn slots read the disk-order planes: a four-token batch equals the stamped q8 tile over the rows' expanded levels bit for bit and moves off it under one flipped code bit, a one-token batch equals the stamped row-major GEMV and misses the tile's next token, and every slot shape over walk groups and a tail lands within the row-major bar of the scalar row dots")]
 def test_q10_gen_slots(t : T?) {
     lowbit_gen_slots(t, KqTag_q10())
+}
+
+//! a per-32 member's rows core on the box's gen backend - the fused chains' seat: rows [8, 24) of a plane in the backend's
+//! active layout against the scalar row dots of the disk-order plane
+def private p32_rows_gate(t : T?; f : auto(TT)) {
+    let kf = p32_fmt(f)
+    let n = p32_n(f)
+    let d = 24l
+    let rb = 8l
+    t |> success(kernel_backend_has_b32_rows(kf), "the gen backend carries a {kf} rows core, the fused chains' seat")
+    return if (!kernel_backend_has_b32_rows(kf))
+    var inscope kq, ks : array<uint8>
+    p32_fill_planes(kq, ks, d, n, f)
+    var inscope xq : array<int8>
+    var inscope xs : array<float>
+    q51_fill_acts(xq, xs, 1l, n)
+    var inscope want <- p32_row_dots(kq, ks, xq, xs, n, d - rb, $(i) => rb + i, $(_i) => 0l, f)
+    var inscope y <- nan_plane(int(d))
+    unsafe {
+        invoke(active_repack_b32(kf), addr(kq[0]), addr(ks[0]), n, d)
+        invoke(b32_rows_fn(kf), addr(y[0]), addr<uint8 const?>(kq[0]), addr<uint8 const?>(ks[0]), addr<int8 const?>(xq[0]),
+            addr<float const?>(xs[0]), null, n, rb, d)
+    }
+    var inscope got <- [for (i in range64(d - rb)); y[rb + i]]
+    check(t, "{kf} rows core over rows [{rb}, {d}) against the scalar row dots", got, want, BAR_ROW_MAJOR, Shape(row_width = int(d - rb)))
+}
+
+[test(description = "On the gen backend every per-32 member - q51, iq4nl32, q4032, q5032, q20 and q10 - carries the rows core the fused decode chains read, and its rows over a plane in the backend's layout match the scalar row dots within the row-major bar")]
+def test_per32_rows_cores(t : T?) {
+    return if (!gen_backend_box(t, "the per-32 rows cores"))
+    let gen = get_architecture_name() == "arm64" ? "arm64-gen" : "x64-gen"
+    let ran = with_kernel_backend(gen) $ {
+        p32_rows_gate(t, KqTag_q51())
+        p32_rows_gate(t, KqTag_iq4nl32())
+        p32_rows_gate(t, KqTag_q4032())
+        p32_rows_gate(t, KqTag_q5032())
+        p32_rows_gate(t, KqTag_q20())
+        p32_rows_gate(t, KqTag_q10())
+    }
+    t |> success(ran, "the {gen} backend took the pin on a box that registers it")
 }
 
 [test(description = "The five MLX affine members dequant hand-packed blocks to scale x q + bias exactly (another packing order misses), and their dot, groupn, grp, batch, dense-router and row-major kernels match the scalar row dots")]

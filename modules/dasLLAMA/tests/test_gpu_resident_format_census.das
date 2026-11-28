@@ -15,6 +15,7 @@ require _compares   // check, the bars: the per-32 tables' CPU cells
 require _kquant_cells   // read_prefix: the per-32 tables' file truth; native_site_rows, kq_dense_sites_cell
 require _metal_format_census_cells   // the Metal arm of the census on the carriers' blob twins
 require _perop_ffn_cells   // the per-op FFN rail's cells on the iq4nl32 file's per-op forms
+require _fused_decode_cells   // fused_per32_cell: the per-32 carriers' decode chains
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_token_gathered: the token command's rows gathered off their ids, where the module exists
 
 // The weight-format census on the dense carriers: the per-op FFN rail's iq4nl32 file with the
@@ -29,6 +30,9 @@ require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_token_gathered: the
 // blocks (`test_gpu_resident_qwen_moe.das`). DASLLAMA_GPU=1, -jit; skips without the file or
 // the armed tier. Under DASLLAMA_CUDA=1 the per-op FFN rail's cells and the per-32 and tied
 // tables' gather cells skip: the per-op tier and the gather witness are the Vulkan home's.
+// A carrier's Metal form is one skipped cell on a build without das_metal; a low-bit carrier's
+// crowned window skips where the box compiles no Metal-4 tensor twin, and a per-32 carrier's
+// fused decode chains' cell where the kernel backend has no rows core for its format.
 // The tied K-quant table's gather rides a smaller file (Llama-3.2-3B-Instruct Q4_K_M;
 // Qwen3-4B-Instruct-2507 Q4_K_M's is its block in test_gpu_resident_qwen3.das), the window's
 // and the steps' rows off the classifier's plane against the CPU chain at the split bar.
@@ -55,6 +59,8 @@ struct Per32Spec {
     fmt : KqFmt
     hybrid : bool
     perop : bool
+    fused : bool       //!< layer 0's attention planes are `fmt`: the fused chains' cell runs
+    fused_ffn : bool   //!< ... and every FFN plane of it too, so the FFN chain takes them
 }
 
 //! what a per-32 carrier's forms collect: the gather's rows, the
@@ -219,6 +225,9 @@ def private per32_rows(t : T?; var k : Per32Kept; var m : Model; form : ModelFor
         format_census_cpu(t, m, form, spec.census, k.census)
     } elif (alone_pass_of(form, per32_cpu_form())) {
         per32_tables_cpu_cell(t, m, spec)
+        if (spec.fused) {
+            fused_per32_cell(t, m, spec.file, spec.fmt, spec.fused_ffn)
+        }
     } elif (form.perop) {
         perop_ffn_device_cell(t, m, form, perop_ffn_qwen25_05b_iq4nl32(), k.perop)
     } elif (form.on_gpu) {
@@ -248,14 +257,14 @@ def private per32_within(t : T?; ran : bool; var k : Per32Kept; spec : Per32Spec
     delete k
 }
 
-[test(description = "Qwen2.5-0.5B iq4nl32, q4032 and q5032 carriers and a Q5_1 Qwen3.5-MTP: on the Vulkan home every site read in its own per-32 format, the tied table gathered on the device each window and step, and forced-feed steps within 6 to 8 percent of the CPU chain; with the whole-model route off the per-op dense FFN rail on the iq4nl32 carrier runs every layer's q/o and FFN on the device, every step's FFN row counted, within 8 percent of the CPU chain, with rail-off as control; on the Metal home's blob twin, one load on a das_metal build, every site read in its own per-32 format and the Metal window and six steps within the census bar of the portable CPU chain's replay; on the K-quant native CPU form, on every box, every table site loads native, `embed_row` rows match the file dequant bit for bit (job lanes too), and classifier and eh_proj rows match the file rows' dot within f32 reassociation; each form loads once")]
+[test(description = "Qwen2.5-0.5B iq4nl32, q4032 and q5032 carriers and a Q5_1 Qwen3.5-MTP: on the Vulkan home every site read in its own per-32 format, the tied table gathered on the device each window and step, and forced-feed steps within 6 to 8 percent of the CPU chain; with the whole-model route off the per-op dense FFN rail on the iq4nl32 carrier runs every layer's q/o and FFN on the device, every step's FFN row counted, within 8 percent of the CPU chain, with rail-off as control; on the Metal home's blob twin, one load on a das_metal build, every site read in its own per-32 format and the Metal window and six steps within the census bar of the portable CPU chain's replay; on the K-quant native CPU form, on every box, every table site loads native, `embed_row` rows match the file dequant bit for bit (job lanes too), and classifier and eh_proj rows match the file rows' dot within f32 reassociation, and on the three qwen2 carriers, where the backend has the format's rows core, the fused decode chains give the per-op dispatches' greedy ids and logits bit for bit - layer 0's attention chain taken, its FFN chain taken on q5032 and declined on the two carriers whose down plane is a superblock format; each form loads once")]
 def test_gpu_resident_per32_tables(t : T?) {
     t |> run(("Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf: the per-32 token table and " +
             "classifier, census, forced feed and the per-op FFN rail")) @(t : T?) {
         return if (!family_on(t, "qwen2"))
         let spec = Per32Spec(file = "Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf",
             vk_arm = "vk-per32-iq4nl32", bar = IQ4NL32_TABLE_BAR_REL,
-            census = format_census_iq4nl32_table(), fmt = KqFmt.iq4nl32, perop = true)
+            census = format_census_iq4nl32_table(), fmt = KqFmt.iq4nl32, perop = true, fused = true)
         var k : Per32Kept
         var forms <- per32_forms(t, spec)
         let ran = with_cpu_and_gpu_model(t, "llm", "Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf",
@@ -270,7 +279,7 @@ def test_gpu_resident_per32_tables(t : T?) {
         return if (!family_on(t, "qwen2"))
         let spec = Per32Spec(file = "Qwen2.5-0.5B-Instruct-Q4_0-local.gguf",
             vk_arm = "vk-per32-q4032", bar = PER32_TABLE_BAR_REL, census = format_census_q4032(),
-            fmt = KqFmt.q4032)
+            fmt = KqFmt.q4032, fused = true)
         var k : Per32Kept
         var forms <- per32_forms(t, spec)
         let ran = with_cpu_and_gpu_model(t, "llm", "Qwen2.5-0.5B-Instruct-Q4_0-local.gguf",
@@ -285,7 +294,7 @@ def test_gpu_resident_per32_tables(t : T?) {
         return if (!family_on(t, "qwen2"))
         let spec = Per32Spec(file = "Qwen2.5-0.5B-Instruct-Q5_0-pure-local.gguf",
             vk_arm = "vk-per32-q5032", bar = PER32_TABLE_BAR_REL, census = format_census_q5032(),
-            fmt = KqFmt.q5032)
+            fmt = KqFmt.q5032, fused = true, fused_ffn = true)
         var k : Per32Kept
         var forms <- per32_forms(t, spec)
         let ran = with_cpu_and_gpu_model(t, "llm", "Qwen2.5-0.5B-Instruct-Q5_0-pure-local.gguf",
@@ -373,6 +382,7 @@ def private lowbit_cpu_cell(t : T?; var m : Model; file : string; fmt : KqFmt; t
             kq_dense_sites_cell(t, m, path, fmt)
         }
     }
+    fused_per32_cell(t, m, file, fmt, true)
 }
 
 //! one form's share of a low-bit carrier's block: on the device the `fmt` matrices (and table, where `tied`), census and gather; on
@@ -402,17 +412,24 @@ def private lowbit_within(t : T?; ran : bool; g : EmbGather; file : string) {
     }
 }
 
-[test(description = "Ternary-Bonsai-1.7B Q2_0 and the Llama-3.2-1B Q2_0 mint: on the Vulkan home every site read in its own format on the whole-model driver - Bonsai's tied q20 table gathered on the device each window and step - and forced-feed steps within 8 percent of the CPU chain, no call taking a CPU pass; on the K-quant native CPU form, on every box, Bonsai's table sites load native, `embed_row` rows match the file dequant bit for bit (job lanes too) and its classifier rows match the file rows' dot within f32 reassociation, and the mint's every attention site loads native, its attention q and FFN down rows matching the file rows' dot within f32 reassociation; each form loads once")]
+[test(description = "Ternary-Bonsai-1.7B Q2_0 and the Llama-3.2-1B Q2_0 mint: on the Vulkan home every site read in its own format on the whole-model driver - Bonsai's tied q20 table gathered on the device each window and step - and forced-feed steps within 8 percent of the CPU chain, no call taking a CPU pass; on the Metal home's blob twin (arm `census-q20`) Bonsai's every site is read in its own format, its window and six steps ride the q20 stamps and the per-32 table gather, and both land within 4 percent of the portable CPU chain's rows; on the K-quant native CPU form, on every box, Bonsai's table sites load native, `embed_row` rows match the file dequant bit for bit (job lanes too) and its classifier rows match the file rows' dot within f32 reassociation, and the mint's every attention site loads native, its attention q and FFN down rows matching the file rows' dot within f32 reassociation, and where the backend has the format's rows core the fused decode chains take its planes and give the per-op dispatches' greedy ids and logits bit for bit; each form loads once")]
 def test_gpu_resident_q20(t : T?) {
     t |> run("Ternary-Bonsai-1.7B-Q2_0_g64.gguf: the q20 matrices and tied table on the device, census and forced feed; the table sites on the CPU") @(t : T?) {
         return if (!family_on(t, "qwen3"))
         let file = "Ternary-Bonsai-1.7B-Q2_0_g64.gguf"
         var g : EmbGather
+        var census : CensusKept
         var forms <- lowbit_forms(t, file, "vk-per32-q20")
+        if (empty(arm_why(format_census_q20().arm))) {
+            format_census_forms(forms, format_census_q20())
+        }
         let ran = with_cpu_and_gpu_model(t, "llm", "Ternary-Bonsai-1.7B-Q2_0_g64.gguf", GATHER_CTX, forms) $(var m, form) {
-            lowbit_rows(t, g, m, form, file, KqFmt.q20, true)
+            if (!format_census_pass(t, m, form, format_census_q20(), census)) {
+                lowbit_rows(t, g, m, form, file, KqFmt.q20, true)
+            }
         }
         lowbit_within(t, ran, g, file)
+        format_census_verdict(t, format_census_q20(), census)
         delete g
         delete forms
     }
@@ -430,17 +447,24 @@ def test_gpu_resident_q20(t : T?) {
     }
 }
 
-[test(description = "Bonsai-1.7B Q1_0 and the Llama-3.2-1B Q1_0 mint: on the Vulkan home every site read in its own format on the whole-model driver - Bonsai's tied q10 table gathered on the device each window and step - and forced-feed steps within 8 percent of the CPU chain, no call taking a CPU pass; on the K-quant native CPU form, on every box, Bonsai's table sites load native, `embed_row` rows match the file dequant bit for bit (job lanes too) and its classifier rows match the file rows' dot within f32 reassociation, and the mint's every attention site loads native, its attention q and FFN down rows matching the file rows' dot within f32 reassociation; each form loads once")]
+[test(description = "Bonsai-1.7B Q1_0 and the Llama-3.2-1B Q1_0 mint: on the Vulkan home every site read in its own format on the whole-model driver - Bonsai's tied q10 table gathered on the device each window and step - and forced-feed steps within 8 percent of the CPU chain, no call taking a CPU pass; on the Metal home's blob twin (arm `census-q10`) Bonsai's every site is read in its own format, its window and six steps ride the q10 stamps and the per-32 table gather, and both land within 4 percent of the portable CPU chain's rows; on the K-quant native CPU form, on every box, Bonsai's table sites load native, `embed_row` rows match the file dequant bit for bit (job lanes too) and its classifier rows match the file rows' dot within f32 reassociation, and the mint's every attention site loads native, its attention q and FFN down rows matching the file rows' dot within f32 reassociation, and where the backend has the format's rows core the fused decode chains take its planes and give the per-op dispatches' greedy ids and logits bit for bit; each form loads once")]
 def test_gpu_resident_q10(t : T?) {
     t |> run("Bonsai-1.7B-Q1_0.gguf: the q10 matrices and tied table on the device, census and forced feed; the table sites on the CPU") @(t : T?) {
         return if (!family_on(t, "qwen3"))
         let file = "Bonsai-1.7B-Q1_0.gguf"
         var g : EmbGather
+        var census : CensusKept
         var forms <- lowbit_forms(t, file, "vk-per32-q10")
+        if (empty(arm_why(format_census_q10().arm))) {
+            format_census_forms(forms, format_census_q10())
+        }
         let ran = with_cpu_and_gpu_model(t, "llm", "Bonsai-1.7B-Q1_0.gguf", GATHER_CTX, forms) $(var m, form) {
-            lowbit_rows(t, g, m, form, file, KqFmt.q10, true)
+            if (!format_census_pass(t, m, form, format_census_q10(), census)) {
+                lowbit_rows(t, g, m, form, file, KqFmt.q10, true)
+            }
         }
         lowbit_within(t, ran, g, file)
+        format_census_verdict(t, format_census_q10(), census)
         delete g
         delete forms
     }
@@ -496,22 +520,8 @@ def private census_row_forms(t : T?; row : CensusRow) : array<ModelForm> {
         skip_cell(t, "{row.file}: the census arm is filtered out")
         return <- forms
     }
-    forms |> push(metal_form(ctx = CENSUS_CELLS_CTX))
-    if (empty(metal_build_why())) {
-        forms |> push(census_cpu_form(row))
-    }
+    format_census_forms(forms, row)
     return <- forms
-}
-
-//! a census row's own block's pass: the row's Metal cells on the
-//! twin, its CPU side on its CPU form
-def private census_row_pass(t : T?; var m : Model; form : ModelForm; row : CensusRow;
-                            var kept : CensusKept) {
-    if (form.on_metal) {
-        format_census_metal(t, m, form, row, kept)
-    } else {
-        format_census_cpu(t, m, form, row, kept)
-    }
 }
 
 [test(description = "On the every-plane NVFP4 Qwen3.5-0.8B-MTP mint, on the Metal home's blob twin, one load on a das_metal build, every site - the deltanet planes, the NextN eh_proj, the table and the classifier - read as nv4, the Metal window and six steps within the census bar of the portable CPU chain's replay; the form loads once")]
@@ -522,7 +532,7 @@ def test_metal_census_nv4_hybrid(t : T?) {
     var forms <- census_row_forms(t, row)
     with_cpu_and_gpu_model(t, "llm", "Qwen3.5-0.8B-MTP-NVFP4-pure-local.gguf", CENSUS_CELLS_CTX,
             forms) $(var m, form) {
-        census_row_pass(t, m, form, row, kept)
+        format_census_pass(t, m, form, row, kept)
     }
     format_census_verdict(t, row, kept)
     delete forms
@@ -536,7 +546,7 @@ def test_metal_census_tied_f16(t : T?) {
     var forms <- census_row_forms(t, row)
     with_cpu_and_gpu_model(t, "llm", "canary-qwen-2.5b-decoder-f16.gguf", CENSUS_CELLS_CTX,
             forms) $(var m, form) {
-        census_row_pass(t, m, form, row, kept)
+        format_census_pass(t, m, form, row, kept)
     }
     format_census_verdict(t, row, kept)
     delete forms

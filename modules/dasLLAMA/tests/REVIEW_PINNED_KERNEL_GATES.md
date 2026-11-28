@@ -42,8 +42,8 @@ them; a whole run is as `../REVIEW_GPU_KERNEL_CLASSES.md` defines it. The pinned
 - `test_metal_misc_kernels.das`'s `test_metal_misc_kernels` cell must hold every kernel gate it calls, at the bar each
   gate sets; and by name: its token-table gathers bit for bit: `embed_q8_gate`, `embed_b32_gate` on q51, iq4nl32,
   q4032 and q5032 at 96 wide, at 2048 wide past a whole other table's blocks, and at a lead off a superblock boundary
-  (the bind's block skip), and on the affine members at whole 64-groups (128 and 2048 wide, a lead six blocks past the
-  bind), `embed_kq_gate` on every K-quant format it lists, and `embed_f32_gate` past a lead of foreign floats; the
+  (the bind's block skip), on the affine members at whole 64-groups (128 and 2048 wide, a lead six blocks past the
+  bind), and on q20 and q10 at whole scale groups (128 to 2048 wide, a lead past the bind), `embed_kq_gate` on every K-quant format it lists, and `embed_f32_gate` past a lead of foreign floats; the
   residual seam's `add_rms_gate` on every stamp at every shipped width, 5376 and 8192 past the slab among them; and
   `cls_select_gate` at a wide, a narrow and the served vocab: the ids at or above the row's K-th largest logit and
   their logits exact against the host oracle, the row's max logit, the overflow flag and the recent ids' logits, the

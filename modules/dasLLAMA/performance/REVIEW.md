@@ -17,12 +17,13 @@ above it run under `DAS_JIT_BASELINE=<class>` when the body says no box of the c
 (`../HOW_TO_GET_SIDECAR.md`, the class minted under a pin), a box of a lower class when no box of
 the class or above it was at hand and the PR body names the class, the lower class and the entry it
 copies, and a `../followup_general.md` row owes the class's own mint, or any box for `wasm-simd128` -
-and quotes the tuner line naming the new value as the entry's winner, from that box's
-`../benchmarks/modules/.daspkg.log`, from the pinned mint's `../harness/dasllama_tuner.das`
-output, or, for `wasm-simd128`, from the output of the `DAS_TUNE_MODE=tune` node runs of
-`../harness/wasm_mint/run.cjs`; a changed entry no quoted line backs is a defect - re-mint the
-profile on such a box.** A `kernels` entry names the variant the tuner timed fastest there; an
-entry written by hand was never timed. A lower class's winner uses only features every class above
+and quotes the tuner line naming the new value as the entry's winner, from the run that minted
+the profile - that box's `../benchmarks/modules/.daspkg.log`, the output of
+`../harness/dasllama_tuner.das` run on it, pinned or not, or, for `wasm-simd128`, the output of
+the `DAS_TUNE_MODE=tune` node runs of `../harness/wasm_mint/run.cjs`; a changed entry no quoted
+line backs is a defect - re-mint the profile on such a box.** A `kernels` entry names the variant
+the tuner timed fastest there; an entry written by hand was never timed. A companion entry
+(`tune_companion`) prints no winner line of its own: its main entry's line backs it. A lower class's winner uses only features every class above
 it has, so it runs there, only not tuned for it.
 
 **A diff that writes a `sha` on a `das` row (a run row whose `engine` is `das`) whose

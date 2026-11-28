@@ -24,6 +24,7 @@ require _model_tier
 require _model_form   // with_ctx_cut, alone_pass_of, cpu_cells_form
 require _metal_blob_twin   // metal_kernel_count, counting_text, with_metal_rails
 require _format_census   // census_cell, census_sites_all, format_census
+require _metal4_probe   // nolint:STYLE029,STYLE030,LINT019 - metal4_tensor_available, inside the das_metal halves
 require _kernel_census   // nolint:STYLE029,STYLE030,LINT019 - kernel_census_reset_metal, inside the das_metal halves
 
 //! the context every cell here cuts its form's model to: each row's
@@ -65,8 +66,10 @@ enum CensusKind {
     iq3s4_moe      //!< IQ3_S routed downs under the lut pin
     per32          //!< the per-32 dense planes
     nv4            //!< the nv4 dense planes
+    lowbit_sb      //!< a low-bit superblock member's dense planes (`f`: tq2, tq1, iq1s, iq1m) beside K-quant ones
     nv4_moe        //!< the nv4 routed stacks
     per32_moe      //!< the per-32 routed and shared expert stacks
+    lowbit_moe     //!< a low-bit member's routed stacks (`f`) on three layers of a whole carrier, every other plane Q8_0
     mlx4b_moe      //!< a snapshot's mlx4b routed stacks, every site native
     tied_f16       //!< a tied F16 table no KqFmt carries: converted copies
 }
@@ -82,8 +85,10 @@ struct CensusRow {
     bar : float      //!< the compare's bar against the CPU chain
     kind : CensusKind
     hy : bool        //!< a hybrid carrier: the deltanet and NextN sites too
-    f : KqFmt        //!< a per-32 MoE row's routed member
+    f : KqFmt        //!< a per-32 MoE row's routed member, a ternary row's dense one
+    kq_native : KqNative   //!< the CPU form's K-quant knob: `on` where the block already loads that form
     blocks : int64   //!< past 0: the trunk blocks a cut's name claims
+    stacks : int64   //!< a low-bit routed carrier: the routed stacks its member sits on
     cut_tag : string   //!< the cut claim's message opening
     iq3s : string    //!< the IQ3_S serving pin of both loads, "" none
 }
@@ -97,6 +102,7 @@ struct CensusKept {
     prompt : array<int64>
     fed : array<int64>
     gpu_window : array<float>
+    gpu_crowned : array<float>   //!< the window's last row again under the low-bit members' tensor crowns, empty where none was forced
     gpu_steps : array<array<float>>
     cpu_window : array<float>
     cpu_steps : array<array<float>>
@@ -168,11 +174,11 @@ def private census_want(row : CensusRow) : array<string> {
         return <- census_sites_all()
     } elif (row.kind == CensusKind.iq3s4_moe) {
         return <- ["routed experts"]
-    } elif (row.kind == CensusKind.per32 || row.kind == CensusKind.nv4) {
+    } elif (row.kind == CensusKind.per32 || row.kind == CensusKind.nv4 || row.kind == CensusKind.lowbit_sb) {
         return <- dense_census_sites(row.hy)
     } elif (row.kind == CensusKind.nv4_moe) {
         return <- ["attention q/k/v/o", "routed experts", "token table", "classifier"]
-    } elif (row.kind == CensusKind.per32_moe) {
+    } elif (row.kind == CensusKind.per32_moe || row.kind == CensusKind.lowbit_moe) {
         return <- ["attention q/k/v/o", "routed experts", "shared expert", "token table",
             "classifier"]
     } elif (row.kind == CensusKind.mlx4b_moe) {
@@ -252,6 +258,7 @@ def private metal_window_steps(t : T?; m : Model; row : CensusRow; var kept : Ce
             t |> success(emb_w >= 1l, ("{tag}: the window gathered its token rows on the device " +
                 "({emb_kernel}: {emb_w} dispatches)"))
             invoke(after_window)
+            uncrowned_twins_idle(t, m, row)
             kept.gpu_window := sg.logits
             keep_piece_of(kept, m, argmax_of(sg.logits, vocab))
             var de0 = 0l
@@ -276,6 +283,95 @@ def private metal_window_steps(t : T?; m : Model; row : CensusRow; var kept : Ce
             kept.metal_ran = true
             delete sg
         }
+    }
+}
+
+//! the stamp body `f`'s routed tensor twins stage on: the per-32 body, the ternary pair's K2 one, the 1-bit grid pair's own
+def private routed_twin_body(f : KqFmt) : string {
+    return "metal_moe_mulmm_k2_t" if (f == KqFmt.tq2 || f == KqFmt.tq1)
+    return "metal_moe_mulmm_iq1_t" if (f == KqFmt.iq1s || f == KqFmt.iq1m)
+    return "metal_moe_mulmm_b32_t"
+}
+
+//! the low-bit members, whose tensor families a box sidecar may leave uncrowned
+let private LOWBIT_TWIN_FMTS = fixed_array(KqFmt.tq2, KqFmt.tq1, KqFmt.q20, KqFmt.q10, KqFmt.iq1s, KqFmt.iq1m)
+
+//! the low-bit members among `m`'s planes - its routed stacks under `stacks`, else its dense planes - whose tensor family
+//! (`moe_mulmm_<f>`, `kq_mulmm_<f>`) the box profile leaves uncrowned
+def private lowbit_uncrowned(m : Model; stacks : bool) : array<KqFmt> {
+    var fmts : array<KqFmt>
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        for (f in LOWBIT_TWIN_FMTS) {
+            let n = sites_count(m, !stacks, stacks, $(x : KqFmt) : bool => x == f)
+            if (n > 0l && !metal_tensor_crowned(stacks ? "moe_mulmm_{f}" : "kq_mulmm_{f}")) {
+                fmts |> push(f)
+            }
+        }
+    }
+    return <- fmts
+}
+
+//! the crowned window's control, read off the plain window's census: an uncrowned low-bit member's dense tensor twins
+//! never ran (its sites rode the dequant pass and the split tile). A routed stack has no such control: an uncrowned family
+//! takes its routed twins at or under the knee too (`metal_moe_kq_twin_pick`), the window's size
+def private uncrowned_twins_idle(t : T?; m : Model; row : CensusRow) {   // nolint:LINT012,LINT019 - das_metal half
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var inscope fmts <- lowbit_uncrowned(m, false)
+        for (f in fmts) {
+            let tw = metal_kernel_count_prefix("MetalKqMulMm{kq_stem(f)}T")
+            t |> equal(tw, 0l, "{row.tag}: the crowned window's control: with kq_mulmm_{f} uncrowned no {f} tensor twin ran")
+        }
+    }
+}
+
+//! the window again with the tensor family of each low-bit member among `m`'s planes - `kq_mulmm_<f>` on a dense plane,
+//! `moe_mulmm_<f>` on a routed stack - crowned where the box profile leaves it out: the drivers shut down so the PSOs
+//! compile under the crowns, each such dense member's tensor twins and routed member's routed twins dispatch, the last row
+//! kept for the verdict; the crowns put back and the drivers shut down again. Shuts the drivers down mid-cell
+def private crowned_window(t : T?; m : Model; row : CensusRow;
+                           var kept : CensusKept) {   // nolint:LINT012,LINT019 - das_metal half
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let crowns0 = get_metal_tensor_crowns()
+        var crowns = crowns0
+        var fmts <- lowbit_uncrowned(m, false)
+        var routed <- lowbit_uncrowned(m, true)
+        for (f in fmts) {
+            crowns = empty(crowns) ? "kq_mulmm_{f}" : "{crowns},kq_mulmm_{f}"
+        }
+        for (f in routed) {
+            crowns = empty(crowns) ? "moe_mulmm_{f}" : "{crowns},moe_mulmm_{f}"
+        }
+        if ((!empty(fmts) || !empty(routed)) && !metal4_tensor_available(g_dev)) {
+            skip_cell(t, "{row.tag}: the crowned window: this box compiles no Metal-4 tensor twin")
+        } elif (!empty(fmts) || !empty(routed)) {
+            set_metal_tensor_crowns(crowns)
+            metal_decode_shutdown()
+            metal_prefill_shutdown()
+            with_dasllama_jobque() {
+                var sg = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
+                with_metal_rails(MetalRails(decode = false)) {
+                    kernel_census_reset_metal()
+                    eval_(m, sg, kept.prompt)
+                }
+                for (f in fmts) {
+                    let tw = metal_kernel_count_prefix("MetalKqMulMm{kq_stem(f)}T")
+                    t |> success(tw > 0l, ("{row.tag}: under the kq_mulmm_{f} crown the window's {f} sites rode the " +
+                        "tensor twins ({tw} dispatches)"))
+                }
+                for (f in routed) {
+                    let tw = routed_twin_dispatches(f, routed_twin_body(f), false)
+                    t |> success(tw > 0l, ("{row.tag}: under the moe_mulmm_{f} crown the window's {f} expert stacks rode " +
+                        "the routed tensor twins ({tw} dispatches)"))
+                }
+                kept.gpu_crowned := sg.logits
+                delete sg
+            }
+            set_metal_tensor_crowns(crowns0)
+            metal_decode_shutdown()
+            metal_prefill_shutdown()
+        }
+        delete fmts
+        delete routed
     }
 }
 
@@ -402,7 +498,7 @@ def private per32_metal(t : T?; m : Model; row : CensusRow;
         let arm = row.arm
         let np32 = per32_plane_count(m, true)
         t |> success(np32 > 0l,
-            "{arm}: the dense planes load as q51 / iq4nl32 / q4032 / q5032 ({np32} planes)")
+            "{arm}: the dense planes load in a per-32 format ({np32} planes)")
         metal_window_steps(t, m, row, kept) $ {
             let w = per32_window_dispatches()
             t |> success(w >= np32, ("{arm}: the window's per-32 sites rode the per-32 stamps " +
@@ -413,10 +509,10 @@ def private per32_metal(t : T?; m : Model; row : CensusRow;
         let wide = get_metal_b32_wide()
         //! a k/v plane under the wide form's rows rides the K-split
         if (!wide || !b32_wide_fits(kv_rows)) {
-            let ks = (metal_kernel_count("metal_kq_gemv_q51_ks")
-                + metal_kernel_count("metal_kq_gemv_iq4nl32_ks")
-                + metal_kernel_count("metal_kq_gemv_q4032_ks")
-                + metal_kernel_count("metal_kq_gemv_q5032_ks"))
+            var ks = 0l
+            for (f in PER32_FMTS) {
+                ks += metal_kernel_count("metal_kq_gemv_{f}_ks")
+            }
             t |> success(ks > 0l, ("{arm}: the narrow planes rode the K-split GEMV " +
                 "(DASLLAMA_METAL_B32_WIDE={wide}, k/v rows {kv_rows})"))
         }
@@ -444,6 +540,29 @@ def private nv4_metal(t : T?; m : Model; row : CensusRow;
         }
         let gv = metal_kernel_count("MetalKqGemvNv4_metal_kq_gemv_iq4")
         t |> success(gv >= DECODE_STEPS * nplanes, ("{arm}: the steps read every nv4 plane " +
+            "through its GEMV ({gv} dispatches, {DECODE_STEPS * nplanes} planes)"))
+    }
+}
+
+//! a low-bit superblock member's dense planes: they load as `row.f`, the window rides the member's tiles, small-batch forms
+//! and GEMV, every step reads each plane through the member's GEMV
+def private lowbit_sb_metal(t : T?; m : Model; row : CensusRow;
+                            var kept : CensusKept) { // nolint:LINT012,LINT019 - das_metal half
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let arm = row.arm
+        let f = row.f
+        let stem = kq_stem(f)
+        let nplanes = sites_count(m, true, true, $(x : KqFmt) : bool => x == f)
+        t |> success(nplanes > 0l, "{arm}: the dense planes load as {f} ({nplanes} planes)")
+        metal_window_steps(t, m, row, kept) $ {
+            let w = (metal_kernel_count_prefix("MetalKqMulMm{stem}") + metal_kernel_count_prefix("MetalKqDequant{stem}")
+                + metal_kernel_count_prefix("MetalKqMvB2{stem}") + metal_kernel_count_prefix("MetalKqMvB4{stem}")
+                + metal_kernel_count_prefix("MetalKqMvB8{stem}") + metal_kernel_count("metal_kq_gemv_{f}"))
+            t |> success(w >= nplanes, ("{arm}: the window's {f} sites rode the {f} stamps " +
+                "({w} dispatches, {nplanes} planes)"))
+        }
+        let gv = metal_kernel_count("metal_kq_gemv_{f}")
+        t |> success(gv >= DECODE_STEPS * nplanes, ("{arm}: the steps read every {f} plane " +
             "through its GEMV ({gv} dispatches, {DECODE_STEPS * nplanes} planes)"))
     }
 }
@@ -476,19 +595,24 @@ def private per32_moe_metal(t : T?; m : Model; row : CensusRow;
         let arm = row.arm
         let mlx = row.kind == CensusKind.mlx4b_moe
         let nexp = sites_count(m, false, true, $(x : KqFmt) : bool => x == row.f)
+        let carrier = row.kind == CensusKind.lowbit_moe
         if (mlx) {
             t |> success(nexp >= 3l * m.config.n_layers,
                 "{arm}: every routed stack loads as {row.f} ({nexp} stacks)")
+        } elif (carrier) {
+            t |> equal(nexp, row.stacks, "{arm}: the carrier's routed stacks that load as {row.f}")
         } else {
             t |> success(nexp >= m.config.n_layers,
                 "{arm}: the routed stacks load as {row.f} ({nexp} stacks)")
         }
         let stem = "{row.f}"
         let cls = kq_stem(row.f)
-        let tbody = "metal_moe_mulmm_b32_t"   //! every per-32 routed twin stages on the per-32 body
+        let tbody = routed_twin_body(row.f)
+        //! a carrier's member may be one the box profile leaves uncrowned: its twin then never compiled
+        let uncrowned = carrier && !metal_tensor_crowned("moe_mulmm_{stem}")
         metal_window_steps(t, m, row, kept) $ {
             let mm = (metal_kernel_count("metal_moe_mulmm_{stem}")
-                + routed_gemv_dispatches(row.f, cls) + routed_twin_dispatches(row.f, tbody, false))
+                + routed_gemv_dispatches(row.f, cls) + routed_twin_dispatches(row.f, tbody, uncrowned))
             t |> success(mm >= nexp, ("{arm}: the window's {stem} expert stacks rode the {stem} " +
                 "routed stamps ({mm} dispatches, {nexp} stacks)"))
         }
@@ -527,9 +651,11 @@ def private kind_metal(t : T?; m : Model; row : CensusRow; var kept : CensusKept
         per32_metal(t, m, row, kept)
     } elif (row.kind == CensusKind.nv4) {
         nv4_metal(t, m, row, kept)
+    } elif (row.kind == CensusKind.lowbit_sb) {
+        lowbit_sb_metal(t, m, row, kept)
     } elif (row.kind == CensusKind.nv4_moe) {
         nv4_moe_metal(t, m, row, kept)
-    } elif (row.kind == CensusKind.per32_moe || row.kind == CensusKind.mlx4b_moe) {
+    } elif (row.kind == CensusKind.per32_moe || row.kind == CensusKind.mlx4b_moe || row.kind == CensusKind.lowbit_moe) {
         per32_moe_metal(t, m, row, kept)
     } else {
         tied_f16_metal(t, m, row, kept)
@@ -553,6 +679,9 @@ def format_census_metal(t : T?; var m : Model; form : ModelForm; row : CensusRow
             }
             census_of(t, m, row, "blob twin")
             kind_metal(t, m, row, kept)
+            if (kept.metal_ran) {
+                crowned_window(t, m, row, kept)
+            }
         }
     } else {
         t |> skip("dasMetal not built")
@@ -562,7 +691,7 @@ def format_census_metal(t : T?; var m : Model; form : ModelForm; row : CensusRow
 //! the CPU form the row's controls wait for: the portable backend,
 //! IQ3_S served as the row's pin
 def census_cpu_form(row : CensusRow) : ModelForm =>
-    cpu_cells_form(backend = "portable", iq3s_serve = row.iq3s)
+    cpu_cells_form(backend = "portable", kq_native = row.kq_native, iq3s_serve = row.iq3s)
 
 //! the row's CPU cells on `census_cpu_form(row)` alone, cut to
 //! `CENSUS_CELLS_CTX`: the census and the Metal stream's replay
@@ -581,6 +710,26 @@ def format_census_cpu(t : T?; var m : Model; form : ModelForm; row : CensusRow;
     }
 }
 
+//! `row`'s Metal census forms onto `forms`: the blob twin and, on a das_metal build, the row's CPU form
+def format_census_forms(var forms : array<ModelForm>; row : CensusRow) {
+    forms |> push(metal_form(ctx = CENSUS_CELLS_CTX))
+    if (empty(metal_build_why())) {
+        forms |> push(census_cpu_form(row))
+    }
+}
+
+//! whether `form` is one of the Metal census's of `row`, its share run: the blob twin's census, window and steps, the row's
+//! CPU form's replay
+def format_census_pass(t : T?; var m : Model; form : ModelForm; row : CensusRow; var kept : CensusKept) : bool {
+    if (form.on_metal) {
+        format_census_metal(t, m, form, row, kept)
+        return true
+    }
+    return false if (!alone_pass_of(form, census_cpu_form(row)))
+    format_census_cpu(t, m, form, row, kept)
+    return true
+}
+
 //! the window and every step against the CPU chain within the bar,
 //! the CPU's next row (window) and previous row (steps) the controls
 def private steps_verdict(t : T?; row : CensusRow; kept : CensusKept) {
@@ -591,6 +740,12 @@ def private steps_verdict(t : T?; row : CensusRow; kept : CensusKept) {
         "'{piece_of(kept, kept.gpu_window)}' (maxd {pf_d})\n"))
     t |> success(pf_d <= bar,
         "{tag}: the window's last row within {bar} of the CPU chain's (maxd {pf_d})")
+    if (!empty(kept.gpu_crowned)) {
+        let cr_d = logits_maxdiff(kept.cpu_window, kept.gpu_crowned)
+        to_log(LOG_INFO, "{tag} window under the low-bit tensor crowns: maxd {cr_d} of the CPU chain's\n")
+        t |> success(cr_d <= bar,
+            "{tag}: the crowned window's last row within {bar} of the CPU chain's (maxd {cr_d})")
+    }
     var worst = 0.0
     var off_min = 1.0e30
     for (cs, gs, step in kept.cpu_steps, kept.gpu_steps, count()) {
@@ -601,6 +756,11 @@ def private steps_verdict(t : T?; row : CensusRow; kept : CensusKept) {
             let ctl = logits_maxdiff(cs, kept.gpu_window)
             t |> success(ctl > bar, ("{tag}: the window compare's control: the CPU chain's next " +
                 "row lands outside the bar of the window's ({ctl})"))
+        }
+        if (step == 0 && !empty(kept.gpu_crowned)) {
+            let ctl = logits_maxdiff(cs, kept.gpu_crowned)
+            t |> success(ctl > bar, ("{tag}: the crowned window compare's control: the CPU chain's next " +
+                "row lands outside the bar of the crowned window's ({ctl})"))
         }
         let fed = eyeball_str(kept.pieces?[kept.fed[step]] ?? "")
         to_log(LOG_INFO, ("{tag} step {step}: fed '{fed}', CPU next '{piece_of(kept, cs)}' vs " +
@@ -629,6 +789,12 @@ def private dense_row(file, fam, arm, emb : string; kind : CensusKind; hy : bool
     return CensusRow(file = file, fam = fam, arm = arm, tag = arm, emb = emb, bar = DENSE_KQ_BAR,
         kind = kind, hy = hy)
 }
+
+//! a llama carrier of low-bit superblock member `f`, its table gathered by `emb`; the CPU side the block's portable
+//! K-quant-native form
+def private lowbit_sb_row(file : string; f : KqFmt; emb : string) : CensusRow => CensusRow(
+    file = file, fam = "llama", arm = "census-{f}", tag = "{f}", emb = emb,
+    bar = DENSE_KQ_BAR, kind = CensusKind.lowbit_sb, f = f, kq_native = KqNative.on)
 
 def private per32_moe_row(file, arm, emb : string; f : KqFmt) : CensusRow {
     return CensusRow(file = file, fam = "qwen2moe", arm = arm, tag = arm, emb = emb,
@@ -674,6 +840,14 @@ def format_census_q4032() : CensusRow => dense_row("Qwen2.5-0.5B-Instruct-Q4_0-l
 def format_census_q5032() : CensusRow => dense_row("Qwen2.5-0.5B-Instruct-Q5_0-pure-local.gguf",
     "qwen2", "census-q5032", "MetalEmbedB32Q5032_metal_embed_b32", CensusKind.per32, false)
 
+//! Ternary-Bonsai 1.7B Q2_0: every matrix and the tied table q20
+def format_census_q20() : CensusRow => dense_row("Ternary-Bonsai-1.7B-Q2_0_g64.gguf", "qwen3",
+    "census-q20", "MetalEmbedB32Q20_metal_embed_b32", CensusKind.per32, false)
+
+//! Bonsai 1.7B Q1_0: every matrix and the tied table q10
+def format_census_q10() : CensusRow => dense_row("Bonsai-1.7B-Q1_0.gguf", "qwen3",
+    "census-q10", "MetalEmbedB32Q10_metal_embed_b32", CensusKind.per32, false)
+
 def format_census_q51_table() : CensusRow => dense_row("Qwen3.5-0.8B-MTP-Q5_1-local.gguf", "qwen35",
     "census-q51-table", "MetalEmbedB32Q51_metal_embed_b32", CensusKind.per32, true)
 
@@ -686,12 +860,25 @@ def format_census_nv4_table() : CensusRow => dense_row("Llama-3.2-1B-Instruct-em
 def format_census_nv4_hybrid() : CensusRow => dense_row("Qwen3.5-0.8B-MTP-NVFP4-pure-local.gguf",
     "qwen35", "census-nv4-hybrid", "MetalEmbedNv4_metal_embed_kq", CensusKind.nv4, true)
 
+//! TriLM 1.1B as `f` (tq2, tq1): every dense plane the member's, an untied Q4_K table
+def format_census_ternary(file : string; f : KqFmt) : CensusRow => lowbit_sb_row(file, f, "MetalEmbedK4_metal_embed_kq")
+
+//! a Llama-3.2-1B 1-bit grid mint as `f` (iq1s, iq1m): 78 dense planes the member's, the rest K-quant and IQ2_XXS, the tied
+//! Q5_K table gathered on the device
+def format_census_iq1(file : string; f : KqFmt) : CensusRow => lowbit_sb_row(file, f, "MetalEmbedK5_metal_embed_kq")
+
 //! the Qwen3-30B-A3B `--pure` NVFP4 mint's seven-block cut: the
 //! 768-wide routed stacks, the table and the classifier as nv4
 def format_census_nv4_moe() : CensusRow => CensusRow(
     file = "Qwen3-30B-A3B-7L-NVFP4-pure-local.gguf", fam = "qwen3moe", arm = "census-moe-nv4",
     tag = "census-moe-nv4", emb = "MetalEmbedNv4_metal_embed_kq", bar = NV4_MOE_BAR,
     kind = CensusKind.nv4_moe, blocks = 7l)
+
+//! a low-bit member's routed carrier: the whole Qwen1.5-MoE, `f` on `stacks` routed stacks of three layers, a Q8_0 table;
+//! the CPU chain reads those stacks off their own bytes
+def format_census_moe_lowbit(file : string; f : KqFmt; stacks : int64) : CensusRow => CensusRow(file = file, fam = "qwen2moe",
+    arm = "census-moe-{f}", tag = "census-moe-{f}", emb = "metal_embed_q8", bar = PLAIN_MOE_BAR,
+    kind = CensusKind.lowbit_moe, f = f, kq_native = KqNative.on_q40, stacks = stacks)
 
 def format_census_moe_q51() : CensusRow => per32_moe_row("Qwen1.5-MoE-A2.7B-4L-Q5_1-local.gguf",
     "census-moe-q51", "MetalEmbedB32Q51_metal_embed_b32", KqFmt.q51)

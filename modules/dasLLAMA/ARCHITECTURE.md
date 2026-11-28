@@ -47,9 +47,9 @@ any sibling companion that sends a reader to it.
   tiling (`#nv4-planes`) and the per-tensor scale beside them (`#nv4-site-scale`).
 - `ARCHITECTURE_ENGINE_FORMATS_IQ1.md` - the iq1s and iq1m members: their planes as the disk bytes (`#iq1-planes`), the one
   packed grid (`#iq1-grid`), the delta folded into the weight (`#iq1-delta-fold`), their CPU rows (`#iq1-grp-cpu`) and
-  the discrete homes' read of the same planes (`#iq1-device-row`).
+  the discrete homes' (`#iq1-device-row`) and Metal's (`#iq1-metal-row`) read of the same planes.
 - `ARCHITECTURE_ENGINE_FORMATS_TQ2.md` - the ternary members: tq2's planes read by the k2 bodies (`#tq2-k2-lattice`) and on
-  the discrete homes (`#tq2-device-row`), tq1's as trits of four-byte columns (`#tq1-trit-columns`, `#tq1-device-row`).
+  the discrete homes (`#tq2-device-row`), tq1's as trits of four-byte columns (`#tq1-trit-columns`, `#tq1-device-row`), both in place on Metal (`#tq-metal-row`).
 - `ARCHITECTURE_ENGINE_FORMATS_MLX.md` - a safetensors snapshot directory as a synthesized GGUF meta (`#mlx-snapshot-source`), the routed (`#mlx-moe-snapshot`) and qwen4_exp (`#mlx-qwen4exp-snapshot`) snapshot families, the affine members' planes (`#mlx-affine-planes`) and their Metal forms (`#mlx-metal-forms`).
 - `ARCHITECTURE_ENGINE_FORMATS_TERMS.md` - the weight-format terms: a site, a lever and a converted
   copy (`ARCHITECTURE_ENGINE_FORMATS_TERMS.md#kq-format-terms`), the served form (`#served-form`), a member set's width (`#kq-member-set`).
@@ -231,7 +231,7 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_GPU_MTP_DECODE_HC.md` - the hyper-connection mixer's three-to-eight-row form on the
   matrix unit.
 - `ARCHITECTURE_RUNTIME.md` - kernel shape, caches, lint policy, knobs, hot-path coverage and its
-  call-graph terms, the GPU ramp.
+  call-graph terms, the GPU ramp, the activation form a fused decode chain reads (`#chain-activation-forms`).
 - `ARCHITECTURE_RUNTIME_JOBQUE.md` - the hybrid worker pool, the MoE region split, the job queue
   the engine dispatches on, and the mode that dispatches to none.
 - `ARCHITECTURE_MEDIA.md` - the family GPU hooks, the tower weight lane.
@@ -278,7 +278,7 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   host, the score dot classic prefill shares with decode, the module-scope visibility a lifted
   worker lambda needs of its kernel, the two interleaves a grp<mr> repack is made of, the JIT partition a
   hot leaf instantiates in; the q8 chain's activation forms against the reference's
-  (`ARCHITECTURE_CPU_KERNELS.md#q8-activation-forms`); the 16-bit activation image the disk-order K-quant and q8 batch GEMMs read on wasm and on x86 without AVX2 (`ARCHITECTURE_CPU_KERNELS.md#x16-rows`); q20's code spreads (`#q20-code-spreads`), q10's sign tests (`#q10-sign-tests`) and the low-bit rows' in-place walk (`#q20-device-layout-walk`).
+  (`ARCHITECTURE_CPU_KERNELS.md#q8-activation-forms`); the 16-bit activation image the disk-order K-quant and q8 batch GEMMs read on wasm and on x86 without AVX2 (`ARCHITECTURE_CPU_KERNELS.md#x16-rows`); q20's code spreads (`#q20-code-spreads`), q10's sign tests (`#q10-sign-tests`), NEON's low-bit plane GEMV (`#plane-gemv`) and the low-bit rows' row-group decode into the q8 tile's plane (`#q20-device-layout-walk`).
 - `ARCHITECTURE_CPU_KERNELS_TILES.md` - the CPU tile families: the bf16 tile that keeps its sum in the matrix
   unit, the batch tile's lattice (`ARCHITECTURE_CPU_KERNELS_TILES.md#f32-batch-tile-lattice`), the generated f32
   GEMM family, the half-float weight rows and the bf16 weight plane's matrix-unit family.

@@ -721,8 +721,13 @@ the Llama-3.2-1B NVFP4 mint with every dense plane nv4, its table mint with the 
 Qwen3.5-0.8B-MTP `--pure` mint with the deltanet planes, the NextN eh_proj, the table and the classifier nv4, and the
 Qwen3-30B-A3B `--pure` mint's seven-block cut - family `qwen3moe`, its blocks asserted on the load - with every routed stack nv4) and the per-32 mints `census-q51 census-iq4nl32
 census-iq4nl32-table census-q4032 census-q5032 census-q51-table census-moe-q51 census-moe-q4032
-census-moe-q5032`, and the affine routed mint `census-moe-mlx4b` (the Qwen3.6-35B-A3B 4-bit snapshot's served image,
-large tier). Vulkan format census (`test_gpu_resident_format_census.das`, entry below):
+census-moe-q5032`, the low-bit carriers `census-q20 census-q10` (Ternary-Bonsai Q2_0 and Bonsai Q1_0, tied tables, family
+`qwen3`) and `census-tq2 census-tq1` (the TriLM 1.1B tq2_0 and tq1_0 files) and `census-iq1s census-iq1m` (the Llama-3.2-1B IQ1 mints, tied Q5_K tables;
+both pairs family `llama`, in `test_gpu_resident_llama.das`), the routed low-bit carriers `census-moe-tq2 census-moe-tq1
+census-moe-iq1s census-moe-iq1m` (`test_gpu_resident_moe_formats.das`) and `census-moe-q20 census-moe-q10`
+(`test_gpu_resident_qwen_moe.das`) - the whole Qwen1.5-MoE with the member on three layers' routed stacks, category
+`qwen15-moe` - and the
+affine routed mint `census-moe-mlx4b` (the Qwen3.6-35B-A3B 4-bit snapshot's served image, large tier). Vulkan format census (`test_gpu_resident_format_census.das`, entry below):
 `vk-census vk-gather vk-perop-ffn vk-per32-iq4nl32 vk-per32-q4032 vk-per32-q5032 vk-per32-q51 vk-per32-q20 vk-per32-q10`;
 `vk-per32-moe` is `test_gpu_resident_qwen_moe.das`'s per-32 MoE carriers, `vk-per32-moe-q20` and `vk-per32-moe-q10` among them. A filter token matches by
 substring, so `--arm census-q51` also runs `census-q51-table`, and `--arm vk-per32` runs every
@@ -1087,15 +1092,15 @@ residual step's plain and sandwich builders at 256 and 1024 lanes, swiglu, geglu
 the rows and twin bit for bit, the table the twin's halves in the prep's slot law, the sums within 1e-5, the pad rows
 untouched, the plain twin's order the control the table must miss; its device pair arms (`attn_qk_mm_gate` with `pair_mt`, `attn_dev_pair_gate`) run both
 tile heights at a head of 96 too - QK's reduction width is the head, AV's 64-wide tiles plus the
-32-column tail stamp - and the misc file's `embed_kq_gate` the token-table gather of every K-quant format the Metal tier serves (three rows off the engine's own plane-row dequant, bit for bit), `embed_b32_gate` the per-32 gather (q51, iq4nl32, q4032, q5032; three rows against `dequant_b32_plane_block`, bit for bit, at 96 wide and at 2048 wide past a whole other table's blocks - an untied table's offset - and at 96 and 288 wide off the 16-byte grid, bound on the grid below as `enc_embed_table` binds it, the blocks past the bind asserted and both binds asserted on 16 bytes) and `embed_f32_gate` the greedy chain's fp32-table gather (the
+32-column tail stamp - and the misc file's `embed_kq_gate` the token-table gather of every K-quant format the Metal tier serves (three rows off the engine's own plane-row dequant, bit for bit), `embed_b32_gate` the per-32 gather (q51, iq4nl32, q4032, q5032, and q20 and q10 at whole scale groups; three rows against `dequant_b32_plane_block`, bit for bit, at 96 wide and at 2048 wide past a whole other table's blocks - an untied table's offset - and at 96 and 288 wide off the 16-byte grid, bound on the grid below as `enc_embed_table` binds it, the blocks past the bind asserted and both binds asserted on 16 bytes) and `embed_f32_gate` the greedy chain's fp32-table gather (the
 row gather at one row under the embed scale) at a 96-wide row and past a lead of foreign floats. The gemv file's
 small-batch cells run every superblock format's eight-column form at 9 and 16 rows too - two column groups in one
 dispatch over an x of the live rows alone - and every kernel cell of the iq4 family carries the iq3s4 stamps (format 35:
 the GEMV, the small-batch forms, the routed GEMV, the base and tensor tiles, the routed tiles and twins, the token
-gather). The prefill file's per-32 cells run the small-batch stamps (`b32_mvb_gate`: q51, iq4nl32, q4032 and q5032 at two, four and eight
+gather). The prefill file's per-32 cells run the small-batch stamps (`b32_mvb_gate`: q51, iq4nl32, q4032, q5032, q20 and q10 at two, four and eight
 columns, pad columns and two column groups, y rows past `d`, on the two-row stamps and on the K-split narrow-plane ones, a
 64-block row among them) bit for bit against the same form's one-row GEMV a row at a time over x off
-the dyadic lattice, the GEMV within a double dot's envelope, and the routed GEMV (`moe_b32_rows_gate`: q51, iq4nl32, q4032, q5032 and mx4's
+the dyadic lattice, the GEMV within a double dot's envelope, and the routed GEMV (`moe_b32_rows_gate`: q51, iq4nl32, q4032, q5032, q20, q10 and mx4's
 E8M0 path) over several streams in one dispatch bit for bit against one stream a dispatch; the E-series pre-step's cells
 (the bf16 and f32 rows' cells one gate, `router_gemv_gate`, over the two weight packings; `ple_proj_bf16_gate`: the bf16 rows through `enc_ple_proj_bf16_rows` - the word-pair stamps at an even dim and base, eight
 columns a simdgroup and the decode column's threadgroup a row at 1536 wide, and the halfword stamps at an odd dim or base,
@@ -3444,7 +3449,11 @@ native, the tied table gathered (Bonsai's off `q20_emb_cls_spv`, the mint's Q6_K
 bar, each form loaded once; arm `vk-per32-q10` the same cells on the Bonsai-1.7B Q1_0 file (its tied table off `q10_emb_cls_spv`)
 and the Llama-3.2-1B Q1_0 mint. Each of the four blocks also loads its K-quant native CPU form on every box, whatever the arm
 filter says: Bonsai's table sites off their own bytes (`per32_tables_cpu_cell`), the mint's attention sites native and layer 0's
-attention q and FFN down rows against the file rows' dot (`kq_dense_sites_cell`, `_kquant_cells.das`). Under
+attention q and FFN down rows against the file rows' dot (`kq_dense_sites_cell`, `_kquant_cells.das`). On that form each
+low-bit carrier and the IQ4_NL, Q4_0 and Q5_0 qwen2 mints also run the fused decode chains against the per-op dispatches, ids and
+final logits bit for bit (`fused_per32_cell`, `_fused_decode_cells.das`): layer 0's attention chain is taken, its FFN chain taken
+on the low-bit carriers and the Q5_0 mint and declined on the IQ4_NL and Q4_0 mints (a superblock down plane at a 896-wide
+dim); the cell skips where the kernel backend has no rows core for the format. Under
 `DASLLAMA_CUDA=1` the per-op FFN rail's test, the per-32 tables' and the tied llama table's gather cells skip: the per-op tier and the
 gather witness (`vk_rdec_token_gathered`) are the Vulkan home's.
 `_metal_format_census_cells.das` - the Metal format census, cells on the blocks of its carriers' files
@@ -3455,7 +3464,12 @@ attention q/k/v/o, routed experts, shared expert, deltanet qkv/gate/out, deltane
 NextN eh_proj - on the planar load and on its blob twin, the sites still on a converted copy logged as one list; then a
 Metal prefill window over a counting prompt and six Metal decode steps on the twin against the CPU chain over the same
 tokens, the CPU chain's next row as each compare's control outside the bar, the prefill and decode counters, and the
-token-table gather dispatched by the window and by every step (the host embeds no row). Arm `census-iq4xs` (family
+token-table gather dispatched by the window and by every step (the host embeds no row). A carrier with a low-bit member
+whose tensor family the box profile leaves uncrowned (`kq_mulmm_<f>`, `moe_mulmm_<f>` on a routed stack) runs its window
+again under those crowns (`crowned_window`): a dense member's tensor twins dispatch - none on the plain window, the
+control, whose sites ride the dequant pass and the split tile; a routed member's twins serve an uncrowned family at or
+under the knee too, so their count is no witness of the crown - and the crowned last row holds the row's bar with the CPU
+chain's next row outside it; a skipped cell where the box compiles no Metal-4 tensor twin. Arm `census-iq4xs` (family
 `qwen35moe`): Qwen3.6-35B-A3B-4L-MTP-IQ4_XS-pure, the four-block cut (its blocks asserted), every big plane IQ4_XS on disk, at the qwen35moe row's bar
 (6.0) - the window's beta/alpha planes on the IQ4_XS expert-form GEMV (`metal_moe_gemv_iq4xs`, none on the q8
 `MetalDnBa`), the steps' IQ4_XS single-row GEMV count covering every recurrent layer's five deltanet planes and every
@@ -3992,7 +4006,8 @@ a block a file; `test_gpu_resident_moe_q20` (arm `vk-per32-moe-q20`, category `q
 down stacks of layers 3, 11 and 19 are Q2_0 (no cut): every site native, the window and its fed steps on the resident chain with no CPU
 pass, within the routed bar; `test_gpu_resident_moe_q10` (arm `vk-per32-moe-q10`, category `qwen15-moe`) the same cell on the Q1_0 twin, and on
 that file's K-quant native CPU form, on every box, layer 3's routed gate, up and down rows against the file rows' dot
-(`kq_expert_sites_cell`, `_kquant_cells.das`). The whole-model resident driver on a MoE
+(`kq_expert_sites_cell`, `_kquant_cells.das`); both tests take the Metal blob twin and its census row under the arms
+`census-moe-q20` and `census-moe-q10`. The whole-model resident driver on a MoE
 (`DASLLAMA_GPU=1`): the expert stacks in the arena, the window
 chain's routed block and the token command's routed block - the hybrid file's forced-feed
 logits-tolerance form at the routed chain's 20% bar (the arms part on the router's near-ties from
@@ -4069,7 +4084,8 @@ TQ1_0, IQ1_S, IQ1_M) is the three-layer form `moe-formats/<file>-exps3-<TYPE>.gg
 layers 3, 11 and 19 alone and their down stacks the type's fallback - Q4_0 under a ternary type, IQ4_NL under IQ1_S and
 IQ1_M - since a ternary requant of every stack amplifies the chains' rounding past the routed bar; the IQ1_S and IQ1_M files' blocks
 also load a K-quant native CPU form whose cell holds layer 3's routed gate and up rows to the file rows' dot,
-`kq_expert_sites_cell`), four routed layers' experts pinned to the host
+`kq_expert_sites_cell`; each of the four files' blocks takes the Metal blob twin and its census row under the arm
+`census-moe-<member>`, `format_census_moe_lowbit`), four routed layers' experts pinned to the host
 under the streamed prompt (`set_gpu_want_pf_stream`), the rare rail reading them off the tier's pinned device-layout planes through
 the host twin (`set_rare_arena`): the host-pinned file's two cells a format - the split token command and the cut window chain
 against the CPU chain, one window and two, one `[test]` a format (dastest's `--test-names test_moe_formats_<TYPE>` runs one;

@@ -3175,6 +3175,41 @@ def test_metal_prefill_kernels(t : T?) {
                     b32_dense_twins(t, dev, queue, fa)
                 }
 
+                // ===== the low-bit members (q20, q10): the per-32 gates at whole scale groups a row - 64 weights, 128 on q10 =====
+                for (fl in [KqFmt.q20, KqFmt.q10]) {
+                    mlx_fixture_gate(t, fl, 24, 256)
+                    moe_gemv_gate(t, dev, queue, fl, 128, 24, 5, 3, 1, false)   //! the expert-indexed twin: a routed gate/up site (shared x)
+                    moe_gemv_gate(t, dev, queue, fl, 128, 32, 7, 4, 1, true)    //! ... the down site (per-slot x)
+                    moe_gemv_gate(t, dev, queue, fl, 128, 24, 5, 3, 3, true)    //! ... batch streams
+                    moe_gemv_gate(t, dev, queue, fl, 128, 24, 5, 3, 1, false, false, true)   //! the wide stamp: a gate/up site
+                    moe_gemv_gate(t, dev, queue, fl, 128, 33, 7, 4, 1, true, false, true)    //! ... the down site, an odd row past the last pair
+                    moe_gemv_gate(t, dev, queue, fl, 1152, 12, 5, 3, 3, true, false, true)   //! ... one 32-block stride and a four-block tail
+                    moe_b32_rows_gate(t, dev, queue, fl, 128, 24, 5, 3, 4)
+                    moe_b32_rows_gate(t, dev, queue, fl, 256, 12, 6, 2, 3)
+                    moe_mulmm_b32_gate(t, dev, queue, fl, 128, 64, [32, 40, 64])   //! the routed base and twins: a padded tail on expert 1
+                    moe_mulmm_b32_gate(t, dev, queue, fl, 256, 128, [8, 96])       //! 2 col tiles, a tiny run and a multi-tile one
+                    moe_mulmm_b32_gate(t, dev, queue, fl, 128, 64, [136, 32])      //! counts crossing 128 - both tall-pair stamps live
+                    b32_gemv_gate(t, dev, queue, fl, 128, 24)
+                    b32_gemv_gate(t, dev, queue, fl, 640, 7)   //! 20 blocks - five lane strides; a row-pair tail
+                    b32_gemv_wide_gate(t, dev, queue, fl, 256, 7)     //! eight blocks, under one 32-block stride; the odd row's partner clamped
+                    b32_gemv_wide_gate(t, dev, queue, fl, 1024, 12)   //! one whole stride
+                    b32_gemv_wide_gate(t, dev, queue, fl, 2176, 5)    //! two strides and a four-block tail
+                    b32_glu_gate(t, dev, queue, fl, 256, 7, 0u)       //! the fused gate|up form: silu, the odd row clamped
+                    b32_glu_gate(t, dev, queue, fl, 2176, 6, 1u)      //! ... the tanh GELU past two strides
+                    for (ks in [false, true]) {
+                        b32_mvb_gate(t, dev, queue, fl, 128, 24, 2, 2, 24, ks)
+                        b32_mvb_gate(t, dev, queue, fl, 640, 7, 3, 4, 9, ks)
+                        b32_mvb_gate(t, dev, queue, fl, 640, 7, 4, 4, 9, ks)
+                        b32_mvb_gate(t, dev, queue, fl, 128, 24, 5, 8, 26, ks)
+                        b32_mvb_gate(t, dev, queue, fl, 640, 7, 8, 8, 9, ks)
+                        b32_mvb_gate(t, dev, queue, fl, 128, 24, 9, 8, 24, ks)
+                        b32_mvb_gate(t, dev, queue, fl, 2048, 12, 2, 2, 12, ks)
+                    }
+                    b32_mm_gate(t, dev, queue, fl, 128, 128, 64)
+                    b32_mm_gate(t, dev, queue, fl, 256, 64, 32)
+                    b32_dense_twins(t, dev, queue, fl)
+                }
+
                 // ===== the 6-bit affine member: its dense forms (no routed form is stamped; the member declines a routed stack) =====
                 mlx_fixture_gate(t, KqFmt.mlx6b, 24, 192)
                 b32_gemv_gate(t, dev, queue, KqFmt.mlx6b, 128, 24)
@@ -4154,6 +4189,8 @@ def private moe_gemv_planes(fmt : KqFmt; rows, n) : tuple<p0 : array<uint8>; p1 
         q5032_test_planes(rows, n, p0, p1, wref)
     } elif (kq_mlx_affine(fmt)) {
         mlx_test_planes(fmt, rows, n, p0, p1, wref)
+    } elif (fmt == KqFmt.q20 || fmt == KqFmt.q10) {
+        lowbit_test_planes(fmt, rows, n, p0, p1, wref)
     } else {
         let nb = n / 32
         p0 |> resize(rows * nb * 16)
@@ -4185,7 +4222,7 @@ def private moe_gemv_gate(t : T?; var dev, queue; fmt : KqFmt; n, d, net, k, nst
         let sq51 = stamp_of(@@enc_moe_gemv_q51_c)
         let siq = wide ? b32_moe_gemv_w_stamp(fmt) : b32_moe_gemv_stamp(fmt)
         let smx = stamp_of(@@enc_moe_gemv_mx4_c)
-        let nl = wide || fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032 || kq_mlx_affine(fmt)
+        let nl = wide || fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032 || kq_mlx_affine(fmt) || fmt == KqFmt.q20 || fmt == KqFmt.q10
         let q51n = fmt == KqFmt.q51 && !wide
         var pso = (fmt == KqFmt.q8 ? mc |> keep_stamp(sq8, err) : (q51n ? mc |> keep_stamp(sq51, err)
             : (nl ? mc |> keep_stamp(siq, err) : mc |> keep_stamp(smx, err))))
@@ -4502,7 +4539,7 @@ def private moe_b32_rows_gate(t : T?; var dev, queue; fmt : KqFmt; n, d, net, k,
         let sq51 = stamp_of(@@enc_moe_gemv_q51_c)
         let siq = b32_moe_gemv_stamp(fmt)
         let smx = stamp_of(@@enc_moe_gemv_mx4_c)
-        let nl = fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032 || kq_mlx_affine(fmt)
+        let nl = fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032 || kq_mlx_affine(fmt) || fmt == KqFmt.q20 || fmt == KqFmt.q10
         var pso = fmt == KqFmt.q51 ? mc |> keep_stamp(sq51, err) : (nl ? mc |> keep_stamp(siq, err) : mc |> keep_stamp(smx, err))
         return if (!pso_ok(t, tag, pso, err))
         let nb = n / 32
@@ -4682,13 +4719,14 @@ def private b32_devw_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim, mp : 
 //! every dense form of one per-32 format: the five twins at a 32-row and a 128-row panel, the split-K pair at one and four
 //! splits, the dev-W chain whole and tiled
 def private b32_dense_twins(t : T?; var dev, queue; fmt : KqFmt) {
+    let k3 = kq_group_elems(fmt) > 64l ? 384 : 192   //! three 64-chunks a row - the odd chunk count - or the three scale groups of a 128-group member
     for (form in ["t", "th", "thdb"]) {
         b32_mm_twin_gate(t, dev, queue, fmt, form, 128, 128, 64)
-        b32_mm_twin_gate(t, dev, queue, fmt, form, 192, 64, 32)   // six blocks a row: the odd 64-chunk count
+        b32_mm_twin_gate(t, dev, queue, fmt, form, k3, 64, 32)
     }
     for (form in ["th128", "thdb128"]) {
         b32_mm_twin_gate(t, dev, queue, fmt, form, 128, 128, 128)
-        b32_mm_twin_gate(t, dev, queue, fmt, form, 192, 64, 256)
+        b32_mm_twin_gate(t, dev, queue, fmt, form, k3, 64, 256)
     }
     for (half in [false, true]) {
         b32_mm_split_gate(t, dev, queue, fmt, half, 256, 128, 32, 1)
@@ -4697,7 +4735,7 @@ def private b32_dense_twins(t : T?; var dev, queue; fmt : KqFmt) {
     }
     b32_mm_base_split_gate(t, dev, queue, fmt, 256, 128, 64, 4)   //! the simdgroup base tile split four ways
     b32_devw_gate(t, dev, queue, fmt, 128, 128, 64)
-    b32_devw_gate(t, dev, queue, fmt, 192, 64, 32)
+    b32_devw_gate(t, dev, queue, fmt, k3, 64, 32)
 }
 
 //! The dense per-32 mul_mm (MetalKqMulMmQ51 / MetalKqMulMmIq4nl32) BIT-exact over `mp` x rows of the exact-arithmetic planes

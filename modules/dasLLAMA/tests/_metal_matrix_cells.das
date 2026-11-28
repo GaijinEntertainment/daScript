@@ -2855,6 +2855,8 @@ let private TENSOR_CROWNED = ("attn_avmm,attn_qkmm,gemm64b_q8,gemmb_q8,gemmb_sk_
     "kq_mulmm_q5032,moe_mulmm_q51,moe_mulmm_iq4nl32,moe_mulmm_q4032,moe_mulmm_q5032," +
     "kq_mulmm_iq4xs,kq_mulmm_iq4nl,kq_mulmm_k3,kq_mulmm_iq3s,kq_mulmm_iq3xxs," +
     "kq_mulmm_k2,kq_mulmm_iq2s,kq_mulmm_iq2xs,kq_mulmm_iq2xxs," +
+    "kq_mulmm_tq2,kq_mulmm_tq1,kq_mulmm_iq1s,kq_mulmm_iq1m,kq_mulmm_q20,kq_mulmm_q10," +
+    "moe_mulmm_tq2,moe_mulmm_tq1,moe_mulmm_iq1s,moe_mulmm_iq1m,moe_mulmm_q20,moe_mulmm_q10," +
     "kq_gemv_iq3s_f4,kq_gemv_iq3xxs_f4,kq_gemv_iq2xxs_f4,hmm_tall")
 
 //! the parameters of one tensor-twin row

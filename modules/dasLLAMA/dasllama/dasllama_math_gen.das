@@ -2238,6 +2238,7 @@ def q20q8_rm_witness_gen() : bool => false
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, lev = "s", spread = "mshift", accs = 2, requires = "avx512vnni,avx512bw,avx512vbmi"),
  tune_perm(mr = 4, lev = "s", spread = "shift", accs = 2, requires = "neon"),
  tune_perm(mr = 4, lev = "s", spread = "shuf", accs = 2, requires = "neon"),
+ tune_perm(mr = 4, lev = "s", spread = "plane", requires = "neon"),
  tune_companion(fn = "q20q8_rm_tile4_gen", gen = "dasllama_gemm_gen::q20_rm_tile4"),
  tune_companion(fn = "q20q8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::q20_rm_gemv",
@@ -2290,6 +2291,7 @@ def q10q8_rm_witness_gen() : bool => false
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, lev = "s", spread = "mask", accs = 2, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4, lev = "u", spread = "shuf", accs = 2, requires = "neon"),
  tune_perm(mr = 4, lev = "s", spread = "shuf", accs = 2, requires = "neon"),
+ tune_perm(mr = 4, lev = "s", spread = "plane", requires = "neon"),
  tune_companion(fn = "q10q8_rm_tile4_gen", gen = "dasllama_gemm_gen::q10_rm_tile4"),
  tune_companion(fn = "q10q8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::q10_rm_gemv",
@@ -3664,27 +3666,97 @@ def private b32g_gemv(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp
     q5032q8_gemv_gen(yp, qp, sp, xqp, xsp, xbsp, n, rb, re)
 }
 def private b32g_scalar(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q5032) : float => dot_q5032q8_scalar(wq, ws, xq, xs, n)
-let private LOWBIT_WALK_ROWS = 16   //! the rows a low-bit walk group hands the row-major stamps
 [arch(at = "../ARCHITECTURE_CPU_KERNELS.md#q20-device-layout-walk")]
-def private b32g_layout(_f : KqTag_q20 | KqTag_q10) : int64 => int64(LOWBIT_WALK_ROWS)
+def private b32g_layout(_f : KqTag_q20 | KqTag_q10) : int64 => int64(q8q8_layout_gen())
 def private b32g_bsum(_f : KqTag_q20 | KqTag_q10) : bool => false
-//! a low-bit walk group's four tokens through the member's row-major tile over the group's disk-order rows, scattered from a
-//! group-sized scratch
-[unused_argument(xbsp)]
-def private b32g_tile(var yp : float?; qg : uint8 const?; sg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64; f : KqTag_q20 | KqTag_q10) {
-    var y4 : float[LOWBIT_WALK_ROWS * 4]
-    let rows = int64(LOWBIT_WALK_ROWS)
+
+//! the eight levels of elements [8 i, 8 i + 8) of a low-bit row as one word's bytes, element 8 i the low byte
+def private lowbit_levels8(wq : uint8 const?; i : int64; _f : KqTag_q10) : uint64 {
+    let x = (uint64(unsafe(wq[i])) * 0x0101010101010101ul) & 0x8040201008040201ul
+    let set = ((x + 0x7f7f7f7f7f7f7f7ful) >> 7ul) & 0x0101010101010101ul
+    return 0xfffffffffffffffful ^ (set * 0xfeul)
+}
+def private lowbit_levels8(wq : uint8 const?; i : int64; _f : KqTag_q20) : uint64 {
     unsafe {
-        rm_tile4_gen(addr(y4[0]), qg, sg, xqp + tk * n, xsp + tk * (n / KQ_B32_ELEMS), null, n, rows, f)
-        for (t in range64(4l)) {
-            for (r in range64(rows)) {
-                yp[(tk + t) * d + g * rows + r] = y4[t * rows + r]
+        var x = uint64(wq[2l * i]) | (uint64(wq[2l * i + 1l]) << 32ul)
+        x = (x | (x << 12ul)) & 0x000f000f000f000ful
+        x = (x | (x << 6ul)) & 0x0303030303030303ul
+        return (x + 0x7f7f7f7f7f7f7f7ful) ^ 0x8080808080808080ul
+    }
+}
+
+//! word `w`'s bytes at elements [e, e + 8) of row `r` of a grp<mr> q8 plane, `kgroup` bytes a row a column
+def private put_grp_levels8(var dst : uint8?; w : uint64; e, r, mr, kgroup : int64) {
+    unsafe {
+        if (kgroup == 8l) {
+            *reinterpret<uint64?>(dst + (e / 8l * mr + r) * 8l) = w
+        } elif (kgroup == 4l) {
+            let c = (e / 4l * mr + r) * 4l
+            *reinterpret<uint?>(dst + c) = uint(w & 0xfffffffful)
+            *reinterpret<uint?>(dst + c + mr * 4l) = uint(w >> 32ul)
+        } else {
+            for (k in range64(8l)) {
+                let ek = e + k
+                dst[(ek / kgroup * mr + r) * kgroup + ek % kgroup] = uint8((w >> uint64(k * 8l)) & 0xfful)
             }
         }
     }
 }
+
+//! the bytes of a low-bit walk group's panel: `mr` rows' levels as the q8 tile's plane, then their binary16 scales a block
+def private b32g_panel_bytes(n, mr : int64; _f : KqTag_q20 | KqTag_q10) : int64 => mr * n + mr * (n / KQ_B32_ELEMS) * 2l
+def private b32g_panel_bytes(_n, _mr : int64; _f : KqTag_q51 | KqTag_iq4nl32 | KqTag_q4032 | KqTag_q5032) : int64 => 0l
+
+//! the planes a walk group's tile reads: a low-bit group (`mr` disk-order rows at `qg` / `sg`) decoded into panel `scp` as
+//! the stamped q8 repack lays a group out - int8 levels `kgroup` bytes a row a column under the stamp's bias (128: the byte's
+//! top bit), a block's binary16 scale bits a row after them; a packed group's own planes
+[hint(unsafe_range_check, noalias = qg, noalias = sg, noalias = scp)]
+def private b32g_panel(qg, sg : uint8 const?; var scp : uint8?; n, mr : int64; f : KqTag_q20 | KqTag_q10) : tuple<q : uint8 const?; s : uint8 const?> {
+    let nb = n / KQ_B32_ELEMS
+    let qrow = nb * b32_qb(f)
+    let srow = b32_sbytes(nb, f)
+    let kgroup = int64(q8q8_kgroup_gen())
+    let flip = uint64(q8q8_wbias_gen() & 255) * 0x0101010101010101ul
+    unsafe {
+        var sd = reinterpret<uint16?>(scp + mr * n)
+        for (r in range64(mr)) {
+            let wq = qg + r * qrow
+            let ws = sg + r * srow
+            for (i in range64(n / 8l)) {
+                put_grp_levels8(scp, lowbit_levels8(wq, i, f) ^ flip, i * 8l, r, mr, kgroup)
+            }
+            for (bi in range64(nb)) {
+                sd[bi * mr + r] = uint16(u16_le(ws + b32_soff(bi, f), 0l))
+            }
+        }
+        return (q = reinterpret<uint8 const?>(scp), s = reinterpret<uint8 const?>(sd))
+    }
+}
+[unused_argument(scp, n, mr, f)]
+def private b32g_panel(qg, sg : uint8 const?; var scp : uint8?; n, mr : int64; f : KqTag_q51 | KqTag_iq4nl32 | KqTag_q4032 | KqTag_q5032) : tuple<q : uint8 const?; s : uint8 const?> =>
+    (q = qg, s = sg)
+
+//! the q8 tile's bias sums over token rows [0, ntok) where a low-bit panel feeds a biased stamp
+def private b32g_bias_sums(xqp : int8 const?; n, ntok : int64; _f : KqTag_q20 | KqTag_q10) : int const? => q8q8_bias_sums(xqp, n, ntok, int64(q8q8_wbias_gen()))
+[unused_argument(xqp, n, ntok)]
+def private b32g_bias_sums(xqp : int8 const?; n, ntok : int64; _f : KqTag_q51 | KqTag_iq4nl32 | KqTag_q4032 | KqTag_q5032) : int const? => null
+
+//! a low-bit walk group's four tokens: the stamped q8 tile over the group's panel (`b32g_panel`), its four-token vector tile
+//! under a stamp whose tile steps wider
+def private b32g_tile(var yp : float?; qg : uint8 const?; sg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64; _f : KqTag_q20 | KqTag_q10) {
+    unsafe {
+        let wg = reinterpret<int8 const?>(qg)
+        let sc = reinterpret<uint16 const?>(sg)
+        if (q8q8_tokstep_gen() != 4) {
+            q8q8_tile4_s16_gen(yp, wg, sc, xqp, xsp, xbsp, n, d, g, tk)
+        } else {
+            q8q8_tile_s16_gen(yp, wg, sc, xqp, xsp, xbsp, n, d, g, tk)
+        }
+    }
+}
+[unused_argument(xbsp)]
 def private b32g_gemv(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64; f : KqTag_q20 | KqTag_q10) {
-    rm_gemv_gen(yp, qp, sp, xqp, xsp, xbsp, n, rb, re, f)
+    rm_gemv_gen(yp, qp, sp, xqp, xsp, null, n, rb, re, f)
 }
 def private b32g_scalar(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; f : KqTag_q20 | KqTag_q10) : float => dot_lowbit_q8_scalar(wq, ws, xq, xs, n, f)
 
@@ -3781,6 +3853,54 @@ def private q20q8_groupn_gen(var yp : float?; wq : uint8 const?; ws : uint8 cons
 
 def private q10q8_groupn_gen(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
     b32g_groupn(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_q10())
+}
+
+let private B32_ROWS_BSUMS = 1024   //! the block sums a rows call holds on its stack: an activation row of 32768 elements
+
+//! rows [rb, re) of a per-32 plane against one Q8_0-form activation row - the fused chains' core: the member's GEMV over
+//! its own plane layout, rb and re whole row groups; the activation's block sums filled here where the fold reads them
+def private b32g_rows(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64; f : auto(TT)) {
+    if (!b32g_bsum(f)) {
+        b32g_gemv(yp, qp, sp, xqp, xsp, null, n, rb, re, f)
+        return
+    }
+    let nb = n / 32l
+    panic("dasLLAMA: a per-32 rows call's block sums outgrow its stack scratch") if (nb > int64(B32_ROWS_BSUMS))
+    var bs : int[B32_ROWS_BSUMS]
+    unsafe {
+        b32g_fill_bsums(addr(bs[0]), xqp, n, nb, 0l, 1l)
+        b32g_gemv(yp, qp, sp, xqp, xsp, addr<int const?>(bs[0]), n, rb, re, f)
+    }
+}
+
+[hot_path]
+def private q51q8_rows_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; _xbsp : int const?; n, rb, re : int64) {
+    b32g_rows(yp, qp, sp, xqp, xsp, n, rb, re, KqTag_q51())
+}
+
+[hot_path]
+def private iq4nl32q8_rows_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; _xbsp : int const?; n, rb, re : int64) {
+    b32g_rows(yp, qp, sp, xqp, xsp, n, rb, re, KqTag_iq4nl32())
+}
+
+[hot_path]
+def private q4032q8_rows_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; _xbsp : int const?; n, rb, re : int64) {
+    b32g_rows(yp, qp, sp, xqp, xsp, n, rb, re, KqTag_q4032())
+}
+
+[hot_path]
+def private q5032q8_rows_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; _xbsp : int const?; n, rb, re : int64) {
+    b32g_rows(yp, qp, sp, xqp, xsp, n, rb, re, KqTag_q5032())
+}
+
+[hot_path]
+def private q20q8_rows_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; _xbsp : int const?; n, rb, re : int64) {
+    b32g_rows(yp, qp, sp, xqp, xsp, n, rb, re, KqTag_q20())
+}
+
+[hot_path]
+def private q10q8_rows_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; _xbsp : int const?; n, rb, re : int64) {
+    b32g_rows(yp, qp, sp, xqp, xsp, n, rb, re, KqTag_q10())
 }
 
 
@@ -6081,8 +6201,9 @@ def private kq_batch_groupn_gen(fmt : int; var yp : float?; kqp : uint8 const?; 
 }
 
 // One (group range x token range) cell of the per-32 batch walk — kq_batch_cell_gen's shape over
-// the packed grp<mr> planes (no scratch: the tile decodes in register).
-def private b32g_batch_cell(var myp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, mr, TB : int64; ub, ue : int; tb0, tend : int64; f : auto(TT)) {
+// the packed grp<mr> planes (the tile decodes in register), or over a low-bit group's panel in `scp`
+// (`b32g_panel_bytes`, this dispatch slot's), decoded once a token block.
+def private b32g_batch_cell(var myp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, mr, TB : int64; ub, ue : int; tb0, tend : int64; var scp : uint8?; f : auto(TT)) {
     let nb = n / 32l
     let qb = b32_qb(f)
     let srowb = b32_sbytes(nb, f)
@@ -6096,9 +6217,12 @@ def private b32g_batch_cell(var myp : float?; qp : uint8 const?; sp : uint8 cons
                 let qg = qp + g * mr * nb * qb
                 let sg = sp + g * mr * srowb
                 var tk = tb
-                while (tk < tb4) {
-                    b32g_tile(myp, qg, sg, xqp, xsp, xbsp, n, d, g, tk, f)
-                    tk += 4l
+                if (tk < tb4) {
+                    let planes = b32g_panel(qg, sg, scp, n, mr, f)
+                    while (tk < tb4) {
+                        b32g_tile(myp, planes.q, planes.s, xqp, xsp, xbsp, n, d, g, tk, f)
+                        tk += 4l
+                    }
                 }
                 while (tk < tbe) {   // token tail (< 4): the rows core, one position
                     b32g_gemv(myp + tk * d, qp, sp, xqp + tk * n, xsp + tk * nb, xbsp != null ? xbsp + tk * nb : null, n, g * mr, (g + 1l) * mr, f)
@@ -6108,6 +6232,13 @@ def private b32g_batch_cell(var myp : float?; qp : uint8 const?; sp : uint8 cons
             tb += TB
         }
     }
+}
+
+//! every dispatch slot's panel for a walk of `f` (`walk_panels`), none where the tile reads the packed planes
+def private b32g_walk_panels(n, mr : int64; f : auto(TT)) : tuple<base : uint8?; stride : int64> {
+    let bytes = b32g_panel_bytes(n, mr, f)
+    return walk_panels(bytes) if (bytes > 0l)
+    return (base = null, stride = 0l)
 }
 
 // batch slot: batched per-32 GEMM over the grp planes — group chunks parallel, the cell walk
@@ -6125,14 +6256,20 @@ def private b32g_batch(var yp : float?; wq : uint8 const?; ws : uint8 const?; xq
         bs |> resize(ntok * nb)
     }
     unsafe {
-        var bsp : int? = null
+        var bsp = b32g_bias_sums(xqp, n, ntok, f)
         if (b32g_bsum(f)) {
-            bsp = addr(bs[0])
-            b32g_fill_bsums(bsp, xqp, n, nb, 0l, ntok)
+            var sums = addr(bs[0])
+            b32g_fill_bsums(sums, xqp, n, nb, 0l, ntok)
+            bsp = sums
         }
         let TB = effective_token_block(g_q8_token_block, n)
-        maybe_parallel_for(0, int(ng), matmul_chunks(int(ng * mr), get_q8_batch_chunks_per_job(), n * d * ntok)) $(ub, ue) {
-            b32g_batch_cell(myp, wq, ws, xqp, xsp, bsp, n, d, mr, TB, ub, ue, 0l, ntok, f)
+        var panels = b32g_walk_panels(n, mr, f)
+        var pbase = panels.base
+        let pstride = panels.stride
+        maybe_parallel_for_indexed(0, int(ng), matmul_chunks(int(ng * mr), get_q8_batch_chunks_per_job(), n * d * ntok)) $(slot, ub, ue) {
+            unsafe {
+                b32g_batch_cell(myp, wq, ws, xqp, xsp, bsp, n, d, mr, TB, ub, ue, 0l, ntok, pbase + int64(slot) * pstride, f)
+            }
         }
         for (tk in range64(ntok)) {   // row tails (d % mr): disk-order scalar per token
             for (i in range64(ng * mr, d)) {
@@ -6157,7 +6294,7 @@ def private b32g_expert_batch_core(var yp : float?; wq : uint8 const?; ws : uint
         }
         let t4 = (ntok / 4l) * 4l
         if (t4 > 0l) {
-            b32g_batch_cell(yp, wq, ws, xqp, xsp, bsp, n, d, mr, tb, 0, int(ng), 0l, t4, f)
+            b32g_batch_cell(yp, wq, ws, xqp, xsp, bsp, n, d, mr, tb, 0, int(ng), 0l, t4, null, f)
         }
         for (tk in range64(t4, ntok)) {
             b32g_gemv(yp + tk * d, wq, ws, xqp + tk * n, xsp + tk * nb, bsp != null ? bsp + tk * nb : null, n, 0l, ng * mr, f)
@@ -6209,15 +6346,19 @@ def private b32g_batch_groupn(var yp : float?; wq : uint8 const?; ws : uint8 con
         bs |> resize(maxRow * nb)
     }
     unsafe {
-        var bsp : int? = null
+        var bsp = b32g_bias_sums(xqp, n, maxRow, f)
         if (b32g_bsum(f)) {
-            bsp = addr(bs[0])
+            var sums = addr(bs[0])
             for (r in range64(nregions)) {
-                b32g_fill_bsums(bsp, xqp, n, nb, offs[r * 3l + 1l], offs[r * 3l + 2l])
+                b32g_fill_bsums(sums, xqp, n, nb, offs[r * 3l + 1l], offs[r * 3l + 2l])
             }
+            bsp = sums
         }
         let TB = effective_token_block(g_q8_token_block, n)
-        maybe_parallel_for(0, int(nregions * ng), matmul_chunks_gemv(int(nregions * ng * mr), get_q8_batch_chunks_per_job(), n * d * nregions)) $(gb, ge) {
+        var panels = b32g_walk_panels(n, mr, f)
+        var pbase = panels.base
+        let pstride = panels.stride
+        maybe_parallel_for_indexed(0, int(nregions * ng), matmul_chunks_gemv(int(nregions * ng * mr), get_q8_batch_chunks_per_job(), n * d * nregions)) $(slot, gb, ge) {
             unsafe {
                 var gg = int64(gb)
                 while (gg < int64(ge)) {
@@ -6227,7 +6368,7 @@ def private b32g_batch_groupn(var yp : float?; wq : uint8 const?; ws : uint8 con
                     let b0 = offs[r * 3l] / 32l
                     let row0 = offs[r * 3l + 1l]
                     let cnt = offs[r * 3l + 2l]
-                    b32g_batch_cell(myp, wq + b0 * qb, ws + b32_soff(b0, f), xqp, xsp, bsp, n, d, mr, TB, int(gLocal), int(gEnd), row0, row0 + cnt, f)
+                    b32g_batch_cell(myp, wq + b0 * qb, ws + b32_soff(b0, f), xqp, xsp, bsp, n, d, mr, TB, int(gLocal), int(gEnd), row0, row0 + cnt, pbase + int64(slot) * pstride, f)
                     gg = r * ng + gEnd
                 }
             }
@@ -6375,20 +6516,20 @@ def private gen_b32_slots() : B32Slots[KQ_FMT_COUNT] {
     var slots : B32Slots[KQ_FMT_COUNT]
     slots[int(KqFmt.q51)] = B32Slots(batch = @@q51q8_batch_kernel_gen,
         groupn = @@q51q8_groupn_gen, batch_groupn = @@q51q8_batch_groupn_gen,
-        repack = @@repack_q51_gen, layout = @@q51q8_layout_gen)
+        repack = @@repack_q51_gen, layout = @@q51q8_layout_gen, rows = @@q51q8_rows_gen)
     slots[int(KqFmt.iq4nl32)] = B32Slots(batch = @@iq4nl32q8_batch_kernel_gen,
         groupn = @@iq4nl32q8_groupn_gen, batch_groupn = @@iq4nl32q8_batch_groupn_gen,
-        repack = @@repack_iq4nl32_gen, layout = @@iq4nl32q8_layout_gen)
+        repack = @@repack_iq4nl32_gen, layout = @@iq4nl32q8_layout_gen, rows = @@iq4nl32q8_rows_gen)
     slots[int(KqFmt.q4032)] = B32Slots(batch = @@q4032q8_batch_kernel_gen,
         groupn = @@q4032q8_groupn_gen, batch_groupn = @@q4032q8_batch_groupn_gen,
-        repack = @@repack_q4032_gen, layout = @@q4032q8_layout_gen)
+        repack = @@repack_q4032_gen, layout = @@q4032q8_layout_gen, rows = @@q4032q8_rows_gen)
     slots[int(KqFmt.q5032)] = B32Slots(batch = @@q5032q8_batch_kernel_gen,
         groupn = @@q5032q8_groupn_gen, batch_groupn = @@q5032q8_batch_groupn_gen,
-        repack = @@repack_q5032_gen, layout = @@q5032q8_layout_gen)
+        repack = @@repack_q5032_gen, layout = @@q5032q8_layout_gen, rows = @@q5032q8_rows_gen)
     slots[int(KqFmt.q20)] = B32Slots(batch = @@q20q8_batch_kernel_gen,
-        groupn = @@q20q8_groupn_gen, batch_groupn = @@q20q8_batch_groupn_gen, live = @@q20q8_rm_witness_gen)
+        groupn = @@q20q8_groupn_gen, batch_groupn = @@q20q8_batch_groupn_gen, live = @@q20q8_rm_witness_gen, rows = @@q20q8_rows_gen)
     slots[int(KqFmt.q10)] = B32Slots(batch = @@q10q8_batch_kernel_gen,
-        groupn = @@q10q8_groupn_gen, batch_groupn = @@q10q8_batch_groupn_gen, live = @@q10q8_rm_witness_gen)
+        groupn = @@q10q8_groupn_gen, batch_groupn = @@q10q8_batch_groupn_gen, live = @@q10q8_rm_witness_gen, rows = @@q10q8_rows_gen)
     return slots
 }
 

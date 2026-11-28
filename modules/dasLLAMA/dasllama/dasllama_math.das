@@ -1544,6 +1544,7 @@ struct B32Slots {
     repack : RepackQ51Fn
     layout : function<() : int>
     live : function<() : bool>   //! the row's witness, read at activation: false seats the portable kernels instead (null: the row always serves)
+    rows : MatmulKqRowsFn        //! rows [rb, re) against one Q8_0-form activation over the row's own plane layout - the fused chains' core (null: the chains decline the format)
 }
 
 //! One kernel backend: the three Q8·Q8 matmul kernels + the weight repack, plus selection metadata.
@@ -1741,7 +1742,8 @@ def private b32_slots_or(slots, fallback : B32Slots) : B32Slots {
         groupn = slots.groupn != null ? slots.groupn : fallback.groupn,
         batch_groupn = slots.batch_groupn != null ? slots.batch_groupn : fallback.batch_groupn,
         repack = slots.repack != null ? slots.repack : fallback.repack,
-        layout = slots.layout != null ? slots.layout : fallback.layout)
+        layout = slots.layout != null ? slots.layout : fallback.layout,
+        rows = slots.rows != null ? slots.rows : fallback.rows)
 }
 
 //! the slots a backend's row seats at activation: the row over `fallback`, or `fallback` alone where the row's witness says its stamp declined
@@ -1777,6 +1779,12 @@ def active_repack_b32(fmt : KqFmt) : RepackQ51Fn {
     let bake = g_bake_cpu_override && dlim_b32_mr(g_bake_cpu, fmt) > 1l
     return bake ? g_bake_b32_repack[int(fmt)] : g_b32[int(fmt)].repack
 }
+
+//! does the active backend carry a rows core for per-32 format `fmt`?
+def kernel_backend_has_b32_rows(fmt : KqFmt) : bool => g_b32[int(fmt)].rows != null
+
+//! the active backend's rows core for per-32 format `fmt` - the chains' twin of `kq_rows_fn`; the panic stub where the backend has none
+def b32_rows_fn(fmt : KqFmt) : MatmulKqRowsFn => g_b32[int(fmt)].rows != null ? g_b32[int(fmt)].rows : @@kq_unset_rows
 
 //! `ntok` Q8_0-form activation rows against `fmt`'s planes at `woff`
 def matmul_b32q8_batch(var y : array<float>; wq : array<uint8>; ws : array<uint8>; woff : int64;

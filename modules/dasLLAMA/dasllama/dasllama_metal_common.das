@@ -255,6 +255,10 @@ var g_pso_emb_kq_q40 : MetalComputePipeline?
 var g_pso_emb_kq_nv4 : MetalComputePipeline?
 var g_pso_emb_kq_k3 : MetalComputePipeline?
 var g_pso_emb_kq_k2 : MetalComputePipeline?
+var g_pso_emb_kq_tq2 : MetalComputePipeline?
+var g_pso_emb_kq_iq1s : MetalComputePipeline?
+var g_pso_emb_kq_iq1m : MetalComputePipeline?
+var g_pso_emb_kq_tq1 : MetalComputePipeline?
 var g_pso_emb_kq_iq3s : MetalComputePipeline?
 var g_pso_emb_kq_iq3xxs : MetalComputePipeline?
 var g_pso_emb_kq_iq2s : MetalComputePipeline?
@@ -265,6 +269,8 @@ var g_pso_emb_b32_iq4nl32 : MetalComputePipeline?
 var g_pso_emb_b32_q4032 : MetalComputePipeline?
 var g_pso_emb_b32_q5032 : MetalComputePipeline?
 var g_pso_emb_b32_mlx4 : MetalComputePipeline?
+var g_pso_emb_b32_q20 : MetalComputePipeline?
+var g_pso_emb_b32_q10 : MetalComputePipeline?
 var g_pso_emb_b32_mlx8 : MetalComputePipeline?
 var g_pso_emb_b32_mlx4b : MetalComputePipeline?
 var g_pso_emb_b32_mlx8b : MetalComputePipeline?
@@ -300,6 +306,10 @@ var g_pso_moe_kq_q40 : MetalComputePipeline?
 var g_pso_moe_kq_nv4 : MetalComputePipeline?
 var g_pso_moe_kq_iq4nl : MetalComputePipeline?
 var g_pso_moe_kq_k2 : MetalComputePipeline?
+var g_pso_moe_kq_tq2 : MetalComputePipeline?
+var g_pso_moe_kq_iq1s : MetalComputePipeline?
+var g_pso_moe_kq_iq1m : MetalComputePipeline?
+var g_pso_moe_kq_tq1 : MetalComputePipeline?
 var g_pso_moe_kq_k5 : MetalComputePipeline?
 var g_pso_moe_kq_k6 : MetalComputePipeline?
 var g_pso_moe_combine : MetalComputePipeline?  // weighted top-k reduce into the w2 write shape
@@ -350,28 +360,50 @@ var g_pso_b32_mvb4_q5032_ks : MetalComputePipeline?
 var g_pso_b32_mvb8_q5032_ks : MetalComputePipeline?
 var g_pso_kq_mm_b5032 : MetalComputePipeline?
 var g_pso_moe_gemv_mlx4 : MetalComputePipeline?   //! the affine members' stamps: codes verbatim under the 64-group (scale, bias) pair
+var g_pso_moe_gemv_q20 : MetalComputePipeline?
+var g_pso_moe_gemv_q10 : MetalComputePipeline?
 var g_pso_moe_gemv_mlx8 : MetalComputePipeline?
 var g_pso_moe_gemv_mlx4b : MetalComputePipeline?
 var g_pso_moe_gemv_mlx8b : MetalComputePipeline?
 var g_pso_moe_gemv_q51_w : MetalComputePipeline?   //! the expert-indexed wide stamps, one a `B32_MOE_WIDE_FMTS` member
 var g_pso_moe_gemv_q5032_w : MetalComputePipeline?
 var g_pso_moe_gemv_mlx4_w : MetalComputePipeline?
+var g_pso_moe_gemv_q20_w : MetalComputePipeline?
+var g_pso_moe_gemv_q10_w : MetalComputePipeline?
 var g_pso_moe_gemv_mlx8_w : MetalComputePipeline?
 var g_pso_moe_gemv_mlx4b_w : MetalComputePipeline?
 var g_pso_moe_gemv_mlx8b_w : MetalComputePipeline?
 var g_pso_kq_mm_mlx4 : MetalComputePipeline?
+var g_pso_kq_mm_q20 : MetalComputePipeline?
+var g_pso_kq_mm_q10 : MetalComputePipeline?
 var g_pso_kq_mm_mlx8 : MetalComputePipeline?
 var g_pso_kq_mm_mlx4b : MetalComputePipeline?
 var g_pso_kq_mm_mlx8b : MetalComputePipeline?
 var g_pso_kq_mm_mlx6b : MetalComputePipeline?
 var g_pso_kq_mlx4 : MetalComputePipeline?
+var g_pso_kq_q20 : MetalComputePipeline?
+var g_pso_kq_q10 : MetalComputePipeline?
 var g_pso_kq_mlx4_ks : MetalComputePipeline?
+var g_pso_kq_q20_ks : MetalComputePipeline?
+var g_pso_kq_q10_ks : MetalComputePipeline?
 var g_pso_b32_mvb2_mlx4 : MetalComputePipeline?
+var g_pso_b32_mvb2_q20 : MetalComputePipeline?
+var g_pso_b32_mvb2_q10 : MetalComputePipeline?
 var g_pso_b32_mvb4_mlx4 : MetalComputePipeline?
+var g_pso_b32_mvb4_q20 : MetalComputePipeline?
+var g_pso_b32_mvb4_q10 : MetalComputePipeline?
 var g_pso_b32_mvb8_mlx4 : MetalComputePipeline?
+var g_pso_b32_mvb8_q20 : MetalComputePipeline?
+var g_pso_b32_mvb8_q10 : MetalComputePipeline?
 var g_pso_b32_mvb2_mlx4_ks : MetalComputePipeline?
+var g_pso_b32_mvb2_q20_ks : MetalComputePipeline?
+var g_pso_b32_mvb2_q10_ks : MetalComputePipeline?
 var g_pso_b32_mvb4_mlx4_ks : MetalComputePipeline?
+var g_pso_b32_mvb4_q20_ks : MetalComputePipeline?
+var g_pso_b32_mvb4_q10_ks : MetalComputePipeline?
 var g_pso_b32_mvb8_mlx4_ks : MetalComputePipeline?
+var g_pso_b32_mvb8_q20_ks : MetalComputePipeline?
+var g_pso_b32_mvb8_q10_ks : MetalComputePipeline?
 var g_pso_kq_mlx8 : MetalComputePipeline?
 var g_pso_kq_mlx8_ks : MetalComputePipeline?
 var g_pso_b32_mvb2_mlx8 : MetalComputePipeline?
@@ -401,6 +433,8 @@ var g_pso_kq_iq4nl32_w : MetalComputePipeline?
 var g_pso_kq_q4032_w : MetalComputePipeline?
 var g_pso_kq_q5032_w : MetalComputePipeline?
 var g_pso_kq_mlx4_w : MetalComputePipeline?
+var g_pso_kq_q20_w : MetalComputePipeline?
+var g_pso_kq_q10_w : MetalComputePipeline?
 var g_pso_kq_mlx8_w : MetalComputePipeline?
 var g_pso_kq_mlx4b_w : MetalComputePipeline?
 var g_pso_kq_mlx8b_w : MetalComputePipeline?
@@ -409,6 +443,8 @@ var g_pso_kq_iq4nl32_glu : MetalComputePipeline?
 var g_pso_kq_q4032_glu : MetalComputePipeline?
 var g_pso_kq_q5032_glu : MetalComputePipeline?
 var g_pso_kq_mlx4_glu : MetalComputePipeline?
+var g_pso_kq_q20_glu : MetalComputePipeline?
+var g_pso_kq_q10_glu : MetalComputePipeline?
 var g_pso_kq_mlx8_glu : MetalComputePipeline?
 var g_pso_kq_mlx4b_glu : MetalComputePipeline?
 var g_pso_kq_mlx8b_glu : MetalComputePipeline?
@@ -537,10 +573,30 @@ var g_pso_kq_mm_b33 : MetalComputePipeline?
 var g_pso_kq_iq3xxs : MetalComputePipeline?
 var g_pso_kq_iq4nl : MetalComputePipeline?
 var g_pso_kq_k2 : MetalComputePipeline?
+var g_pso_kq_tq2 : MetalComputePipeline?
+var g_pso_kq_iq1s : MetalComputePipeline?
+var g_pso_kq_iq1m : MetalComputePipeline?
+var g_pso_kq_tq1 : MetalComputePipeline?
 var g_pso_kq_mvb2_k2 : MetalComputePipeline?
+var g_pso_kq_mvb2_tq2 : MetalComputePipeline?
+var g_pso_kq_mvb2_iq1s : MetalComputePipeline?
+var g_pso_kq_mvb2_iq1m : MetalComputePipeline?
+var g_pso_kq_mvb2_tq1 : MetalComputePipeline?
 var g_pso_kq_mvb4_k2 : MetalComputePipeline?
+var g_pso_kq_mvb4_tq2 : MetalComputePipeline?
+var g_pso_kq_mvb4_iq1s : MetalComputePipeline?
+var g_pso_kq_mvb4_iq1m : MetalComputePipeline?
+var g_pso_kq_mvb4_tq1 : MetalComputePipeline?
 var g_pso_kq_mvb8_k2 : MetalComputePipeline?
+var g_pso_kq_mvb8_tq2 : MetalComputePipeline?
+var g_pso_kq_mvb8_iq1s : MetalComputePipeline?
+var g_pso_kq_mvb8_iq1m : MetalComputePipeline?
+var g_pso_kq_mvb8_tq1 : MetalComputePipeline?
 var g_pso_kq_mm_b2 : MetalComputePipeline?
+var g_pso_kq_mm_b22 : MetalComputePipeline?
+var g_pso_kq_mm_b13 : MetalComputePipeline?
+var g_pso_kq_mm_b16 : MetalComputePipeline?
+var g_pso_kq_mm_b21 : MetalComputePipeline?
 var g_pso_kq_mvb2_iq4nl : MetalComputePipeline?
 var g_pso_kq_mvb4_iq4nl : MetalComputePipeline?
 var g_pso_kq_mvb8_iq4nl : MetalComputePipeline?
@@ -606,8 +662,20 @@ var g_pso_kq_mvb2h_iq3xxs : MetalComputePipeline?
 var g_pso_kq_mvb4h_iq3xxs : MetalComputePipeline?
 var g_pso_kq_mvb8h_iq3xxs : MetalComputePipeline?
 var g_pso_kq_mvb2h_k2 : MetalComputePipeline?
+var g_pso_kq_mvb2h_tq2 : MetalComputePipeline?
+var g_pso_kq_mvb2h_iq1s : MetalComputePipeline?
+var g_pso_kq_mvb2h_iq1m : MetalComputePipeline?
+var g_pso_kq_mvb2h_tq1 : MetalComputePipeline?
 var g_pso_kq_mvb4h_k2 : MetalComputePipeline?
+var g_pso_kq_mvb4h_tq2 : MetalComputePipeline?
+var g_pso_kq_mvb4h_iq1s : MetalComputePipeline?
+var g_pso_kq_mvb4h_iq1m : MetalComputePipeline?
+var g_pso_kq_mvb4h_tq1 : MetalComputePipeline?
 var g_pso_kq_mvb8h_k2 : MetalComputePipeline?
+var g_pso_kq_mvb8h_tq2 : MetalComputePipeline?
+var g_pso_kq_mvb8h_iq1s : MetalComputePipeline?
+var g_pso_kq_mvb8h_iq1m : MetalComputePipeline?
+var g_pso_kq_mvb8h_tq1 : MetalComputePipeline?
 var g_pso_kq_mvb2h_iq2s : MetalComputePipeline?
 var g_pso_kq_mvb4h_iq2s : MetalComputePipeline?
 var g_pso_kq_mvb8h_iq2s : MetalComputePipeline?
@@ -648,6 +716,10 @@ var g_pso_kq_mm_b3_sk : MetalComputePipeline?
 var g_pso_kq_mm_b33_sk : MetalComputePipeline?
 var g_pso_kq_mm_b34_sk : MetalComputePipeline?
 var g_pso_kq_mm_b2_sk : MetalComputePipeline?
+var g_pso_kq_mm_b22_sk : MetalComputePipeline?
+var g_pso_kq_mm_b13_sk : MetalComputePipeline?
+var g_pso_kq_mm_b16_sk : MetalComputePipeline?
+var g_pso_kq_mm_b21_sk : MetalComputePipeline?
 var g_pso_kq_mm_b23_sk : MetalComputePipeline?
 var g_pso_kq_mm_b24_sk : MetalComputePipeline?
 var g_pso_kq_mm_b25_sk : MetalComputePipeline?
@@ -659,6 +731,8 @@ var g_pso_kq_mm_b4n32_sk : MetalComputePipeline?
 var g_pso_kq_mm_b4032_sk : MetalComputePipeline?
 var g_pso_kq_mm_b5032_sk : MetalComputePipeline?
 var g_pso_kq_mm_mlx4_sk : MetalComputePipeline?
+var g_pso_kq_mm_q20_sk : MetalComputePipeline?
+var g_pso_kq_mm_q10_sk : MetalComputePipeline?
 var g_pso_kq_mm_mlx8_sk : MetalComputePipeline?
 var g_pso_kq_mm_mlx4b_sk : MetalComputePipeline?
 var g_pso_kq_mm_mlx8b_sk : MetalComputePipeline?
@@ -1435,14 +1509,14 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
 }
 
 //! One kq tensor's GPU-form scale bind (the gemv lab's layouts, pre-baked by the blob transform):
-//! k4/k5/q40/iq4nl/nv4 = 16B compact blocks at soff, doff 0; every other format is the split plane -
-//! sub-scale strips at soff, the packed f16 d plane at doff, the kernels binding the buffer twice.
+//! k4/k5 and the kept planes = one compact row a superblock at soff (`metal_kq_scale_row`), doff 0; every other format is the
+//! split plane - sub-scale strips at soff, the packed f16 d plane at doff, the kernels binding the buffer twice.
 [arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tuple<buf : MetalBuffer?; soff : uint64; doff : uint64> {
     assert(t.metal_blob)
     var kq, ks : array<uint8> const?
     kq_planes_of(t, fmt, kq, ks)
-    let at = kq_bind_offs(fmt, long_length(*ks) / (METAL_KQ_SCALE_ROW + kq_scale_d_tail(fmt)), off)
+    let at = kq_bind_offs(fmt, long_length(*ks) / (metal_kq_scale_row(fmt) + kq_scale_d_tail(fmt)), off)
     return (buf = plane_buffer(dev, unsafe(addr<void?>((*ks)[0])), uint64(long_length(*ks)), t.image_map != null),
             soff = at.soff,
             doff = at.doff)
@@ -1457,6 +1531,8 @@ typedef B32PlaneBind = tuple<qbuf : MetalBuffer?; qoff : uint64; sbuf : MetalBuf
 def b32_planes_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : B32PlaneBind {
     assert(t.metal_blob)
     let b0 = off / KQ_B32_ELEMS
+    let sgroup = kq_sgroup(fmt)
+    assert(b0 % sgroup == 0l, "a per-32 plane binds on a whole scale group")
     let mapped = t.image_map != null
     var qp : B32PlaneBind
     kq_plane_pair(t, fmt) $(q, s) {
@@ -1464,7 +1540,7 @@ def b32_planes_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : B32
             qp = (qbuf = plane_buffer(dev, addr<void?>(q[0]), uint64(long_length(q)), mapped),
                   qoff = uint64(b0 * kq_qsb(fmt)),
                   sbuf = plane_buffer(dev, addr<void?>(s[0]), uint64(long_length(s)), mapped),
-                  soff = uint64(b0 * kq_ssb(fmt)))
+                  soff = uint64(kq_soff(fmt, b0)))
         }
     }
     return qp
@@ -3583,9 +3659,10 @@ enum KqRaceScaleForm {
     compact     //!< k4/k5: 16B kmask blocks, d+dmin leading halves
     split_d     //!< k6 + every split-scale iquant: 16B strips + a 2B f16 d tail
     split_dmin  //!< k2: 16B strips + a 4B d+dmin tail
-    pure_d      //!< iq4nl, q40 and the per-32 d-only planes: a pure-d plane, 8 f16 per superblock
+    pure_d      //!< iq4nl, q40 and the per-32 d-only planes: a pure-d plane, 8 f16 per superblock - which a ternary member and iq1s read their one d a superblock from
     pair_dm     //!< q5_1: d and m a 32-block, 16 f16 per superblock
     ue4m3       //!< nv4: sixteen UE4M3 sub-block scales a superblock, one byte each
+    iq1m_words  //!< iq1m: four scale words a superblock, the f16 d's nibbles on top
 }
 
 //! a format's quant words a 256-element superblock, the unit `race_kq_planes` fills its quant plane in
@@ -3597,7 +3674,8 @@ def race_scale_form(fmt : KqFmt) : KqRaceScaleForm {
     return KqRaceScaleForm.split_dmin if (fmt == KqFmt.k2)
     return KqRaceScaleForm.pair_dm if (fmt == KqFmt.q51)
     return KqRaceScaleForm.ue4m3 if (fmt == KqFmt.nv4)
-    return KqRaceScaleForm.pure_d if (fmt == KqFmt.iq4nl || fmt == KqFmt.q40 || kq_dense_b32(fmt))
+    return KqRaceScaleForm.iq1m_words if (fmt == KqFmt.iq1m)
+    return KqRaceScaleForm.pure_d if (fmt == KqFmt.iq4nl || fmt == KqFmt.q40 || fmt == KqFmt.tq2 || fmt == KqFmt.tq1 || fmt == KqFmt.iq1s || kq_dense_b32(fmt))
     return KqRaceScaleForm.split_d
 }
 
@@ -3614,7 +3692,7 @@ def race_kq_planes(dev : MetalDevice?; nblk, qu_per_sb : int; sform : KqRaceScal
         qplane[i] = uint(i) * 2654435761u   //! deterministic pseudo-random bit pattern
     }
     var splane : array<uint8>
-    let sbytes = sform == KqRaceScaleForm.split_d ? nblk * 18 : (sform == KqRaceScaleForm.split_dmin ? nblk * 20 : (sform == KqRaceScaleForm.pair_dm ? nblk * int(kq_ssb(KqFmt.q51) * (KQ_SB_ELEMS / KQ_B32_ELEMS)) : nblk * 16))
+    let sbytes = sform == KqRaceScaleForm.iq1m_words ? nblk * int(IQ1M_SSB) : (sform == KqRaceScaleForm.split_d ? nblk * int(METAL_KQ_SCALE_ROW + kq_scale_d_tail(KqFmt.k6)) : (sform == KqRaceScaleForm.split_dmin ? nblk * int(METAL_KQ_SCALE_ROW + kq_scale_d_tail(KqFmt.k2)) : (sform == KqRaceScaleForm.pair_dm ? nblk * int(kq_ssb(KqFmt.q51) * (KQ_SB_ELEMS / KQ_B32_ELEMS)) : nblk * int(METAL_KQ_SCALE_ROW))))
     splane |> reserve_resize(sbytes)
     if (sform == KqRaceScaleForm.split_d || sform == KqRaceScaleForm.split_dmin) {
         for (i in range(nblk * 16)) {
@@ -3637,6 +3715,12 @@ def race_kq_planes(dev : MetalDevice?; nblk, qu_per_sb : int; sform : KqRaceScal
     } elif (sform == KqRaceScaleForm.ue4m3) {
         for (i in range(sbytes)) {
             splane[i] = uint8(0x30)   //! UE4M3 e = 6, m = 0: 0.25 at half
+        }
+    } elif (sform == KqRaceScaleForm.iq1m_words) {
+        let words = fixed_array(0x0249u, 0x0249u, 0x4249u, 0x3249u)   //! every half-block's scale 1, the top nibbles the f16 0.25
+        for (i in range(sbytes / 2)) {
+            splane[i * 2] = uint8(words[i % length(words)] & 255u)
+            splane[i * 2 + 1] = uint8(words[i % length(words)] >> 8u)
         }
     } else {
         unsafe {

@@ -1320,7 +1320,7 @@ def private tw_kq_stage_member(fc : TwFc; recs : array<Q8Region>; kf : KqFmt; va
             memcpy(addr(ks[sb * ssb]), plane_at(fc.ks, seat.soff), uint64(nsb * ssb))
         }
         g_tw_kq_fc_binds[rid].qoff = uint64(qbase + sb * qsb)
-        g_tw_kq_fc_binds[rid].soff = uint64(sb * 16l)
+        g_tw_kq_fc_binds[rid].soff = uint64(sb * metal_kq_scale_row(kf))
         g_tw_kq_fc_binds[rid].doff = uint64(kq_scale_doff(kf, nsb_total, sb))
         sb += nsb
     }

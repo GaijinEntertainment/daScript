@@ -427,7 +427,7 @@ So there's no ambiguity about what will fail:
   `qwen3vl_merger` incl. deepstack, Qwen2.5-Omni/VL `qwen2.5o`) — vision on the remaining
   multimodal families (pixtral, minicpm-v, …) is what stays out of scope.
 - **GGUF weight types beyond F32 / F16 / Q8_0 / Q4_0 / MXFP4 / NVFP4 / Q2_K-Q6_K / IQ4_XS / IQ4_NL / IQ3_S / IQ3_XXS / IQ2_S / IQ2_XS / IQ2_XXS / IQ1_S / IQ1_M / Q2_0 / Q1_0 / TQ2_0 / TQ1_0** — the six
-  1- and 2-bit types (Q2_0, Q1_0, TQ2_0, TQ1_0, IQ1_S, IQ1_M) run on the CPU, Vulkan and CUDA, and the Metal tier declines them at load; BF16 is read only for the audio-tower mmprojs, not as an LLM weight format.
+  1- and 2-bit types (Q2_0, Q1_0, TQ2_0, TQ1_0, IQ1_S, IQ1_M) run on the CPU and on every GPU tier (Vulkan, CUDA, Metal); BF16 is read only for the audio-tower mmprojs, not as an LLM weight format.
 - `encode(..., parse_special)` is reserved and currently a no-op — the chat renderer injects
   special-token *ids* directly (so templates work); parsing special tokens out of free text
   doesn't.

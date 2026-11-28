@@ -112,7 +112,7 @@ struct private TilePerm {
     accs : int = 0        // the row-major block loop's accumulator sets abreast (0 = the shipped pick: four in the
                           // GEMV, two in the x64 tile, one in the NEON tile); the tile takes at most two
     lev : string = ""     //! q20's levels: "u" the unsigned codes under the activation-sum term, "s" the signed q - 1 lanes ("" = "u"); q10's: "u" the set bits as 0/1 under the sum term, "s" the activation flipped where a bit is clear
-    spread : string = ""  //! q20's 2-bit code spread: "shift", "shuf" or "mshift" (`q20_spread`; "" = "shuf"); q10's sign test: "shuf" or "mask" (`q10_signs`)
+    spread : string = ""  //! q20's 2-bit code spread: "shift", "shuf" or "mshift" (`q20_spread`; "" = "shuf"); q10's sign test: "shuf" or "mask" (`q10_signs`); NEON's q20 and q10 GEMV "plane" (`rm_emit_xplanes`)
     trit : string = ""    //! the x64 tq1 digit extraction: "" the rounding halving adds, "mulhi" the 16-bit multiply-high, "shuf" the nibble tables
 }
 
@@ -241,14 +241,14 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
         || (p.grid != "" && p.grid != "vbmi")
         || (p.pf != 0 && p.pf != 1024 && p.pf != 2048 && p.pf != 4096)
         || (p.lev != "" && p.lev != "u" && p.lev != "s")
-        || (p.spread != "" && p.spread != "shift" && p.spread != "shuf" && p.spread != "mshift" && p.spread != "mask")
+        || (p.spread != "" && p.spread != "shift" && p.spread != "shuf" && p.spread != "mshift" && p.spread != "mask" && p.spread != "plane")
         || (p.bias != 0 && (p.bias != 128 || p.dotPrim != "vpdpbusd"))) return true
     let rt = q8q8_repack_type(p.mr, p.bias, kgroup_of(p))
     if (rt.interleave != p.mr || !rt.f32_scales) return true
     if (p.dotPrim == "smmla") {
         // the i8mm MMA leg: NEON widths, row-quad geometry, same q-reg budget as sdot, and the i8mm tier flag (M1 is dotprod-only)
         if ((!target_aarch64(gc.jit.target)) || (!gc.jit.target.features.i8mm) || (p.width != 128) || (p.grid != "") || (p.pf != 0)
-            || (p.spread == "mshift") || (p.spread == "mask") || (p.mr % 4 != 0)
+            || (p.spread == "mshift") || (p.spread == "mask") || (p.spread == "plane") || (p.mr % 4 != 0)
             || (2 * p.mr + p.nrsplit * p.mr / 4 + 2 * p.nrsplit + 2 > 32)) return true
         let mod = LLVMGetGlobalParent(gc.impl)
         var v16i8 = LLVMVectorType(gc.jit.types.t_int8, 16u)
@@ -286,6 +286,7 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
         || (p.grid == "vbmi" && (p.width != 512 || p.dotPrim == "vpdpbssd" || !tiers.avx512vbmi))   // the lattice is zmm VBMI
         || (p.spread == "mshift" && (p.width != 512 || !tiers.avx512vbmi))
         || (p.spread == "mask" && (!tiers.avx512bw || (p.width == 256 && !gc.jit.target.features.avx512vl)))
+        || (p.spread == "plane")
         || (p.dotPrim == "vpdpbssd" && p.width != 256)) return true    // 512-bit bssd is AVX10 — unproven
     if (p.width == 256) {
         if ((p.dotPrim == "maddubs" && !gc.jit.target.features.avx2)
@@ -329,6 +330,7 @@ struct private TileEmit {
     rm_rpv : int                        // ... rows a vector (2 at width 256, 4 at 512; 0 = the form is off)
     rm_acc_sets : int                   // the perm's accumulator sets abreast in the row-major block loop (0 = the shipped pick)
     rm_row_jam : bool                   // the row-major row loop may unroll-and-jam
+    rm_planes : int                     //! the walk hands the body the activation row as this many byte planes a span and its quarter-span sums (`rm_emit_xplanes`); 0 = as it came
     sign_code_pm1_g : LLVMOpaqueValue?   // the row-group grid decode: ksigns code -> eight +-1 bytes, [128 x i64], parity bit folded in
     gridRows : bool                      // set while the row-group grid decode emits: the column dword read (a panel-form win) reverts to byte loads
     vbmi : bool                          // grid = "vbmi": the grid gemv decodes through the VBMI symbol lattice (row form)
@@ -416,7 +418,8 @@ struct private TileEmit {
     pavg_decl : LLVMOpaqueValue?         //! x64 tq1: the byte rounding halving add (VPAVGB), opaque to the combiner
     usat_decl : LLVMOpaqueValue?         //! x64 tq1: the byte saturating subtract (VPSUBUSB)
     pmulhu_decl : LLVMOpaqueValue?       //! x64 tq1 "mulhi": the word multiply-high (VPMULHUW)
-    trit_ty : LLVMOpaqueType?            //! the byte two-operand signature the pavg / usat / pshufb rails share
+    uhadd_decl : LLVMOpaqueValue?        //! NEON tq1: the byte halving add (UHADD), opaque to the combiner
+    trit_ty : LLVMOpaqueType?            //! the byte two-operand signature the pavg / usat / pshufb / uhadd rails share
     pmulhu_ty : LLVMOpaqueType?          //! the word two-operand signature of VPMULHUW
 }
 
@@ -745,16 +748,6 @@ def private nibbles(te : TileEmit; var v : LLVMOpaqueValue?; loName, hiName : st
 def private crumb_at(te : TileEmit; var v : LLVMOpaqueValue?; sh : int; name : string) : LLVMOpaqueValue? =>
     LLVMBuildAnd(te.builder, sh == 0 ? v : LLVMBuildLShr(te.builder, v, splat_i8w(te, sh), ""), splat_i8w(te, 3), name)
 
-//! the byte-wise halving add (a + c + round) >> 1 at nine bits: pavgb (round 1) and uhadd (round 0) after lowering
-def private avg_u8(te : TileEmit; var a, c : LLVMOpaqueValue?; round : bool) : LLVMOpaqueValue? {
-    let b = te.builder
-    let w8 = te.width / 8
-    var v16 = LLVMVectorType(te.types.t_int16, uint(w8))
-    var one = const_splat(te.types.t_int16, w8, 1ul)
-    var sum = LLVMBuildAdd(b, LLVMBuildZExt(b, a, v16, ""), LLVMBuildZExt(b, c, v16, ""), "")
-    return LLVMBuildTrunc(b, LLVMBuildLShr(b, round ? LLVMBuildAdd(b, sum, one, "") : sum, one, ""), te.vwi8, "")
-}
-
 //! every byte times 9 as the x64 reference spells it: the word shift by 3 with the bytes masked apart, plus the byte
 def private times9_u8(te : TileEmit; var v : LLVMOpaqueValue?) : LLVMOpaqueValue? {
     let b = te.builder
@@ -772,7 +765,7 @@ def private trit_at(te : TileEmit; var v : LLVMOpaqueValue?; n : int; name : str
         if (n > 0) {
             q = LLVMBuildMul(b, v, splat_i8w(te, tq1_pow3(n)), "")
         }
-        return LLVMBuildLShr(b, avg_u8(te, q, LLVMBuildLShr(b, q, splat_i8w(te, 1), ""), false), splat_i8w(te, 6), name)
+        return LLVMBuildLShr(b, trit_call(te, te.uhadd_decl, q, LLVMBuildLShr(b, q, splat_i8w(te, 1), "")), splat_i8w(te, 6), name)
     }
     if (te.trit == "mulhi") return trit_mulhi(te, v, tq1_pow3(n), name)
     if (te.trit == "shuf") {
@@ -790,7 +783,7 @@ def private trit_at(te : TileEmit; var v : LLVMOpaqueValue?; n : int; name : str
     return LLVMBuildLShr(b, trit_call(te, te.pavg_decl, q1, inner), splat_i8w(te, 6), name)
 }
 
-//! one call of a byte two-operand rail (`trit_ty`): VPAVGB, VPSUBUSB or VPSHUFB
+//! one call of a byte two-operand rail (`trit_ty`): VPAVGB, VPSUBUSB, VPSHUFB or NEON's UHADD
 def private trit_call(te : TileEmit; decl : LLVMOpaqueValue?; var a, c : LLVMOpaqueValue?) : LLVMOpaqueValue? {
     var args <- [a, c]
     return LLVMBuildCall2(te.builder, te.trit_ty, decl, args, "")
@@ -2661,6 +2654,13 @@ def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePer
             var mmArgTypes <- [te.vni32, te.v16i8, te.v16i8]
             te.smmla_ty = LLVMFunctionType(te.vni32, mmArgTypes)
         }
+        if (te.kq == 21) {
+            var hTypes <- [te.v16i8]
+            te.uhadd_decl = LLVMGetIntrinsicDeclaration(mod, LLVMLookupIntrinsicID("llvm.aarch64.neon.uhadd"), hTypes)
+            if (te.uhadd_decl == null) return false
+            var h2Types <- [te.v16i8, te.v16i8]
+            te.trit_ty = LLVMFunctionType(te.v16i8, h2Types)
+        }
         if (needMx4) {
             let tblId = LLVMLookupIntrinsicID("llvm.aarch64.neon.tbl1")
             var tblDeclTypes <- [te.v16i8]
@@ -3801,6 +3801,103 @@ def private emit_soff(b : LLVMOpaqueBuilder?; var te : TileEmit; var blk : LLVMO
     return LLVMBuildMul(b, unit, te.types->ConstI64(uint64(ssb)), name)
 }
 
+//! the activation row as `np` (4 or 8) byte planes in the kernel's frame, a span of 16 x np elements at a time:
+//! plane k of a span its sixteen bytes np x j + k, so byte j of a span's sixteen plane bytes meets its element k in
+//! plane k (te.x[0]); beside them a span's four sums, one a quarter span (te.xbs[0])
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#plane-gemv")]
+def private rm_emit_xplanes(var gc : LlvmCodeCtx; var te : TileEmit; var xq, n : LLVMOpaqueValue?; np : int) {
+    let b = gc.jit.builder
+    var planes = LLVMBuildArrayAlloca(b, te.types.t_int8, n, "xplanes")
+    LLVMSetAlignment(planes, 16u)
+    var sums = LLVMBuildArrayAlloca(b, te.types.t_int32, LLVMBuildSDiv(b, n, te.types->ConstI64(uint64(4 * np)), ""), "xsums")
+    LLVMSetAlignment(sums, 16u)
+    var nspan = LLVMBuildSDiv(b, n, te.types->ConstI64(uint64(16 * np)), "nspan")
+    let evens <- [for (i in range(16)); 2 * i]
+    let odds <- [for (i in range(16)); 2 * i + 1]
+    let half = np / 2
+    var ones = const_splat(te.types.t_int8, 16, 1ul)
+    emit_count_loop(gc, te, nspan, "xpi") $(var si) {
+        var base = LLVMBuildMul(b, si, te.types->ConstI64(uint64(16 * np)), "xpoff")
+        var v : LLVMOpaqueValue? [8]
+        for (i in range(np)) {
+            v[i] = load_v16i8(te, xq, LLVMBuildAdd(b, base, te.types->ConstI64(uint64(16 * i)), ""), "")
+        }
+        for (_round in range(np == 8 ? 3 : 2)) {   //! log2(np) even / odd byte splits of neighbours leave slot k holding plane k
+            var nx : LLVMOpaqueValue? [8]
+            for (i in range(half)) {
+                nx[i] = LLVMBuildShuffleVector(b, te.types, v[2 * i], v[2 * i + 1], evens, "")
+                nx[half + i] = LLVMBuildShuffleVector(b, te.types, v[2 * i], v[2 * i + 1], odds, "")
+            }
+            for (i in range(np)) {
+                v[i] = nx[i]
+            }
+        }
+        var acc = LLVMConstNull(te.vni32)
+        for (k in range(np)) {
+            var pp = LLVMBuildGEP2(b, te.types.t_int8, planes, LLVMBuildAdd(b, base, te.types->ConstI64(uint64(16 * k)), ""), "")
+            LLVMBuildStore(b, v[k], pp)
+            var args <- [acc, ones, v[k]]
+            acc = LLVMBuildCall2(b, te.sdot_ty, te.sdot_decl, args, "")
+        }
+        LLVMBuildStore(b, acc, LLVMBuildGEP2(b, te.types.t_int32, sums, LLVMBuildShl(b, si, te.types->ConstI64(2ul), ""), ""))
+    }
+    te.x[0] = planes
+    te.xbs[0] = sums
+}
+
+//! one 128-weight q10 span of a row against the activation's bit planes: plane k's sixteen bytes under the sign bytes' bit
+//! k as a 0 / -1 lane, so a lane of the dot is minus a block's set-bit sum; the fold takes 2 x set - sum a block under its
+//! activation scale and the span's d
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#q10-sign-tests")]
+def private rm_q10_plane_span(var te : TileEmit; var bi : LLVMOpaqueValue?; var f : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let b = te.builder
+    var w = load_v16i8(te, te.wg, LLVMBuildShl(b, bi, te.types->ConstI64(4ul), ""), "signs")
+    var xoff = LLVMBuildShl(b, bi, te.types->ConstI64(7ul), "xoff")
+    var acc = LLVMConstNull(te.vni32)
+    for (k in range(8)) {
+        var bit = const_splat(te.types.t_int8, 16, uint64(1 << k))
+        var set = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntNE, LLVMBuildAnd(b, w, bit, ""), LLVMConstNull(te.v16i8), "")
+        var xk = load_v16i8(te, te.x[0], LLVMBuildAdd(b, xoff, te.types->ConstI64(uint64(16 * k)), ""), "xk{k}")
+        var args <- [acc, LLVMBuildSExt(b, set, te.v16i8, "m{k}"), xk]
+        acc = LLVMBuildCall2(b, te.sdot_ty, te.sdot_decl, args, "acc{k}")
+    }
+    var sp = LLVMBuildGEP2(b, te.types.t_int32, te.xbs[0], LLVMBuildShl(b, bi, te.types->ConstI64(2ul), ""), "")
+    var xsum = LLVMBuildLoad2Aligned(b, te.vni32, sp, 16u, "xsum")
+    var minus = LLVMBuildAdd(b, LLVMBuildShl(b, acc, splat_i32n(te, 1), ""), xsum, "nisum")
+    var qp = LLVMBuildGEP2(b, te.types.t_float, te.xs[0], LLVMBuildShl(b, bi, te.types->ConstI64(2ul), ""), "")
+    var xsv = LLVMBuildLoad2Aligned(b, te.vnf32, qp, 4u, "xsv")
+    var d = rm_f16_at(te, te.sg, LLVMBuildShl(b, bi, te.types->ConstI64(1ul), ""), "d")
+    var dv = LLVMBuildFMul(b, xsv, splat_f32(te, d, ""), "dv")
+    return fold_fma(te, LLVMBuildFNeg(b, LLVMBuildSIToFP(b, minus, te.vnf32, ""), ""), dv, f, "fnew")
+}
+
+//! one 64-weight q20 span of a row against the activation's four planes: plane k's sixteen bytes under the code bytes'
+//! code k, dotted as 0..3; the fold takes the dot less the lane's activation sum (the level is the code less one) a
+//! sixteen-weight lane under its block's activation scale and the span's d
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#plane-gemv")]
+def private rm_q20_plane_span(var te : TileEmit; var bi : LLVMOpaqueValue?; var f : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let b = te.builder
+    var w = load_v16i8(te, te.wg, LLVMBuildShl(b, bi, te.types->ConstI64(4ul), ""), "codes")
+    var xoff = LLVMBuildShl(b, bi, te.types->ConstI64(6ul), "xoff")
+    var acc = LLVMConstNull(te.vni32)
+    var three = const_splat(te.types.t_int8, 16, 3ul)
+    for (k in range(4)) {
+        var c = LLVMBuildAnd(b, k == 0 ? w : LLVMBuildLShr(b, w, const_splat(te.types.t_int8, 16, uint64(2 * k)), ""), three, "c{k}")
+        var xk = load_v16i8(te, te.x[0], LLVMBuildAdd(b, xoff, te.types->ConstI64(uint64(16 * k)), ""), "xk{k}")
+        var args <- [acc, c, xk]
+        acc = LLVMBuildCall2(b, te.sdot_ty, te.sdot_decl, args, "acc{k}")
+    }
+    var sp = LLVMBuildGEP2(b, te.types.t_int32, te.xbs[0], LLVMBuildShl(b, bi, te.types->ConstI64(2ul), ""), "")
+    var isum = LLVMBuildSub(b, acc, LLVMBuildLoad2Aligned(b, te.vni32, sp, 16u, "xsum"), "isum")
+    var qp = LLVMBuildGEP2(b, te.types.t_float, te.xs[0], LLVMBuildShl(b, bi, te.types->ConstI64(1ul), ""), "")
+    var xs2 = LLVMBuildLoad2Aligned(b, LLVMVectorType(te.types.t_float, 2u), qp, 4u, "xs2")
+    let twice <- [0, 0, 1, 1]
+    var xsv = LLVMBuildShuffleVector(b, te.types, xs2, xs2, twice, "xsv")
+    var d = rm_f16_at(te, te.sg, LLVMBuildShl(b, bi, te.types->ConstI64(1ul), ""), "d")
+    var dv = LLVMBuildFMul(b, xsv, splat_f32(te, d, ""), "dv")
+    return fold_fma(te, LLVMBuildSIToFP(b, isum, te.vnf32, ""), dv, f, "fnew")
+}
+
 //! the walk every row-major kernel shares: the GEMV (rows [rb, re) against one activation row) and the four-token tile
 //! (every row against four rows at a row's stride); the rows `rpv` a vector in the row-lane form where the body has one
 //! (a 128-bit lane a row's half block), the rest a row (two 32-blocks a vector at width 512, the odd tail alone)
@@ -3840,6 +3937,9 @@ def private rm_rows_walk(var gc : LlvmCodeCtx; var te : TileEmit; qsb, ssb, sgro
         if (xbs) {
             te.xbs[t] = LLVMBuildGEP2(b, te.types.t_int32, xbsp, LLVMBuildMul(b, tt, n16, ""), "xbsrow{t}")
         }
+    }
+    if (te.rm_planes > 0) {
+        rm_emit_xplanes(gc, te, xq, n, te.rm_planes)
     }
     var qrow = LLVMBuildMul(b, nb, te.types->ConstI64(uint64(qsb)), "qrowb")
     var srowb = emit_soff(b, te, nb, ssb, sgroup, "srowb")
@@ -5197,6 +5297,15 @@ def private rm_b32_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE0
     if (!setup_tile_emit(te, gc, p, lut)) return false
     te.gctx = gc.jit.ctx
     let neon = te.dotKind == DOT_SDOT
+    if (p.spread == "plane") {
+        return false if ((!q10 && !q20) || !neon)
+        if (nt == 1) {   //! the GEMV alone: its four-token tile keeps the block walk below
+            te.rm_planes = q10 ? 8 : 4
+            return rm_rows_walk(gc, te, 16l, 2l, 1l, true, 16 * te.rm_planes, 1, 0) $(bi, _nblk, _paired, f) {
+                f[0] = q10 ? rm_q10_plane_span(te, bi, f[0]) : rm_q20_plane_span(te, bi, f[0])
+            }
+        }
+    }
     let qsb = kq_qsb(fmt)
     let sgroup = kq_sgroup(fmt)
     let ssb = kq_sbytes(fmt, sgroup)

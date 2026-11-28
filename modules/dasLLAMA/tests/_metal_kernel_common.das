@@ -18,6 +18,7 @@ require dasllama/dasllama_kqformat   // KqFmt
 require daslib/strings_boost   // split: a stamp= family's fields
 require dasllama/dasllama_convert   // dequant_k{4,5,6}_plane_superblock — the kq reference dequant
 require dasllama/dasllama_gemm_schema  // kq_qsb — the ONE per-format quant-plane stride source
+require dasllama/dasllama_layout   // metal_kq_scale_row, kq_scale_doff: a fixture's scale plane in the engine's Metal form
 require daslib/f16_cvt              // f32_to_f16 — packing synthetic scale planes
 require daslib/math_bits            // uint_bits_to_float — the affine fixture's BF16 pair halves read back
 require _gguf_writer   // half_bits: the affine fixture's scale and bias halves
@@ -621,6 +622,33 @@ def mlx_test_planes(fmt : KqFmt; rows, n : int; var qp : array<uint8>; var sp : 
     }
 }
 
+//! Build a low-bit member's plane pair (q20 / q10) for `rows` rows of n elements, whole scale groups a row: patterned codes
+//! packed as the disk lays them (element k at bits lb k of its block's stream), a group's pow2 d - d * level is f32-exact, so
+//! the CPU float reference is BIT-exact under any GPU reduction order
+def lowbit_test_planes(fmt : KqFmt; rows, n : int; var qp : array<uint8>; var sp : array<uint8>; var wref : array<float>) {
+    let lb = fmt == KqFmt.q20 ? 2 : 1
+    let qb = int(kq_qsb(fmt))
+    let ge = int(kq_group_elems(fmt))
+    let dlut = fixed_array(0.25, 0.5, 1.0, 2.0)
+    qp |> resize(rows * (n / 32) * qb)
+    sp |> resize((rows * n / ge) * 2)
+    wref |> resize(rows * n)
+    for (g in range(rows * n / ge)) {
+        let d = dlut[(g / 3) % 4]
+        let dbits = half_bits(d, false)
+        sp[g * 2] = uint8(dbits & 0xFF)
+        sp[g * 2 + 1] = uint8(dbits >> 8u)
+        for (i in range(ge)) {
+            let e = g * ge + i
+            let bit = (e % 32) * lb
+            let q = lb == 2 ? (g * 5 + i * 7 + i / 3) % 3 : (g * 3 + i * 7 + i / 5) % 2
+            let o = (e / 32) * qb + bit / 8
+            qp[o] = uint8(uint(qp[o]) | (uint(q) << uint(bit % 8)))
+            wref[e] = d * float(lb == 2 ? q - 1 : 2 * q - 1)
+        }
+    }
+}
+
 //! a BF16 affine plane pair scaled by the power of two `f`: every group's scale and bias halves and the weights, exact
 def mlx_bf16_scale_planes(var sp : array<uint8>; var wref : array<float>; f : float) {
     for (hi in range(length(sp) / 2)) {
@@ -638,7 +666,7 @@ def mlx_bf16_scale_planes(var sp : array<uint8>; var wref : array<float>; f : fl
 // quant plane = hash bytes (any bit pattern is valid); scale plane K4/K5 = [d f16][dmin f16]
 // [12 packed 6-bit bytes] per superblock, K6 = [16B sub-scales] x nsb + f16 d tail, IQ4_XS (44) =
 // the same split form with [8 signed sub-scales in -31..31][8 zero] strips, Q3_K (3) = the k6 form over 96B quants
-def kq_fill_planes(fmt, nsb : int; var kq : array<uint8>; var ks : array<uint8>) {
+def kq_fill_planes(fmt, nsb : int; var kq : array<uint8>; var ks : array<uint8>) {   // nolint:STYLE037 - one arm a format
     let qsb = int(kq_qsb(fmt))
     kq |> resize(nsb * qsb)
     for (i in range(nsb * qsb)) {
@@ -664,6 +692,26 @@ def kq_fill_planes(fmt, nsb : int; var kq : array<uint8>; var ks : array<uint8>)
         ks |> resize(nv4_sbytes)
         for (i in range(nv4_sbytes)) {
             ks[i] = uint8(0x30 + int(kq_hash_byte(i * 11 + 5)) % 32)
+        }
+    } elif (fmt == 22 || fmt == 21 || fmt == 13) {
+        // tq2, tq1 and iq1s: the f16 d a superblock, the engine's own plane
+        ks |> resize(nsb * 2)
+        for (b in range(nsb)) {
+            let dbits = f32_to_f16(KQ_SAFE_SCALES[b % 8])
+            ks[b * 2] = uint8(dbits & 0xFFu)
+            ks[b * 2 + 1] = uint8(dbits >> 8u)
+        }
+    } elif (fmt == 16) {
+        // iq1m: four scale words a superblock - twelve bits of half-block scales, the f16 d's nibble on top
+        ks |> resize(nsb * 8)
+        for (b in range(nsb)) {
+            let dbits = f32_to_f16(KQ_SAFE_SCALES[b % 8])
+            for (w in range(4)) {
+                let sc = (uint(kq_hash_byte(b * 29 + w * 5 + 3)) | (uint(kq_hash_byte(b * 13 + w * 7 + 1)) << 8u)) & 0x0FFFu
+                let word = sc | (((dbits >> uint(4 * w)) & 15u) << 12u)
+                ks[b * 8 + w * 2] = uint8(word & 0xFFu)
+                ks[b * 8 + w * 2 + 1] = uint8(word >> 8u)
+            }
         }
     } elif (fmt == 45 || fmt == 40) {
         // iq4nl and q40: 16B/sb = 8 per-32-block f16 d's, verbatim (no strips)
@@ -756,15 +804,19 @@ def q8_x_fill(nn : int; var xf : array<float>) {
     }
 }
 
-//! the byte offset a GEMV stamp binds a split-scale plane's f16 d tail at: past the `nsb` 16-byte strip rows on the formats
-//! that split their scales (k6, k3, k2, iq4xs and the grid formats), 0 on the ones whose d rides the superblock row
-def kq_split_doff(fmt, nsb : int) : uint64 =>
-    fmt == 6 || fmt == 44 || fmt == 35 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul
+//! the bytes a superblock of a fixture's scale plane: the engine's Metal scale row (`metal_kq_scale_row`)
+def kq_fixture_scale_row(fmt : int) : int => int(metal_kq_scale_row(kq_fmt_of_id(fmt, "kq_fixture_scale_row")))
+
+//! the byte offset a stamp binds superblock `sb0`'s d tail at in a scale plane of `nsb` superblocks (`kq_scale_doff`): past
+//! the strip rows on the formats that split their scales, 0 on the ones whose d rides the superblock row
+def kq_split_doff(fmt, nsb : int; sb0 : int = 0) : uint64 =>
+    uint64(kq_scale_doff(kq_fmt_of_id(fmt, "kq_split_doff"), int64(nsb), int64(sb0)))
 
 //! One row's reference dequant (nb superblocks from sb_base) off split-scale planes, through the engine's own plane-row dequant.
 def kq_row_ref(fmt, sb_base, nb, nsb_total : int; kq, ks : array<uint8>; var wrow : array<float>) {
     let tail = fmt == 2 ? 4l : 2l   //! the engine finds the d tail from the plane's length: the fixture's plane holds nsb_total superblocks exactly
-    assert(fmt == 4 || fmt == 5 || fmt == 40 || fmt == 45 || fmt == 49 || long_length(ks) == int64(nsb_total) * (16l + tail), "kq_row_ref: the scale plane holds nsb_total superblocks")
+    assert(fmt == 4 || fmt == 5 || fmt == 40 || fmt == 45 || fmt == 49 || fmt == 22 || fmt == 21 || fmt == 13 || fmt == 16
+        || long_length(ks) == int64(nsb_total) * (16l + tail), "kq_row_ref: the scale plane holds nsb_total superblocks")
     let f = kq_fmt_of_id(fmt, "kq_row_ref")
     kq_plane_row_f32(f, kq, ks, int64(nb) * kq_elems(f), 1l, 1l, 0l, wrow, 0l, int64(sb_base), true)
 }

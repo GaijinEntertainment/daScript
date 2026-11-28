@@ -591,7 +591,9 @@ class UnpackWords {
 
 // ===== Phase 0: user-function lowering (free functions lower 1:1 as MSL functions) =====
 
-def private ufx_sky(d : float) : float => 0.5 * d + 0.5
+let UFX_SKY_FLOOR = 0.5   //! a module `let` the kernel reads, folded to its constant
+
+def private ufx_sky(d : float) : float => 0.5 * d + UFX_SKY_FLOOR
 
 def private ufx_shade(d : float; bounce : int) : float {
     var acc = ufx_sky(d)     // nested user call
@@ -1299,6 +1301,7 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         "call.simd_shuffle_xor.i32",
         "call.simd_shuffle_xor.u32",
         // values
+        "expr.global_const",
         "expr.builtin.thread_position_in_grid",
         "expr.builtin.thread_position_in_threadgroup",
         "expr.builtin.threadgroup_position_in_grid",

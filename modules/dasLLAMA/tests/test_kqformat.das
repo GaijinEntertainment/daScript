@@ -812,6 +812,11 @@ def test_metal_b32_block_constants(t : T?) {
         for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
             t |> equal(kq_elems(f), 32l, "{f}: BE = 32 on MetalEmbedB32T (a row's blocks are dim / BE), and its four stamps' requires = \"ka.dim % 32\"")
         }
+        t |> equal(kq_group_elems(KqFmt.q20), 64l, "q20: a scale group's elements, MetalEmbedB32Q20's requires = \"ka.dim % 64\"")
+        t |> equal(kq_group_elems(KqFmt.q10), 128l, "q10: a scale group's elements, MetalEmbedB32Q10's requires = \"ka.dim % 128\"")
+        for (f in [KqFmt.tq2, KqFmt.tq1, KqFmt.iq1s, KqFmt.iq1m]) {
+            t |> equal(kq_elems(f), 256l, "{f}: a superblock's elements, the row-batch stamps' requires = \"ka.ndim % 256\"")
+        }
     }
 }
 

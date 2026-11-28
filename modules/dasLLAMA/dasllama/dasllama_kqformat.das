@@ -943,6 +943,8 @@ def tq1_pow3(n : auto(TN)) : int => int(n) < 4 ? int((0x1B090301u >> uint(8 * in
 //! trit `n` (0 to 4) of TQ1_0 byte `b`, a code in {0, 1, 2}: (b x 3^n wrapped to 8 bits) x 3 >> 8
 def tq1_trit(b : auto(TB); n : int) : int => (((int(b) * tq1_pow3(n)) & 255) * 3) >> 8
 
+
+
 //! The IQ4_NL / IQ4_XS nibble codebook (upstream's kvalues_iq4nl): weight = scale x lut[nibble], as
 //! a per-call local (16 bytes on the caller's frame) - the form every worker-run kernel reads.
 def iq4nl_lut() : int8[16] => fixed_array<int8>(-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113)
@@ -1918,6 +1920,11 @@ def kq_sgroup(f : KqFmt) : int64 => kq_desc(f).sgroup
 
 //! the weights one scale unit of `f` serves - its disk block's weights, and the unit a row of the format is whole in
 def kq_group_elems(f : KqFmt) : int64 => kq_desc(f).elems * kq_desc(f).sgroup
+
+let KQ_METAL_BIND_ALIGN = 16l   //! the byte grain a plane's Metal bind offset keeps
+
+//! the element granule at which a group-scaled format's scale row lands `align`-byte aligned: `align` over a group's scale bytes, in groups
+def kq_group_align_elems(f : KqFmt; align : int64) : int64 => kq_group_elems(f) * (align / kq_sbytes(f, kq_sgroup(f)))
 
 //! the scale-plane byte offset of stride unit `blk`: the scale unit of its group
 def kq_soff(f : KqFmt; blk : int64) : int64 {

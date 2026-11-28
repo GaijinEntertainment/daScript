@@ -22,7 +22,7 @@ def class_mint() : string {
     return mint_failure_text("the generator test gate failed") if (!gen_tune_probe::test_mode())
     return mint_failure_text("the generator race failed") if (!gen_tune_probe::tune_mode_run())
     return mint_failure_text("the loop-hint tuner failed") if (tune_kernels::main() != 0)
-    let profile = tune_profile_text(tune_native_target().klass)
+    let profile = tune_profile_text(tune_mint_target().klass)
     return mint_failure_text("the mint wrote no kernels") if (empty(profile))
     return mint_result_text(profile, tune_manifest_text())
 }

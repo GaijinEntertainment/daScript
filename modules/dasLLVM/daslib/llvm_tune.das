@@ -133,6 +133,13 @@ def tune_build_target(cli : JitCliOptions; triple : string) : TuneTarget {
 def tune_process_target() : TuneTarget =>
     tune_build_target(jit_cli_options_or_default(), get_target_triple())
 
+//! The target a mint writes for - a sidecar's feature stamp, a
+//! profile's class: the class this process is pinned to, this box
+//! where it names none.
+def tune_mint_target() : TuneTarget =>
+    tune_target(cpu_class_of(jit_baseline_class(jit_cli_options_or_default(),
+        g_env_jit.jit_baseline)), CpuFeatures(0u))
+
 //! The class this process's cross triple builds for, none for a
 //! native compile.
 def private process_cross_class() : CpuClass =>
@@ -746,7 +753,7 @@ def private save_sidecar_doc(path : string; var doc : JsonValue?) : bool {
     }
     var prov = JV((binary = tilde_home(running_binary()), platform = tune_target_platform(),
         arch = get_target_architecture_name(), box = tune_box_identity(), written = iso8601_now(),
-        features = cpu_features_text(tune_native_target().features, ";")))
+        features = cpu_features_text(tune_mint_target().features, ";")))
     let old = doc?["provenance"]
     if (old != null && old is _object) {
         for (k, v in keys(old as _object), values(old as _object)) {
