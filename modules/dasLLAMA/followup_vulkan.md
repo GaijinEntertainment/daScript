@@ -1838,18 +1838,6 @@ module) is independent and can land any time - it is pure structure.
     `stage_grid` would read the grid the previous dispatch left in workgroup memory (a poisoning
     dispatch between them, or the N class first, pins the call).
 
-118. **Two vulkan-lane arms still bake from RAM with the planar families kept.** The streaming mint
-    (`ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint`) serves the cold load; a planar image already
-    mapped (a CPU-mode load's lane found under an armed tier) and the eager rail (a gguf that would
-    not open for streaming, a chunk that would not allocate) still bake the lane through
-    `vulkan_bake_flavor` off the mapping or the loaded planes - one file, but the families ride it,
-    the eager rail writes the CPU lane beside it and serves that, and under `DASLLAMA_TRIM` the
-    lane's identity says trimmed while its meta says not (the image serves, with the extra planes;
-    the arm warns). An fp32 token table rides `fblob` whole under the trim (nothing packs
-    it). `vulkan_bake_begin` on those arms collects the twin into RAM even under
-    `DASLLAMA_IMAGE_SAVE=0`, where `vulkan_bake_flavor` deletes it unsaved. Done = both arms re-read
-    the gguf through the streaming mint, the collect skipped where nothing saves, and the trimmed
-    lane means the same thing on every arm.
 119. **The converter's trim and the runtime's trim admit different models under one identity bit.**
     `dasllama-convert -f vulkan --trim` (`trim_model_planes`) refuses a NextN head, while the cold
     load's trimmed mint (`resident_would_serve`) admits one the driver's draft seat serves - the
@@ -2242,3 +2230,12 @@ module) is independent and can land any time - it is pure structure.
     the gemma combine) at 1024 lanes on a device whose workgroups take them, the one-row and N-row commands still bit
     for bit on the regions cells, with `lcpp_bench` tg128 and `--npl` rows before and after; or the reading here with
     the 256-lane stamps kept.
+172. **The census verdict is red on a card whose own coopmat mode is the KHR one.** `VK_CENSUS_NEVER_DISPATCHED`
+    (`tests/_kernel_census.das`) is calibrated on an NV coopmat2 card: on a Radeon 8060S the llama and format-census
+    files dispatch five of its entries - `q51_batch_khr_cls`, `q8_gemv_n2r_cls`, `q8_gemv_n8r_cls`, `kq_gemv_k4_nr_cls`,
+    `kq_gemv_k4_n4r_cls` - so `test_kernel_coverage.das` fails there, and `q20_batch_khr_cls` / `q10_batch_khr_cls`,
+    which the same files dispatch there and no file dispatches on a cm2 card, are declared on neither list. Done = a
+    `VK_CENSUS_PICK_CONDITIONAL` pick for the mode a file serves in (read off the armed mode, a forced `DASLLAMA_COOPMAT`
+    included) and one for the rotated N-column leaves (`vk_gemv_n_rot`), each with a count of the carriers that ran so an
+    absent carrier file skips its entry, the seven entries on them, and the verdict green on a KHR-mode card and on a
+    cm2 card.

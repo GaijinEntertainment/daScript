@@ -11850,3 +11850,18 @@ between cells (two rows reading under one), so a cell reads against its own pair
 
   The rule is level with the best split on every row. No shape of either instrument has n at or under 1536: their shape
   lists are fixed in the source and take no shape by flag, so the rule's 8-lane branch is not timed here.
+
+### An armed load beside a CPU lane: what the host holds and the lane's size (2026-11-27, rizen: Ryzen AI Max+ 395, Radeon 8060S, Vulkan)
+
+`harness/load_probe.das <gguf> 8` under `-jit` with `DASLLAMA_GPU=1`, on SmolLM2-135M-Instruct-Q8_0.gguf (138.1 MB) copied
+to a folder of its own, after a CPU-mode run of the same probe left the CPU lane (166.8 MB) beside it. One run a row;
+the host figures are the probe's `planes:` line (`footprint`), the lane's its size on disk.
+
+| tree | the load | host planes | image mapped | lane on disk |
+|---|---|---|---|---|
+| master at 13359e4ff7 | maps the CPU lane, serves it, bakes the lane from RAM | q8 0.17 GB | 0.17 GB, `planes_trimmed` false | 303.5 MB |
+| this change | mints the lane off the gguf, serves it | 0.00 GB | 0.18 GB (vkblob 0.14, embq 0.03), `planes_trimmed` true | 167.3 MB |
+
+A load of the same file with no CPU lane beside it writes the 167.3 MB lane on both trees. The process's peak footprint
+and its resident set after the load were not read on either tree: the probe reads `/proc/self/status`, which this box
+does not have.

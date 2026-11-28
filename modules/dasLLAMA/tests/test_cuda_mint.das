@@ -62,6 +62,32 @@ def test_cuda_live_load(tst : T?) {
     }
 }
 
+[test(description = "With the CPU lane of Qwen3.5-0.8B-MTP already on disk, a CUDA-armed load under the trim mints the trimmed cuda lane off the gguf and serves it with no planar family on the host, the CPU lane left as minted")]
+def test_cuda_mint_beside_cpu_lane(tst : T?) {
+    own_load("writes `.dlim` images beside the file: the CPU lane, then the trimmed lane")
+    tst |> run("Qwen3.5-0.8B-MTP: with the CPU lane on disk the armed load mints the trimmed cuda lane off the gguf and serves it, the CPU lane left as minted") @(t : T?) {
+        return if (!cuda_home_asked(t))
+        with_mint_file(t, "qwen35", MINT_FILE) $(path) {
+            with_gpu_kv_dtype(t, KVDtype.f16) {
+                beside_cpu_lane_cell(t, path)
+            }
+        }
+    }
+}
+
+[test(description = "A cuda lane of Qwen3.5-0.8B-MTP that carries its planar families under the trimmed identity is deleted by the armed load under the trim and minted again trimmed, the smaller file, served with no planar family on the host")]
+def test_cuda_mint_planar_lane_reminted(tst : T?) {
+    own_load("writes `.dlim` images beside the file: a lane with its planar families, then the trimmed lane over it")
+    tst |> run("Qwen3.5-0.8B-MTP: a cuda lane with its planar families under the trimmed identity is minted again trimmed by the armed load, the smaller file") @(t : T?) {
+        return if (!cuda_home_asked(t))
+        with_mint_file(t, "qwen35", MINT_FILE) $(path) {
+            with_gpu_kv_dtype(t, KVDtype.f16) {
+                planar_lane_reminted_cell(t, path)
+            }
+        }
+    }
+}
+
 //! the families whose trimmed lane the whole-model driver serves beside the dense q8 one: biased routed experts over an untied
 //! q8 token table, per-layer embeddings, the gemma-4 routed block with its dense shared expert, and K-quant routed stacks
 //! under an untied K-quant token table - a test a family:
