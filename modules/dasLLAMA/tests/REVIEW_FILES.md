@@ -62,12 +62,6 @@ one program and runs every module's `[init]` in every batch-mate's context, so a
 `[init]` reaches files that never asked for it, and their cells skip or measure the wrong rail;
 `allow_cpu_prefill()` only matches the `DASLLAMA_CPU_PREFILL=1` every child runs under.
 
-**A test file here, a file dastest runs, declares no `module` name; a diff that adds a `module`
-line to one is a defect, and `REVIEW.das` is the gate.** dastest runs a named root with no
-required module's `[init]`, so every table an `[init]` seeds - a kernel census, a dispatch
-slot - reads empty in the file's cells, and a cell fails far from the cause. A `_*.das` fixture
-is a module a test requires, never a root, and keeps its name.
-
 **A model-gated or compute `[test]` here that neither builds, spawns a child nor waits on a
 peer carries no `timeout`.** The runner owns a child's budget, and a per-test cap reds a cell
 that runs long on a cold cache.

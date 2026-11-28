@@ -5,6 +5,7 @@ module uncategorized_rtti shared public
 
 require dastest/testing_boost public
 require daslib/rtti
+require _init_seed_helper
 
 struct public RttiInitProbe {
     value : int = 7
@@ -25,4 +26,9 @@ def test_named_module_structure_init_mnh(t : T?) {
 
     let typeInfo = typeinfo rtti_typeinfo(type<RttiInitProbe>)
     t |> equal(typeInfo.structType.init_mnh, initializerHash)
+}
+
+[test(description = "a test file that declares a module name runs the [init] of the modules it requires")]
+def test_named_root_runs_required_init(t : T?) {
+    t |> equal(seed_set_by_init(), 7, "the required module's [init] ran")
 }
