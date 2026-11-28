@@ -938,7 +938,9 @@ q8_0 mirror maps under tq4 and f16 with no re-mint (the file's size and time as 
 the asked codec and serving the staged load's tokens at that codec; `test_cuda_mint_identity_cap` - the lane identity's
 budget word (` b<mb>`) reads the card's total memory within a GiB unpinned and the pinned figure (4096) under
 `set_gpu_tier_want_`'s `vram_mb`, skipping where `DASLLAMA_GPU_VRAM_MB` shadows the pin; `test_cuda_live_load` - the
-load that writes no lane on this home, the Vulkan file's `live_cell` (below); `test_cuda_mint_family_lane_<family>` - the
+load that writes no lane on this home, the Vulkan file's `live_cell` (below); `test_cuda_mint_beside_cpu_lane` and
+`test_cuda_mint_planar_lane_reminted` - the armed load's own mint beside a CPU lane and over a lane with its planar families, the
+Vulkan file's `beside_cpu_lane_cell` and `planar_lane_reminted_cell` (below); `test_cuda_mint_family_lane_<family>` - the
 families' trimmed lanes on this home, a test a family, the Vulkan file's `family_lane_cell` (below). Every cell skips when interpreted,
 without `DASLLAMA_CUDA=1`, without the model, with the image rail off (`DASLLAMA_IMAGE=0`), without the armed home
 (`cuda_home_asked`), and where the whole-model driver declines the model on the box. `test_vulkan_mint_trim_follows_the_driver`
@@ -974,7 +976,17 @@ tokens token for token and gathers its token rows wherever the staged load does 
 packed emb region); the staged load's tokens are logged beside the live load's, not held. `test_vulkan_mint_trim_refused_unarmed` mints the trimmed
 lane, then loads it under the `set_resident_upload_fault` seam - the whole-model upload declining after the trim admitted
 the model: the load is refused, its text naming the lane, the seam's decline and the trim; the lane stays on disk at its
-minted size, and the same load with the seam off serves on the driver (the control).
+minted size, and the same load with the seam off serves on the driver (the control). `test_vulkan_mint_beside_cpu_lane` (and
+`test_cuda_mint_beside_cpu_lane`, one shared cell, `beside_cpu_lane_cell`) holds the armed load to its own mint with another
+mode's lane on disk: a planar-only load (`load_cached_q8`'s `planar_only`) mints the CPU lane and no other, then the armed
+load under the trim mints the home's lane off the gguf and serves it on the whole-model driver - the mapped lane's meta
+trimmed, no planar family on the host (`holds_planes`) - while the CPU lane keeps its size and time; a skip where the driver
+declines the model. `test_vulkan_mint_planar_lane_reminted` (and `test_cuda_mint_planar_lane_reminted`, one shared cell,
+`planar_lane_reminted_cell`) holds the armed load to replacing a lane that carries its planar families under the trimmed
+identity: the cell makes one - a planar-only load's planes, the armed walk's twin collected over them (`vulkan_bake_begin`,
+`vulkan_bake_take`), the two saved at the lane's path, the save asserted - and the next armed load under the trim serves the trimmed lane on the
+whole-model driver with no planar family on the host, the file at the lane's path the smaller one; a skip where the driver
+declines the model.
 
 The kernel coverage census (`test_kernel_coverage.das`, the verdict a run appends as its last child, the verdict code, blind
 lists and pick tables in `_kernel_census.das`; its rows the cells of `_kernel_coverage_cells.das` on the carriers' blocks -

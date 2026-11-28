@@ -2325,11 +2325,17 @@ def private vulkan_bake_flavor(var t : Model; path : string; vk_tag : string; ke
         //! seams, the card's room) is not written under the trimmed identity, or the next run would serve it untrimmed - it is
         //! written as the untrimmed lane, which a trimmed load falls back to
         let trim_why = resident_trim_decline(t)
-        if (!empty(trim_why) && resident_trim_decline_is_run_mode(trim_why)) {
+        if (empty(trim_why)) {
+            to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed {moe_gpu_backend_name()} lane of '{path}', which only the streamed build off the gguf writes - this load built from RAM, so no lane is written and the next load mints it\n")
+            delete t.vkblob
+            delete t.vkplan
+            return
+        }
+        if (resident_trim_decline_is_run_mode(trim_why)) {
             save_tag = untrimmed_lane_tag()
             to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed {moe_gpu_backend_name()} lane, and this run cannot mint it ({trim_why}) - the lane this run collected from RAM is written untrimmed\n")
         } else {
-            to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed {moe_gpu_backend_name()} lane, and this arm bakes the lane from RAM with the planar families kept - the lane's identity still folds the trim\n")
+            to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed {moe_gpu_backend_name()} lane, and the whole-model driver would not take '{path}' whole ({trim_why}) - the lane this run collected from RAM keeps its planar families\n")
         }
     }
     let ts = ref_time_ticks()
@@ -2763,10 +2769,26 @@ def load_model_uncached(path : string; mode : QuantMode = QuantMode.fp32) : Mode
     return <- load_model_(path, mode)
 }
 
+//! `path`'s planar image `img` mapped into `t` and served; under an armed tier the walk's twin is baked off it unless
+//! `trimmed_lane_kept`. False with `t` empty where no planar image serves this run: none maps, or a metal run needs the blob flavor
+def private serve_planar_image(path, img, qs, vk_tag : string; trimmed_lane_kept, want_metal : bool; var t : Model) : bool {
+    return false if (!load_model_image(img, t, "", qs))
+    vulkan_bake_flavor(t, path, vk_tag, trimmed_lane_kept)
+    //! the layout gate must agree, or the rebake refuses and re-mints the SAME planar file every load (a repacking backend
+    //! passes the mint-time shape gate); the rebake reads the gguf, never this mapping
+    return true if (!(want_metal && metal_model_servable(t) && metal_blob_form_ok(t)))
+    if (g_image_frozen) {
+        panic("dasLLAMA: '{img}' is planar but this run needs the metal blob flavor, and artifacts are frozen - pre-mint {image_path_for(path, METAL_IMAGE_TAG)}")
+    }
+    delete t
+    return false
+}
+
 //! The image-cached model load — ``load_model``'s engine half, public for callers bypassing the facade. ``.dlim`` maps directly (wrong identity panics); q8-mode gguf maps/saves a prepared image (``DASLLAMA_IMAGE=0`` disables); an fp32-mode gguf joins the rail only with ``image_fp32`` (planar flavor — the parity-pinned decoders, e.g. canary's).
 //! Under an active Metal mode the image is the BLOB-ONLY metal flavor (CPU inference against it panics) when servable, the planar CPU flavor otherwise; ``planar_only`` pins the planar CPU flavor regardless of armed GPU tiers (the ASR surface — its decode path reads CPU planes).
 //! Call inside ``with_job_que()``.
-[arch(at = "../ARCHITECTURE_IMAGE.md#image-interp-load"), arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order"), arch(at = "../ARCHITECTURE_IMAGE.md#dlim-meta-head")]
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-interp-load"), arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order"), arch(at = "../ARCHITECTURE_IMAGE.md#dlim-meta-head"),
+ arch(at = "../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
 def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                       planar_only : bool = false; image_fp32 : bool = false) : Model {
     // under Metal the GPU serves through the override registries, so "no backend registered" would be a false alarm
@@ -2831,7 +2853,8 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             vulkan_bake_slice_begin()
             if (load_image(img_v, t, vk_tag)) {
                 let trim_why = t.planes_trimmed ? resident_trim_decline(t) : ""
-                if (empty(trim_why)) {
+                let remint_planar_lane = vulkan_trim() && !t.planes_trimmed && !g_image_frozen && resident_would_serve(t)
+                if (empty(trim_why) && !remint_planar_lane) {
                     ple_check_table(t, "prepared image '{img_v}'")
                     moe_gpu_upload_lane(t, img_v)
                     vulkan_bake_slice_end(t)
@@ -2843,7 +2866,10 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                 //! a run-mode decline (the route, a prefill pin or override, this card's room) keeps the lane for the next run and
                 //! serves this one planar from memory; a model-shape decline means the trim rule moved, so the lane is minted again;
                 //! frozen artifacts are never deleted
-                if (resident_trim_decline_is_run_mode(trim_why)) {
+                if (remint_planar_lane) {
+                    to_log(LOG_WARNING, "dasLLAMA: the {moe_gpu_backend_name()} lane '{img_v}' carries its planar families under the trimmed identity, and this run serves the trim (DASLLAMA_TRIM / set_vulkan_trim) - the lane is deleted and minted again trimmed\n")
+                    remove(img_v)
+                } elif (resident_trim_decline_is_run_mode(trim_why)) {
                     kept_why = trim_why
                     to_log(LOG_WARNING, "dasLLAMA: the trimmed {moe_gpu_backend_name()} lane '{img_v}' maps, and this run cannot serve it ({trim_why}; {trim_lane_run_knobs()} sit outside the lane's identity) - the lane stays on disk and the streamed build serves planar from memory\n")
                 } elif (g_image_frozen) {
@@ -2878,20 +2904,10 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             vulkan_bake_begin()   // whatever loads below runs the GPU walk — collect and bake
         }
         let img = image_path_for(path, "", qs)
-        if (load_model_image(img, t, "", qs)) {
-            vulkan_bake_flavor(t, path, vk_tag, !empty(kept_why))
-            //! the layout gate must agree, or the rebake below refuses and re-mints the SAME planar
-            //! file every load (a repacking backend passes the mint-time shape gate); the mapping's
-            //! borrowed planes are not the question - the rebake reads the gguf, never this mapping
-            if (!(want_metal && metal_model_servable(t) && metal_blob_form_ok(t))) {
-                to_log(LOG_INFO, "dasLLAMA: prepared image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
-                return <- t
-            }
-            // planar image, metal-servable config: drop it and rebake the blob flavor (the planar file stays for CPU loads)
-            if (g_image_frozen) {
-                panic("dasLLAMA: '{img}' is planar but this run needs the metal blob flavor, and artifacts are frozen - pre-mint {image_path_for(path, METAL_IMAGE_TAG)}")
-            }
-            delete t
+        let mint_first = vk_tag != "" && empty(kept_why)
+        if (!mint_first && serve_planar_image(path, img, qs, vk_tag, !empty(kept_why), want_metal, t)) {
+            to_log(LOG_INFO, "dasLLAMA: prepared image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
+            return <- t
         }
         if (g_image_frozen) {
             let want = want_metal ? image_path_for(path, METAL_IMAGE_TAG) : img
@@ -2989,6 +3005,10 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             delete streamed
             if (vk_tag != "") {
                 vulkan_bake_begin()
+            }
+            if (mint_first && !save_lost && serve_planar_image(path, img, qs, vk_tag, false, want_metal, t)) {
+                to_log(LOG_INFO, "dasLLAMA: prepared image mapped in {get_time_usec(ts_img) / 1000} ms - {img} (the streamed build declined)\n")
+                return <- t
             }
             if (ran) {
                 to_log(LOG_WARNING, "dasLLAMA: the streamed cold build declined for '{path}' - taking the eager rail\n")

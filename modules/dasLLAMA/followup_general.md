@@ -3016,3 +3016,13 @@
     lane race carrying shapes with n at or under 1536 - the MoE down's 1408 x 2048 and one at or under 768 - timed on
     both homes, the 8-lane branch kept or changed by the result; (b) the grid-form race run on both homes with each
     backend's noise beside its rows, and the shipped form read against it.
+328. **The arms behind a declined stream collect a device twin they do not save, and no cell holds them.** The
+    streaming mint (`ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint`) alone writes a trimmed lane. Where the streamed
+    build declines, the two arms behind it - the planar image mapped (`serve_planar_image`) and the eager rail - and the
+    planar image mapped under a held mint run the walk under `vulkan_bake_begin`, which collects the twin into RAM;
+    `vulkan_bake_flavor` deletes it unsaved under a held mint, under `DASLLAMA_IMAGE_SAVE=0` and where the run serves
+    the trim. No seam declines a streamed build, so no cell reaches the planar fallback or the no-write arm behind it,
+    and none loads a lane with its planar families under frozen artifacts (`remint_planar_lane`). An fp32 token table
+    rides `fblob` whole under the trim (nothing packs it). Done = a seam that declines the streamed build and a cell
+    over both arms, a cell under frozen artifacts, the collect skipped where nothing saves, and the fp32 table packed
+    or its lane's size stated.

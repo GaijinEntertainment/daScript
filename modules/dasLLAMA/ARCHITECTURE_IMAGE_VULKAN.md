@@ -103,9 +103,20 @@ lane sits on disk writes nothing: the lane stays for the next run and this run s
 an expert stack - the rail or the mirror declined after all - is a panic by name (`trim_planar_guard`), as a live gather
 is. A lane baked under one host-layers count and mapped under another leaves the baked plan at
 the first routed layer the counts disagree on, and the walk regathers its expert entries live off those planes from
-there, the load warning (`vk_bake_slice_off`) - on an untrimmed lane; a trimmed one panics there. The eager rail (a gguf that would not open for streaming, a
-chunk that would not allocate) and a planar image already mapped bake the lane from RAM or the mapping with the families
-kept, the eager rail writing the CPU lane beside it and serving that.
+there, the load warning (`vk_bake_slice_off`) - on an untrimmed lane; a trimmed one panics there.
+
+An armed load with no lane of its own mints one off the gguf whatever other lane sits beside the file: a CPU-mode load's
+planar image is that mode's lane, so the armed load skips it (`mint_first` in `load_model_cached`) and writes the lane a
+load with no image beside the file writes. The armed load maps the planar image on two arms only (`serve_planar_image`).
+Under a trimmed lane on disk that this run cannot serve, the mapping serves the run and no lane is written. After a
+streamed build that declined with no write lost, the mapping serves the run and the walk's twin, collected off planes in
+RAM, goes through `vulkan_bake_flavor`; so does the twin of the eager rail (a gguf that would not open for streaming, a
+chunk that would not allocate), which writes the CPU lane and serves that. `vulkan_bake_flavor` writes what the mint
+would write: with the trim off, the lane with its families; under a trim the driver declines for the model's shape, the
+lane with its families; under a trim this run's knobs decline, the untrimmed lane; and under a trim the run serves,
+nothing - the streaming mint alone writes a trimmed lane, so the next load mints it. A lane on disk that carries its
+planar families under the trimmed identity while the run serves the trim is a lane no arm writes: the armed load deletes
+it and mints the trimmed lane (`remint_planar_lane`), frozen artifacts excepted.
 
 ### The slice walk reads the device twin off the lane file {#lane-file-read}
 

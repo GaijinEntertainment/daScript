@@ -115,11 +115,11 @@ def staged_tokens_at(t : T?; path : string; kv : KVDtype) : array<int64> {
     return <- ids
 }
 
-//! `path` loaded through the image cache in q8 inside the job queue
-def load_cached_q8(path : string) : Model {
+//! `path` loaded through the image cache in q8 inside the job queue; `planar_only` asks the CPU lane under an armed tier
+def load_cached_q8(path : string; planar_only : bool = false) : Model {
     var m = Model()
     with_dasllama_jobque_() {
-        m <- load_model_cached(path, QuantMode.q8)   // nolint:PERF030,LINT019 -- the move must sit inside with_job_que; the target is fresh-empty, so nothing drops
+        m <- load_model_cached(path, QuantMode.q8, planar_only)   // nolint:PERF030,LINT019 -- the move must sit inside with_job_que; the target is fresh-empty, so nothing drops
     }
     return <- m
 }
@@ -230,6 +230,78 @@ def live_cell(t : T?; path : string) {
         delete c
         delete r
     }
+}
+
+//! whether `m` is a mapped trimmed lane: no planar family on the host
+def private serves_trimmed_lane(m : Model) : bool => m.image_map != null && m.planes_trimmed && !holds_planes(m)
+
+def private skip_driver_declined(t : T?; path : string) {
+    t |> skip("the whole-model driver did not take '{path}' (the decline line above)")
+}
+
+//! both homes: with the CPU lane on disk, the armed load under the trim mints and serves its own lane, the CPU lane untouched
+[cold_path]
+def beside_cpu_lane_cell(t : T?; path : string) {
+    let lane = image_lane_name(moe_gpu_bake_tag())
+    let img_v = image_path_for(path, moe_gpu_bake_tag())
+    let img_p = image_path_for(path, "", "q8")
+    remove(img_v)
+    remove(img_p)
+    var cpu <- load_cached_q8(path, true)
+    delete cpu
+    moe_gpu_drop_model()
+    let minted = stat(img_p)
+    t |> success(minted.is_valid && !stat(img_v).is_valid, "the planar-only load minted the CPU lane and no {lane} lane")
+    set_vulkan_trim(true)
+    var m <- load_cached_q8(path)
+    if (moe_gpu_resident_active()) {
+        t |> success(serves_trimmed_lane(m), "with the CPU lane on disk the armed load serves the trimmed {lane} lane, no planar family on the host")
+        t |> success(stat(img_v).is_valid, "the {lane} lane is minted at its own path")
+        let kept = stat(img_p)
+        t |> success(kept.is_valid && kept.size == minted.size && int64(kept.mtime) == int64(minted.mtime), "the CPU lane stays as its mint left it ({kept.size} bytes)")
+    } else {
+        skip_driver_declined(t, path)
+    }
+    delete m
+    moe_gpu_drop_model()
+    remove(img_v)
+    remove(img_p)
+}
+
+//! both homes: a lane with its planar families under the trimmed identity is deleted by the armed load and minted again trimmed
+[cold_path]
+def planar_lane_reminted_cell(t : T?; path : string) {
+    set_vulkan_trim(true)
+    let lane = image_lane_name(moe_gpu_bake_tag())
+    let img_v = image_path_for(path, moe_gpu_bake_tag())
+    let img_p = image_path_for(path, "", "q8")
+    remove(img_v)
+    remove(img_p)
+    var planar <- load_cached_q8(path, true)
+    var armed = false
+    var baked = false
+    with_dasllama_jobque_() {
+        vulkan_bake_begin()
+        moe_gpu_upload_resident(planar)
+        armed = moe_gpu_resident_active()
+        baked = vulkan_bake_take(planar) && armed && save_model_image(planar, img_v, moe_gpu_bake_tag())
+    }
+    delete planar
+    moe_gpu_drop_model()
+    remove(img_p)
+    if (armed) {
+        t |> success(baked, "the walk's twin over the planar planes is saved at the {lane} lane's path under the trimmed identity")
+        let planar_bytes = stat(img_v).size
+        var m <- load_cached_q8(path)
+        t |> success(moe_gpu_resident_active() && serves_trimmed_lane(m),
+            "the armed load mints the {lane} lane again trimmed: the whole-model driver serves it, no planar family on the host")
+        t |> success(stat(img_v).size < planar_bytes, "the trimmed lane replaced the one with its planar families ({stat(img_v).size} against {planar_bytes} bytes)")
+        delete m
+        moe_gpu_drop_model()
+    } else {
+        skip_driver_declined(t, path)
+    }
+    remove(img_v)
 }
 
 //! the trimmed-lane cell both homes run over `path`: a staged load with its planes on the host says whether the model's token
